@@ -127,6 +127,71 @@ export interface IdentityAudit {
   tenantId: string;
 }
 
+export interface InventoryCategories {
+  archived: number;
+  createdAt: Int8;
+  createdBy: string;
+  fields: string;
+  id: string;
+  isPart: number;
+  name: string;
+  nameFormat: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface InventoryItemFacets {
+  facet: string;
+  itemId: string;
+  position: number;
+  tenantId: string;
+  value: string;
+  valueKey: string;
+}
+
+export interface InventoryItemFits {
+  brand: string;
+  itemId: string;
+  model: string;
+  modelKey: string;
+  position: number;
+  tenantId: string;
+}
+
+export interface InventoryItems {
+  archived: number;
+  barcode: string | null;
+  categoryId: string | null;
+  code: string | null;
+  createdAt: Int8;
+  createdBy: string;
+  fieldValues: string;
+  fits: string | null;
+  id: string;
+  name: string;
+  nameAuto: number;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface InventoryMovements {
+  at: Int8;
+  counted: number | null;
+  id: string;
+  itemId: string;
+  kind: string;
+  note: string | null;
+  qty: number;
+  storeId: string;
+  tenantId: string;
+  useId: string | null;
+  useKind: string | null;
+  useLabel: string | null;
+  userId: string;
+}
+
 export interface Media {
   attachedOperationId: string | null;
   byteSize: Int8;
@@ -154,6 +219,54 @@ export interface MediaChunks {
   chunkIndex: number;
   mediaId: string;
   receivedAt: Int8;
+  tenantId: string;
+}
+
+export interface MoneyAccounts {
+  active: number;
+  createdAt: Int8;
+  id: string;
+  kind: string;
+  name: string;
+  storeId: string | null;
+  storeIdsJson: string | null;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface MoneyEntries {
+  account: string | null;
+  amount: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  documentId: string | null;
+  documentKind: string | null;
+  documentLabel: string | null;
+  id: string;
+  kind: string;
+  reason: string | null;
+  reference: string | null;
+  relatedEntryId: string | null;
+  storeId: string;
+  subKind: string | null;
+  tenantId: string;
+  tendered: Int8 | null;
+  voidedAt: Int8 | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface MoneyLines {
+  account: string;
+  at: Int8;
+  credit: Int8;
+  debit: Int8;
+  documentId: string | null;
+  documentKind: string | null;
+  entryId: string;
+  id: string;
+  storeId: string;
   tenantId: string;
 }
 
@@ -523,8 +636,16 @@ export interface DB {
   devices: Devices;
   idempotencyKeys: IdempotencyKeys;
   identityAudit: IdentityAudit;
+  inventoryCategories: InventoryCategories;
+  inventoryItemFacets: InventoryItemFacets;
+  inventoryItemFits: InventoryItemFits;
+  inventoryItems: InventoryItems;
+  inventoryMovements: InventoryMovements;
   media: Media;
   mediaChunks: MediaChunks;
+  moneyAccounts: MoneyAccounts;
+  moneyEntries: MoneyEntries;
+  moneyLines: MoneyLines;
   notes: Notes;
   operations: Operations;
   permissions: Permissions;

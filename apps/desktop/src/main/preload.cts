@@ -3,7 +3,19 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- a sandboxed preload is CommonJS
 import electron = require('electron');
 
-import type { DesktopBridge, UpdateState } from './bridge.js';
+import type { CorePortMode, DesktopBridge, UpdateState } from './bridge.js';
+
+// Duplicated from bridge.ts: a sandboxed preload can require only `electron`, not its own modules.
+const CORE_PORT_MESSAGE = 'bolusi:core-port';
+
+// A port cannot cross the context bridge as a value; posting it to the page's own window is the
+// documented way. The page accepts it only from its own window (see the renderer's core client).
+const page = globalThis as unknown as {
+  postMessage(message: unknown, targetOrigin: string, transfer: readonly unknown[]): void;
+};
+electron.ipcRenderer.on('core:port', (event, mode: CorePortMode) => {
+  page.postMessage({ type: CORE_PORT_MESSAGE, mode }, '*', event.ports);
+});
 
 const bridge: DesktopBridge = {
   printers: {
@@ -23,6 +35,9 @@ const bridge: DesktopBridge = {
       return () => electron.ipcRenderer.removeListener('updates:changed', relay);
     },
     install: () => electron.ipcRenderer.invoke('updates:install'),
+  },
+  core: {
+    connect: () => electron.ipcRenderer.send('core:connect'),
   },
 };
 

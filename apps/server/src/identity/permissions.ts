@@ -85,6 +85,9 @@ const STAFF_PERMS = [
 // back; the technician works tickets and may only propose price changes. Cancelling and discounts are
 // the owners' alone ("Cancelling a servisan"): both are how counter staff kept customers' cash.
 const PERSONAL_PERMS = [AUTH_PERMISSION.pinChange, 'platform.set_locale'];
+// Parts (owner decision, 2026-10-28): technicians and the counter see stock and take parts for a
+// servisan in work. Editing the list, counting and correcting a finished servisan are the owners'.
+const PARTS_USER_PERMS = ['inventory.read', 'inventory.use_parts'];
 const CASHIER_PERMS = [
   ...PERSONAL_PERMS,
   'repair.read',
@@ -92,8 +95,15 @@ const CASHIER_PERMS = [
   'repair.assign',
   'repair.quote_change',
   'repair.handover',
+  ...PARTS_USER_PERMS,
+  // Money (product-scope.md, "Repair payments"): the counter takes payments, gives back overpayments,
+  // moves and counts cash. Bigger refunds, lower bills, voids and cash adjustments are owners'.
+  'money.read',
+  'money.receive',
+  'money.move_cash',
+  'money.count_cash',
 ];
-const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work'];
+const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work', ...PARTS_USER_PERMS];
 
 /** 02 §10 — the system-default roles, seeded at provisioning. Store owners can edit grants later. */
 export const DEFAULT_ROLES: readonly DefaultRoleDef[] = [

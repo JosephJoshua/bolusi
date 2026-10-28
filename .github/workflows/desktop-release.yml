@@ -29,8 +29,16 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsc -b packages/ui-web/tsconfig.build.json packages/modules/tsconfig.desktop.json
+      - run: pnpm exec tsc -b
+      # The server the installed app syncs with is baked in at build time (repository variable).
+      - name: Check the server address is set
+        shell: pwsh
+        run: if (-not $env:BOLUSI_API_URL) { throw 'Set the BOLUSI_API_URL repository variable' }
+        env:
+          BOLUSI_API_URL: ${{ vars.BOLUSI_API_URL }}
       - run: pnpm --filter @bolusi/desktop run build
+        env:
+          BOLUSI_API_URL: ${{ vars.BOLUSI_API_URL }}
       - run: pnpm --filter @bolusi/desktop exec electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

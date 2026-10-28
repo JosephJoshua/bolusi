@@ -29,7 +29,7 @@
     "assign": "Assign technician",
     "cancel": "Cancel repair",
     "changePrice": "Change price",
-    "claim": "Take this repair",
+    "claim": "Add to my tasks",
     "decidePrice": "Confirm price",
     "declinePrice": "Doesn’t agree",
     "handover": "Hand back to customer",
@@ -48,7 +48,9 @@
     "reassignShort": "Change",
     "backToTicket": "Back to the repair",
     "applyUnconfirmed": "Not yet",
-    "agreedYes": "Yes"
+    "agreedYes": "Yes",
+    "takeOver": "Take over",
+    "more": "More"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -142,7 +144,13 @@
     "signAgain": "Sign again",
     "signature": "Customer signature",
     "signatureTitle": "Customer signs to receive the phone",
-    "cancelled": "Repair charges are not billed."
+    "cancelled": "Repair charges are not billed.",
+    "payment": "Payment",
+    "payLater": "Pay later",
+    "payNow": "Pay now",
+    "payLaterReason": "Why pay later",
+    "payLaterNote": "The remaining {amount} is recorded as the customer’s debt.",
+    "refundReason": "Rest of the DP returned at handover"
   },
   "intake": {
     "discard": "Discard intake",
@@ -183,6 +191,7 @@
       "top": "Top"
     },
     "take": "Take photo",
+    "takeAll": "Take all photos",
     "takeNext": "Take photo: {slot}",
     "expired": "Some photos from this unfinished intake were deleted. Take them again.",
     "title": "Photos",
@@ -197,6 +206,7 @@
   },
   "price": {
     "amount": "Amount (Rp)",
+    "paid": "Paid",
     "decisionNote": "Note (optional)",
     "description": "Description",
     "kind": {
@@ -237,6 +247,7 @@
     "incompleteLine": "Describe every line that has an amount.",
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
+    "downPaymentReference": "Enter the approval code from the EDC machine.",
     "screenLock": "Enter the screen lock, or choose None."
   },
   "ready": {
@@ -295,7 +306,8 @@
     "discountOwner": "Only an owner can approve a discount.",
     "downPayment": "Enter the amount first.",
     "downPaymentCorrect": "Enter the correct down payment first.",
-    "downPaymentSame": "The amount has not changed."
+    "downPaymentSame": "The amount has not changed.",
+    "handoverPayment": "Complete the payment first."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -439,6 +451,7 @@
     "estimateTotal": "Estimated total",
     "total": "Total",
     "downPayment": "Down payment",
+    "paid": "Paid",
     "balance": "Balance due",
     "sign": {
       "customer": "Customer",
@@ -578,6 +591,14 @@
       "next": "Next page",
       "page": "Page {page}",
       "pages": "Pages"
+    },
+    "settings": {
+      "discard": "Discard changes",
+      "slipLead": "The store name, logo and terms printed on this store’s slips."
+    },
+    "options": {
+      "dragHandle": "Drag to reorder, or use the up and down arrows",
+      "new": "New"
     }
   },
   "refusal": {
@@ -611,6 +632,11 @@
     "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it.",
+    "partsNotInWork": "Parts can only be taken or put back while the repair is being worked on.",
+    "partsNotYours": "Another technician is working on this repair.",
+    "notPaid": "This servisan isn’t paid in full yet.",
+    "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid.",
+    "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed.",
     "repairTypesNotYours": "Only the counter or a technician can change the repair type.",
     "claimNotReturned": "A warranty claim is only for a phone that was repaired and collected.",
     "claimOfClaim": "Open the claim from the original repair, not from another claim.",

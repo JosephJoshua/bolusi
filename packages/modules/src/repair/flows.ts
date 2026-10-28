@@ -5,7 +5,12 @@ import type { MediaRef, MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 import { zMediaRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
+import { CASH_ACCOUNT } from '../money/constants.js';
+import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
+import type { PaymentAccountRow } from '../money/queries.js';
 import type { OpenTicketInput } from './commands.js';
+import type { RepairKey } from './i18n.js';
 import {
   CHECKLIST_STATES,
   IN_PROGRESS_OUTCOMES,
@@ -203,6 +208,33 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
   };
 }
 
+/** A servisan parts are drawn for: being worked on or waiting for a part, and still in the store. */
+export function partsInWork(ticket: {
+  readonly outcome: string;
+  readonly location: string;
+}): boolean {
+  return (
+    (ticket.outcome === 'in_repair' || ticket.outcome === 'waiting_for_parts') &&
+    ticket.location === 'in_store'
+  );
+}
+
+/**
+ * Whether this user may take or put back parts on the ticket now: the client side of repair's
+ * part-use rule (part-use.ts), for showing the actions. The rule decides again on save. Owners may
+ * correct any ticket past intake, so they see the actions on finished and cancelled ones too.
+ */
+export function canUseParts(
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'location' | 'technicianId'>,
+  userId: string,
+  hasPermission: (id: string) => boolean,
+): boolean {
+  if (!hasPermission(INVENTORY_PERMISSION.useParts) || ticket.outcome === 'received') return false;
+  if (hasPermission(INVENTORY_PERMISSION.correctUse)) return true;
+  if (!partsInWork(ticket)) return false;
+  return ticket.technicianId === userId || hasPermission(REPAIR_PERMISSION.assign);
+}
+
 export type TicketAction =
   | 'decidePrice'
   | 'claim'
@@ -259,6 +291,66 @@ export function ticketActions(
   return actions;
 }
 
+/** Actions that change one fact, offered beside it (the technician, the price), never in a row. */
+export const CONTEXTUAL_ACTIONS: ReadonlySet<TicketAction> = new Set([
+  'assign',
+  'changePrice',
+  'proposePrice',
+]);
+
+/**
+ * The offered actions laid out by what this user does next, not as a row of every status change:
+ * one next step, at most one real alternative to it, and the rarer moves kept under "Lainnya".
+ * Cancelling is not here: it is final, so screens keep it apart at the end.
+ */
+export interface TicketActionLayout {
+  readonly next: TicketAction | null;
+  readonly alternative: TicketAction | null;
+  readonly more: readonly TicketAction[];
+}
+
+/** The steps that move a repair forward, likeliest first. */
+const FORWARD: readonly TicketAction[] = [
+  'decidePrice',
+  'handover',
+  'markRepaired',
+  'start',
+  'resume',
+];
+/** Bench work: offered only on a repair that is this user's or nobody's yet. */
+const BENCH_WORK: ReadonlySet<TicketAction> = new Set([
+  'start',
+  'resume',
+  'markRepaired',
+  'waitForParts',
+]);
+
+export function arrangeTicketActions(
+  actions: readonly TicketAction[],
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'technicianId'>,
+  userId: string,
+): TicketActionLayout {
+  // Someone else's repair is theirs to work on; this user first takes it over ("Ambil alih").
+  const mine = ticket.technicianId === null || ticket.technicianId === userId;
+  const offered = actions.filter(
+    (action) =>
+      action !== 'cancel' && !CONTEXTUAL_ACTIONS.has(action) && (mine || !BENCH_WORK.has(action)),
+  );
+  const forward = FORWARD.filter((action) => offered.includes(action));
+  // With nothing to push forward, picking a technician is what an unassigned repair waits on.
+  const assignNext = ticket.technicianId === null && actions.includes('assign');
+  const next = forward[0] ?? (assignNext ? 'assign' : null);
+  // Parts running out is the one real fork while working; before work starts it is rare.
+  const alternative =
+    forward[1] ??
+    (ticket.outcome === 'in_repair' && offered.includes('waitForParts') ? 'waitForParts' : null);
+  return {
+    next,
+    alternative,
+    more: offered.filter((action) => action !== next && action !== alternative),
+  };
+}
+
 /**
  * What this user may do about the down payment, shown beside it. Mirrors the commands: anyone at
  * the counter records one while the servisan is open and none is recorded; only an owner
@@ -268,8 +360,10 @@ export function downPaymentAction(
   ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
   can: RepairAbilities,
 ): 'record' | 'correct' | null {
+  // Once the phone is back with its owner the DP is part of the bill it paid, not a figure to edit.
+  if (ticket.location === 'returned') return null;
   if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
-  const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
+  const open = ticket.outcome !== 'cancelled';
   return can.intake && open ? 'record' : null;
 }
 
@@ -368,6 +462,14 @@ export function amountOwed(
   return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
 }
 
+/**
+ * What the money already paid on a servisan is called: its DP while the phone is in the store,
+ * what was paid in all (DP and the rest) once it went home.
+ */
+export function paidLabelKey(ticket: Pick<TicketSummaryRow, 'location'>): RepairKey {
+  return ticket.location === 'returned' ? 'repair.price.paid' : 'repair.price.downPayment';
+}
+
 /** Why an open down payment step can no longer finish: what it would do is no longer offered. */
 export function downPaymentStale(
   ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
@@ -379,7 +481,8 @@ export function downPaymentStale(
 }
 
 /** What still stands between a typed down payment and saving it; null when it can be saved. */
-export type DownPaymentGap = 'aboveTotal' | 'amount' | 'correctAmount' | 'same' | 'reason';
+export type DownPaymentGap =
+  'aboveTotal' | 'amount' | 'reference' | 'correctAmount' | 'same' | 'reason';
 
 /**
  * A down payment being recorded or corrected, as typed. A new one is at least Rp 1; a correction
@@ -392,6 +495,8 @@ export function downPaymentEntry(input: {
   readonly reason: string;
   readonly current: number | null;
   readonly total: number;
+  /** A new DP's method still lacks the reference it takes (an EDC's approval code). */
+  readonly referenceMissing?: boolean;
 }): {
   readonly amount: number | null;
   readonly aboveTotal: boolean;
@@ -405,14 +510,18 @@ export function downPaymentEntry(input: {
     : !correcting
       ? amount === null || amount <= 0
         ? 'amount'
-        : null
+        : input.referenceMissing === true
+          ? 'reference'
+          : null
       : amount === null
         ? 'correctAmount'
         : amount === input.current
           ? 'same'
           : input.reason.trim() === ''
             ? 'reason'
-            : null;
+            : amount > 0 && input.referenceMissing === true
+              ? 'reference'
+              : null;
   return { amount, aboveTotal, gap };
 }
 
@@ -667,6 +776,10 @@ const zIntakeDraft = z.strictObject({
   lines: z.array(zLineDraft),
   /** Rupiah the customer paid up front, as typed; '' when nothing was paid. */
   downPayment: z.string().default(''),
+  /** How the DP came in: `cash` or `account:<id>`. */
+  downPaymentAccount: z.string().default(CASH_ACCOUNT),
+  /** The DP's reference, as an EDC's approval code; '' when none. */
+  downPaymentReference: z.string().default(''),
   /** The ready-by option id picked, or '' while the store's default stands. */
   ready: z.string().transform((ready) => LEGACY_READY[ready] ?? ready),
   /** The id the ticket will get, taken when the intake starts so it can only be opened once. */
@@ -705,6 +818,8 @@ export function emptyIntakeDraft(): IntakeDraft {
     photos: {},
     lines: [],
     downPayment: '',
+    downPaymentAccount: CASH_ACCOUNT,
+    downPaymentReference: '',
     ready: '',
     claimOf: null,
   };
@@ -749,12 +864,15 @@ export type IntakeProblem =
   | 'quoteLines'
   | 'incompleteLine'
   | 'negativeTotal'
-  | 'downPaymentAboveTotal';
+  | 'downPaymentAboveTotal'
+  | 'downPaymentReference';
 
 export function stepProblems(
   draft: IntakeDraft,
   step: IntakeStep,
   options: IntakeOptionLists,
+  /** The store's payment methods besides cash, for the DP's reference. */
+  accounts: readonly PaymentAccountRow[] = [],
 ): IntakeProblem[] {
   const problems: IntakeProblem[] = [];
   switch (step) {
@@ -794,10 +912,16 @@ export function stepProblems(
       ) {
         problems.push('downPaymentAboveTotal');
       }
+      if (
+        intakeDownPayment(draft) > 0 &&
+        referenceMissing(draft.downPaymentAccount, draft.downPaymentReference, accounts)
+      ) {
+        problems.push('downPaymentReference');
+      }
       break;
     case 'review':
       for (const earlier of INTAKE_STEPS.slice(0, -1)) {
-        problems.push(...stepProblems(draft, earlier, options));
+        problems.push(...stepProblems(draft, earlier, options, accounts));
       }
       break;
   }
@@ -879,7 +1003,13 @@ export function toOpenTicketInput(
   draft: IntakeDraft,
   options: IntakeOptionLists,
   now: number,
+  accounts: readonly PaymentAccountRow[] = [],
 ): OpenTicketInput {
+  const downPayment = intakeDownPayment(draft);
+  const method =
+    downPayment > 0
+      ? chosenMethod(draft.downPaymentAccount, draft.downPaymentReference, accounts)
+      : { account: CASH_ACCOUNT, reference: null };
   const checklist = options.checks.flatMap(({ id, label }) => {
     const state: ChecklistState | undefined = draft.checks[id];
     return state === undefined ? [] : [{ item: id, label, state, note: '' }];
@@ -924,6 +1054,8 @@ export function toOpenTicketInput(
       label,
       ref: draft.photos[id]!,
     })),
-    downPayment: intakeDownPayment(draft),
+    downPayment,
+    downPaymentAccount: method.account,
+    downPaymentReference: method.reference,
   };
 }

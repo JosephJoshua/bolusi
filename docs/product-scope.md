@@ -259,6 +259,38 @@ elsewhere, so a self-made first PIN there would let a coworker sign in as them.
 - Phones set up before this change have no such owner on record, so an owner
   without a PIN there gets theirs from another owner.
 
+## Repair payments (2026-10-28)
+
+Agreed with the owner before building payments. This replaces the paper cash
+book for repairs and starts the store's money ledger.
+
+- **Paid in full at pickup:** the phone goes back once what is left (Sisa) is
+  paid. Only an owner can let it go unpaid ("Bayar nanti", with a reason). It
+  then stays as a debt on the owners' unpaid list until the customer pays.
+- **Methods:** Tunai, QRIS (the store's own QR, marked received by the counter),
+  EDC and Transfer, and one payment may be split across them. Owners set each
+  store's methods and name the account the money lands in. An account belongs to
+  one store or is a central account the franchise shares (the main owner picks
+  which stores use it). An EDC payment needs the slip's approval code; other
+  references are optional.
+- **DP:** a down payment is a real payment with its method, taken at intake or
+  later, and printed on the slips as before.
+- **Integrated QRIS:** Xendit (Bolusi shows a QR for the exact amount and Xendit
+  confirms it). Built after manual payments; each settlement owner (a store or
+  the franchise) opens its own Xendit account. Manual QRIS stays available.
+- **Refunds are owners':** the counter gives back only what a customer paid
+  beyond their bill, through the method they paid with (a cancelled servisan's
+  DP less its fee, an overpayment). Anything more, a lower bill or a cancelled
+  payment is an owner's. A cancel fee larger than the DP is paid at handover.
+- **Tutup kas, daily:** each store counts its drawer once a day. Bolusi knows
+  what should be there (cash in, less refunds, less cash taken out with a
+  reason: to the owner, a small expense, a bank deposit; or change money put
+  in). The difference is kept for the owners, and only an owner settles it.
+- **Real books behind it:** every money record posts balanced double-entry lines
+  in one ledger the stock and purchasing work also posts to. Owners see plain
+  views for now (money in by method, the drawer, the unpaid list); accountant
+  screens come later. POS and accounting record and read money the same way.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.
@@ -313,6 +345,48 @@ The repair payment journey supports deposits, split payments, and the remaining 
 ## Why / rejected alternatives
 
 The owner chose an actual repair business outcome rather than stock control alone, a retail-sale-first sequence, or intake without pickup/payment. A full repair journey needs genuine stock, customer, payment, evidence, and printing seams, but does not require shipping a standalone retail checkout first. Automatically treating an externally paid QRIS/EDC transaction as provider-confirmed would substitute a cashier claim for a provider result. Promising universal printer or existing-bank API compatibility without real hardware/merchant access would create a false acceptance gate.
+
+## Parts and stock (2026-10-28)
+
+Agreed with the owner, as the first part of parts, purchasing and stock.
+
+- **One parts list for the business** (the inventory module), built for
+  thousands of parts. Stock is per store. Owners add parts and correct stock
+  ("Koreksi stok", owners only); starting stock comes from a correction. The
+  phones a part fits are picked from the phone catalog, as at intake, and the
+  take step offers the parts that fit the servisan's phone first.
+- **Taking a part drops stock; putting it back returns it.** Technicians take
+  parts for their own servisan, and the counter (who assigns work) can take for
+  any servisan. There is no storekeeper.
+- **No cheating the shelf:** parts move only for a servisan being worked on
+  (Dikerjakan or Tunggu sparepart, in the store); every take records who and when; only what a
+  servisan took can go back; once it is repaired, cancelled or handed back only
+  an owner corrects its parts. A cancelled servisan shows parts not yet back.
+- **Customers never see part prices:** parts are not bill lines, and taking a
+  part never changes the price.
+- **Offline first:** two phones may take the last part; stock goes below zero
+  and the owner sees it under "Stok minus" instead of the repair being blocked.
+  A count is the shelf at the moment it was made (by the phone's clock): a take
+  made after it still comes off when it syncs, one made before is already in the
+  count, and of two counts the later one stands.
+- **Categories and built names (2026-10-28):** the list holds every item the
+  shops stock, not only parts. The business owner alone sets up categories:
+  each lists the fields its items fill in (pick one, pick several, text, or the
+  phones it fits) and a name format such as `LCD {HP} {Kualitas} {Tambahan}`,
+  so names read one way whoever enters them. Choices grow as new values are
+  typed ("+ frame"). A name can still be typed for an odd item; a format change
+  renames only the items it named. The owner marks which categories are
+  spareparts: the take step offers only those and items with no category. Tags
+  are free labels on any item.
+- **Finding items:** fuzzy, typo-tolerant search over names, codes, barcodes,
+  field values, tags and phones; filters by category, stock, field values and
+  tags; a camera scan of a barcode or QR code opens its item (exact match only,
+  never a near miss). The PC gets a spreadsheet-like table with paste from Excel.
+- **Next, in order:** supplier orders and receiving, supplier invoices and
+  payments (on the shared money ledger), transfers between stores, supplier
+  returns, stock counts across many parts (a fast table on the PC). Part costs
+  will be seen only by owners and whoever records purchases; a sell price per
+  store waits for the shop POS.
 
 ## Open product choices
 

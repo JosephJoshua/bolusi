@@ -22,7 +22,7 @@ import {
   Tooltip,
   controlClass,
 } from '@bolusi/ui-web';
-import { ArrowLeft, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
+import { ArrowLeft, Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
@@ -69,7 +69,14 @@ import {
   optionLabel,
   readyLabel,
 } from '../labels.js';
-import { useIntakeOptionSettings, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import {
+  useIntakeOptionSettings,
+  usePaymentAccounts,
+  useRepairQuery,
+  useRepairRuntime,
+} from '../runtime.js';
+import type { PaymentAccountRow } from '../../money/queries.js';
+import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import type { MediaRef } from '@bolusi/schemas';
 
 import {
@@ -101,6 +108,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
   downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
+  downPaymentReference: 'repair.problem.downPaymentReference',
   screenLock: 'repair.problem.screenLock',
 };
 
@@ -115,6 +123,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   incompleteLine: 'repair.desk.intake.lines',
   negativeTotal: 'repair.desk.intake.lines',
   downPaymentAboveTotal: 'repair.desk.intake.downPayment',
+  downPaymentReference: 'repair.desk.intake.downPaymentMethod.reference',
   screenLock: 'repair.desk.intake.lock.kind',
 };
 
@@ -163,12 +172,15 @@ export function IntakePage({
   const update = (patch: Partial<IntakeDraft>): void =>
     setDraft((current) => ({ ...current, ...patch }));
   const dirty = intakeDirty(draft);
+  // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const problemsBy = useMemo(
     () =>
       Object.fromEntries(
-        SECTIONS.map((section) => [section, stepProblems(draft, section, options)]),
+        SECTIONS.map((section) => [section, stepProblems(draft, section, options, accounts)]),
       ),
-    [draft, options],
+    [draft, options, accounts],
   ) as Readonly<Record<Section, IntakeProblem[]>>;
   const problems = SECTIONS.flatMap((section) => problemsBy[section]);
   const problemText = (problem: IntakeProblem): string | undefined =>
@@ -231,14 +243,14 @@ export function IntakePage({
   };
 
   const save = (): void => {
-    if (settings.status === 'loading') return;
+    if (settings.status === 'loading' || loadedAccounts === null) return;
     if (problems.length > 0) {
       setShowProblems(true);
       focusProblem(problems[0]!);
       return;
     }
     void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now())))
+      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
       .then((opened) => {
         if (opened === undefined) return;
         onDraftChange?.(null);
@@ -270,6 +282,21 @@ export function IntakePage({
           photos: { ...current.photos, [angle.id]: captured.mediaRef },
         }));
       });
+  };
+
+  /** Every angle still missing, one after another; backing out of one stops there. */
+  const takeMissing = (): void => {
+    const missing = options.photoAngles.filter((angle) => draft.photos[angle.id] === undefined);
+    void runner.run(async () => {
+      for (const angle of missing) {
+        const captured = await runtime.capturePhoto({ title: optionLabel('photoAngles', angle) });
+        if (captured === null) return;
+        setDraft((current) => ({
+          ...current,
+          photos: { ...current.photos, [angle.id]: captured.mediaRef },
+        }));
+      }
+    });
   };
 
   return (
@@ -363,6 +390,7 @@ export function IntakePage({
                   draft={draft}
                   angles={options.photoAngles}
                   onTake={takePhoto}
+                  onTakeMissing={takeMissing}
                   showMissing={showProblems}
                 />
               </IntakeSection>
@@ -375,6 +403,8 @@ export function IntakePage({
                   lineError={problemText('incompleteLine')}
                   totalError={problemText('negativeTotal') ?? problemText('quoteLines')}
                   downPaymentError={problemText('downPaymentAboveTotal')}
+                  accounts={accounts}
+                  referenceError={problemText('downPaymentReference')}
                 />
               </IntakeSection>
             </div>
@@ -1018,16 +1048,31 @@ function PhotoFields({
   draft,
   angles,
   onTake,
+  onTakeMissing,
   showMissing,
 }: {
   readonly draft: IntakeDraft;
   readonly angles: readonly IntakeOption[];
   readonly onTake: (angle: IntakeOption) => void;
+  /** Takes every missing angle in a row. */
+  readonly onTakeMissing: () => void;
   readonly showMissing: boolean;
 }): React.JSX.Element {
+  const missing = angles.filter((angle) => draft.photos[angle.id] === undefined).length;
   return (
     <div data-testid="repair.desk.intake.photos" tabIndex={-1} className="focus:outline-none">
-      <p className="mb-4 text-body text-text-muted">{tn('repair.photo.intakeHint')}</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-body text-text-muted">{tn('repair.photo.intakeHint')}</p>
+        {missing > 1 ? (
+          <Button
+            label={tn('repair.photo.takeAll')}
+            icon={Camera}
+            size="sm"
+            onClick={onTakeMissing}
+            data-testid="repair.desk.intake.photo.all"
+          />
+        ) : null}
+      </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3">
         {angles.map((angle) => (
           <AngleTile
@@ -1084,6 +1129,8 @@ function PriceFields({
   lineError,
   totalError,
   downPaymentError,
+  accounts,
+  referenceError,
 }: {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
@@ -1092,6 +1139,8 @@ function PriceFields({
   readonly lineError: string | undefined;
   readonly totalError: string | undefined;
   readonly downPaymentError: string | undefined;
+  readonly accounts: readonly PaymentAccountRow[];
+  readonly referenceError: string | undefined;
 }): React.JSX.Element {
   const lines = draft.lines.length === 0 ? [EMPTY_LINE] : draft.lines;
   const setLine = (index: number, patch: Partial<QuoteLineDraft>): void =>
@@ -1205,6 +1254,21 @@ function PriceFields({
             data-testid="repair.desk.intake.downPayment"
           />
         </div>
+        {intakeDownPayment(draft) > 0 ? (
+          <div className="mt-3">
+            <PaymentMethodField
+              accounts={accounts}
+              account={draft.downPaymentAccount}
+              reference={draft.downPaymentReference}
+              onChange={({ account, reference }) =>
+                update({ downPaymentAccount: account, downPaymentReference: reference })
+              }
+              referenceError={referenceError}
+              align="end"
+              testId="repair.desk.intake.downPaymentMethod"
+            />
+          </div>
+        ) : null}
       </div>
       <div>
         <p className="mb-2 text-small font-semibold text-text">{tn('repair.ticket.readyBy')}</p>

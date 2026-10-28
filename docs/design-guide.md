@@ -33,6 +33,10 @@ competing hierarchy, not missing decoration.
   outlined and "yes" filled (`FlowScreen` `question` + `secondary`). A rare or
   risky escape ("Pakai tanpa konfirmasi pelanggan") is a `TextButton` in the
   body, away from the answers.
+- **Offer the next step, not every transition.** A record shows the one step
+  this person takes next for where it stands, at most one real alternative
+  ("Tunggu sparepart" while working), and the rarer moves under "Lainnya".
+  A row of every status change is CRUD thinking (`arrangeTicketActions`).
 - **Destructive actions** are danger `TextButton`s placed apart at the end
   ("Batalkan servisan"), then confirmed in `ConfirmSheet`. They are never a
   solid red block that looks like the next step.
@@ -162,7 +166,7 @@ Write like Gojek or Tokopedia product copy: short, everyday, friendly, exact.
 - Say what happened or what to do, in plain words: "Belum dikonfirmasi
   pelanggan: Rp 180.000", not "Usulan belum diputuskan". Prefer
   "konfirmasi", "ajukan", "diajukan teknisi", "ditolak pelanggan".
-- Buttons are verbs or direct answers: "Ambil servisan ini", "Serahkan HP",
+- Buttons are verbs or direct answers: "Mulai kerjakan", "Serahkan HP",
   "Setuju" / "Tidak setuju". No "OK", no "Submit", no "Proses".
 - Validation tells the next step, ending in "dulu" where natural: "Tulis
   alasannya dulu." Errors say what failed and what to try: "Fotonya belum bisa

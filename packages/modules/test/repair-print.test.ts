@@ -123,6 +123,7 @@ describe('handover slip', () => {
     expect(text).toContain('Biaya pembatalan');
     expect(text).toContain('Pelanggan tidak jadi');
     expect(text).not.toContain('Ganti LCD');
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 20\.000/);
     expect(text).toMatch(/Sisa bayar\s+Rp 30\.000/);
     // No repair, so no warranty terms.
     expect(text).not.toContain('KETENTUAN');
@@ -172,6 +173,24 @@ describe('handover slip', () => {
     expect(text).toMatch(/Klaim dari\s+: K7Q-0005/);
     expect(text).toMatch(/Ganti layar\s+: s\/d 31\/10\/2026/);
     expect(allText(intakeSlip(claim, ctx))).toMatch(/Klaim dari\s+: K7Q-0005/);
+  });
+
+  it('an intake receipt reprinted after pickup does not call the whole bill a DP', () => {
+    const text = allText(
+      intakeSlip(sampleTicket({ downPayment: 950_000, location: 'returned' }), ctx),
+    );
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 950\.000/);
+    expect(text).not.toMatch(/\bDP\b/);
+  });
+
+  it('a slip printed once the phone is paid for reads as paid in full', () => {
+    const paid = sampleTicket({ downPayment: 950_000, location: 'returned' });
+    const text = allText(
+      handoverSlip(paid, { ...ctx, handedOverByName: 'Maria Kasir', signature: null }),
+    );
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 950\.000/);
+    expect(text).toMatch(/Sisa bayar\s+Rp 0/);
+    expect(text).not.toMatch(/\bDP\b/);
   });
 
   it('shows the on-screen signature on plain paper', () => {

@@ -333,8 +333,13 @@ export const workPhotosAddedPayload = z
   })
   .strict();
 
-export const deviceReturnedPayload = z
+export const deviceReturnedPayloadV1 = z
   .object({ handoverPhoto: zMediaRef, signature: zMediaRef, note: zLongText })
+  .strict();
+
+/** v2: settled in the money ledger; `unpaidReason` is an owner's word for letting it go unpaid. */
+export const deviceReturnedPayload = deviceReturnedPayloadV1
+  .extend({ unpaidReason: z.string().trim().min(1).max(MAX_TEXT).nullable() })
   .strict();
 
 /** Money the customer paid up front: a positive amount when received. */
@@ -510,8 +515,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.repairTypes, severity: 'minor' },
   },
   [REPAIR_OP.deviceReturned]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: deviceReturnedPayload,
+    payloadByVersion: { 1: deviceReturnedPayloadV1 },
     reversal: 'Not reversible: the device physically left the store. Warranty opens a new ticket.',
     apply: deviceReturnedApplier,
     rule: deviceReturnedRule,

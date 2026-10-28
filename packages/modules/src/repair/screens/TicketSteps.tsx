@@ -53,9 +53,13 @@ import { useDiscardConfirm } from './discard.js';
 import {
   useCancelFees,
   useIntakeOptionSettings,
+  useDownPaymentMethod,
+  usePaymentAccounts,
   useRepairQuery,
   useRepairRuntime,
 } from '../runtime.js';
+import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 interface StepProps {
   readonly chrome: RepairChrome;
@@ -408,6 +412,10 @@ export function DownPaymentStep({
   // Empty even when correcting: the recorded amount is shown above, and the step asks for a new one.
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
+  const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const correcting = mode === 'correct';
   const { amount, aboveTotal, gap } = downPaymentEntry({
     mode,
@@ -415,16 +423,26 @@ export function DownPaymentStep({
     reason,
     current,
     total,
+    referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
-  const complete = gap === null;
+  const complete = gap === null && loadedAccounts !== null;
 
   const submit = (): void => {
     if (!complete || amount === null) return;
     void runner
       .run(() =>
         correcting
-          ? runtime.run('correctDownPayment', { ticketId, amount, reason })
-          : runtime.run('recordDownPayment', { ticketId, amount }),
+          ? runtime.run('correctDownPayment', {
+              ticketId,
+              amount,
+              reason,
+              ...chosenMethod(method.account, method.reference, accounts),
+            })
+          : runtime.run('recordDownPayment', {
+              ticketId,
+              amount,
+              ...chosenMethod(method.account, method.reference, accounts),
+            }),
       )
       .then((result) => {
         if (result !== undefined) onDone();
@@ -468,6 +486,17 @@ export function DownPaymentStep({
           {tn('repair.downPayment.ofTotal', { amount: formatMoney(total) })}
         </Text>
       </View>
+      {correcting && (amount ?? 0) === 0 ? null : (
+        <View style={repairStyles.gap}>
+          <PaymentMethodField
+            accounts={accounts}
+            account={method.account}
+            reference={method.reference}
+            onChange={setMethod}
+            testID={`${testID}.method`}
+          />
+        </View>
+      )}
       {correcting ? (
         <View style={repairStyles.gap}>
           <TextInput

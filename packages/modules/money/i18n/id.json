@@ -1,0 +1,53 @@
+{
+  "opType": {
+    "accountSaved": "Metode pembayaran diubah",
+    "centralAccountSaved": "Metode pembayaran pusat diubah",
+    "chargeRecorded": "Tagihan dicatat",
+    "chargeReduced": "Tagihan dikurangi",
+    "paymentReceived": "Pembayaran diterima",
+    "paymentVoided": "Pembayaran dibatalkan",
+    "refundPaid": "Uang dikembalikan",
+    "cashMoved": "Kas keluar/masuk",
+    "cashCounted": "Tutup kas",
+    "cashAdjusted": "Selisih kas diselesaikan"
+  },
+  "refusal": {
+    "alreadyRecorded": "Catatan ini sudah ada.",
+    "documentNotFound": "Tagihan ini tidak ada di toko ini.",
+    "notChargeable": "Belum bisa ditagih. Servisan belum selesai.",
+    "chargeMismatch": "Jumlah tagihan tidak sama dengan harga yang disepakati.",
+    "aboveCharged": "Potongan lebih besar dari tagihan.",
+    "accountNotUsable": "Metode pembayaran ini tidak tersedia di toko ini.",
+    "referenceRequired": "Isi kode approval dari struk EDC.",
+    "tenderedTooLow": "Uang yang diterima kurang dari jumlah bayar.",
+    "paymentNotFound": "Pembayaran ini tidak ditemukan.",
+    "alreadyVoided": "Pembayaran ini sudah dibatalkan.",
+    "refundAboveCredit": "Uang yang dikembalikan lebih dari kelebihan bayar. Minta pemilik.",
+    "notCharged": "Tagihannya belum dicatat. Minta pemilik untuk mengembalikan uang.",
+    "refundAbovePaid": "Uang yang dikembalikan lebih dari yang dibayar pelanggan.",
+    "notThisStore": "Ini milik toko lain.",
+    "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
+    "countNotFound": "Hitungan kas ini tidak ditemukan.",
+    "countSettled": "Selisih hitungan kas ini sudah diselesaikan."
+  },
+  "method": {
+    "cash": "Tunai"
+  },
+  "pay": {
+    "amount": "Jumlah",
+    "tendered": "Uang diterima",
+    "change": "Kembalian",
+    "approvalCode": "Kode approval",
+    "reference": "No. referensi (opsional)",
+    "addMethod": "Tambah metode lain",
+    "remove": "Hapus metode ini",
+    "removeLabel": "Hapus pembayaran {method}",
+    "remaining": "Kurang {amount}",
+    "overpaid": "Lebih {amount}. Kurangi jumlahnya dulu.",
+    "problem": {
+      "tendered": "Uang diterima kurang dari jumlahnya."
+    },
+    "method": "Metode pembayaran",
+    "currency": "Rp"
+  }
+}

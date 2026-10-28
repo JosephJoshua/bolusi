@@ -23,6 +23,7 @@ import { serverTime } from './middleware/server-time.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createCatalogRouter } from './routes/catalog.js';
 import { createDevicesRouter } from './routes/devices.js';
+import { createHandoffPageRouter, createHandoffRouter } from './routes/handoff.js';
 import { createMediaRouter } from './routes/media.js';
 import { createPushRouter } from './routes/push.js';
 import { createRealtimeRouter } from './routes/realtime.js';
@@ -178,16 +179,21 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
 
   // §13 steps 10–11: validators live on the routes (shared 422 hook); handlers open the tenant
   // transaction via the tenant helper (task 16+). Mounted chained under /v1 (§14).
-  return app
-    .route('/v1/auth', createAuthRouter(deps))
-    .route('/v1/devices', createDevicesRouter(deps))
-    .route('/v1/users', createUsersRouter(deps))
-    .route('/v1/tenant', createTenantRouter(deps))
-    .route('/v1/sync', createSyncRouter(deps))
-    .route('/v1/media', createMediaRouter(deps))
-    .route('/v1/push', createPushRouter(deps))
-    .route('/v1/realtime', createRealtimeRouter(deps))
-    .route('/v1/catalog', createCatalogRouter(deps));
+  return (
+    app
+      .route('/v1/auth', createAuthRouter(deps))
+      .route('/v1/devices', createDevicesRouter(deps))
+      .route('/v1/users', createUsersRouter(deps))
+      .route('/v1/tenant', createTenantRouter(deps))
+      .route('/v1/sync', createSyncRouter(deps))
+      .route('/v1/media', createMediaRouter(deps))
+      .route('/v1/push', createPushRouter(deps))
+      .route('/v1/realtime', createRealtimeRouter(deps))
+      .route('/v1/catalog', createCatalogRouter(deps))
+      .route('/v1/handoff', createHandoffRouter(deps))
+      // The store phone's page: no device token (the pairing key is its credential), so outside /v1.
+      .route('/h', createHandoffPageRouter(deps))
+  );
 }
 
 /** The production app instance (default deps): the RPC contract surface + boot handler. */

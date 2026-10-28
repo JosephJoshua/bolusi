@@ -28,7 +28,8 @@ import {
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
-import { systemClock } from './src/ports/clock.js';
+import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
+import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
 import {
@@ -36,14 +37,14 @@ import {
   withDraft,
   withRoute,
   type UserWorkspace,
-} from './src/state/user-workspaces.js';
+} from '@bolusi/device/state/user-workspaces';
 import { useHardwareBack } from './src/navigation/useHardwareBack.js';
 import {
   backTarget,
   resolveZone,
   type DeviceStatus,
   type ShellRoute,
-} from './src/navigation/zone.js';
+} from '@bolusi/device/navigation/zone';
 import { EnrollmentScreen } from './src/screens/enrollment/EnrollmentScreen.js';
 import {
   afterLogin,
@@ -54,16 +55,16 @@ import {
   initialEnrollmentState,
   needsDiscardConfirm,
   type EnrollmentState,
-} from './src/screens/enrollment/model.js';
-import type { EnrollmentController } from './src/bootstrap/enrollment.js';
+} from '@bolusi/device/models/enrollment/model';
+import type { EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
 import { StaffScreen } from './src/screens/staff/StaffScreen.js';
-import type { PinTargetUser } from './src/screens/pin/pin-target.js';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
-import { pinView } from './src/screens/pin/model.js';
+import { pinView } from '@bolusi/device/models/pin/model';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
 import { roleLabel } from './src/screens/switcher/UserRow.js';
@@ -72,24 +73,26 @@ import {
   switcherState,
   tapTarget,
   type SwitcherUser,
-} from './src/screens/switcher/model.js';
+} from '@bolusi/device/models/switcher/model';
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
 import {
   firstSyncPercent,
   syncChipState,
   type SyncStatusInput,
-} from './src/screens/sync-status/model.js';
+} from '@bolusi/device/models/sync-status/model';
 import { syncChipAccessibilityLabels } from './src/screens/sync-status/chip-a11y.js';
 import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
 import type { SignatureSurface } from './src/media/SignatureHost.js';
 import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
-import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
+import type { ScanSurface } from './src/media/ScanHost.js';
+import { ScanScreen } from './src/media/ScanScreen.js';
+import type { DeviceInfo, MutablePushCategory } from '@bolusi/device/models/settings/model';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
-import type { StaffControls } from './src/bootstrap/staff.js';
+import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
@@ -98,6 +101,8 @@ import {
   type IntakeDraft,
 } from '@bolusi/modules/repair';
 import { tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
+import { ti } from '@bolusi/modules/inventory/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -150,6 +155,8 @@ export interface AppProps {
    * exactly like `capture`: it wins the screen inside the shell zone only, so a lock still wins.
    */
   readonly signature?: SignatureSurface | null;
+  /** The code scanner while it looks for a barcode or QR code, from `useScanHost`; like `capture`. */
+  readonly scan?: ScanSurface | null;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -575,6 +582,7 @@ export default function App(props: AppProps): React.JSX.Element {
 
   const captureSurface = props.capture ?? null;
   const signatureSurface = props.signature ?? null;
+  const scanSurface = props.scan ?? null;
   const goBack = useCallback((): boolean => {
     if (accountMenu) {
       setAccountMenu(false);
@@ -590,6 +598,10 @@ export default function App(props: AppProps): React.JSX.Element {
     }
     if (signatureSurface !== null) {
       signatureSurface.onBack();
+      return true;
+    }
+    if (scanSurface !== null) {
+      scanSurface.onBack();
       return true;
     }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
@@ -640,7 +652,7 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, syncReturn]);
+  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, scanSurface, syncReturn]);
 
   // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
   useEffect(() => {
@@ -730,6 +742,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
+  const closeParts = useCallback(() => setRoute('home'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
   const currentUser = useMemo(() => {
@@ -803,6 +816,7 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const capture = zone.kind === 'shell' ? captureSurface : null;
   const signing = zone.kind === 'shell' ? signatureSurface : null;
+  const scanning = zone.kind === 'shell' ? scanSurface : null;
   const modal =
     capture !== null ? (
       <CaptureScreen
@@ -834,6 +848,14 @@ export default function App(props: AppProps): React.JSX.Element {
         onRetry={signing.onRetry}
         onBack={signing.onBack}
         onPadLayout={signing.onPadLayout}
+      />
+    ) : scanning !== null ? (
+      <ScanScreen
+        state={scanning.state}
+        preview={scanning.preview}
+        syncChip={modalSyncChip}
+        avatar={<View testID="scan-no-avatar" />}
+        onBack={scanning.onBack}
       />
     ) : null;
 
@@ -1150,6 +1172,25 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            if (shellZone.route === 'parts' && props.repair?.inventory !== undefined) {
+              return (
+                <PartsRoute
+                  runtime={props.repair.inventory}
+                  syncChip={
+                    <SyncChip
+                      state={chip}
+                      pendingCount={props.sync.pendingOperationCount}
+                      accessibilityLabels={syncChipAccessibilityLabels({
+                        pendingCount: props.sync.pendingOperationCount,
+                      })}
+                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
+                    />
+                  }
+                  onClose={closeParts}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
             if (shellZone.route === 'changePin') {
               // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
               // through the session controller and REJECTS with its DomainError; the screen maps it.
@@ -1342,6 +1383,17 @@ export default function App(props: AppProps): React.JSX.Element {
               }}
               testID="account-menu-switch-user"
             />
+            {props.repair?.inventory?.hasPermission(INVENTORY_PERMISSION.read) === true ? (
+              <ListRow
+                leading={<Icon name="parts" size={size.iconInline} color={color.text} />}
+                primaryText={ti('inventory.list.title')}
+                onPress={() => {
+                  setAccountMenu(false);
+                  leaveHome(() => setRoute('parts'));
+                }}
+                testID="shell-open-parts"
+              />
+            ) : null}
             <ListRow
               leading={<Icon name="settings" size={size.iconInline} color={color.text} />}
               primaryText={t('core.settings.title')}
@@ -1437,6 +1489,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'staffPins',
   'printSettings',
   'printPaper',
+  'parts',
 ]);
 
 /**

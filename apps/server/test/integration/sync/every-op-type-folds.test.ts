@@ -91,6 +91,83 @@ function journey(world: ChainWorld): OpSpec[] {
   const cancelledTicket = id(3);
   const note = id(4);
   const screen = { item: 'screen', label: null, warrantyDays: 30, needsVideo: false };
+  const part = id(8);
+  const category = id(9);
+  // A part drawn for the servisan while it is being worked on, and the unused one put back.
+  const partsUsed = (): OpSpec[] => {
+    const use = { kind: 'repair_ticket', id: ticket, label: formatTicketNumber(world.deviceId, 1) };
+    const movement = (n: number, type: string, payload: Record<string, unknown>): OpSpec => ({
+      type,
+      entityType: 'inventory_movement',
+      entityId: id(0x300 + n),
+      payload,
+    });
+    const lcdFields = [
+      { id: 'hp', label: 'HP', kind: 'phones', options: [] },
+      { id: 'q', label: 'Kualitas', kind: 'one', options: ['Original', 'OEM'] },
+    ];
+    return [
+      {
+        type: 'inventory.category_added',
+        entityType: 'inventory_category',
+        entityId: category,
+        storeId: null,
+        payload: { name: 'LCD', isPart: true, fields: lcdFields, nameFormat: 'LCD {HP}' },
+      },
+      {
+        type: 'inventory.category_edited',
+        entityType: 'inventory_category',
+        entityId: category,
+        storeId: null,
+        payload: {
+          name: 'LCD',
+          isPart: true,
+          fields: lcdFields,
+          nameFormat: 'LCD {HP} {Kualitas}',
+          archived: false,
+        },
+      },
+      {
+        type: 'inventory.item_added',
+        entityType: 'inventory_item',
+        entityId: part,
+        storeId: null,
+        payload: {
+          name: 'LCD Samsung Galaxy A14 Original',
+          nameAuto: true,
+          code: null,
+          barcode: '8991234567890',
+          categoryId: category,
+          values: { q: ['Original'] },
+          tags: ['laris'],
+          fits: [{ brand: 'Samsung', model: 'Galaxy A14' }],
+        },
+      },
+      {
+        type: 'inventory.item_edited',
+        entityType: 'inventory_item',
+        entityId: part,
+        storeId: null,
+        payload: {
+          name: 'LCD Samsung A14',
+          nameAuto: false,
+          code: 'LCD-A14',
+          barcode: null,
+          categoryId: null,
+          values: {},
+          tags: [],
+          fits: [
+            { brand: 'Samsung', model: 'Galaxy A14' },
+            { brand: '', model: 'A14 5G' },
+          ],
+          archived: false,
+        },
+      },
+      movement(1, 'inventory.stock_counted', { itemId: part, counted: 3, expected: 0, note: null }),
+      movement(2, 'inventory.item_taken', { itemId: part, qty: 2, use }),
+      movement(3, 'inventory.item_put_back', { itemId: part, qty: 1, use }),
+    ];
+  };
   /** v3 with the repair types picked at intake; without them, the v2 an older app signs. */
   const opened = (
     ticketId: string,
@@ -123,6 +200,17 @@ function journey(world: ChainWorld): OpSpec[] {
     type,
     entityType: 'repair_ticket',
     entityId: ticket,
+    payload,
+  });
+  const document = {
+    kind: 'repair.ticket',
+    id: ticket,
+    label: formatTicketNumber(world.deviceId, 1),
+  };
+  const money = (type: string, n: number, payload: Record<string, unknown>): OpSpec => ({
+    type,
+    entityType: 'money_entry',
+    entityId: id(n),
     payload,
   });
   const credential = (type: string, payload: Record<string, unknown>): OpSpec => ({
@@ -248,6 +336,7 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.ticket_repair_types_changed', {
       repairTypes: [screen, { item: 'battery', label: null, warrantyDays: 30, needsVideo: false }],
     }),
+    ...partsUsed(),
     onTicket('repair.quote_change_proposed', {
       lineId: id(0x201),
       kind: 'part',
@@ -274,11 +363,75 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.work_started', {}),
     onTicket('repair.work_photos_added', { stage: 'after', photos: [photo(8)] }),
     onTicket('repair.marked_repaired', { note: '' }),
-    onTicket('repair.device_returned', {
-      handoverPhoto: photo(10),
-      signature: photo(11),
-      note: '',
+
+    // money: a DP, the charge, a split payment, an owner's refund, a void, and the drawer
+    {
+      type: 'money.account_saved',
+      entityType: 'money_account',
+      entityId: id(0x400),
+      payload: { kind: 'qris', name: 'QRIS BCA toko', active: true },
+    },
+    {
+      type: 'money.central_account_saved',
+      entityType: 'money_account',
+      entityId: id(0x401),
+      storeId: null,
+      payload: { kind: 'transfer', name: 'BCA pusat', active: true, storeIds: [] },
+    },
+    money('money.payment_received', 0x402, {
+      document,
+      account: 'cash',
+      amount: 100_000,
+      reference: null,
+      tendered: 150_000,
     }),
+    money('money.charge_recorded', 0x403, {
+      document,
+      amount: 600_000,
+      account: 'service_revenue',
+    }),
+    money('money.payment_received', 0x404, {
+      document,
+      account: `account:${id(0x400)}`,
+      amount: 500_000,
+      reference: null,
+      tendered: null,
+    }),
+    money('money.payment_received', 0x405, {
+      document,
+      account: `account:${id(0x401)}`,
+      amount: 5_000,
+      reference: 'TRF-1',
+      tendered: null,
+    }),
+    { ...money('money.payment_voided', 0x405, { reason: 'Salah catat' }) },
+    money('money.charge_reduced', 0x406, { document, amount: 10_000, reason: 'Komplain' }),
+    money('money.refund_paid', 0x407, {
+      document,
+      account: 'cash',
+      amount: 10_000,
+      reason: 'Komplain',
+      reference: null,
+    }),
+    money('money.cash_moved', 0x408, {
+      kind: 'withdrawal',
+      amount: 50_000,
+      reason: 'Setor ke pemilik',
+      account: null,
+    }),
+    money('money.cash_counted', 0x409, { counted: 30_000, note: '' }),
+    money('money.cash_adjusted', 0x40a, { amount: -10_000, countId: id(0x409), reason: 'Kurang' }),
+
+    // Paid in full above, so the phone may leave.
+    {
+      ...onTicket('repair.device_returned', {
+        handoverPhoto: photo(10),
+        signature: photo(11),
+        note: '',
+        unpaidReason: null,
+      }),
+      schemaVersion: 2,
+    },
     onTicket('repair.slip_printed', { slip: 'handover' }),
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {
@@ -413,4 +566,14 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
   ]);
   const notes = await db.selectFrom('notes').select('archived').execute();
   expect(notes).toEqual([{ archived: true }]);
+  // The money folds balance, and the servisan is settled: 100k DP + 500k QRIS, less the owner's 10k.
+  const books = await sql<{ debit: string; credit: string }>`
+    SELECT SUM(debit) AS debit, SUM(credit) AS credit FROM money_lines
+  `.execute(db);
+  expect(books.rows[0]!.debit).toBe(books.rows[0]!.credit);
+  const owed = await sql<{ balance: string }>`
+    SELECT SUM(debit - credit) AS balance FROM money_lines
+    WHERE account = 'receivable' AND document_id = ${id(2)}
+  `.execute(db);
+  expect(Number(owed.rows[0]!.balance)).toBe(0);
 });

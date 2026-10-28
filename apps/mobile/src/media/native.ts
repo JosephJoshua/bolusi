@@ -14,11 +14,15 @@
 import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
-import type { BackgroundHost } from '../bootstrap/background-task.js';
+import type { BackgroundHost } from '@bolusi/device/bootstrap/background-task';
 import { expoBackgroundTaskPlatform } from '../ports/background-task.js';
-import type { CompressedImage, ImageCompressorPort } from './compression.js';
+import type { CompressedImage, ImageCompressorPort } from '@bolusi/device/media/compression';
 import { availableDiskSpaceBytes, createEncryptingMediaFileParts } from './files.js';
-import { createMediaClient, type MediaClient, type MediaClientDeps } from './client.js';
+import {
+  createMediaClient,
+  type MediaClient,
+  type MediaClientDeps,
+} from '@bolusi/device/media/client';
 
 /**
  * The `expo-image-manipulator` binding — SDK 57's CONTEXTUAL API.

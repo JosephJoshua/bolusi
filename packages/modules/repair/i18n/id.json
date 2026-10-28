@@ -29,7 +29,7 @@
     "assign": "Pilih teknisi",
     "cancel": "Batalkan servisan",
     "changePrice": "Ubah harga",
-    "claim": "Ambil servisan ini",
+    "claim": "Masukkan ke Tugasku",
     "decidePrice": "Konfirmasi harga",
     "declinePrice": "Tidak setuju",
     "handover": "Serahkan HP",
@@ -48,7 +48,9 @@
     "reassignShort": "Ganti",
     "backToTicket": "Kembali ke servisan",
     "applyUnconfirmed": "Belum",
-    "agreedYes": "Sudah"
+    "agreedYes": "Sudah",
+    "takeOver": "Ambil alih",
+    "more": "Lainnya"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -142,7 +144,13 @@
     "signAgain": "Ulangi tanda tangan",
     "signature": "Tanda tangan pelanggan",
     "signatureTitle": "Tanda tangan pelanggan",
-    "cancelled": "Biaya perbaikan tidak ditagih."
+    "cancelled": "Biaya perbaikan tidak ditagih.",
+    "payment": "Pembayaran",
+    "payLater": "Bayar nanti",
+    "payNow": "Bayar sekarang",
+    "payLaterReason": "Alasan bayar nanti",
+    "payLaterNote": "Sisa {amount} dicatat sebagai utang pelanggan.",
+    "refundReason": "Sisa DP dikembalikan saat serah terima"
   },
   "intake": {
     "discard": "Buang",
@@ -183,6 +191,7 @@
       "top": "Atas"
     },
     "take": "Ambil foto",
+    "takeAll": "Ambil semua foto",
     "takeNext": "Ambil foto: {slot}",
     "expired": "Ada foto yang sudah terhapus. Ambil ulang, ya.",
     "title": "Foto",
@@ -197,6 +206,7 @@
   },
   "price": {
     "amount": "Harga (Rp)",
+    "paid": "Sudah dibayar",
     "decisionNote": "Catatan (opsional)",
     "description": "Keterangan",
     "kind": {
@@ -237,6 +247,7 @@
     "incompleteLine": "Biaya ini belum ada keterangannya.",
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
+    "downPaymentReference": "Isi kode approval dari mesin EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
   },
   "ready": {
@@ -295,7 +306,8 @@
     "discountOwner": "Diskon hanya bisa disetujui pemilik.",
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
-    "downPaymentSame": "Jumlahnya masih sama."
+    "downPaymentSame": "Jumlahnya masih sama.",
+    "handoverPayment": "Lengkapi pembayarannya dulu."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -439,6 +451,7 @@
     "estimateTotal": "Estimasi total",
     "total": "Total",
     "downPayment": "DP",
+    "paid": "Sudah dibayar",
     "balance": "Sisa bayar",
     "sign": {
       "customer": "Pelanggan",
@@ -578,6 +591,14 @@
       "next": "Halaman berikutnya",
       "page": "Halaman {page}",
       "pages": "Halaman"
+    },
+    "settings": {
+      "discard": "Buang perubahan",
+      "slipLead": "Nama toko, logo dan ketentuan yang tercetak di nota toko ini."
+    },
+    "options": {
+      "dragHandle": "Seret untuk mengubah urutan, atau pakai panah atas dan bawah",
+      "new": "Baru"
     }
   },
   "refusal": {
@@ -611,6 +632,11 @@
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
+    "partsNotInWork": "Sparepart hanya bisa diambil atau dikembalikan saat servisan sedang dikerjakan.",
+    "partsNotYours": "Servisan ini dipegang teknisi lain.",
+    "notPaid": "Servisan ini belum lunas.",
+    "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas.",
+    "downPaymentRefunded": "Sebagian DP ini sudah dikembalikan, jadi tidak bisa diubah.",
     "repairTypesNotYours": "Hanya kasir atau teknisi yang bisa mengubah jenis servisan.",
     "claimNotReturned": "Klaim garansi hanya untuk HP yang sudah selesai diservis dan diambil.",
     "claimOfClaim": "Klaim garansi dibuat dari servisan aslinya, bukan dari klaim lain.",

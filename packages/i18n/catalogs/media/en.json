@@ -27,5 +27,9 @@
   },
   "upload": {
     "persistentFailure": "{count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}}"
+  },
+  "scan": {
+    "title": "Scan code",
+    "hint": "Point the camera at a barcode or QR code."
   }
 }

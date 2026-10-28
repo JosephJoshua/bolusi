@@ -22,7 +22,11 @@ import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js
 import { describe, expect, test, vi } from 'vitest';
 
 import { SettingsScreen } from './SettingsScreen.js';
-import { MUTABLE_PUSH_CATEGORIES, type DeviceInfo, type MutablePushCategory } from './model.js';
+import {
+  MUTABLE_PUSH_CATEGORIES,
+  type DeviceInfo,
+  type MutablePushCategory,
+} from '@bolusi/device/models/settings/model';
 
 const ENROLLED: DeviceInfo = {
   deviceId: 'device-abc-123',

@@ -86,6 +86,11 @@ export interface TextInputProps {
    */
   readonly revealOnFocus?: RevealMode | undefined;
   readonly onBlur?: (() => void) | undefined;
+  /**
+   * The keyboard's enter key, for a field that adds what was typed and stays open for the next one
+   * (a tag, a choice). Present: the key reads "done" and the field keeps the keyboard up.
+   */
+  readonly onSubmitEditing?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -142,6 +147,7 @@ export function TextInput({
   maxLength,
   revealOnFocus = 'into-view',
   onBlur,
+  onSubmitEditing,
   testID = 'ui.textInput',
 }: TextInputProps): React.JSX.Element {
   const reveal = useRevealOnFocus(revealOnFocus);
@@ -184,6 +190,9 @@ export function TextInput({
           autoFocus={autoFocus}
           multiline={effectiveMultiline}
           maxLength={maxLength}
+          onSubmitEditing={onSubmitEditing}
+          returnKeyType={onSubmitEditing === undefined ? undefined : 'done'}
+          submitBehavior={onSubmitEditing === undefined ? undefined : 'submit'}
           onFocus={() => {
             setFocused(true);
             reveal.onFocus();

@@ -33,7 +33,7 @@ vi.mock('expo-location', () => ({
 }));
 
 import { fire, type RenderResult } from '../../../packages/ui/test/render.js';
-import { createSessionRepairRuntime, repairMediaSeamsFor } from '../src/bootstrap/repair.js';
+import { createSessionRepairRuntime, repairMediaSeamsFor } from '@bolusi/device/bootstrap/repair';
 import { __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.js';
 import {
   bootFixture,

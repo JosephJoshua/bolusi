@@ -43,16 +43,16 @@ import { View } from 'react-native';
 
 import App from '../../App.js';
 import { bootstrapI18n, writeDeviceLocale, type LocaleStorePort } from '../i18n.js';
-import { defaultMuteState, type DeviceInfo } from '../screens/settings/model.js';
-import { systemClock } from '../ports/clock.js';
+import { defaultMuteState, type DeviceInfo } from '@bolusi/device/models/settings/model';
+import { systemClock } from '@bolusi/device/ports/clock';
 import { startLocationWatcher } from '../ports/location.js';
 import { useLatestCallback } from '../hooks/useLatestCallback.js';
 import type { Locale } from '@bolusi/i18n';
 
-import type { Bootstrapped } from './bootstrap.js';
-import type { AppEnrollment, EnrollmentController } from './enrollment.js';
-import { readSessionIdentity } from './notes.js';
-import { createUserLocaleWriter } from './user-locale.js';
+import type { Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import type { AppEnrollment, EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
+import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
+import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import { createNotificationChannels } from './notifications.js';
 import {
   answerNotificationAsk,
@@ -70,24 +70,25 @@ import {
   type PushRouteRequest,
   type PushRouterPort,
 } from '../push/router.js';
-import { REPAIR_REJECTED_SUBJECTS } from './repair.js';
-import type { AppRuntime } from './runtime.js';
-import type { AppSessionController as AppSession } from './session.js';
-import { resolveShellInputs } from './shell-inputs.js';
-import { createStaffControls } from './staff.js';
-import type { UserWorkspace } from '../state/user-workspaces.js';
+import { REPAIR_REJECTED_SUBJECTS } from '@bolusi/device/bootstrap/repair';
+import type { AppRuntime } from '@bolusi/device/bootstrap/runtime';
+import type { AppSessionController as AppSession } from '@bolusi/device/bootstrap/session';
+import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
+import { createStaffControls } from '@bolusi/device/bootstrap/staff';
+import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import {
   NO_SYNC_STATUS_READS,
   readSyncStatusRows,
   type SyncStatusReads,
-} from './sync-status-reads.js';
+} from '@bolusi/device/bootstrap/sync-status-reads';
 import { useCaptureHost, type CapturePlatform } from '../media/CaptureHost.js';
 import { useSignatureHost } from '../media/SignatureHost.js';
-import type { SyncClient } from './sync-client.js';
-import type { AppStatePort } from './triggers.js';
-import { createIdleTicker } from '../session/idle-ticker.js';
-import { consoleDiagnostics } from '../ports/diagnostics.js';
-import type { MediaClient } from '../media/client.js';
+import { useScanHost, type ScanPlatform } from '../media/ScanHost.js';
+import type { SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import type { AppStatePort } from '@bolusi/device/bootstrap/triggers';
+import { createIdleTicker } from '@bolusi/device/session/idle-ticker';
+import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
+import type { MediaClient } from '@bolusi/device/media/client';
 import {
   readDeviceId,
   readSyncState,
@@ -171,7 +172,10 @@ export interface RootProps {
    * never delay an op push; 06 §1 is explicit that "a note/ticket is usable before its media has
    * uploaded".
    */
-  readonly createMedia?: (app: Bootstrapped) => MediaClient | null;
+  readonly createMedia?: (
+    app: Bootstrapped,
+    hooks: { readonly onQueueChanged: () => void },
+  ) => MediaClient | null;
   /**
    * Build the session controller for a booted app, or `null` when the device is not enrolled
    * (task 119) — injected for the same reason as `createSync`: the real one binds quick-crypto and the
@@ -216,7 +220,12 @@ export interface RootProps {
     runtime: AppRuntime,
     identity: CommandIdentity,
     media: MediaClient | null,
-    capture: { readonly capturePhoto: PhotoCapture; readonly captureSignature: SignatureCapture },
+    capture: {
+      readonly capturePhoto: PhotoCapture;
+      readonly captureSignature: SignatureCapture;
+      /** Reads a barcode or QR code for the items screens; absent without a camera. */
+      readonly scanCode: (() => Promise<string | null>) | undefined;
+    },
   ) => RepairRuntime;
   /**
    * RN `AppState`, injected — the idle ticker's foreground/resume signal (api/02-auth §6.4).
@@ -277,6 +286,8 @@ export interface RootProps {
    * `UNWIRED_NOTES_MEDIA.capturePhoto` rather than a stub that behaves like a cancel.
    */
   readonly capturePlatform?: CapturePlatform | undefined;
+  /** The camera's code scanner, bound at index.ts like `capturePlatform`. `undefined` ⇒ no scan. */
+  readonly scanPlatform?: ScanPlatform | undefined;
   /**
    * The notification permission (Android 13+ POST_NOTIFICATIONS), bound over `expo-notifications` at
    * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
@@ -301,6 +312,7 @@ export function Root({
   uploadPinVerifier,
   staffAdmin,
   capturePlatform,
+  scanPlatform,
   notificationPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
@@ -415,6 +427,7 @@ export function Root({
    * `test/live-shell-dead-controls.test.tsx` guards it.
    */
   const [capturePlatformFixed] = useState(capturePlatform ?? null);
+  const [scanPlatformFixed] = useState(scanPlatform ?? null);
 
   useEffect(() => {
     let disposed = false;
@@ -491,7 +504,8 @@ export function Root({
      */
     const startMediaIfEnrolled = async (booted: Bootstrapped): Promise<void> => {
       if (disposed || mediaRef.current !== null || booted.deviceId === null) return;
-      const client = createMedia?.(booted) ?? null;
+      // A photo that finishes uploading re-reads the sync status now, not at the next sync tick.
+      const client = createMedia?.(booted, { onQueueChanged: bump }) ?? null;
       if (client === null || disposed) {
         client?.stop();
         return;
@@ -833,6 +847,9 @@ export function Root({
   /** The signature pad (06 §2.3) for handover, stamped with the same session identity. */
   const signature = useSignatureHost({ media, identity: notes?.identity ?? null });
 
+  /** The code scanner for the items list and form. It reads a code and stores nothing. */
+  const scan = useScanHost(scanPlatformFixed);
+
   /**
    * THE IDLE TICK (task 133; api/02-auth §6.4) — the production caller `SessionManager.checkIdle()`
    * never had.
@@ -940,6 +957,7 @@ export function Root({
           createRepair?.(app, enrollment.runtime, identity, media, {
             capturePhoto: capture.capturePhoto,
             captureSignature: signature.captureSignature,
+            scanCode: scan.scanCode,
           }) ?? null,
       });
     });
@@ -955,6 +973,7 @@ export function Root({
     media,
     capture.capturePhoto,
     signature.captureSignature,
+    scan.scanCode,
   ]);
 
   /**
@@ -1103,6 +1122,8 @@ export function Root({
         capture={capture.surface}
         // The signature pad while a customer signs at handover (06 §2.3), else null.
         signature={signature.surface}
+        // The code scanner while it looks for a code, else null.
+        scan={scan.surface}
         // SEC-AUTH-08 work retention (task 155) — the READ and WRITE halves of task 133's path, which
         // shipped with a producer (`updateWorkspace`) and NO consumer, so a half-typed note was still
         // lost on a real device. `workspace` is the active user's retained work from the shell session

@@ -180,5 +180,44 @@
     "discard": "Discard",
     "keepEditing": "Keep editing",
     "makePinHint": "Can’t sign in yet without a PIN."
+  },
+  "pc": {
+    "enrollTitle": "Register this computer",
+    "instruction": "Only once on this computer. Make sure it is online.",
+    "deviceNameField": "Computer name",
+    "deviceNamePlaceholder": "For example: Counter PC",
+    "nameDeviceFirst": "Name the computer first.",
+    "emptyUsers": "No staff on this computer yet. Ask the store owner to add them.",
+    "lock": "Lock screen",
+    "opening": "Opening the store’s data…",
+    "openFailed": "This computer’s data could not be opened",
+    "openFailedHint": "Close the app and open it again. If it still happens, contact the store owner.",
+    "backTo": "Back to {name}",
+    "otherPerson": "Not you?",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "unrecognised": {
+      "title": "This computer needs to be registered again",
+      "body": "The server no longer recognises this computer. Every change stays safe here until an owner registers it again.",
+      "action": "Register this computer again"
+    },
+    "unsyncedBody": "Sent once this computer is registered, still under the name of whoever made them.",
+    "settings": {
+      "account": "Account",
+      "pinTitle": "PIN",
+      "pinSummary": "For signing in on the store’s phones and computers.",
+      "thisPc": "This computer",
+      "staffOffline": "This computer is offline. Connect it, then try again.",
+      "handOverTitle": "{name}’s turn",
+      "handOverBody": "Ask {name} to type their new PIN themselves. You do not need to know it.",
+      "noOtherStaff": "No other staff on this computer yet.",
+      "notYetHere": "{name} shows up here shortly. Set their PIN later in Staff PINs.",
+      "addedBody": "If they are here, ask them to make their own PIN now.",
+      "colName": "Name",
+      "colRoles": "Roles",
+      "colStatus": "Status",
+      "lockedCount": "{count} locked",
+      "pinFor": "New PIN for {name}"
+    }
   }
 }

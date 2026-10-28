@@ -98,6 +98,32 @@ describe('a multi-chunk upload, end to end (task 18 acceptance: the fake-server 
   });
 });
 
+describe('the queue-changed signal', () => {
+  it('fires once per item, after its new status is written, so a status screen reads it fresh', async () => {
+    await givenCapture(h, 'm-a', jpegBytes(10));
+    await givenCapture(h, 'm-b', jpegBytes(20));
+    const seen: string[] = [];
+    const loop = new MediaDrainLoop({
+      db: h.db as never,
+      transport: h.server,
+      files: h.files,
+      clock: h.clock,
+      surface: h.surface,
+      onItemSettled: () => {
+        void Promise.all([readStatus(h.db, 'm-a'), readStatus(h.db, 'm-b')]).then(([a, b]) =>
+          seen.push(`${a.uploadStatus}/${b.uploadStatus}`),
+        );
+      },
+    });
+    loop.requestDrain('capture');
+    await loop.settle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(seen).toHaveLength(2);
+    expect(seen.at(-1)).toBe('uploaded/uploaded');
+    expect(seen[0]).toContain('uploaded');
+  });
+});
+
 describe('resume is SERVER-authoritative — local progress lies, the server wins (06 §5.1; 03 §4)', () => {
   it('sends exactly the chunks the server lacks, even when the server holds fewer than we sent', async () => {
     const bytes = jpegBytes(4 * WIRE_CHUNK_SIZE);

@@ -28,7 +28,12 @@ import {
   ticketOpenedPayloadV2,
 } from '../src/repair/operations.js';
 
-import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import {
+  intake,
+  openRepairHarness,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 const DAY = 86_400_000;
 
@@ -216,7 +221,7 @@ describe('a servisan’s repair types', () => {
     await h.run('markRepaired', { ticketId: returned, afterPhotos: [h.photo(2)] }, h.technicianId);
     await h.run(
       'returnDevice',
-      { ticketId: returned, handoverPhoto: h.photo(3), signature: h.photo(4) },
+      (await paidHandover(h, returned, {}, [3, 4])) as never,
       h.cashierId,
     );
     const cancelled = await openTicket(h, ['screen']);

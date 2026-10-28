@@ -18,6 +18,11 @@ import {
 import { Check, Printer, Signature } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
+import { MONEY_PERMISSION } from '../../money/constants.js';
+import { PaymentLines } from '../../money/desktop/PaymentLines.js';
+import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
+import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_PERMISSION,
@@ -26,6 +31,7 @@ import {
   type WorkPhotoStage,
 } from '../constants.js';
 import {
+  balanceAfterDownPayment,
   capturedThumbnailRef,
   downPaymentEntry,
   printableSlips,
@@ -42,6 +48,8 @@ import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js'
 import {
   useCancelFees,
   useIntakeOptionSettings,
+  useDownPaymentMethod,
+  usePaymentAccounts,
   useRepairQuery,
   useRepairRuntime,
   type RepairPrinting,
@@ -884,12 +892,16 @@ export function HandoverDialog({
   stale,
   customerName,
   amount,
+  downPayment,
   cancelled,
   onDone,
   onClose,
 }: StepDialogProps & {
   readonly customerName: string;
+  /** What the customer pays in all: the price, or a cancelled servisan's fee. */
   readonly amount: number;
+  /** What they paid already (the DP), from the money ledger. */
+  readonly downPayment: number | null;
   readonly cancelled: boolean;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -897,8 +909,17 @@ export function HandoverDialog({
   const [photo, setPhoto] = useState<MediaRef | null>(null);
   const [signature, setSignature] = useState<MediaRef | null>(null);
   const [note, setNote] = useState('');
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
+  const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
+  const due = balance.kind === 'due' ? balance.amount : 0;
+  const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
+  const payment = useHandoverPayment(due, accounts, canPayLater);
+  const { settled } = payment;
   const leave = useLeaveGuard(
-    stale === null && (photo !== null || signature !== null || note.trim() !== ''),
+    stale === null &&
+      (photo !== null || signature !== null || note.trim() !== '' || payment.touched),
     onClose,
   );
   const photoState = usePhotoState(photo === null ? null : capturedThumbnailRef(photo));
@@ -912,15 +933,24 @@ export function HandoverDialog({
       if (captured !== undefined && captured !== null) keep(captured.mediaRef);
     });
   };
+  const captured = photo !== null && signature !== null;
+  const complete = captured && settled && loadedAccounts !== null;
   const submit = (): void => {
-    if (photo === null || signature === null) return;
+    if (!complete || photo === null || signature === null) return;
     void runner
-      .run(() => runtime.run('returnDevice', { ticketId, handoverPhoto: photo, signature, note }))
+      .run(() =>
+        runtime.run('returnDevice', {
+          ticketId,
+          handoverPhoto: photo,
+          signature,
+          note,
+          ...payment.input,
+        }),
+      )
       .then((result) => {
         if (result !== undefined) onDone();
       });
   };
-  const complete = photo !== null && signature !== null;
 
   return (
     <>
@@ -933,7 +963,9 @@ export function HandoverDialog({
         footer={
           <>
             {complete ? null : (
-              <p className="mr-auto text-small text-text-muted">{tn('repair.hint.handover')}</p>
+              <p className="mr-auto text-small text-text-muted">
+                {tn(settled ? 'repair.hint.handover' : 'repair.hint.handoverPayment')}
+              </p>
             )}
             <CancelButton onClick={leave.requestClose} />
             <Button
@@ -947,22 +979,81 @@ export function HandoverDialog({
           </>
         }
       >
-        <div className="flex items-end justify-between gap-4 rounded-sm bg-surface-alt p-4">
-          <div className="min-w-0">
-            <p className="text-small text-text-muted">{customerName}</p>
-            <p className="text-body font-semibold text-text">
-              {tn(cancelled ? 'repair.cancel.fee' : 'repair.price.total')}
+        <div className="rounded-sm bg-surface-alt p-4">
+          <div className="flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-small text-text-muted">{customerName}</p>
+              <p className="text-body font-semibold text-text">
+                {tn(cancelled ? 'repair.cancel.fee' : 'repair.price.total')}
+              </p>
+            </div>
+            <p
+              className="tabular text-title font-bold text-text"
+              data-testid="repair.desk.handover.total"
+            >
+              {formatMoney(amount)}
             </p>
           </div>
-          <p
-            className="tabular text-title font-bold text-text"
-            data-testid="repair.desk.handover.total"
-          >
-            {formatMoney(amount)}
-          </p>
+          {downPayment === null || downPayment === 0 ? null : (
+            <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t border-border pt-2 text-body">
+              <dt className="text-text-muted">{tn('repair.price.downPayment')}</dt>
+              <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
+              <dt className="font-semibold text-text">
+                {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+              </dt>
+              <dd
+                className="tabular text-right font-semibold text-text"
+                data-testid="repair.desk.handover.balance"
+              >
+                {formatMoney(balance.amount)}
+              </dd>
+            </dl>
+          )}
         </div>
         {cancelled ? (
           <p className="mt-2 text-small text-text-muted">{tn('repair.handover.cancelled')}</p>
+        ) : null}
+        {due > 0 && stale === null ? (
+          <section className="mt-4" data-testid="repair.desk.handover.payment">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-body font-semibold text-text">{tn('repair.handover.payment')}</h3>
+              {canPayLater ? (
+                <Button
+                  label={tn(payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
+                  variant="text"
+                  size="sm"
+                  onClick={payment.togglePayLater}
+                  data-testid="repair.desk.handover.payLater"
+                />
+              ) : null}
+            </div>
+            {payment.unpaid ? (
+              <div>
+                <TextArea
+                  label={tn('repair.handover.payLaterReason')}
+                  rows={2}
+                  value={payment.unpaidReason}
+                  onChange={(event) => payment.setUnpaidReason(event.target.value)}
+                  data-testid="repair.desk.handover.unpaidReason"
+                />
+                <p
+                  className="mt-2 text-small text-text-muted"
+                  data-testid="repair.desk.handover.debt"
+                >
+                  {tn('repair.handover.payLaterNote', { amount: formatMoney(due) })}
+                </p>
+              </div>
+            ) : (
+              <PaymentLines
+                lines={payment.lines}
+                entry={payment.entry}
+                accounts={accounts}
+                onChange={payment.setLines}
+                newKey={payment.newKey}
+                testId="repair.desk.handover.pay"
+              />
+            )}
+          </section>
         ) : null}
         <div className="mt-4 grid grid-cols-2 gap-4">
           <CaptureTile
@@ -983,6 +1074,7 @@ export function HandoverDialog({
             state={signature === null ? null : signatureState}
             labels={photoLabels()}
             icon={Signature}
+            whole
             onCapture={() =>
               capture(
                 () => runtime.captureSignature({ title: tn('repair.handover.signatureTitle') }),
@@ -1030,17 +1122,37 @@ export function DownPaymentDialog({
   const runner = useActionRunner();
   const [typed, setTyped] = useState<number | null>(null);
   const [reason, setReason] = useState('');
+  const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const correcting = mode === 'correct';
-  const { amount, aboveTotal, gap } = downPaymentEntry({ mode, typed, reason, current, total });
+  const { amount, aboveTotal, gap } = downPaymentEntry({
+    mode,
+    typed,
+    reason,
+    current,
+    total,
+    referenceMissing: referenceMissing(method.account, method.reference, accounts),
+  });
   const testId = `repair.desk.downPayment.${mode}`;
 
   const submit = (): void => {
-    if (gap !== null || amount === null) return;
+    if (gap !== null || amount === null || loadedAccounts === null) return;
     void runner
       .run(() =>
         correcting
-          ? runtime.run('correctDownPayment', { ticketId, amount, reason })
-          : runtime.run('recordDownPayment', { ticketId, amount }),
+          ? runtime.run('correctDownPayment', {
+              ticketId,
+              amount,
+              reason,
+              ...chosenMethod(method.account, method.reference, accounts),
+            })
+          : runtime.run('recordDownPayment', {
+              ticketId,
+              amount,
+              ...chosenMethod(method.account, method.reference, accounts),
+            }),
       )
       .then((result) => {
         if (result !== undefined) onDone();
@@ -1070,7 +1182,7 @@ export function DownPaymentDialog({
               variant="primary"
               onClick={submit}
               busy={runner.busy}
-              disabled={gap !== null || stale !== null}
+              disabled={gap !== null || stale !== null || loadedAccounts === null}
               data-testid={`${testId}.submit`}
             />
           </>
@@ -1104,6 +1216,15 @@ export function DownPaymentDialog({
             autoFocus
             data-testid={`${testId}.amount`}
           />
+          {correcting && (amount ?? 0) === 0 ? null : (
+            <PaymentMethodField
+              accounts={accounts}
+              account={method.account}
+              reference={method.reference}
+              onChange={setMethod}
+              testId={`${testId}.method`}
+            />
+          )}
           {correcting ? (
             <TextArea
               label={tn('repair.downPayment.reason')}

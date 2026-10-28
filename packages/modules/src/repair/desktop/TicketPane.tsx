@@ -10,6 +10,7 @@ import {
   Fact,
   FactGrid,
   IconButton,
+  Menu,
   PatternPad,
   PhotoTile,
   PhotoViewer,
@@ -22,6 +23,7 @@ import {
   Check,
   CloudOff,
   Copy,
+  Ellipsis,
   Eye,
   EyeOff,
   MessageCircle,
@@ -46,11 +48,14 @@ import {
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import {
   amountOwed,
+  arrangeTicketActions,
   balanceAfterDownPayment,
   canSetRepairTypes,
   claimIntakeDraft,
+  CONTEXTUAL_ACTIONS,
   downPaymentAction,
   downPaymentStale,
+  paidLabelKey,
   photoInSlot,
   repairTypesStale,
   photoThumbnailRef,
@@ -69,7 +74,7 @@ import {
 } from '../flows.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel, warrantyLine } from '../labels.js';
+import { actionKey, LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel, warrantyLine } from '../labels.js';
 import {
   useRepairQuery,
   useRepairRuntime,
@@ -100,21 +105,6 @@ import {
   WorkPhotosDialog,
 } from './steps.js';
 
-const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
-  decidePrice: 'repair.action.decidePrice',
-  claim: 'repair.action.claim',
-  start: 'repair.action.start',
-  resume: 'repair.action.resume',
-  reopen: 'repair.action.reopen',
-  waitForParts: 'repair.action.waitForParts',
-  markRepaired: 'repair.action.markRepaired',
-  assign: 'repair.action.assign',
-  changePrice: 'repair.action.changePrice',
-  proposePrice: 'repair.action.proposePrice',
-  handover: 'repair.action.handover',
-  cancel: 'repair.action.cancel',
-};
-
 /** What an action that runs in place, or a step that lands, says afterwards. */
 const DONE_KEY: Partial<Record<TicketAction | 'before' | 'after', RepairKey>> = {
   claim: 'repair.done.claim',
@@ -125,9 +115,6 @@ const DONE_KEY: Partial<Record<TicketAction | 'before' | 'after', RepairKey>> = 
   after: 'repair.done.repaired',
   handover: 'repair.desk.done.handover',
 };
-
-/** Actions shown beside the fact they change rather than in the row of status actions. */
-const CONTEXTUAL: ReadonlySet<TicketAction> = new Set(['assign', 'changePrice', 'proposePrice']);
 
 type Step =
   | { readonly kind: 'none' }
@@ -258,23 +245,15 @@ export function TicketPane({
   };
 
   const label = (action: TicketAction): string =>
-    tn(
-      action === 'assign' && ticket?.technicianId != null
-        ? 'repair.action.reassign'
-        : ACTION_KEY[action],
-    );
+    tn(actionKey(action, ticket?.technicianId ?? null));
 
-  // Corrections stay beside what they correct (the price, the technician), never the big button.
-  const correction = (action: TicketAction): boolean =>
-    action === 'changePrice' ||
-    action === 'proposePrice' ||
-    (action === 'assign' && ticket?.technicianId != null);
-  const offered = actions.filter((action) => action !== 'cancel');
-  const primary = offered.find((action) => !correction(action));
-  const others = offered.filter((action) => action !== primary);
-  const rowActions = others.filter((action) => !CONTEXTUAL.has(action));
+  // The next step leads; a correction stays beside what it corrects (the price, the technician).
+  const layout =
+    ticket === undefined
+      ? { next: null, alternative: null, more: [] }
+      : arrangeTicketActions(actions, ticket, runtime.userId);
   const contextual = (action: TicketAction, row: TicketDetailRow): ReactNode =>
-    others.some((other) => other === action) ? (
+    CONTEXTUAL_ACTIONS.has(action) && actions.includes(action) && layout.next !== action ? (
       // The short word beside a fact ("Ubah"), named in full on hover.
       <Tooltip label={label(action)}>
         <Button
@@ -369,7 +348,7 @@ export function TicketPane({
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
-              className="tabular whitespace-nowrap text-small font-semibold text-text-muted"
+              className="tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted"
               data-testid="repair.desk.ticket.number"
             >
               {row.ticketNumber}
@@ -409,30 +388,31 @@ export function TicketPane({
             </span>
           </div>
         </div>
-        {primary === undefined &&
-        rowActions.length === 0 &&
+        {layout.next === null &&
+        layout.alternative === null &&
+        layout.more.length === 0 &&
         printing === undefined &&
         messageKind === null &&
         claimAction === null ? null : (
-          <div className="flex flex-wrap gap-2">
-            {primary === undefined ? null : (
+          // The next step leads; printing and the rarer moves ("Lainnya") wait quietly at the end.
+          <div className="flex items-center gap-2">
+            {layout.next === null ? null : (
               <Button
-                label={label(primary)}
+                label={label(layout.next)}
                 variant="primary"
-                onClick={() => perform(primary, row)}
+                onClick={() => perform(layout.next!, row)}
                 busy={runner.busy}
-                data-testid={`repair.desk.ticket.action.${primary}`}
+                data-testid={`repair.desk.ticket.action.${layout.next}`}
               />
             )}
-            {rowActions.map((action) => (
+            {layout.alternative === null ? null : (
               <Button
-                key={action}
-                label={label(action)}
-                onClick={() => perform(action, row)}
+                label={label(layout.alternative)}
+                onClick={() => perform(layout.alternative!, row)}
                 disabled={runner.busy}
-                data-testid={`repair.desk.ticket.action.${action}`}
+                data-testid={`repair.desk.ticket.action.${layout.alternative}`}
               />
-            ))}
+            )}
             {messageKind === null ? null : (
               <Button
                 label={tn(MESSAGE_ACTION_KEY[messageKind])}
@@ -453,20 +433,37 @@ export function TicketPane({
                 data-testid="repair.desk.ticket.action.warrantyClaim"
               />
             )}
-            {/* An icon with its name on hover, so the steps that move the servisan keep one line. */}
-            {printing === undefined ? null : (
-              <IconButton
-                icon={Printer}
-                label={tn('repair.print.title')}
-                className="ml-auto"
-                onClick={() => {
-                  setDone(null);
-                  setStep({ kind: 'print' });
-                }}
-                disabled={runner.busy}
-                data-testid="repair.desk.ticket.action.print"
-              />
-            )}
+            <div className="-mr-2 ml-auto flex items-center gap-1">
+              {printing === undefined ? null : (
+                <IconButton
+                  icon={Printer}
+                  label={tn('repair.print.title')}
+                  onClick={() => {
+                    setDone(null);
+                    setStep({ kind: 'print' });
+                  }}
+                  disabled={runner.busy}
+                  data-testid="repair.desk.ticket.action.print"
+                />
+              )}
+              {layout.more.length === 0 ? null : (
+                <Menu
+                  trigger={
+                    <IconButton
+                      icon={Ellipsis}
+                      label={tn('repair.action.more')}
+                      disabled={runner.busy}
+                      data-testid="repair.desk.ticket.more"
+                    />
+                  }
+                  items={layout.more.map((action) => ({
+                    key: action,
+                    label: label(action),
+                    onSelect: () => perform(action, row),
+                  }))}
+                />
+              )}
+            </div>
           </div>
         )}
         {banner}
@@ -656,6 +653,7 @@ export function TicketPane({
         <DownPaymentLines
           total={amountOwed(row)}
           downPayment={row.downPayment}
+          paidLabel={paidLabelKey(row)}
           action={downPaymentAction(row, can)}
           disabled={runner.busy}
           onAction={(mode) => {
@@ -902,7 +900,8 @@ export function TicketPane({
             {...common}
             customerName={row.customerName}
             cancelled={row.outcome === 'cancelled'}
-            amount={row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal}
+            amount={amountOwed(row)}
+            downPayment={row.downPayment}
             onDone={() => finishStep(DONE_KEY.handover)}
           />
         );
@@ -1175,12 +1174,14 @@ function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
 function DownPaymentLines({
   total,
   downPayment,
+  paidLabel,
   action,
   disabled,
   onAction,
 }: {
   readonly total: number;
   readonly downPayment: number | null;
+  readonly paidLabel: RepairKey;
   readonly action: 'record' | 'correct' | null;
   readonly disabled: boolean;
   readonly onAction: (mode: 'record' | 'correct') => void;
@@ -1204,7 +1205,7 @@ function DownPaymentLines({
     <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
       <div className="flex items-center justify-between gap-4 text-body text-text-muted">
         <dt className="flex items-center gap-2">
-          {tn('repair.price.downPayment')}
+          {tn(paidLabel)}
           {action === 'correct' ? (
             <Tooltip label={tn('repair.downPayment.correctTitle')}>
               <Button

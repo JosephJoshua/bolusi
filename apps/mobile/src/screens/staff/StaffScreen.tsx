@@ -34,7 +34,12 @@ import { useLatestCallback } from '../../hooks/useLatestCallback.js';
 import type { SurfaceNav } from '../../navigation/surface.js';
 import { UserRow } from '../switcher/UserRow.js';
 
-import { hasOtherStaff, staffListItems, type StaffListItem, type StaffStep } from './model.js';
+import {
+  hasOtherStaff,
+  staffListItems,
+  type StaffListItem,
+  type StaffStep,
+} from '@bolusi/device/models/staff/model';
 import { InactivePage, PersonForm, StaffShell } from './StaffPages.js';
 
 export interface StaffScreenProps {

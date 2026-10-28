@@ -22,7 +22,7 @@ import {
   newPinPadState,
   newPinPromptKey,
   type NewPinEntry,
-} from './new-pin.js';
+} from '@bolusi/device/models/pin/new-pin';
 import { PinEntry } from './PinEntry.js';
 
 export interface PinSetupScreenProps {

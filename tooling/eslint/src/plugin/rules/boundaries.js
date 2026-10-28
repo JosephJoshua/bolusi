@@ -186,6 +186,9 @@ function isOutsideShippingSource(filename) {
 // Platform-free workspaces (08 §3.3 hard rule 3). modules screens files are exempt.
 const PLATFORM_FREE = new Set([
   'packages/core',
+  // The device core runs on the phone (Hermes) and in the PC's background process (Node); each
+  // binds its own storage, crypto and network, so the shared code imports none of them.
+  'packages/device',
   'packages/schemas',
   'packages/i18n',
   'packages/modules',
@@ -363,8 +366,19 @@ export default {
         context.report({ node, messageId: 'uiSchemasTypeOnly', data: { source } });
         return;
       }
-      // 3. */screens subpaths only from apps/mobile.
-      if (/\/screens(\/|$)/.test(source) && workspace !== 'apps/mobile') {
+      // 3. */screens subpaths only from apps/mobile. packages/device binds the runtimes those screens
+      // take, so it may name their types, never pull a screen into its emit. One module's screen may
+      // reuse another's (repair's handover taking money's payment lines): both are Hermes-only.
+      if (
+        /\/screens(\/|$)/.test(source) &&
+        workspace !== 'apps/mobile' &&
+        !(workspace === 'packages/device' && importKind === 'type') &&
+        !(
+          workspace === 'packages/modules' &&
+          source.startsWith('.') &&
+          /\/src\/[^/]+\/screens\//.test(filename)
+        )
+      ) {
         context.report({ node, messageId: 'screensOutsideMobile', data: { source } });
         return;
       }
@@ -393,6 +407,8 @@ export default {
         workspace &&
         PLATFORM_FREE.has(workspace) &&
         !(workspace === 'packages/modules' && /\/screens\//.test(filename)) &&
+        // The device core keeps its Node-lane tests beside the code, as the phone app did.
+        !(workspace === 'packages/device' && /\.test\.[tj]sx?$/.test(filename)) &&
         !NODE_LANE_ONLY.test(filename) &&
         PLATFORM_FORBIDDEN.some((re) => re.test(packageRoot(source)))
       ) {

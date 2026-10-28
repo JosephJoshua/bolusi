@@ -1,21 +1,32 @@
 /**
- * Handover — giving the device back: a photo of the handover and the customer's signature, both
- * required, then one tap records it. The amount shown is what the customer owes and signs for: the
- * price on a repaired phone, the cancellation fee on a cancelled one. Payment itself is still the
- * store's paper cash book in this slice.
+ * Handover — giving the device back: the customer pays what is left (in one or more methods), a
+ * photo of the handover and their signature, then one tap records it all. What they owe is the
+ * price on a repaired phone or the fee on a cancelled one, less the DP; a DP above it goes back.
+ * Only an owner may let the phone go unpaid ("Bayar nanti"), which leaves a debt.
  */
 import { formatMoney } from '@bolusi/i18n';
-import { Card, PhotoSlot, TextInput, border, color, space, type } from '@bolusi/ui';
+import { Card, PhotoSlot, TextButton, TextInput, border, color, space, type } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
+import { MONEY_PERMISSION } from '../../money/constants.js';
+import { PaymentLines } from '../../money/screens/PaymentLines.js';
 import { tn } from '../i18n.js';
-import { capturedThumbnailRef, repairAbilities, staleStep, ticketStatus } from '../flows.js';
 import {
+  balanceAfterDownPayment,
+  capturedThumbnailRef,
+  amountOwed,
+  repairAbilities,
+  staleStep,
+  ticketStatus,
+} from '../flows.js';
+import {
+  DownPaymentRows,
   FlowScreen,
+  Section,
   PhotoGrid,
   PhotoThumb,
   QueryView,
@@ -24,7 +35,8 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { useHandoverPayment } from '../handover-payment.js';
+import { usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 export interface HandoverProps {
   readonly ticketId: string;
@@ -54,16 +66,29 @@ export function Handover({
     async (rt) => (await rt.query('getTicket', { ticketId })).rows[0],
     `handover:${ticketId}:${String(reloadNonce)}`,
   );
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
 
   // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
   // than take a signature for a handover that would be refused.
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const ticket = query.status === 'ready' ? query.data : undefined;
+  const balance =
+    ticket === undefined
+      ? { kind: 'due' as const, amount: 0 }
+      : balanceAfterDownPayment(amountOwed(ticket), ticket.downPayment ?? 0);
+  const due = balance.kind === 'due' ? balance.amount : 0;
+  const payment = useHandoverPayment(due, accounts, canPayLater);
+  const { settled } = payment;
   const stale =
     ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
 
   const discard = useDiscardConfirm({
-    dirty: stale === null && (photo !== null || signature !== null || note.trim() !== ''),
+    dirty:
+      stale === null &&
+      (photo !== null || signature !== null || note.trim() !== '' || payment.touched),
     onRegisterDiscardGuard,
     testID,
   });
@@ -78,9 +103,17 @@ export function Handover({
   };
 
   const submit = (): void => {
-    if (photo === null || signature === null) return;
+    if (photo === null || signature === null || !settled || loadedAccounts === null) return;
     void runner
-      .run(() => runtime.run('returnDevice', { ticketId, handoverPhoto: photo, signature, note }))
+      .run(() =>
+        runtime.run('returnDevice', {
+          ticketId,
+          handoverPhoto: photo,
+          signature,
+          note,
+          ...payment.input,
+        }),
+      )
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -94,8 +127,8 @@ export function Handover({
       overlay={discard.overlay}
       primaryLabel={tn('repair.action.handover')}
       onPrimary={submit}
-      primaryDisabled={photo === null || signature === null}
-      primaryHint={tn('repair.hint.handover')}
+      primaryDisabled={photo === null || signature === null || !settled || loadedAccounts === null}
+      primaryHint={tn(settled ? 'repair.hint.handover' : 'repair.hint.handoverPayment')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -108,50 +141,80 @@ export function Handover({
         onRetry={() => setReloadNonce((n) => n + 1)}
         testID={`${testID}.ticket`}
       >
-        {(ticket) =>
-          ticket === undefined ? null : (
+        {(shown) =>
+          shown === undefined ? null : (
             <Card testID={`${testID}.summary`}>
-              <StatusChip status={ticketStatus(ticket)} testID={`${testID}.status`} />
-              <Text style={styles.customer}>{ticket.customerName}</Text>
+              <StatusChip status={ticketStatus(shown)} testID={`${testID}.status`} />
+              <Text style={styles.customer}>{shown.customerName}</Text>
               <Text style={repairStyles.muted}>
-                {`${ticket.deviceBrand} ${ticket.deviceModel} · ${ticket.ticketNumber}`}
+                {`${shown.deviceBrand} ${shown.deviceModel} · ${shown.ticketNumber}`}
               </Text>
-              {ticket.outcome === 'cancelled' ? (
-                // What the customer signs for: the cancellation fee, never the repair price. A
-                // ticket cancelled before fees existed charged nothing.
-                <View style={styles.total}>
-                  <View style={repairStyles.row}>
-                    <Text style={[styles.totalLabel, repairStyles.rowText]}>
-                      {tn('repair.cancel.fee')}
-                    </Text>
-                    <Text
-                      style={[repairStyles.heading, repairStyles.rowValue]}
-                      testID={`${testID}.total`}
-                    >
-                      {formatMoney(ticket.cancelFee ?? 0)}
-                    </Text>
-                  </View>
-                  <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>
-                    {tn('repair.handover.cancelled')}
-                  </Text>
-                </View>
-              ) : (
-                <View style={[repairStyles.row, styles.total]}>
-                  <Text style={[styles.totalLabel, repairStyles.rowText]}>
-                    {tn('repair.price.total')}
-                  </Text>
-                  <Text
-                    style={[repairStyles.heading, repairStyles.rowValue]}
-                    testID={`${testID}.total`}
-                  >
-                    {formatMoney(ticket.quoteTotal)}
-                  </Text>
-                </View>
-              )}
+              {/* What the customer signs for: the cancellation fee, never the repair price. A
+                  ticket cancelled before fees existed charged nothing. */}
+              <View style={[repairStyles.row, styles.total]}>
+                <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                  {tn(shown.outcome === 'cancelled' ? 'repair.cancel.fee' : 'repair.price.total')}
+                </Text>
+                <Text
+                  style={[repairStyles.heading, repairStyles.rowValue]}
+                  testID={`${testID}.total`}
+                >
+                  {formatMoney(amountOwed(shown))}
+                </Text>
+              </View>
+              {shown.outcome === 'cancelled' ? (
+                <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>
+                  {tn('repair.handover.cancelled')}
+                </Text>
+              ) : null}
+              <DownPaymentRows
+                total={amountOwed(shown)}
+                downPayment={shown.downPayment}
+                testID={testID}
+              />
             </Card>
           )
         }
       </QueryView>
+      {due > 0 && stale === null ? (
+        <Section
+          title={tn('repair.handover.payment')}
+          action={
+            canPayLater ? (
+              <TextButton
+                label={tn(payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
+                onPress={payment.togglePayLater}
+                testID={`${testID}.payLater`}
+              />
+            ) : undefined
+          }
+          testID={`${testID}.payment`}
+        >
+          {payment.unpaid ? (
+            <View style={styles.payLater}>
+              <TextInput
+                label={tn('repair.handover.payLaterReason')}
+                value={payment.unpaidReason}
+                onChangeText={payment.setUnpaidReason}
+                multiline
+                testID={`${testID}.unpaidReason`}
+              />
+              <Text style={repairStyles.muted} testID={`${testID}.debt`}>
+                {tn('repair.handover.payLaterNote', { amount: formatMoney(due) })}
+              </Text>
+            </View>
+          ) : (
+            <PaymentLines
+              lines={payment.lines}
+              entry={payment.entry}
+              accounts={accounts}
+              onChange={payment.setLines}
+              newKey={payment.newKey}
+              testID={`${testID}.pay`}
+            />
+          )}
+        </Section>
+      ) : null}
       <View style={repairStyles.gap}>
         <PhotoGrid>
           <View style={styles.half}>
@@ -220,6 +283,7 @@ const styles = StyleSheet.create({
     borderTopColor: color.border,
   },
   totalLabel: { ...type.bodyBold, color: color.text },
+  payLater: { gap: space.sm },
   // Two captures side by side, each half the row.
   half: { flexBasis: '47%', flexGrow: 1 },
 });

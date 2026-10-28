@@ -7,7 +7,12 @@ import { DomainError, refusalKeyOf } from '@bolusi/core';
 
 import { maxTicketCounter } from '../src/repair/queries.js';
 
-import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
+import {
+  openRepairHarness,
+  intake,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
 afterEach(async () => {
@@ -646,7 +651,9 @@ describe('cancel and handover', () => {
     await h.run('declineProposal', { ticketId, lineId: pending.id }, h.cashierId);
 
     await expectCode(h.run('returnDevice', handover, h.technicianId), 'PERMISSION_DENIED');
-    await h.run('returnDevice', handover, h.cashierId);
+    // Not until it is paid; then the rest of the bill is taken at the counter.
+    await expectCode(h.run('returnDevice', handover, h.cashierId), 'VALIDATION_FAILED');
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
     const t = await ticket(h, ticketId);
     expect(t).toMatchObject({ outcome: 'repaired', location: 'returned', returnedBy: h.cashierId });
     expect(t.photos.map((p: { slot: string }) => p.slot)).toEqual(

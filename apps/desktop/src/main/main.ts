@@ -1,9 +1,20 @@
-// The Electron main process: one locked-down window for the counter screens. The renderer gets no
-// Node and no way to open other pages; the preload gives it a few narrow calls (`bridge.ts`):
-// printing and updates for now, the offline core next. Only `wa.me` links open outside the app.
-import { app, BrowserWindow, session, shell, type IpcMainInvokeEvent } from 'electron';
+// The Electron main process: one locked-down window for the counter screens, and the offline core
+// in its own utility process. The renderer gets no Node and no way to open other pages; the preload
+// gives it a few narrow calls (`bridge.ts`): printing, updates and a port to the core. Only `wa.me`
+// links open outside the app.
+import {
+  app,
+  BrowserWindow,
+  session,
+  shell,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+} from 'electron';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { quitAfter, registerCore } from './core-process.js';
 import { DeviceSettingsFile } from './device-settings.js';
 import { opensExternally } from './external-links.js';
 import { registerPrinting } from './printing.js';
@@ -14,11 +25,36 @@ const DEV_SERVER_URL = app.isPackaged ? undefined : process.env['BOLUSI_DESKTOP_
 const ALLOWED_PERMISSIONS: ReadonlySet<string> = new Set(['clipboard-sanitized-write']);
 const RENDERER_INDEX = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
 const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url));
+const BUILD_CONFIG = fileURLToPath(new URL('./build-config.json', import.meta.url));
+// The seeded demo instead of the core, for previews and the screen tests (also against the installed
+// app in the Windows CI job). It holds only made-up data in memory and opens nothing on disk.
+const DEMO = process.env['BOLUSI_DESKTOP_DEMO'] === '1';
+const API_BASE_URL = apiBaseUrl();
+
+// A developer build or a test may keep its data elsewhere, so it never touches a real counter's.
+const DATA_DIR_OVERRIDE = app.isPackaged ? undefined : process.env['BOLUSI_DESKTOP_DATA_DIR'];
+if (DATA_DIR_OVERRIDE !== undefined) app.setPath('userData', join(DATA_DIR_OVERRIDE));
+
+/**
+ * Where this build syncs: `BOLUSI_API_URL` when the build ran (written beside main by the core's
+ * build, so an installed app carries it), or from the shell when developing.
+ */
+function apiBaseUrl(): string {
+  const fromShell = app.isPackaged ? undefined : process.env['BOLUSI_API_URL'];
+  let built: string | undefined;
+  try {
+    const config = JSON.parse(readFileSync(BUILD_CONFIG, 'utf8')) as { apiBaseUrl?: unknown };
+    if (typeof config.apiBaseUrl === 'string') built = config.apiBaseUrl;
+  } catch {
+    built = undefined;
+  }
+  return (fromShell ?? built ?? '').replace(/\/+$/, '');
+}
 
 /** The counter windows this process opened; only their own page may call in. */
 const counterWindows = new Set<BrowserWindow>();
 
-function trusted(event: IpcMainInvokeEvent): boolean {
+function trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const frame = event.senderFrame;
   if (frame === null || frame !== event.sender.mainFrame) return false;
   return [...counterWindows].some((window) => window.webContents === event.sender);
@@ -101,7 +137,22 @@ void app.whenReady().then(() => {
     );
   });
   registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
-  registerUpdates(trusted, () => [...counterWindows].map((window) => window.webContents));
+  const pages = (): Electron.WebContents[] =>
+    [...counterWindows].map((window) => window.webContents);
+  registerUpdates(trusted, pages);
+  if (!DEMO && API_BASE_URL === '')
+    console.error('BOLUSI_API_URL is not set: nothing to sync with');
+  quitAfter(
+    registerCore({
+      dataDir: app.getPath('userData'),
+      apiBaseUrl: API_BASE_URL,
+      appVersion: app.getVersion(),
+      demo: DEMO,
+      unsealedSecretsForDev: !app.isPackaged && process.platform === 'linux',
+      trusted,
+      windows: pages,
+    }),
+  );
   createWindow();
 });
 

@@ -15,7 +15,7 @@
  * counter the commonest error is typing your own PIN into a colleague's account, which costs THEM an
  * attempt against a lockout they did not earn.
  */
-import { formatDuration, t } from '@bolusi/i18n';
+import { t } from '@bolusi/i18n';
 import {
   AppShell,
   Button,
@@ -36,11 +36,11 @@ import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 import {
   attemptsLeft,
   PIN_MESSAGE_KEY,
+  pinMessage,
   pinPadState,
   pinView,
   type LastAttempt,
-  type PinView,
-} from './model.js';
+} from '@bolusi/device/models/pin/model';
 import { PinEntry, PinPerson } from './PinEntry.js';
 import type { PinAttemptRow } from '@bolusi/core';
 
@@ -162,7 +162,7 @@ export function PinScreen({
         <PinEntry
           person={{ id: userId, name: userName, roleKeys }}
           prompt={t('auth.pin.title')}
-          message={messageFor(view)}
+          message={pinMessage(view)}
           state={pinPadState(view)}
           onComplete={onSubmit}
           backspaceLabel={t('core.action.delete')}
@@ -178,35 +178,6 @@ export function PinScreen({
       )}
     </AppShell>
   );
-}
-
-/**
- * The already-localized message for the pad's message slot. `PinPad` never formats time (its own
- * contract), so the countdown is formatted here — through `@bolusi/i18n`'s `formatDuration`, which
- * is the single formatting authority (07-i18n §5).
- *
- * THE MESSAGE KEY IS READ FROM `PIN_MESSAGE_KEY` (model.ts), NOT RESTATED HERE. There is ONE
- * view→key mapping (§2.8); this function only supplies each arm's PARAMS, which genuinely differ.
- * That is what makes `model.test.ts`'s `PIN_MESSAGE_KEY` assertions load-bearing rather than a decoy
- * (task 65): break the map's `delayed`/`lockedOut` slot and both this screen AND those tests change.
- * Two arms are not a plain lookup and stay explicit: `wrong` appends a SECOND key
- * (`auth.pin.attemptsLeft`) the one-slot-per-state map has no room for, and `entry`'s `null` slot
- * renders no message at all.
- */
-function messageFor(view: PinView): string | undefined {
-  switch (view.kind) {
-    case 'entry':
-      return undefined;
-    case 'wrong':
-      // Two sentences, deliberately: what happened, then what it costs. `attemptsLeft` is what turns
-      // "wrong PIN" from a nag into information — it is the only warning a user gets before a lock
-      // that only the owner can undo.
-      return `${t(PIN_MESSAGE_KEY[view.kind])} ${t('auth.pin.attemptsLeft', { count: view.attemptsLeft })}`;
-    case 'delayed':
-      return t(PIN_MESSAGE_KEY[view.kind], { duration: formatDuration(view.remainingMs) });
-    case 'lockedOut':
-      return t(PIN_MESSAGE_KEY[view.kind]);
-  }
 }
 
 /** Re-exported for the screen's test — the value the message renders for a wrong attempt. */

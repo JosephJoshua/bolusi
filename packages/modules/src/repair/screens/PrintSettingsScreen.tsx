@@ -4,7 +4,6 @@
  * store prints them. The terms start as the app's own, so the owner edits rather than writes them.
  * Leaving with unsaved changes asks first.
  */
-import type { MediaRef } from '@bolusi/schemas';
 import {
   ConfirmSheet,
   SwitchRow,
@@ -23,9 +22,21 @@ import type { MediaRefMime } from '@bolusi/schemas';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { tn } from '../i18n.js';
+import {
+  printSettingsForm,
+  printSettingsInput,
+  samePrintSettingsForm,
+  type PrintSettingsForm,
+  type PrintSettingsLogo,
+} from '../print-settings-form.js';
 import type { PrintSettings } from '../queries.js';
 import { FlowScreen, QueryView, Section, repairStyles, type RepairChrome } from './parts.js';
-import { usePrintSettings, useRepairRuntime, useRepairThumbnail } from '../runtime.js';
+import {
+  usePrintSettings,
+  usePrintStoreName,
+  useRepairRuntime,
+  useRepairThumbnail,
+} from '../runtime.js';
 
 export interface PrintSettingsScreenProps {
   readonly chrome: RepairChrome;
@@ -62,48 +73,8 @@ export function PrintSettingsScreen({
   );
 }
 
-/** The logo as the form holds it: the signed ref, whether just picked or as saved. */
-type Logo = Pick<MediaRef, 'mediaId' | 'sha256' | 'mime'>;
-
-interface Form {
-  readonly name: string;
-  readonly address: string;
-  readonly phone: string;
-  readonly logo: Logo | MediaRef | null;
-  readonly logoOnDotMatrix: boolean;
-  readonly intakeTerms: string;
-  readonly handoverTerms: string;
-}
-
-/** The form for saved settings, with the app's terms filled in where the store has none. */
-function formFor(saved: PrintSettings): Form {
-  return {
-    name: saved.name ?? '',
-    address: saved.address,
-    phone: saved.phone,
-    logo: saved.logo === null ? null : { ...saved.logo, mime: saved.logo.mime as MediaRefMime },
-    logoOnDotMatrix: saved.logoOnDotMatrix,
-    intakeTerms: saved.intakeTerms ?? tn('repair.slip.terms.intake'),
-    handoverTerms: saved.handoverTerms ?? tn('repair.slip.terms.handover'),
-  };
-}
-
-function sameForm(a: Form, b: Form): boolean {
-  return (
-    a.name.trim() === b.name.trim() &&
-    a.address.trim() === b.address.trim() &&
-    a.phone.trim() === b.phone.trim() &&
-    (a.logo?.mediaId ?? null) === (b.logo?.mediaId ?? null) &&
-    a.logoOnDotMatrix === b.logoOnDotMatrix &&
-    a.intakeTerms.trim() === b.intakeTerms.trim() &&
-    a.handoverTerms.trim() === b.handoverTerms.trim()
-  );
-}
-
-/** Terms left as the app's own are saved as none, so the store keeps getting the app's wording. */
-function termsToSave(text: string, defaults: string): string | null {
-  return text.trim() === defaults.trim() ? null : text;
-}
+type Logo = PrintSettingsLogo;
+type Form = PrintSettingsForm;
 
 function SettingsForm({
   saved,
@@ -120,12 +91,12 @@ function SettingsForm({
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [form, setForm] = useState<Form>(() => formFor(saved));
-  const [baseline, setBaseline] = useState<Form>(() => formFor(saved));
+  const [form, setForm] = useState<Form>(() => printSettingsForm(saved));
+  const [baseline, setBaseline] = useState<Form>(() => printSettingsForm(saved));
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
-  const dirty = !sameForm(form, baseline);
-  const storeName = useStoreName();
+  const dirty = !samePrintSettingsForm(form, baseline);
+  const storeName = usePrintStoreName();
 
   useEffect(() => {
     onRegisterDiscardGuard?.(dirty ? (proceed) => setPendingLeave(() => proceed) : null);
@@ -152,21 +123,8 @@ function SettingsForm({
       onClose();
       return;
     }
-    // A logo picked here carries its whole signed ref; one already saved is unchanged, so the
-    // command keeps the stored one.
-    const logo = form.logo === null ? null : 'type' in form.logo ? form.logo : undefined;
     void runner
-      .run(() =>
-        runtime.run('setPrintSettings', {
-          name: form.name,
-          address: form.address.trim(),
-          phone: form.phone.trim(),
-          ...(logo === undefined ? {} : { logo }),
-          logoOnDotMatrix: form.logoOnDotMatrix,
-          intakeTerms: termsToSave(form.intakeTerms, tn('repair.slip.terms.intake')),
-          handoverTerms: termsToSave(form.handoverTerms, tn('repair.slip.terms.handover')),
-        }),
-      )
+      .run(() => runtime.run('setPrintSettings', printSettingsInput(form)))
       .then((result) => {
         if (result === undefined) return;
         setBaseline(form);
@@ -295,22 +253,6 @@ function SettingsForm({
       </Section>
     </FlowScreen>
   );
-}
-
-/** The enrolled store name, which prints while the owner leaves the name empty. */
-function useStoreName(): string {
-  const printing = useRepairRuntime().printing;
-  const [name, setName] = useState('');
-  useEffect(() => {
-    let live = true;
-    void printing?.storeName().then((loaded) => {
-      if (live) setName(loaded);
-    });
-    return () => {
-      live = false;
-    };
-  }, [printing]);
-  return name;
 }
 
 function LogoRow({

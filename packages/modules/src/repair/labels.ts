@@ -6,7 +6,7 @@ import { formatDate } from '@bolusi/i18n';
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import type { DownPaymentGap, IntakeStep, StaleStep, TicketStatus } from './flows.js';
+import type { DownPaymentGap, IntakeStep, StaleStep, TicketAction, TicketStatus } from './flows.js';
 import type { SpecFactKey } from './device-specs.js';
 import type { ScreenLockKind } from './screen-lock.js';
 import {
@@ -192,6 +192,7 @@ export const CHECK_STATE_KEY: Readonly<Record<ChecklistState, RepairKey>> = {
 export const DOWN_PAYMENT_GAP_KEY: Readonly<Record<DownPaymentGap, RepairKey>> = {
   aboveTotal: 'repair.problem.downPaymentAboveTotal',
   amount: 'repair.hint.downPayment',
+  reference: 'repair.problem.downPaymentReference',
   correctAmount: 'repair.hint.downPaymentCorrect',
   same: 'repair.hint.downPaymentSame',
   reason: 'repair.hint.reason',
@@ -208,3 +209,28 @@ export const SPEC_FACT_KEY: Readonly<Record<SpecFactKey, RepairKey>> = {
   cardSlot: 'repair.spec.cardSlot',
   os: 'repair.spec.os',
 };
+
+const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
+  decidePrice: 'repair.action.decidePrice',
+  claim: 'repair.action.claim',
+  start: 'repair.action.start',
+  resume: 'repair.action.resume',
+  reopen: 'repair.action.reopen',
+  waitForParts: 'repair.action.waitForParts',
+  markRepaired: 'repair.action.markRepaired',
+  assign: 'repair.action.assign',
+  changePrice: 'repair.action.changePrice',
+  proposePrice: 'repair.action.proposePrice',
+  handover: 'repair.action.handover',
+  cancel: 'repair.action.cancel',
+};
+
+/**
+ * An action's button label. Picking a technician and taking a repair read differently once someone
+ * already has it: "Ganti teknisi", and "Ambil alih" instead of "Masukkan ke Tugasku".
+ */
+export function actionKey(action: TicketAction, technicianId: string | null): RepairKey {
+  if (technicianId !== null && action === 'assign') return 'repair.action.reassign';
+  if (technicianId !== null && action === 'claim') return 'repair.action.takeOver';
+  return ACTION_KEY[action];
+}

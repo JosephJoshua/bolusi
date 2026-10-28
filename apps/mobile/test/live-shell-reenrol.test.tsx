@@ -54,11 +54,11 @@ import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-su
 import { sql } from 'kysely';
 
 import type { RootProps } from '../src/bootstrap/Root.js';
-import { createAppEnrollment, type EnrollmentPlatform } from '../src/bootstrap/enrollment.js';
-import { createSyncClient } from '../src/bootstrap/sync-client.js';
-import type { NetInfoPort } from '../src/bootstrap/triggers.js';
+import { createAppEnrollment, type EnrollmentPlatform } from '@bolusi/device/bootstrap/enrollment';
+import { createSyncClient } from '@bolusi/device/bootstrap/sync-client';
+import type { NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 import { SecureStoreKeyStore } from '../src/ports/keystore.js';
-import type { LoginResult } from '../src/screens/enrollment/model.js';
+import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { fire, textsIn } from '../../../packages/ui/test/render.js';
 import { __resetHardwareBack } from './doubles/react-native.js';
 import {

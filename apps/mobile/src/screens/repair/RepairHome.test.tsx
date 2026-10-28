@@ -215,6 +215,8 @@ describe('counter intake', () => {
       photos: {},
       lines: [],
       downPayment: '',
+      downPaymentAccount: 'cash',
+      downPaymentReference: '',
       ready: 'tomorrow',
     };
     const onDraftChange = vi.fn();
@@ -920,6 +922,8 @@ describe('price and assignment details', () => {
       photos: {},
       lines: [],
       downPayment: '',
+      downPaymentAccount: 'cash',
+      downPaymentReference: '',
       ready: 'tomorrow',
     };
     const screen = await mount(h, h.cashierId, { restoredDraft: draft });
@@ -949,6 +953,8 @@ describe('price and assignment details', () => {
       photos: { front: kept, back: gone },
       lines: [],
       downPayment: '',
+      downPaymentAccount: 'cash',
+      downPaymentReference: '',
       ready: 'tomorrow',
     };
     const runtime = repairRuntimeFor(h, h.cashierId);

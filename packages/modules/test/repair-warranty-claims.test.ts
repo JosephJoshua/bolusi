@@ -18,7 +18,12 @@ import {
   warrantyClaimAction,
 } from '../src/repair/flows.js';
 
-import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import {
+  intake,
+  openRepairHarness,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 import { sampleTicket } from './support/repair-rows.js';
 
 const DAY = 86_400_000;
@@ -60,11 +65,7 @@ async function pickedUp(h: RepairHarness, repairTypes: string[] = ['screen']): P
   };
   await h.run('startWork', { ticketId, beforePhotos: [h.photo(1)] }, h.technicianId);
   await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(2)] }, h.technicianId);
-  await h.run(
-    'returnDevice',
-    { ticketId, handoverPhoto: h.photo(3), signature: h.photo(4) },
-    h.cashierId,
-  );
+  await h.run('returnDevice', (await paidHandover(h, ticketId, {}, [3, 4])) as never, h.cashierId);
   return ticketId;
 }
 
@@ -153,11 +154,7 @@ describe('opening a claim', () => {
     const first = await claim(h, original, h.cashierId);
     await h.run('startWork', { ticketId: first, beforePhotos: [h.photo(5)] }, h.technicianId);
     await h.run('markRepaired', { ticketId: first, afterPhotos: [h.photo(6)] }, h.technicianId);
-    await h.run(
-      'returnDevice',
-      { ticketId: first, handoverPhoto: h.photo(7), signature: h.photo(8) },
-      h.cashierId,
-    );
+    await h.run('returnDevice', (await paidHandover(h, first, {}, [7, 8])) as never, h.cashierId);
     await expectRefusal(claim(h, first, h.ownerId), 'VALIDATION_FAILED', 'claimOfClaim');
     // A second claim names the first servisan again, under the same warranty.
     await claim(h, original, h.cashierId);

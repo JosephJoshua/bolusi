@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import { sql, type Kysely } from 'kysely';
+import { sql } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -40,6 +40,9 @@ import {
   type IntakeOptionSettings,
   type RecordedRepairType,
 } from './intake-options.js';
+import { userNames } from '../shared/user-names.js';
+import { paidOnDocumentSql } from '../money/queries.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
 import { deviceCode } from './ticket-number.js';
@@ -86,7 +89,10 @@ export interface TicketSummaryRow {
   readonly cancelledBy: string | null;
   readonly cancelledByName: string | null;
   readonly cancelledAt: number | null;
-  /** Integer IDR the customer paid up front; null when nothing was. */
+  /**
+   * Integer IDR the customer has paid so far, less what went back (the money ledger): the DP
+   * before handover. Null when nothing was.
+   */
   readonly downPayment: number | null;
   /** When the phone was last ready to collect (repaired or cancelled); null while worked on. */
   readonly readyAt: number | null;
@@ -168,9 +174,6 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly returnedAt: number | null;
   /** A technician has started work on it at least once, so the after-work cancellation fee applies. */
   readonly workStarted: boolean;
-  readonly downPaymentBy: string | null;
-  readonly downPaymentByName: string | null;
-  readonly downPaymentAt: number | null;
   /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
   readonly slipPrints: Readonly<Record<SlipKind, number>>;
   readonly quoteLines: readonly QuoteLineRow[];
@@ -179,25 +182,6 @@ export interface TicketDetailRow extends TicketSummaryRow {
 }
 
 // ── shared pieces ──────────────────────────────────────────────────────────────────────────────
-
-/** The client-only users directory, reached by narrow cast as notes' getNote does. */
-interface UsersLookup {
-  readonly usersDirectory: { readonly id: string; readonly name: string };
-}
-
-async function userNames(
-  qctx: Qctx,
-  ids: readonly (string | null)[],
-): Promise<Map<string, string>> {
-  const wanted = [...new Set(ids.filter((id): id is string => id !== null))];
-  if (wanted.length === 0) return new Map();
-  const rows = await (qctx.db as unknown as Pick<Kysely<UsersLookup>, 'selectFrom'>)
-    .selectFrom('usersDirectory')
-    .select(['id', 'name'])
-    .where('id', 'in', wanted)
-    .execute();
-  return new Map(rows.map((row) => [row.id, row.name]));
-}
 
 function summaryQuery(qctx: Qctx) {
   return qctx.db
@@ -226,7 +210,7 @@ function summaryQuery(qctx: Qctx) {
       't.cancelStandardFee',
       't.cancelledBy',
       't.cancelledAt',
-      't.downPayment',
+      paidOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('downPayment'),
       't.readyAt',
       eb
         .selectFrom('repairQuoteLines as l')
@@ -268,14 +252,15 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     cancelledBy: row.cancelledBy,
     cancelledByName: row.cancelledBy === null ? null : (names.get(row.cancelledBy) ?? null),
     cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
-    downPayment: row.downPayment === null ? null : Number(row.downPayment),
+    downPayment:
+      row.downPayment === null || Number(row.downPayment) === 0 ? null : Number(row.downPayment),
     readyAt: row.readyAt === null ? null : Number(row.readyAt),
   };
 }
 
 async function toSummaries(qctx: Qctx, rows: readonly RawSummary[]): Promise<TicketSummaryRow[]> {
   const names = await userNames(
-    qctx,
+    qctx.db,
     rows.flatMap((row) => [row.technicianId, row.cancelledBy]),
   );
   return rows.map((row) => toSummary(row, names));
@@ -678,8 +663,6 @@ export async function getTicketHandler(
       'createdBy',
       'returnedBy',
       'returnedAt',
-      'downPaymentBy',
-      'downPaymentAt',
     ])
     .where('id', '=', input.ticketId)
     .executeTakeFirstOrThrow();
@@ -729,10 +712,9 @@ export async function getTicketHandler(
     .orderBy('id', 'asc')
     .execute();
 
-  const names = await userNames(qctx, [
+  const names = await userNames(qctx.db, [
     summary.technicianId,
     detail.createdBy,
-    detail.downPaymentBy,
     ...events.map((event) => event.actorId),
   ]);
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
@@ -772,10 +754,6 @@ export async function getTicketHandler(
         returnedByName: detail.returnedBy === null ? null : (names.get(detail.returnedBy) ?? null),
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
-        downPaymentBy: detail.downPaymentBy,
-        downPaymentByName:
-          detail.downPaymentBy === null ? null : (names.get(detail.downPaymentBy) ?? null),
-        downPaymentAt: detail.downPaymentAt === null ? null : Number(detail.downPaymentAt),
         slipPrints,
         quoteLines: lines.map((line) => ({
           id: line.id,

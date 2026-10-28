@@ -250,17 +250,77 @@ test('the counter decides a proposal and the agreed total grows', async ({ page 
   await shoot(page, 'proposal-applied');
 });
 
-test('handover needs the photo and the signature, then the phone is returned', async ({ page }) => {
+test('handover takes the rest of the bill, then the photo and the signature', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-4');
   await tap(page, 'repair.ticket.action.handover');
+  // Rp 115.000 less the Rp 100.000 DP: the rest, in cash unless the counter picks another method.
+  await expect(page.getByTestId('repair.handover.balance')).toHaveText('Rp 15.000');
+  await expect(page.getByTestId('repair.handover.pay.line0.amount.field')).toHaveValue('15.000');
+  await fill(page, 'repair.handover.pay.line0.tendered', '20000');
+  await expect(page.getByTestId('repair.handover.pay.line0.change')).toHaveText('Rp 5.000');
   await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await shoot(page, 'handover-payment');
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await tap(page, 'repair.handover.primary');
   await expect(page.getByTestId('repair.ticket.photos.strip.signature')).toBeVisible();
   await shoot(page, 'handover-done');
+});
+
+test('a split payment needs every part, and an EDC payment its approval code', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await tap(page, 'repair.handover.photo.press');
+  await tap(page, 'repair.handover.signature.press');
+  await fill(page, 'repair.handover.pay.line0.amount', '5000');
+  await expect(page.getByTestId('repair.handover.pay.remaining')).toHaveText('Kurang Rp 10.000');
+  await tap(page, 'repair.handover.pay.add');
+  await expect(page.getByTestId('repair.handover.pay.line1.amount.field')).toHaveValue('10.000');
+  await tap(page, 'repair.handover.pay.line1.method.account:01920000-0000-7000-8000-00000000a002');
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await shoot(page, 'handover-split-edc');
+  await fill(page, 'repair.handover.pay.line1.reference', '004512');
+  await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
+  await shoot(page, 'handover-split-ready');
+});
+
+test('only an owner lets a phone go unpaid, with a reason', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await expect(page.getByTestId('repair.handover.payLater')).toHaveCount(0);
+
+  await open(page, 'owner');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await tap(page, 'repair.handover.payLater');
+  await tap(page, 'repair.handover.photo.press');
+  await tap(page, 'repair.handover.signature.press');
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await fill(page, 'repair.handover.unpaidReason', 'Langganan, bayar hari Jumat');
+  await expect(page.getByTestId('repair.handover.debt')).toHaveText(
+    'Sisa Rp 15.000 dicatat sebagai utang pelanggan.',
+  );
+  await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
+  await shoot(page, 'handover-pay-later');
+});
+
+test('a cancelled servisan gives back the DP less its fee, with nothing to pay', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-5');
+  await tap(page, 'repair.ticket.action.handover');
+  await expect(page.getByTestId('repair.handover.balance')).toHaveText('Rp 50.000');
+  await expect(page.getByTestId('repair.handover.payment')).toHaveCount(0);
+  await shoot(page, 'handover-cancelled-refund');
 });
 
 test('a ticket photo opens full screen, zooms on double tap, and "see all" groups every photo', async ({
@@ -611,6 +671,7 @@ test('a step that raced a cancel on another device is refused with its reason', 
 }) => {
   await open(page, 'owner');
   await tap(page, 'repair.board.row.t-1');
+  await tap(page, 'repair.ticket.more.open');
   // The cancel lands just as the owner taps: the tap runs on the screen they saw.
   await page.evaluate(() => {
     const hook = (window as unknown as Record<string, { run(n: string, i: unknown): unknown }>)[
@@ -681,6 +742,16 @@ test('a down payment at intake shows what is left to pay, and opens with the tic
   await fill(page, 'repair.intake.price.downPaymentInput', '200000');
   await expect(page.getByTestId('repair.intake.price.balance')).toHaveText('Rp 450.000');
   await shoot(page, 'dp-intake-price');
+  // Paid on the EDC: the step waits for its approval code.
+  await tap(
+    page,
+    'repair.intake.price.downPaymentMethod.method.account:01920000-0000-7000-8000-00000000a002',
+  );
+  await page.getByTestId('repair.intake.price.downPaymentMethod').scrollIntoViewIfNeeded();
+  await shoot(page, 'dp-intake-edc');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByText('Isi kode approval dari mesin EDC.').first()).toBeVisible();
+  await fill(page, 'repair.intake.price.downPaymentMethod.reference', '004512');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.balance')).toHaveText('Rp 450.000');
   await page.getByTestId('repair.intake.review.balance').scrollIntoViewIfNeeded();
@@ -701,6 +772,9 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await tap(page, 'repair.board.row.t-1');
   await tap(page, 'repair.ticket.downPayment.record');
   await fill(page, 'repair.downPayment.amount', '100000');
+  await tap(page, 'repair.downPayment.method.method.account:01920000-0000-7000-8000-00000000a002');
+  await expect(page.getByTestId('repair.downPayment.primary')).toBeDisabled();
+  await fill(page, 'repair.downPayment.method.reference', '004512');
   await shoot(page, 'dp-record');
   await tap(page, 'repair.downPayment.primary');
   await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 100.000');

@@ -27,6 +27,9 @@ import {
   type ModuleRuntime,
 } from '@bolusi/core';
 
+import { inventoryModule, moneyModule } from '../../src/index.js';
+import { INVENTORY_PERMISSION } from '../../src/inventory/index.js';
+import { MONEY_PERMISSION } from '../../src/money/index.js';
 import { repairModule, REPAIR_PERMISSION } from '../../src/repair/index.js';
 import { SqliteOpStore } from './harness.js';
 
@@ -35,6 +38,8 @@ const TECHNICIAN_ROLE = 'role-technician';
 const OWNER_ROLE = 'role-owner';
 const STORE_OWNER_ROLE = 'role-store-owner';
 const P = REPAIR_PERMISSION;
+const M = MONEY_PERMISSION;
+const I = INVENTORY_PERMISSION;
 
 const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
   scopeType,
@@ -49,6 +54,8 @@ export interface RepairHarness {
   readonly runtime: ModuleRuntime<ClientDatabase>;
   readonly db: Kysely<ClientDatabase>;
   readonly engine: ReturnType<typeof createProjectionEngine<ClientDatabase>>;
+  /** Judges an op by its type's rule against this device's records, as push ingestion would. */
+  readonly checkRule: (op: SignedOperation) => Promise<void>;
   readonly tenantId: string;
   readonly storeId: string;
   readonly deviceId: string;
@@ -71,6 +78,30 @@ export interface RepairHarness {
     input: Parameters<(typeof repairModule.commands)[K]['input']['parse']>[0],
     userId: string,
   ): Promise<unknown>;
+  /** Run an inventory command as `userId` (parts drawn for servisan). */
+  runInventory<K extends keyof typeof inventoryModule.commands>(
+    command: K,
+    input: Parameters<(typeof inventoryModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run an inventory query as `userId`. */
+  queryInventory<K extends keyof typeof inventoryModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Run a money command as `userId`. */
+  money<K extends keyof typeof moneyModule.commands>(
+    command: K,
+    input: Parameters<(typeof moneyModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run a money query as `userId`. */
+  moneyQuery<K extends keyof typeof moneyModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
   /** Run a repair query as `userId`. */
   query<K extends keyof typeof repairModule.queries>(
     query: K,
@@ -99,6 +130,8 @@ export async function openRepairHarness(
 
   const registry = registerModules([
     repairModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    inventoryModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    moneyModule as unknown as AnyModuleDefinition<ClientDatabase>,
   ]);
   const engine = createProjectionEngine(db, registry.projections);
 
@@ -120,7 +153,11 @@ export async function openRepairHarness(
   });
 
   const evaluator = new PermissionEvaluator(
-    assemblePermissionRegistry([repairModule as unknown as ModulePermissionManifest]),
+    assemblePermissionRegistry([
+      repairModule as unknown as ModulePermissionManifest,
+      inventoryModule as unknown as ModulePermissionManifest,
+      moneyModule as unknown as ModulePermissionManifest,
+    ]),
     {
       load: () =>
         Promise.resolve({
@@ -131,9 +168,27 @@ export async function openRepairHarness(
             ),
           ),
           roles: new Map<string, DirectoryRole>([
-            [CASHIER_ROLE, role([P.read, P.intake, P.assign, P.quoteChange, P.handover])],
-            [TECHNICIAN_ROLE, role([P.read, P.work])],
-            [OWNER_ROLE, role(Object.values(P), 'tenant')],
+            [
+              CASHIER_ROLE,
+              role([
+                P.read,
+                P.intake,
+                P.assign,
+                P.quoteChange,
+                P.handover,
+                M.read,
+                M.receive,
+                M.moveCash,
+                M.countCash,
+                I.read,
+                I.useParts,
+              ]),
+            ],
+            [TECHNICIAN_ROLE, role([P.read, P.work, I.read, I.useParts])],
+            [
+              OWNER_ROLE,
+              role([...Object.values(P), ...Object.values(I), ...Object.values(M)], 'tenant'),
+            ],
             [
               STORE_OWNER_ROLE,
               role([
@@ -148,6 +203,9 @@ export async function openRepairHarness(
                 P.setPrintSettings,
                 P.setUncollectedDays,
                 P.warrantyException,
+                // Categories are the business owner's alone (a tenant-wide permission).
+                ...Object.values(I).filter((id) => id !== I.manageCategories),
+                ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
               ]),
             ],
           ]),
@@ -193,6 +251,8 @@ export async function openRepairHarness(
     runtime,
     db,
     engine,
+    checkRule: (op) =>
+      registry.checkOpRule(op, { db: db as never, holdsPermission: () => Promise.resolve(true) }),
     tenantId,
     storeId,
     deviceId,
@@ -211,6 +271,37 @@ export async function openRepairHarness(
       );
       return (outcome as { result?: unknown }).result;
     },
+    runInventory: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        inventoryModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    queryInventory: async (query, input, userId) => {
+      return (await runtime.queries.execute(
+        inventoryModule.queries[query] as never,
+        input as never,
+        { tenantId, storeId, userId, deviceId },
+      )) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
+    money: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        moneyModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    moneyQuery: async (query, input, userId) => {
+      return (await runtime.queries.execute(moneyModule.queries[query] as never, input as never, {
+        tenantId,
+        storeId,
+        userId,
+        deviceId,
+      })) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
     query: async (query, input, userId) => {
       return (await runtime.queries.execute(repairModule.queries[query] as never, input as never, {
         tenantId,
@@ -224,7 +315,13 @@ export async function openRepairHarness(
         .selectFrom('operations')
         .select(['signedCoreJcs', 'hash', 'signature'])
         .where('deviceId', '=', deviceId)
-        .where('type', 'like', 'repair.%')
+        .where((eb) =>
+          eb.or([
+            eb('type', 'like', 'repair.%'),
+            eb('type', 'like', 'inventory.%'),
+            eb('type', 'like', 'money.%'),
+          ]),
+        )
         .orderBy('seq', 'asc')
         .execute();
       return rows.map((row) => operationFromSignedCoreJcs(row.signedCoreJcs, row));
@@ -287,5 +384,37 @@ export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}
       ref: h.photo(i + 1),
     })),
     ...overrides,
+  };
+}
+
+/**
+ * A handover the way the counter takes it: photo, signature and the rest of the bill in cash.
+ * `extra` overrides any field (a note, other payments).
+ */
+export async function paidHandover(
+  harness: RepairHarness,
+  ticketId: string,
+  extra: Record<string, unknown> = {},
+  photos: readonly [number, number] = [7, 8],
+): Promise<Record<string, unknown>> {
+  const ticket = (await harness.query('getTicket', { ticketId }, harness.cashierId)).rows[0] as {
+    outcome: string;
+    location: string;
+    quoteTotal: number;
+    cancelFee: number | null;
+    downPayment: number | null;
+  };
+  const cost = ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
+  const due = cost - (ticket.downPayment ?? 0);
+  const finished = ticket.outcome === 'repaired' || ticket.outcome === 'cancelled';
+  return {
+    ticketId,
+    handoverPhoto: harness.photo(photos[0]),
+    signature: harness.photo(photos[1]),
+    payments:
+      finished && ticket.location === 'in_store' && due > 0
+        ? [{ account: 'cash', amount: due }]
+        : [],
+    ...extra,
   };
 }

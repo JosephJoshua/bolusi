@@ -51,7 +51,9 @@ export type { ListProps, ListState } from './components/List.js';
 export type { ButtonProps, ButtonVariant } from './components/Button.js';
 export type { CardProps } from './components/Card.js';
 export type { ChipProps, ChipTone } from './components/Chip.js';
+export type { ActionChipProps } from './components/ActionChip.js';
 export type { ChipRowProps } from './components/ChipRow.js';
+export type { ChoiceChipsProps } from './components/ChoiceChips.js';
 export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
 export type { FactProps } from './components/Fact.js';
@@ -70,6 +72,7 @@ export type {
 } from './components/PhotoViewer.js';
 export type { PatternLockProps } from './components/PatternLock.js';
 export type { PinPadProps, PinPadState } from './components/PinPad.js';
+export type { QuantityStepperProps } from './components/QuantityStepper.js';
 export type { SearchFieldProps } from './components/SearchField.js';
 export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';
 export type { ReorderableListProps } from './components/ReorderableList.js';

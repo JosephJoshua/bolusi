@@ -32,6 +32,8 @@ vi.mock('expo-location', () => ({
   watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
 }));
 
+import { DomainError } from '@bolusi/core';
+import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 import * as SecureStore from 'expo-secure-store';
 
 import type { RenderResult } from '../../../packages/ui/test/render.js';
@@ -177,5 +179,26 @@ describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (ta
     await openSettings(screen);
     expect(screen.query('settings-change-pin')).not.toBeNull(); // Security section rendered
     expect(screen.query('settings-staff-pins')).toBeNull(); // but the owner row is gated out
+  });
+});
+
+describe("colleagues' PIN state is only for those who may unlock or reset", () => {
+  test('a signed-in person without either permission is refused the PIN target list', async () => {
+    let controller: AppSessionController | null = null;
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedDirectory(fixture);
+    const screen = await mountRoot(fixture, {
+      onSessionController: (next) => {
+        controller = next;
+      },
+    });
+    fireOn(screen, `switcher-user-${fixture.userId}`);
+    await settle();
+    expect(await submitPin(screen, TEST_PIN)).toBe(true);
+
+    const refused = await controller!.listPinTargets().catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(DomainError);
+    expect((refused as DomainError).code).toBe('PERMISSION_DENIED');
   });
 });

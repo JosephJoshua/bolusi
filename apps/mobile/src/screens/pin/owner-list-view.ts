@@ -9,7 +9,7 @@
 import { t } from '@bolusi/i18n';
 import type { ListState } from '@bolusi/ui';
 
-import type { OwnerListState, PinTargetUser } from './pin-target.js';
+import type { OwnerListState, PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 
 export interface OwnerListViewOptions {
   /** The localized Empty-state title — "no other users" for reset, "no one is locked out" for unlock. */

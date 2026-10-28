@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { NOTES_KEYS } from '@bolusi/modules/notes/screens';
+import { MONEY_KEYS } from '@bolusi/modules/money/screens';
 import { REPAIR_KEYS } from '@bolusi/modules/repair/screens';
 import { describe, expect, test } from 'vitest';
 
@@ -38,6 +39,7 @@ function catalogKeys(module: string, locale: 'id' | 'en'): string[] {
 const MODULES = [
   { module: 'notes', keys: NOTES_KEYS },
   { module: 'repair', keys: REPAIR_KEYS },
+  { module: 'money', keys: MONEY_KEYS },
 ] as const;
 
 describe.each(MODULES)('the $module catalog matches its typed key surface', ({ module, keys }) => {
