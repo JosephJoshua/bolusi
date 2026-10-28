@@ -132,6 +132,30 @@ const source = {
         use: 'Simpan tanda tangan',
         saveFailed: 'Tanda tangannya belum bisa disimpan. Coba lagi.',
       },
+      handoff: {
+        usePhone: 'Pakai HP',
+        useWebcam: 'Pakai webcam',
+        useScreen: 'Tanda tangan di layar',
+        scanHint:
+          'Pindai kode ini dengan kamera HP. HP harus pakai Wi-Fi yang sama dengan komputer ini.',
+        qrLabel: 'Kode QR untuk HP',
+        orOpen: 'Atau buka di HP:',
+        waiting: 'Menunggu HP…',
+        opened: 'HP sudah tersambung. Menunggu kiriman…',
+        noNetwork: 'Komputer ini belum tersambung ke Wi-Fi toko. Sambungkan dulu, lalu coba lagi.',
+        failed: 'HP belum bisa disambungkan. Coba lagi.',
+        expired: 'Kodenya sudah kedaluwarsa. Buat kode baru.',
+        page: {
+          photoHint: 'Ambil foto, lalu kirim ke komputer.',
+          send: 'Kirim ke komputer',
+          sending: 'Mengirim…',
+          sent: 'Terkirim. Lanjutkan di komputer.',
+          failed:
+            'Belum terkirim. Pastikan HP masih pakai Wi-Fi toko dan kodenya masih tampil di komputer, lalu coba lagi.',
+          expired: 'Kode ini sudah kedaluwarsa. Pindai kode baru dari komputer.',
+          unreadable: 'Fotonya tidak bisa dibaca. Ambil lagi.',
+        },
+      },
     },
     auth: {
       switcher: {
@@ -593,6 +617,30 @@ export const resources = {
           clear: 'Clear',
           use: 'Save signature',
           saveFailed: 'Couldn’t save the signature. Try again.',
+        },
+        handoff: {
+          usePhone: 'Use a phone',
+          useWebcam: 'Use the webcam',
+          useScreen: 'Sign on screen',
+          scanHint:
+            'Scan this code with a phone’s camera. The phone must be on the same Wi-Fi as this computer.',
+          qrLabel: 'QR code for the phone',
+          orOpen: 'Or open on the phone:',
+          waiting: 'Waiting for the phone…',
+          opened: 'Phone connected. Waiting for it to send…',
+          noNetwork: 'This computer isn’t on the store Wi-Fi. Connect it, then try again.',
+          failed: 'Couldn’t connect a phone. Try again.',
+          expired: 'This code has expired. Make a new one.',
+          page: {
+            photoHint: 'Take a photo, then send it to the computer.',
+            send: 'Send to computer',
+            sending: 'Sending…',
+            sent: 'Sent. Carry on at the computer.',
+            failed:
+              'Not sent. Check the phone is still on the store Wi-Fi and the code is still showing on the computer, then try again.',
+            expired: 'This code has expired. Scan a new one from the computer.',
+            unreadable: 'Couldn’t read that photo. Take it again.',
+          },
         },
       },
       auth: {

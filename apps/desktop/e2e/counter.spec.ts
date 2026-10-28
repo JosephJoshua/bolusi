@@ -18,19 +18,19 @@ const INSTALLED = process.env['BOLUSI_E2E_EXECUTABLE'];
 // decide whether the page may use it.
 const FLAGS = ['--no-sandbox', '--use-fake-device-for-media-stream'];
 
-async function launch(): Promise<void> {
+async function launch(flags: readonly string[] = FLAGS): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
   // settings are unchanged.
   app = await electron.launch(
     INSTALLED === undefined
-      ? { args: [...FLAGS, `${import.meta.dirname}/..`] }
-      : { executablePath: INSTALLED, args: FLAGS },
+      ? { args: [...flags, `${import.meta.dirname}/..`] }
+      : { executablePath: INSTALLED, args: [...flags] },
   );
   page = await app.firstWindow();
   await page.getByTestId('repair.desk.board').waitFor();
 }
 
-test.beforeEach(launch);
+test.beforeEach(() => launch());
 
 test.afterEach(async () => {
   await app.close();
@@ -121,19 +121,21 @@ for (const [width, height, sidebar] of [
   });
 }
 
-test('the page gets only the narrow print and update calls, through the real preload', async () => {
+test('the page gets only the narrow print, update and handoff calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;
     return {
       keys: bridge === undefined ? null : Object.keys(bridge).sort(),
       printers: bridge?.['printers'] === undefined ? null : Object.keys(bridge['printers']).sort(),
+      handoff: bridge?.['handoff'] === undefined ? null : Object.keys(bridge['handoff']).sort(),
       node: typeof (window as { require?: unknown }).require,
       process: typeof (window as { process?: unknown }).process,
     };
   });
   expect(shape).toEqual({
-    keys: ['printers', 'updates'],
+    keys: ['handoff', 'printers', 'updates'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
+    handoff: ['cancel', 'onEvent', 'open'],
     node: 'undefined',
     process: 'undefined',
   });
@@ -198,6 +200,91 @@ test('takes the customer signature at handover, over the handover dialog', async
   await page.getByTestId('desktop.signature.use').click();
   await expect(page.getByTestId('desktop.signature')).toBeHidden();
   await expect(page.getByTestId('repair.desk.handover')).toBeVisible();
+  await expect(page.getByTestId('repair.desk.handover.signature').locator('img')).toHaveAttribute(
+    'src',
+    /^blob:/,
+  );
+});
+
+/**
+ * A phone's browser on the store Wi-Fi, played by a plain window of the same Electron (no extra
+ * browser to install on CI) with a phone-sized touch screen. It reaches the page over the PC's LAN
+ * address like a phone would.
+ */
+async function phoneOpening(url: string): Promise<{ phone: Page; done: () => Promise<void> }> {
+  const opening = app.waitForEvent('window');
+  await app.evaluate(({ BrowserWindow }, address) => {
+    const window = new BrowserWindow({ width: 390, height: 844, show: true });
+    void window.loadURL(address);
+  }, url);
+  const phone = await opening;
+  await phone.waitForLoadState();
+  return { phone, done: () => phone.close() };
+}
+
+test('a PC without a webcam takes the intake photo on a phone over the store Wi-Fi', async () => {
+  await app.close();
+  await launch(['--no-sandbox']);
+  await page.getByTestId('repair.desk.board.newIntake').click();
+  const tile = page.locator('[data-testid^="repair.desk.intake.photo."]').first();
+  await tile.click();
+  await expect(page.getByTestId('desktop.camera.problem')).toBeVisible();
+  await page.getByTestId('desktop.usePhone').click();
+  const url = (await page.getByTestId('desktop.handoff.url').textContent())!;
+  expect(url).toMatch(/^http:\/\/[\d.]+:\d+\/h\//);
+
+  const { phone, done } = await phoneOpening(url);
+  try {
+    await expect(page.getByTestId('desktop.handoff.status')).toContainText(/tersambung/);
+    const jpeg = await phone.evaluate(async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2400;
+      canvas.height = 1800;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#2a6';
+      context.fillRect(0, 0, 2400, 1800);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', 0.9),
+      );
+      return [...new Uint8Array(await blob!.arrayBuffer())];
+    });
+    await phone.locator('#file').setInputFiles({
+      name: 'front.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from(jpeg),
+    });
+    await expect(phone.locator('#preview')).toBeVisible();
+    await phone.locator('#send').click();
+    await expect(phone.locator('#note')).toContainText('Terkirim');
+  } finally {
+    await done();
+  }
+  await expect(page.getByTestId('desktop.handoff')).toBeHidden();
+  await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/);
+});
+
+test('the customer signs on a phone at handover', async () => {
+  await page.getByTestId('repair.desk.board.views.pickup').click();
+  await page.getByText('Ester Mandowen').click();
+  await page.getByTestId('repair.desk.ticket.action.handover').click();
+  await page.getByTestId('repair.desk.handover.signature').click();
+  await page.getByTestId('desktop.usePhone').click();
+  const url = (await page.getByTestId('desktop.handoff.url').textContent())!;
+  const { phone, done } = await phoneOpening(url);
+  try {
+    const pad = phone.locator('#pad');
+    const box = (await pad.boundingBox())!;
+    await phone.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.6);
+    await phone.mouse.down();
+    await phone.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.3, { steps: 8 });
+    await phone.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.6, { steps: 8 });
+    await phone.mouse.up();
+    await phone.locator('#send').click();
+    await expect(phone.locator('#note')).toContainText('Terkirim');
+  } finally {
+    await done();
+  }
+  await expect(page.getByTestId('desktop.handoff')).toBeHidden();
   await expect(page.getByTestId('repair.desk.handover.signature').locator('img')).toHaveAttribute(
     'src',
     /^blob:/,

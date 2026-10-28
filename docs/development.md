@@ -92,6 +92,14 @@ Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a 
 (XPS-only) driver does not pass RAW jobs. CI's `desktop-windows` job spools a real job
 to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
 
+Photos and signatures: the webcam when the PC has one, otherwise "Pakai HP". The PC
+then serves one small page on the store network (`src/main/handoff.ts`) and shows its
+address as a QR with a one-time key; a phone on the same Wi-Fi opens it in its own
+browser, takes the photo or signature and sends it back. The port is open only while
+the QR is showing (10 minutes at most). Windows asks once to let Bolusi through its
+firewall on private networks; allow it. On Linux, e2e needs a private address
+(10/8, 172.16/12 or 192.168/16) on some interface for the handoff tests.
+
 Releasing: bump `version` in `apps/desktop/package.json`, merge, then push a tag
 `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
 installer on Windows and publishes it with `latest.yml` to that GitHub Release.

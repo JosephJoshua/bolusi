@@ -5,6 +5,7 @@ import { app, BrowserWindow, session, type IpcMainInvokeEvent } from 'electron';
 import { fileURLToPath } from 'node:url';
 
 import { DeviceSettingsFile } from './device-settings.js';
+import { HandoffServer, registerHandoff } from './handoff.js';
 import { registerPrinting } from './printing.js';
 import { registerUpdates } from './updater.js';
 
@@ -97,6 +98,7 @@ void app.whenReady().then(() => {
     );
   });
   registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
+  registerHandoff(new HandoffServer(), trusted);
   registerUpdates(trusted, () => [...counterWindows].map((window) => window.webContents));
   createWindow();
 });

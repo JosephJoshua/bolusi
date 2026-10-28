@@ -49,7 +49,48 @@ export interface UpdatesBridge {
   install(): Promise<void>;
 }
 
+export type HandoffKind = 'photo' | 'signature';
+
+/** The copy on the page the phone opens, in the counter's language. */
+export interface HandoffPageLabels {
+  readonly title: string;
+  readonly hint: string;
+  readonly take: string;
+  readonly retake: string;
+  readonly clear: string;
+  readonly send: string;
+  readonly sending: string;
+  readonly sent: string;
+  readonly failed: string;
+  readonly expired: string;
+  readonly unreadable: string;
+}
+
+export type HandoffOpened =
+  | { readonly ok: true; readonly id: string; readonly urls: readonly string[] }
+  /** No store network to offer the page on, or the port would not open. */
+  | { readonly ok: false; readonly problem: 'noNetwork' | 'failed' };
+
+export type HandoffEvent =
+  | { readonly id: string; readonly type: 'opened' | 'expired' }
+  | { readonly id: string; readonly type: 'photo'; readonly bytes: Uint8Array }
+  | {
+      readonly id: string;
+      readonly type: 'signature';
+      readonly strokes: readonly (readonly { readonly x: number; readonly y: number }[])[];
+      readonly pad: { readonly width: number; readonly height: number };
+    };
+
+export interface HandoffBridge {
+  /** Starts waiting for one photo or signature from a phone; a new open replaces the last. */
+  open(kind: HandoffKind, labels: HandoffPageLabels): Promise<HandoffOpened>;
+  cancel(id: string): Promise<void>;
+  /** Calls back when the phone opens the page, sends, or the code expires. */
+  onEvent(listener: (event: HandoffEvent) => void): () => void;
+}
+
 export interface DesktopBridge {
   readonly printers: PrintersBridge;
   readonly updates: UpdatesBridge;
+  readonly handoff: HandoffBridge;
 }

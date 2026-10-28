@@ -134,5 +134,27 @@
     "clear": "Hapus",
     "use": "Simpan tanda tangan",
     "saveFailed": "Tanda tangannya belum bisa disimpan. Coba lagi."
+  },
+  "handoff": {
+    "usePhone": "Pakai HP",
+    "useWebcam": "Pakai webcam",
+    "useScreen": "Tanda tangan di layar",
+    "scanHint": "Pindai kode ini dengan kamera HP. HP harus pakai Wi-Fi yang sama dengan komputer ini.",
+    "qrLabel": "Kode QR untuk HP",
+    "orOpen": "Atau buka di HP:",
+    "waiting": "Menunggu HP…",
+    "opened": "HP sudah tersambung. Menunggu kiriman…",
+    "noNetwork": "Komputer ini belum tersambung ke Wi-Fi toko. Sambungkan dulu, lalu coba lagi.",
+    "failed": "HP belum bisa disambungkan. Coba lagi.",
+    "expired": "Kodenya sudah kedaluwarsa. Buat kode baru.",
+    "page": {
+      "photoHint": "Ambil foto, lalu kirim ke komputer.",
+      "send": "Kirim ke komputer",
+      "sending": "Mengirim…",
+      "sent": "Terkirim. Lanjutkan di komputer.",
+      "failed": "Belum terkirim. Pastikan HP masih pakai Wi-Fi toko dan kodenya masih tampil di komputer, lalu coba lagi.",
+      "expired": "Kode ini sudah kedaluwarsa. Pindai kode baru dari komputer.",
+      "unreadable": "Fotonya tidak bisa dibaca. Ambil lagi."
+    }
   }
 }

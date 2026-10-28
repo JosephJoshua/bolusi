@@ -14,6 +14,7 @@ import { ChevronsUpDown, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { createCaptureDialogs } from './capture-dialogs.js';
+import { handoffBridge } from './phone-handoff.js';
 import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from './demo.js';
 import { UpdateNotice, useAppVersion } from './updates.js';
 
@@ -58,7 +59,7 @@ function useSidebarCollapsed(): readonly [boolean, () => void] {
 
 export function App(): React.JSX.Element {
   const [person, setPerson] = useState<DemoPerson>(DEMO_PEOPLE[0]!);
-  const [dialogs] = useState(createCaptureDialogs);
+  const [dialogs] = useState(() => createCaptureDialogs(handoffBridge()));
   const runtime = useMemo(() => demoRuntimeFor(person, dialogs.capture), [person, dialogs]);
   return (
     <RepairRuntimeProvider runtime={runtime}>
