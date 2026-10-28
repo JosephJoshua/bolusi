@@ -1,9 +1,10 @@
 @import 'tailwindcss';
 @import '@bolusi/ui-web/theme.css';
 
-/* Classes used by the shared desktop components live outside this folder. */
+/* Classes used by the shared desktop components live outside this folder: ui-web, and every
+   module's desktop screens (repair, money, the shared screen kit). */
 @source '../../../../packages/ui-web/src';
-@source '../../../../packages/modules/src/repair/desktop';
+@source '../../../../packages/modules/src/*/desktop/*.tsx';
 
 /* Dialogs, menus and tooltips can open over the title bar's drag area; a click on them must stay a
  * click, not start moving the window. */

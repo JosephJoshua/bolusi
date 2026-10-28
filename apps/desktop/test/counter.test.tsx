@@ -90,8 +90,18 @@ async function showView(view: string): Promise<void> {
   fireEvent.click(tab);
 }
 
-/** The handover photo and signature, one after the other as the counter takes them. */
+/** Every line of the handover checklist ticked, as the counter goes through it with the customer. */
+async function tickHandoverChecks(): Promise<void> {
+  const checks = await screen.findByTestId('repair.desk.handover.checks');
+  for (const line of within(checks).getAllByRole('button')) fireEvent.click(line);
+}
+
+/**
+ * The checklist ticked, then the handover photo and signature, one after the other as the counter
+ * takes them.
+ */
 async function captureHandover(): Promise<void> {
+  await tickHandoverChecks();
   for (const tile of ['photo', 'signature']) {
     const before = byTestId(`repair.desk.handover.${tile}`).textContent;
     await act(async () => {
@@ -335,6 +345,44 @@ describe('counter app over demo data', () => {
     );
     fireEvent.click(byTestId('repair.desk.handover.submit'));
     await waitFor(() => expect(screen.queryByTestId('repair.desk.handover')).toBeNull());
+  });
+
+  it('hands a phone back with something not ticked only with a note saying why', async () => {
+    renderApp();
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
+    const checks = within(await screen.findByTestId('repair.desk.handover.checks'));
+    expect(checks.getAllByRole('button').map((line) => line.textContent)).toEqual([
+      'Sudah dicoba pelanggan',
+      'Bagian yang diperbaiki berfungsi',
+      'Charger dikembalikan',
+      'Casing dikembalikan',
+    ]);
+    for (const tile of ['photo', 'signature']) {
+      const before = byTestId(`repair.desk.handover.${tile}`).textContent;
+      await act(async () => {
+        fireEvent.click(byTestId(`repair.desk.handover.${tile}`));
+        await Promise.resolve();
+      });
+      await waitFor(() =>
+        expect(byTestId(`repair.desk.handover.${tile}`).textContent).not.toBe(before),
+      );
+    }
+    for (const name of ['Sudah dicoba pelanggan', 'Charger dikembalikan']) {
+      fireEvent.click(checks.getByRole('button', { name }));
+    }
+    expect(await screen.findByText('Centang semua, atau tulis kenapa belum.')).toBeTruthy();
+    expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('repair.desk.handover.note'), {
+      target: { value: 'Casing diambil besok' },
+    });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
+    );
+    fireEvent.click(byTestId('repair.desk.handover.submit'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.handover')).toBeNull());
+    expect(await screen.findByText(/Belum: Bagian yang diperbaiki berfungsi, Casing/)).toBeTruthy();
   });
 
   it('splits a payment, and an EDC line needs its approval code', async () => {

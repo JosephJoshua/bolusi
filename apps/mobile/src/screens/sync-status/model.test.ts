@@ -115,6 +115,13 @@ describe('THE THESIS — offline is a normal state, not an error', () => {
     expect(syncChipState(input({ isOffline: true, pendingOperationCount: 47 }))).toBe('offline');
   });
 
+  test('a push attempted while offline still reads offline, never "sending"', () => {
+    // A new change starts a push even offline (the append trigger); it fails at once.
+    expect(syncChipState(input({ isOffline: true, loopState: 'pushing' }))).toBe('offline');
+    expect(syncChipState(input({ isOffline: true, loopState: 'pulling' }))).toBe('offline');
+    expect(syncTitleState(input({ isOffline: true, loopState: 'pushing' }))).toBe('offline');
+  });
+
   test('being offline NEVER disables manual sync — the loop decides, not NetInfo', () => {
     expect(manualSync(input({ isOffline: true }))).toEqual({ kind: 'ready' });
   });

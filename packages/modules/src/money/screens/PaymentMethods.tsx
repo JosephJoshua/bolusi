@@ -6,52 +6,35 @@
  */
 import {
   EmptyState,
+  Icon,
   ListRow,
   SegmentedControl,
   SwitchRow,
   TextInput,
   color,
+  size,
   space,
   type,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
+import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
+import { MAX_ACCOUNT_NAME, PAYMENT_ACCOUNT_KINDS } from '../constants.js';
+import { tm } from '../i18n.js';
 import {
-  MAX_ACCOUNT_NAME,
-  MONEY_PERMISSION,
-  PAYMENT_ACCOUNT_KINDS,
-  type PaymentAccountKind,
-} from '../constants.js';
-import { tm, type MoneyKey } from '../i18n.js';
+  KIND_KEY,
+  methodSummary,
+  methodsInOrder,
+  useMethodAccess,
+  useMoneyStores,
+  usePaymentMethodForm,
+} from '../methods.js';
 import type { PaymentAccountRow } from '../queries.js';
-import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
-
-const KIND_KEY: Readonly<Record<PaymentAccountKind, MoneyKey>> = {
-  qris: 'money.kind.qris',
-  edc: 'money.kind.edc',
-  transfer: 'money.kind.transfer',
-};
-
-/** "QRIS · Semua toko · Tidak dipakai". */
-function methodSummary(account: PaymentAccountRow): string {
-  return [
-    tm(KIND_KEY[account.kind]),
-    // A franchise method given to some stores only is the head office's, not every store's.
-    account.central
-      ? account.storeIds.length === 0
-        ? tm('money.methods.central')
-        : tm('money.methods.storeCount', { count: account.storeIds.length })
-      : '',
-    account.active ? '' : tm('money.methods.inactive'),
-  ]
-    .filter((part) => part !== '')
-    .join(' · ');
-}
+import { useMoneyQuery } from '../runtime.js';
 
 type MethodsView =
   { readonly kind: 'list' } | { readonly kind: 'form'; readonly account?: PaymentAccountRow };
@@ -147,13 +130,12 @@ export function PaymentMethodList({
   onClearNotice,
   testID = 'money.methods',
 }: PaymentMethodListProps): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const mayEditStore = runtime.hasPermission(MONEY_PERMISSION.manageAccounts);
-  const mayEditCentral = runtime.hasPermission(MONEY_PERMISSION.manageCentralAccounts);
+  const access = useMethodAccess();
+  const stores = useMoneyStores();
   const [nonce, setNonce] = useState(0);
   const query = useMoneyQuery<readonly PaymentAccountRow[]>(
     async (rt) =>
-      (await rt.query('paymentAccounts', { includeInactive: true, everyStore: mayEditCentral }))
+      (await rt.query('paymentAccounts', { includeInactive: true, everyStore: access.central }))
         .rows,
     `methods:${String(nonce)}`,
   );
@@ -184,14 +166,13 @@ export function PaymentMethodList({
               secondaryText={tm('money.methods.cashAlways')}
               testID={`${testID}.cash`}
             />
-            {/* Switched-off ones last: they are kept for the payments made through them. */}
-            {[...rows.filter((a) => a.active), ...rows.filter((a) => !a.active)].map((account) => {
-              const editable = account.central ? mayEditCentral : mayEditStore;
+            {methodsInOrder(rows).map((account) => {
+              const editable = access.mayEdit(account);
               return (
                 <ListRow
                   key={account.id}
                   primaryText={account.name}
-                  secondaryText={methodSummary(account)}
+                  secondaryText={methodSummary(account, stores)}
                   showChevron={editable}
                   onPress={editable ? () => onOpen(account) : undefined}
                   testID={`${testID}.row.${account.id}`}
@@ -233,33 +214,10 @@ export function PaymentMethodForm({
   onRegisterDiscardGuard,
   testID = 'money.methodForm',
 }: PaymentMethodFormProps): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const mayStore = runtime.hasPermission(MONEY_PERMISSION.manageAccounts);
-  const mayCentral = runtime.hasPermission(MONEY_PERMISSION.manageCentralAccounts);
-  const [kind, setKind] = useState<PaymentAccountKind>(account?.kind ?? 'qris');
-  const [name, setName] = useState(account?.name ?? '');
-  const [active, setActive] = useState(account?.active ?? true);
-  // Someone who manages only the franchise's methods adds franchise ones.
-  const [central, setCentral] = useState(account?.central ?? !mayStore);
-  // A central method is every store's unless it names some: none named means all of them.
-  const [picked, setPicked] = useState<readonly string[]>(account?.storeIds ?? []);
-  const [everyStore, setEveryStore] = useState((account?.storeIds.length ?? 0) === 0);
-  const [tried, setTried] = useState(false);
-  const stores = useMoneyQuery((rt) => rt.stores(), 'stores');
-  const storeList = stores.status === 'ready' ? stores.data : [];
-  // One store has nothing to pick between.
-  const picksStores = central && mayCentral && storeList.length > 1;
-  const storeIds = everyStore ? [] : [...picked].sort();
-
-  const dirty =
-    account === undefined
-      ? name.trim() !== ''
-      : name.trim() !== account.name ||
-        active !== account.active ||
-        storeIds.join() !== [...account.storeIds].sort().join();
+  const form = usePaymentMethodForm(account);
+  const { runner, kind, name, active, central, everyStore, picked, stores: storeList } = form;
   const discard = useDiscardConfirm({
-    dirty,
+    dirty: form.dirty,
     copy: {
       title: tm('money.discard.title'),
       message: tm('money.discard.message'),
@@ -269,33 +227,6 @@ export function PaymentMethodForm({
     onRegisterDiscardGuard,
     testID,
   });
-  const nameMissing = name.trim() === '';
-  const noStore = picksStores && !everyStore && picked.length === 0;
-
-  const save = (): void => {
-    setTried(true);
-    if (nameMissing || noStore) return;
-    if (account !== undefined && !dirty) {
-      onCancel();
-      return;
-    }
-    const fields = {
-      ...(account === undefined ? {} : { accountId: account.id }),
-      kind,
-      name: name.trim(),
-      active,
-    };
-    void runner
-      .run(() =>
-        central
-          ? runtime.run('saveCentralAccount', { ...fields, storeIds })
-          : runtime.run('saveAccount', fields),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone(tm('money.methods.saved', { name: name.trim() }));
-      });
-  };
-
   return (
     <FlowScreen
       chrome={chrome}
@@ -303,7 +234,7 @@ export function PaymentMethodForm({
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
       primaryLabel={tm('money.methods.save')}
-      onPrimary={save}
+      onPrimary={() => form.save(onDone, onCancel)}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -319,7 +250,7 @@ export function PaymentMethodForm({
                 label: tm(KIND_KEY[value]),
               }))}
               value={kind}
-              onChange={setKind}
+              onChange={form.setKind}
               testID={`${testID}.kind`}
             />
           </View>
@@ -335,21 +266,23 @@ export function PaymentMethodForm({
           label={tm('money.methods.name')}
           placeholder={tm('money.methods.namePlaceholder')}
           value={name}
-          onChangeText={setName}
+          onChangeText={form.setName}
           maxLength={MAX_ACCOUNT_NAME}
-          errorMessage={tried && nameMissing ? tm('money.methods.nameRequired') : undefined}
+          errorMessage={
+            form.tried && form.nameMissing ? tm('money.methods.nameRequired') : undefined
+          }
           testID={`${testID}.name`}
         />
-        {account === undefined && mayStore && mayCentral ? (
+        {form.choosesCentral ? (
           <SwitchRow
             label={tm('money.methods.allStores')}
             caption={tm('money.methods.allStoresCaption')}
             value={central}
-            onValueChange={setCentral}
+            onValueChange={form.setCentral}
             testID={`${testID}.central`}
           />
         ) : null}
-        {picksStores ? (
+        {form.picksStores ? (
           <View testID={`${testID}.stores`}>
             <Text style={styles.label}>{tm('money.methods.usedAt')}</Text>
             <SegmentedControl
@@ -358,7 +291,7 @@ export function PaymentMethodForm({
                 { value: 'some', label: tm('money.methods.someStores') },
               ]}
               value={everyStore ? 'all' : 'some'}
-              onChange={(value) => setEveryStore(value === 'all')}
+              onChange={(value) => form.setEveryStore(value === 'all')}
               testID={`${testID}.scope`}
             />
             {everyStore ? null : (
@@ -368,18 +301,15 @@ export function PaymentMethodForm({
                     key={store.id}
                     primaryText={store.name}
                     checked={picked.includes(store.id)}
-                    onPress={() =>
-                      setPicked((current) =>
-                        current.includes(store.id)
-                          ? current.filter((id) => id !== store.id)
-                          : [...current, store.id],
-                      )
-                    }
+                    onPress={() => form.togglePicked(store.id)}
                     testID={`${testID}.store.${store.id}`}
                   />
                 ))}
-                {tried && noStore ? (
-                  <Text style={styles.error}>{tm('money.methods.storeRequired')}</Text>
+                {form.tried && form.noStore ? (
+                  <View style={styles.errorRow} testID={`${testID}.storeError`}>
+                    <Icon name="warning" size={size.iconChip} color={color.danger} />
+                    <Text style={styles.error}>{tm('money.methods.storeRequired')}</Text>
+                  </View>
                 ) : null}
               </View>
             )}
@@ -390,7 +320,7 @@ export function PaymentMethodForm({
             label={tm('money.methods.active')}
             caption={tm('money.methods.activeCaption')}
             value={active}
-            onValueChange={setActive}
+            onValueChange={form.setActive}
             testID={`${testID}.active`}
           />
         )}
@@ -405,5 +335,12 @@ const styles = StyleSheet.create({
   label: { ...type.caption, color: color.textMuted, marginBottom: space.xs },
   value: { ...type.body, color: color.text },
   storeRows: { marginTop: space.sm, marginHorizontal: -space.lg },
-  error: { ...type.caption, color: color.danger, marginTop: space.xs, marginHorizontal: space.lg },
+  // As a field's own error reads (TextInput).
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: space.xs,
+    marginHorizontal: space.lg,
+  },
+  error: { ...type.bodySm, color: color.danger, marginLeft: space.xs, flex: 1 },
 });

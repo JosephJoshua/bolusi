@@ -10,6 +10,7 @@ import { TYPING_PAUSE_MS } from '@bolusi/modules/screen-kit';
 import { act } from 'react';
 
 import {
+  accessoriesBack,
   openRepairHarness,
   intake,
   type RepairHarness,
@@ -17,7 +18,16 @@ import {
 import { fire, render, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
 import { createRepairRuntime } from '@bolusi/device/models/repair/runtime-adapter';
 
-export { openRepairHarness, intake, render, fire, textsIn, type RepairHarness, type RenderResult };
+export {
+  accessoriesBack,
+  openRepairHarness,
+  intake,
+  render,
+  fire,
+  textsIn,
+  type RepairHarness,
+  type RenderResult,
+};
 
 export function ensureRepairCatalog(): void {
   registerRepairCatalog({ id: idCatalog, en: enCatalog });

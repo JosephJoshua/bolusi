@@ -150,7 +150,12 @@
     "payNow": "Bayar sekarang",
     "payLaterReason": "Alasan bayar nanti",
     "payLaterNote": "Sisa {amount} dicatat sebagai utang pelanggan.",
-    "refundReason": "Sisa DP dikembalikan saat serah terima"
+    "refundReason": "Sisa DP dikembalikan saat serah terima",
+    "checks": "Cek bersama pelanggan",
+    "accessoryBack": "{name} dikembalikan",
+    "noteNeeded": "Catatan",
+    "checked": "Dicek: {items}",
+    "unchecked": "Belum: {items}"
   },
   "intake": {
     "discard": "Buang",
@@ -307,7 +312,8 @@
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
     "downPaymentSame": "Jumlahnya masih sama.",
-    "handoverPayment": "Lengkapi pembayarannya dulu."
+    "handoverPayment": "Lengkapi pembayarannya dulu.",
+    "handoverChecks": "Centang semua, atau tulis kenapa belum."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -316,8 +322,8 @@
     "keep": "Tetap di sini"
   },
   "options": {
-    "title": "Pilihan saat terima HP",
-    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi, jenis servisan",
+    "title": "Pilihan servisan",
+    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi, jenis servisan, serah terima",
     "intro": "Berlaku di semua toko. Servisan yang sudah masuk tidak ikut berubah.",
     "introStore": "Pilih yang tampil di toko ini.",
     "count": "{count} pilihan",
@@ -328,7 +334,8 @@
       "photoAngles": "Sisi HP yang difoto",
       "brands": "Merek pilihan cepat",
       "readyBy": "Estimasi selesai",
-      "repairTypes": "Jenis servisan"
+      "repairTypes": "Jenis servisan",
+      "handoverChecks": "Cek saat serah terima"
     },
     "hint": {
       "checks": "Dicek kasir di depan pelanggan, urut dari atas.",
@@ -336,7 +343,8 @@
       "photoAngles": "Semua sisi di sini wajib difoto saat terima HP.",
       "brands": "Tampil sebagai pilihan cepat. Merek lain tetap bisa diketik.",
       "readyBy": "Pilihan estimasi selesai saat terima HP.",
-      "repairTypes": "Garansi dihitung sejak HP diambil."
+      "repairTypes": "Garansi dihitung sejak HP diambil.",
+      "handoverChecks": "Dicek bersama pelanggan sebelum HP dibawa pulang. Kelengkapan yang dititipkan ikut dicek."
     },
     "add": "Tambah",
     "addUnknown": "Tambah “Belum tahu”",
@@ -643,7 +651,9 @@
     "claimWithTypes": "Klaim garansi memakai jenis servisan dari servisan aslinya.",
     "warrantyEnded": "Garansinya sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
     "claimChargeOwnerOnly": "Klaim garansi gratis. Hanya pemilik yang bisa menagih biaya.",
-    "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya."
+    "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya.",
+    "handoverAccessories": "Ada kelengkapan yang tidak ada di daftar serah terima.",
+    "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu."
   },
   "paper": {
     "title": "Kertas nota",
@@ -732,5 +742,9 @@
     "open": "Buka",
     "intakeNote": "Dari {number}. Jenis servisan dan garansinya ikut servisan itu.",
     "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini."
+  },
+  "handoverCheck": {
+    "customerTried": "Sudah dicoba pelanggan",
+    "repairWorks": "Bagian yang diperbaiki berfungsi"
   }
 }

@@ -47,7 +47,14 @@ import {
 } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { actionKey, LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel, warrantyLine } from '../labels.js';
+import {
+  actionKey,
+  eventNote,
+  LOCK_KIND_KEY,
+  PRICE_KIND_KEY,
+  optionLabel,
+  warrantyLine,
+} from '../labels.js';
 import {
   amountOwed,
   arrangeTicketActions,
@@ -1142,15 +1149,6 @@ function ticketPhotos(row: TicketDetailRow): BrowsablePhoto[] {
     ...rest,
     ref: photoThumbnailRef(photo),
   }));
-}
-
-/** The note or reason a person typed with an event (a cancel reason, a parts note), if any. */
-function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
-  for (const field of ['note', 'reason'] as const) {
-    const value = detail[field];
-    if (typeof value === 'string' && value.trim() !== '') return value;
-  }
-  return null;
 }
 
 const styles = StyleSheet.create({

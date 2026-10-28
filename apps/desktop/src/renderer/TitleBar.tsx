@@ -2,13 +2,11 @@
 // the left, the app's own controls on the right, and Windows' minimise, maximise and close beyond
 // them. The empty part drags the window and a double click maximises it, as on any title bar; the
 // controls opt out of dragging so a click on them is a click.
-import { OverflowText } from '@bolusi/ui-web';
+import { BrandMark, OverflowText } from '@bolusi/ui-web';
 import { clsx } from 'clsx';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
 import type { WindowBridge } from '../main/bridge.js';
-
-import { BrandMark } from './BrandMark.js';
 
 /** A control in the bar: quiet until pointed at, and a focus ring that shows on the dark bar. */
 export const BAR_CONTROL =
@@ -110,7 +108,7 @@ export function TitleBar({
           !active && 'opacity-60',
         )}
       >
-        <BrandMark size={20} />
+        <BrandMark size={20} tone="dark" label={null} />
         <span className="shrink-0 text-body font-semibold tracking-tight">{APP_NAME}</span>
         {store === null ? null : (
           <>

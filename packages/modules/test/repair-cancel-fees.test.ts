@@ -10,7 +10,12 @@ import { storeCancelFeesChangedApplier } from '../src/repair/applier.js';
 import { REPAIR_OP } from '../src/repair/constants.js';
 import { repairOperations, ticketCancelledPayload } from '../src/repair/operations.js';
 
-import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import {
+  accessoriesBack,
+  intake,
+  openRepairHarness,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 const open: RepairHarness[] = [];
 afterEach(async () => {
@@ -90,7 +95,12 @@ describe('who may cancel', () => {
     await h.run('cancelTicket', { ticketId: returned, reason: 'Batal', fee: 0 }, h.storeOwnerId);
     await h.run(
       'returnDevice',
-      { ticketId: returned, handoverPhoto: h.photo(3), signature: h.photo(4) },
+      {
+        ticketId: returned,
+        handoverPhoto: h.photo(3),
+        signature: h.photo(4),
+        checklist: accessoriesBack(),
+      },
       h.cashierId,
     );
     await expectCode(

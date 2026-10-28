@@ -614,6 +614,18 @@ export const REPAIR_KEYS = [
   'repair.desk.settings.slipLead',
   'repair.desk.options.dragHandle',
   'repair.desk.options.new',
+  'repair.handoverCheck.customerTried',
+  'repair.handoverCheck.repairWorks',
+  'repair.options.list.handoverChecks',
+  'repair.options.hint.handoverChecks',
+  'repair.handover.checks',
+  'repair.handover.accessoryBack',
+  'repair.handover.noteNeeded',
+  'repair.hint.handoverChecks',
+  'repair.handover.checked',
+  'repair.handover.unchecked',
+  'repair.refusal.handoverAccessories',
+  'repair.refusal.handoverNoteNeeded',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];

@@ -14,6 +14,7 @@ export type { RepairChrome } from './parts.js';
 export { catalogModelSearch } from '../model-picker.js';
 export {
   RepairRuntimeProvider,
+  moneyRuntimeOf,
   servisanCustomers,
   useRepairRuntime,
   type RepairPrinting,

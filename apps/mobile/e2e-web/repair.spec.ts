@@ -71,6 +71,13 @@ async function order(page: Page, listTestID: string): Promise<string[]> {
   return ids.map((id) => id.slice(prefix.length));
 }
 
+/** Tick every line of the handover checklist, as the counter does with the customer. */
+async function tickHandoverChecks(page: Page): Promise<void> {
+  const lines = page.getByTestId('repair.handover.checkList').getByRole('checkbox');
+  await expect(lines.first()).toBeVisible();
+  for (const line of await lines.all()) await line.click();
+}
+
 test('a misspelled name finds the ticket', async ({ page }) => {
   await open(page, 'counter');
   await fill(page, 'repair.board.search', 'yohanes wenda');
@@ -262,6 +269,7 @@ test('handover takes the rest of the bill, then the photo and the signature', as
   await expect(page.getByTestId('repair.handover.pay.line0.change')).toHaveText('Rp 5.000');
   await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
   await shoot(page, 'handover-payment');
+  await tickHandoverChecks(page);
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await tap(page, 'repair.handover.primary');
@@ -269,11 +277,44 @@ test('handover takes the rest of the bill, then the photo and the signature', as
   await shoot(page, 'handover-done');
 });
 
+test('the counter goes through the checks with the customer; anything not ticked needs a note', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await fill(page, 'repair.handover.pay.line0.tendered', '15000');
+  await tap(page, 'repair.handover.photo.press');
+  await tap(page, 'repair.handover.signature.press');
+  const lines = page.getByTestId('repair.handover.checkList').getByRole('checkbox');
+  await expect(lines).toHaveText([
+    'Sudah dicoba pelanggan',
+    'Bagian yang diperbaiki berfungsi',
+    'Charger dikembalikan',
+    'Casing dikembalikan',
+  ]);
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await tap(page, 'repair.handover.check.check.customerTried');
+  await tap(page, 'repair.handover.check.check.repairWorks');
+  await tap(page, 'repair.handover.check.accessory.case');
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await shoot(page, 'handover-checks');
+  await fill(page, 'repair.handover.note', 'Charger diambil besok');
+  await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
+  await tap(page, 'repair.handover.primary');
+  const history = page.getByTestId('repair.ticket.timeline');
+  await expect(history).toContainText('Belum: Charger');
+  await history.scrollIntoViewIfNeeded();
+  await shoot(page, 'handover-checks-history');
+});
+
 test('a split payment needs every part, and an EDC payment its approval code', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-4');
   await tap(page, 'repair.ticket.action.handover');
+  await tickHandoverChecks(page);
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await fill(page, 'repair.handover.pay.line0.amount', '5000');
@@ -300,6 +341,7 @@ test('only an owner lets a phone go unpaid, with a reason', async ({ page }) => 
   await tap(page, 'repair.board.row.t-4');
   await tap(page, 'repair.ticket.action.handover');
   await tap(page, 'repair.handover.payLater');
+  await tickHandoverChecks(page);
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
@@ -547,6 +589,7 @@ test('once the phone goes home, the warranty shows its last day', async ({ page 
   await tap(page, 'repair.board.row.t-4');
   await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText('· garansi 30 hari');
   await tap(page, 'repair.ticket.action.handover');
+  await tickHandoverChecks(page);
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await tap(page, 'repair.handover.primary');
@@ -711,6 +754,12 @@ test('a phone handed back on another device stops the handover', async ({ page }
     ticketId: 't-4',
     handoverPhoto: shot('m-handover'),
     signature: shot('m-signature'),
+    checklist: ['charger', 'case'].map((item) => ({
+      kind: 'accessory',
+      item,
+      label: null,
+      done: true,
+    })),
   });
   await expect(page.getByTestId('repair.handover.stale')).toBeVisible();
   await shoot(page, 'stale-handover');
