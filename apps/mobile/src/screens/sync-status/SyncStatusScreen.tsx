@@ -337,6 +337,13 @@ export function SyncStatusScreen({
         </View>
       ) : null}
 
+      {problems.some((problem) => problem.kind === 'appUpdateNeeded') ? (
+        <View style={styles.section} testID="sync-update-needed">
+          <Text style={styles.sectionTitle}>{t('sync.updateNeeded.title')}</Text>
+          <Text style={styles.sectionText}>{t('sync.updateNeeded.body')}</Text>
+        </View>
+      ) : null}
+
       {problems.some((problem) => problem.kind === 'quarantined') ? (
         <View style={styles.section} testID="sync-quarantine">
           <Text style={styles.sectionTitle}>{t('sync.quarantine.title')}</Text>

@@ -180,6 +180,9 @@ function SyncStatusDialog({
         {failedPhotos === 0 ? null : (
           <Banner tone="warning" message={t('sync.pc.mediaFailed', { count: failedPhotos })} />
         )}
+        {syncProblems(input).some((problem) => problem.kind === 'appUpdateNeeded') ? (
+          <Banner tone="warning" message={t('sync.updateNeeded.body')} />
+        ) : null}
         {input.quarantined.length === 0 ? null : (
           <Banner tone="warning" message={t('sync.quarantine.body')} />
         )}

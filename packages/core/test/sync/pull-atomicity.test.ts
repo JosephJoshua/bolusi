@@ -39,7 +39,12 @@ import {
   type SyncHarness,
   type TestDevice,
 } from './_fixtures.js';
-import { insertOpLogRow, runPullPhase, type PulledBatch } from '../../src/index.js';
+import {
+  AppUpdateRequiredError,
+  insertOpLogRow,
+  runPullPhase,
+  type PulledBatch,
+} from '../../src/index.js';
 import { noblePort, opRowOf } from '@bolusi/test-support';
 
 let harness: SyncHarness;
@@ -320,6 +325,41 @@ describe('batch progress is reported only for committed batches', () => {
       },
     });
     expect(result.applied).toBe(5);
+    expect(await cursor()).toBe(BATCH_CURSOR);
+  });
+});
+
+describe('an op from a newer app pauses the pull until this app updates', () => {
+  it('applies nothing of the batch, keeps the cursor, and says an update is needed', async () => {
+    ops[2] = { ...ops[2]!, schemaVersion: 99 };
+    scriptBatch();
+    const knowsOp = (op: SignedOperation): boolean => op.schemaVersion === 1;
+
+    const pull = runPullPhase({ ...pullDeps((op) => harness.engine.applyPulledOp(op)), knowsOp });
+
+    await expect(pull).rejects.toBeInstanceOf(AppUpdateRequiredError);
+    await expect(pull).rejects.toMatchObject({ code: 'APP_UPDATE_REQUIRED', schemaVersion: 99 });
+    expect(await countRows(harness.db, 'operations')).toBe(0);
+    expect(await countRows(harness.db, 'notes')).toBe(0);
+    expect(await cursor()).toBe(0);
+  });
+
+  it('the updated app pulls the same batch and applies all of it', async () => {
+    scriptBatch();
+    await expect(
+      runPullPhase({
+        ...pullDeps((op) => harness.engine.applyPulledOp(op)),
+        knowsOp: () => false,
+      }),
+    ).rejects.toBeInstanceOf(AppUpdateRequiredError);
+
+    scriptBatch();
+    const result = await runPullPhase({
+      ...pullDeps((op) => harness.engine.applyPulledOp(op)),
+      knowsOp: () => true,
+    });
+    expect(result.applied).toBe(5);
+    expect(await countRows(harness.db, 'notes')).toBe(5);
     expect(await cursor()).toBe(BATCH_CURSOR);
   });
 });

@@ -38,7 +38,12 @@ import { fakeBackgroundPlatform } from './_background-platform.test.js';
 import { SYNC_BACKGROUND_TASK } from './background-sync.js';
 import { createBackgroundHost, type BackgroundBinding } from './background-task.js';
 import type { Bootstrapped } from './bootstrap.js';
-import { createSyncClient, createSyncClientForApp, type SyncClientDeps } from './sync-client.js';
+import {
+  createSyncClient,
+  createSyncClientForApp,
+  knowsOp,
+  type SyncClientDeps,
+} from './sync-client.js';
 import { APPEND_DEBOUNCE_MS } from './triggers.js';
 
 const KEY = 'a'.repeat(64);
@@ -205,6 +210,7 @@ async function build(options: BuildOptions = {}) {
       return Promise.resolve();
     },
     refoldRefused: () => Promise.resolve(),
+    knowsOp: () => true,
     crypto: noblePort,
     clock: { now: () => T },
     timer,
@@ -690,5 +696,21 @@ describe('trigger (d): the OS background task drives the started client', () => 
     expect(client.backgroundRegistration()).toEqual({ kind: 'restricted' });
     expect(platform.registered).toHaveLength(0);
     client.stop();
+  });
+});
+
+describe('knowsOp: can this build fold a pulled op?', () => {
+  const operations = {
+    schemaVersionFor: (type: string) => (type === 'repair.ticket_opened' ? 4 : undefined),
+  };
+
+  test('folds any version up to the one it declares', () => {
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 1 })).toBe(true);
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 4 })).toBe(true);
+  });
+
+  test('a newer version or an unknown type comes from a newer app', () => {
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 5 })).toBe(false);
+    expect(knowsOp(operations, { type: 'stock.item_received', schemaVersion: 1 })).toBe(false);
   });
 });

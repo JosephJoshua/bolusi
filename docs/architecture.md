@@ -87,6 +87,11 @@ behind adapters. Node tests do not establish native performance or correctness.
 - A change stamped more than 10 minutes ahead of the server clock is refused, so
   a wrong clock cannot win last-writer-wins. A device whose last sync found its
   clock that far ahead saves nothing until the clock is fixed.
+- Old and new app versions share one tenant. A pulled change this build cannot fold
+  (an unknown type, or a newer `schemaVersion`) stops the pull before its batch with
+  `APP_UPDATE_REQUIRED`; the device keeps working and pushing, sync status asks for an
+  update, and the updated app resumes from the same cursor. The server keeps every older
+  version, so release the server before the apps that emit a new type or version.
 - Pending, rejected, and conflicting offline work stays visible and recoverable.
 - A phone whose token the server refuses (401 `AUTH_TOKEN_INVALID`) 3 times over
   10+ minutes stops syncing (`device_unrecognised`) but keeps working; the sync

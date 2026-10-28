@@ -39,7 +39,7 @@ import {
   type SyncTransportPort,
   type TimerPort,
 } from './ports.js';
-import { runPullPhase, type PulledBatch } from './pull.js';
+import { AppUpdateRequiredError, runPullPhase, type PulledBatch } from './pull.js';
 import { runPushPhase, type PushSettled } from './push.js';
 import {
   pendingMediaCount,
@@ -108,6 +108,8 @@ export interface SyncLoopOptions<DB> {
   readonly timer: TimerPort;
   readonly deviceId: string;
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
+  /** Passed to the pull phase: can this build fold the op (see `PullPhaseDeps.knowsOp`)? */
+  readonly knowsOp?: (op: SignedOperation) => boolean;
   /** `ProjectionEngine.refoldRefused`: the push phase takes a refused op back out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly pushBatchSize?: number;
@@ -303,6 +305,7 @@ export class SyncLoop<DB> {
         crypto: this.options.crypto,
         clock: this.options.clock,
         applyPulledOp: this.options.applyPulledOp,
+        ...(this.options.knowsOp === undefined ? {} : { knowsOp: this.options.knowsOp }),
         ...(this.options.pullLimit === undefined ? {} : { limit: this.options.pullLimit }),
         ...(this.options.onPullBatch === undefined
           ? {}
@@ -501,5 +504,6 @@ function isTokenRejected(error: unknown): boolean {
 /** The label-catalog code for `lastSyncError` (01 §5.2: "last failure, label-catalog code"). */
 function errorCode(error: unknown): string {
   if (error instanceof SyncTransportError && error.code !== null) return error.code;
+  if (error instanceof AppUpdateRequiredError) return error.code;
   return 'NETWORK';
 }

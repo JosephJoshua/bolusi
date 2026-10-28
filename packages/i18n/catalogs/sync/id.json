@@ -65,5 +65,9 @@
     "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini.",
     "rejectedExplain": "Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.",
     "rejectedBanner": "{count} perubahan ditolak server."
+  },
+  "updateNeeded": {
+    "title": "Perbarui aplikasi",
+    "body": "Perangkat lain sudah pakai versi baru. Data darinya baru masuk setelah aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron."
   }
 }
