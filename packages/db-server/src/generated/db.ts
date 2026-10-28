@@ -157,6 +157,54 @@ export interface MediaChunks {
   tenantId: string;
 }
 
+export interface MoneyAccounts {
+  active: number;
+  createdAt: Int8;
+  id: string;
+  kind: string;
+  name: string;
+  storeId: string | null;
+  storeIdsJson: string | null;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface MoneyEntries {
+  account: string | null;
+  amount: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  documentId: string | null;
+  documentKind: string | null;
+  documentLabel: string | null;
+  id: string;
+  kind: string;
+  reason: string | null;
+  reference: string | null;
+  relatedEntryId: string | null;
+  storeId: string;
+  subKind: string | null;
+  tenantId: string;
+  tendered: Int8 | null;
+  voidedAt: Int8 | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface MoneyLines {
+  account: string;
+  at: Int8;
+  credit: Int8;
+  debit: Int8;
+  documentId: string | null;
+  documentKind: string | null;
+  entryId: string;
+  id: string;
+  storeId: string;
+  tenantId: string;
+}
+
 export interface Notes {
   archived: Generated<boolean>;
   body: string;
@@ -523,6 +571,9 @@ export interface DB {
   identityAudit: IdentityAudit;
   media: Media;
   mediaChunks: MediaChunks;
+  moneyAccounts: MoneyAccounts;
+  moneyEntries: MoneyEntries;
+  moneyLines: MoneyLines;
   notes: Notes;
   operations: Operations;
   permissions: Permissions;

@@ -24,7 +24,12 @@ const WITH_RULES = ALL_MODULES.filter((module) =>
 );
 
 test('the modules with rules are the ones expected (the denominator)', () => {
-  expect(WITH_RULES.map((module) => module.id).sort()).toEqual(['notes', 'platform', 'repair']);
+  expect(WITH_RULES.map((module) => module.id).sort()).toEqual([
+    'money',
+    'notes',
+    'platform',
+    'repair',
+  ]);
 });
 
 describe.each(WITH_RULES.map((module) => ({ id: module.id, reasons: module.refusals ?? [] })))(

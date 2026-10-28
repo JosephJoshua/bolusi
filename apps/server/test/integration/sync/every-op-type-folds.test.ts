@@ -117,6 +117,17 @@ function journey(world: ChainWorld): OpSpec[] {
     entityId: ticket,
     payload,
   });
+  const document = {
+    kind: 'repair.ticket',
+    id: ticket,
+    label: formatTicketNumber(world.deviceId, 1),
+  };
+  const money = (type: string, n: number, payload: Record<string, unknown>): OpSpec => ({
+    type,
+    entityType: 'money_entry',
+    entityId: id(n),
+    payload,
+  });
   const credential = (type: string, payload: Record<string, unknown>): OpSpec => ({
     type,
     entityType: 'user_credential',
@@ -242,6 +253,65 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.work_started', {}),
     onTicket('repair.work_photos_added', { stage: 'after', photos: [photo(8)] }),
     onTicket('repair.marked_repaired', { note: '' }),
+
+    // money: a DP, the charge, a split payment, an owner's refund, a void, and the drawer
+    {
+      type: 'money.account_saved',
+      entityType: 'money_account',
+      entityId: id(0x400),
+      payload: { kind: 'qris', name: 'QRIS BCA toko', active: true },
+    },
+    {
+      type: 'money.central_account_saved',
+      entityType: 'money_account',
+      entityId: id(0x401),
+      storeId: null,
+      payload: { kind: 'transfer', name: 'BCA pusat', active: true, storeIds: [] },
+    },
+    money('money.payment_received', 0x402, {
+      document,
+      account: 'cash',
+      amount: 100_000,
+      reference: null,
+      tendered: 150_000,
+    }),
+    money('money.charge_recorded', 0x403, {
+      document,
+      amount: 600_000,
+      account: 'service_revenue',
+    }),
+    money('money.payment_received', 0x404, {
+      document,
+      account: `account:${id(0x400)}`,
+      amount: 500_000,
+      reference: null,
+      tendered: null,
+    }),
+    money('money.payment_received', 0x405, {
+      document,
+      account: `account:${id(0x401)}`,
+      amount: 5_000,
+      reference: 'TRF-1',
+      tendered: null,
+    }),
+    { ...money('money.payment_voided', 0x405, { reason: 'Salah catat' }) },
+    money('money.charge_reduced', 0x406, { document, amount: 10_000, reason: 'Komplain' }),
+    money('money.refund_paid', 0x407, {
+      document,
+      account: 'cash',
+      amount: 10_000,
+      reason: 'Komplain',
+      reference: null,
+    }),
+    money('money.cash_moved', 0x408, {
+      kind: 'withdrawal',
+      amount: 50_000,
+      reason: 'Setor ke pemilik',
+      account: null,
+    }),
+    money('money.cash_counted', 0x409, { counted: 30_000, note: '' }),
+    money('money.cash_adjusted', 0x40a, { amount: -10_000, countId: id(0x409), reason: 'Kurang' }),
+
     onTicket('repair.device_returned', {
       handoverPhoto: photo(10),
       signature: photo(11),
@@ -379,4 +449,14 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
   ]);
   const notes = await db.selectFrom('notes').select('archived').execute();
   expect(notes).toEqual([{ archived: true }]);
+  // The money folds balance, and the servisan is settled: 100k DP + 500k QRIS, less the owner's 10k.
+  const books = await sql<{ debit: string; credit: string }>`
+    SELECT SUM(debit) AS debit, SUM(credit) AS credit FROM money_lines
+  `.execute(db);
+  expect(books.rows[0]!.debit).toBe(books.rows[0]!.credit);
+  const owed = await sql<{ balance: string }>`
+    SELECT SUM(debit - credit) AS balance FROM money_lines
+    WHERE account = 'receivable' AND document_id = ${id(2)}
+  `.execute(db);
+  expect(Number(owed.rows[0]!.balance)).toBe(0);
 });
