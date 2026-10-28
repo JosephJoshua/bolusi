@@ -202,6 +202,7 @@
   },
   "price": {
     "amount": "Amount (Rp)",
+    "paid": "Paid",
     "decisionNote": "Note (optional)",
     "description": "Description",
     "kind": {
@@ -609,7 +610,8 @@
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it.",
     "notPaid": "This servisan isn’t paid in full yet.",
-    "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid."
+    "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid.",
+    "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed."
   },
   "paper": {
     "title": "Slip paper",

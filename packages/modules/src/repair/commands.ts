@@ -56,20 +56,12 @@ import {
   type CancelFees,
   type PrintSettings,
   type TicketDetailRow,
-  type TicketSummaryRow,
 } from './queries.js';
-import {
-  CASH_ACCOUNT,
-  MONEY_ENTRY_ENTITY,
-  MONEY_OP,
-  SYSTEM_ACCOUNT,
-  type RevenueAccount,
-} from '../money/constants.js';
+import { CASH_ACCOUNT, MONEY_ENTRY_ENTITY, MONEY_OP } from '../money/constants.js';
 import { chargeOp, paymentOp, refundOp, zPaymentInput } from '../money/commands.js';
 import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
-import { REPAIR_DOCUMENT_KIND } from './money-document.js';
-import { handoverCost } from './flows.js';
+import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { formatTicketNumber } from './ticket-number.js';
 
@@ -703,18 +695,6 @@ export const returnDeviceInput = z
   .strict();
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
-/** What a finished servisan costs the customer, and the revenue it counts as. */
-export function handoverCharge(ticket: TicketSummaryRow): {
-  amount: number;
-  account: RevenueAccount;
-} {
-  const account =
-    ticket.outcome === 'cancelled'
-      ? SYSTEM_ACCOUNT.cancelFeeRevenue
-      : SYSTEM_ACCOUNT.serviceRevenue;
-  return { amount: handoverCost(ticket), account };
-}
-
 /**
  * Money handed back at the counter, through the accounts the customer paid with: the drawer
  * first, then each account in the order it was paid. Never more than went in through each one.
@@ -768,7 +748,8 @@ export async function returnDeviceHandler(
   if (settles) {
     const document = ticketDocument(ticket.id, ticket.ticketNumber);
     const money = await ticketMoney(ctx, ticket.id);
-    const charge = handoverCharge(ticket);
+    // `settles` means the outcome is settled, so there is a charge.
+    const charge = ticketCharge(ticket)!;
     const toCharge = Math.max(0, charge.amount - money.charged);
     if (toCharge > 0) ops.push(chargeOp(ctx, document, toCharge, charge.account));
     for (const payment of input.payments) ops.push(paymentOp(ctx, document, payment));
@@ -839,22 +820,34 @@ export const correctDownPaymentInput = z
     ticketId: z.string().min(1),
     /** What the down payment should be; 0 removes it. */
     amount: z.number().int().min(0).max(MAX_LINE_AMOUNT),
-    reason: zRequiredText(2000),
+    // The voids carry it, and a money reason is at most 500.
+    reason: zRequiredText(500),
+    /** How the right amount came in; the first payment's method when not said. */
+    account: zAccountRef.optional(),
+    reference: zDpReference,
   })
   .strict();
 export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
 
 /**
  * An owner corrects a down payment, with a reason: the payments taken so far are voided and, when
- * the amount is not 0, one payment of the right amount is recorded through the same method.
+ * the amount is not 0, one payment of the right amount is recorded through the method the owner
+ * picks (the first payment's, unless said otherwise).
  */
 export async function correctDownPaymentHandler(
   input: z.output<typeof correctDownPaymentInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
+  const details = { entityType: REPAIR_TICKET_ENTITY, entityId: ticket.id };
+  // After pickup the DP is part of the bill the customer paid; and money already handed back
+  // would be paid out a second time if the payments were simply re-recorded.
+  if (ticket.location === 'returned') throw REPAIR_REFUSALS.refuse('returned', { details });
   if ((ticket.downPayment ?? 0) === input.amount) throw nothingChanged('amount');
   const money = await ticketMoney(ctx, ticket.id);
+  if (money.entries.some((entry) => entry.kind === 'refund_paid')) {
+    throw REPAIR_REFUSALS.refuse('downPaymentRefunded', { details });
+  }
   const live = money.entries.filter(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
   );
@@ -868,11 +861,14 @@ export async function correctDownPaymentHandler(
   );
   if (input.amount > 0) {
     const first = live[0];
+    const method =
+      input.account === undefined
+        ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
+        : { account: input.account, reference: input.reference };
     ops.push(
       paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
-        account: first?.account ?? CASH_ACCOUNT,
+        ...method,
         amount: input.amount,
-        reference: first?.reference ?? null,
         tendered: null,
       }),
     );

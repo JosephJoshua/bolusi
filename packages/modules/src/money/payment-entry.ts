@@ -67,8 +67,10 @@ export function paymentEntry(
       continue;
     }
     paid += amount;
-    const kind = lineKind(line.account, accounts);
-    const reference = line.reference.trim();
+    // A method switched off while the line was open counts as the drawer, as its chips show.
+    const account = offeredAccount(line.account, accounts);
+    const kind = lineKind(account, accounts);
+    const reference = kind === 'cash' ? '' : line.reference.trim();
     if (referenceRequired(kind) && reference === '') {
       problems[line.key] = 'reference';
       continue;
@@ -80,7 +82,7 @@ export function paymentEntry(
     }
     if (tendered !== null) change += tendered - amount;
     payments.push({
-      account: line.account,
+      account,
       amount,
       reference: reference === '' ? null : reference,
       tendered,
@@ -145,4 +147,18 @@ export function paymentMethods(accounts: readonly PaymentAccountRow[]): PaymentM
     { account: CASH_ACCOUNT, label: tm('money.method.cash') },
     ...accounts.map((row) => ({ account: `account:${row.id}`, label: row.name })),
   ];
+}
+
+/** A single payment's method as it is sent: the offered account, and a reference unless cash. */
+export function chosenMethod(
+  account: string,
+  reference: string,
+  accounts: readonly PaymentAccountRow[],
+): { readonly account: string; readonly reference: string | null } {
+  const offered = offeredAccount(account, accounts);
+  const trimmed = reference.trim();
+  return {
+    account: offered,
+    reference: offered === CASH_ACCOUNT || trimmed === '' ? null : trimmed,
+  };
 }

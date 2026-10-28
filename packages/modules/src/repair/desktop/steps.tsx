@@ -15,18 +15,13 @@ import {
   TextField,
 } from '@bolusi/ui-web';
 import { Check, Printer, Signature } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
-import { CASH_ACCOUNT, MONEY_PERMISSION } from '../../money/constants.js';
+import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
-import {
-  newPaymentLine,
-  offeredAccount,
-  paymentEntry,
-  referenceMissing,
-  type PaymentLine,
-} from '../../money/payment-entry.js';
+import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_PERMISSION,
@@ -49,6 +44,7 @@ import { tn, type RepairKey } from '../i18n.js';
 import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY } from '../labels.js';
 import {
   useCancelFees,
+  useDownPaymentMethod,
   usePaymentAccounts,
   useRepairQuery,
   useRepairRuntime,
@@ -825,22 +821,15 @@ export function HandoverDialog({
   const [photo, setPhoto] = useState<MediaRef | null>(null);
   const [signature, setSignature] = useState<MediaRef | null>(null);
   const [note, setNote] = useState('');
-  const [typedLines, setLines] = useState<readonly PaymentLine[] | null>(null);
-  const [payLater, setPayLater] = useState(false);
-  const [unpaidReason, setUnpaidReason] = useState('');
-  const keys = useRef(0);
-  const newKey = (): string => `line${String((keys.current += 1))}`;
-  const accounts = usePaymentAccounts();
+  const accounts = usePaymentAccounts() ?? [];
   const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
-  const lines = typedLines ?? (due > 0 ? [newPaymentLine('line0', due)] : []);
-  const entry = paymentEntry(due, lines, accounts);
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
-  const unpaid = payLater && due > 0;
-  const settled = due === 0 || (unpaid ? unpaidReason.trim() !== '' : entry.complete);
+  const payment = useHandoverPayment(due, accounts, canPayLater);
+  const { settled } = payment;
   const leave = useLeaveGuard(
     stale === null &&
-      (photo !== null || signature !== null || note.trim() !== '' || typedLines !== null),
+      (photo !== null || signature !== null || note.trim() !== '' || payment.touched),
     onClose,
   );
   const photoState = usePhotoState(photo === null ? null : capturedThumbnailRef(photo));
@@ -863,9 +852,7 @@ export function HandoverDialog({
           handoverPhoto: photo,
           signature,
           note,
-          payments: unpaid ? [] : [...entry.payments],
-          unpaidReason: unpaid ? unpaidReason : null,
-          refundReason: tn('repair.handover.refundReason'),
+          ...payment.input,
         }),
       )
       .then((result) => {
@@ -942,21 +929,21 @@ export function HandoverDialog({
               <h3 className="text-body font-semibold text-text">{tn('repair.handover.payment')}</h3>
               {canPayLater ? (
                 <Button
-                  label={tn(unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
+                  label={tn(payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
                   variant="text"
                   size="sm"
-                  onClick={() => setPayLater(!unpaid)}
+                  onClick={payment.togglePayLater}
                   data-testid="repair.desk.handover.payLater"
                 />
               ) : null}
             </div>
-            {unpaid ? (
+            {payment.unpaid ? (
               <div>
                 <TextArea
                   label={tn('repair.handover.payLaterReason')}
                   rows={2}
-                  value={unpaidReason}
-                  onChange={(event) => setUnpaidReason(event.target.value)}
+                  value={payment.unpaidReason}
+                  onChange={(event) => payment.setUnpaidReason(event.target.value)}
                   data-testid="repair.desk.handover.unpaidReason"
                 />
                 <p
@@ -968,11 +955,11 @@ export function HandoverDialog({
               </div>
             ) : (
               <PaymentLines
-                lines={lines}
-                entry={entry}
+                lines={payment.lines}
+                entry={payment.entry}
                 accounts={accounts}
-                onChange={setLines}
-                newKey={newKey}
+                onChange={payment.setLines}
+                newKey={payment.newKey}
                 testId="repair.desk.handover.pay"
               />
             )}
@@ -1044,11 +1031,8 @@ export function DownPaymentDialog({
   const runner = useActionRunner();
   const [typed, setTyped] = useState<number | null>(null);
   const [reason, setReason] = useState('');
-  const [method, setMethod] = useState<{ account: string; reference: string }>({
-    account: CASH_ACCOUNT,
-    reference: '',
-  });
-  const accounts = usePaymentAccounts();
+  const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
+  const accounts = usePaymentAccounts() ?? [];
   const correcting = mode === 'correct';
   const { amount, aboveTotal, gap } = downPaymentEntry({
     mode,
@@ -1065,12 +1049,16 @@ export function DownPaymentDialog({
     void runner
       .run(() =>
         correcting
-          ? runtime.run('correctDownPayment', { ticketId, amount, reason })
+          ? runtime.run('correctDownPayment', {
+              ticketId,
+              amount,
+              reason,
+              ...chosenMethod(method.account, method.reference, accounts),
+            })
           : runtime.run('recordDownPayment', {
               ticketId,
               amount,
-              account: offeredAccount(method.account, accounts),
-              reference: method.reference,
+              ...chosenMethod(method.account, method.reference, accounts),
             }),
       )
       .then((result) => {
@@ -1135,7 +1123,7 @@ export function DownPaymentDialog({
             autoFocus
             data-testid={`${testId}.amount`}
           />
-          {correcting ? null : (
+          {correcting && (amount ?? 0) === 0 ? null : (
             <PaymentMethodField
               accounts={accounts}
               account={method.account}

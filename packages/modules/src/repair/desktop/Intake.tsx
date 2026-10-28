@@ -169,7 +169,9 @@ export function IntakePage({
   const update = (patch: Partial<IntakeDraft>): void =>
     setDraft((current) => ({ ...current, ...patch }));
   const dirty = intakeDirty(draft);
-  const accounts = usePaymentAccounts();
+  // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const problemsBy = useMemo(
     () =>
       Object.fromEntries(
@@ -238,7 +240,7 @@ export function IntakePage({
   };
 
   const save = (): void => {
-    if (settings.status === 'loading') return;
+    if (settings.status === 'loading' || loadedAccounts === null) return;
     if (problems.length > 0) {
       setShowProblems(true);
       focusProblem(problems[0]!);

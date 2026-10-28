@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
+import { downPaymentAction, paidLabelKey, repairAbilities } from '../src/repair/flows.js';
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
@@ -244,5 +245,103 @@ describe('Bayar nanti', () => {
       h.cashierId,
     );
     expect(await location(h, ticketId)).toBe('returned');
+  });
+});
+
+describe('a bill paid twice', () => {
+  test('keeps both payments, and the owner sees what is owed back', async () => {
+    h = await openRepairHarness(7501);
+    const ticketId = await repaired(h);
+    await h.run(
+      'returnDevice',
+      handover(h, ticketId, { payments: [{ account: 'cash', amount: TOTAL }] }),
+      h.cashierId,
+    );
+    // A second counter, offline, took the same bill again: the cash is in its drawer.
+    await h.money(
+      'receivePayments',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        payments: [{ account: 'cash', amount: 100_000 }],
+      },
+      h.cashierId,
+    );
+    const open = await h.moneyQuery('openBalances', {}, h.storeOwnerId);
+    expect(open.rows).toMatchObject([{ documentId: ticketId, balance: -100_000 }]);
+    await expectBalancedBooks(h);
+  });
+});
+
+describe('the DP once the phone went home', () => {
+  test('is part of what was paid, and no longer something to correct', async () => {
+    h = await openRepairHarness(7401);
+    const ticketId = await repaired(h, { downPayment: 100_000 });
+    await h.run(
+      'returnDevice',
+      handover(h, ticketId, { payments: [{ account: 'cash', amount: TOTAL - 100_000 }] }),
+      h.cashierId,
+    );
+    const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0] as {
+      location: 'returned';
+      outcome: 'repaired';
+      downPayment: number;
+    };
+    expect(ticket.downPayment).toBe(TOTAL);
+    expect(paidLabelKey(ticket)).toBe('repair.price.paid');
+    const identity = {
+      tenantId: h.tenantId,
+      storeId: h.storeId,
+      deviceId: h.deviceId,
+      userId: h.storeOwnerId,
+    };
+    const owner = repairAbilities((id) =>
+      h!.runtime.commands.enforcementPoint.hasPermission(identity, id),
+    );
+    expect(downPaymentAction(ticket, owner)).toBeNull();
+    // Correcting it would void the pickup payment too and turn a paid phone into a debt.
+    await expectRefused(
+      h.run('correctDownPayment', { ticketId, amount: 50_000, reason: 'x' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'repair.refusal.returned',
+    );
+  });
+
+  test('a correction records the right amount through the method the owner picks', async () => {
+    h = await openRepairHarness(7403);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const ticketId = await openTicket(h, { downPayment: 200_000 });
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 150_000, reason: 'Ternyata lewat QRIS', account: `account:${accountId}` },
+      h.storeOwnerId,
+    );
+    const money = await ledger(h, ticketId);
+    expect(money.paid).toBe(150_000);
+    expect(money.entries.at(-1)).toMatchObject({
+      kind: 'payment_received',
+      account: `account:${accountId}`,
+      amount: 150_000,
+    });
+    await expectBalancedBooks(h);
+  });
+
+  test('a DP partly given back is not re-recorded by a correction', async () => {
+    h = await openRepairHarness(7402);
+    const ticketId = await openTicket(h, { downPayment: 200_000 });
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 50_000, reason: 'Kembali sebagian' },
+      h.storeOwnerId,
+    );
+    await expectRefused(
+      h.run('correctDownPayment', { ticketId, amount: 100_000, reason: 'x' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'repair.refusal.downPaymentRefunded',
+    );
   });
 });

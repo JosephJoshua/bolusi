@@ -85,6 +85,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'downPaymentRecorded',
   'notPaid',
   'unpaidOwnerOnly',
+  'downPaymentRefunded',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -623,7 +624,8 @@ export const deviceReturnedRule: Rule = async (op, { db, holdsPermission }) => {
       'price proposals are undecided',
     );
   } // Version 1 predates the money ledger: its servisan was settled on paper.
-  if (op.schemaVersion >= 2) await requirePaid(db, op, holdsPermission);
+  // Every version: an older payload carries no reason, so it hands over only a paid phone.
+  await requirePaid(db, op, holdsPermission);
 };
 
 /**
@@ -637,7 +639,8 @@ async function requirePaid(
   op: SignedOperation,
   holdsPermission: Parameters<Rule>[1]['holdsPermission'],
 ): Promise<void> {
-  const { unpaidReason } = payloadOf<Payload<typeof deviceReturnedPayload>>(op);
+  const unpaidReason =
+    payloadOf<Partial<Payload<typeof deviceReturnedPayload>>>(op).unpaidReason ?? null;
   const lookup = { tenantId: op.tenantId, storeId: op.storeId ?? '', documentId: op.entityId };
   const ledger = db as unknown as Kysely<never>;
   const expected = await repairMoneyDocument.charge(ledger, lookup);

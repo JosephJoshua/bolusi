@@ -14,6 +14,7 @@ import { tm } from '../i18n.js';
 import {
   lineKind,
   newPaymentLine,
+  offeredAccount,
   paymentMethods,
   type PaymentEntry,
   type PaymentLine,
@@ -65,7 +66,8 @@ export function PaymentLines({
     <View style={styles.lines} testID={testID}>
       {lines.map((line, index) => {
         const id = `${testID}.line${String(index)}`;
-        const kind = lineKind(line.account, accounts);
+        const account = offeredAccount(line.account, accounts);
+        const kind = lineKind(account, accounts);
         const problem = entry.problems[line.key];
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
@@ -77,7 +79,7 @@ export function PaymentLines({
                   <ToggleChip
                     key={method.account}
                     label={method.label}
-                    selected={line.account === method.account}
+                    selected={account === method.account}
                     onToggle={() =>
                       set(line.key, { account: method.account, tendered: '', reference: '' })
                     }
@@ -133,7 +135,7 @@ export function PaymentLines({
                 <TextButton
                   label={tm('money.pay.remove')}
                   accessibilityLabel={tm('money.pay.removeLabel', {
-                    method: labelOf(line.account),
+                    method: labelOf(account),
                   })}
                   tone="danger"
                   onPress={() => onChange(lines.filter((other) => other.key !== line.key))}

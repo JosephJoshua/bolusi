@@ -129,6 +129,14 @@ describe('handover slip', () => {
     expect(text).not.toContain('KETENTUAN');
   });
 
+  it('an intake receipt reprinted after pickup does not call the whole bill a DP', () => {
+    const text = allText(
+      intakeSlip(sampleTicket({ downPayment: 950_000, location: 'returned' }), ctx),
+    );
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 950\.000/);
+    expect(text).not.toMatch(/\bDP\b/);
+  });
+
   it('a slip printed once the phone is paid for reads as paid in full', () => {
     const paid = sampleTicket({ downPayment: 950_000, location: 'returned' });
     const text = allText(

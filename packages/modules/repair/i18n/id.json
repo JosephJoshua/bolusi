@@ -202,6 +202,7 @@
   },
   "price": {
     "amount": "Harga (Rp)",
+    "paid": "Sudah dibayar",
     "decisionNote": "Catatan (opsional)",
     "description": "Keterangan",
     "kind": {
@@ -609,7 +610,8 @@
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
     "notPaid": "Servisan ini belum lunas.",
-    "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas."
+    "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas.",
+    "downPaymentRefunded": "Sebagian DP ini sudah dikembalikan, jadi tidak bisa diubah."
   },
   "paper": {
     "title": "Kertas nota",

@@ -47,9 +47,14 @@ import {
   usePhotoGridCell,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useCancelFees, usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
-import { CASH_ACCOUNT } from '../../money/constants.js';
-import { offeredAccount, referenceMissing } from '../../money/payment-entry.js';
+import {
+  useCancelFees,
+  useDownPaymentMethod,
+  usePaymentAccounts,
+  useRepairQuery,
+  useRepairRuntime,
+} from '../runtime.js';
+import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 interface StepProps {
@@ -391,11 +396,8 @@ export function DownPaymentStep({
   // Empty even when correcting: the recorded amount is shown above, and the step asks for a new one.
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
-  const [method, setMethod] = useState<{ account: string; reference: string }>({
-    account: CASH_ACCOUNT,
-    reference: '',
-  });
-  const accounts = usePaymentAccounts();
+  const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
+  const accounts = usePaymentAccounts() ?? [];
   const correcting = mode === 'correct';
   const { amount, aboveTotal, gap } = downPaymentEntry({
     mode,
@@ -412,12 +414,16 @@ export function DownPaymentStep({
     void runner
       .run(() =>
         correcting
-          ? runtime.run('correctDownPayment', { ticketId, amount, reason })
+          ? runtime.run('correctDownPayment', {
+              ticketId,
+              amount,
+              reason,
+              ...chosenMethod(method.account, method.reference, accounts),
+            })
           : runtime.run('recordDownPayment', {
               ticketId,
               amount,
-              account: offeredAccount(method.account, accounts),
-              reference: method.reference,
+              ...chosenMethod(method.account, method.reference, accounts),
             }),
       )
       .then((result) => {
@@ -462,7 +468,7 @@ export function DownPaymentStep({
           {tn('repair.downPayment.ofTotal', { amount: formatMoney(total) })}
         </Text>
       </View>
-      {correcting ? null : (
+      {correcting && (amount ?? 0) === 0 ? null : (
         <View style={repairStyles.gap}>
           <PaymentMethodField
             accounts={accounts}

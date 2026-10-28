@@ -7,7 +7,7 @@
 import type { Kysely } from 'kysely';
 
 import type { MoneyDocumentSource } from '../money/documents.js';
-import { SYSTEM_ACCOUNT } from '../money/constants.js';
+import { SYSTEM_ACCOUNT, type RevenueAccount } from '../money/constants.js';
 import type { RepairDatabase } from './schema.js';
 
 /** The document kind money records name a servisan by. */
@@ -33,13 +33,24 @@ export const repairMoneyDocument: MoneyDocumentSource = {
 
   async charge(db, lookup) {
     const ticket = await ticketQuery(db, lookup);
-    if (ticket === undefined) return null;
-    if (ticket.outcome === 'repaired') {
-      return { amount: Number(ticket.quoteTotal), account: SYSTEM_ACCOUNT.serviceRevenue };
-    }
-    if (ticket.outcome === 'cancelled') {
-      return { amount: Number(ticket.cancelFee ?? 0), account: SYSTEM_ACCOUNT.cancelFeeRevenue };
-    }
-    return null;
+    return ticket === undefined ? null : ticketCharge(ticket);
   },
 };
+
+/**
+ * What a servisan charges and the revenue it counts as, once its outcome is settled: the price of a
+ * repaired phone, the fee of a cancelled one; null while the work is open.
+ */
+export function ticketCharge(ticket: {
+  readonly outcome: string;
+  readonly quoteTotal: number | string;
+  readonly cancelFee: number | string | null;
+}): { amount: number; account: RevenueAccount } | null {
+  if (ticket.outcome === 'repaired') {
+    return { amount: Number(ticket.quoteTotal), account: SYSTEM_ACCOUNT.serviceRevenue };
+  }
+  if (ticket.outcome === 'cancelled') {
+    return { amount: Number(ticket.cancelFee ?? 0), account: SYSTEM_ACCOUNT.cancelFeeRevenue };
+  }
+  return null;
+}

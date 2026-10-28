@@ -345,12 +345,16 @@ export const moneyEntriesQuery = {
   handler: moneyEntriesHandler,
 } as const;
 
-// ── openBalances (documents a customer still owes on: "Belum lunas") ───────────────────────────
+// ── openBalances (charged documents not square: a customer still owes, or is owed) ─────────────
+//
+// Owed back happens when more was recorded than was due, as when two offline counters both took
+// the rest of one bill. The cash is real, so the ledger keeps it and the owner sees it here.
 
 export interface OpenBalanceRow {
   readonly documentKind: string;
   readonly documentId: string;
   readonly documentLabel: string;
+  /** Above zero the customer owes it ("Belum lunas"); below, the store owes it back. */
   readonly balance: number;
   /** When the charge was recorded (the phone went home unpaid). */
   readonly since: number;
@@ -379,7 +383,7 @@ async function openBalancesHandler(
     .where('l.storeId', '=', store)
     .where('l.account', '=', SYSTEM_ACCOUNT.receivable)
     .groupBy(['l.documentKind', 'l.documentId'])
-    .having(sql<boolean>`SUM(l.debit - l.credit) > 0`)
+    .having(sql<boolean>`SUM(l.debit - l.credit) <> 0`)
     .having(
       sql<boolean>`MIN(CASE WHEN e.kind = 'charge_recorded' THEN e.created_at END) IS NOT NULL`,
     )

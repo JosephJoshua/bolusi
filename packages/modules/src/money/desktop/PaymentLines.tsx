@@ -12,6 +12,7 @@ import { tm } from '../i18n.js';
 import {
   lineKind,
   newPaymentLine,
+  offeredAccount,
   paymentMethods,
   type PaymentEntry,
   type PaymentLine,
@@ -60,7 +61,8 @@ export function PaymentLines({
     <div className="flex flex-col gap-4" data-testid={testId}>
       {lines.map((line, index) => {
         const id = `${testId}.line${String(index)}`;
-        const kind = lineKind(line.account, accounts);
+        const account = offeredAccount(line.account, accounts);
+        const kind = lineKind(account, accounts);
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
         return (
@@ -80,7 +82,7 @@ export function PaymentLines({
                   <ToggleChip
                     key={method.account}
                     label={method.label}
-                    selected={line.account === method.account}
+                    selected={account === method.account}
                     onToggle={() =>
                       set(line.key, { account: method.account, tendered: '', reference: '' })
                     }
@@ -130,7 +132,7 @@ export function PaymentLines({
               {lines.length > 1 ? (
                 <Button
                   label={tm('money.pay.remove')}
-                  aria-label={tm('money.pay.removeLabel', { method: labelOf(line.account) })}
+                  aria-label={tm('money.pay.removeLabel', { method: labelOf(account) })}
                   variant="dangerText"
                   size="sm"
                   onClick={() => onChange(lines.filter((other) => other.key !== line.key))}

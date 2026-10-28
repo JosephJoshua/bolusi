@@ -208,7 +208,8 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
         tn('repair.slip.estimateTotal'),
         total,
         ticket.downPayment,
-        tn('repair.slip.downPayment'),
+        // Reprinted after pickup, what was paid is more than the DP.
+        tn(ticket.location === 'returned' ? 'repair.slip.paid' : 'repair.slip.downPayment'),
       ),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),

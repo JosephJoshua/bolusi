@@ -90,6 +90,7 @@ test('a pushed repair journey folds into the server projections', async () => {
   const lineId = '01920000-0000-7000-8000-0000000c0003';
   const changeId = '01920000-0000-7000-8000-0000000c0004';
   const ticketNumber = formatTicketNumber(world.deviceId, 1);
+  const document = { kind: 'repair.ticket', id: ticketId, label: ticketNumber };
 
   const ops = [
     builder.append({
@@ -165,6 +166,19 @@ test('a pushed repair journey folds into the server projections', async () => {
       entityType: 'repair_ticket',
       entityId: ticketId,
       payload: { note: '' },
+    }),
+    // The handover settles the bill first, as `returnDevice` does: charged, then paid.
+    builder.append({
+      type: 'money.charge_recorded',
+      entityType: 'money_entry',
+      entityId: '01920000-0000-7000-8000-0000000c0005',
+      payload: { document, amount: 600_000, account: 'service_revenue' },
+    }),
+    builder.append({
+      type: 'money.payment_received',
+      entityType: 'money_entry',
+      entityId: '01920000-0000-7000-8000-0000000c0006',
+      payload: { document, account: 'cash', amount: 600_000, reference: null, tendered: null },
     }),
     builder.append({
       type: 'repair.device_returned',

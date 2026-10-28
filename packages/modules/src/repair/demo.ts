@@ -24,7 +24,7 @@ import {
 } from './intake-options.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
-import { handoverCost } from './flows.js';
+import { amountOwed } from './flows.js';
 import { REPAIR_REFUSALS } from './rules.js';
 import {
   demoFindDeviceModel,
@@ -1048,7 +1048,7 @@ export function demoRepairRuntime(
         (sum, payment) => sum + payment.amount,
         0,
       );
-      const paid = Math.min((t.downPayment ?? 0) + paidNow, handoverCost(t));
+      const paid = Math.min((t.downPayment ?? 0) + paidNow, amountOwed(t));
       return update(t.id, 'repair.device_returned', {
         downPayment: paid === 0 ? null : paid,
         location: 'returned',

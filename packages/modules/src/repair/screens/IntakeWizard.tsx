@@ -158,7 +158,9 @@ export function IntakeWizard({
 
   const stepIndex = Math.min(draft.step, INTAKE_STEPS.length - 1);
   const step = INTAKE_STEPS[stepIndex]!;
-  const accounts = usePaymentAccounts();
+  // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const problems = stepProblems(draft, step, options, accounts);
   const dirty = intakeDirty(draft);
   const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
@@ -249,6 +251,7 @@ export function IntakeWizard({
       goTo(stepIndex + 1);
       return;
     }
+    if (loadedAccounts === null) return;
     void runner
       .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
       .then((opened) => {

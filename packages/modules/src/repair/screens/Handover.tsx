@@ -7,19 +7,18 @@
 import { formatMoney } from '@bolusi/i18n';
 import { Card, PhotoSlot, TextButton, TextInput, border, color, space, type } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { MONEY_PERMISSION } from '../../money/constants.js';
-import { newPaymentLine, paymentEntry, type PaymentLine } from '../../money/payment-entry.js';
 import { PaymentLines } from '../../money/screens/PaymentLines.js';
 import { tn } from '../i18n.js';
 import {
   balanceAfterDownPayment,
   capturedThumbnailRef,
-  handoverCost,
+  amountOwed,
   repairAbilities,
   staleStep,
   ticketStatus,
@@ -36,7 +35,8 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { useHandoverPayment } from '../handover-payment.js';
+import { usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 export interface HandoverProps {
   readonly ticketId: string;
@@ -61,43 +61,32 @@ export function Handover({
   const [photo, setPhoto] = useState<MediaRef | null>(null);
   const [signature, setSignature] = useState<MediaRef | null>(null);
   const [note, setNote] = useState('');
-  // Null until the counter touches the payment: the lines follow what is due as it loads.
-  const [typedLines, setLines] = useState<readonly PaymentLine[] | null>(null);
-  const [payLater, setPayLater] = useState(false);
-  const [unpaidReason, setUnpaidReason] = useState('');
-  const keys = useRef(0);
-  const newKey = (): string => `line${String((keys.current += 1))}`;
   const [reloadNonce, setReloadNonce] = useState(0);
   const query = useRepairQuery(
-    async (rt) => ({
-      ticket: (await rt.query('getTicket', { ticketId })).rows[0],
-      accounts: (await rt.money.query('paymentAccounts', {})).rows,
-    }),
+    async (rt) => (await rt.query('getTicket', { ticketId })).rows[0],
     `handover:${ticketId}:${String(reloadNonce)}`,
   );
+  const accounts = usePaymentAccounts() ?? [];
 
   // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
   // than take a signature for a handover that would be refused.
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
-  const ticket = query.status === 'ready' ? query.data.ticket : undefined;
-  const accounts = query.status === 'ready' ? query.data.accounts : [];
+  const ticket = query.status === 'ready' ? query.data : undefined;
   const balance =
     ticket === undefined
       ? { kind: 'due' as const, amount: 0 }
-      : balanceAfterDownPayment(handoverCost(ticket), ticket.downPayment ?? 0);
+      : balanceAfterDownPayment(amountOwed(ticket), ticket.downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
-  const lines = typedLines ?? (due > 0 ? [newPaymentLine('line0', due)] : []);
-  const entry = paymentEntry(due, lines, accounts);
-  const unpaid = payLater && due > 0;
-  const settled = due === 0 || (unpaid ? unpaidReason.trim() !== '' : entry.complete);
+  const payment = useHandoverPayment(due, accounts, canPayLater);
+  const { settled } = payment;
   const stale =
     ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
 
   const discard = useDiscardConfirm({
     dirty:
       stale === null &&
-      (photo !== null || signature !== null || note.trim() !== '' || typedLines !== null),
+      (photo !== null || signature !== null || note.trim() !== '' || payment.touched),
     onRegisterDiscardGuard,
     testID,
   });
@@ -120,9 +109,7 @@ export function Handover({
           handoverPhoto: photo,
           signature,
           note,
-          payments: unpaid ? [] : [...entry.payments],
-          unpaidReason: unpaid ? unpaidReason : null,
-          refundReason: tn('repair.handover.refundReason'),
+          ...payment.input,
         }),
       )
       .then((result) => {
@@ -152,7 +139,7 @@ export function Handover({
         onRetry={() => setReloadNonce((n) => n + 1)}
         testID={`${testID}.ticket`}
       >
-        {({ ticket: shown }) =>
+        {(shown) =>
           shown === undefined ? null : (
             <Card testID={`${testID}.summary`}>
               <StatusChip status={ticketStatus(shown)} testID={`${testID}.status`} />
@@ -170,7 +157,7 @@ export function Handover({
                   style={[repairStyles.heading, repairStyles.rowValue]}
                   testID={`${testID}.total`}
                 >
-                  {formatMoney(handoverCost(shown))}
+                  {formatMoney(amountOwed(shown))}
                 </Text>
               </View>
               {shown.outcome === 'cancelled' ? (
@@ -179,7 +166,7 @@ export function Handover({
                 </Text>
               ) : null}
               <DownPaymentRows
-                total={handoverCost(shown)}
+                total={amountOwed(shown)}
                 downPayment={shown.downPayment}
                 testID={testID}
               />
@@ -193,20 +180,20 @@ export function Handover({
           action={
             canPayLater ? (
               <TextButton
-                label={tn(unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
-                onPress={() => setPayLater(!unpaid)}
+                label={tn(payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
+                onPress={payment.togglePayLater}
                 testID={`${testID}.payLater`}
               />
             ) : undefined
           }
           testID={`${testID}.payment`}
         >
-          {unpaid ? (
+          {payment.unpaid ? (
             <View style={styles.payLater}>
               <TextInput
                 label={tn('repair.handover.payLaterReason')}
-                value={unpaidReason}
-                onChangeText={setUnpaidReason}
+                value={payment.unpaidReason}
+                onChangeText={payment.setUnpaidReason}
                 multiline
                 testID={`${testID}.unpaidReason`}
               />
@@ -216,11 +203,11 @@ export function Handover({
             </View>
           ) : (
             <PaymentLines
-              lines={lines}
-              entry={entry}
+              lines={payment.lines}
+              entry={payment.entry}
               accounts={accounts}
-              onChange={setLines}
-              newKey={newKey}
+              onChange={payment.setLines}
+              newKey={payment.newKey}
               testID={`${testID}.pay`}
             />
           )}

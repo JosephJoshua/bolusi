@@ -6,9 +6,10 @@ import { zMediaRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { CASH_ACCOUNT } from '../money/constants.js';
-import { offeredAccount, referenceMissing } from '../money/payment-entry.js';
+import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { OpenTicketInput } from './commands.js';
+import type { RepairKey } from './i18n.js';
 import {
   CHECKLIST_STATES,
   IN_PROGRESS_OUTCOMES,
@@ -323,8 +324,10 @@ export function downPaymentAction(
   ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
   can: RepairAbilities,
 ): 'record' | 'correct' | null {
+  // Once the phone is back with its owner the DP is part of the bill it paid, not a figure to edit.
+  if (ticket.location === 'returned') return null;
   if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
-  const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
+  const open = ticket.outcome !== 'cancelled';
   return can.intake && open ? 'record' : null;
 }
 
@@ -333,6 +336,14 @@ export function amountOwed(
   row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal'>,
 ): number {
   return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+}
+
+/**
+ * What the money already paid on a servisan is called: its DP while the phone is in the store,
+ * what was paid in all (DP and the rest) once it went home.
+ */
+export function paidLabelKey(ticket: Pick<TicketSummaryRow, 'location'>): RepairKey {
+  return ticket.location === 'returned' ? 'repair.price.paid' : 'repair.price.downPayment';
 }
 
 /** Why an open down payment step can no longer finish: what it would do is no longer offered. */
@@ -384,7 +395,9 @@ export function downPaymentEntry(input: {
           ? 'same'
           : input.reason.trim() === ''
             ? 'reason'
-            : null;
+            : amount > 0 && input.referenceMissing === true
+              ? 'reference'
+              : null;
   return { amount, aboveTotal, gap };
 }
 
@@ -403,15 +416,6 @@ export function printableSlips(
  * What the customer still owes once a down payment is taken off the total, or what the store gives
  * back when the down payment was more (a cancelled servisan whose fee is below it).
  */
-/** What the customer pays for a finished servisan: the price, or a cancelled one's fee. */
-export function handoverCost(ticket: {
-  readonly outcome: RepairOutcome;
-  readonly quoteTotal: number;
-  readonly cancelFee: number | null;
-}): number {
-  return ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
-}
-
 export function balanceAfterDownPayment(
   total: number,
   downPayment: number,
@@ -851,8 +855,10 @@ export function toOpenTicketInput(
   accounts: readonly PaymentAccountRow[] = [],
 ): OpenTicketInput {
   const downPayment = intakeDownPayment(draft);
-  const downPaymentAccount =
-    downPayment > 0 ? offeredAccount(draft.downPaymentAccount, accounts) : CASH_ACCOUNT;
+  const method =
+    downPayment > 0
+      ? chosenMethod(draft.downPaymentAccount, draft.downPaymentReference, accounts)
+      : { account: CASH_ACCOUNT, reference: null };
   const checklist = options.checks.flatMap(({ id, label }) => {
     const state: ChecklistState | undefined = draft.checks[id];
     return state === undefined ? [] : [{ item: id, label, state, note: '' }];
@@ -892,8 +898,7 @@ export function toOpenTicketInput(
       ref: draft.photos[id]!,
     })),
     downPayment,
-    downPaymentAccount,
-    downPaymentReference:
-      downPaymentAccount === CASH_ACCOUNT ? null : draft.downPaymentReference.trim() || null,
+    downPaymentAccount: method.account,
+    downPaymentReference: method.reference,
   };
 }
