@@ -68,7 +68,8 @@ import {
   useRepairThumbnail,
   useUncollectedLimit,
 } from '../runtime.js';
-import { ActionError, MoneyField, QueryPanel } from './parts.js';
+import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
+import { MoneyField } from './parts.js';
 
 /** What every settings page takes from Settings. */
 export interface RepairSettingsProps {

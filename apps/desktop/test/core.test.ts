@@ -16,11 +16,14 @@ import {
   runDriverConformance,
   sha256Vectors,
 } from '@bolusi/test-support';
+import { MONEY_PERMISSION } from '@bolusi/modules/money';
+import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import { describe, expect, it } from 'vitest';
 
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 
 import { actingSession, actingStaffAdmin } from '../src/core/acting.js';
+import { heldPermissions } from '../src/core/permissions.js';
 import { nodeCryptoPort } from '../src/core/crypto.js';
 import { openNodeSqliteDriver } from '../src/core/sqlite-driver.js';
 import { connect, serve, type Channel } from '../src/main/rpc.js';
@@ -192,6 +195,26 @@ describe('who a window call may act as', () => {
     ).toBeUndefined();
     expect(code(() => actingStaffAdmin(sessionAs('u-1', { canManageStaff: true }), 'u-2'))).toBe(
       'NOT_AUTHENTICATED',
+    );
+  });
+});
+
+describe('the permissions the window is told about', () => {
+  it("are every module's the person holds, money's for Kas as much as repair's", () => {
+    const granted = new Set([
+      REPAIR_PERMISSION.read,
+      MONEY_PERMISSION.read,
+      MONEY_PERMISSION.countCash,
+      'not.a.module.permission',
+    ]);
+    expect(heldPermissions((permission) => granted.has(permission)).sort()).toEqual(
+      [REPAIR_PERMISSION.read, MONEY_PERMISSION.read, MONEY_PERMISSION.countCash].sort(),
+    );
+    expect(heldPermissions(() => true)).toEqual(
+      expect.arrayContaining([
+        ...Object.values(MONEY_PERMISSION),
+        ...Object.values(REPAIR_PERMISSION),
+      ]),
     );
   });
 });

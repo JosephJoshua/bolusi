@@ -65,7 +65,8 @@ import {
   type TicketFacets,
 } from '../table.js';
 
-import { QueryPanel, StatusChip } from './parts.js';
+import { QueryPanel } from '../../screen-kit/desktop/index.js';
+import { StatusChip } from './parts.js';
 import { TicketPane } from './TicketPane.js';
 
 /** Search is ranked, so its best matches are the ones worth filtering and paging. */

@@ -17,6 +17,7 @@ export { repairAbilities } from '../flows.js';
 export { INTAKE_LIST_KEY } from '../labels.js';
 export { INTAKE_OPTION_LISTS, type IntakeOptionList } from '../intake-options.js';
 export {
+  moneyRuntimeOf,
   PrinterProblem,
   RepairRuntimeProvider,
   useRepairRuntime,

@@ -43,16 +43,19 @@ export function ToggleChip({
   selected,
   onToggle,
   skipTab = false,
+  testId,
 }: {
   readonly label: string;
   readonly selected: boolean;
   readonly onToggle: () => void;
   /** A mouse shortcut for a field beside it: Tab passes it by instead of stopping at each chip. */
   readonly skipTab?: boolean;
+  readonly testId?: string | undefined;
 }): React.JSX.Element {
   return (
     <button
       type="button"
+      data-testid={testId}
       tabIndex={skipTab ? -1 : undefined}
       aria-pressed={selected}
       onClick={onToggle}
