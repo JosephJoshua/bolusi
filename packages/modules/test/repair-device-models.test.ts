@@ -126,6 +126,28 @@ test('a model taken in once is suggested afterwards, unless the catalog already 
   expect(a55.map((row) => row.key)).toEqual(['c:12824']);
 });
 
+test('a ticket stores a catalog model the catalog way, however it was typed', async () => {
+  const h = await openRepairHarness(508);
+  open.push(h);
+  await download(h, CATALOG);
+  const model = async (device: { brand: string; model: string }) => {
+    const { ticketId } = (await h.run(
+      'openTicket',
+      intake(h, { device: { ...device, color: 'Biru', imei: null } }),
+      h.cashierId,
+    )) as { ticketId: string };
+    const row = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0]!;
+    return `${row.deviceBrand} ${row.deviceModel}`;
+  };
+
+  expect(await model({ brand: 'Samsung', model: 'A55' })).toBe('Samsung Galaxy A55');
+  expect(await model({ brand: 'samsung', model: 'galaxy-a55' })).toBe('Samsung Galaxy A55');
+  expect(await model({ brand: 'Samsung', model: 'Galaxy A55' })).toBe('Samsung Galaxy A55');
+  // Not in the catalog, or only close to a model in it: kept as typed.
+  expect(await model({ brand: 'Samsung', model: 'A5' })).toBe('Samsung A5');
+  expect(await model({ brand: 'Evercoss', model: 'Xtream 1 Plus' })).toBe('Evercoss Xtream 1 Plus');
+});
+
 test('a catalog download reaches a warm index', async () => {
   const h = await openRepairHarness(503);
   open.push(h);

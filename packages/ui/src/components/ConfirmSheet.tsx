@@ -22,7 +22,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
 import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
-import { color, overlayOpacity, radius, space, type } from '../tokens.js';
+import { color, overlayOpacity, radius, size, space, type } from '../tokens.js';
 import { Button } from './Button.js';
 
 export interface ConfirmSheetProps {
@@ -54,6 +54,10 @@ const styles = StyleSheet.create({
     opacity: overlayOpacity,
   },
   sheet: {
+    // On a tablet the sheet rises in the middle at the content's width, not across the whole screen.
+    width: '100%',
+    maxWidth: size.contentMax,
+    alignSelf: 'center',
     backgroundColor: color.surface,
     borderTopLeftRadius: radius.md,
     borderTopRightRadius: radius.md,

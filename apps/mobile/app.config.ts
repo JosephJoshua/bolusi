@@ -7,7 +7,9 @@ const config: ExpoConfig = {
   name: 'Bolusi',
   slug: 'bolusi',
   version: '0.0.0',
-  orientation: 'portrait',
+  // Every orientation here, then phones are locked upright at start (src/ports/orientation.ts):
+  // tablets turn, and in landscape the servisan board sits beside the open ticket.
+  orientation: 'default',
   // Forced light appearance is a deliberate product decision, not a default: design-system §0/§1.1
   // ships v0 LIGHT-ONLY (dark mode explicitly deferred) because the fleet is dim, low-cost LCDs used
   // in bright equatorial shops, tuned for a high-contrast light palette. This option ONLY takes
@@ -44,6 +46,8 @@ const config: ExpoConfig = {
     // The GENERATED bundle id is asserted (com.bolusi.app, NOT the placeholder) and falsified in
     // test/ios-config.test.ts.
     bundleIdentifier: 'com.bolusi.app',
+    // Run as an iPad app on an iPad, not a scaled-up iPhone screen.
+    supportsTablet: true,
   },
   // Where the web preview is served from, e.g. `/bolusi/pr-preview/pr-12` on GitHub Pages
   // (docs/previews.md). Empty for local runs. Native builds ignore it.
