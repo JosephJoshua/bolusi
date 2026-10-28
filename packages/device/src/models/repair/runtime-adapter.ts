@@ -44,6 +44,7 @@ export interface RepairRuntimeDeps {
   readonly identity: CommandIdentity;
   readonly media: RepairMediaSeams;
   readonly printing?: RepairRuntime['printing'];
+  readonly inventory?: RepairRuntime['inventory'];
 }
 
 /** Every repair table, the op log for each ticket's sync status, the phone catalog (a
@@ -72,5 +73,6 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
         .map(({ id, name }) => ({ id, name })),
     ...deps.media,
     ...(deps.printing === undefined ? {} : { printing: deps.printing }),
+    ...(deps.inventory === undefined ? {} : { inventory: deps.inventory }),
   };
 }

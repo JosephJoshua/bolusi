@@ -16,6 +16,8 @@ import { userWorkMigration } from './015-user-work.js';
 import { syncTokenRejectionsMigration } from './016-sync-token-rejections.js';
 import { repairUncollectedMigration } from './017-repair-uncollected.js';
 import { moneyMigration } from './018-money.js';
+import { inventoryMigration } from './019-inventory.js';
+import { repairTypesMigration } from './020-repair-types.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
@@ -36,6 +38,8 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   syncTokenRejectionsMigration,
   repairUncollectedMigration,
   moneyMigration,
+  inventoryMigration,
+  repairTypesMigration,
 ];
 
 export interface RunMigrationsOptions {

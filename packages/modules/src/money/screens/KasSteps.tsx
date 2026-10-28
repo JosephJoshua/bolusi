@@ -9,7 +9,7 @@ import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner } from '../../screen-kit/index.js';
-import { StepScreen, type ScreenChrome } from '../../screen-kit/screens/index.js';
+import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
 import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
 import { tm } from '../i18n.js';
@@ -111,7 +111,7 @@ export function CountCashStep({
   };
 
   return (
-    <StepScreen
+    <FlowScreen
       chrome={chrome}
       title={tm('money.kas.count')}
       onBack={onCancel}
@@ -156,7 +156,7 @@ export function CountCashStep({
           testID={`${testID}.note`}
         />
       </View>
-    </StepScreen>
+    </FlowScreen>
   );
 }
 
@@ -213,7 +213,7 @@ export function MoveCashStep({
   };
 
   return (
-    <StepScreen
+    <FlowScreen
       chrome={chrome}
       title={tm('money.kas.move')}
       onBack={onCancel}
@@ -272,7 +272,7 @@ export function MoveCashStep({
           testID={`${testID}.reason`}
         />
       </View>
-    </StepScreen>
+    </FlowScreen>
   );
 }
 
@@ -309,7 +309,7 @@ export function SettleCountStep({
   };
 
   return (
-    <StepScreen
+    <FlowScreen
       chrome={chrome}
       title={tm('money.settle.title')}
       onBack={onCancel}
@@ -349,7 +349,7 @@ export function SettleCountStep({
           testID={`${testID}.reason`}
         />
       </View>
-    </StepScreen>
+    </FlowScreen>
   );
 }
 
@@ -410,7 +410,7 @@ export function ReceiveDebtStep({
   };
 
   return (
-    <StepScreen
+    <FlowScreen
       chrome={chrome}
       title={tm('money.receive.title')}
       onBack={onCancel}
@@ -447,7 +447,7 @@ export function ReceiveDebtStep({
           testID={`${testID}.pay`}
         />
       </View>
-    </StepScreen>
+    </FlowScreen>
   );
 }
 

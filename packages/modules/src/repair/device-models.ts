@@ -11,7 +11,6 @@ import { z } from 'zod';
 import { zPhoneSpecs, type PhoneSpecs } from '@bolusi/schemas';
 
 import {
-  normalizeText,
   searchIndexFor,
   type QueryContext,
   type QueryPage,
@@ -23,6 +22,8 @@ import {
 
 import { REPAIR_PERMISSION, REPAIR_TABLE, REPAIR_TICKET_ENTITY } from './constants.js';
 import type { RepairDatabase } from './schema.js';
+
+import { compactModel } from '../shared/model-key.js';
 
 export const PHONE_MODELS_TABLE = 'phone_models';
 
@@ -52,9 +53,7 @@ export interface DeviceModelRow {
 }
 
 /** Letters and digits only, lower case: how two spellings of one model are told apart. */
-function compact(...parts: string[]): string {
-  return normalizeText(parts.join(' ')).replace(/ /g, '');
-}
+const compact = compactModel;
 
 /** Whether two brand-and-model spellings are the same model ("samsung" "a-55" = "Samsung" "A55"). */
 export function sameDeviceModel(

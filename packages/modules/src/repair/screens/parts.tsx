@@ -1,6 +1,5 @@
 // Small pieces every repair screen shares: a verified photo thumbnail, the ticket status chip, the
-// flow step screen and the price rows. The read states and sections every module shares are in
-// screen-kit/screens.
+// repair flow step, and the shared read-state and banner pieces (screen-kit) re-exported.
 import { formatMoney } from '@bolusi/i18n';
 import {
   Chip,
@@ -17,11 +16,17 @@ import {
   type IconName,
 } from '@bolusi/ui';
 import { Image } from 'expo-image';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
-import { Section, StepScreen } from '../../screen-kit/screens/index.js';
+import {
+  ActionErrorBanner,
+  FlowScreen as BaseFlowScreen,
+  QueryView,
+  Section,
+  type ScreenChrome,
+} from '../../screen-kit/screens/views.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
@@ -36,8 +41,33 @@ import { specFacts } from '../device-specs.js';
 import { useCatalogModel } from '../model-picker.js';
 import { useModelPhoto, useRepairThumbnail } from '../runtime.js';
 
-// Shared with every module's phone screens.
-export { ActionErrorBanner, QueryView, Section } from '../../screen-kit/screens/index.js';
+/** Shared with every module's screens; re-exported so the repair screens keep importing them here. */
+export { ActionErrorBanner, QueryView, Section };
+
+/** The chrome every full-screen repair step shares: the shell's sync chip and avatar. */
+export type RepairChrome = ScreenChrome;
+
+/**
+ * A full-screen repair step (screen-kit `FlowScreen`). A ticket that changed elsewhere while the
+ * step was open says how, and its way back is "back to the servisan".
+ */
+export function FlowScreen({
+  stale,
+  ...props
+}: Omit<Parameters<typeof BaseFlowScreen>[0], 'stale'> & {
+  readonly stale?: StaleStep | null | undefined;
+}): React.JSX.Element {
+  return (
+    <BaseFlowScreen
+      {...props}
+      stale={
+        stale === undefined || stale === null
+          ? stale
+          : { message: staleStepMessage(stale), backLabel: tn('repair.action.backToTicket') }
+      }
+    />
+  );
+}
 
 const STATUS_ICON: Readonly<Record<TicketStatus, IconName>> = {
   received: 'pending',
@@ -195,35 +225,6 @@ export function DeviceSpecs({
   );
 }
 
-/** The chrome every full-screen repair step shares: the shell's sync chip and avatar. */
-export interface RepairChrome {
-  readonly syncChip: ReactNode;
-  readonly avatar: ReactNode;
-}
-
-/**
- * A repair flow's step: the shared step screen, where a servisan changed elsewhere says what
- * changed and offers the way back to it.
- */
-export function FlowScreen({
-  stale,
-  ...props
-}: Omit<ComponentProps<typeof StepScreen>, 'stale'> & {
-  /** The ticket changed elsewhere and this step can no longer finish. */
-  readonly stale?: StaleStep | null | undefined;
-}): React.JSX.Element {
-  return (
-    <StepScreen
-      {...props}
-      stale={
-        stale === undefined || stale === null
-          ? stale
-          : { message: staleStepMessage(stale), backLabel: tn('repair.action.backToTicket') }
-      }
-    />
-  );
-}
-
 /** A label and its value on one line, e.g. "IMEI  356789…". */
 export function Field({
   label,
@@ -316,6 +317,8 @@ export const repairStyles = StyleSheet.create({
   /** The amount side of a `row`: never shrinks, so "Rp" and its number stay on one line. */
   rowValue: { flexShrink: 0 },
   warning: { ...type.bodySm, color: color.warning },
+  /** Choice chips that wrap, where a whole screen holds them (not a strip in a long form). */
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });
 
 const styles = StyleSheet.create({

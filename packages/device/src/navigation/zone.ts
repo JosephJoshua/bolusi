@@ -41,6 +41,7 @@ export const SHELL_ROUTES = [
   'uncollectedDays',
   'printSettings',
   'printPaper',
+  'parts',
 ] as const;
 export type ShellRoute = (typeof SHELL_ROUTES)[number];
 

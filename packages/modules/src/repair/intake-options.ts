@@ -1,7 +1,7 @@
 // The lists the counter picks from at intake, which the owner edits (product-scope.md, "Configurable
 // intake lists"): condition checks, accessories left with the phone, intake photo angles, one-tap
-// brands and ready-by choices. The owner keeps one list of each for the whole franchise; a store
-// hides the items it does not use. A ticket records the label it showed, so a later rename or
+// brands, ready-by choices and repair types ("Jenis servisan", each with its warranty). The owner
+// keeps one list of each for the whole franchise; a store hides the items it does not use. A ticket records the label it showed, so a later rename or
 // removal never rewrites an old servisan.
 //
 // Platform-free and pure, so the command, the intake screens and the owner's editor share every rule.
@@ -13,6 +13,7 @@ export const INTAKE_OPTION_LISTS = [
   'photoAngles',
   'brands',
   'readyBy',
+  'repairTypes',
 ] as const;
 export type IntakeOptionList = (typeof INTAKE_OPTION_LISTS)[number];
 
@@ -24,6 +25,10 @@ export type IntakeOptionList = (typeof INTAKE_OPTION_LISTS)[number];
 export interface IntakeOption {
   readonly id: string;
   readonly label: string | null;
+  /** A repair type's warranty in days from pickup (0: none). Repair types only. */
+  readonly warrantyDays?: number | undefined;
+  /** A repair type the counter films the customer's ownership statement for. Repair types only. */
+  readonly needsVideo?: boolean | undefined;
 }
 
 export type IntakeOptionLists = Readonly<Record<IntakeOptionList, readonly IntakeOption[]>>;
@@ -63,6 +68,26 @@ export const COMMON_BRANDS = [
   'iPhone',
 ] as const;
 
+/**
+ * Repair types offered by default, with their usual warranty: parts replaced get a month, a fix
+ * without new parts two weeks, software a week; water damage and unlocking carry none. Unlocking
+ * is where a stolen phone turns up, so the customer says on video that it is theirs.
+ */
+export const REPAIR_TYPES = [
+  { id: 'screen', warrantyDays: 30, needsVideo: false },
+  { id: 'battery', warrantyDays: 30, needsVideo: false },
+  { id: 'chargingPort', warrantyDays: 30, needsVideo: false },
+  { id: 'camera', warrantyDays: 30, needsVideo: false },
+  { id: 'audio', warrantyDays: 30, needsVideo: false },
+  { id: 'buttons', warrantyDays: 30, needsVideo: false },
+  { id: 'noPower', warrantyDays: 14, needsVideo: false },
+  { id: 'software', warrantyDays: 7, needsVideo: false },
+  { id: 'waterDamage', warrantyDays: 0, needsVideo: false },
+  { id: 'unlock', warrantyDays: 0, needsVideo: true },
+] as const;
+export type RepairTypeId = (typeof REPAIR_TYPES)[number]['id'];
+export const MAX_WARRANTY_DAYS = 365;
+
 /** A ready-by choice's id is its number of days, or this for "not known yet". */
 export const READY_UNKNOWN = 'unknown';
 export const MAX_READY_DAYS = 60;
@@ -75,6 +100,7 @@ export const BUILT_IN_OPTION_IDS: Readonly<Record<IntakeOptionList, readonly str
   photoAngles: INTAKE_PHOTO_SLOTS,
   brands: [],
   readyBy: [],
+  repairTypes: REPAIR_TYPES.map((type) => type.id),
 };
 
 /** The most an owner can put on one list: past this, the intake screen stops being quick. */
@@ -93,6 +119,7 @@ export const DEFAULT_INTAKE_OPTIONS: IntakeOptionLists = {
   photoAngles: INTAKE_PHOTO_SLOTS.map(builtIn),
   brands: COMMON_BRANDS.map((name) => ({ id: name.toLowerCase(), label: name })),
   readyBy: ['0', '1', '3', READY_UNKNOWN].map(builtIn),
+  repairTypes: REPAIR_TYPES.map((type) => ({ ...type, label: null })),
 };
 
 export const NOTHING_HIDDEN: IntakeOptionSettings['hidden'] = {
@@ -101,6 +128,7 @@ export const NOTHING_HIDDEN: IntakeOptionSettings['hidden'] = {
   photoAngles: [],
   brands: [],
   readyBy: [],
+  repairTypes: [],
 };
 
 /** Days until a ready-by choice, or null for "not known yet" (and for anything unreadable). */
@@ -139,12 +167,34 @@ export function storeIntakeOptions(settings: IntakeOptionSettings): IntakeOption
     photoAngles: pick('photoAngles'),
     brands: pick('brands'),
     readyBy: pick('readyBy'),
+    repairTypes: pick('repairTypes'),
   };
 }
 
 /** What would be wrong with saving `items` as `list`. Empty means it can be saved. */
 export type IntakeOptionProblem =
-  'emptyLabel' | 'labelTooLong' | 'duplicate' | 'tooMany' | 'empty' | 'notBuiltIn' | 'badReadyBy';
+  | 'emptyLabel'
+  | 'labelTooLong'
+  | 'duplicate'
+  | 'tooMany'
+  | 'empty'
+  | 'notBuiltIn'
+  | 'badReadyBy'
+  | 'badWarranty';
+
+/** Whether `item` carries a repair type's terms exactly when `list` is the repair types. */
+function termsFit(list: IntakeOptionList, item: IntakeOption): boolean {
+  if (list !== 'repairTypes')
+    return item.warrantyDays === undefined && item.needsVideo === undefined;
+  const days = item.warrantyDays;
+  return (
+    days !== undefined &&
+    Number.isInteger(days) &&
+    days >= 0 &&
+    days <= MAX_WARRANTY_DAYS &&
+    typeof item.needsVideo === 'boolean'
+  );
+}
 
 /**
  * The rules a franchise list must meet, checked by the command and shown by the editor. `nameOf`
@@ -162,6 +212,7 @@ export function intakeListProblems(
   const seenIds = new Set<string>();
   const seenNames = new Set<string>();
   for (const item of items) {
+    if (!termsFit(list, item)) problems.add('badWarranty');
     if (list === 'readyBy') {
       if (item.label !== null || !isReadyId(item.id)) problems.add('badReadyBy');
     } else if (item.label === null) {
@@ -179,10 +230,115 @@ export function intakeListProblems(
   return [...problems];
 }
 
-/** Two lists are the same when they hold the same items, named the same, in the same order. */
+/** Two lists are the same when they hold the same items, named and set the same, in one order. */
 export function sameOptions(a: readonly IntakeOption[], b: readonly IntakeOption[]): boolean {
   return (
     a.length === b.length &&
-    a.every((item, i) => item.id === b[i]!.id && item.label === b[i]!.label)
+    a.every((item, i) => {
+      const other = b[i]!;
+      return (
+        item.id === other.id &&
+        item.label === other.label &&
+        item.warrantyDays === other.warrantyDays &&
+        item.needsVideo === other.needsVideo
+      );
+    })
   );
+}
+
+/** A repair type as a servisan recorded it: the name it showed and its terms then. */
+export interface RecordedRepairType {
+  readonly item: string;
+  readonly label: string | null;
+  readonly warrantyDays: number;
+  readonly needsVideo: boolean;
+}
+
+/**
+ * The repair types picked by id, as a servisan records them. A type the servisan already has keeps
+ * the terms it was given, so the owner changing a warranty later never changes one already promised;
+ * a new one takes its terms from `offered` (the owner's list now). Returns the first id that is
+ * neither, so the caller can refuse it.
+ */
+export function recordRepairTypes(
+  ids: readonly string[],
+  offered: readonly IntakeOption[],
+  kept: readonly RecordedRepairType[] = [],
+): { readonly types: RecordedRepairType[] } | { readonly unknown: string } {
+  const types: RecordedRepairType[] = [];
+  for (const id of ids) {
+    const recorded = kept.find((type) => type.item === id);
+    if (recorded !== undefined) {
+      types.push(recorded);
+      continue;
+    }
+    const option = offered.find((item) => item.id === id);
+    if (option === undefined) return { unknown: id };
+    types.push({
+      item: option.id,
+      label: option.label,
+      warrantyDays: option.warrantyDays ?? 0,
+      needsVideo: option.needsVideo ?? false,
+    });
+  }
+  return { types };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * When a repair type's warranty ends: its days after the phone went home (owner decision: warranty
+ * counts from pickup). Null without a warranty, or while the phone is still in the store.
+ */
+export function warrantyEnds(
+  type: Pick<RecordedRepairType, 'warrantyDays'>,
+  returnedAt: number | null,
+): number | null {
+  return type.warrantyDays === 0 || returnedAt === null
+    ? null
+    : returnedAt + type.warrantyDays * DAY_MS;
+}
+
+/**
+ * The last moment a servisan that went home can be claimed for free: the latest end among its
+ * types' warranties. Null when none of them carries a warranty, or the phone is still in the store.
+ */
+export function warrantyUntil(
+  types: readonly Pick<RecordedRepairType, 'warrantyDays'>[],
+  returnedAt: number | null,
+): number | null {
+  let until: number | null = null;
+  for (const type of types) {
+    const ends = warrantyEnds(type, returnedAt);
+    if (ends !== null && (until === null || ends > until)) until = ends;
+  }
+  return until;
+}
+
+/** Whether two recorded lists are the same types in the same order. */
+export function sameRepairTypes(
+  a: readonly RecordedRepairType[],
+  b: readonly RecordedRepairType[],
+): boolean {
+  return a.length === b.length && a.every((type, i) => type.item === b[i]!.item);
+}
+
+/**
+ * The repair types a servisan can be changed to: the store's list, then any it already has that the
+ * list no longer offers (renamed, hidden or removed since), so they can be kept or taken off.
+ */
+export function repairTypeChoices(
+  offered: readonly IntakeOption[],
+  recorded: readonly RecordedRepairType[],
+): IntakeOption[] {
+  const ids = new Set(offered.map((option) => option.id));
+  const kept = recorded
+    .filter((type) => !ids.has(type.item))
+    .map((type) => ({
+      id: type.item,
+      label: type.label,
+      warrantyDays: type.warrantyDays,
+      needsVideo: type.needsVideo,
+    }));
+  return [...offered, ...kept];
 }

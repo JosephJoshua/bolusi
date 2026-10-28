@@ -8,6 +8,7 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
+import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { MoneyModule } from '../money/manifest.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
@@ -134,6 +135,8 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
   readonly pickPhoto?: PhotoCapture | undefined;
   /** Absent ⇒ this build cannot print, and no print action shows. */
   readonly printing?: RepairPrinting | undefined;
+  /** The parts a servisan draws on. Absent ⇒ this build has no stock, and no parts section shows. */
+  readonly inventory?: InventoryRuntime | undefined;
 }
 
 const RepairRuntimeContext = createRuntimeContext<RepairRuntime>('repair');

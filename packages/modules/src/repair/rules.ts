@@ -27,7 +27,7 @@ import {
 } from './constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
 import { documentBalance, documentTotal } from '../money/rules.js';
-import { intakeListProblems } from './intake-options.js';
+import { intakeListProblems, warrantyUntil, type RecordedRepairType } from './intake-options.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 import type {
   deviceReturnedPayload,
@@ -83,6 +83,15 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'customerAgreementMismatch',
   'downPaymentAboveTotal',
   'downPaymentRecorded',
+  'repairTypesNotYours',
+  'claimNotReturned',
+  'claimOfClaim',
+  'claimWithTypes',
+  'warrantyEnded',
+  'claimChargeOwnerOnly',
+  'claimOtherPhone',
+  'partsNotInWork',
+  'partsNotYours',
   'notPaid',
   'unpaidOwnerOnly',
   'downPaymentRefunded',
@@ -106,6 +115,25 @@ async function requireDiscountPermission(
     code: 'PERMISSION_DENIED',
     details: { permissionId: REPAIR_PERMISSION.discount },
     message: `user ${op.userId} cannot lower a price`,
+  });
+}
+
+/**
+ * A warranty claim is free unless an owner says otherwise, at intake and after: a price change that
+ * adds to one needs an owner. A technician may still propose it; applying it is the owner's.
+ */
+async function requireClaimChargePermission(
+  op: SignedOperation,
+  holdsPermission: Parameters<Rule>[1]['holdsPermission'],
+  ticket: TicketState,
+  amount: number,
+): Promise<void> {
+  if (ticket.claimOfTicketId === null || amount <= 0) return;
+  if (await holdsPermission(op.userId, REPAIR_PERMISSION.warrantyException)) return;
+  throw refuse('claimChargeOwnerOnly', {
+    code: 'PERMISSION_DENIED',
+    details: { permissionId: REPAIR_PERMISSION.warrantyException },
+    message: `user ${op.userId} cannot charge for warranty claim ${ticket.ticketNumber}`,
   });
 }
 
@@ -162,6 +190,8 @@ export interface TicketState {
   readonly location: DeviceLocation;
   readonly technicianId: string | null;
   readonly quoteTotal: number;
+  /** The servisan this one is a warranty claim on; null for an ordinary one. */
+  readonly claimOfTicketId: string | null;
 }
 
 export function invalidTransition(
@@ -259,7 +289,15 @@ function alreadyRecorded(field: string, id: string): DomainError {
 async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | undefined> {
   const row = await db
     .selectFrom('repairTickets')
-    .select(['id', 'ticketNumber', 'outcome', 'location', 'technicianId', 'quoteTotal'])
+    .select([
+      'id',
+      'ticketNumber',
+      'outcome',
+      'location',
+      'technicianId',
+      'quoteTotal',
+      'claimOfTicketId',
+    ])
     .where('id', '=', op.entityId)
     .where('tenantId', '=', op.tenantId)
     .where('storeId', '=', storeOf(op))
@@ -272,6 +310,7 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
     location: row.location as DeviceLocation,
     technicianId: row.technicianId,
     quoteTotal: Number(row.quoteTotal),
+    claimOfTicketId: row.claimOfTicketId,
   };
 }
 
@@ -433,6 +472,143 @@ export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
 };
 
 /**
+ * The repair types of an open servisan, set after the diagnosis: by the counter, who took it in, or
+ * a technician, who found what is wrong. Not once the phone left or the servisan was cancelled,
+ * since the warranty the customer took home must not change, and never on a warranty claim.
+ */
+export const ticketRepairTypesChangedRule: Rule = async (op, { db, holdsPermission }) => {
+  const ticket = await loadTicket(db, op);
+  requireOpen(ticket, op.type);
+  // A claim's types and warranty are its servisan's, so it never gets its own.
+  if (ticket.claimOfTicketId !== null) {
+    throw refuse('claimWithTypes', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'repairTypes', issue: 'a claim with repair types' },
+    });
+  }
+  if (
+    (await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) ||
+    (await holdsPermission(op.userId, REPAIR_PERMISSION.work))
+  ) {
+    return;
+  }
+  throw refuse('repairTypesNotYours', {
+    code: 'PERMISSION_DENIED',
+    details: { permissionId: REPAIR_PERMISSION.work },
+    message: `user ${op.userId} neither takes in nor works on phones`,
+  });
+};
+
+/** The servisan a claim names, as far as the claim rule needs it. */
+export interface ClaimedServisan {
+  readonly outcome: string;
+  readonly location: string;
+  readonly returnedAt: number | null;
+  readonly repairTypes: readonly RecordedRepairType[];
+  readonly claimOfTicketId: string | null;
+  readonly customerId: string;
+  readonly deviceImei: string | null;
+}
+
+/** What a new claim brings: who and which phone, what it picks, and what it costs. */
+export interface ClaimRequest {
+  readonly customerId: string;
+  readonly imei: string | null;
+  readonly repairTypes: readonly unknown[];
+  readonly total: number;
+  /** When it was signed. */
+  readonly at: number;
+}
+
+/**
+ * A warranty claim: a new servisan for a phone that went home repaired. It names the servisan it
+ * claims on, never another claim, so the warranty always counts from that first pickup and a
+ * claim cannot stretch it. It carries no repair types of its own: it repairs what that servisan
+ * did. Free while the warranty runs; a claim after it ended, or one the customer pays for, needs an
+ * owner (owner decision).
+ *
+ * Returns why this claim cannot be opened, or null when it can: `owner` reasons fall away for
+ * someone holding the warranty exception. Shared by the rule and the demo runtime so they judge
+ * alike.
+ */
+export function claimProblem(
+  original: ClaimedServisan,
+  claim: ClaimRequest,
+): { readonly reason: RepairRefusal; readonly owner: boolean } | null {
+  if (original.location !== 'returned' || original.outcome !== 'repaired') {
+    return { reason: 'claimNotReturned', owner: false };
+  }
+  if (original.claimOfTicketId !== null) return { reason: 'claimOfClaim', owner: false };
+  if (claim.repairTypes.length > 0) return { reason: 'claimWithTypes', owner: false };
+  // The warranty covers that customer's phone, not another one brought in under its number.
+  const imei = (value: string | null): string => (value ?? '').trim();
+  if (
+    claim.customerId !== original.customerId ||
+    (imei(claim.imei) !== '' &&
+      imei(original.deviceImei) !== '' &&
+      imei(claim.imei) !== imei(original.deviceImei))
+  ) {
+    return { reason: 'claimOtherPhone', owner: false };
+  }
+  if (claim.total > 0) return { reason: 'claimChargeOwnerOnly', owner: true };
+  const until = warrantyUntil(original.repairTypes, original.returnedAt);
+  // Signed between pickup and the warranty's end: a phone clock set back before pickup proves
+  // nothing about when the claim was made.
+  const covered =
+    until !== null &&
+    original.returnedAt !== null &&
+    claim.at >= original.returnedAt &&
+    claim.at <= until;
+  return covered ? null : { reason: 'warrantyEnded', owner: true };
+}
+
+async function requireClaimable(
+  db: Db,
+  op: SignedOperation,
+  claimOf: string,
+  claim: Omit<ClaimRequest, 'at'>,
+  holdsPermission: Parameters<Rule>[1]['holdsPermission'],
+): Promise<void> {
+  const original = await db
+    .selectFrom('repairTickets')
+    .select([
+      'outcome',
+      'location',
+      'returnedAt',
+      'repairTypesJson',
+      'claimOfTicketId',
+      'customerId',
+      'deviceImei',
+    ])
+    .where('id', '=', claimOf)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  if (original === undefined) throw notFound(REPAIR_TICKET_ENTITY, claimOf);
+  const problem = claimProblem(
+    {
+      ...original,
+      returnedAt: original.returnedAt === null ? null : Number(original.returnedAt),
+      repairTypes: JSON.parse(original.repairTypesJson) as RecordedRepairType[],
+    },
+    { ...claim, at: op.timestamp },
+  );
+  if (problem === null) return;
+  if (!problem.owner) {
+    throw refuse(problem.reason, {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'claimOf', issue: problem.reason },
+    });
+  }
+  if (await holdsPermission(op.userId, REPAIR_PERMISSION.warrantyException)) return;
+  throw refuse(problem.reason, {
+    code: 'PERMISSION_DENIED',
+    details: { permissionId: REPAIR_PERMISSION.warrantyException },
+    message: `user ${op.userId} cannot open this claim on ticket ${claimOf}`,
+  });
+}
+
+/**
  * A new ticket: a fresh id, a customer of this store, a price that adds up, and a ticket number
  * this device minted (its own code, or an earlier registration's it carried changes over from) and
  * has not used before. The number is printed for the customer, so it is the device's to mint offline
@@ -452,10 +628,24 @@ export const ticketOpenedRule: Rule = async (op, { db, holdsPermission }) => {
     holdsPermission,
     payload.quoteLines.map((line) => line.amount),
   );
-  checkTotal(
-    0,
-    payload.quoteLines.reduce((sum, line) => sum + line.amount, 0),
-  );
+  const total = payload.quoteLines.reduce((sum, line) => sum + line.amount, 0);
+  checkTotal(0, total);
+  // v1 and v2 intakes were signed before claims.
+  const claimOf = (payload as { claimOf?: string | null }).claimOf ?? null;
+  if (claimOf !== null) {
+    await requireClaimable(
+      db,
+      op,
+      claimOf,
+      {
+        customerId: payload.customerId,
+        imei: payload.device.imei,
+        repairTypes: payload.repairTypes,
+        total,
+      },
+      holdsPermission,
+    );
+  }
   for (const line of payload.quoteLines) {
     if (await idTaken(db, 'repairQuoteLines', line.lineId)) {
       throw alreadyRecorded('quoteLines', line.lineId);
@@ -581,6 +771,7 @@ export const quoteChangedRule: Rule = async (op, { db, holdsPermission }) => {
   const ticket = await loadTicket(db, op);
   requireOpen(ticket, op.type);
   checkTotal(ticket.quoteTotal, line.amount);
+  await requireClaimChargePermission(op, holdsPermission, ticket, line.amount);
   if (!line.fromProposal) {
     await requireFreshLine(db, ticket, line.lineId, op.type);
     return;

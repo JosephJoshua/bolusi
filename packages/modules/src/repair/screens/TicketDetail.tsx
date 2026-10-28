@@ -47,23 +47,29 @@ import {
 } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { actionKey, LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import { actionKey, LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel, warrantyLine } from '../labels.js';
 import {
   amountOwed,
   arrangeTicketActions,
   CONTEXTUAL_ACTIONS,
+  canSetRepairTypes,
+  canUseParts,
+  claimIntakeDraft,
   downPaymentAction,
   downPaymentStale,
   paidLabelKey,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
+  repairTypesStale,
   staleStep,
   ticketActions,
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
+  warrantyClaimAction,
   workPhotos,
+  type IntakeDraft,
   type StaleStep,
   type TicketAction,
   type TicketStep,
@@ -89,6 +95,16 @@ import {
   useUncollectedLimit,
 } from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
+import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
+import { ti } from '../../inventory/i18n.js';
+import type { UsedPartRow } from '../../inventory/queries.js';
+import { InventoryRuntimeProvider } from '../../inventory/runtime.js';
+import {
+  PutBackStep,
+  TakePartStep,
+  UsedPartsSection,
+  type PartUse,
+} from '../../inventory/screens/UsedParts.js';
 import {
   AssignStep,
   CancelStep,
@@ -96,8 +112,14 @@ import {
   WaitForPartsStep,
   PriceChangeStep,
   ProposalStep,
+  RepairTypesStep,
   WorkPhotosStep,
 } from './TicketSteps.js';
+
+/** The servisan as stock records it: parts taken for it carry its number. */
+function partUse(ticket: Pick<TicketDetailRow, 'id' | 'ticketNumber'>): PartUse {
+  return { kind: 'repair_ticket', id: ticket.id, label: ticket.ticketNumber };
+}
 
 /** What an action that runs in place says once it lands, in the fixed banner slot. */
 const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
@@ -113,7 +135,10 @@ type Step =
   | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
-  | { readonly kind: 'print' };
+  | { readonly kind: 'repairTypes' }
+  | { readonly kind: 'print' }
+  | { readonly kind: 'takePart' }
+  | { readonly kind: 'putBackPart'; readonly part: UsedPartRow };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
@@ -125,6 +150,10 @@ export interface TicketDetailProps {
   readonly hideBack?: boolean | undefined;
   readonly onHandover: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
+  /** Starts a warranty claim's intake from this servisan; without it the claim is not offered. */
+  readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
+  /** Opens a linked servisan: the one a claim is on, or a claim on this one. */
+  readonly onOpenTicket?: ((ticketId: string) => void) | undefined;
   /** Hardware back closes an open step back to the ticket before it leaves the ticket. */
   readonly onRegisterStepBack?: ((back: StepBack | null) => void) | undefined;
   /** Leaving the surface (header sync chip, lock) asks the open step first, like back does. */
@@ -145,6 +174,8 @@ export function TicketDetail({
   hideBack = false,
   onHandover,
   onOpenSyncStatus,
+  onStartClaim,
+  onOpenTicket,
   onRegisterStepBack,
   onRegisterDiscardGuard,
   testID = 'repair.ticket',
@@ -154,7 +185,8 @@ export function TicketDetail({
   const runner = useActionRunner();
   const [step, setStep] = useState<Step>({ kind: 'none' });
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [done, setDone] = useState<RepairKey | null>(null);
+  // What the last action did, already in words: repair's own steps and the parts steps say it.
+  const [done, setDone] = useState<string | null>(null);
   const [passcodeShown, setPasscodeShown] = useState(false);
   const [messageFailed, setMessageFailed] = useState(false);
   const storeName = useStoreDisplayName();
@@ -221,11 +253,17 @@ export function TicketDetail({
   // The ticket keeps reading live under an open step, so a change synced from another device while
   // the user fills the step in is caught here rather than as a refusal once they submit.
   const stale: StaleStep | null =
-    step.kind === 'none' || step.kind === 'print' || ticket === undefined
+    step.kind === 'none' ||
+    step.kind === 'print' ||
+    step.kind === 'takePart' ||
+    step.kind === 'putBackPart' ||
+    ticket === undefined
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
-        : staleStep(step, ticket, can, runtime.userId);
+        : step.kind === 'repairTypes'
+          ? repairTypesStale(ticket, can)
+          : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
     ticketId,
@@ -244,14 +282,20 @@ export function TicketDetail({
           stage={step.kind}
           onDone={() => {
             closeStep();
-            setDone(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired');
+            setDone(tn(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired'));
           }}
         />
       );
     case 'waitForParts':
       return <WaitForPartsStep {...stepProps} />;
     case 'cancel':
-      return <CancelStep {...stepProps} workStarted={ticket?.workStarted ?? false} />;
+      return (
+        <CancelStep
+          {...stepProps}
+          workStarted={ticket?.workStarted ?? false}
+          claimOf={ticket?.claimOfTicketId ?? null}
+        />
+      );
     case 'assign':
       return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
     case 'changePrice':
@@ -274,7 +318,18 @@ export function TicketDetail({
           total={ticket === undefined ? 0 : amountOwed(ticket)}
           onDone={() => {
             closeStep();
-            setDone('repair.done.downPayment');
+            setDone(tn('repair.done.downPayment'));
+          }}
+        />
+      );
+    case 'repairTypes':
+      return (
+        <RepairTypesStep
+          {...stepProps}
+          current={ticket?.repairTypes ?? []}
+          onDone={() => {
+            closeStep();
+            setDone('repair.done.repairTypes');
           }}
         />
       );
@@ -288,10 +343,43 @@ export function TicketDetail({
           onCancel={closeStep}
           onDone={(notice) => {
             closeStep();
-            setDone(notice);
+            setDone(tn(notice));
           }}
         />
       );
+    case 'takePart':
+    case 'putBackPart': {
+      const inventory = runtime.inventory;
+      if (ticket === undefined || inventory === undefined) break;
+      const use = partUse(ticket);
+      return (
+        <InventoryRuntimeProvider runtime={inventory}>
+          {step.kind === 'takePart' ? (
+            <TakePartStep
+              chrome={chrome}
+              use={use}
+              device={{ brand: ticket.deviceBrand, model: ticket.deviceModel }}
+              onCancel={closeStep}
+              onDone={() => {
+                closeStep();
+                setDone(ti('inventory.done.taken'));
+              }}
+            />
+          ) : (
+            <PutBackStep
+              chrome={chrome}
+              use={use}
+              part={step.part}
+              onCancel={closeStep}
+              onDone={() => {
+                closeStep();
+                setDone(ti('inventory.done.putBack'));
+              }}
+            />
+          )}
+        </InventoryRuntimeProvider>
+      );
+    }
     case 'none':
       break;
   }
@@ -299,7 +387,8 @@ export function TicketDetail({
   const runInPlace = (action: TicketAction, run: () => Promise<unknown>): void => {
     setDone(null);
     void runner.run(run).then((result) => {
-      if (result !== undefined) setDone(DONE_KEY[action] ?? null);
+      const key = DONE_KEY[action];
+      if (result !== undefined) setDone(key === undefined ? null : tn(key));
     });
   };
 
@@ -347,6 +436,10 @@ export function TicketDetail({
   const primary = layout.next ?? undefined;
   const canCancel = actions.includes('cancel');
   const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const claimAction =
+    ticket === undefined || onStartClaim === undefined
+      ? null
+      : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
     const url = customerMessageUrl(kind, row, storeName);
@@ -385,7 +478,7 @@ export function TicketDetail({
     ) : done !== null ? (
       <Banner
         variant="info"
-        message={tn(done)}
+        message={done}
         onPress={() => setDone(null)}
         testID={`${testID}.done`}
       />
@@ -501,6 +594,13 @@ export function TicketDetail({
         <Card testID={`${testID}.summary`}>
           <View style={styles.statusRow}>
             <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+            {row.claimOf === null ? null : (
+              <Chip
+                label={tn('repair.warrantyClaim.title')}
+                icon="repair"
+                testID={`${testID}.claimChip`}
+              />
+            )}
             {waited === null ? null : (
               <Chip
                 label={tn('repair.board.waited', { days: waited })}
@@ -546,6 +646,8 @@ export function TicketDetail({
 
         <View style={styles.facts}>
           <FactGrid>
+            {renderRepairTypes(row)}
+            {renderClaimLinks(row)}
             <Fact
               label={tn('repair.ticket.technician')}
               value={row.technicianName ?? tn('repair.ticket.unassigned')}
@@ -606,8 +708,23 @@ export function TicketDetail({
           )}
         </View>
 
-        {layout.alternative === null && more.length === 0 && messageKind === null ? null : (
+        {layout.alternative === null &&
+        more.length === 0 &&
+        messageKind === null &&
+        claimAction === null ? null : (
           <View style={styles.actions}>
+            {claimAction === null ? null : (
+              <Button
+                label={tn('repair.warrantyClaim.action')}
+                variant="secondary"
+                size="compact"
+                onPress={() =>
+                  onStartClaim?.(claimIntakeDraft(row, tn('repair.warrantyClaim.line')))
+                }
+                disabled={runner.busy}
+                testID={`${testID}.action.warrantyClaim`}
+              />
+            )}
             {messageKind === null ? null : (
               <Button
                 label={tn(MESSAGE_ACTION_KEY[messageKind])}
@@ -653,6 +770,19 @@ export function TicketDetail({
         )}
 
         {renderPrice(row, contextual('changePrice') ?? contextual('proposePrice'))}
+        {runtime.inventory === undefined ||
+        !runtime.inventory.hasPermission(INVENTORY_PERMISSION.read) ? null : (
+          <InventoryRuntimeProvider runtime={runtime.inventory}>
+            <UsedPartsSection
+              use={partUse(row)}
+              editable={canUseParts(row, runtime.userId, runtime.inventory.hasPermission)}
+              flagUnreturned={row.outcome === 'cancelled'}
+              onTake={() => setStep({ kind: 'takePart' })}
+              onPutBack={(part) => setStep({ kind: 'putBackPart', part })}
+              testID={`${testID}.parts`}
+            />
+          </InventoryRuntimeProvider>
+        )}
         {photos.section}
         {renderCondition(row)}
         <DeviceSpecs
@@ -819,6 +949,93 @@ export function TicketDetail({
         ) : null}
       </Section>
     );
+  }
+
+  /**
+   * What is being repaired, changed from here once the diagnosis shows it, and each type's
+   * warranty: how long while the phone is in the store, until when once it went home.
+   */
+  function renderRepairTypes(row: TicketDetailRow): React.JSX.Element | null {
+    const editable = canSetRepairTypes(row, can);
+    if (row.repairTypes.length === 0 && !editable) return null;
+    return (
+      <Fact
+        label={tn('repair.repairTypes.title')}
+        value={
+          row.repairTypes.length === 0
+            ? tn('repair.repairTypes.none')
+            : row.repairTypes.map((type) => warrantyLine(type, row.returnedAt)).join('\n')
+        }
+        wide
+        action={
+          editable ? (
+            <TextButton
+              label={tn(
+                row.repairTypes.length === 0
+                  ? 'repair.repairTypes.choose'
+                  : 'repair.repairTypes.change',
+              )}
+              accessibilityLabel={tn('repair.repairTypes.title')}
+              onPress={() => {
+                setDone(null);
+                setStep({ kind: 'repairTypes' });
+              }}
+              disabled={runner.busy}
+              testID={`${testID}.action.repairTypes`}
+            />
+          ) : null
+        }
+        testID={`${testID}.repairTypes`}
+      />
+    );
+  }
+
+  /**
+   * The servisan a claim is on, with the warranty the claim runs under, or the claims on this one,
+   * each a tap away.
+   */
+  function renderClaimLinks(row: TicketDetailRow): ReactNode {
+    const { claimOf } = row;
+    const links = [
+      ...(claimOf === null
+        ? []
+        : [
+            {
+              id: claimOf.id,
+              value: [
+                claimOf.ticketNumber,
+                ...claimOf.repairTypes.map((type) => warrantyLine(type, claimOf.returnedAt)),
+              ].join('\n'),
+              number: claimOf.ticketNumber,
+              key: 'of' as const,
+            },
+          ]),
+      ...row.claims.map((claim) => ({
+        id: claim.id,
+        value: claim.ticketNumber,
+        number: claim.ticketNumber,
+        key: 'claims' as const,
+      })),
+    ];
+    return links.map((link) => (
+      <Fact
+        key={link.id}
+        label={tn(`repair.warrantyClaim.${link.key}`)}
+        value={link.value}
+        wide
+        action={
+          onOpenTicket === undefined ? null : (
+            <TextButton
+              label={tn('repair.warrantyClaim.open')}
+              accessibilityLabel={`${tn(`repair.warrantyClaim.${link.key}`)} ${link.number}`}
+              onPress={() => onOpenTicket(link.id)}
+              testID={`${testID}.claimLink.${link.id}`}
+            />
+          )
+        }
+        testID={`${testID}.claimLink`}
+      />
+    ));
   }
 
   function renderCondition(row: TicketDetailRow): React.JSX.Element | null {

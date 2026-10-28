@@ -363,6 +363,26 @@ describe('repair settings on the PC', () => {
     expect(change.items.at(-1)!.label).toBe('Tali gantungan');
   });
 
+  it('sets each repair type’s warranty and whether it needs the ownership video', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    renderApp();
+    await openSettings('options.repairTypes');
+    const rows = await screen.findByTestId('repair.desk.options.repairTypes.rows');
+    const [first] = within(rows).getAllByTestId(/\.warranty$/) as HTMLInputElement[];
+    expect(first!.value).toBe('30');
+    // Days only: anything else typed is dropped as it is typed.
+    fireEvent.change(first!, { target: { value: '9x0' } });
+    expect(first!.value).toBe('90');
+    const [video] = within(rows).getAllByTestId(/\.needsVideo$/);
+    fireEvent.click(video!);
+    fireEvent.click(byTestId('repair.desk.options.repairTypes.save'));
+    await screen.findByTestId('repair.desk.options.repairTypes.saved');
+    const change = callsTo('repair.run').find((args) => args[1] === 'changeIntakeOptions')![2] as {
+      items: { warrantyDays: number; needsVideo: boolean }[];
+    };
+    expect(change.items[0]).toMatchObject({ warrantyDays: 90, needsVideo: true });
+  });
+
   it("follows another device's slip change, keeping what was typed here", async () => {
     core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
     renderApp();

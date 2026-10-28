@@ -245,3 +245,40 @@ test('takes the customer signature at handover, over the handover dialog', async
     /^blob:/,
   );
 });
+
+test('the pane lists each repair type with its warranty, and the counter changes them', async () => {
+  await page.getByText('Maria Kogoya').click();
+  const types = page.getByTestId('repair.desk.ticket.repairTypes');
+  await expect(types).toContainText('Ganti konektor cas · garansi 30 hari');
+  await expect(types).toContainText('Ganti baterai · garansi 30 hari');
+  await page.getByTestId('repair.desk.ticket.action.repairTypes').click();
+  const chips = page.getByTestId('repair.desk.repairTypes.chips');
+  await chips.getByText('Ganti baterai').click();
+  await chips.getByText('Ganti layar').click();
+  await page.getByTestId('repair.desk.repairTypes.submit').click();
+  await expect(page.getByTestId('repair.desk.repairTypes')).toBeHidden();
+  await expect(types).not.toContainText('Ganti baterai');
+  await expect(types).toContainText('Ganti layar · garansi 30 hari');
+});
+
+test('the intake offers the store’s repair types next to the complaint', async () => {
+  await page.keyboard.press('F2');
+  const chips = page.getByTestId('repair.desk.intake.repairTypes');
+  await expect(chips).toContainText('Buka kunci / akun');
+  const screen = chips.getByRole('button', { name: 'Ganti layar' });
+  await screen.click();
+  await expect(screen).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('a phone back under warranty starts a claim from its servisan, with no types of its own', async () => {
+  await page.getByTestId('repair.desk.board.search').fill('K7Q-0005');
+  await page.getByText('Yakob Tabuni').click();
+  await expect(page.getByTestId('repair.desk.ticket.repairTypes')).toContainText(
+    /Ganti layar · garansi s\/d \d{2}\/\d{2}\/\d{4}/,
+  );
+  await page.getByTestId('repair.desk.ticket.action.warrantyClaim').click();
+  await expect(page.getByTestId('repair.desk.intake')).toBeVisible();
+  await expect(page.getByTestId('repair.desk.intake.claim')).toContainText('Dari K7Q-0005');
+  await expect(page.getByTestId('repair.desk.intake')).toContainText('Yakob Tabuni');
+  await expect(page.getByTestId('repair.desk.intake.repairTypes')).toHaveCount(0);
+});

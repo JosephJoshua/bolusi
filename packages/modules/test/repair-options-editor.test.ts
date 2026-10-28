@@ -39,8 +39,22 @@ describe('the list editor', () => {
   test('rows start as the saved list with built-in names and this store’s hiding', () => {
     const state = editorFor('checks', settings, builtInName);
     expect(state.rows).toStrictEqual([
-      { key: 'screen', id: 'screen', text: 'Layar', hidden: false },
-      { key: 'touch', id: 'touch', text: 'Sentuhan', hidden: true },
+      {
+        key: 'screen',
+        id: 'screen',
+        text: 'Layar',
+        hidden: false,
+        warranty: '',
+        needsVideo: false,
+      },
+      {
+        key: 'touch',
+        id: 'touch',
+        text: 'Sentuhan',
+        hidden: true,
+        warranty: '',
+        needsVideo: false,
+      },
     ]);
     expect(changedItems(state, settings.lists.checks, builtInName)).toBeNull();
     expect(changedHidden(state, settings.hidden.checks)).toBeNull();

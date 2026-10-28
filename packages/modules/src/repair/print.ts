@@ -19,7 +19,14 @@ import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 import type { SlipKind } from './constants.js';
 import { balanceAfterDownPayment, photoInSlot, photoThumbnailRef, ticketStatus } from './flows.js';
 import { tn } from './i18n.js';
-import { CHECK_STATE_KEY, PRICE_KIND_KEY, optionLabel, statusLabel } from './labels.js';
+import {
+  CHECK_STATE_KEY,
+  PRICE_KIND_KEY,
+  optionLabel,
+  repairTypeLabel,
+  statusLabel,
+  warrantyTerms,
+} from './labels.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow } from './queries.js';
 
 /** What a slip needs besides the ticket. */
@@ -99,7 +106,36 @@ function customerFields(ticket: TicketDetailRow): PrintField[] {
   if (ticket.deviceImei !== null && ticket.deviceImei !== '') {
     fields.push({ label: tn('repair.slip.field.imei'), value: ticket.deviceImei });
   }
+  if (ticket.repairTypes.length > 0) {
+    fields.push({
+      label: tn('repair.condition.repairTypes'),
+      value: ticket.repairTypes.map(repairTypeLabel).join(', '),
+    });
+  }
+  if (ticket.claimOf !== null) {
+    fields.push({ label: tn('repair.slip.field.claimOf'), value: ticket.claimOf.ticketNumber });
+  }
   return fields;
+}
+
+/**
+ * Each repair type's warranty, from the day the phone went home: "Ganti layar : s/d 27/11/2026". A
+ * claim runs under its servisan's warranty, so its slip prints that one: a claim never extends it.
+ */
+function warrantyBlocks(ticket: TicketDetailRow): PrintBlock[] {
+  const { repairTypes, returnedAt } = ticket.claimOf === null ? ticket : ticket.claimOf;
+  return repairTypes.length === 0
+    ? []
+    : [
+        { kind: 'heading', text: tn('repair.warranty.title') },
+        {
+          kind: 'fields',
+          fields: repairTypes.map((type) => ({
+            label: repairTypeLabel(type),
+            value: warrantyTerms(type, returnedAt),
+          })),
+        },
+      ];
 }
 
 function lineRow(line: QuoteLineRow): PrintAmountRow {
@@ -306,7 +342,12 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
     tn('repair.slip.handoverTitle'),
     tn('repair.slip.job.handover', { number: ticket.ticketNumber }),
     meta,
-    { blocks: [{ kind: 'fields', fields }], aside, closing },
+    {
+      // A cancelled servisan was not repaired, so it carries no warranty.
+      blocks: [{ kind: 'fields', fields }, ...(cancelled ? [] : warrantyBlocks(ticket))],
+      aside,
+      closing,
+    },
   );
 }
 

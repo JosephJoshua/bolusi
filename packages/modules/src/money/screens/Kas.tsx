@@ -20,7 +20,7 @@ import {
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Section, type ScreenChrome } from '../../screen-kit/screens/index.js';
+import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import type { QueryState } from '../../screen-kit/index.js';
 
 import { MONEY_PERMISSION } from '../constants.js';

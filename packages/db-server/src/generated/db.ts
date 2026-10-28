@@ -127,6 +127,71 @@ export interface IdentityAudit {
   tenantId: string;
 }
 
+export interface InventoryCategories {
+  archived: number;
+  createdAt: Int8;
+  createdBy: string;
+  fields: string;
+  id: string;
+  isPart: number;
+  name: string;
+  nameFormat: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface InventoryItemFacets {
+  facet: string;
+  itemId: string;
+  position: number;
+  tenantId: string;
+  value: string;
+  valueKey: string;
+}
+
+export interface InventoryItemFits {
+  brand: string;
+  itemId: string;
+  model: string;
+  modelKey: string;
+  position: number;
+  tenantId: string;
+}
+
+export interface InventoryItems {
+  archived: number;
+  barcode: string | null;
+  categoryId: string | null;
+  code: string | null;
+  createdAt: Int8;
+  createdBy: string;
+  fieldValues: string;
+  fits: string | null;
+  id: string;
+  name: string;
+  nameAuto: number;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface InventoryMovements {
+  at: Int8;
+  counted: number | null;
+  id: string;
+  itemId: string;
+  kind: string;
+  note: string | null;
+  qty: number;
+  storeId: string;
+  tenantId: string;
+  useId: string | null;
+  useKind: string | null;
+  useLabel: string | null;
+  userId: string;
+}
+
 export interface Media {
   attachedOperationId: string | null;
   byteSize: Int8;
@@ -441,6 +506,7 @@ export interface RepairTickets {
   cancelledBy: string | null;
   cancelStandardFee: Int8 | null;
   checklistJson: string;
+  claimOfTicketId: string | null;
   complaint: string;
   createdAt: Int8;
   createdBy: string;
@@ -463,6 +529,7 @@ export interface RepairTickets {
   peripheralsJson: string;
   quoteTotal: Int8;
   readyAt: Int8 | null;
+  repairTypesJson: Generated<string>;
   returnedAt: Int8 | null;
   returnedBy: string | null;
   storeId: string;
@@ -569,6 +636,11 @@ export interface DB {
   devices: Devices;
   idempotencyKeys: IdempotencyKeys;
   identityAudit: IdentityAudit;
+  inventoryCategories: InventoryCategories;
+  inventoryItemFacets: InventoryItemFacets;
+  inventoryItemFits: InventoryItemFits;
+  inventoryItems: InventoryItems;
+  inventoryMovements: InventoryMovements;
   media: Media;
   mediaChunks: MediaChunks;
   moneyAccounts: MoneyAccounts;

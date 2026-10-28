@@ -30,7 +30,8 @@ import type { SurfaceNav } from '../../navigation/surface.js';
 
 type RepairView =
   | { readonly kind: 'board' }
-  | { readonly kind: 'intake' }
+  /** A warranty claim's intake starts from a draft made from the servisan it claims on. */
+  | { readonly kind: 'intake'; readonly draft?: IntakeDraft }
   | { readonly kind: 'ticket'; readonly ticketId: string }
   | { readonly kind: 'handover'; readonly ticketId: string };
 
@@ -143,6 +144,8 @@ export function RepairHome({
         hideBack={split}
         onBack={() => setView({ kind: 'board' })}
         onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
+        onStartClaim={(draft) => setView({ kind: 'intake', draft })}
+        onOpenTicket={(ticketId) => setView({ kind: 'ticket', ticketId })}
         onOpenSyncStatus={onOpenSyncStatus}
         onRegisterStepBack={registerStepBack}
         onRegisterDiscardGuard={registerDiscardGuard}
@@ -191,7 +194,7 @@ export function RepairHome({
           <IntakeWizard
             chrome={chrome}
             now={now}
-            restoredDraft={restoredDraft}
+            restoredDraft={view.draft ?? restoredDraft}
             onDraftChange={onDraftChange}
             onRegisterDiscardGuard={registerDiscardGuard}
             onRegisterStepBack={registerStepBack}

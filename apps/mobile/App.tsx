@@ -30,6 +30,7 @@ import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { KasHome } from './src/screens/money/KasHome.js';
+import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
@@ -86,6 +87,8 @@ import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
 import type { SignatureSurface } from './src/media/SignatureHost.js';
 import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
+import type { ScanSurface } from './src/media/ScanHost.js';
+import { ScanScreen } from './src/media/ScanScreen.js';
 import type { DeviceInfo, MutablePushCategory } from '@bolusi/device/models/settings/model';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
@@ -102,6 +105,8 @@ import {
 import { servisanCustomers, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
 import { MONEY_PERMISSION } from '@bolusi/modules/money';
 import { tm, type MoneyRuntime } from '@bolusi/modules/money/screens';
+import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
+import { ti } from '@bolusi/modules/inventory/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -154,6 +159,8 @@ export interface AppProps {
    * exactly like `capture`: it wins the screen inside the shell zone only, so a lock still wins.
    */
   readonly signature?: SignatureSurface | null;
+  /** The code scanner while it looks for a barcode or QR code, from `useScanHost`; like `capture`. */
+  readonly scan?: ScanSurface | null;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -584,6 +591,7 @@ export default function App(props: AppProps): React.JSX.Element {
 
   const captureSurface = props.capture ?? null;
   const signatureSurface = props.signature ?? null;
+  const scanSurface = props.scan ?? null;
   const goBack = useCallback((): boolean => {
     if (accountMenu) {
       setAccountMenu(false);
@@ -599,6 +607,10 @@ export default function App(props: AppProps): React.JSX.Element {
     }
     if (signatureSurface !== null) {
       signatureSurface.onBack();
+      return true;
+    }
+    if (scanSurface !== null) {
+      scanSurface.onBack();
       return true;
     }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
@@ -649,7 +661,7 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, syncReturn]);
+  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, scanSurface, syncReturn]);
 
   // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
   useEffect(() => {
@@ -739,6 +751,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
+  const closeParts = useCallback(() => setRoute('home'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
   // The ledger as the Kas screens read it: repair's money port, live on the same tables.
@@ -890,6 +903,7 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const capture = zone.kind === 'shell' ? captureSurface : null;
   const signing = zone.kind === 'shell' ? signatureSurface : null;
+  const scanning = zone.kind === 'shell' ? scanSurface : null;
   const modal =
     capture !== null ? (
       <CaptureScreen
@@ -921,6 +935,14 @@ export default function App(props: AppProps): React.JSX.Element {
         onRetry={signing.onRetry}
         onBack={signing.onBack}
         onPadLayout={signing.onPadLayout}
+      />
+    ) : scanning !== null ? (
+      <ScanScreen
+        state={scanning.state}
+        preview={scanning.preview}
+        syncChip={modalSyncChip}
+        avatar={<View testID="scan-no-avatar" />}
+        onBack={scanning.onBack}
       />
     ) : null;
 
@@ -1237,6 +1259,25 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            if (shellZone.route === 'parts' && props.repair?.inventory !== undefined) {
+              return (
+                <PartsRoute
+                  runtime={props.repair.inventory}
+                  syncChip={
+                    <SyncChip
+                      state={chip}
+                      pendingCount={props.sync.pendingOperationCount}
+                      accessibilityLabels={syncChipAccessibilityLabels({
+                        pendingCount: props.sync.pendingOperationCount,
+                      })}
+                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
+                    />
+                  }
+                  onClose={closeParts}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
             if (shellZone.route === 'changePin') {
               // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
               // through the session controller and REJECTS with its DomainError; the screen maps it.
@@ -1457,6 +1498,17 @@ export default function App(props: AppProps): React.JSX.Element {
               }}
               testID="account-menu-switch-user"
             />
+            {props.repair?.inventory?.hasPermission(INVENTORY_PERMISSION.read) === true ? (
+              <ListRow
+                leading={<Icon name="parts" size={size.iconInline} color={color.text} />}
+                primaryText={ti('inventory.list.title')}
+                onPress={() => {
+                  setAccountMenu(false);
+                  leaveHome(() => setRoute('parts'));
+                }}
+                testID="shell-open-parts"
+              />
+            ) : null}
             <ListRow
               leading={<Icon name="settings" size={size.iconInline} color={color.text} />}
               primaryText={t('core.settings.title')}
@@ -1555,6 +1607,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'staffPins',
   'printSettings',
   'printPaper',
+  'parts',
 ]);
 
 /**

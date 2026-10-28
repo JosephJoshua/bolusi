@@ -21,7 +21,8 @@
     "downPaymentCorrected": "Down payment changed",
     "slipPrinted": "Slip printed",
     "storePrintSettingsChanged": "Slip details changed",
-    "storeUncollectedDaysChanged": "Not-collected limit changed"
+    "storeUncollectedDaysChanged": "Not-collected limit changed",
+    "ticketRepairTypesChanged": "Repair type changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -87,7 +88,8 @@
     "changeFeeLabel": "Change the cancellation fee",
     "feeInput": "Fee the customer pays",
     "storeFee": "This store’s usual fee: {amount}",
-    "feeChangedHint": "Also say why you changed the fee."
+    "feeChangedHint": "Also say why you changed the fee.",
+    "claimFree": "Warranty claim, no fee"
   },
   "check": {
     "biometrics": "Fingerprint or face unlock",
@@ -110,7 +112,8 @@
     "ok": "OK",
     "peripherals": "Left with the phone",
     "restOk": "Mark the rest OK",
-    "notesLabel": "Notes"
+    "notesLabel": "Notes",
+    "repairTypes": "Repair type"
   },
   "customer": {
     "change": "Choose another customer",
@@ -287,7 +290,8 @@
     "repaired": "Marked repaired. Ready to hand back.",
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
-    "downPayment": "Down payment saved."
+    "downPayment": "Down payment saved.",
+    "repairTypes": "Repair type saved."
   },
   "passcode": {
     "show": "Show",
@@ -313,7 +317,7 @@
   },
   "options": {
     "title": "Intake choices",
-    "summary": "Checks, accessories, photos, brands, ready-by",
+    "summary": "Checks, accessories, photos, brands, ready-by, repair types",
     "intro": "These apply to every store. Repairs already taken in stay as they were.",
     "introStore": "Choose what shows at this store.",
     "count": "{count, plural, one {# choice} other {# choices}}",
@@ -323,14 +327,16 @@
       "accessories": "Accessories",
       "photoAngles": "Sides to photograph",
       "brands": "Quick brand choices",
-      "readyBy": "Ready-by choices"
+      "readyBy": "Ready-by choices",
+      "repairTypes": "Repair types"
     },
     "hint": {
       "checks": "Checked at the counter in front of the customer, top to bottom.",
       "accessories": "Things a customer can leave with the phone.",
       "photoAngles": "Every side here must be photographed at intake.",
       "brands": "Shown as one-tap choices. Other brands can still be typed.",
-      "readyBy": "When the repair can be ready, offered at intake."
+      "readyBy": "When the repair can be ready, offered at intake.",
+      "repairTypes": "Warranty counts from pickup."
     },
     "add": "Add",
     "addUnknown": "Add “Not sure yet”",
@@ -358,8 +364,15 @@
       "badReadyBy": "Enter 0 to 60 days.",
       "empty": "Keep at least one choice.",
       "tooMany": "40 choices at most.",
-      "hidesAll": "At least one choice must show at this store."
-    }
+      "hidesAll": "At least one choice must show at this store.",
+      "badWarranty": "Enter a warranty of 0 to 365 days."
+    },
+    "warrantyDays": "Warranty (days)",
+    "needsVideo": "Needs ownership video",
+    "needsVideoCaption": "The customer says on video the phone is theirs.",
+    "warranty": "{count}-day warranty",
+    "noWarranty": "No warranty",
+    "videoShort": "Needs video"
   },
   "spec": {
     "battery": "Battery",
@@ -424,7 +437,8 @@
       "accessories": "Accessories",
       "technician": "Technician",
       "status": "Status",
-      "cancelReason": "Cancel reason"
+      "cancelReason": "Cancel reason",
+      "claimOf": "Claim on"
     },
     "section": {
       "complaint": "Complaint",
@@ -618,9 +632,18 @@
     "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it.",
+    "partsNotInWork": "Parts can only be taken or put back while the repair is being worked on.",
+    "partsNotYours": "Another technician is working on this repair.",
     "notPaid": "This servisan isn’t paid in full yet.",
     "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid.",
-    "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed."
+    "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed.",
+    "repairTypesNotYours": "Only the counter or a technician can change the repair type.",
+    "claimNotReturned": "A warranty claim is only for a phone that was repaired and collected.",
+    "claimOfClaim": "Open the claim from the original repair, not from another claim.",
+    "claimWithTypes": "A warranty claim uses the repair types of the original repair.",
+    "warrantyEnded": "The warranty has ended. Only an owner can open this claim.",
+    "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
+    "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan."
   },
   "paper": {
     "title": "Slip paper",
@@ -671,5 +694,43 @@
     "none": "No printer on this computer yet. Install it in Windows first, then look again.",
     "loadFailed": "Couldn’t open the printer list.",
     "gone": "{name} is no longer installed on this computer. Choose another printer."
+  },
+  "repairType": {
+    "screen": "Screen replacement",
+    "battery": "Battery replacement",
+    "chargingPort": "Charging port",
+    "camera": "Camera repair",
+    "audio": "Speaker or mic repair",
+    "buttons": "Button repair",
+    "noPower": "Won’t power on",
+    "software": "Software or reinstall",
+    "waterDamage": "Water damage",
+    "unlock": "Unlock or account removal"
+  },
+  "warranty": {
+    "title": "Warranty",
+    "none": "no warranty",
+    "days": "{count} days",
+    "until": "until {date}",
+    "fromPickup": "Warranty counts from pickup.",
+    "line": "{name} · warranty {terms}",
+    "lineNone": "{name} · no warranty"
+  },
+  "repairTypes": {
+    "none": "Not chosen yet",
+    "change": "Change",
+    "choose": "Choose",
+    "title": "Repair type",
+    "save": "Save"
+  },
+  "warrantyClaim": {
+    "action": "Warranty claim",
+    "title": "Warranty claim",
+    "line": "Warranty claim",
+    "of": "Warranty claim on",
+    "claims": "Warranty claim",
+    "open": "Open",
+    "intakeNote": "From {number}. Its repair types and warranty carry over.",
+    "ended": "The warranty has ended. Only an owner can open this claim."
   }
 }

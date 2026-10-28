@@ -18,7 +18,10 @@ import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
 import { UpdateNotice } from './updates.js';
 
 type Page =
-  { readonly kind: 'board' } | { readonly kind: 'intake' } | { readonly kind: 'settings' };
+  | { readonly kind: 'board' }
+  // A warranty claim's intake starts from a draft made from the servisan it claims on.
+  | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
+  | { readonly kind: 'settings' };
 
 const SIDEBAR_KEY = 'bolusi.sidebar';
 const NARROW_PX = 1280;
@@ -187,11 +190,13 @@ export function Counter({
         <SettingsPage person={person} access={settings} onRegisterLeaveGuard={registerLeaveGuard} />
       ) : page.kind === 'intake' ? (
         <IntakePage
+          // A claim is its own intake: it starts from its servisan and leaves the other one be.
+          key={page.claim === undefined ? 'intake' : 'claim'}
           now={Date.now}
-          restoredDraft={restoredDraft}
-          onDraftChange={onDraftChange}
+          restoredDraft={page.claim ?? restoredDraft}
+          onDraftChange={page.claim === undefined ? onDraftChange : undefined}
           onOpened={(ticketId) => {
-            onDraftChange(null);
+            if (page.claim === undefined) onDraftChange(null);
             setSelectedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
@@ -204,6 +209,7 @@ export function Counter({
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
+          onStartClaim={(claim) => setPage({ kind: 'intake', claim })}
         />
       )}
     </AppShell>

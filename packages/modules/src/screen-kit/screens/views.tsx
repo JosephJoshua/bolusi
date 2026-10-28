@@ -1,5 +1,6 @@
-// Phone pieces every module's screens share: the four read states around a query, the banner for a
-// refused action, a captioned section and a one-task step screen with its bottom action.
+// Screen pieces every module's phone screens share: the four read states around a query, the
+// banner for a refused action, a captioned section and the full-screen step of a flow. React Native
+// only, so this lives under a `screens/` path (the platform-free boundary).
 import { t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import {
   AppShell,
@@ -18,12 +19,6 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { QueryState } from '../live.js';
-
-/** The chrome every full-screen step shares: the shell's sync chip and avatar. */
-export interface ScreenChrome {
-  readonly syncChip: ReactNode;
-  readonly avatar: ReactNode;
-}
 
 /**
  * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
@@ -99,48 +94,19 @@ export function ActionErrorBanner({
   );
 }
 
-/** A captioned group on a detail or review screen, with an optional compact action beside the title. */
-export function Section({
-  title,
-  action,
-  first = false,
-  children,
-  testID,
-}: {
-  readonly title: string;
-  readonly action?: ReactNode;
-  /** The screen's first section: the screen's own top padding is room enough above it. */
-  readonly first?: boolean | undefined;
-  readonly children: ReactNode;
-  readonly testID?: string | undefined;
-}): React.JSX.Element {
-  return (
-    <View style={first ? undefined : styles.section} testID={testID}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}
-        {action === undefined ? null : <View style={styles.sectionAction}>{action}</View>}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-/** A step that can no longer finish, because its record changed elsewhere. */
-export interface StepStale {
-  /** Already-localized: what changed. */
-  readonly message: string;
-  /** Already-localized: the bottom action that takes the user back. */
-  readonly backLabel: string;
+/** The chrome every full-screen step shares: the shell's sync chip and avatar. */
+export interface ScreenChrome {
+  readonly syncChip: ReactNode;
+  readonly avatar: ReactNode;
 }
 
 /**
  * One full-screen step of a flow (design-system §3.10: flows, not modals): a back arrow, the body,
- * the refused-action banner and one primary action at the bottom, with a hint above it while it
- * waits for something. A step whose choices are its rows has no primary action. A step that asks a
- * yes/no question puts the question over both answers, the "no" beside the primary as its equal.
+ * the refused-action banner and one primary action at the bottom. A step whose choices are its rows
+ * (picking a technician) has no primary action. A step that asks a yes/no question (did the customer
+ * agree?) puts the question over both answers, the "no" beside the primary as its equal.
  */
-export function StepScreen({
+export function FlowScreen({
   chrome,
   title,
   onBack,
@@ -190,12 +156,12 @@ export function StepScreen({
   readonly onClearNotice?: (() => void) | undefined;
   readonly overlay?: ReactNode;
   /**
-   * The record changed elsewhere and this step can no longer finish: said in the banner slot, and
-   * the bottom action becomes the way back. Held back while the step's own command runs, since
-   * that command changes the record too and the step closes as it lands: the runner clears `busy`
+   * The record changed elsewhere and this step can no longer finish: `message` is said in the
+   * banner slot, and the bottom action becomes the way back, labelled `backLabel`. Held back while the step's own command runs, since
+   * that command changes the ticket too and the step closes as it lands: the runner clears `busy`
    * and the step's `onDone` closes it in the same batched update, so the notice never shows.
    */
-  readonly stale?: StepStale | null | undefined;
+  readonly stale?: { readonly message: string; readonly backLabel: string } | null | undefined;
   /** A multi-step flow's step: each step opens scrolled to the top (AppShell `scrollKey`). */
   readonly scrollKey?: string | number | undefined;
   readonly testID: string;
@@ -289,7 +255,39 @@ export function StepScreen({
   );
 }
 
+/** A captioned group on a detail or review screen, with an optional compact action beside the title. */
+export function Section({
+  title,
+  action,
+  first = false,
+  children,
+  testID,
+}: {
+  readonly title: string;
+  readonly action?: ReactNode;
+  /** The screen's first section: the screen's own top padding is room enough above it. */
+  readonly first?: boolean | undefined;
+  readonly children: ReactNode;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  return (
+    <View style={first ? undefined : styles.section} testID={testID}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}
+        {action === undefined ? null : <View style={styles.sectionAction}>{action}</View>}
+      </View>
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
+  inert: { opacity: 0.45 },
+  question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },
+  answers: { flexDirection: 'row', gap: space.md },
+  answer: { flex: 1 },
   section: { marginTop: space.xl },
   sectionHeader: {
     flexDirection: 'row',
@@ -300,9 +298,4 @@ const styles = StyleSheet.create({
   },
   sectionAction: { marginRight: -space.sm },
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
-  hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
-  inert: { opacity: 0.45 },
-  question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },
-  answers: { flexDirection: 'row', gap: space.md },
-  answer: { flex: 1 },
 });

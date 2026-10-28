@@ -25,6 +25,8 @@ export interface ChipProps {
   readonly tone?: ChipTone | undefined;
   /** Present ⇒ the chip is pressable and gets a `button` role plus a `touch.min` hit area. */
   readonly onPress?: (() => void) | undefined;
+  /** Already-localized, when the label alone doesn't say what a press does ("Hapus Original"). */
+  readonly accessibilityLabel?: string | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -58,6 +60,7 @@ export function Chip({
   icon,
   tone = 'neutral',
   onPress,
+  accessibilityLabel,
   testID,
 }: ChipProps): React.JSX.Element {
   const { bg, fg } = TONE[tone];
@@ -86,7 +89,7 @@ export function Chip({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       onPress={onPress}
       hitSlop={{ top: HIT_SLOP_Y, bottom: HIT_SLOP_Y }}
       style={[styles.base, { backgroundColor: bg }]}

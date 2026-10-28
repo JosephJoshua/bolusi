@@ -129,6 +129,52 @@ describe('handover slip', () => {
     expect(text).not.toContain('KETENTUAN');
   });
 
+  it('prints each repair type’s warranty from the day the phone went home', () => {
+    const typed = sampleTicket({
+      outcome: 'repaired',
+      location: 'returned',
+      returnedAt: Date.UTC(2026, 9, 1, 3),
+      repairTypes: [
+        { item: 'screen', label: null, warrantyDays: 30, needsVideo: false },
+        { item: 'waterDamage', label: null, warrantyDays: 0, needsVideo: false },
+      ],
+    });
+    const text = allText(handoverSlip(typed, { ...ctx, handedOverByName: null, signature: null }));
+    expect(text).toMatch(/Jenis servisan\s+: Ganti layar, Kena air/);
+    expect(text).toContain('GARANSI');
+    expect(text).toMatch(/Ganti layar\s+: s\/d 31\/10\/2026/);
+    expect(text).toMatch(/Kena air\s+: tanpa garansi/);
+
+    const cancelled = allText(
+      handoverSlip(
+        { ...typed, outcome: 'cancelled', cancelFee: 0 },
+        { ...ctx, handedOverByName: null, signature: null },
+      ),
+    );
+    expect(cancelled).not.toContain('GARANSI');
+    expect(allText(intakeSlip(typed, ctx))).not.toContain('GARANSI');
+  });
+
+  it('a claim names its servisan and prints that one’s warranty, which it never extends', () => {
+    const screen = { item: 'screen', label: null, warrantyDays: 30, needsVideo: false };
+    const claim = sampleTicket({
+      outcome: 'repaired',
+      location: 'returned',
+      returnedAt: Date.UTC(2026, 9, 20, 3),
+      claimOfTicketId: 't0',
+      claimOf: {
+        id: 't0',
+        ticketNumber: 'K7Q-0005',
+        repairTypes: [screen],
+        returnedAt: Date.UTC(2026, 9, 1, 3),
+      },
+    });
+    const text = allText(handoverSlip(claim, { ...ctx, handedOverByName: null, signature: null }));
+    expect(text).toMatch(/Klaim dari\s+: K7Q-0005/);
+    expect(text).toMatch(/Ganti layar\s+: s\/d 31\/10\/2026/);
+    expect(allText(intakeSlip(claim, ctx))).toMatch(/Klaim dari\s+: K7Q-0005/);
+  });
+
   it('an intake receipt reprinted after pickup does not call the whole bill a DP', () => {
     const text = allText(
       intakeSlip(sampleTicket({ downPayment: 950_000, location: 'returned' }), ctx),
