@@ -61,6 +61,71 @@ export interface DeviceRegistry {
   storeId: string | null;
 }
 
+export interface InventoryCategories {
+  archived: number;
+  createdAt: number;
+  createdBy: string;
+  fields: string;
+  id: string | null;
+  isPart: number;
+  name: string;
+  nameFormat: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface InventoryItemFacets {
+  facet: string;
+  itemId: string;
+  position: number;
+  tenantId: string;
+  value: string;
+  valueKey: string;
+}
+
+export interface InventoryItemFits {
+  brand: string;
+  itemId: string;
+  model: string;
+  modelKey: string;
+  position: number;
+  tenantId: string;
+}
+
+export interface InventoryItems {
+  archived: number;
+  barcode: string | null;
+  categoryId: string | null;
+  code: string | null;
+  createdAt: number;
+  createdBy: string;
+  fieldValues: string;
+  fits: string | null;
+  id: string | null;
+  name: string;
+  nameAuto: number;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface InventoryMovements {
+  at: number;
+  counted: number | null;
+  id: string | null;
+  itemId: string;
+  kind: string;
+  note: string | null;
+  qty: number;
+  storeId: string;
+  tenantId: string;
+  useId: string | null;
+  useKind: string | null;
+  useLabel: string | null;
+  userId: string;
+}
+
 export interface MediaItems {
   attachedToOperationId: string | null;
   byteSize: number;
@@ -457,6 +522,11 @@ export interface DB {
   authSessions: AuthSessions;
   conflicts: Conflicts;
   deviceRegistry: DeviceRegistry;
+  inventoryCategories: InventoryCategories;
+  inventoryItemFacets: InventoryItemFacets;
+  inventoryItemFits: InventoryItemFits;
+  inventoryItems: InventoryItems;
+  inventoryMovements: InventoryMovements;
   mediaItems: MediaItems;
   metaKv: MetaKv;
   migrations: Migrations;

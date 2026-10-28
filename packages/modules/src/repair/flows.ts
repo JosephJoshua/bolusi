@@ -5,6 +5,7 @@ import type { MediaRef, MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 import { zMediaRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
@@ -197,6 +198,33 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     setPrintSettings: hasPermission(P.setPrintSettings),
     setUncollectedDays: hasPermission(P.setUncollectedDays),
   };
+}
+
+/** A servisan parts are drawn for: being worked on or waiting for a part, and still in the store. */
+export function partsInWork(ticket: {
+  readonly outcome: string;
+  readonly location: string;
+}): boolean {
+  return (
+    (ticket.outcome === 'in_repair' || ticket.outcome === 'waiting_for_parts') &&
+    ticket.location === 'in_store'
+  );
+}
+
+/**
+ * Whether this user may take or put back parts on the ticket now: the client side of repair's
+ * part-use rule (part-use.ts), for showing the actions. The rule decides again on save. Owners may
+ * correct any ticket past intake, so they see the actions on finished and cancelled ones too.
+ */
+export function canUseParts(
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'location' | 'technicianId'>,
+  userId: string,
+  hasPermission: (id: string) => boolean,
+): boolean {
+  if (!hasPermission(INVENTORY_PERMISSION.useParts) || ticket.outcome === 'received') return false;
+  if (hasPermission(INVENTORY_PERMISSION.correctUse)) return true;
+  if (!partsInWork(ticket)) return false;
+  return ticket.technicianId === userId || hasPermission(REPAIR_PERMISSION.assign);
 }
 
 export type TicketAction =

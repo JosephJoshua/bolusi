@@ -83,6 +83,7 @@ import {
 } from '@bolusi/device/bootstrap/sync-status-reads';
 import { useCaptureHost, type CapturePlatform } from '../media/CaptureHost.js';
 import { useSignatureHost } from '../media/SignatureHost.js';
+import { useScanHost, type ScanPlatform } from '../media/ScanHost.js';
 import type { SyncClient } from '@bolusi/device/bootstrap/sync-client';
 import type { AppStatePort } from '@bolusi/device/bootstrap/triggers';
 import { createIdleTicker } from '@bolusi/device/session/idle-ticker';
@@ -219,7 +220,12 @@ export interface RootProps {
     runtime: AppRuntime,
     identity: CommandIdentity,
     media: MediaClient | null,
-    capture: { readonly capturePhoto: PhotoCapture; readonly captureSignature: SignatureCapture },
+    capture: {
+      readonly capturePhoto: PhotoCapture;
+      readonly captureSignature: SignatureCapture;
+      /** Reads a barcode or QR code for the items screens; absent without a camera. */
+      readonly scanCode: (() => Promise<string | null>) | undefined;
+    },
   ) => RepairRuntime;
   /**
    * RN `AppState`, injected — the idle ticker's foreground/resume signal (api/02-auth §6.4).
@@ -280,6 +286,8 @@ export interface RootProps {
    * `UNWIRED_NOTES_MEDIA.capturePhoto` rather than a stub that behaves like a cancel.
    */
   readonly capturePlatform?: CapturePlatform | undefined;
+  /** The camera's code scanner, bound at index.ts like `capturePlatform`. `undefined` ⇒ no scan. */
+  readonly scanPlatform?: ScanPlatform | undefined;
   /**
    * The notification permission (Android 13+ POST_NOTIFICATIONS), bound over `expo-notifications` at
    * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
@@ -304,6 +312,7 @@ export function Root({
   uploadPinVerifier,
   staffAdmin,
   capturePlatform,
+  scanPlatform,
   notificationPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
@@ -418,6 +427,7 @@ export function Root({
    * `test/live-shell-dead-controls.test.tsx` guards it.
    */
   const [capturePlatformFixed] = useState(capturePlatform ?? null);
+  const [scanPlatformFixed] = useState(scanPlatform ?? null);
 
   useEffect(() => {
     let disposed = false;
@@ -837,6 +847,9 @@ export function Root({
   /** The signature pad (06 §2.3) for handover, stamped with the same session identity. */
   const signature = useSignatureHost({ media, identity: notes?.identity ?? null });
 
+  /** The code scanner for the items list and form. It reads a code and stores nothing. */
+  const scan = useScanHost(scanPlatformFixed);
+
   /**
    * THE IDLE TICK (task 133; api/02-auth §6.4) — the production caller `SessionManager.checkIdle()`
    * never had.
@@ -944,6 +957,7 @@ export function Root({
           createRepair?.(app, enrollment.runtime, identity, media, {
             capturePhoto: capture.capturePhoto,
             captureSignature: signature.captureSignature,
+            scanCode: scan.scanCode,
           }) ?? null,
       });
     });
@@ -959,6 +973,7 @@ export function Root({
     media,
     capture.capturePhoto,
     signature.captureSignature,
+    scan.scanCode,
   ]);
 
   /**
@@ -1107,6 +1122,8 @@ export function Root({
         capture={capture.surface}
         // The signature pad while a customer signs at handover (06 §2.3), else null.
         signature={signature.surface}
+        // The code scanner while it looks for a code, else null.
+        scan={scan.surface}
         // SEC-AUTH-08 work retention (task 155) — the READ and WRITE halves of task 133's path, which
         // shipped with a producer (`updateWorkspace`) and NO consumer, so a half-typed note was still
         // lost on a real device. `workspace` is the active user's retained work from the shell session

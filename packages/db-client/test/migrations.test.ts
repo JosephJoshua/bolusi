@@ -15,6 +15,11 @@ const SPEC_TABLES = [
   'auth_sessions',
   'conflicts',
   'device_registry',
+  'inventory_categories',
+  'inventory_item_facets',
+  'inventory_item_fits',
+  'inventory_items',
+  'inventory_movements',
   'media_items',
   'meta_kv',
   'migrations',
@@ -51,6 +56,11 @@ const SPEC_TABLES = [
 // Every index the spec declares (10-db §9.2/§9.4/§9.6, §10 query-pattern table).
 const SPEC_INDEXES = [
   'idx_conflicts_surfaced',
+  'idx_inventory_item_facets_value',
+  'idx_inventory_item_fits_model',
+  'idx_inventory_items_category',
+  'idx_inventory_movements_part',
+  'idx_inventory_movements_use',
   'idx_media_items_queue',
   'idx_money_entries_document',
   'idx_money_entries_related',
@@ -151,7 +161,7 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18]);
+    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
@@ -173,6 +183,7 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 16, name: 'sync_token_rejections', applied_at: 1_700_000_000_000 },
       { version: 17, name: 'repair_uncollected', applied_at: 1_700_000_000_000 },
       { version: 18, name: 'money', applied_at: 1_700_000_000_000 },
+      { version: 19, name: 'inventory', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -182,11 +193,11 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18]);
+    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 16 }]);
+    expect(rows.rows).toEqual([{ c: 17 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);

@@ -11,6 +11,7 @@ export { PrintSettingsScreen, type PrintSettingsScreenProps } from './PrintSetti
 export { PaperScreen, type PaperScreenProps } from './PaperScreen.js';
 export { UncollectedDaysScreen, type UncollectedDaysScreenProps } from './UncollectedDaysScreen.js';
 export type { RepairChrome } from './parts.js';
+export { catalogModelSearch } from '../model-picker.js';
 export {
   RepairRuntimeProvider,
   useRepairRuntime,

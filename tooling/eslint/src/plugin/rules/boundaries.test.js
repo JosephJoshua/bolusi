@@ -20,6 +20,11 @@ const tester = new RuleTester({
 
 tester.run('boundaries', rule, {
   valid: [
+    // one module's screens sharing another screens file inside the package (both Hermes-only UI)
+    {
+      code: `import { FlowScreen } from '../../screen-kit/screens/views.js';`,
+      filename: '/repo/packages/modules/src/inventory/screens/PartsHome.tsx',
+    },
     // The platform-free lock follows "runs on Hermes", not "is shipped". Build tooling and the
     // Node test lane (`test/**/*.test.*`) run only on Node — 08 §3.4's CI leg says so — and a
     // codegen/gate script cannot read the repo without node:fs. Anything under test/ that is NOT
@@ -330,6 +335,12 @@ tester.run('boundaries', rule, {
     {
       code: `import { NotesScreen } from '@bolusi/modules/notes/screens';`,
       filename: '/repo/apps/server/src/routers/sync.ts',
+      errors: [{ messageId: 'screensOutsideMobile' }],
+    },
+    // a platform-free module file reaching into a screens folder relatively → error
+    {
+      code: `import { FlowScreen } from '../screen-kit/screens/views.js';`,
+      filename: '/repo/packages/modules/src/inventory/manifest.ts',
       errors: [{ messageId: 'screensOutsideMobile' }],
     },
     // a platform-free module file still may not reach a screen

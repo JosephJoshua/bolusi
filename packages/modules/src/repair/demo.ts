@@ -10,6 +10,8 @@
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 
+import { demoInventoryRuntime } from '../inventory/demo.js';
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
@@ -17,6 +19,8 @@ import {
   REPAIR_PERMISSION,
   type RepairOutcome,
 } from './constants.js';
+import { partsInWork } from './flows.js';
+import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
@@ -47,6 +51,7 @@ const browser = globalThis as unknown as {
 
 const HOUR = 3_600_000;
 const P = REPAIR_PERMISSION;
+const I = INVENTORY_PERMISSION;
 const M = MONEY_PERMISSION;
 
 /** Who the harness can act as: the owner (everything), the counter and a technician. */
@@ -54,15 +59,29 @@ export const DEMO_REPAIR_ROLES = {
   owner: {
     userId: 'u-andi',
     name: 'Andi Pratama',
-    permissions: [...Object.values(P), ...Object.values(M)],
+    permissions: [...Object.values(P), ...Object.values(I), ...Object.values(M)],
   },
   counter: {
     userId: 'u-siti',
     name: 'Siti Rahayu',
     // No cancel or discount: only owners lower what a customer pays (how counter staff kept cash).
-    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover, M.read, M.receive],
+    permissions: [
+      P.read,
+      P.intake,
+      P.assign,
+      P.quoteChange,
+      P.handover,
+      I.read,
+      I.useParts,
+      M.read,
+      M.receive,
+    ],
   },
-  technician: { userId: 'u-budi', name: 'Budi Santoso', permissions: [P.read, P.work] },
+  technician: {
+    userId: 'u-budi',
+    name: 'Budi Santoso',
+    permissions: [P.read, P.work, I.read, I.useParts],
+  },
   /** A store owner: may choose what this store uses, not change the franchise's lists. */
   storeOwner: {
     userId: 'u-yosua',
@@ -78,6 +97,8 @@ export const DEMO_REPAIR_ROLES = {
       P.correctDownPayment,
       P.setPrintSettings,
       P.setUncollectedDays,
+      // Categories are the business owner's alone.
+      ...Object.values(I).filter((id) => id !== I.manageCategories),
       ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
     ],
   },
@@ -1145,8 +1166,33 @@ export function demoRepairRuntime(
     imageDataUri: (ref) => Promise.resolve(placeholderUri(ref.mediaId)),
   };
 
+  // The parts shelf, with repair's say over which servisan may draw on it (repair/part-use.ts).
+  const inventory = demoInventoryRuntime({
+    now: HARNESS_NOW,
+    actor: () => actor,
+    checkUse: (ticketId, who) => {
+      const t = find(ticketId);
+      if (t.outcome === 'received') throw REPAIR_REFUSALS.refuse('partsNotInWork');
+      if (who.permissions.includes(I.correctUse)) return t.ticketNumber;
+      if (!partsInWork(t)) throw REPAIR_REFUSALS.refuse('partsNotInWork');
+      if (t.technicianId !== who.userId && !who.permissions.includes(P.assign)) {
+        throw REPAIR_REFUSALS.refuse('partsNotYours', { code: 'PERMISSION_DENIED' });
+      }
+      return t.ticketNumber;
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    notify,
+    searchModels: catalogModelSearch({
+      query: (name: string, input: Input) => queries[name]!(input),
+    } as unknown as Pick<RepairRuntime, 'query'>),
+  });
+
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
+    inventory,
     get userId() {
       return actor.userId;
     },

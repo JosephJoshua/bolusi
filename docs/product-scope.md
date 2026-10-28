@@ -337,6 +337,48 @@ The repair payment journey supports deposits, split payments, and the remaining 
 
 The owner chose an actual repair business outcome rather than stock control alone, a retail-sale-first sequence, or intake without pickup/payment. A full repair journey needs genuine stock, customer, payment, evidence, and printing seams, but does not require shipping a standalone retail checkout first. Automatically treating an externally paid QRIS/EDC transaction as provider-confirmed would substitute a cashier claim for a provider result. Promising universal printer or existing-bank API compatibility without real hardware/merchant access would create a false acceptance gate.
 
+## Parts and stock (2026-10-28)
+
+Agreed with the owner, as the first part of parts, purchasing and stock.
+
+- **One parts list for the business** (the inventory module), built for
+  thousands of parts. Stock is per store. Owners add parts and correct stock
+  ("Koreksi stok", owners only); starting stock comes from a correction. The
+  phones a part fits are picked from the phone catalog, as at intake, and the
+  take step offers the parts that fit the servisan's phone first.
+- **Taking a part drops stock; putting it back returns it.** Technicians take
+  parts for their own servisan, and the counter (who assigns work) can take for
+  any servisan. There is no storekeeper.
+- **No cheating the shelf:** parts move only for a servisan being worked on
+  (Dikerjakan or Tunggu sparepart, in the store); every take records who and when; only what a
+  servisan took can go back; once it is repaired, cancelled or handed back only
+  an owner corrects its parts. A cancelled servisan shows parts not yet back.
+- **Customers never see part prices:** parts are not bill lines, and taking a
+  part never changes the price.
+- **Offline first:** two phones may take the last part; stock goes below zero
+  and the owner sees it under "Stok minus" instead of the repair being blocked.
+  A count is the shelf at the moment it was made (by the phone's clock): a take
+  made after it still comes off when it syncs, one made before is already in the
+  count, and of two counts the later one stands.
+- **Categories and built names (2026-10-28):** the list holds every item the
+  shops stock, not only parts. The business owner alone sets up categories:
+  each lists the fields its items fill in (pick one, pick several, text, or the
+  phones it fits) and a name format such as `LCD {HP} {Kualitas} {Tambahan}`,
+  so names read one way whoever enters them. Choices grow as new values are
+  typed ("+ frame"). A name can still be typed for an odd item; a format change
+  renames only the items it named. The owner marks which categories are
+  spareparts: the take step offers only those and items with no category. Tags
+  are free labels on any item.
+- **Finding items:** fuzzy, typo-tolerant search over names, codes, barcodes,
+  field values, tags and phones; filters by category, stock, field values and
+  tags; a camera scan of a barcode or QR code opens its item (exact match only,
+  never a near miss). The PC gets a spreadsheet-like table with paste from Excel.
+- **Next, in order:** supplier orders and receiving, supplier invoices and
+  payments (on the shared money ledger), transfers between stores, supplier
+  returns, stock counts across many parts (a fast table on the PC). Part costs
+  will be seen only by owners and whoever records purchases; a sell price per
+  store waits for the shop POS.
+
 ## Open product choices
 
 - Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, the user-facing v1 permission/grant matrix and server/offline enforcement of high-risk approvals, manager refund/price-override caps and per-store limits, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.

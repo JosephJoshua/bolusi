@@ -90,6 +90,83 @@ function journey(world: ChainWorld): OpSpec[] {
   const ticket = id(2);
   const cancelledTicket = id(3);
   const note = id(4);
+  const part = id(8);
+  const category = id(9);
+  // A part drawn for the servisan while it is being worked on, and the unused one put back.
+  const partsUsed = (): OpSpec[] => {
+    const use = { kind: 'repair_ticket', id: ticket, label: formatTicketNumber(world.deviceId, 1) };
+    const movement = (n: number, type: string, payload: Record<string, unknown>): OpSpec => ({
+      type,
+      entityType: 'inventory_movement',
+      entityId: id(0x300 + n),
+      payload,
+    });
+    const lcdFields = [
+      { id: 'hp', label: 'HP', kind: 'phones', options: [] },
+      { id: 'q', label: 'Kualitas', kind: 'one', options: ['Original', 'OEM'] },
+    ];
+    return [
+      {
+        type: 'inventory.category_added',
+        entityType: 'inventory_category',
+        entityId: category,
+        storeId: null,
+        payload: { name: 'LCD', isPart: true, fields: lcdFields, nameFormat: 'LCD {HP}' },
+      },
+      {
+        type: 'inventory.category_edited',
+        entityType: 'inventory_category',
+        entityId: category,
+        storeId: null,
+        payload: {
+          name: 'LCD',
+          isPart: true,
+          fields: lcdFields,
+          nameFormat: 'LCD {HP} {Kualitas}',
+          archived: false,
+        },
+      },
+      {
+        type: 'inventory.item_added',
+        entityType: 'inventory_item',
+        entityId: part,
+        storeId: null,
+        payload: {
+          name: 'LCD Samsung Galaxy A14 Original',
+          nameAuto: true,
+          code: null,
+          barcode: '8991234567890',
+          categoryId: category,
+          values: { q: ['Original'] },
+          tags: ['laris'],
+          fits: [{ brand: 'Samsung', model: 'Galaxy A14' }],
+        },
+      },
+      {
+        type: 'inventory.item_edited',
+        entityType: 'inventory_item',
+        entityId: part,
+        storeId: null,
+        payload: {
+          name: 'LCD Samsung A14',
+          nameAuto: false,
+          code: 'LCD-A14',
+          barcode: null,
+          categoryId: null,
+          values: {},
+          tags: [],
+          fits: [
+            { brand: 'Samsung', model: 'Galaxy A14' },
+            { brand: '', model: 'A14 5G' },
+          ],
+          archived: false,
+        },
+      },
+      movement(1, 'inventory.stock_counted', { itemId: part, counted: 3, expected: 0, note: null }),
+      movement(2, 'inventory.item_taken', { itemId: part, qty: 2, use }),
+      movement(3, 'inventory.item_put_back', { itemId: part, qty: 1, use }),
+    ];
+  };
   const opened = (ticketId: string, ticketNumber: string, lineId: string): OpSpec => ({
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
@@ -227,6 +304,7 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.ticket_claimed', {}),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),
+    ...partsUsed(),
     onTicket('repair.quote_change_proposed', {
       lineId: id(0x201),
       kind: 'part',

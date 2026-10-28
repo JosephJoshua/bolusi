@@ -37,6 +37,14 @@
       "types": "./dist/repair/desktop/index.d.ts",
       "default": "./dist/repair/desktop/index.js"
     },
+    "./inventory": {
+      "types": "./dist/inventory/index.d.ts",
+      "default": "./dist/inventory/index.js"
+    },
+    "./inventory/screens": {
+      "types": "./dist/inventory/screens/index.d.ts",
+      "default": "./dist/inventory/screens/index.js"
+    },
     "./money": {
       "types": "./dist/money/index.d.ts",
       "default": "./dist/money/index.js"
@@ -57,6 +65,8 @@
     "./notes/i18n/en.json": "./notes/i18n/en.json",
     "./repair/i18n/id.json": "./repair/i18n/id.json",
     "./repair/i18n/en.json": "./repair/i18n/en.json",
+    "./inventory/i18n/id.json": "./inventory/i18n/id.json",
+    "./inventory/i18n/en.json": "./inventory/i18n/en.json",
     "./money/i18n/id.json": "./money/i18n/id.json",
     "./money/i18n/en.json": "./money/i18n/en.json"
   },
@@ -64,6 +74,7 @@
     "dist",
     "notes/i18n",
     "repair/i18n",
+    "inventory/i18n",
     "money/i18n"
   ],
   "dependencies": {

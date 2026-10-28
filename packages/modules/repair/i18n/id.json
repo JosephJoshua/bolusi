@@ -618,6 +618,8 @@
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
+    "partsNotInWork": "Sparepart hanya bisa diambil atau dikembalikan saat servisan sedang dikerjakan.",
+    "partsNotYours": "Servisan ini dipegang teknisi lain.",
     "notPaid": "Servisan ini belum lunas.",
     "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas.",
     "downPaymentRefunded": "Sebagian DP ini sudah dikembalikan, jadi tidak bisa diubah."

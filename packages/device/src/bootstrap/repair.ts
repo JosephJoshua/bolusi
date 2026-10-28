@@ -7,7 +7,7 @@
  */
 import type { CommandIdentity } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
-import { REPAIR_TICKET_ENTITY, tn } from '@bolusi/modules/repair';
+import { REPAIR_TICKET_ENTITY, catalogModelSearch, tn } from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { PhotoCapture } from '@bolusi/modules/screen-kit';
 import type { Kysely } from 'kysely';
@@ -15,6 +15,7 @@ import type { Kysely } from 'kysely';
 import type { MediaClient } from '../media/client.js';
 import type { GalleryPort } from '../media/import.js';
 import { createPhotoSharer, type SharePlatform } from '../media/share.js';
+import { createInventoryRuntime } from '../models/inventory/runtime-adapter.js';
 import { createRepairRuntime, type RepairMediaSeams } from '../models/repair/runtime-adapter.js';
 
 import type { Bootstrapped } from './bootstrap.js';
@@ -74,6 +75,8 @@ export function createSessionRepairRuntime(deps: {
   readonly media: RepairMediaSeams;
   /** Absent ⇒ this build cannot print and the screens show no print action. */
   readonly print?: PrintPlatform | undefined;
+  /** The camera's code scanner for the items screens; absent ⇒ they offer no scan. */
+  readonly scanCode?: (() => Promise<string | null>) | undefined;
 }): RepairRuntime {
   const { app, identity } = deps;
   const printing =
@@ -85,18 +88,31 @@ export function createSessionRepairRuntime(deps: {
           loadThumbnail: deps.media.loadThumbnail,
           platform: deps.print,
         });
-  return createRepairRuntime({
-    runtime: deps.runtime.moduleRuntimeFor({
-      tenantId: identity.tenantId,
-      storeId: identity.storeId,
-      deviceId: identity.deviceId,
-    }),
+  const runtime = deps.runtime.moduleRuntimeFor({
+    tenantId: identity.tenantId,
+    storeId: identity.storeId,
+    deviceId: identity.deviceId,
+  });
+  // The parts a servisan draws on, and the parts list the shell opens from the account menu. Its
+  // "fits" picker searches repair's phone catalog, bound once the repair runtime exists.
+  let repair: RepairRuntime | null = null;
+  const inventory = createInventoryRuntime({
+    runtime,
+    invalidation: app.invalidation,
+    identity,
+    searchModels: (text, limit) => catalogModelSearch(repair!)(text, limit),
+    scanCode: deps.scanCode,
+  });
+  repair = createRepairRuntime({
+    runtime,
     db: app.db.db,
     invalidation: app.invalidation,
     identity,
     media: deps.media,
     printing,
+    inventory,
   });
+  return repair;
 }
 
 /**

@@ -50,7 +50,7 @@ import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstra
 import { MEDIA_DRAIN_TASK } from '@bolusi/device/media/background-task';
 import type { MediaClient } from '@bolusi/device/media/client';
 import { createMediaClientForApp } from './src/media/native.js';
-import { createExpoCapturePlatform } from './src/media/native-capture.js';
+import { createExpoCapturePlatform, createExpoScanPlatform } from './src/media/native-capture.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from '@bolusi/device/media/transport';
@@ -437,8 +437,11 @@ function createRepair(
   runtime: AppRuntime,
   identity: CommandIdentity,
   media: MediaClient | null,
-  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'>,
+  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'> & {
+    readonly scanCode: (() => Promise<string | null>) | undefined;
+  },
 ): RepairRuntime {
+  const { scanCode, ...photos } = capture;
   const keystore = new SecureStoreKeyStore();
   const loadModelPhoto = createPhonePhotoLoader({
     baseUrl: apiBaseUrl(),
@@ -452,11 +455,12 @@ function createRepair(
     identity,
     media: repairMediaSeamsFor(
       media,
-      { ...capture, loadModelPhoto },
+      { ...photos, loadModelPhoto },
       expoSharePlatform,
       galleryPickerFor(media, identity, expoGallery),
     ),
     print: expoPrintPlatform,
+    scanCode,
   });
 }
 
@@ -599,6 +603,7 @@ function buildRootProps(): RootProps {
     // this is what turns the notes editor's attach button from a rejecting stub into a camera, and
     // what gives 06 §7's storage banners their first production render.
     capturePlatform: createExpoCapturePlatform(),
+    scanPlatform: createExpoScanPlatform(),
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process

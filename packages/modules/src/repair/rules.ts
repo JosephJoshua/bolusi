@@ -83,6 +83,8 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'customerAgreementMismatch',
   'downPaymentAboveTotal',
   'downPaymentRecorded',
+  'partsNotInWork',
+  'partsNotYours',
   'notPaid',
   'unpaidOwnerOnly',
   'downPaymentRefunded',

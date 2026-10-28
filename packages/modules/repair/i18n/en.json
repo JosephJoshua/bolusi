@@ -618,6 +618,8 @@
     "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it.",
+    "partsNotInWork": "Parts can only be taken or put back while the repair is being worked on.",
+    "partsNotYours": "Another technician is working on this repair.",
     "notPaid": "This servisan isn’t paid in full yet.",
     "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid.",
     "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed."

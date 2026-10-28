@@ -7,6 +7,9 @@ import { registerNotesCatalog } from '@bolusi/modules/notes/screens';
 import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import { registerRepairCatalog } from '@bolusi/modules/repair/screens';
+import idInventoryCatalog from '@bolusi/modules/inventory/i18n/id.json';
+import enInventoryCatalog from '@bolusi/modules/inventory/i18n/en.json';
+import { registerInventoryCatalog } from '@bolusi/modules/inventory/screens';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
@@ -32,6 +35,11 @@ export const CLIENT_SCREEN_MODULES: readonly ClientScreenModule[] = [
     moduleId: 'repair',
     register: registerRepairCatalog,
     catalogs: { id: idRepairCatalog, en: enRepairCatalog },
+  },
+  {
+    moduleId: 'inventory',
+    register: registerInventoryCatalog,
+    catalogs: { id: idInventoryCatalog, en: enInventoryCatalog },
   },
   {
     moduleId: 'money',

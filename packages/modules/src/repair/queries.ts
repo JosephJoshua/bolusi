@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import { sql, type Kysely } from 'kysely';
+import { sql } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -39,6 +39,7 @@ import {
   type IntakeOptionList,
   type IntakeOptionSettings,
 } from './intake-options.js';
+import { userNames } from '../shared/user-names.js';
 import { paidOnDocumentSql } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
@@ -165,25 +166,6 @@ export interface TicketDetailRow extends TicketSummaryRow {
 
 // ── shared pieces ──────────────────────────────────────────────────────────────────────────────
 
-/** The client-only users directory, reached by narrow cast as notes' getNote does. */
-interface UsersLookup {
-  readonly usersDirectory: { readonly id: string; readonly name: string };
-}
-
-async function userNames(
-  qctx: Qctx,
-  ids: readonly (string | null)[],
-): Promise<Map<string, string>> {
-  const wanted = [...new Set(ids.filter((id): id is string => id !== null))];
-  if (wanted.length === 0) return new Map();
-  const rows = await (qctx.db as unknown as Pick<Kysely<UsersLookup>, 'selectFrom'>)
-    .selectFrom('usersDirectory')
-    .select(['id', 'name'])
-    .where('id', 'in', wanted)
-    .execute();
-  return new Map(rows.map((row) => [row.id, row.name]));
-}
-
 function summaryQuery(qctx: Qctx) {
   return qctx.db
     .selectFrom('repairTickets as t')
@@ -261,7 +243,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
 
 async function toSummaries(qctx: Qctx, rows: readonly RawSummary[]): Promise<TicketSummaryRow[]> {
   const names = await userNames(
-    qctx,
+    qctx.db,
     rows.flatMap((row) => [row.technicianId, row.cancelledBy]),
   );
   return rows.map((row) => toSummary(row, names));
@@ -691,7 +673,7 @@ export async function getTicketHandler(
     .orderBy('id', 'asc')
     .execute();
 
-  const names = await userNames(qctx, [
+  const names = await userNames(qctx.db, [
     summary.technicianId,
     detail.createdBy,
     ...events.map((event) => event.actorId),

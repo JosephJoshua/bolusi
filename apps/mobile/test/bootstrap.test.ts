@@ -387,11 +387,12 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
     // T-14, and the reason this test is written this way: `registerModules([])` SUCCEEDS and returns
     // a registry that folds nothing and answers `undefined` to every lookup. A bootstrap looping
     // over it reports green having registered nothing. So assert the COUNT.
-    expect(CLIENT_MODULES).toHaveLength(5);
+    expect(CLIENT_MODULES).toHaveLength(6);
     expect(app.registry.modules.map((m) => m.id)).toStrictEqual([
       'platform',
       'notes',
       'repair',
+      'inventory',
       'money',
       'auth',
     ]);
@@ -407,7 +408,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(43);
+    expect(app.registry.permissions.size).toBe(49);
     expect(app.registry.permissions.ids()).toStrictEqual([
       'auth.audit_view',
       'auth.device_enroll',
@@ -421,6 +422,12 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'auth.user_deactivate',
       'auth.user_edit',
       'auth.user_reset_pin',
+      'inventory.correct_use',
+      'inventory.count',
+      'inventory.manage_categories',
+      'inventory.manage_items',
+      'inventory.read',
+      'inventory.use_parts',
       'money.adjust_cash',
       'money.count_cash',
       'money.extend_credit',
