@@ -48,6 +48,7 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'refundAbovePaid',
   'notThisStore',
   'accountKindChanged',
+  'countRequired',
   'countNotFound',
   'countSettled',
   'countSuperseded',
@@ -442,11 +443,20 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     await requireFreshEntry(db, op);
   };
 
-  /** An owner's adjustment settles this store's latest count once, when it names one. */
+  /**
+   * An owner's adjustment settles this store's latest count once. The payload still allows no count
+   * (schema v1), but a correction that names none would move the book with no count behind it, so
+   * none is recorded any more.
+   */
   const cashAdjustedRule: Rule = async (op, { db }) => {
     const { amount, countId } = payloadOf<{ amount: number; countId: string | null }>(op);
     await requireFreshEntry(db, op);
-    if (countId === null) return;
+    if (countId === null) {
+      throw refuse('countRequired', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'countId', issue: 'an adjustment settles a count' },
+      });
+    }
     const count = await db
       .selectFrom('moneyEntries')
       .select(['id', 'amount', 'createdAt'])

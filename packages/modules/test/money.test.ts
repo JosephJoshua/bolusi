@@ -489,6 +489,41 @@ describe('the drawer', () => {
     await expectBalancedBooks(h);
   });
 
+  test('an adjustment always settles a count: one naming none is refused', async () => {
+    h = await openRepairHarness(514);
+    await h.money('moveCash', { kind: 'float', amount: 100_000, reason: 'Modal' }, h.cashierId);
+    // A screen never sends one without a count, so drive the op past the command's input, as
+    // another device's push would arrive.
+    const { MONEY_OP: OP } = await import('../src/money/index.js');
+    const ctx = h.runtime.commands.createContext(h.storeOwnerId);
+    const unbound = h.runtime.commands.execute(
+      {
+        permission: 'money.adjust_cash',
+        input: { parse: (x: unknown) => x },
+        handler: (_input: unknown, c: typeof ctx) => ({
+          ops: [
+            c.op({
+              type: OP.cashAdjusted,
+              entityType: 'money_entry',
+              entityId: c.newId(),
+              payload: { amount: 50_000, countId: null, reason: 'Tambah' },
+            }),
+          ],
+          result: null,
+        }),
+      } as never,
+      {} as never,
+      ctx,
+    );
+    await expectRefused(unbound, 'VALIDATION_FAILED', 'countRequired');
+    expect((await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0].expected).toBe(100_000);
+    // The command itself names the count it settles.
+    await expectRefused(
+      h.money('adjustCash', { amount: 50_000, reason: 'Tambah' }, h.storeOwnerId),
+      'VALIDATION_FAILED',
+    );
+  });
+
   test('an owner settles the difference as it stands, not as an older screen showed it', async () => {
     h = await openRepairHarness(512);
     await h.money('moveCash', { kind: 'float', amount: 100_000, reason: 'Modal' }, h.cashierId);

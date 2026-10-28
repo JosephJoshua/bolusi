@@ -29,6 +29,7 @@
     "notThisStore": "Ini milik toko lain.",
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
+    "countRequired": "Selisih kas hanya diselesaikan dari hitungan kas.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
     "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",

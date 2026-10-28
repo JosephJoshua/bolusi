@@ -38,6 +38,7 @@ export const MONEY_KEYS = [
   'money.refusal.alreadyVoided',
   'money.refusal.chargeMismatch',
   'money.refusal.countNotFound',
+  'money.refusal.countRequired',
   'money.refusal.countSettled',
   'money.refusal.countSuperseded',
   'money.refusal.differenceChanged',

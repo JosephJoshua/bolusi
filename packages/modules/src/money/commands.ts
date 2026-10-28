@@ -302,7 +302,7 @@ export const adjustCashInput = z
       .min(-MAX_AMOUNT)
       .max(MAX_AMOUNT)
       .refine((n) => n !== 0),
-    countId: zUuid.nullable().default(null),
+    countId: zUuid,
     reason: zReason,
   })
   .strict();

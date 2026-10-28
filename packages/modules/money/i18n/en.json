@@ -29,6 +29,7 @@
     "notThisStore": "This belongs to another store.",
     "accountKindChanged": "A payment method’s type can’t be changed.",
     "countNotFound": "This cash count wasn’t found.",
+    "countRequired": "A cash difference is settled only from a cash count.",
     "countSettled": "This cash count is already settled.",
     "countSuperseded": "There is a newer cash count. Settle the latest difference.",
     "differenceChanged": "The difference has changed. Check it again before settling.",
