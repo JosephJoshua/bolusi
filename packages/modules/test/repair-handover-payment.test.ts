@@ -94,7 +94,13 @@ async function ledger(harness: RepairHarness, ticketId: string) {
     balance: number;
     charged: number;
     paid: number;
-    entries: { kind: string; account: string | null; amount: number; tendered: number | null }[];
+    entries: {
+      kind: string;
+      account: string | null;
+      amount: number;
+      tendered: number | null;
+      reason: string | null;
+    }[];
   };
 }
 
