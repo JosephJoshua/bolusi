@@ -1,6 +1,6 @@
 // Users sub-router (api/02-auth §5.4). Bearer-guarded; the §4.5 matrix + the §5.4 anti-escalation
 // rules are enforced here against the server directory.
-import { compareCanonicalOrder, OWNER_POWER_PERMISSIONS } from '@bolusi/core';
+import { compareCanonicalOrder, isAheadOfServer, OWNER_POWER_PERMISSIONS } from '@bolusi/core';
 import { buildPinVerifierRow, type TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
@@ -53,6 +53,31 @@ function enforceUsersQuota(deps: ServerDeps, tenantId: string, now: number): voi
 /** A verifier `asOf` beats the stored one iff it is strictly later in canonical order (§5.3). */
 function isNewer(candidate: CanonicalRef, stored: CanonicalRef): boolean {
   return compareCanonicalOrder(candidate, stored) > 0;
+}
+
+/**
+ * Refuse a verifier `asOf` (§5.3) the caller could not honestly hold. The greatest-`asOf` merge
+ * trusts it, so a far-future one would beat every later reset and pin the verifier for good. It may
+ * not be further ahead of the server clock than an op may (core sync/clock-guard.ts), and when a
+ * device posts it, it must be a position on that device's own log — the PIN op that gave the
+ * verifier its `asOf` was appended there (core auth/pin-flows.ts).
+ */
+function assertPlausibleAsOf(
+  asOf: CanonicalRef,
+  now: number,
+  path: readonly string[],
+  deviceId: string | undefined,
+): void {
+  const issue = (field: string, message: string) =>
+    new ApiError('VALIDATION_FAILED', {
+      issues: [{ path: [...path, 'asOf', field], code: 'custom', message }],
+    });
+  if (isAheadOfServer(asOf.timestamp, now)) {
+    throw issue('timestamp', 'asOf.timestamp is ahead of the server clock');
+  }
+  if (deviceId !== undefined && asOf.deviceId !== deviceId) {
+    throw issue('deviceId', 'asOf.deviceId must be the posting device');
+  }
 }
 
 async function targetStoreIds(db: TenantDb, userId: string): Promise<string[]> {
@@ -197,6 +222,9 @@ export function createUsersRouter(deps: ServerDeps) {
             const roles = await loadRoles(db, body.roleIds);
             if (await rolesConferOwnerPowers(db, roles)) {
               await requireTenantAdmin(db, acting, TENANT_ADMIN_PERMISSION);
+            }
+            if (body.pinVerifier !== null) {
+              assertPlausibleAsOf(body.pinVerifier.asOf, t, ['pinVerifier'], undefined);
             }
             enforceUsersQuota(deps, tenantId, t);
 
@@ -472,7 +500,8 @@ export function createUsersRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
           // pin-verifier is device-token only (§4.5: control session "—").
-          if (c.get('device') === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
+          const device = c.get('device');
+          if (device === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
 
           const applied = await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
@@ -531,6 +560,7 @@ export function createUsersRouter(deps: ServerDeps) {
                   });
               }
             }
+            assertPlausibleAsOf(body.verifier.asOf, t, ['verifier'], device.deviceId);
             enforceUsersQuota(deps, tenantId, t);
 
             // Greatest-asOf merge (§5.3): a stale POST is a no-op (idempotent convergence).
