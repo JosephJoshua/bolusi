@@ -57,9 +57,12 @@ import {
   type ProjectionOperation,
 } from '@bolusi/core';
 
-import { bootOncePerRealm, bootstrap } from '../src/bootstrap/bootstrap.js';
-import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/bootstrap/recovery.js';
-import { CLIENT_MODULES } from '../src/bootstrap/modules.js';
+import { bootOncePerRealm, bootstrap } from '@bolusi/device/bootstrap/bootstrap';
+import {
+  bootWithLocalRecovery,
+  isUnrecoverableLocalDbError,
+} from '@bolusi/device/bootstrap/recovery';
+import { CLIENT_MODULES } from '@bolusi/device/bootstrap/modules';
 import { SecureStoreDbKeyStore } from '../src/ports/db-keystore.js';
 import { openBetterSqlite3Driver, openedWith, resetOpenedWith } from './better-sqlite3-driver.js';
 import { nodeColumnAead } from '@bolusi/test-support';

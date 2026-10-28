@@ -32,7 +32,7 @@ import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 
-import { createExpoCameraCapture, type CameraCapturePort } from './capture.js';
+import { createExpoCameraCapture, type CameraCapturePort } from '@bolusi/device/media/capture';
 import type { CapturePlatform } from './CaptureHost.js';
 
 /**

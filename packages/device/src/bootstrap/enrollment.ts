@@ -32,7 +32,7 @@ import {
   type PermissionEvaluator,
 } from '@bolusi/core';
 
-import type { LoginResult } from '../screens/enrollment/model.js';
+import type { LoginResult } from '../models/enrollment/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { persistEnrolledNames } from './device-info.js';

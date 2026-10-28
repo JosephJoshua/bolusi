@@ -26,7 +26,7 @@ import type {
   MediaUploadStatus,
   QuarantinedOpRow,
   RejectedOpRow,
-} from '../screens/sync-status/model.js';
+} from '../models/sync-status/model.js';
 
 /**
  * Cap on the rejected list. §8.4 item 4 renders one `ListRow` per rejected op, and 05 §8 makes a

@@ -13,7 +13,7 @@ import { Avatar, PinPad, color, space, type, useViewport, type PinPadState } fro
 import type { ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { initialsOf } from '../switcher/model.js';
+import { initialsOf } from '@bolusi/device/models/switcher/model';
 import { roleLabel } from '../switcher/UserRow.js';
 
 export interface PinEntryPerson {

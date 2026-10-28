@@ -36,9 +36,9 @@ import type { ReactNode } from 'react';
 
 import type { CaptureRequest, CapturedMedia, PhotoCapture } from '@bolusi/modules/screen-kit';
 
-import type { CameraCapturePort, CaptureIdentity } from './capture.js';
+import type { CameraCapturePort, CaptureIdentity } from '@bolusi/device/media/capture';
 import type { CaptureScreenState } from './CaptureScreen.js';
-import type { MediaClient } from './client.js';
+import type { MediaClient } from '@bolusi/device/media/client';
 import { usePendingCapture } from './pending-capture.js';
 
 /** The native seams this host needs, bound at `index.ts` (the one `expo-camera` site). */

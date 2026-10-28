@@ -40,7 +40,7 @@ import {
   pinView,
   type LastAttempt,
   type PinView,
-} from './model.js';
+} from '@bolusi/device/models/pin/model';
 import { PinEntry, PinPerson } from './PinEntry.js';
 import type { PinAttemptRow } from '@bolusi/core';
 

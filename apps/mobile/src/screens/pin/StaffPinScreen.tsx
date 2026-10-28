@@ -29,16 +29,28 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useLatestCallback } from '../../hooks/useLatestCallback.js';
 import type { SurfaceNav } from '../../navigation/surface.js';
-import { filterUsers, SWITCHER_SEARCH_MIN } from '../switcher/model.js';
+import { filterUsers, SWITCHER_SEARCH_MIN } from '@bolusi/device/models/switcher/model';
 import { UserRow } from '../switcher/UserRow.js';
 
-import { CLEAR_IDLE, clearActionReducer, clearLockoutOutcome } from './clear-lockout.model.js';
+import {
+  CLEAR_IDLE,
+  clearActionReducer,
+  clearLockoutOutcome,
+} from '@bolusi/device/models/pin/clear-lockout.model';
 import { ownerListToListState } from './owner-list-view.js';
-import type { PinTargetUser } from './pin-target.js';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinPerson } from './PinEntry.js';
-import { RESET_LIST, resetOutcome, resetPinReducer } from './reset-pin.model.js';
+import {
+  RESET_LIST,
+  resetOutcome,
+  resetPinReducer,
+} from '@bolusi/device/models/pin/reset-pin.model';
 import { StaffPinNewPin } from './StaffPinNewPin.js';
-import { staffListState, staffPinActions, staffPinBodyKey } from './staff-pin.model.js';
+import {
+  staffListState,
+  staffPinActions,
+  staffPinBodyKey,
+} from '@bolusi/device/models/pin/staff-pin.model';
 
 export interface StaffPinScreenProps {
   /** Does the acting user hold `auth.pin_unlock`? */

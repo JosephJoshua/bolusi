@@ -7,6 +7,8 @@ export * from './screen-lock.js';
 export type * from './schema.js';
 export * from './search.js';
 export { REPAIR_REFUSALS } from './rules.js';
+// The module's translator, for device code that names a servisan outside the screens (sync problems).
+export { tn } from './i18n.js';
 export {
   PHONE_MODELS_TABLE,
   catalogKeys,

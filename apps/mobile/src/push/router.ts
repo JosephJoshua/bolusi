@@ -22,7 +22,7 @@
 // consumes a `conflictId`/`deviceId` yet, and the dedicated detail screens are a future module surface
 // (the `ShellRoute` comment: "Module screens extend this union"). Pointing at a route that does not
 // exist is the failure this indirection prevents — every target below is a member of `ShellRoute`.
-import type { ShellRoute } from '../navigation/zone.js';
+import type { ShellRoute } from '@bolusi/device/navigation/zone';
 
 import { resolvePushRoute } from './routes.js';
 

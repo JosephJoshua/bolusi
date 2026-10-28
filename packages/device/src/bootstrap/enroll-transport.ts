@@ -13,7 +13,7 @@
 // status-less error to `offline`, which is the one sanctioned "you need internet" in the app.
 import type { EnrollRequest, EnrollResponse, EnrollTransportPort } from '@bolusi/core';
 
-import type { LoginResult } from '../screens/enrollment/model.js';
+import type { LoginResult } from '../models/enrollment/model.js';
 
 /** A non-2xx control-plane response, carrying the api/00 §7 envelope fields the wizard buckets on. */
 export class EnrollHttpError extends Error {

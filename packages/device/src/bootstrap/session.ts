@@ -79,8 +79,8 @@ import type { ClientDatabase } from '@bolusi/db-client';
 import { sql, type Kysely } from 'kysely';
 
 import { consoleDiagnostics } from '../ports/diagnostics.js';
-import type { PinTargetUser } from '../screens/pin/pin-target.js';
-import type { SwitcherUser } from '../screens/switcher/model.js';
+import type { PinTargetUser } from '../models/pin/pin-target.js';
+import type { SwitcherUser } from '../models/switcher/model.js';
 import { ShellSession, type LockReason } from '../session/shell-session.js';
 import { parseUserWorkspace, type UserWorkspace } from '../state/user-workspaces.js';
 

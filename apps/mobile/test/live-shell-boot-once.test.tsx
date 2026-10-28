@@ -60,7 +60,7 @@ vi.mock('expo-location', () => ({
 }));
 
 import { Root, type RootProps } from '../src/bootstrap/Root.js';
-import { type DeviceInfo } from '../src/screens/settings/model.js';
+import { type DeviceInfo } from '@bolusi/device/models/settings/model';
 import {
   bootFixture,
   closeClientDb,

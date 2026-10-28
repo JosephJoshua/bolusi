@@ -30,7 +30,7 @@ import { NOTE_ENTITY } from '@bolusi/modules/notes';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
 import type { MediaClient } from '../media/client.js';
-import { createNotesRuntime } from '../screens/notes/runtime-adapter.js';
+import { createNotesRuntime } from '../models/notes/runtime-adapter.js';
 import { createThumbnailLoader } from '../media/thumbnail-loader.js';
 
 import type { Bootstrapped } from './bootstrap.js';

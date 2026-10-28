@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest';
 import type { Bootstrapped } from './bootstrap.js';
 import { resolveShellInputs } from './shell-inputs.js';
 import type { SyncClient } from './sync-client.js';
-import type { FirstSyncProgress } from '../screens/sync-status/model.js';
+import type { FirstSyncProgress } from '../models/sync-status/model.js';
 
 function syncState(over: Partial<SyncState> = {}): SyncState {
   return {

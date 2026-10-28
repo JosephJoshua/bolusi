@@ -42,7 +42,7 @@ import {
 } from '@bolusi/core';
 import type { ClientDatabase, ClientDb } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
-import type { FirstSyncProgress } from '../screens/sync-status/model.js';
+import type { FirstSyncProgress } from '../models/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';

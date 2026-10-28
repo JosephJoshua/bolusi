@@ -10,7 +10,7 @@
 import { DEVICE_UNRECOGNISED_REASON, type SyncLoopState, type SyncState } from '@bolusi/core';
 
 import type { DeviceStatus } from '../navigation/zone.js';
-import type { FirstSyncProgress, SyncStatusInput } from '../screens/sync-status/model.js';
+import type { FirstSyncProgress, SyncStatusInput } from '../models/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { NO_SYNC_STATUS_READS, type SyncStatusReads } from './sync-status-reads.js';

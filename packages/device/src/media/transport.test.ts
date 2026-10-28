@@ -16,7 +16,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { MediaTransportError } from '@bolusi/core';
 
-import { createFetchMediaTransport } from './transport';
+import { createFetchMediaTransport } from './transport.js';
 
 const BASE = 'https://api.example.test';
 

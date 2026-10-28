@@ -30,7 +30,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
-import { initialsOf } from '../switcher/model.js';
+import { initialsOf } from '@bolusi/device/models/switcher/model';
 import { roleLabel } from '../switcher/UserRow.js';
 
 import {
@@ -39,7 +39,7 @@ import {
   MUTABLE_PUSH_CATEGORIES,
   type DeviceInfo,
   type MutablePushCategory,
-} from './model.js';
+} from '@bolusi/device/models/settings/model';
 
 /** A module's section in Settings, its copy resolved by the caller. */
 export interface SettingsModuleSection {
