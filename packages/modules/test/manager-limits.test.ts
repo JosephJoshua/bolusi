@@ -29,6 +29,14 @@ async function expectOverLimit(p: Promise<unknown>, module: 'repair' | 'money'):
   expect(refusalKeyOf(err)).toBe(`${module}.refusal.overLimit`);
 }
 
+/** The manager's limit of `kind` as a judging side applies it, noting each amount judged. */
+const managerLimit =
+  (kind: keyof typeof MANAGER_LIMITS, judged: number[] = []) =>
+  (_user: string, _permission: string, amount: number) => {
+    judged.push(amount);
+    return Promise.resolve(amount <= MANAGER_LIMITS[kind]);
+  };
+
 const discount = (amount: number) => ({
   kind: 'discount',
   description: 'Diskon langganan',
@@ -117,6 +125,29 @@ describe('cancel fees', () => {
       { ticketId: await openTicket(h), reason: 'Batal', fee: 0 },
       h.storeOwnerId,
     );
+  });
+
+  test('an older phone cancelling with no fee (v1) charges nothing, so the whole fee counts', async () => {
+    h = await openRepairHarness(9202);
+    await h.run('setCancelFees', { beforeWork: 100_000, afterWork: 150_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    const opened = (await h.ownOps()).find(
+      (op) => op.type === 'repair.ticket_opened' && op.entityId === ticketId,
+    )!;
+    const cancelV1 = {
+      ...opened,
+      type: 'repair.ticket_cancelled',
+      schemaVersion: 1,
+      payload: { reason: 'Batal' },
+    };
+    const judged: number[] = [];
+    await expectOverLimit(
+      h.checkRule({ ...cancelV1, userId: h.managerId }, managerLimit('priceDrop', judged)),
+      'repair',
+    );
+    expect(judged).toEqual([100_000]);
+    // An owner has no limit.
+    await h.checkRule({ ...cancelV1, userId: h.storeOwnerId }, () => Promise.resolve(true));
   });
 });
 

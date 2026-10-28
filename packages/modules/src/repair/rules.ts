@@ -805,9 +805,9 @@ export const markedRepairedRule: Rule = async (op, { db }) => {
 export const ticketCancelledRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
   requireOpen(ticket, op.type);
-  // v1, from before fees, charged nothing and named no fee.
-  const fee = payloadOf<{ fee?: number }>(op).fee;
-  if (fee === undefined) return;
+  // v1, from before fees, names no fee and charges nothing (the applier records no fee): a drop
+  // of the whole standard fee, which an older phone must not get past the limit with.
+  const fee = payloadOf<{ fee?: number }>(op).fee ?? 0;
   const fees = await ctx.db
     .selectFrom('repairStoreCancelFees')
     .select(['beforeWork', 'afterWork'])
