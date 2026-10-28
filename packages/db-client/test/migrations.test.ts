@@ -37,6 +37,7 @@ const SPEC_TABLES = [
   'repair_store_cancel_fees',
   'repair_store_intake_options',
   'repair_store_print_settings',
+  'repair_store_uncollected',
   'repair_ticket_events',
   'repair_ticket_photos',
   'repair_tickets',
@@ -150,7 +151,7 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 19]);
+    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 19]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
@@ -170,6 +171,7 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 14, name: 'pending_pin_verifiers', applied_at: 1_700_000_000_000 },
       { version: 15, name: 'user_work', applied_at: 1_700_000_000_000 },
       { version: 16, name: 'sync_token_rejections', applied_at: 1_700_000_000_000 },
+      { version: 17, name: 'repair_uncollected', applied_at: 1_700_000_000_000 },
       { version: 19, name: 'inventory', applied_at: 1_700_000_000_000 },
     ]);
   });
@@ -180,11 +182,11 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 19]);
+    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 19]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 15 }]);
+    expect(rows.rows).toEqual([{ c: 16 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);

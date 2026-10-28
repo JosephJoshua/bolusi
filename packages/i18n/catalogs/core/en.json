@@ -127,7 +127,8 @@
     "none": "No camera found. Connect a webcam, then try again.",
     "denied": "The camera isn’t allowed. Allow it in Windows Settings › Privacy › Camera, then try again.",
     "failed": "The camera won’t start. Close other apps using it, then try again.",
-    "saveFailed": "Couldn’t save the photo. Try again."
+    "saveFailed": "Couldn’t save the photo. Try again.",
+    "fromFile": "Choose a photo file"
   },
   "signature": {
     "hint": "Ask the customer to sign in this box.",

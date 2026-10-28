@@ -29,7 +29,7 @@ import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
-import { systemClock } from './src/ports/clock.js';
+import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
 import {
@@ -37,14 +37,14 @@ import {
   withDraft,
   withRoute,
   type UserWorkspace,
-} from './src/state/user-workspaces.js';
+} from '@bolusi/device/state/user-workspaces';
 import { useHardwareBack } from './src/navigation/useHardwareBack.js';
 import {
   backTarget,
   resolveZone,
   type DeviceStatus,
   type ShellRoute,
-} from './src/navigation/zone.js';
+} from '@bolusi/device/navigation/zone';
 import { EnrollmentScreen } from './src/screens/enrollment/EnrollmentScreen.js';
 import {
   afterLogin,
@@ -55,16 +55,16 @@ import {
   initialEnrollmentState,
   needsDiscardConfirm,
   type EnrollmentState,
-} from './src/screens/enrollment/model.js';
-import type { EnrollmentController } from './src/bootstrap/enrollment.js';
+} from '@bolusi/device/models/enrollment/model';
+import type { EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
 import { StaffScreen } from './src/screens/staff/StaffScreen.js';
-import type { PinTargetUser } from './src/screens/pin/pin-target.js';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
-import { pinView } from './src/screens/pin/model.js';
+import { pinView } from '@bolusi/device/models/pin/model';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
 import { roleLabel } from './src/screens/switcher/UserRow.js';
@@ -73,13 +73,13 @@ import {
   switcherState,
   tapTarget,
   type SwitcherUser,
-} from './src/screens/switcher/model.js';
+} from '@bolusi/device/models/switcher/model';
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
 import {
   firstSyncPercent,
   syncChipState,
   type SyncStatusInput,
-} from './src/screens/sync-status/model.js';
+} from '@bolusi/device/models/sync-status/model';
 import { syncChipAccessibilityLabels } from './src/screens/sync-status/chip-a11y.js';
 import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
@@ -87,12 +87,12 @@ import type { SignatureSurface } from './src/media/SignatureHost.js';
 import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
 import type { ScanSurface } from './src/media/ScanHost.js';
 import { ScanScreen } from './src/media/ScanScreen.js';
-import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
+import type { DeviceInfo, MutablePushCategory } from '@bolusi/device/models/settings/model';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
-import type { StaffControls } from './src/bootstrap/staff.js';
+import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
@@ -115,6 +115,11 @@ export interface AppProps {
   readonly usersError: string | null;
   readonly pinRow: (userId: string) => PinAttemptRow | null;
   readonly now: number;
+  /**
+   * The clock the repair screens count from (an intake's ready-by, how long a phone has waited).
+   * The system clock unless a preview pins its demo time.
+   */
+  readonly clock?: (() => number) | undefined;
   readonly session: { readonly userId: string } | null;
   readonly locked: boolean;
   /** Live operation-sync state. */
@@ -732,6 +737,8 @@ export default function App(props: AppProps): React.JSX.Element {
       props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
   const canSetCancelFees =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setCancelFees);
+  const canSetUncollectedDays =
+    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setUncollectedDays);
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
@@ -1096,6 +1103,17 @@ export default function App(props: AppProps): React.JSX.Element {
                             },
                           ]
                         : []),
+                      ...(canSetUncollectedDays
+                        ? [
+                            {
+                              icon: 'clock' as const,
+                              title: tn('repair.uncollected.title'),
+                              summary: tn('repair.uncollected.summary'),
+                              onOpen: () => setRoute('uncollectedDays'),
+                              testID: 'settings-uncollected-days',
+                            },
+                          ]
+                        : []),
                       ...(canSetPrintSettings
                         ? [
                             {
@@ -1130,6 +1148,7 @@ export default function App(props: AppProps): React.JSX.Element {
             if (
               (shellZone.route === 'intakeOptions' ||
                 shellZone.route === 'cancelFees' ||
+                shellZone.route === 'uncollectedDays' ||
                 shellZone.route === 'printSettings' ||
                 shellZone.route === 'printPaper') &&
               props.repair !== undefined
@@ -1290,7 +1309,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   <RepairHome
                     runtime={props.repair}
                     // The clock itself, not this render's reading: an intake can sit open for hours.
-                    now={systemClock.now}
+                    now={props.clock ?? systemClock.now}
                     onRegisterSurfaceNav={registerSurfaceNav}
                     restoredDraft={restoredIntakeDraft}
                     onDraftChange={publishIntakeDraft}
@@ -1465,6 +1484,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
   'intakeOptions',
   'cancelFees',
+  'uncollectedDays',
   'staff',
   'staffPins',
   'printSettings',

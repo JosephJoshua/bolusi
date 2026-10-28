@@ -29,6 +29,7 @@ import {
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+  REPAIR_STORE_UNCOLLECTED_ENTITY,
   REPAIR_TICKET_ENTITY,
   workPhotoSlot,
   type DeviceLocation,
@@ -94,12 +95,14 @@ export const repairTicketsTable: ProjectionTableManifest = {
     down_payment: 'integer',
     down_payment_by: 'text',
     down_payment_at: 'integer',
+    ready_at: 'integer',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
   entityIdColumn: 'id',
   // 2: a re-fold fills who cancelled and when for tickets cancelled before the columns existed.
-  projectionVersion: 2,
+  // 3: it fills when each finished phone was ready to collect.
+  projectionVersion: 3,
 };
 
 export const repairQuoteLinesTable: ProjectionTableManifest = {
@@ -228,6 +231,20 @@ export const repairStorePrintSettingsTable: ProjectionTableManifest = {
   projectionVersion: 1,
 };
 
+export const repairStoreUncollectedTable: ProjectionTableManifest = {
+  columns: {
+    store_id: 'text',
+    tenant_id: 'text',
+    days: 'integer',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['store_id'],
+  entityType: REPAIR_STORE_UNCOLLECTED_ENTITY,
+  entityIdColumn: 'store_id',
+  projectionVersion: 1,
+};
+
 // ── payload shapes the appliers read (validated by operations.ts before any fold) ───────────────
 
 interface QuoteLineDraft {
@@ -336,6 +353,7 @@ async function updateTicket(
     downPayment: number | null;
     downPaymentBy: string;
     downPaymentAt: number;
+    readyAt: number | null;
   }>,
 ): Promise<void> {
   await db
@@ -509,6 +527,7 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       downPayment: null,
       downPaymentBy: null,
       downPaymentAt: null,
+      readyAt: null,
     })
     .execute();
 
@@ -569,7 +588,8 @@ export const workPhotosAddedApplier: ProjectionApplier<RepairDatabase> = async (
 };
 
 export const workStartedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  await updateTicket(db, op, { outcome: 'in_repair', outcomeNote: null });
+  // Starting again on a repaired phone (a reopen) means it is no longer waiting to be collected.
+  await updateTicket(db, op, { outcome: 'in_repair', outcomeNote: null, readyAt: null });
   await recordEvent(db, op, {});
 };
 
@@ -581,7 +601,7 @@ export const workPausedApplier: ProjectionApplier<RepairDatabase> = async (db, o
 
 export const markedRepairedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { note } = payloadOf<{ note: string }>(op);
-  await updateTicket(db, op, { outcome: 'repaired', outcomeNote: note });
+  await updateTicket(db, op, { outcome: 'repaired', outcomeNote: note, readyAt: op.timestamp });
   await recordEvent(db, op, { note });
 };
 
@@ -603,6 +623,7 @@ export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = async (
     cancelStandardFee: standardFee,
     cancelledBy: op.userId,
     cancelledAt: op.timestamp,
+    readyAt: op.timestamp,
   });
   await recordEvent(db, op, fee === null ? { reason } : { reason, fee, standardFee });
 };
@@ -839,6 +860,21 @@ export const storePrintSettingsChangedApplier: ProjectionApplier<RepairDatabase>
   // A logo left out keeps the one already set (none on a store's first settings).
   await db
     .insertInto('repairStorePrintSettings')
+    .values({ storeId, tenantId: op.tenantId, ...values })
+    .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
+    .execute();
+};
+
+export const storeUncollectedDaysChangedApplier: ProjectionApplier<RepairDatabase> = async (
+  db,
+  op,
+) => {
+  const storeId = storeIdOf(op);
+  if (op.entityId !== storeId) return;
+  const { days } = payloadOf<{ days: number }>(op);
+  const values = { days, updatedBy: op.userId, updatedAt: op.timestamp };
+  await db
+    .insertInto('repairStoreUncollected')
     .values({ storeId, tenantId: op.tenantId, ...values })
     .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
     .execute();

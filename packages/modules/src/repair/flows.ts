@@ -36,25 +36,72 @@ export const BOARD_VIEWS = [
   'mine',
   'unassigned',
   'pickup',
+  'uncollected',
   'returned',
   'cancelled',
 ] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
 
-/** The views this user gets: every cancel, with who and what it charged, is for owners only. */
+/**
+ * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
+ * nobody collected are for the counter and owners, who call the customer.
+ */
 export function boardViews(can: RepairAbilities): readonly BoardView[] {
-  return BOARD_VIEWS.filter((view) => view !== 'cancelled' || can.cancel);
+  return BOARD_VIEWS.filter((view) => {
+    if (view === 'cancelled') return can.cancel;
+    if (view === 'uncollected') return flagsUncollected(can);
+    return true;
+  });
 }
 
-/** The cancelled view lists the latest cancel first; every queue lists the newest ticket first. */
+/**
+ * The cancelled view lists the latest cancel first, phones not collected the longest waiting
+ * first; every queue lists the newest ticket first.
+ */
 export function boardSort(view: BoardView): ListTicketsInput['sort'] {
-  return view === 'cancelled' ? 'cancelledAt.desc' : 'createdAt.desc';
+  if (view === 'cancelled') return 'cancelledAt.desc';
+  if (view === 'uncollected') return 'readyAt.asc';
+  return 'createdAt.desc';
 }
 
 const IN_PROGRESS = IN_PROGRESS_OUTCOMES;
+const DAY_MS = 86_400_000;
+/** How often an open screen re-reads which phones are not collected, as days pass with no change. */
+export const UNCOLLECTED_REFRESH_MS = 3_600_000;
 
-/** The `listTickets` filter behind each board view. */
-export function boardFilter(view: BoardView, userId: string): ListTicketsInput['filter'] {
+/** Phones nobody collected are flagged to the counter and owners, who call the customer. */
+export function flagsUncollected(can: Pick<RepairAbilities, 'intake' | 'cancel'>): boolean {
+  return can.intake || can.cancel;
+}
+
+/** Phones ready to collect before this time are not collected: `days` (the store's) before `now`. */
+export function uncollectedBefore(days: number, now: number): number {
+  return now - days * DAY_MS;
+}
+
+/**
+ * Whole days a finished phone has waited in the store, when it has waited at least the store's
+ * `days`; null when it is not flagged (still worked on, back with its owner, or not long enough).
+ */
+export function uncollectedDays(
+  ticket: Pick<TicketSummaryRow, 'location' | 'readyAt'>,
+  days: number,
+  now: number,
+): number | null {
+  if (ticket.location !== 'in_store' || ticket.readyAt === null) return null;
+  if (ticket.readyAt >= uncollectedBefore(days, now)) return null;
+  return Math.floor((now - ticket.readyAt) / DAY_MS);
+}
+
+/**
+ * The `listTickets` filter behind each board view. `readyBefore` is the not-collected cut-off
+ * (`uncollectedBefore`), which only that view reads.
+ */
+export function boardFilter(
+  view: BoardView,
+  userId: string,
+  readyBefore: number,
+): ListTicketsInput['filter'] {
   switch (view) {
     case 'active':
       return { outcomes: [...IN_PROGRESS], location: 'in_store' };
@@ -64,6 +111,8 @@ export function boardFilter(view: BoardView, userId: string): ListTicketsInput['
       return { outcomes: [...IN_PROGRESS], location: 'in_store', unassigned: true };
     case 'pickup':
       return { outcomes: ['repaired', 'cancelled'], location: 'in_store' };
+    case 'uncollected':
+      return { outcomes: ['repaired', 'cancelled'], location: 'in_store', readyBefore };
     case 'returned':
       return { location: 'returned' };
     case 'cancelled':
@@ -123,6 +172,8 @@ export interface RepairAbilities {
   readonly correctDownPayment: boolean;
   /** Edit what this store's slips print. */
   readonly setPrintSettings: boolean;
+  /** Set after how many days a phone nobody collected is flagged here. */
+  readonly setUncollectedDays: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -141,6 +192,7 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     setCancelFees: hasPermission(P.setCancelFees),
     correctDownPayment: hasPermission(P.correctDownPayment),
     setPrintSettings: hasPermission(P.setPrintSettings),
+    setUncollectedDays: hasPermission(P.setUncollectedDays),
   };
 }
 
@@ -225,6 +277,66 @@ export function ticketActions(
   if (open && can.work && ticket.outcome === 'repaired') actions.push('reopen');
   if (open && can.cancel) actions.push('cancel');
   return actions;
+}
+
+/** Actions that change one fact, offered beside it (the technician, the price), never in a row. */
+export const CONTEXTUAL_ACTIONS: ReadonlySet<TicketAction> = new Set([
+  'assign',
+  'changePrice',
+  'proposePrice',
+]);
+
+/**
+ * The offered actions laid out by what this user does next, not as a row of every status change:
+ * one next step, at most one real alternative to it, and the rarer moves kept under "Lainnya".
+ * Cancelling is not here: it is final, so screens keep it apart at the end.
+ */
+export interface TicketActionLayout {
+  readonly next: TicketAction | null;
+  readonly alternative: TicketAction | null;
+  readonly more: readonly TicketAction[];
+}
+
+/** The steps that move a repair forward, likeliest first. */
+const FORWARD: readonly TicketAction[] = [
+  'decidePrice',
+  'handover',
+  'markRepaired',
+  'start',
+  'resume',
+];
+/** Bench work: offered only on a repair that is this user's or nobody's yet. */
+const BENCH_WORK: ReadonlySet<TicketAction> = new Set([
+  'start',
+  'resume',
+  'markRepaired',
+  'waitForParts',
+]);
+
+export function arrangeTicketActions(
+  actions: readonly TicketAction[],
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'technicianId'>,
+  userId: string,
+): TicketActionLayout {
+  // Someone else's repair is theirs to work on; this user first takes it over ("Ambil alih").
+  const mine = ticket.technicianId === null || ticket.technicianId === userId;
+  const offered = actions.filter(
+    (action) =>
+      action !== 'cancel' && !CONTEXTUAL_ACTIONS.has(action) && (mine || !BENCH_WORK.has(action)),
+  );
+  const forward = FORWARD.filter((action) => offered.includes(action));
+  // With nothing to push forward, picking a technician is what an unassigned repair waits on.
+  const assignNext = ticket.technicianId === null && actions.includes('assign');
+  const next = forward[0] ?? (assignNext ? 'assign' : null);
+  // Parts running out is the one real fork while working; before work starts it is rare.
+  const alternative =
+    forward[1] ??
+    (ticket.outcome === 'in_repair' && offered.includes('waitForParts') ? 'waitForParts' : null);
+  return {
+    next,
+    alternative,
+    more: offered.filter((action) => action !== next && action !== alternative),
+  };
 }
 
 /**

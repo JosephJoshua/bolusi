@@ -14,6 +14,7 @@ import { repairPrintingMigration } from './013-repair-printing.js';
 import { pendingPinVerifiersMigration } from './014-pending-pin-verifiers.js';
 import { userWorkMigration } from './015-user-work.js';
 import { syncTokenRejectionsMigration } from './016-sync-token-rejections.js';
+import { repairUncollectedMigration } from './017-repair-uncollected.js';
 import { inventoryMigration } from './019-inventory.js';
 import type { ClientMigration } from './types.js';
 
@@ -33,6 +34,7 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   pendingPinVerifiersMigration,
   userWorkMigration,
   syncTokenRejectionsMigration,
+  repairUncollectedMigration,
   inventoryMigration,
 ];
 

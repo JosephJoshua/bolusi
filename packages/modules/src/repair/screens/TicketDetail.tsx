@@ -12,7 +12,9 @@ import {
   Card,
   Chip,
   Icon,
+  ListRow,
   PatternLock,
+  Sheet,
   TextButton,
   Timeline,
   border,
@@ -28,6 +30,12 @@ import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import {
+  MESSAGE_ACTION_KEY,
+  customerMessageKind,
+  customerMessageUrl,
+  type CustomerMessageKind,
+} from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
@@ -39,9 +47,11 @@ import {
 } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import { actionKey, LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   amountOwed,
+  arrangeTicketActions,
+  CONTEXTUAL_ACTIONS,
   canUseParts,
   downPaymentAction,
   downPaymentStale,
@@ -51,6 +61,8 @@ import {
   staleStep,
   ticketActions,
   ticketStatus,
+  flagsUncollected,
+  uncollectedDays,
   workPhotos,
   type StaleStep,
   type TicketAction,
@@ -70,7 +82,12 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import {
+  useRepairQuery,
+  useRepairRuntime,
+  useStoreDisplayName,
+  useUncollectedLimit,
+} from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
 import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
 import { ti } from '../../inventory/i18n.js';
@@ -105,21 +122,6 @@ const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
   reopen: 'repair.done.start',
 };
 
-const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
-  decidePrice: 'repair.action.decidePrice',
-  claim: 'repair.action.claim',
-  start: 'repair.action.start',
-  resume: 'repair.action.resume',
-  reopen: 'repair.action.reopen',
-  waitForParts: 'repair.action.waitForParts',
-  markRepaired: 'repair.action.markRepaired',
-  assign: 'repair.action.assign',
-  changePrice: 'repair.action.changePrice',
-  proposePrice: 'repair.action.proposePrice',
-  handover: 'repair.action.handover',
-  cancel: 'repair.action.cancel',
-};
-
 /** The open step, if any. A proposal keeps the line as it was opened, for when no fresher read is at hand. */
 type Step =
   | { readonly kind: 'none' }
@@ -133,6 +135,8 @@ type Step =
 export interface TicketDetailProps {
   readonly ticketId: string;
   readonly chrome: RepairChrome;
+  /** The clock a phone's wait is counted against (phones not collected). */
+  readonly now: () => number;
   readonly onBack: () => void;
   /** Beside the board on a tablet there is nothing to go back to: the board is already in view. */
   readonly hideBack?: boolean | undefined;
@@ -153,6 +157,7 @@ interface LoadedTicket {
 export function TicketDetail({
   ticketId,
   chrome,
+  now,
   onBack,
   hideBack = false,
   onHandover,
@@ -169,6 +174,9 @@ export function TicketDetail({
   // What the last action did, already in words: repair's own steps and the parts steps say it.
   const [done, setDone] = useState<string | null>(null);
   const [passcodeShown, setPasscodeShown] = useState(false);
+  const [messageFailed, setMessageFailed] = useState(false);
+  const storeName = useStoreDisplayName();
+  const uncollectedLimit = useUncollectedLimit();
   // An open step holding photos asks before it is dropped (header back, hardware back).
   const stepGuardRef = useRef<DiscardGuard | null>(null);
   const registerStepGuard = useCallback((guard: DiscardGuard | null): void => {
@@ -190,6 +198,10 @@ export function TicketDetail({
   );
   const photosBack = useRef(photos.back);
   photosBack.current = photos.back;
+  // The rarer moves ("Lainnya") open in a sheet; back closes it like the photo sheet.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreBack = useRef(moreOpen);
+  moreBack.current = moreOpen;
   const rejected = query.status === 'ready' && hasRejectedOp(query.data.statuses[ticketId] ?? []);
   const closeStep = (): void => setStep({ kind: 'none' });
   const leaveStep = useCallback((): void => {
@@ -204,6 +216,10 @@ export function TicketDetail({
     onRegisterStepBack?.(() => {
       // An open photo or the photo sheet closes first, then a step, then the ticket.
       if (photosBack.current()) return true;
+      if (moreBack.current) {
+        setMoreOpen(false);
+        return true;
+      }
       if (!stepOpen) return false;
       leaveStep();
       return true;
@@ -376,26 +392,44 @@ export function TicketDetail({
     }
   };
 
-  // The likeliest next step is the bottom action, in the thumb zone like every other flow; the
-  // rest sit under the summary, and cancelling is kept apart at the end so it is never hit by habit.
+  // The next step is the bottom action, in the thumb zone like every other flow; its one real
+  // alternative sits under the summary with the rarer moves behind "Lainnya", and cancelling is kept
+  // apart at the end so it is never hit by habit.
   const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
-  const [primary, ...others] = actions.filter((action) => action !== 'cancel');
+  const layout =
+    ticket === undefined
+      ? { next: null, alternative: null, more: [] }
+      : arrangeTicketActions(actions, ticket, runtime.userId);
+  const primary = layout.next ?? undefined;
   const canCancel = actions.includes('cancel');
+  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
+  const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
+    const url = customerMessageUrl(kind, row, storeName);
+    if (url === null) return;
+    setDone(null);
+    setMessageFailed(false);
+    Linking.openURL(url).catch(() => setMessageFailed(true));
+  };
   const label = (action: TicketAction): string =>
-    tn(
-      action === 'assign' && ticket?.technicianId != null
-        ? 'repair.action.reassign'
-        : ACTION_KEY[action],
-    );
+    tn(actionKey(action, ticket?.technicianId ?? null));
 
   // One banner at a time, in the fixed slot so it shows wherever the user has scrolled: a refusal of
-  // what they just did, then a rejected op from sync, then what their last action did.
+  // what they just did (WhatsApp not opening included; dismissing it shows what it covered), then a
+  // rejected op from sync, then what their last action did.
   const banner =
     runner.errorCode !== null ? (
       <ActionErrorBanner
         errorCode={runner.errorCode}
         onDismiss={runner.clearError}
         testID={`${testID}.actionError`}
+      />
+    ) : messageFailed ? (
+      <Banner
+        variant="danger"
+        message={tn('repair.message.openFailed')}
+        onPress={() => setMessageFailed(false)}
+        testID={`${testID}.messageFailed`}
       />
     ) : rejected ? (
       <Banner
@@ -423,7 +457,30 @@ export function TicketDetail({
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       banner={banner}
-      overlay={photos.overlay}
+      overlay={
+        moreOpen && ticket !== undefined ? (
+          <Sheet
+            title={tn('repair.action.more')}
+            closeLabel={t('core.action.close')}
+            onClose={() => setMoreOpen(false)}
+            testID={`${testID}.more`}
+          >
+            {moreActions(ticket).map((item) => (
+              <ListRow
+                key={item.key}
+                primaryText={item.label}
+                onPress={() => {
+                  setMoreOpen(false);
+                  item.onPress();
+                }}
+                testID={`${testID}.action.${item.key}`}
+              />
+            ))}
+          </Sheet>
+        ) : (
+          photos.overlay
+        )
+      }
       bottomAction={
         ticket === undefined || primary === undefined ? undefined : (
           <Button
@@ -448,6 +505,28 @@ export function TicketDetail({
     </AppShell>
   );
 
+  /** The rarer moves, printing among them: on a phone a slip is a PDF to share, now and then. */
+  function moreActions(
+    row: TicketDetailRow,
+  ): readonly { readonly key: string; readonly label: string; readonly onPress: () => void }[] {
+    return [
+      ...layout.more.map((action) => ({
+        key: action,
+        label: label(action),
+        onPress: () => perform(action, row),
+      })),
+      ...(runtime.printing === undefined
+        ? []
+        : [
+            {
+              key: 'print',
+              label: tn('repair.print.title'),
+              onPress: () => setStep({ kind: 'print' }),
+            },
+          ]),
+    ];
+  }
+
   function renderTicket(row: TicketDetailRow): React.JSX.Element {
     const lock = row.devicePasscode === null ? null : decodeScreenLock(row.devicePasscode);
     const device = [row.deviceBrand, row.deviceModel, row.deviceColor]
@@ -458,7 +537,7 @@ export function TicketDetail({
     const shortAssignKey: RepairKey =
       row.technicianId === null ? 'repair.action.assignShort' : 'repair.action.reassignShort';
     const contextual = (action: TicketAction): ReactNode =>
-      others.some((candidate) => candidate === action) ? (
+      CONTEXTUAL_ACTIONS.has(action) && actions.includes(action) && layout.next !== action ? (
         <TextButton
           label={action === 'assign' ? tn(shortAssignKey) : label(action)}
           accessibilityLabel={label(action)}
@@ -467,11 +546,26 @@ export function TicketDetail({
           testID={`${testID}.action.${action}`}
         />
       ) : null;
-    const statusActions = others.filter((action) => !CONTEXTUAL_ACTIONS.has(action));
+    const more = moreActions(row);
+    // The counter and owners call the customer about a phone left too long; technicians need not.
+    const waited =
+      flagsUncollected(can) && uncollectedLimit.status === 'ready'
+        ? uncollectedDays(row, uncollectedLimit.data.days, now())
+        : null;
     return (
       <View testID={`${testID}.content`}>
         <Card testID={`${testID}.summary`}>
-          <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+          <View style={styles.statusRow}>
+            <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+            {waited === null ? null : (
+              <Chip
+                label={tn('repair.board.waited', { days: waited })}
+                icon="warning"
+                tone="warning"
+                testID={`${testID}.uncollected`}
+              />
+            )}
+          </View>
           <Text style={styles.customer} testID={`${testID}.customer`}>
             {row.customerName}
           </Text>
@@ -568,29 +662,49 @@ export function TicketDetail({
           )}
         </View>
 
-        {statusActions.length === 0 && runtime.printing === undefined ? null : (
+        {layout.alternative === null && more.length === 0 && messageKind === null ? null : (
           <View style={styles.actions}>
-            {runtime.printing === undefined ? null : (
+            {messageKind === null ? null : (
               <Button
-                label={tn('repair.print.title')}
+                label={tn(MESSAGE_ACTION_KEY[messageKind])}
                 variant="secondary"
                 size="compact"
-                onPress={() => setStep({ kind: 'print' })}
+                onPress={() => sendMessage(messageKind, row)}
                 disabled={runner.busy}
-                testID={`${testID}.action.print`}
+                testID={`${testID}.action.message`}
               />
             )}
-            {statusActions.map((action) => (
+            {layout.alternative === null ? null : (
               <Button
-                key={action}
-                label={label(action)}
+                label={label(layout.alternative)}
                 variant="secondary"
                 size="compact"
-                onPress={() => perform(action, row)}
+                onPress={() => perform(layout.alternative!, row)}
                 disabled={runner.busy}
-                testID={`${testID}.action.${action}`}
+                testID={`${testID}.action.${layout.alternative}`}
               />
-            ))}
+            )}
+            {/* One rare move needs no sheet; several wait behind "Lainnya". Same level as the
+                alternative, so the two never read as a choice between a button and a link. */}
+            {more.length === 0 ? null : more.length === 1 ? (
+              <Button
+                label={more[0]!.label}
+                variant="secondary"
+                size="compact"
+                onPress={more[0]!.onPress}
+                disabled={runner.busy}
+                testID={`${testID}.action.${more[0]!.key}`}
+              />
+            ) : (
+              <Button
+                label={tn('repair.action.more')}
+                variant="secondary"
+                size="compact"
+                onPress={() => setMoreOpen(true)}
+                disabled={runner.busy}
+                testID={`${testID}.more.open`}
+              />
+            )}
           </View>
         )}
 
@@ -643,7 +757,7 @@ export function TicketDetail({
             {/* Red text, kept apart at the end: it is final for the repair, so it never looks like
                 the next step. The step it opens says what cancelling means. */}
             <TextButton
-              label={tn(ACTION_KEY.cancel)}
+              label={tn(actionKey('cancel', row.technicianId))}
               tone="danger"
               onPress={() => perform('cancel', row)}
               disabled={runner.busy}
@@ -880,13 +994,6 @@ function ticketPhotos(row: TicketDetailRow): BrowsablePhoto[] {
   }));
 }
 
-/** Actions shown beside the fact they change rather than in the row of status actions. */
-const CONTEXTUAL_ACTIONS: ReadonlySet<TicketAction> = new Set([
-  'assign',
-  'changePrice',
-  'proposePrice',
-]);
-
 /** The note or reason a person typed with an event (a cancel reason, a parts note), if any. */
 function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
   for (const field of ['note', 'reason'] as const) {
@@ -922,6 +1029,7 @@ const styles = StyleSheet.create({
   facts: { marginTop: space.lg },
   note: { marginTop: space.xs },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.lg },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
   cancel: { marginTop: space['2xl'], alignItems: 'center' },
   line: { paddingVertical: space.sm },
   lineRow: { alignItems: 'flex-start' },

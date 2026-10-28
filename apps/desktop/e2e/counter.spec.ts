@@ -21,10 +21,12 @@ const FLAGS = ['--no-sandbox', '--use-fake-device-for-media-stream'];
 async function launch(): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
   // settings are unchanged.
+  // These screens run over the seeded demo; the live app has its own tests.
+  const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1' };
   app = await electron.launch(
     INSTALLED === undefined
-      ? { args: [...FLAGS, `${import.meta.dirname}/..`] }
-      : { executablePath: INSTALLED, args: FLAGS },
+      ? { args: [...FLAGS, `${import.meta.dirname}/..`], env }
+      : { executablePath: INSTALLED, args: FLAGS, env },
   );
   page = await app.firstWindow();
   await page.getByTestId('repair.desk.board').waitFor();
@@ -60,7 +62,9 @@ for (const [width, height] of [
   [1024, 640],
   [1280, 720],
   [1366, 768],
+  [1536, 864],
   [1920, 1080],
+  [2560, 1440],
 ] as const) {
   test(`the board fits a ${String(width)}×${String(height)} screen, with and without a servisan open`, async () => {
     await page.setViewportSize({ width, height });
@@ -72,6 +76,17 @@ for (const [width, height] of [
         ),
       );
       expect(overflow).toBe(false);
+      // Customer names show in full; only free text such as a complaint may be cut.
+      const cutNames = await table.evaluate((grid) => {
+        const headers = [...grid.querySelectorAll('[role="columnheader"]')];
+        const column = headers.findIndex((header) => header.textContent?.trim() === 'Pelanggan');
+        return [...grid.querySelectorAll('[role="row"]')]
+          .slice(1)
+          .map((row) => row.children[column]?.querySelector('.truncate'))
+          .filter((name) => name != null && name.scrollWidth > name.clientWidth)
+          .map((name) => name!.textContent);
+      });
+      expect(cutNames).toEqual([]);
       await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({ ratio: 1 });
       // Only the table and the pane scroll; the window never does, so paging stays in reach.
       expect(
@@ -121,19 +136,42 @@ for (const [width, height, sidebar] of [
   });
 }
 
+test('a phone nobody collected shows in its own list, and the message opens WhatsApp outside the app', async () => {
+  // Stands in for the OS: records what the app asked to open instead of starting a browser.
+  await app.evaluate(({ shell }) => {
+    const opened: string[] = [];
+    (globalThis as { opened?: string[] }).opened = opened;
+    shell.openExternal = (url: string) => {
+      opened.push(url);
+      return Promise.resolve();
+    };
+  });
+  await page.getByTestId('repair.desk.board.views.uncollected').click();
+  await page.getByText('Markus Yikwa').click();
+  await expect(page.getByTestId('repair.desk.ticket.customer')).toHaveText('Markus Yikwa');
+  await page.getByTestId('repair.desk.ticket.action.message').click();
+  await expect
+    .poll(() => app.evaluate(() => (globalThis as { opened?: string[] }).opened ?? []))
+    .toEqual([expect.stringMatching(/^https:\/\/wa\.me\/6281344556677\?text=/)]);
+  // The app itself stays on its one page.
+  expect(app.windows()).toHaveLength(1);
+});
+
 test('the page gets only the narrow print and update calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;
     return {
       keys: bridge === undefined ? null : Object.keys(bridge).sort(),
       printers: bridge?.['printers'] === undefined ? null : Object.keys(bridge['printers']).sort(),
+      core: bridge?.['core'] === undefined ? null : Object.keys(bridge['core']).sort(),
       node: typeof (window as { require?: unknown }).require,
       process: typeof (window as { process?: unknown }).process,
     };
   });
   expect(shape).toEqual({
-    keys: ['printers', 'updates'],
+    keys: ['core', 'printers', 'updates'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
+    core: ['connect'],
     node: 'undefined',
     process: 'undefined',
   });

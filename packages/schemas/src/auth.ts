@@ -99,6 +99,10 @@ export const PasswordChangeReq = z
 export type PasswordChangeReq = z.infer<typeof PasswordChangeReq>;
 
 // ============ POST /v1/devices/enroll (§4.3) ============
+/** What a device runs on: a phone, or the Windows counter PC app. */
+export const DevicePlatform = z.enum(['android', 'ios', 'windows']);
+export type DevicePlatform = z.infer<typeof DevicePlatform>;
+
 export const EnrollReq = z
   .object({
     deviceId: zId,
@@ -107,7 +111,7 @@ export const EnrollReq = z
       .refine((s) => b64ByteLength(s) === 32, 'public key must decode to exactly 32 bytes'),
     storeId: zId,
     deviceName: z.string().min(1).max(64),
-    platform: z.enum(['android', 'ios']),
+    platform: DevicePlatform,
     appVersion: z.string().max(32),
     /**
      * The device registration this enrolment REPLACES (§4.3, D27) — set only when an already-enrolled

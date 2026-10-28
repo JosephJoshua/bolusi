@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
+  arrangeTicketActions,
   balanceAfterDownPayment,
   downPaymentAction,
   downPaymentEntry,
@@ -27,6 +28,7 @@ import {
   ticketActions,
   toOpenTicketInput,
   type IntakeDraft,
+  type RepairAbilities,
   type TicketAction,
 } from '../src/repair/flows.js';
 import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
@@ -288,6 +290,81 @@ describe('ticket actions', () => {
       ticketActions(row({ location: 'returned', outcome: 'repaired' }), cashier, h.cashierId),
     ).toEqual([]);
   });
+
+  test('each person gets one next step for where the repair stands, not every status change', async () => {
+    h = await openRepairHarness(4103);
+    const tech = abilitiesOf(h, h.technicianId);
+    const cashier = abilitiesOf(h, h.cashierId);
+    const layout = (
+      ticket: Partial<Parameters<typeof ticketActions>[0]>,
+      can: RepairAbilities,
+      userId: string,
+    ) => {
+      const row = {
+        outcome: 'received' as const,
+        location: 'in_store' as const,
+        technicianId: null,
+        pendingProposals: 0,
+        ...ticket,
+      };
+      return arrangeTicketActions(ticketActions(row, can, userId), row, userId);
+    };
+    const mine = h.technicianId;
+
+    // Off the shelf: start it (which also takes it); parts before starting and taking it for later
+    // are rare, so they wait under "Lainnya".
+    expect(layout({}, tech, mine)).toEqual({
+      next: 'start',
+      alternative: null,
+      more: ['waitForParts', 'claim'],
+    });
+    // At the bench the one real fork is running out of parts.
+    expect(layout({ outcome: 'in_repair', technicianId: mine }, tech, mine)).toEqual({
+      next: 'markRepaired',
+      alternative: 'waitForParts',
+      more: [],
+    });
+    expect(layout({ outcome: 'waiting_for_parts', technicianId: mine }, tech, mine)).toEqual({
+      next: 'resume',
+      alternative: null,
+      more: [],
+    });
+    // Someone else's repair is theirs to work on: this person can only take it over.
+    expect(layout({ outcome: 'in_repair', technicianId: h.storeOwnerId }, tech, mine)).toEqual({
+      next: null,
+      alternative: null,
+      more: ['claim'],
+    });
+    // The counter: pick a technician, settle a price change, hand the phone back.
+    expect(layout({}, cashier, h.cashierId)).toEqual({
+      next: 'assign',
+      alternative: null,
+      more: [],
+    });
+    expect(layout({ technicianId: mine }, cashier, h.cashierId)).toEqual({
+      next: null,
+      alternative: null,
+      more: [],
+    });
+    expect(
+      layout(
+        { outcome: 'in_repair', technicianId: mine, pendingProposals: 1 },
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ next: 'decidePrice', alternative: null, more: [] });
+    expect(layout({ outcome: 'repaired', technicianId: mine }, cashier, h.cashierId)).toEqual({
+      next: 'handover',
+      alternative: null,
+      more: [],
+    });
+    // A repaired phone back on the bench is the rare case: the technician finds it under "Lainnya".
+    expect(layout({ outcome: 'repaired', technicianId: mine }, tech, mine)).toEqual({
+      next: null,
+      alternative: null,
+      more: ['reopen'],
+    });
+  });
 });
 
 describe('down payment and slips', () => {
@@ -439,12 +516,31 @@ describe('an open step after the ticket changed elsewhere', () => {
 
 describe('board views', () => {
   test('mine filters to the user; pickup is finished work still in the store', () => {
-    expect(boardFilter('mine', 'u1')).toMatchObject({ technicianId: 'u1', location: 'in_store' });
-    expect(boardFilter('pickup', 'u1')).toEqual({
+    expect(boardFilter('mine', 'u1', 0)).toMatchObject({
+      technicianId: 'u1',
+      location: 'in_store',
+    });
+    expect(boardFilter('pickup', 'u1', 0)).toEqual({
       outcomes: ['repaired', 'cancelled'],
       location: 'in_store',
     });
-    expect(boardFilter('returned', 'u1')).toEqual({ location: 'returned' });
+    expect(boardFilter('returned', 'u1', 0)).toEqual({ location: 'returned' });
+  });
+
+  test('phones not collected are finished, still in the store, ready before the cut-off', async () => {
+    expect(boardFilter('uncollected', 'u1', 1_000)).toEqual({
+      outcomes: ['repaired', 'cancelled'],
+      location: 'in_store',
+      readyBefore: 1_000,
+    });
+    // Only that view reads the cut-off.
+    expect(boardFilter('pickup', 'u1', 1_000)).not.toHaveProperty('readyBefore');
+    expect(boardSort('uncollected')).toBe('readyAt.asc');
+    h = await openRepairHarness(4105);
+    // The counter and owners call the customer; technicians have no use for the list.
+    expect(boardViews(abilitiesOf(h, h.cashierId))).toContain('uncollected');
+    expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('uncollected');
+    expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('uncollected');
   });
 
   test('the cancelled view is for owners only and lists the latest cancel first', async () => {
@@ -453,7 +549,7 @@ describe('board views', () => {
     expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('cancelled');
     expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('cancelled');
     expect(boardViews(abilitiesOf(h, h.ownerId))).toContain('cancelled');
-    expect(boardFilter('cancelled', 'u1')).toEqual({ outcomes: ['cancelled'] });
+    expect(boardFilter('cancelled', 'u1', 0)).toEqual({ outcomes: ['cancelled'] });
     expect(boardSort('cancelled')).toBe('cancelledAt.desc');
     expect(boardSort('active')).toBe('createdAt.desc');
   });

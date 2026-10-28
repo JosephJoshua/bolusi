@@ -7,6 +7,7 @@ import {
   repairStoreCancelFeesTable,
   repairStoreIntakeOptionsTable,
   repairStorePrintSettingsTable,
+  repairStoreUncollectedTable,
   repairQuoteLinesTable,
   repairTicketEventsTable,
   repairTicketPhotosTable,
@@ -53,6 +54,8 @@ import {
   setCancelFeesInput,
   setPrintSettingsHandler,
   setPrintSettingsInput,
+  setUncollectedDaysHandler,
+  setUncollectedDaysInput,
   startWorkHandler,
   startWorkInput,
 } from './commands.js';
@@ -73,6 +76,7 @@ import {
   searchCustomersQuery,
   searchTicketsQuery,
   ticketBrandsQuery,
+  uncollectedDaysQuery,
 } from './queries.js';
 import type { RepairDatabase } from './schema.js';
 
@@ -94,6 +98,7 @@ export const repairModuleManifest = {
       [REPAIR_TABLE.storeIntakeOptions]: repairStoreIntakeOptionsTable,
       [REPAIR_TABLE.storeCancelFees]: repairStoreCancelFeesTable,
       [REPAIR_TABLE.storePrintSettings]: repairStorePrintSettingsTable,
+      [REPAIR_TABLE.storeUncollected]: repairStoreUncollectedTable,
     },
   },
 
@@ -169,6 +174,12 @@ export const repairModuleManifest = {
       scope: 'store',
       isDangerous: false,
       description: "Can change the store's name, address, logo and terms printed on repair slips.",
+    },
+    [REPAIR_PERMISSION.setUncollectedDays]: {
+      scope: 'store',
+      isDangerous: false,
+      description:
+        'Can set after how many days a repaired or cancelled phone nobody collected is flagged.',
     },
   },
 
@@ -278,6 +289,11 @@ export const repairModuleManifest = {
       input: setPrintSettingsInput,
       handler: setPrintSettingsHandler,
     },
+    setUncollectedDays: {
+      permission: REPAIR_PERMISSION.setUncollectedDays,
+      input: setUncollectedDaysInput,
+      handler: setUncollectedDaysHandler,
+    },
   },
 
   queries: {
@@ -295,6 +311,7 @@ export const repairModuleManifest = {
     findDeviceModel: findDeviceModelQuery,
     cancelFees: cancelFeesQuery,
     printSettings: printSettingsQuery,
+    uncollectedDays: uncollectedDaysQuery,
   },
 } as const satisfies ModuleManifest<RepairDatabase>;
 

@@ -6,9 +6,9 @@ import { useEffect, useState } from 'react';
 import { sameDeviceModel, type DeviceModelRow } from './device-models.js';
 import { colourChoices, memoryVariants } from './device-specs.js';
 import type { IntakeDraft } from './flows.js';
-import { tn } from './i18n.js';
-import type { PhoneModelOption } from '../inventory/runtime.js';
-import { useRepairQuery, type RepairRuntime } from './runtime.js';
+import { useRepairQuery } from './runtime.js';
+
+export { catalogModelSearch, modelCaption } from './model-search.js';
 
 /** The catalog model a brand and model name are, when the catalog surely has it (findDeviceModel). */
 export function useCatalogModel(brand: string, model: string): DeviceModelRow | null {
@@ -21,16 +21,6 @@ export function useCatalogModel(brand: string, model: string): DeviceModelRow | 
     `deviceModel:${brand.trim()}\u0000${model.trim()}`,
   );
   return query.status === 'ready' ? query.data : null;
-}
-
-/** "Samsung · 2024", "Samsung · Tablet · 2024", or "Evercoss · Serviced here before". */
-export function modelCaption(row: DeviceModelRow): string {
-  const parts = [row.brand];
-  if (row.kind === 'tablet') parts.push(tn('repair.device.tablet'));
-  if (row.kind === 'watch') parts.push(tn('repair.device.watch'));
-  if (row.learned) parts.push(tn('repair.device.servicedBefore'));
-  else if (row.announcedYear !== null) parts.push(String(row.announcedYear));
-  return parts.join(' · ');
 }
 
 export interface ModelPicker {
@@ -91,20 +81,4 @@ export function useModelPicker(
       set({ brand: matched.brand, model: matched.model });
     },
   };
-}
-
-/**
- * The phone catalog search as other modules take it (the parts list's "fits" picker): the same
- * models, spellings and captions the intake offers.
- */
-export function catalogModelSearch(
-  runtime: Pick<RepairRuntime, 'query'>,
-): (text: string, limit: number) => Promise<readonly PhoneModelOption[]> {
-  return async (text, limit) =>
-    (await runtime.query('searchDeviceModels', { text, limit })).rows.map((row) => ({
-      key: row.key,
-      brand: row.brand,
-      model: row.model,
-      caption: modelCaption(row),
-    }));
 }

@@ -125,6 +125,7 @@ const source = {
         failed:
           'Kamera belum bisa menyala. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.',
         saveFailed: 'Fotonya belum bisa disimpan. Coba lagi.',
+        fromFile: 'Pilih file foto',
       },
       signature: {
         hint: 'Minta pelanggan tanda tangan di kotak ini.',
@@ -318,6 +319,29 @@ const source = {
         keepEditing: 'Lanjut ubah',
         makePinHint: 'Belum bisa masuk karena belum punya PIN.',
       },
+      pc: {
+        enrollTitle: 'Daftarkan komputer ini',
+        instruction: 'Cukup sekali di komputer ini. Pastikan ada internet.',
+        deviceNameField: 'Nama komputer',
+        deviceNamePlaceholder: 'Contoh: PC Kasir',
+        nameDeviceFirst: 'Kasih nama komputernya dulu.',
+        emptyUsers: 'Belum ada karyawan di komputer ini. Minta pemilik toko menambahkannya.',
+        lock: 'Kunci layar',
+        opening: 'Membuka data toko…',
+        openFailed: 'Data di komputer ini belum bisa dibuka',
+        openFailedHint:
+          'Tutup aplikasinya, lalu buka lagi. Kalau masih begini, hubungi pemilik toko.',
+        backTo: 'Kembali ke {name}',
+        otherPerson: 'Bukan kamu?',
+        showPassword: 'Lihat kata sandi',
+        hidePassword: 'Sembunyikan kata sandi',
+        unrecognised: {
+          title: 'Komputer ini perlu didaftarkan ulang',
+          body: 'Server tidak mengenali komputer ini lagi. Semua perubahan tetap aman di sini sampai pemilik mendaftarkannya ulang.',
+          action: 'Daftarkan ulang komputer ini',
+        },
+        unsyncedBody: 'Dikirim setelah komputer ini terdaftar, tetap atas nama yang membuatnya.',
+      },
     },
     sync: {
       chip: { pending: 'Belum terkirim', rejected: 'Ditolak' },
@@ -373,6 +397,11 @@ const source = {
         failedTitle: 'Foto gagal dikirim',
         failedBody: '{count} foto belum bisa dikirim. Fotonya aman di HP ini.',
         retry: 'Kirim ulang foto',
+      },
+      pc: {
+        savedHere: '{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.',
+        offline: 'Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.',
+        mediaFailed: '{count} foto belum bisa dikirim. Fotonya aman di komputer ini.',
       },
     },
     conflict: {
@@ -588,6 +617,7 @@ export const resources = {
             'The camera isn’t allowed. Allow it in Windows Settings › Privacy › Camera, then try again.',
           failed: 'The camera won’t start. Close other apps using it, then try again.',
           saveFailed: 'Couldn’t save the photo. Try again.',
+          fromFile: 'Choose a photo file',
         },
         signature: {
           hint: 'Ask the customer to sign in this box.',
@@ -785,6 +815,30 @@ export const resources = {
           keepEditing: 'Keep editing',
           makePinHint: 'Can’t sign in yet without a PIN.',
         },
+        pc: {
+          enrollTitle: 'Register this computer',
+          instruction: 'Only once on this computer. Make sure it is online.',
+          deviceNameField: 'Computer name',
+          deviceNamePlaceholder: 'For example: Counter PC',
+          nameDeviceFirst: 'Name the computer first.',
+          emptyUsers: 'No staff on this computer yet. Ask the store owner to add them.',
+          lock: 'Lock screen',
+          opening: 'Opening the store’s data…',
+          openFailed: 'This computer’s data could not be opened',
+          openFailedHint:
+            'Close the app and open it again. If it still happens, contact the store owner.',
+          backTo: 'Back to {name}',
+          otherPerson: 'Not you?',
+          showPassword: 'Show password',
+          hidePassword: 'Hide password',
+          unrecognised: {
+            title: 'This computer needs to be registered again',
+            body: 'The server no longer recognises this computer. Every change stays safe here until an owner registers it again.',
+            action: 'Register this computer again',
+          },
+          unsyncedBody:
+            'Sent once this computer is registered, still under the name of whoever made them.',
+        },
       },
       sync: {
         chip: { pending: 'Not sent yet', rejected: 'Rejected' },
@@ -844,6 +898,13 @@ export const resources = {
           failedBody:
             '{count, plural, one {# photo couldn’t be sent. It’s safe on this phone.} other {# photos couldn’t be sent. They’re safe on this phone.}}',
           retry: 'Send photos again',
+        },
+        pc: {
+          savedHere:
+            '{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}',
+          offline: 'Changes are saved on this computer and sent when it is online.',
+          mediaFailed:
+            '{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}',
         },
       },
       conflict: {

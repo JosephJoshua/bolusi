@@ -178,6 +178,29 @@ export function usePrintSettings(reloadKey = 0): QueryState<PrintSettings> {
   );
 }
 
+/** After how many days this store flags a phone nobody collected; `reloadKey` re-reads after a failure. */
+export function useUncollectedLimit(reloadKey = 0): QueryState<{ readonly days: number }> {
+  return useRepairQuery(
+    async (rt) => (await rt.query('uncollectedDays', {})).rows[0]!,
+    `uncollectedDays:${String(reloadKey)}`,
+  );
+}
+
+/**
+ * The name customers know this store by, for a message to them: the slips' header name, else the
+ * store's enrolled name. Null while it loads, or when this build knows neither.
+ */
+export function useStoreDisplayName(): string | null {
+  const name = useRepairQuery(
+    async (rt) =>
+      (await rt.query('printSettings', {})).rows[0]!.name ??
+      (await rt.printing?.storeName()) ??
+      null,
+    'storeDisplayName',
+  );
+  return name.status === 'ready' ? name.data : null;
+}
+
 export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
   return useRepairQuery(
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,

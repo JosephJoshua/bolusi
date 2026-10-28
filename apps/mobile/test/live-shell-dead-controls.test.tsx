@@ -71,11 +71,11 @@ import { sql } from 'kysely';
 import { act, useEffect } from 'react';
 import { View } from 'react-native';
 
-import type { CameraCapturePort, CameraShot } from '../src/media/capture.js';
+import type { CameraCapturePort, CameraShot } from '@bolusi/device/media/capture';
 import type { CapturePlatform } from '../src/media/CaptureHost.js';
-import type { MediaClient, MediaStartReport } from '../src/media/client.js';
-import { createSyncClient, type SyncClient } from '../src/bootstrap/sync-client.js';
-import type { NetInfoPort } from '../src/bootstrap/triggers.js';
+import type { MediaClient, MediaStartReport } from '@bolusi/device/media/client';
+import { createSyncClient, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import type { NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 import type { RootProps } from '../src/bootstrap/Root.js';
 import {
   bootFixture,

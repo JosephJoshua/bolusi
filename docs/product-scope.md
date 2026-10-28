@@ -210,6 +210,33 @@ Agreed with the owner before building printing.
 - **Code:** one shared printing layer (core `print`: document model, HTML and
   ESC/P renderers) that POS receipts will reuse; slips are module templates.
 
+## Warranty, phones not collected and customer messages (2026-10-28)
+
+Agreed with the owner after reviewing what the repair release still lacks.
+
+- **Repair types ("Jenis servis"):** an owner-edited list like the intake lists. Each
+  type has its warranty days and whether it needs an ownership video (unlocking
+  types do). A servisan can have several. Keluhan stays the customer's words. No
+  automatic suggestion for now: a fuzzy match is not useful, and a smarter model can
+  come later, trained on the counter's picks, as a suggestion only.
+- **Warranty claims:** a claim opens a new servisan linked to the old one, at Rp 0.
+  Charging for a claim, or a claim after the warranty ended, needs an owner.
+- **Ownership video:** taken by the counter at intake when a chosen type needs it. It
+  shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
+  720p; it uploads in the background like photos.
+- **No separate QC step:** the technician's after photo stays, and the counter tests
+  the phone with the customer at handover from a short checklist.
+- **Phones not collected:** a repaired or cancelled phone still in the store is
+  flagged once it has waited the store's number of days (60 until its owner sets
+  another, 1 to 365). The counter and owners see it on the board ("Belum diambil",
+  longest waiting first) and on the servisan. A flag only: nothing happens to the
+  phone. The days count from when it was last marked repaired, or cancelled.
+- **WhatsApp messages:** "Kabari pelanggan" on a phone ready to collect and "Tanya
+  pelanggan" on a price change waiting for the customer open WhatsApp on the
+  customer's number with the message written (number, what is owed, the DP). The
+  person checks it and presses send; there is no WhatsApp API. The counter PC opens
+  `wa.me` links outside the app and no other link.
+
 ## Who makes a first PIN (2026-10-26)
 
 A phone that is offline or behind can show "no PIN yet" for someone who made one

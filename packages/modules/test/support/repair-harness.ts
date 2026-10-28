@@ -168,6 +168,7 @@ export async function openRepairHarness(
                 P.setCancelFees,
                 P.correctDownPayment,
                 P.setPrintSettings,
+                P.setUncollectedDays,
                 // Categories are the business owner's alone (a tenant-wide permission).
                 ...Object.values(I).filter((id) => id !== I.manageCategories),
               ]),

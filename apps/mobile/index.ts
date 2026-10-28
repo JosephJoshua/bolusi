@@ -10,59 +10,65 @@ import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
-import { bootOncePerRealm, bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
-import { bootWithLocalRecovery } from './src/bootstrap/recovery.js';
+import { bootOncePerRealm, bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import { bootWithLocalRecovery } from '@bolusi/device/bootstrap/recovery';
 import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
-import { createEnrollTransport, createLoginTransport } from './src/bootstrap/enroll-transport.js';
+import {
+  createEnrollTransport,
+  createLoginTransport,
+} from '@bolusi/device/bootstrap/enroll-transport';
 import {
   createAppEnrollment,
   type AppEnrollment,
   type EnrollmentPlatform,
-} from './src/bootstrap/enrollment.js';
-import { readDeviceInfo } from './src/bootstrap/device-info.js';
-import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
+} from '@bolusi/device/bootstrap/enrollment';
+import { readDeviceInfo } from '@bolusi/device/bootstrap/device-info';
+import { createSessionNotesRuntime, notesMediaSeamsFor } from '@bolusi/device/bootstrap/notes';
 import {
   createSessionRepairRuntime,
   galleryPickerFor,
   repairMediaSeamsFor,
   type RepairMediaSeams,
-} from './src/bootstrap/repair.js';
+} from '@bolusi/device/bootstrap/repair';
 import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
-import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
-import { createFetchStaffAdmin } from './src/bootstrap/staff-transport.js';
+import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
+import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root, type RootProps } from './src/bootstrap/Root.js';
 import { lockPhonesToPortrait } from './src/ports/orientation.js';
-import type { AppRuntime } from './src/bootstrap/runtime.js';
-import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
-import { SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
-import { createBackgroundHost, type BackgroundHost } from './src/bootstrap/background-task.js';
-import { headlessPass } from './src/bootstrap/headless.js';
-import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
-import { MEDIA_DRAIN_TASK } from './src/media/background-task.js';
-import type { MediaClient } from './src/media/client.js';
+import type { AppRuntime } from '@bolusi/device/bootstrap/runtime';
+import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
+import { SYNC_BACKGROUND_TASK } from '@bolusi/device/bootstrap/background-sync';
+import {
+  createBackgroundHost,
+  type BackgroundHost,
+} from '@bolusi/device/bootstrap/background-task';
+import { headlessPass } from '@bolusi/device/bootstrap/headless';
+import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import { MEDIA_DRAIN_TASK } from '@bolusi/device/media/background-task';
+import type { MediaClient } from '@bolusi/device/media/client';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform, createExpoScanPlatform } from './src/media/native-capture.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
-import { createFetchMediaTransport } from './src/media/transport.js';
+import { createFetchMediaTransport } from '@bolusi/device/media/transport';
 import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
-import { createPhonePhotoLoader } from './src/media/phone-photos.js';
+import { createPhonePhotoLoader } from '@bolusi/device/media/phone-photos';
 import { appStatePort } from './src/ports/app-state.js';
 import { expoPrintPlatform } from './src/ports/print.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
-import { systemClock } from './src/ports/clock.js';
+import { systemClock } from '@bolusi/device/ports/clock';
 import { deviceColumnAead } from './src/ports/aead.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
-import { consoleDiagnostics } from './src/ports/diagnostics.js';
+import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import { SecureStoreDbKeyStore } from './src/ports/db-keystore.js';
 import { SecureStoreKeyStore } from './src/ports/keystore.js';
 import { fileLocaleStore } from './src/ports/locale-store.js';
 import { expoLocationPort } from './src/ports/location.js';
 import { netInfoPort } from './src/ports/netinfo.js';
-import { systemTimer } from './src/ports/timer.js';
+import { systemTimer } from '@bolusi/device/ports/timer';
 // Side-effect import (task 27a/175): flag-gated `AppRegistry.registerComponent('BolusiHarness', …)`.
 // This bundle is loaded by BOTH MainActivity and the test-profile-only HarnessActivity, so the harness
 // root must be registered here; it is a no-op unless `EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1`.
@@ -269,14 +275,17 @@ function buildSync(
  * The `bdt_` token is read PER CALL from SecureStore, never cached, so a revoked device stops
  * authenticating at once (api/02-auth §7.3) — the same rule the sync legs follow.
  */
-function createMedia(app: Bootstrapped): MediaClient | null {
-  return buildMedia(app, { background: true });
+function createMedia(
+  app: Bootstrapped,
+  hooks: { readonly onQueueChanged: () => void },
+): MediaClient | null {
+  return buildMedia(app, { background: true, onQueueChanged: hooks.onQueueChanged });
 }
 
 /** `background: false` builds a client for one headless pass: the host drives it directly. */
 function buildMedia(
   app: Bootstrapped,
-  options: { readonly background: boolean },
+  options: { readonly background: boolean; readonly onQueueChanged?: () => void },
 ): MediaClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
@@ -302,6 +311,7 @@ function buildMedia(
       randomBytes: (n) => quickCryptoPort.randomBytes(n),
     }),
     location: expoLocationPort,
+    ...(options.onQueueChanged === undefined ? {} : { onQueueChanged: options.onQueueChanged }),
     // 06 §8: silent failure is unacceptable. The client buffers per-item surfacings for the
     // sync-status screen; THIS sink is only for the rejections that escape a trigger (a drain that
     // could not even read the queue). It routes through the app's ONE client diagnostics channel

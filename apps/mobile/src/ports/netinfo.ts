@@ -11,7 +11,7 @@
 // the honest default (never a cheerful "online" a device has not confirmed — design-system §4).
 import NetInfo from '@react-native-community/netinfo';
 
-import type { NetInfoPort } from '../bootstrap/triggers.js';
+import type { NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 
 export const netInfoPort: NetInfoPort = {
   subscribe(listener: (connected: boolean) => void): () => void {

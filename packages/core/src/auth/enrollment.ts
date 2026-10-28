@@ -15,7 +15,7 @@
 //
 // Enrollment logs NOBODY in (§4.4): it returns with no open session — the device shows the switcher,
 // and the enrolling owner authenticates by PIN like everyone else.
-import type { SignedOperation } from '@bolusi/schemas';
+import type { DevicePlatform, SignedOperation } from '@bolusi/schemas';
 import type { Kysely } from 'kysely';
 
 import type { CryptoPort } from '../crypto/port.js';
@@ -84,7 +84,7 @@ export interface EnrollmentParams {
   readonly controlSession: string;
   readonly storeId: string;
   readonly deviceName: string;
-  readonly platform: 'android' | 'ios';
+  readonly platform: DevicePlatform;
   readonly appVersion: string;
   /**
    * The registration this enrolment replaces, when that registration is still active on the server

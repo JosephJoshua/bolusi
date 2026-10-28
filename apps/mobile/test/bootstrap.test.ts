@@ -57,9 +57,12 @@ import {
   type ProjectionOperation,
 } from '@bolusi/core';
 
-import { bootOncePerRealm, bootstrap } from '../src/bootstrap/bootstrap.js';
-import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/bootstrap/recovery.js';
-import { CLIENT_MODULES } from '../src/bootstrap/modules.js';
+import { bootOncePerRealm, bootstrap } from '@bolusi/device/bootstrap/bootstrap';
+import {
+  bootWithLocalRecovery,
+  isUnrecoverableLocalDbError,
+} from '@bolusi/device/bootstrap/recovery';
+import { CLIENT_MODULES } from '@bolusi/device/bootstrap/modules';
 import { SecureStoreDbKeyStore } from '../src/ports/db-keystore.js';
 import { openBetterSqlite3Driver, openedWith, resetOpenedWith } from './better-sqlite3-driver.js';
 import { nodeColumnAead } from '@bolusi/test-support';
@@ -404,7 +407,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(38);
+    expect(app.registry.permissions.size).toBe(39);
     expect(app.registry.permissions.ids()).toStrictEqual([
       'auth.audit_view',
       'auth.device_enroll',
@@ -420,6 +423,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'auth.user_reset_pin',
       'inventory.correct_use',
       'inventory.count',
+      'inventory.manage_categories',
       'inventory.manage_items',
       'inventory.read',
       'inventory.use_parts',
@@ -442,6 +446,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'repair.read',
       'repair.set_cancel_fees',
       'repair.set_print_settings',
+      'repair.set_uncollected_days',
       'repair.work',
     ]);
     await app.close();

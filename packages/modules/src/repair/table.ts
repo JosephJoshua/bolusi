@@ -66,6 +66,7 @@ export function statusChoices(view: BoardView | 'search'): readonly TicketStatus
     case 'unassigned':
       return IN_PROGRESS_OUTCOMES;
     case 'pickup':
+    case 'uncollected':
       return ['repaired', 'cancelled'];
     case 'returned':
     case 'cancelled':
@@ -130,9 +131,14 @@ export function presetRange(preset: ReceivedPreset, now: number): DayRange {
   }
 }
 
-/** The `listTickets` filter for a queue narrowed by the facets. */
-export function tableFilter(view: BoardView, userId: string, facets: TicketFacets): TicketFilter {
-  const base: TicketFilter = boardFilter(view, userId) ?? {};
+/** The `listTickets` filter for a queue narrowed by the facets; `readyBefore` as `boardFilter`. */
+export function tableFilter(
+  view: BoardView,
+  userId: string,
+  readyBefore: number,
+  facets: TicketFacets,
+): TicketFilter {
+  const base: TicketFilter = boardFilter(view, userId, readyBefore) ?? {};
   const filter: { -readonly [K in keyof TicketFilter]: TicketFilter[K] } = { ...base };
   if (facets.statuses.length > 0) {
     // Only the statuses this queue holds (every queue that offers a status keeps its phones in the
