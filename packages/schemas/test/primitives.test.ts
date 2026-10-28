@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { containsNulCharacter, zMoneyIdr, zPayloadNumber } from '../src/index.js';
+import { containsUnstorableText, zMoneyIdr, zPayloadNumber } from '../src/index.js';
 
 describe('zMoneyIdr — money is integer IDR, never floats (05 §3)', () => {
   test('accepts an integer amount', () => {
@@ -58,15 +58,25 @@ describe('zPayloadNumber — payload numbers are integers or decimal strings (05
   });
 });
 
-describe('containsNulCharacter — Postgres cannot store U+0000 in text or jsonb', () => {
+describe('containsUnstorableText — Postgres cannot store U+0000 or a lone surrogate', () => {
   test('finds a NUL in a nested string or an object key', () => {
-    expect(containsNulCharacter({ a: [{ b: 'x\u0000y' }] })).toBe(true);
-    expect(containsNulCharacter({ ['k\u0000']: 1 })).toBe(true);
-    expect(containsNulCharacter('\u0000')).toBe(true);
+    expect(containsUnstorableText({ a: [{ b: 'x\u0000y' }] })).toBe(true);
+    expect(containsUnstorableText({ ['k\u0000']: 1 })).toBe(true);
+    expect(containsUnstorableText('\u0000')).toBe(true);
+  });
+
+  test('finds an unpaired surrogate in a nested string or an object key', () => {
+    const cutEmoji = '\u{1F4F1}'.slice(0, 1);
+    expect(containsUnstorableText({ a: [{ b: `HP ${cutEmoji}` }] })).toBe(true);
+    expect(containsUnstorableText('\uDC00x')).toBe(true);
+    expect(containsUnstorableText('x\uDBFF')).toBe(true);
+    expect(containsUnstorableText('\uDBFF\uDBFF\uDC00')).toBe(true);
+    expect(containsUnstorableText({ [`k${cutEmoji}`]: 1 })).toBe(true);
   });
 
   test('passes ordinary JSON values', () => {
-    expect(containsNulCharacter({ a: ['x', 1, null, true, { b: 'Rp 50.000' }] })).toBe(false);
-    expect(containsNulCharacter('\\u0000')).toBe(false);
+    expect(containsUnstorableText({ a: 'HP rusak \u{1F4F1}\u{1F44D}', b: 'é' })).toBe(false);
+    expect(containsUnstorableText({ a: ['x', 1, null, true, { b: 'Rp 50.000' }] })).toBe(false);
+    expect(containsUnstorableText('\\u0000')).toBe(false);
   });
 });

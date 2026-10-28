@@ -19,7 +19,7 @@ import {
   SKELETON_ROW_COUNT,
 } from '../src/components/LoadingState.js';
 import { resolveSyncChip, SyncStatusChip } from '../src/components/SyncStatusChip.js';
-import { TextInput } from '../src/components/TextInput.js';
+import { dropUnpairedSurrogates, TextInput } from '../src/components/TextInput.js';
 import { UnauthorizedState } from '../src/components/UnauthorizedState.js';
 import { border, color, identityPalette, size, touch } from '../src/tokens.js';
 import { fire, isUnwired, render } from './render.js';
@@ -471,6 +471,16 @@ describe('List (§3.13) — virtualization and the four mandatory states', () =>
 
 describe('TextInput (§3.2)', () => {
   const base = { label: 'Nama', value: '', onChangeText: vi.fn() };
+
+  test('a native maxLength cut through an emoji never reaches the screen as half a character', () => {
+    const onChangeText = vi.fn();
+    const r = render(<TextInput {...base} onChangeText={onChangeText} maxLength={4} />);
+    fire(r.get('ui.textInput.field'), 'onChangeText', 'HP \u{1F4F1}'.slice(0, 4));
+    expect(onChangeText).toHaveBeenLastCalledWith('HP ');
+    fire(r.get('ui.textInput.field'), 'onChangeText', 'HP\u{1F4F1}');
+    expect(onChangeText).toHaveBeenLastCalledWith('HP\u{1F4F1}');
+    expect(dropUnpairedSurrogates('\uDC00a\uD83D')).toBe('a');
+  });
 
   test('the label is always rendered above the field — never placeholder-as-label', () => {
     const r = render(<TextInput {...base} placeholder="mis. Yosia" />);

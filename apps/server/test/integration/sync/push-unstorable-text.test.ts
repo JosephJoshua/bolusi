@@ -1,4 +1,4 @@
-// An op holding U+0000 can never be stored (Postgres refuses it in jsonb and text), so the push
+// An op holding U+0000 or an unpaired surrogate can never be stored (Postgres refuses both), so the push
 // pipeline refuses it per op instead of failing the whole batch and wedging the device.
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
@@ -56,7 +56,7 @@ afterEach(async () => {
   closeDb = undefined;
 });
 
-describe('a NUL character in an op', () => {
+describe('text Postgres cannot store in an op', () => {
   test('is refused as SCHEMA_INVALID while the rest of the batch is accepted', async () => {
     const world = makeWorld(9201, serverCryptoPort);
     const builder = new ChainBuilder(world, serverCryptoPort);
@@ -93,5 +93,38 @@ describe('a NUL character in an op', () => {
     // A re-send settles instead of failing again: the device is not stuck.
     const again = await push();
     expect(again.results.map((r) => r.status)).toEqual(['rejected', 'duplicate']);
+  });
+
+  test('refuses an unpaired surrogate the same way', async () => {
+    const world = makeWorld(9202, serverCryptoPort);
+    const builder = new ChainBuilder(world, serverCryptoPort);
+    const genesis = builder.genesis();
+    await seedWorld(db, world, { lastSeq: 1, lastHash: genesis.hash, grants: 'all' });
+
+    const cut = builder.append({
+      type: 'notes.note_created',
+      schemaVersion: 3,
+      entityType: 'note',
+      payload: { title: 'Catatan', body: 'layar retak \u{1F4F1}'.slice(0, -1), mediaRef: null },
+    });
+    const honest = builder.append({
+      type: 'notes.note_created',
+      schemaVersion: 3,
+      entityType: 'note',
+      payload: { title: 'Catatan 2', body: 'ok \u{1F44D}', mediaRef: null },
+    });
+
+    const result = await processPushBatch(
+      productionDeps(),
+      { deviceId: world.deviceId, tenantId: world.tenantId },
+      [cut, honest],
+    );
+    expect(result.results[0]).toMatchObject({
+      id: cut.id,
+      status: 'rejected',
+      code: 'SCHEMA_INVALID',
+    });
+    expect(result.results[1]).toMatchObject({ id: honest.id, status: 'accepted' });
+    expect((await readOps(db, world.tenantId)).map((op) => op.id)).toEqual([honest.id]);
   });
 });

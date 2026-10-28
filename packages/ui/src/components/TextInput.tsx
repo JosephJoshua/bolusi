@@ -129,6 +129,35 @@ const styles = StyleSheet.create({
   errorText: { ...type.bodySm, color: color.danger, marginLeft: space.xs, flex: 1 },
 });
 
+/**
+ * Drops any UTF-16 surrogate left without its pair. A native `maxLength` counts code units, so it
+ * can cut an emoji in half; Postgres cannot store the half left over and the phone refuses to sign
+ * an op holding one, so the field never hands it to a screen.
+ */
+export function dropUnpairedSurrogates(text: string): string {
+  let out = '';
+  let changed = false;
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : -1;
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += text[i]! + text[i + 1]!;
+        i++;
+        continue;
+      }
+      changed = true;
+      continue;
+    }
+    if (unit >= 0xdc00 && unit <= 0xdfff) {
+      changed = true;
+      continue;
+    }
+    out += text[i]!;
+  }
+  return changed ? out : text;
+}
+
 export function TextInput({
   label,
   value,
@@ -178,7 +207,7 @@ export function TextInput({
           accessibilityLabel={label}
           accessibilityState={{ disabled }}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={(text) => onChangeText(dropUnpairedSurrogates(text))}
           placeholder={placeholder}
           placeholderTextColor={color.textMuted}
           editable={!notEditable}
