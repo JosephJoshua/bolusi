@@ -253,7 +253,7 @@ export function RolesScreen({
               <ListRow
                 primaryText={roleName(role)}
                 secondaryText={`${roleHint(role)} · ${t('auth.roles.holders', {
-                  count: roleHolders(loaded.directory, role.id),
+                  count: directory === null ? 0 : roleHolders(directory, role.id),
                 })}`}
                 onPress={() => {
                   setNotice(null);
