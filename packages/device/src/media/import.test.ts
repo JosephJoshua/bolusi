@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 import { FakeFs, bytesOfLength, sha256Hex } from './_harness.test.js';
-import { importImage, type ImportDeps } from './import.js';
+import { importImage, importVideo, type ImportDeps } from './import.js';
 
 const keyStore = { getDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)) };
 const IDENTITY = {
@@ -74,6 +74,38 @@ describe('importing a gallery picture', () => {
     const fs = new FakeFs();
     fs.write('/cache/logo.jpg', bytesOfLength(10));
     const outcome = await importImage(deps(fs, 1), { uri: '/cache/logo.jpg', mime: 'image/jpeg' });
+    expect(outcome.kind).toBe('refused_low_storage');
+    const rows = await sql`SELECT id FROM media_items`.execute(db.db);
+    expect(rows.rows).toHaveLength(0);
+  });
+});
+
+describe('keeping a recorded video clip', () => {
+  test('an MP4 is kept as a video item, sealed under its own extension', async () => {
+    const fs = new FakeFs();
+    const bytes = bytesOfLength(3 * 256 * 1024 + 7);
+    fs.write('/cache/clip.mp4', bytes);
+    const outcome = await importVideo(deps(fs), { uri: '/cache/clip.mp4', mime: 'video/mp4' });
+    expect(outcome.kind).toBe('imported');
+    if (outcome.kind !== 'imported') return;
+    expect(outcome.ref).toMatchObject({
+      mime: 'video/mp4',
+      type: 'video',
+      sizeBytes: bytes.byteLength,
+      sha256: sha256Hex(bytes),
+    });
+    const row = await sql<{ localPath: string; type: string; mimeType: string }>`
+      SELECT local_path AS "localPath", type, mime_type AS "mimeType" FROM media_items
+    `.execute(db.db);
+    expect(row.rows[0]).toMatchObject({ type: 'video', mimeType: 'video/mp4' });
+    expect(row.rows[0]?.localPath).toMatch(/\.mp4$/);
+    expect(fs.files.has('/cache/clip.mp4')).toBe(false);
+  });
+
+  test('a nearly full device refuses a clip before writing anything', async () => {
+    const fs = new FakeFs();
+    fs.write('/cache/clip.webm', bytesOfLength(10));
+    const outcome = await importVideo(deps(fs, 1), { uri: '/cache/clip.webm', mime: 'video/webm' });
     expect(outcome.kind).toBe('refused_low_storage');
     const rows = await sql`SELECT id FROM media_items`.execute(db.db);
     expect(rows.rows).toHaveLength(0);

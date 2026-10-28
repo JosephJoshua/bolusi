@@ -67,7 +67,7 @@ import {
   type PruneReport,
   type RemoteCacheEntry,
 } from './pruning.js';
-import { importImage, type PickedImage } from './import.js';
+import { importImage, importVideo, type PickedImage, type RecordedVideo } from './import.js';
 import { attachMediaToOperation } from './queue.js';
 import type { MediaRef } from '@bolusi/schemas';
 import {
@@ -160,6 +160,8 @@ export interface MediaClient {
   ): Promise<SignatureOutcome>;
   /** A picture picked from the gallery (the store logo), through the same finalization tail. */
   importImage(identity: CaptureIdentity, picked: PickedImage): ReturnType<typeof importImage>;
+  /** A recorded clip (the ownership video), kept as it is through the same finalization tail. */
+  importVideo(identity: CaptureIdentity, recorded: RecordedVideo): ReturnType<typeof importVideo>;
   /** 04 §5.1 step 5 — the command runtime's attach. Task 25 drives it from a real command. */
   attach(
     ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
@@ -337,20 +339,25 @@ class MediaClientImpl implements MediaClient {
   }
 
   importImage(identity: CaptureIdentity, picked: PickedImage): ReturnType<typeof importImage> {
-    return importImage(
-      {
-        db: this.deps.db.db,
-        identity,
-        files: this.deps.files,
-        moveToDocuments: this.deps.moveToDocuments,
-        location: this.deps.location,
-        clock: this.deps.clock,
-        newId: this.deps.newId,
-        freeSpaceBytes: this.deps.freeSpaceBytes,
-        onCaptured: () => this.triggers.notifyCapture(),
-      },
-      picked,
-    );
+    return importImage(this.importDeps(identity), picked);
+  }
+
+  importVideo(identity: CaptureIdentity, recorded: RecordedVideo): ReturnType<typeof importVideo> {
+    return importVideo(this.importDeps(identity), recorded);
+  }
+
+  private importDeps(identity: CaptureIdentity) {
+    return {
+      db: this.deps.db.db,
+      identity,
+      files: this.deps.files,
+      moveToDocuments: this.deps.moveToDocuments,
+      location: this.deps.location,
+      clock: this.deps.clock,
+      newId: this.deps.newId,
+      freeSpaceBytes: this.deps.freeSpaceBytes,
+      onCaptured: () => this.triggers.notifyCapture(),
+    };
   }
 
   async attach(

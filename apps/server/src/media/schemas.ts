@@ -32,6 +32,12 @@ import { respondError } from '../errors.js';
 /** 10 MiB cap (api/03-media §3.1) — v0 headroom over the ≤ 300 KiB photo contract. */
 export const MEDIA_MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10,485,760
 
+/**
+ * A video clip's cap: a 60 s ownership video at 720p is about 15 to 25 MB from a phone or a
+ * webcam, so this leaves room for a high-bitrate camera without letting a device park anything.
+ */
+export const VIDEO_MAX_SIZE_BYTES = 48 * 1024 * 1024;
+
 /** Server-dictated chunk size, pinned (api/03-media §4). */
 export const MEDIA_CHUNK_SIZE = 262_144; // 256 KiB
 

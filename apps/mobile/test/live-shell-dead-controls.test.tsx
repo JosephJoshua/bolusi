@@ -151,6 +151,7 @@ function fakeMediaClient(
     },
     captureSignature: () => Promise.reject(new Error('not used')),
     importImage: () => Promise.reject(new Error('not used')),
+    importVideo: () => Promise.reject(new Error('not used')),
     attach: () => Promise.resolve(),
     // The captured file is encrypted at rest; rendering it goes through a decrypted copy.
     loadForRender: (ref) =>

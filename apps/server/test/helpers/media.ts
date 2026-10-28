@@ -51,18 +51,20 @@ export function mediaStorageKeyForTest(tenantId: string, mediaId: string): strin
   return mediaStorageKey(tenantId, mediaId);
 }
 
-const MAGIC: Record<'image/jpeg' | 'image/png', number[]> = {
+/** Every mime the server accepts; a video's type is `video`, everything else an `image`. */
+export type TestMime = 'image/jpeg' | 'image/png' | 'video/mp4' | 'video/webm';
+
+const MAGIC: Record<TestMime, number[]> = {
   'image/jpeg': [0xff, 0xd8, 0xff],
   'image/png': [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  // An mp4's first box: its size, then "ftyp" and a brand.
+  'video/mp4': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d],
+  'video/webm': [0x1a, 0x45, 0xdf, 0xa3],
 };
 
 /** A `size`-byte "image" with the correct magic prefix for `mime`, filled deterministically from
  *  `seed`. Body content is arbitrary — only the leading magic bytes are checked at complete. */
-export function buildImage(
-  size: number,
-  mime: 'image/jpeg' | 'image/png',
-  seed = 'img',
-): Uint8Array {
+export function buildImage(size: number, mime: TestMime, seed = 'img'): Uint8Array {
   const bytes = new Uint8Array(size);
   const magic = MAGIC[mime];
   for (let i = 0; i < size; i += 1)
@@ -293,16 +295,12 @@ export interface InitBody {
 }
 
 /** An init body for a full file captured by `ctx` (sha over the whole file). */
-export function initBodyFor(
-  ctx: DeviceContext,
-  bytes: Uint8Array,
-  mime: 'image/jpeg' | 'image/png',
-): InitBody {
+export function initBodyFor(ctx: DeviceContext, bytes: Uint8Array, mime: TestMime): InitBody {
   return {
     sizeBytes: bytes.length,
     sha256: sha256Hex(bytes),
     mime,
-    type: 'image',
+    type: mime.startsWith('video/') ? 'video' : 'image',
     metadata: {
       capturedAt: 1_700_000_000_000,
       location: null,
@@ -360,7 +358,7 @@ export async function uploadFull(
   h: MediaHarness,
   ctx: DeviceContext,
   bytes: Uint8Array,
-  mime: 'image/jpeg' | 'image/png',
+  mime: TestMime,
   seed: string,
 ): Promise<{ mediaId: string }> {
   const mediaId = detUuidV7(`${seed}:media`);

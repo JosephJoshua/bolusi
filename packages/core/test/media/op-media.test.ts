@@ -27,6 +27,13 @@ describe('mediaRefsInPayload', () => {
     expect(mediaRefsInPayload(payload)).toEqual([ref(A), ref(B)]);
   });
 
+  test('finds a video clip ref too', () => {
+    const clip = { ...ref(B), mime: 'video/mp4', type: 'video' };
+    expect(mediaRefsInPayload({ ownershipVideo: clip, photo: ref(A) })).toEqual([clip, ref(A)]);
+    // A photo slot cannot carry a clip's mime: such a ref matches neither shape.
+    expect(mediaRefsInPayload({ photo: { ...ref(A), mime: 'video/mp4' } })).toEqual([]);
+  });
+
   test('ignores incomplete refs and plain values', () => {
     expect(mediaRefsInPayload({ mediaId: A })).toEqual([]);
     expect(mediaRefsInPayload(null)).toEqual([]);

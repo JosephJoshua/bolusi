@@ -27,6 +27,7 @@ import {
   type RawWriteHandle,
   type Sha256Factory,
 } from '@bolusi/core';
+import { MEDIA_EXTENSION, VIDEO_MIMES } from '@bolusi/schemas';
 import { createHash } from 'react-native-quick-crypto';
 
 import { deviceColumnAead } from '../ports/aead.js';
@@ -61,6 +62,8 @@ function captureScratchDirectory(): Directory {
 function renderTempDirectory(): Directory {
   return new Directory(Paths.cache, 'media-render');
 }
+
+const VIDEO_EXTENSIONS = new Set(VIDEO_MIMES.map((mime) => MEDIA_EXTENSION[mime]));
 
 /** Free space in bytes (06 §7). `Paths.availableDiskSpace`, not the throwing legacy API. */
 export function availableDiskSpaceBytes(): number {
@@ -267,16 +270,21 @@ export function createEncryptingMediaFileParts(
     },
 
     /**
-     * Decrypt a verified media file to a transient plaintext temp and return its uri for `<Image>`
-     * (task 158). Called only after the bytes were hash-verified (remote-cache.ts); decryption follows
-     * verification, never replaces it. A v0 photo is ≤ 300 KiB, so buffering the plaintext to write the
-     * temp is bounded; a v1 video would stream to the temp instead (06 §7 tripwire).
+     * Decrypt a verified media file to a transient plaintext temp and return its uri for `<Image>` or
+     * the video player (task 158). Called only after the bytes were hash-verified (remote-cache.ts);
+     * decryption follows verification, never replaces it. A photo is small enough to buffer; a clip
+     * streams to its temp one frame at a time.
      */
     async toRenderUri(path) {
-      const plaintext = await (await resolveEnc()).decryptToBuffer(path);
+      const enc = await resolveEnc();
       const dir = renderTempDirectory();
       if (!dir.exists) dir.create({ intermediates: true });
       const temp = new File(dir, new File(path).name);
+      if (VIDEO_EXTENSIONS.has(temp.extension.replace('.', ''))) {
+        await enc.decryptToFile(path, temp.uri);
+        return temp.uri;
+      }
+      const plaintext = await enc.decryptToBuffer(path);
       if (!temp.exists) temp.create();
       temp.write(plaintext);
       return temp.uri;
