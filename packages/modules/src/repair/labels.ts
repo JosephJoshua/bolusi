@@ -4,7 +4,8 @@
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import type { IntakeStep, StaleStep, TicketStatus } from './flows.js';
+import type { DownPaymentGap, IntakeStep, StaleStep, TicketStatus } from './flows.js';
+import type { SpecFactKey } from './device-specs.js';
 import type { ScreenLockKind } from './screen-lock.js';
 import {
   READY_UNKNOWN,
@@ -137,4 +138,25 @@ export const CHECK_STATE_KEY: Readonly<Record<ChecklistState, RepairKey>> = {
   ok: 'repair.condition.ok',
   issue: 'repair.condition.issue',
   not_checked: 'repair.condition.notChecked',
+};
+
+/** What a down payment entry still needs, said under the field or beside the save button. */
+export const DOWN_PAYMENT_GAP_KEY: Readonly<Record<DownPaymentGap, RepairKey>> = {
+  aboveTotal: 'repair.problem.downPaymentAboveTotal',
+  amount: 'repair.hint.downPayment',
+  correctAmount: 'repair.hint.downPaymentCorrect',
+  same: 'repair.hint.downPaymentSame',
+  reason: 'repair.hint.reason',
+};
+
+/** The label of each fact the phone catalog gives about a model (`specFacts`). */
+export const SPEC_FACT_KEY: Readonly<Record<SpecFactKey, RepairKey>> = {
+  memory: 'repair.spec.memory',
+  screen: 'repair.spec.screen',
+  chipset: 'repair.spec.chipset',
+  battery: 'repair.spec.battery',
+  port: 'repair.spec.port',
+  sim: 'repair.spec.sim',
+  cardSlot: 'repair.spec.cardSlot',
+  os: 'repair.spec.os',
 };

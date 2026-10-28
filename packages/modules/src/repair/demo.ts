@@ -1,34 +1,42 @@
 /**
- * A `RepairRuntime` over in-memory demo tickets for the browser harness, the repair twin of
- * `demoNotesRuntime`. The real runtime needs SQLite, which a browser cannot load, so the harness
- * renders the REAL repair screens over this fake. Commands mutate the demo data and notify, so the
- * flows (intake, start, repaired, price change, handover) genuinely move a ticket along.
+ * A `RepairRuntime` over in-memory demo tickets for the browser harnesses (the phone screens on
+ * react-native-web, the desktop app's demo mode), the repair twin of `demoNotesRuntime`. The real
+ * runtime needs SQLite, so the harnesses render the REAL repair screens over this fake. Commands
+ * mutate the demo data and notify, so the flows (intake, start, repaired, price change, handover)
+ * genuinely move a ticket along. Dev tooling only: no shipping screen imports it.
  *
  * Photos resolve to a labelled grey placeholder image, never anything that looks like a real photo.
  */
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
+
+import { IN_PROGRESS_OUTCOMES, REPAIR_PERMISSION, type RepairOutcome } from './constants.js';
 import {
-  IN_PROGRESS_OUTCOMES,
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
-  REPAIR_PERMISSION,
-  REPAIR_REFUSALS,
   type IntakeOptionSettings,
-  type PrintSettings,
-  type QuoteLineRow,
-  type RepairOutcome,
-  type TicketDetailRow,
-  type TicketPhotoRow,
-} from '@bolusi/modules/repair';
-import type { RepairPrinting, RepairRuntime } from '@bolusi/modules/repair/screens';
-
+} from './intake-options.js';
+import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
+import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { REPAIR_REFUSALS } from './rules.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
   demoSearchDeviceModels,
 } from './phone-catalog-demo.js';
-import { HARNESS_NOW } from './seed.js';
+
+/** The phone harness's fixed clock, so its screenshots never change. */
+export const DEMO_NOW = Date.UTC(2026, 6, 21, 3, 0, 0);
+
+/** "Now" for the runtime being built; a live demo passes the real clock. */
+let HARNESS_NOW = DEMO_NOW;
+
+/** The browser globals the harness touches, without a DOM lib in this package. */
+const browser = globalThis as unknown as {
+  window?: Record<string, unknown> & { open(url: string, target: string): unknown };
+  Blob?: new (parts: string[], options: { type: string }) => Blob;
+  document?: { createElement(tag: 'a'): { href: string; download: string; click(): void } };
+};
 
 const HOUR = 3_600_000;
 const P = REPAIR_PERMISSION;
@@ -331,6 +339,189 @@ function seedTickets(): TicketDetailRow[] {
   ].map(withTotals);
 }
 
+const CUSTOMERS = [
+  'Agustina Rumbiak',
+  'Benny Kambu',
+  'Corneles Waromi',
+  'Debora Yoku',
+  'Elias Mofu',
+  'Fransina Ayomi',
+  'Gerson Rumbewas',
+  'Hana Sawaki',
+  'Isak Kafiar',
+  'Juliana Wanma',
+  'Kornelius Mansawan',
+  'Lea Rumaropen',
+  'Markus Wamafma',
+  'Novi Rumbrawer',
+  'Obeth Inggamer',
+  'Priska Mayor',
+  'Rudi Hamadi',
+  'Sarlota Rumere',
+  'Thomas Indey',
+  'Yuliana Sroyer',
+  'Wempi Fonataba',
+  'Siti Nurhaliza',
+  'Ahmad Fauzi',
+  'Rina Wulandari',
+  'Budi Hartono',
+];
+const DEVICES: readonly (readonly [string, string, string])[] = [
+  ['Samsung', 'Galaxy A15', 'Hitam'],
+  ['Samsung', 'Galaxy A05s', 'Hijau'],
+  ['Oppo', 'A18', 'Biru'],
+  ['Oppo', 'Reno 8', 'Hitam'],
+  ['Vivo', 'Y17s', 'Ungu'],
+  ['Xiaomi', 'Redmi 13C', 'Hitam'],
+  ['Xiaomi', 'Redmi Note 13', 'Biru'],
+  ['Realme', 'C53', 'Emas'],
+  ['Infinix', 'Hot 40i', 'Hijau'],
+  ['iPhone', '11', 'Putih'],
+  ['Tecno', 'Spark 20', 'Hitam'],
+];
+const PROBLEMS: readonly (readonly [string, string, number, string, number])[] = [
+  ['LCD pecah, ada garis hijau', 'LCD original', 550_000, 'Pasang LCD', 100_000],
+  ['Baterai cepat habis', 'Baterai', 180_000, 'Ganti baterai', 50_000],
+  ['Tidak bisa cas', 'Konektor cas', 75_000, 'Servis konektor', 50_000],
+  ['Speaker sember', 'Speaker', 70_000, 'Pasang speaker', 40_000],
+  ['Kamera belakang tidak fokus', 'Kamera belakang', 210_000, 'Pasang kamera', 50_000],
+  ['Mati total habis jatuh', 'IC power', 250_000, 'Servis mesin', 150_000],
+  ['Lupa pola kunci layar', 'Flash ulang', 0, 'Reset dan flash', 100_000],
+  ['Tombol volume macet', 'Fleksibel volume', 60_000, 'Pasang fleksibel', 40_000],
+];
+const OUTCOMES: readonly RepairOutcome[] = [
+  'received',
+  'in_repair',
+  'in_repair',
+  'waiting_for_parts',
+  'repaired',
+  'received',
+  'in_repair',
+];
+
+/** A store's worth of extra tickets, dated over the past two weeks, spread over every queue. */
+function storeTickets(): TicketDetailRow[] {
+  return Array.from({ length: 48 }, (_, i) => {
+    const [brand, model, colour] = DEVICES[(i * 7) % DEVICES.length]!;
+    const [complaint, part, partPrice, labour, labourPrice] = PROBLEMS[(i * 5) % PROBLEMS.length]!;
+    const outcome = OUTCOMES[i % OUTCOMES.length]!;
+    const returned = i % 11 === 10;
+    const unassigned = outcome === 'received' && i % 3 === 0;
+    const lines = [
+      ...(partPrice > 0 ? [line('part', part, partPrice)] : []),
+      line('labour', labour, labourPrice),
+    ];
+    return withTotals(
+      ticket({
+        id: `t-s${String(i)}`,
+        number: `K7P-${String(200 - i).padStart(4, '0')}`,
+        customer: CUSTOMERS[i % CUSTOMERS.length]!,
+        phone:
+          i % 4 === 3
+            ? null
+            : `08${String(11 + (i % 9))}-${String(4000 + i * 37)}-${String(5100 + i * 53)}`,
+        brand,
+        model,
+        color: colour,
+        complaint,
+        outcome: returned ? 'repaired' : outcome,
+        technicianId: unassigned ? null : TECHNICIANS[i % TECHNICIANS.length]!,
+        lines,
+        hoursAgo: 3 + i * 6,
+        ...(outcome === 'received' ? {} : { extraPhotos: [photoRow(`before:s${String(i)}`)] }),
+        ...(returned ? { location: 'returned' as const } : {}),
+      }),
+    );
+  });
+}
+
+/**
+ * `?tickets=N` on a repair entry fills the store to N tickets, so the board can be timed at a busy
+ * store's volume: the seeded six, then older history, nearly all of it already handed back.
+ */
+export function demoTicketCount(search: string): number {
+  const count = Number(new URLSearchParams(search).get('tickets'));
+  return Number.isInteger(count) && count > 0 ? count : 0;
+}
+
+const HISTORY_FIRST = [
+  'Yohanis',
+  'Maria',
+  'Markus',
+  'Agustina',
+  'Petrus',
+  'Ruth',
+  'Simon',
+  'Dorkas',
+  'Budi',
+  'Dewi',
+];
+const HISTORY_LAST = [
+  'Wenda',
+  'Kogoya',
+  'Tabuni',
+  'Mandacan',
+  'Rumbiak',
+  'Kambu',
+  'Yoku',
+  'Mofu',
+  'Krey',
+  'Sawaki',
+];
+const HISTORY_DEVICES = [
+  ['Samsung', 'Galaxy A14'],
+  ['Oppo', 'A17'],
+  ['Vivo', 'Y17s'],
+  ['Xiaomi', 'Redmi Note 12'],
+  ['Realme', 'C55'],
+  ['Infinix', 'Hot 40'],
+  ['Apple', 'iPhone 11'],
+] as const;
+
+/** Older tickets after the seeded ones, deterministic so timings compare run to run. */
+function historyTickets(count: number): TicketDetailRow[] {
+  let seed = 7;
+  const next = (): number => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed / 2_147_483_648;
+  };
+  const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)]!;
+  return Array.from({ length: count }, (_, i) => {
+    const [brand, model] = pick(HISTORY_DEVICES);
+    // One in twenty is still in the shop; the rest were repaired, or cancelled, and handed back.
+    const open = next() < 0.05;
+    const cancelled = !open && next() < 0.08;
+    return withTotals(
+      ticket({
+        id: `h-${String(i)}`,
+        number: `K7Q-H${String(i).padStart(5, '0')}`,
+        customer: `${pick(HISTORY_FIRST)} ${pick(HISTORY_LAST)}`,
+        phone: `08${String(Math.floor(next() * 1e10)).padStart(10, '0')}`,
+        brand,
+        model,
+        color: 'Hitam',
+        complaint: 'Layar retak',
+        outcome: open ? 'in_repair' : cancelled ? 'cancelled' : 'repaired',
+        technicianId: pick(TECHNICIANS),
+        lines: [line('part', 'LCD', 450_000), line('labour', 'Pasang LCD', 50_000)],
+        hoursAgo: 150 + i * 0.6,
+        location: open ? 'in_store' : 'returned',
+        ...(cancelled
+          ? {
+              cancel: {
+                fee: 0,
+                standardFee: 50_000,
+                by: 'u-andi',
+                reason: 'Batal',
+                hoursAgo: 140 + i * 0.6,
+              },
+            }
+          : {}),
+      }),
+    );
+  });
+}
+
 function withTotals(row: TicketDetailRow): TicketDetailRow {
   const counted = row.quoteLines.filter((l) => l.status === 'intake' || l.status === 'applied');
   return {
@@ -350,6 +541,15 @@ function placeholderUri(mediaId: string): string {
   )}`;
 }
 
+export interface DemoRepairOptions {
+  /** The clock the tickets are dated against; the phone harness keeps its fixed one. */
+  readonly now?: number | undefined;
+  /** `store` adds a few dozen more tickets, so lists are seen at a real store's volume. */
+  readonly volume?: 'sample' | 'store' | undefined;
+  /** Fills the store with older history up to this many tickets, to time lists at volume. */
+  readonly tickets?: number | undefined;
+}
+
 /** The demo runtime, plus switching who acts, so "switch user" in the preview keeps the same tickets. */
 export type DemoRepairRuntime = RepairRuntime & { actAs(role: DemoRepairRole): void };
 
@@ -360,9 +560,14 @@ export function demoRoleOf(userId: string): DemoRepairRole | undefined {
   );
 }
 
-export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRuntime {
+export function demoRepairRuntime(
+  role: DemoRepairRole = 'owner',
+  { now = DEMO_NOW, volume = 'sample', tickets: ticketCount = 0 }: DemoRepairOptions = {},
+): DemoRepairRuntime {
+  HARNESS_NOW = now;
   let actor: (typeof DEMO_REPAIR_ROLES)[DemoRepairRole] = DEMO_REPAIR_ROLES[role];
-  let tickets = seedTickets();
+  const seeded = volume === 'store' ? [...seedTickets(), ...storeTickets()] : seedTickets();
+  let tickets = [...seeded, ...historyTickets(Math.max(0, ticketCount - seeded.length))];
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
   let optionIds = 0;
@@ -424,27 +629,111 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
     ...refs.map((ref) => photoRow(`${stage}:${ref.mediaId}`, ref)),
   ];
   const page = <T>(rows: readonly T[]) => Promise.resolve({ rows, nextCursor: null });
+  // Pages like the device's `listTickets`: `limit` rows, with the next offset as the cursor.
+  const paged = <T>(rows: readonly T[], input: Input) => {
+    const start = Number(input['cursor'] ?? 0);
+    const end = start + Number(input['limit'] ?? 50);
+    return Promise.resolve({
+      rows: rows.slice(start, end),
+      nextCursor: end < rows.length ? String(end) : null,
+    });
+  };
+  // Kept between searches and rebuilt only after a change, as the device's search cache does.
+  let ticketIndex: { readonly of: readonly TicketDetailRow[]; readonly index: FuzzyIndex } | null =
+    null;
+  const ticketSearch = (): FuzzyIndex => {
+    if (ticketIndex?.of !== tickets) {
+      ticketIndex = {
+        of: tickets,
+        index: new FuzzyIndex(
+          tickets.map((t) => ({
+            id: t.id,
+            text: [t.customerName, t.deviceBrand, t.deviceModel],
+            phones: [t.customerPhone],
+            numbers: [t.deviceImei],
+            codes: [t.ticketNumber],
+            rank: t.createdAt,
+          })),
+        ),
+      };
+    }
+    return ticketIndex.index;
+  };
   const summary = (t: TicketDetailRow) => t;
+
+  // The same filters and sorts `listTickets` applies on a device, over the demo's rows.
+  const filterTickets = (raw: unknown, cancelledOnly: boolean): TicketDetailRow[] => {
+    const f = (raw ?? {}) as Record<string, unknown>;
+    const outcomes = f['outcomes'] as string[] | undefined;
+    const technicianIds = f['technicianIds'] as string[] | undefined;
+    const brands = (f['brands'] as string[] | undefined)?.map((b) => b.trim().toLowerCase());
+    const from = f['receivedFrom'] as number | undefined;
+    const before = f['receivedBefore'] as number | undefined;
+    return tickets.filter(
+      (t) =>
+        (outcomes === undefined || outcomes.includes(t.outcome)) &&
+        (f['location'] === undefined || t.location === f['location']) &&
+        (f['technicianId'] === undefined || t.technicianId === f['technicianId']) &&
+        (technicianIds === undefined
+          ? f['unassigned'] !== true || t.technicianId === null
+          : (t.technicianId !== null && technicianIds.includes(t.technicianId)) ||
+            (f['unassigned'] === true && t.technicianId === null)) &&
+        (f['hasPendingProposals'] !== true || t.pendingProposals > 0) &&
+        (from === undefined || t.createdAt >= from) &&
+        (before === undefined || t.createdAt < before) &&
+        (brands === undefined || brands.includes(t.deviceBrand.trim().toLowerCase())) &&
+        (!cancelledOnly || t.cancelledAt !== null),
+    );
+  };
+  const compareBy = (sort: string) => {
+    const [key, direction] = sort.split('.');
+    const value = (t: TicketDetailRow): number | string =>
+      key === 'number'
+        ? t.ticketNumber
+        : key === 'total'
+          ? t.outcome === 'cancelled'
+            ? (t.cancelFee ?? 0)
+            : t.quoteTotal
+          : key === 'readyBy'
+            ? (t.estimatedReadyAt ?? 0)
+            : key === 'cancelledAt'
+              ? (t.cancelledAt ?? 0)
+              : t.createdAt;
+    const sign = direction === 'asc' ? 1 : -1;
+    return (a: TicketDetailRow, b: TicketDetailRow): number => {
+      const x = value(a);
+      const y = value(b);
+      const order =
+        typeof x === 'string' && typeof y === 'string'
+          ? x.localeCompare(y, 'id')
+          : Number(x) - Number(y);
+      return order === 0 ? b.createdAt - a.createdAt : sign * order;
+    };
+  };
 
   type Input = Record<string, unknown>;
   const queries: Record<string, (input: Input) => Promise<unknown>> = {
     listTickets: (input) => {
-      const f = (input['filter'] ?? {}) as Record<string, unknown>;
-      const outcomes = f['outcomes'] as string[] | undefined;
-      return page(
-        tickets
-          .filter((t) => outcomes === undefined || outcomes.includes(t.outcome))
-          .filter((t) => f['location'] === undefined || t.location === f['location'])
-          .filter((t) => f['technicianId'] === undefined || t.technicianId === f['technicianId'])
-          .filter((t) => f['unassigned'] !== true || t.technicianId === null)
-          .filter((t) => input['sort'] !== 'cancelledAt.desc' || t.cancelledAt !== null)
-          .sort((a, b) =>
-            input['sort'] === 'cancelledAt.desc'
-              ? (b.cancelledAt ?? 0) - (a.cancelledAt ?? 0)
-              : b.createdAt - a.createdAt,
-          )
-          .map(summary),
-      );
+      const sort = String(input['sort'] ?? 'createdAt.desc');
+      const rows = filterTickets(input['filter'], sort === 'cancelledAt.desc')
+        .sort(compareBy(sort))
+        .map(summary);
+      // The desktop table asks for a page by offset; the phone board pages by cursor like the device.
+      if (input['offset'] === undefined) return paged(rows, input);
+      const offset = Number(input['offset']);
+      return page(rows.slice(offset, offset + Number(input['limit'] ?? 50)));
+    },
+    countTickets: (input) =>
+      page([{ count: filterTickets(input['filter'], input['cancelledOnly'] === true).length }]),
+    ticketBrands: () => {
+      const counts = new Map<string, { brand: string; count: number }>();
+      for (const t of tickets) {
+        const key = t.deviceBrand.trim().toLowerCase();
+        const entry = counts.get(key) ?? { brand: t.deviceBrand.trim(), count: 0 };
+        entry.count += 1;
+        counts.set(key, entry);
+      }
+      return page([...counts.values()].sort((a, b) => b.count - a.count));
     },
     technicianLoads: () => {
       const loads = new Map<string, number>();
@@ -456,19 +745,12 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
       return page([...loads].map(([technicianId, load]) => ({ technicianId, load })));
     },
     // The same shared fuzzy search the device runs, so typos and spelling variants behave alike.
-    searchTickets: (input) => {
-      const index = new FuzzyIndex(
-        tickets.map((t) => ({
-          id: t.id,
-          text: [t.customerName, t.deviceBrand, t.deviceModel],
-          phones: [t.customerPhone],
-          numbers: [t.deviceImei],
-          codes: [t.ticketNumber],
-          rank: t.createdAt,
-        })),
-      );
-      return page(index.search(String(input['text']), 50).map((hit) => find(hit.id)));
-    },
+    searchTickets: (input) =>
+      page(
+        ticketSearch()
+          .search(String(input['text']), Number(input['limit'] ?? 20))
+          .map((hit) => find(hit.id)),
+      ),
     searchDeviceModels: (input) =>
       page(demoSearchDeviceModels(String(input['text']), Number(input['limit'] ?? 6))),
     findDeviceModel: (input) =>
@@ -484,7 +766,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
         })),
       );
       return page(
-        index.search(String(input['text']), 10).map((hit) => {
+        index.search(String(input['text']), Number(input['limit'] ?? 10)).map((hit) => {
           const t = customers.get(hit.id)!;
           return {
             id: t.customerId,
@@ -753,8 +1035,8 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
       actor = self;
     }
   };
-  if (typeof window !== 'undefined') {
-    (window as unknown as Record<string, unknown>)[DEMO_COLLEAGUE_HOOK] = { run: colleague };
+  if (browser.window !== undefined) {
+    browser.window[DEMO_COLLEAGUE_HOOK] = { run: colleague };
   }
 
   // The browser stand-in for the print dialog: the slip opens in a new tab, ready for Ctrl+P, so a
@@ -768,8 +1050,11 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
       return Promise.resolve();
     },
     output: (slip, how) => {
-      if (typeof window === 'undefined') return Promise.resolve('done');
-      const url = URL.createObjectURL(new Blob([slip.html], { type: 'text/html' }));
+      const { window, document, Blob: PageBlob } = browser;
+      if (window === undefined || document === undefined || PageBlob === undefined) {
+        return Promise.resolve('done');
+      }
+      const url = URL.createObjectURL(new PageBlob([slip.html], { type: 'text/html' }));
       if (how === 'print') {
         window.open(url, '_blank');
         // A browser tab cannot say whether it was printed either, so the screen asks.
@@ -822,8 +1107,8 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.
     sharePhoto: (ref: ThumbnailRef) => {
-      if (typeof document === 'undefined') return Promise.resolve('failed');
-      const link = document.createElement('a');
+      if (browser.document === undefined) return Promise.resolve('failed');
+      const link = browser.document.createElement('a');
       link.href = placeholderUri(ref.mediaId);
       link.download = `${ref.mediaId}.svg`;
       link.click();

@@ -108,6 +108,9 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- A change that lowers what a customer owes (a price, a down payment, a fee) needs
+  an owner-only permission, checked in the type's `permission` or its `rule` with
+  `holdsPermission` (repair's `requireDiscountPermission`), so the server refuses it too.
 - Every op type needs a label (`apps/mobile/test/op-type-labels.test.ts`). Every
   error and rejection code needs id and en copy (`pnpm i18n:check`).
 - Every op type a device can push needs a sample in
@@ -150,6 +153,13 @@ fails a build, a boot or a test rather than waiting for review:
   migration 6 stopped storing each payload twice and compressed the signed text;
   the op log went from 394 MB to 143 MB). Phone timings are still unmeasured; on
   Hermes the compression costs about 0.8 ms per pulled op.
+- Board volume: `pnpm --filter @bolusi/modules bench:board` times the board's
+  reads on a device holding a store's history, and `apps/mobile/e2e-web/board-perf.mjs`
+  times the board itself in throttled Chromium (`?tickets=N` fills the web demo).
+  Screens must keep lists windowed: the `AppShell` content slot is fixed in height
+  so a `List` only renders what is near the screen, and rows should be memoized.
+  The first search of a session builds the search index (about 0.25 s on a laptop
+  for 5k tickets, roughly 1 s or more expected on a cheap phone; unmeasured there).
 - Server sync capacity (`bench:sync-load`, one Node process on one core, Postgres
   16 on two cores, October 2026). A busy hour is light even at 1,000 stores and
   4,000 devices: push p50 about 100 ms, and changes reach the store's other

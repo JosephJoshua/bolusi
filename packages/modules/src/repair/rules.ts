@@ -637,16 +637,14 @@ export const ownStoreSettingRule: Rule = (op) =>
       );
 
 /**
- * A down payment taken at intake or later: once per ticket, while the phone is in the store, and no
- * more than the price. Changing a recorded amount is an owner's correction, since a lower figure is
+ * A down payment taken at intake or later: once per ticket, while the servisan is open (in the
+ * store and not cancelled), and no more than the price. Changing a recorded amount is an owner's correction, since a lower figure is
  * how cash would go missing.
  */
 export const downPaymentReceivedRule: Rule = async (op, { db }) => {
   const { amount } = payloadOf<Payload<typeof downPaymentReceivedPayload>>(op);
   const ticket = await loadTicket(db, op);
-  if (ticket.location === 'returned') {
-    throw invalidTransition(ticket, op.type, 'returned', 'already returned');
-  }
+  requireOpen(ticket, op.type);
   const row = await db
     .selectFrom('repairTickets')
     .select('downPayment')

@@ -1,0 +1,19 @@
+{
+  "extends": "@bolusi/tsconfig/dom.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.desktop.tsbuildinfo"
+  },
+  "include": ["src/repair/desktop"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  "references": [
+    {
+      "path": "./tsconfig.build.json"
+    },
+    {
+      "path": "../ui-web/tsconfig.build.json"
+    }
+  ]
+}

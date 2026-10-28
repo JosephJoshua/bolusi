@@ -107,6 +107,7 @@ const source = {
         UNKNOWN_TYPE: 'Perbarui aplikasi supaya bisa dikirim.',
       },
       account: { menu: 'Menu akun', switchUser: 'Ganti pengguna' },
+      nav: { main: 'Menu utama', collapse: 'Ciutkan menu', expand: 'Lebarkan menu' },
     },
     auth: {
       switcher: {
@@ -534,6 +535,7 @@ export const resources = {
           UNKNOWN_TYPE: 'Update the app so this can be sent.',
         },
         account: { menu: 'Account menu', switchUser: 'Switch user' },
+        nav: { main: 'Main menu', collapse: 'Collapse menu', expand: 'Expand menu' },
       },
       auth: {
         switcher: {

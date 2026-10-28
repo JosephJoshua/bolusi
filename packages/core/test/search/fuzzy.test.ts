@@ -3,7 +3,10 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  alignDistance,
+  codeScore,
   compileQuery,
+  digitScore,
   foldWord,
   FuzzyIndex,
   hasExactCode,
@@ -12,6 +15,7 @@ import {
   scoreDocument,
   type SearchDocument,
 } from '../../src/search/index.js';
+import { digitTolerance } from '../../src/search/fuzzy.js';
 
 interface Customer {
   readonly id: string;
@@ -291,5 +295,69 @@ describe('ticket search', () => {
 
   test('equal matches come back newest first', () => {
     expect(ids(searchTickets(tickets, 'yohanis'))).toEqual(['t3', 't1']);
+  });
+});
+
+describe('number scores stop early without changing a score', () => {
+  // The definitions before the shortcut: every alignment scored, the best kept.
+  const closeness = (edits: number, length: number) => 1 - edits / (length + 1);
+  function fullDigitScore(query: string, stored: string): number {
+    if (stored === '') return 0;
+    if (query === stored) return 1;
+    const tolerance = digitTolerance(query.length);
+    let best = 0;
+    const whole = alignDistance(query, stored, 'whole', tolerance);
+    if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
+    const suffix = alignDistance(query, stored, 'suffix', tolerance);
+    if (suffix <= tolerance) best = Math.max(best, 0.85 * closeness(suffix, query.length));
+    const infix = alignDistance(query, stored, 'infix', tolerance);
+    if (infix <= tolerance) best = Math.max(best, 0.7 * closeness(infix, query.length));
+    return best;
+  }
+  function fullCodeScore(query: string, stored: string): number {
+    if (query.length < 3 || stored === '') return 0;
+    if (query === stored) return 1;
+    const tolerance = digitTolerance(query.length);
+    let best = 0;
+    const whole = alignDistance(query, stored, 'whole', tolerance);
+    if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
+    const suffix = alignDistance(query, stored, 'suffix', tolerance);
+    if (suffix <= tolerance) best = Math.max(best, 0.8 * closeness(suffix, query.length));
+    if (query.length < stored.length && stored.startsWith(query)) {
+      best = Math.max(best, 0.7 + 0.15 * (query.length / stored.length));
+    }
+    return best;
+  }
+
+  test('on phones, IMEIs and codes typed with typos, swaps and partial digits', () => {
+    let seed = 42;
+    const random = () => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed / 2_147_483_648;
+    };
+    const digits = (n: number) =>
+      Array.from({ length: n }, () => String(Math.floor(random() * 10))).join('');
+    // A part of the stored value with up to two random edits, or an unrelated number.
+    const typed = (stored: string): string => {
+      if (random() < 0.3) return digits(3 + Math.floor(random() * 10));
+      const start = Math.floor(random() * (stored.length - 3));
+      let out = stored.slice(start, start + 3 + Math.floor(random() * (stored.length - start)));
+      for (let edit = Math.floor(random() * 3); edit > 0; edit -= 1) {
+        const at = Math.floor(random() * out.length);
+        out =
+          random() < 0.5
+            ? out.slice(0, at) + digits(1) + out.slice(at + 1)
+            : out.slice(0, at) + out.slice(at + 1);
+      }
+      return out;
+    };
+    for (let i = 0; i < 5000; i += 1) {
+      const stored = random() < 0.5 ? `08${digits(10)}` : digits(15);
+      const query = typed(stored);
+      expect(digitScore(query, stored)).toBe(fullDigitScore(query, stored));
+      const code = `k7q${digits(4)}`;
+      const codeQuery = typed(code);
+      expect(codeScore(codeQuery, code)).toBe(fullCodeScore(codeQuery, code));
+    }
   });
 });

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import {
   balanceAfterDownPayment,
   downPaymentAction,
+  downPaymentEntry,
   printableSlips,
   boardFilter,
   boardSort,
@@ -292,14 +293,14 @@ describe('ticket actions', () => {
 describe('down payment and slips', () => {
   test('recording a down payment is offered exactly where the command accepts it', async () => {
     h = await openRepairHarness(4109);
-    for (const state of ['received', 'repaired', 'returned'] as const) {
+    for (const state of ['received', 'repaired', 'returned', 'cancelled'] as const) {
       const ticketId = await ticketIn(h, state);
       const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
       const offered = downPaymentAction(ticket, abilitiesOf(h, h.cashierId)) === 'record';
       const run = h.run('recordDownPayment', { ticketId, amount: 20_000 }, h.cashierId);
       if (offered) await expect(run).resolves.toBeDefined();
       else await expect(run).rejects.toThrow();
-      expect(offered).toBe(state !== 'returned');
+      expect(offered).toBe(state !== 'returned' && state !== 'cancelled');
     }
   });
 
@@ -731,5 +732,36 @@ describe('intake draft', () => {
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
     expect(decodeScreenLock(ticket.devicePasscode)).toEqual({ kind: 'pattern', value: '14753' });
+  });
+});
+
+describe('downPaymentEntry', () => {
+  const entry = (
+    mode: 'record' | 'correct',
+    typed: number | null,
+    reason = '',
+    current: number | null = null,
+  ) => downPaymentEntry({ mode, typed, reason, current, total: 100_000 });
+
+  test('a new down payment is at least Rp 1 and never above the total', () => {
+    expect(entry('record', null).gap).toBe('amount');
+    expect(entry('record', 0).gap).toBe('amount');
+    expect(entry('record', 150_000)).toEqual({
+      amount: 150_000,
+      aboveTotal: true,
+      gap: 'aboveTotal',
+    });
+    expect(entry('record', 100_000).gap).toBeNull();
+  });
+
+  test('a correction must change the amount and say why, and may bring it to nothing', () => {
+    expect(entry('correct', null, '', 50_000).gap).toBe('correctAmount');
+    expect(entry('correct', 50_000, 'salah', 50_000).gap).toBe('same');
+    expect(entry('correct', 20_000, ' ', 50_000).gap).toBe('reason');
+    expect(entry('correct', 0, 'batal', 50_000)).toEqual({
+      amount: 0,
+      aboveTotal: false,
+      gap: null,
+    });
   });
 });

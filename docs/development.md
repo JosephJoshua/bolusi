@@ -71,6 +71,19 @@ To click through the screens in a browser without a server or device, run
 Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 `http://10.0.2.2:3000` on Android emulator; a phone needs a reachable LAN address).
 
+### Counter PC app
+
+The Windows counter app (`apps/desktop`) is Electron with its own React DOM screens
+(`packages/ui-web` and `packages/modules/src/repair/desktop`). It currently runs over
+the in-memory repair demo; the offline core is wired in next.
+
+```sh
+pnpm exec tsc -b
+pnpm --filter @bolusi/desktop start   # build, then open the Electron window
+pnpm --filter @bolusi/desktop dev     # renderer only, in a browser at localhost:5183
+pnpm --filter @bolusi/desktop e2e     # Electron end-to-end tests; use xvfb-run on Linux
+```
+
 ## Verify
 
 ```sh
