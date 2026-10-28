@@ -768,8 +768,17 @@ export const quoteProposalDeclinedApplier: ProjectionApplier<RepairDatabase> = a
   await recordEvent(db, op, { lineId, note });
 };
 
+/**
+ * The handover, with the checklist the counter went through (v3) kept in its history entry, where
+ * the servisan shows it; the note says why anything was not ticked.
+ */
 export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const payload = payloadOf<{ handoverPhoto: MediaRef; signature: MediaRef; note: string }>(op);
+  const payload = payloadOf<{
+    handoverPhoto: MediaRef;
+    signature: MediaRef;
+    note: string;
+    checklist?: readonly object[];
+  }>(op);
   await updateTicket(db, op, {
     location: 'returned',
     returnedBy: op.userId,
@@ -779,7 +788,13 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
     ['handover', payload.handoverPhoto],
     ['signature', payload.signature],
   ]);
-  await recordEvent(db, op, { note: payload.note });
+  await recordEvent(
+    db,
+    op,
+    payload.checklist === undefined
+      ? { note: payload.note }
+      : { note: payload.note, checklist: payload.checklist },
+  );
 };
 
 // ── down payment and printing ─────────────────────────────────────────────────────────────────

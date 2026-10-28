@@ -176,6 +176,10 @@ export const QUOTE_LINE_STATUSES = ['intake', 'applied', 'proposed', 'declined']
 export type QuoteLineStatus = (typeof QUOTE_LINE_STATUSES)[number];
 
 export const CHECKLIST_STATES = ['ok', 'issue', 'not_checked'] as const;
+
+/** A handover line is a check from the owner's list, or an accessory left at intake. */
+export const HANDOVER_CHECK_KINDS = ['check', 'accessory'] as const;
+export type HandoverCheckKind = (typeof HANDOVER_CHECK_KINDS)[number];
 export type ChecklistState = (typeof CHECKLIST_STATES)[number];
 
 /** Conflict keys: two devices changing a ticket's outcome or location without seeing each other. */
