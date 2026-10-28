@@ -6,7 +6,7 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.desktop.tsbuildinfo"
   },
-  "include": ["src/repair/desktop"],
+  "include": ["src/*/desktop"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "references": [
     {

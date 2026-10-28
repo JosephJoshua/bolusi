@@ -45,6 +45,10 @@
       "types": "./dist/money/screens/index.d.ts",
       "default": "./dist/money/screens/index.js"
     },
+    "./money/desktop": {
+      "types": "./dist/money/desktop/index.d.ts",
+      "default": "./dist/money/desktop/index.js"
+    },
     "./screen-kit": {
       "types": "./dist/screen-kit/index.d.ts",
       "default": "./dist/screen-kit/index.js"

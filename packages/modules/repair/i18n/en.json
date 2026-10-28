@@ -141,7 +141,13 @@
     "signAgain": "Sign again",
     "signature": "Customer signature",
     "signatureTitle": "Customer signs to receive the phone",
-    "cancelled": "Repair charges are not billed."
+    "cancelled": "Repair charges are not billed.",
+    "payment": "Payment",
+    "payLater": "Pay later",
+    "payNow": "Pay now",
+    "payLaterReason": "Why pay later",
+    "payLaterNote": "The remaining {amount} is recorded as the customer’s debt.",
+    "refundReason": "Rest of the DP returned at handover"
   },
   "intake": {
     "discard": "Discard intake",
@@ -293,7 +299,8 @@
     "discountOwner": "Only an owner can approve a discount.",
     "downPayment": "Enter the amount first.",
     "downPaymentCorrect": "Enter the correct down payment first.",
-    "downPaymentSame": "The amount has not changed."
+    "downPaymentSame": "The amount has not changed.",
+    "handoverPayment": "Complete the payment first."
   },
   "discardPhotos": {
     "title": "Leave without saving?",

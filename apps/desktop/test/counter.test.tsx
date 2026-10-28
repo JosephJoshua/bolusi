@@ -1,9 +1,12 @@
 import { initI18n } from '@bolusi/i18n';
 import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
+import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
+import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
@@ -40,6 +43,7 @@ beforeEach(() => {
   URL.createObjectURL = () => 'blob:photo';
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
+  registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
 });
 afterEach(cleanup);
 
@@ -63,6 +67,16 @@ async function showView(view: string): Promise<void> {
   const tab = await screen.findByTestId(`repair.desk.board.views.${view}`);
   fireEvent.mouseDown(tab, { button: 0 });
   fireEvent.click(tab);
+}
+
+/** The handover photo and signature, one after the other as the counter takes them. */
+async function captureHandover(): Promise<void> {
+  for (const tile of ['photo', 'signature']) {
+    await act(async () => {
+      fireEvent.click(byTestId(`repair.desk.handover.${tile}`));
+      await Promise.resolve();
+    });
+  }
 }
 
 describe('counter app over demo data', () => {
@@ -233,6 +247,77 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.downPayment.correct.submit'));
     await waitFor(() =>
       expect(byTestId('repair.desk.ticket.balance').textContent).toContain('35.000'),
+    );
+  });
+
+  it('hands a phone back only once the rest is paid, with the change shown', async () => {
+    renderApp();
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
+    await screen.findByTestId('repair.desk.handover');
+    expect(byTestId('repair.desk.handover.balance').textContent).toContain('15.000');
+    // The rest is filled in as cash; a counter without the owner's say cannot leave it unpaid.
+    expect(byTestId('repair.desk.handover.pay.line0.amount')).toHaveProperty('value', '15.000');
+    expect(screen.queryByTestId('repair.desk.handover.payLater')).toBeNull();
+    await captureHandover();
+    fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
+      target: { value: '10000' },
+    });
+    expect(await screen.findByText('Uang diterima kurang dari jumlahnya.')).toBeTruthy();
+    expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
+      target: { value: '20000' },
+    });
+    expect(byTestId('repair.desk.handover.pay.line0.change').textContent).toContain('5.000');
+    await waitFor(() =>
+      expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
+    );
+    fireEvent.click(byTestId('repair.desk.handover.submit'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.handover')).toBeNull());
+  });
+
+  it('splits a payment, and an EDC line needs its approval code', async () => {
+    renderApp();
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
+    await screen.findByTestId('repair.desk.handover');
+    await captureHandover();
+    fireEvent.change(byTestId('repair.desk.handover.pay.line0.amount'), {
+      target: { value: '5000' },
+    });
+    expect(byTestId('repair.desk.handover.pay.remaining').textContent).toContain('10.000');
+    fireEvent.click(byTestId('repair.desk.handover.pay.add'));
+    const second = await screen.findByTestId('repair.desk.handover.pay.line1');
+    fireEvent.click(within(second).getByRole('button', { name: 'EDC Mandiri' }));
+    expect(byTestId('repair.desk.handover.pay.line1.amount')).toHaveProperty('value', '10.000');
+    expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('repair.desk.handover.pay.line1.reference'), {
+      target: { value: '123456' },
+    });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
+    );
+  });
+
+  it('lets only an owner hand a phone over unpaid, with a reason', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
+    await screen.findByTestId('repair.desk.handover');
+    await captureHandover();
+    fireEvent.click(byTestId('repair.desk.handover.payLater'));
+    expect(byTestId('repair.desk.handover.debt').textContent).toContain('15.000');
+    expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('repair.desk.handover.unpaidReason'), {
+      target: { value: 'Bayar Jumat' },
+    });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
     );
   });
 

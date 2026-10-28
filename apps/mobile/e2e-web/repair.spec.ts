@@ -250,17 +250,77 @@ test('the counter decides a proposal and the agreed total grows', async ({ page 
   await shoot(page, 'proposal-applied');
 });
 
-test('handover needs the photo and the signature, then the phone is returned', async ({ page }) => {
+test('handover takes the rest of the bill, then the photo and the signature', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-4');
   await tap(page, 'repair.ticket.action.handover');
+  // Rp 115.000 less the Rp 100.000 DP: the rest, in cash unless the counter picks another method.
+  await expect(page.getByTestId('repair.handover.balance')).toHaveText('Rp 15.000');
+  await expect(page.getByTestId('repair.handover.pay.line0.amount.field')).toHaveValue('15.000');
+  await fill(page, 'repair.handover.pay.line0.tendered', '20000');
+  await expect(page.getByTestId('repair.handover.pay.line0.change')).toHaveText('Rp 5.000');
   await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await shoot(page, 'handover-payment');
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await tap(page, 'repair.handover.primary');
   await expect(page.getByTestId('repair.ticket.photos.strip.signature')).toBeVisible();
   await shoot(page, 'handover-done');
+});
+
+test('a split payment needs every part, and an EDC payment its approval code', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await tap(page, 'repair.handover.photo.press');
+  await tap(page, 'repair.handover.signature.press');
+  await fill(page, 'repair.handover.pay.line0.amount', '5000');
+  await expect(page.getByTestId('repair.handover.pay.remaining')).toHaveText('Kurang Rp 10.000');
+  await tap(page, 'repair.handover.pay.add');
+  await expect(page.getByTestId('repair.handover.pay.line1.amount.field')).toHaveValue('10.000');
+  await tap(page, 'repair.handover.pay.line1.method.account:01920000-0000-7000-8000-00000000a002');
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await shoot(page, 'handover-split-edc');
+  await fill(page, 'repair.handover.pay.line1.reference', '004512');
+  await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
+  await shoot(page, 'handover-split-ready');
+});
+
+test('only an owner lets a phone go unpaid, with a reason', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await expect(page.getByTestId('repair.handover.payLater')).toHaveCount(0);
+
+  await open(page, 'owner');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await tap(page, 'repair.handover.payLater');
+  await tap(page, 'repair.handover.photo.press');
+  await tap(page, 'repair.handover.signature.press');
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await fill(page, 'repair.handover.unpaidReason', 'Langganan, bayar hari Jumat');
+  await expect(page.getByTestId('repair.handover.debt')).toHaveText(
+    'Sisa Rp 15.000 dicatat sebagai utang pelanggan.',
+  );
+  await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
+  await shoot(page, 'handover-pay-later');
+});
+
+test('a cancelled servisan gives back the DP less its fee, with nothing to pay', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-5');
+  await tap(page, 'repair.ticket.action.handover');
+  await expect(page.getByTestId('repair.handover.balance')).toHaveText('Rp 50.000');
+  await expect(page.getByTestId('repair.handover.payment')).toHaveCount(0);
+  await shoot(page, 'handover-cancelled-refund');
 });
 
 test('a ticket photo opens full screen, zooms on double tap, and "see all" groups every photo', async ({

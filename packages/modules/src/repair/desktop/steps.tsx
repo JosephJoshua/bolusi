@@ -15,8 +15,11 @@ import {
   TextField,
 } from '@bolusi/ui-web';
 import { Check, Printer, Signature } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
+import { MONEY_PERMISSION } from '../../money/constants.js';
+import { PaymentLines } from '../../money/desktop/PaymentLines.js';
+import { newPaymentLine, paymentEntry, type PaymentLine } from '../../money/payment-entry.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_PERMISSION,
@@ -25,6 +28,7 @@ import {
   type WorkPhotoStage,
 } from '../constants.js';
 import {
+  balanceAfterDownPayment,
   capturedThumbnailRef,
   downPaymentEntry,
   printableSlips,
@@ -796,12 +800,16 @@ export function HandoverDialog({
   stale,
   customerName,
   amount,
+  downPayment,
   cancelled,
   onDone,
   onClose,
 }: StepDialogProps & {
   readonly customerName: string;
+  /** What the customer pays in all: the price, or a cancelled servisan's fee. */
   readonly amount: number;
+  /** What they paid already (the DP), from the money ledger. */
+  readonly downPayment: number | null;
   readonly cancelled: boolean;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -809,8 +817,26 @@ export function HandoverDialog({
   const [photo, setPhoto] = useState<MediaRef | null>(null);
   const [signature, setSignature] = useState<MediaRef | null>(null);
   const [note, setNote] = useState('');
+  const [typedLines, setLines] = useState<readonly PaymentLine[] | null>(null);
+  const [payLater, setPayLater] = useState(false);
+  const [unpaidReason, setUnpaidReason] = useState('');
+  const keys = useRef(0);
+  const newKey = (): string => `line${String((keys.current += 1))}`;
+  const accountsQuery = useRepairQuery(
+    async (rt) => (await rt.money.query('paymentAccounts', {})).rows,
+    'handover:accounts',
+  );
+  const accounts = accountsQuery.status === 'ready' ? accountsQuery.data : [];
+  const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
+  const due = balance.kind === 'due' ? balance.amount : 0;
+  const lines = typedLines ?? (due > 0 ? [newPaymentLine('line0', due)] : []);
+  const entry = paymentEntry(due, lines, accounts);
+  const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
+  const unpaid = payLater && due > 0;
+  const settled = due === 0 || (unpaid ? unpaidReason.trim() !== '' : entry.complete);
   const leave = useLeaveGuard(
-    stale === null && (photo !== null || signature !== null || note.trim() !== ''),
+    stale === null &&
+      (photo !== null || signature !== null || note.trim() !== '' || typedLines !== null),
     onClose,
   );
   const photoState = usePhotoState(photo === null ? null : capturedThumbnailRef(photo));
@@ -825,14 +851,25 @@ export function HandoverDialog({
     });
   };
   const submit = (): void => {
-    if (photo === null || signature === null) return;
+    if (photo === null || signature === null || !settled) return;
     void runner
-      .run(() => runtime.run('returnDevice', { ticketId, handoverPhoto: photo, signature, note }))
+      .run(() =>
+        runtime.run('returnDevice', {
+          ticketId,
+          handoverPhoto: photo,
+          signature,
+          note,
+          payments: unpaid ? [] : [...entry.payments],
+          unpaidReason: unpaid ? unpaidReason : null,
+          refundReason: tn('repair.handover.refundReason'),
+        }),
+      )
       .then((result) => {
         if (result !== undefined) onDone();
       });
   };
-  const complete = photo !== null && signature !== null;
+  const captured = photo !== null && signature !== null;
+  const complete = captured && settled;
 
   return (
     <>
@@ -845,7 +882,9 @@ export function HandoverDialog({
         footer={
           <>
             {complete ? null : (
-              <p className="mr-auto text-small text-text-muted">{tn('repair.hint.handover')}</p>
+              <p className="mr-auto text-small text-text-muted">
+                {tn(settled ? 'repair.hint.handover' : 'repair.hint.handoverPayment')}
+              </p>
             )}
             <CancelButton onClick={leave.requestClose} />
             <Button
@@ -859,22 +898,81 @@ export function HandoverDialog({
           </>
         }
       >
-        <div className="flex items-end justify-between gap-4 rounded-sm bg-surface-alt p-4">
-          <div className="min-w-0">
-            <p className="text-small text-text-muted">{customerName}</p>
-            <p className="text-body font-semibold text-text">
-              {tn(cancelled ? 'repair.cancel.fee' : 'repair.price.total')}
+        <div className="rounded-sm bg-surface-alt p-4">
+          <div className="flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-small text-text-muted">{customerName}</p>
+              <p className="text-body font-semibold text-text">
+                {tn(cancelled ? 'repair.cancel.fee' : 'repair.price.total')}
+              </p>
+            </div>
+            <p
+              className="tabular text-title font-bold text-text"
+              data-testid="repair.desk.handover.total"
+            >
+              {formatMoney(amount)}
             </p>
           </div>
-          <p
-            className="tabular text-title font-bold text-text"
-            data-testid="repair.desk.handover.total"
-          >
-            {formatMoney(amount)}
-          </p>
+          {downPayment === null || downPayment === 0 ? null : (
+            <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t border-border pt-2 text-body">
+              <dt className="text-text-muted">{tn('repair.price.downPayment')}</dt>
+              <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
+              <dt className="font-semibold text-text">
+                {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+              </dt>
+              <dd
+                className="tabular text-right font-semibold text-text"
+                data-testid="repair.desk.handover.balance"
+              >
+                {formatMoney(balance.amount)}
+              </dd>
+            </dl>
+          )}
         </div>
         {cancelled ? (
           <p className="mt-2 text-small text-text-muted">{tn('repair.handover.cancelled')}</p>
+        ) : null}
+        {due > 0 && stale === null ? (
+          <section className="mt-4" data-testid="repair.desk.handover.payment">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-body font-semibold text-text">{tn('repair.handover.payment')}</h3>
+              {canPayLater ? (
+                <Button
+                  label={tn(unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
+                  variant="text"
+                  size="sm"
+                  onClick={() => setPayLater(!unpaid)}
+                  data-testid="repair.desk.handover.payLater"
+                />
+              ) : null}
+            </div>
+            {unpaid ? (
+              <div>
+                <TextArea
+                  label={tn('repair.handover.payLaterReason')}
+                  rows={2}
+                  value={unpaidReason}
+                  onChange={(event) => setUnpaidReason(event.target.value)}
+                  data-testid="repair.desk.handover.unpaidReason"
+                />
+                <p
+                  className="mt-2 text-small text-text-muted"
+                  data-testid="repair.desk.handover.debt"
+                >
+                  {tn('repair.handover.payLaterNote', { amount: formatMoney(due) })}
+                </p>
+              </div>
+            ) : (
+              <PaymentLines
+                lines={lines}
+                entry={entry}
+                accounts={accounts}
+                onChange={setLines}
+                newKey={newKey}
+                testId="repair.desk.handover.pay"
+              />
+            )}
+          </section>
         ) : null}
         <div className="mt-4 grid grid-cols-2 gap-4">
           <CaptureTile

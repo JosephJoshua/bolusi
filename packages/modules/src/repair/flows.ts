@@ -395,6 +395,15 @@ export function printableSlips(
  * What the customer still owes once a down payment is taken off the total, or what the store gives
  * back when the down payment was more (a cancelled servisan whose fee is below it).
  */
+/** What the customer pays for a finished servisan: the price, or a cancelled one's fee. */
+export function handoverCost(ticket: {
+  readonly outcome: RepairOutcome;
+  readonly quoteTotal: number;
+  readonly cancelFee: number | null;
+}): number {
+  return ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
+}
+
 export function balanceAfterDownPayment(
   total: number,
   downPayment: number,

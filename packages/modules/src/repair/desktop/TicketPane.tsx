@@ -52,6 +52,7 @@ import {
   CONTEXTUAL_ACTIONS,
   downPaymentAction,
   downPaymentStale,
+  handoverCost,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -759,7 +760,8 @@ export function TicketPane({
             {...common}
             customerName={row.customerName}
             cancelled={row.outcome === 'cancelled'}
-            amount={row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal}
+            amount={handoverCost(row)}
+            downPayment={row.downPayment}
             onDone={() => finishStep(DONE_KEY.handover)}
           />
         );

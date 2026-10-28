@@ -8,6 +8,7 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
+import type { MoneyModule } from '../money/manifest.js';
 import type { repairModule } from './manifest.js';
 import {
   createRuntimeContext,
@@ -107,6 +108,8 @@ export interface RepairTechnician {
 }
 
 export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSource {
+  /** The money ledger: payment methods, a servisan's payments, and taking money at handover. */
+  readonly money: ModulePort<MoneyModule>;
   /** Op sync statuses per ticket id (design-system §3.5); an absent ticket is all-synced. */
   ticketSyncStatuses(ticketIds: readonly string[]): Promise<EntitySyncStatuses>;
   /** Active colleagues who hold `repair.work` in this store, by name. */

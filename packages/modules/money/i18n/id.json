@@ -29,5 +29,25 @@
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan."
+  },
+  "method": {
+    "cash": "Tunai"
+  },
+  "pay": {
+    "amount": "Jumlah",
+    "tendered": "Uang diterima",
+    "change": "Kembalian",
+    "approvalCode": "Kode approval",
+    "reference": "No. referensi (opsional)",
+    "addMethod": "Tambah metode lain",
+    "remove": "Hapus metode ini",
+    "removeLabel": "Hapus pembayaran {method}",
+    "remaining": "Kurang {amount}",
+    "overpaid": "Lebih {amount}. Kurangi jumlahnya dulu.",
+    "problem": {
+      "tendered": "Uang diterima kurang dari jumlahnya."
+    },
+    "method": "Metode pembayaran",
+    "currency": "Rp"
   }
 }

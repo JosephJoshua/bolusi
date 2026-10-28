@@ -10,6 +10,7 @@
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 
+import { MONEY_PERMISSION } from '../money/constants.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
@@ -23,6 +24,7 @@ import {
 } from './intake-options.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { handoverCost } from './flows.js';
 import { REPAIR_REFUSALS } from './rules.js';
 import {
   demoFindDeviceModel,
@@ -45,15 +47,20 @@ const browser = globalThis as unknown as {
 
 const HOUR = 3_600_000;
 const P = REPAIR_PERMISSION;
+const M = MONEY_PERMISSION;
 
 /** Who the harness can act as: the owner (everything), the counter and a technician. */
 export const DEMO_REPAIR_ROLES = {
-  owner: { userId: 'u-andi', name: 'Andi Pratama', permissions: Object.values(P) },
+  owner: {
+    userId: 'u-andi',
+    name: 'Andi Pratama',
+    permissions: [...Object.values(P), ...Object.values(M)],
+  },
   counter: {
     userId: 'u-siti',
     name: 'Siti Rahayu',
     // No cancel or discount: only owners lower what a customer pays (how counter staff kept cash).
-    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover],
+    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover, M.read, M.receive],
   },
   technician: { userId: 'u-budi', name: 'Budi Santoso', permissions: [P.read, P.work] },
   /** A store owner: may choose what this store uses, not change the franchise's lists. */
@@ -71,9 +78,38 @@ export const DEMO_REPAIR_ROLES = {
       P.correctDownPayment,
       P.setPrintSettings,
       P.setUncollectedDays,
+      ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
     ],
   },
 } as const;
+
+/** The demo store's payment methods besides cash. */
+const DEMO_ACCOUNTS = [
+  {
+    id: '01920000-0000-7000-8000-00000000a001',
+    kind: 'qris',
+    name: 'QRIS BCA',
+    active: true,
+    central: false,
+    storeIds: [],
+  },
+  {
+    id: '01920000-0000-7000-8000-00000000a002',
+    kind: 'edc',
+    name: 'EDC Mandiri',
+    active: true,
+    central: false,
+    storeIds: [],
+  },
+  {
+    id: '01920000-0000-7000-8000-00000000a003',
+    kind: 'transfer',
+    name: 'Transfer BRI',
+    active: true,
+    central: true,
+    storeIds: [],
+  },
+] as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
 
 /** The `window` key of the colleague hook `demoRepairRuntime` installs (browser tests only). */
@@ -315,6 +351,7 @@ function seedTickets(): TicketDetailRow[] {
       lines: [line('part', 'Kamera C55', 220_000), line('labour', 'Pasang kamera', 50_000)],
       hoursAgo: 90,
       extraPhotos: [photoRow('before:m6')],
+      downPayment: 100_000,
       cancel: {
         fee: 50_000,
         standardFee: 50_000,
@@ -1007,7 +1044,13 @@ export function demoRepairRuntime(
     },
     returnDevice: (input) => {
       const t = find(String(input['ticketId']));
+      const paidNow = ((input['payments'] as { amount: number }[] | undefined) ?? []).reduce(
+        (sum, payment) => sum + payment.amount,
+        0,
+      );
+      const paid = Math.min((t.downPayment ?? 0) + paidNow, handoverCost(t));
       return update(t.id, 'repair.device_returned', {
+        downPayment: paid === 0 ? null : paid,
         location: 'returned',
         returnedBy: actor.userId,
         returnedByName: actor.name,
@@ -1129,6 +1172,29 @@ export function demoRepairRuntime(
       return () => listeners.delete(listener);
     },
     ticketSyncStatuses: () => Promise.resolve({ 't-1': ['local'] }),
+    // The ledger as far as the screens read it: the store's methods and a servisan's payments.
+    money: {
+      query: (name: string, input: Input) => {
+        if (name === 'paymentAccounts')
+          return Promise.resolve({ rows: DEMO_ACCOUNTS, nextCursor: null });
+        if (name === 'documentMoney') {
+          const t = find(String(input['id']));
+          const paid = t.downPayment ?? 0;
+          return Promise.resolve({
+            rows: [{ balance: -paid, charged: 0, reduced: 0, paid, entries: [] }],
+            nextCursor: null,
+          });
+        }
+        return Promise.resolve({ rows: [], nextCursor: null });
+      },
+      run: () => Promise.resolve(null),
+      hasPermission: (id: string) => permitted.has(id),
+      colleagueHasPermission: () => false,
+      newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
+      get userId() {
+        return actor.userId;
+      },
+    },
     technicians: () =>
       Promise.resolve(TECHNICIANS.map((id) => ({ id, name: NAMES.get(id) ?? id }))),
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),

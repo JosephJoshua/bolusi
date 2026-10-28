@@ -141,7 +141,13 @@
     "signAgain": "Ulangi tanda tangan",
     "signature": "Tanda tangan pelanggan",
     "signatureTitle": "Tanda tangan pelanggan",
-    "cancelled": "Biaya perbaikan tidak ditagih."
+    "cancelled": "Biaya perbaikan tidak ditagih.",
+    "payment": "Pembayaran",
+    "payLater": "Bayar nanti",
+    "payNow": "Bayar sekarang",
+    "payLaterReason": "Alasan bayar nanti",
+    "payLaterNote": "Sisa {amount} dicatat sebagai utang pelanggan.",
+    "refundReason": "Sisa DP dikembalikan saat serah terima"
   },
   "intake": {
     "discard": "Buang",
@@ -293,7 +299,8 @@
     "discountOwner": "Diskon hanya bisa disetujui pemilik.",
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
-    "downPaymentSame": "Jumlahnya masih sama."
+    "downPaymentSame": "Jumlahnya masih sama.",
+    "handoverPayment": "Lengkapi pembayarannya dulu."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",

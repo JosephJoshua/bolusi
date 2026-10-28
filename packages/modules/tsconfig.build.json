@@ -7,7 +7,7 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/repair/desktop"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/*/desktop"],
   "references": [
     {
       "path": "../core/tsconfig.build.json"

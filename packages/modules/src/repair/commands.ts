@@ -69,6 +69,7 @@ import { chargeOp, paymentOp, refundOp, zPaymentInput } from '../money/commands.
 import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
+import { handoverCost } from './flows.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { formatTicketNumber } from './ticket-number.js';
 
@@ -707,9 +708,11 @@ export function handoverCharge(ticket: TicketSummaryRow): {
   amount: number;
   account: RevenueAccount;
 } {
-  return ticket.outcome === 'cancelled'
-    ? { amount: ticket.cancelFee ?? 0, account: SYSTEM_ACCOUNT.cancelFeeRevenue }
-    : { amount: ticket.quoteTotal, account: SYSTEM_ACCOUNT.serviceRevenue };
+  const account =
+    ticket.outcome === 'cancelled'
+      ? SYSTEM_ACCOUNT.cancelFeeRevenue
+      : SYSTEM_ACCOUNT.serviceRevenue;
+  return { amount: handoverCost(ticket), account };
 }
 
 /**
