@@ -383,6 +383,46 @@ describe('refunds and voids are guarded', () => {
     await expectBalancedBooks(h);
   });
 
+  test('money goes back through a central account the customer paid with, even once unshared', async () => {
+    h = await openRepairHarness(518);
+    const document = await openTicket(h);
+    const { accountId } = (await h.money(
+      'saveCentralAccount',
+      { kind: 'transfer', name: 'BCA pusat', storeIds: [] },
+      h.ownerId,
+    )) as { accountId: string };
+    const account = `account:${accountId}`;
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account, amount: 100_000 }] },
+      h.cashierId,
+    );
+    // The main owner gives the account to another store only.
+    await h.money(
+      'saveCentralAccount',
+      {
+        accountId,
+        kind: 'transfer',
+        name: 'BCA pusat',
+        storeIds: ['01920000-0000-7000-8000-0000000000bb'],
+      },
+      h.ownerId,
+    );
+    // No new payment goes through it here, but the DP still goes back the way it came.
+    await expectRefused(
+      h.money('receivePayments', { document, payments: [{ account, amount: 1 }] }, h.cashierId),
+      'VALIDATION_FAILED',
+      'accountNotUsable',
+    );
+    await h.money(
+      'refund',
+      { document, account, amount: 100_000, reason: 'Batal servis' },
+      h.storeOwnerId,
+    );
+    expect(await documentMoney(h, document)).toMatchObject({ balance: 0, paid: 0 });
+    await expectBalancedBooks(h);
+  });
+
   test("an owner's refund beyond the credit takes the rest off the bill, so nobody owes it", async () => {
     h = await openRepairHarness(507);
     const document = await repaired(h);

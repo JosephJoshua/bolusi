@@ -272,6 +272,25 @@ async function documentPaidIn(
   return Number(row?.total ?? 0);
 }
 
+/** Whether this store took a payment for the document through the account. */
+async function paidThroughOnDocument(
+  db: Db,
+  storeId: string,
+  document: { kind: string; id: string },
+  account: string,
+): Promise<boolean> {
+  const row = await db
+    .selectFrom('moneyEntries')
+    .select('id')
+    .where('storeId', '=', storeId)
+    .where('kind', '=', 'payment_received')
+    .where('account', '=', account)
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .executeTakeFirst();
+  return row !== undefined;
+}
+
 async function entryExists(db: Db, id: string): Promise<boolean> {
   const row = await db
     .selectFrom('moneyEntries')
@@ -447,9 +466,12 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     }>(op);
     await requireFreshEntry(db, op);
     const { source, lookup } = await requireDocument(db, op, document);
-    // A since deactivated account may still give back what was paid through it.
-    await requireAccount(db, op, account, { includeInactive: true });
     const store = storeOf(op);
+    // An account the customer paid this document through gives it back, even one since
+    // deactivated or no longer shared with this store; any other is one this store may use.
+    if (!(await paidThroughOnDocument(db, store, document, account))) {
+      await requireAccount(db, op, account, { includeInactive: true });
+    }
     // Nobody, not even an owner, gives back more than came in: two phones that each saw the same
     // payment must not both hand it back.
     const refunded = await documentTotal(db, store, document, 'refund_paid');
