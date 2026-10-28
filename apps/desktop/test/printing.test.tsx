@@ -84,6 +84,7 @@ const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
 async function openSettings(): Promise<void> {
   await screen.findByText('Yohanis Wenda');
   fireEvent.click(byTestId('nav.settings'));
+  fireEvent.click(await screen.findByTestId('desktop.settings.nav.computer'));
   await screen.findByTestId('repair.desk.printing');
 }
 
@@ -223,7 +224,7 @@ describe('updates', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pasang sekarang' }));
     expect(updates.install).toHaveBeenCalledTimes(1);
     await openSettings();
-    expect((await screen.findByTestId('desktop.version')).textContent).toBe('Versi aplikasi 0.1.0');
+    expect((await screen.findByTestId('desktop.version')).textContent).toBe('0.1.0');
   });
 
   it('keeps the offer as one labelled icon in the narrow sidebar', async () => {

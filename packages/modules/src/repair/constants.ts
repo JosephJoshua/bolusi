@@ -147,6 +147,13 @@ export const DEFAULT_UNCOLLECTED_DAYS = 60;
 export const MIN_UNCOLLECTED_DAYS = 1;
 export const MAX_UNCOLLECTED_DAYS = 365;
 
+/** Typed digits as a day count within the allowed range; null when empty or out of range. */
+export function parseUncollectedDays(text: string): number | null {
+  if (text === '') return null;
+  const days = Number(text);
+  return days >= MIN_UNCOLLECTED_DAYS && days <= MAX_UNCOLLECTED_DAYS ? days : null;
+}
+
 /** Handover evidence slots. */
 export const HANDOVER_PHOTO_SLOTS = ['handover', 'signature'] as const;
 export type HandoverPhotoSlot = (typeof HANDOVER_PHOTO_SLOTS)[number];
