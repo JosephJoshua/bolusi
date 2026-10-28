@@ -56,6 +56,7 @@ export {
 } from './components/Photo.js';
 export { Pagination, pageWindow, type PaginationLabels } from './components/Pagination.js';
 export { OverflowText } from './components/OverflowText.js';
+export { QrCode } from './components/QrCode.js';
 export { PatternPad } from './components/PatternPad.js';
 export { PinPad, type PinPadState } from './components/PinPad.js';
 export { SearchField } from './components/SearchField.js';

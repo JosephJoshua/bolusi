@@ -28,6 +28,7 @@ import { AuthLayout } from './auth/AuthLayout.js';
 import { FirstPinScreen, PinScreen, type PinSubmitResult } from './auth/PinScreen.js';
 import { SwitcherScreen } from './auth/SwitcherScreen.js';
 import { createCaptureDialogs } from './capture-dialogs.js';
+import { windowHandoff } from './phone-handoff.js';
 import type { PcCapture } from './capture.js';
 import { createCoreRepairRuntime } from './core-runtime.js';
 import type { SettingsAccess } from './settings/access.js';
@@ -40,8 +41,8 @@ import { useCore } from './use-core.js';
 const ACTIVITY_EVERY_MS = 5_000;
 
 export function App(): React.JSX.Element {
-  // The webcam and signature dialogs, once for the window; leaving the counter backs out of either.
-  const [dialogs] = useState(createCaptureDialogs);
+  // The webcam, signature and phone dialogs, once for the window; leaving the counter backs out.
+  const [dialogs] = useState(() => createCaptureDialogs(windowHandoff()));
   return (
     <>
       <Gate capture={dialogs.capture} />

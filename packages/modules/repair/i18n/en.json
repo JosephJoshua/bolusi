@@ -182,6 +182,7 @@
       "top": "Top"
     },
     "take": "Take photo",
+    "takeAll": "Take all photos",
     "takeNext": "Take photo: {slot}",
     "expired": "Some photos from this unfinished intake were deleted. Take them again.",
     "title": "Photos",

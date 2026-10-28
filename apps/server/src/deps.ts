@@ -24,6 +24,7 @@ import { ALL_MODULES } from '@bolusi/modules';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
+import { HandoffRelay } from './handoff/relay.js';
 import { createDbVerifyToken } from './auth/verify-token.js';
 import { noblePasswordKdf, type PasswordKdf } from './crypto/index.js';
 import type { AppEnv } from './env.js';
@@ -302,6 +303,8 @@ export interface ServerDeps {
    *  registers a revocation hook (SEC-RT-02); the WS/SSE routes register connections into it. */
   readonly realtimeHub: RealtimeHub;
   readonly phoneCatalog: PhoneCatalogReader;
+  /** The counter PC ↔ store phone handoff (handoff/relay.ts); in memory, like the realtime hub. */
+  readonly handoffRelay: HandoffRelay;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -427,6 +430,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     deliveryDispatcher,
     onConflictSurfaced,
     onDeviceAnomaly,
+    handoffRelay: overrides.handoffRelay ?? new HandoffRelay(realtimeScheduler, now),
     phoneCatalog: overrides.phoneCatalog ?? {
       models: readPhoneModels,
       photo: readPhoneModelPhoto,

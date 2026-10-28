@@ -31,9 +31,11 @@ function serveWindow(core: CoreHost, port: MessagePortMain): void {
   server.emit(CORE_EVENTS.state, core.state());
   const stopState = core.onState((state) => server.emit(CORE_EVENTS.state, state));
   const stopRepair = core.onRepairChanged(() => server.emit(CORE_EVENTS.repairChanged, null));
+  const stopHandoff = core.onHandoff((event) => server.emit(CORE_EVENTS.handoff, event));
   port.on('close', () => {
     stopState();
     stopRepair();
+    stopHandoff();
     server.close();
   });
 }

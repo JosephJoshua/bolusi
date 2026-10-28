@@ -35,6 +35,27 @@ const APP_ROLE = 'bolusi_app';
  * validation (`422 VALIDATION_FAILED`) BEFORE the handler's scope check and every media probe
  * would pass for the wrong reason — a probe that never reaches the code it audits.
  */
+/** Any 15 strings: the probes never open the phone page. */
+const HANDOFF_LABELS = Object.fromEntries(
+  [
+    'photoHint',
+    'signatureHint',
+    'take',
+    'retake',
+    'clear',
+    'send',
+    'sending',
+    'sent',
+    'waiting',
+    'rotate',
+    'rotateNow',
+    'failed',
+    'withdrawn',
+    'expired',
+    'unreadable',
+  ].map((key) => [key, key]),
+);
+
 const ID = {
   tenantA: '01111111-1111-7111-8111-111111111111',
   tenantB: '02222222-2222-7222-8222-222222222222',
@@ -227,6 +248,32 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     expiresAt: CLOCK_BASE + 3_600_000,
   });
 
+  // Phone handoff pairings live in the server's memory, so they are made through the real route by
+  // the devices that own them: tenant B's PC, and tenant A's PC in the store the prober is not in.
+  const pairAs = async (
+    token: string,
+    device: { deviceId: string; tenantId: string; storeId: string },
+  ) => {
+    tokens.add(token, { kind: 'device', ...device, deviceStatus: 'active' });
+    const res = await app.request('http://probe.test/v1/handoff', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: HANDOFF_LABELS }),
+    });
+    if (res.status !== 200) throw new Error(`handoff pairing seed: HTTP ${String(res.status)}`);
+    return ((await res.json()) as { id: string }).id;
+  };
+  const handoffB = await pairAs('bdt_probe_tenant_b_device', {
+    deviceId: ID.deviceB,
+    tenantId: ID.tenantB,
+    storeId: ID.storeB,
+  });
+  const handoffA2 = await pairAs('bdt_probe_tenant_a_device_2', {
+    deviceId: ID.deviceA2,
+    tenantId: ID.tenantA,
+    storeId: ID.storeA2,
+  });
+
   const ctx: ProbeContext = {
     tenantAAuth: `Bearer ${deviceToken}`,
     tenantAControlAuth: `Bearer ${controlToken}`,
@@ -239,6 +286,7 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     tenantAStore2DeviceId: ID.deviceA2,
     tenantAStore2MediaId: ID.mediaA2,
     tenantAOtherDeviceMediaId: ID.mediaAOther,
+    tenantAStore2HandoffId: handoffA2,
     tenantBTenantId: ID.tenantB,
     tenantBUserId: ID.userB,
     tenantBDeviceId: ID.deviceB,
@@ -246,6 +294,7 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     tenantBMediaId: ID.mediaB,
     tenantBLoginIdentifier: TENANT_B_LOGIN,
     tenantBHeldPushToken: TENANT_B_HELD_PUSH_TOKEN,
+    tenantBHandoffId: handoffB,
     nonexistentId: ID.nonexistent,
   };
 
