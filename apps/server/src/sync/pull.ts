@@ -68,18 +68,21 @@ async function directoryVersion(db: TenantDb): Promise<number> {
 }
 
 /**
- * The devices sidecar snapshot (api/01-sync §4.1): the FULL directory of the device's pull scope
- * — `storeId = device.storeId OR storeId IS NULL` — including the tenant-scoped `kind: 'system'`
- * device and any revoked devices (their historical signatures must stay verifiable; the client
- * keeps them for pull-side verification). Never contains other tenants' (RLS) or other stores'
- * devices (the scope predicate). For a store-less device the store leg matches nothing, leaving
- * `storeId IS NULL` — the system devices only.
+ * The devices sidecar snapshot (api/01-sync §4.1): EVERY device of the tenant, including the
+ * tenant-scoped `kind: 'system'` device and any revoked devices (their historical signatures must
+ * stay verifiable; the client keeps them for pull-side verification). Never contains other
+ * tenants' devices (RLS).
+ *
+ * Not narrowed to the puller's store: the pull serves every `storeId IS NULL` op of the tenant,
+ * and a member device at ANY store may author one (a locale change, a tenant inventory item, a
+ * central money account). The client verifies each pulled op against this list, so a list without
+ * the other stores' keys left those ops unverifiable and quarantined them on every other store.
+ * Public keys are not secret, and the list carries no op content.
  */
-async function deviceSnapshot(db: TenantDb, storeId: string | null): Promise<DeviceInfo[]> {
+async function deviceSnapshot(db: TenantDb): Promise<DeviceInfo[]> {
   const rows = await db
     .selectFrom('devices')
     .select(['id', 'storeId', 'kind', 'signingKeyPublic', 'status', 'revokedAt'])
-    .where((eb) => eb.or([eb('storeId', '=', storeId), eb('storeId', 'is', null)]))
     .orderBy('id')
     .execute();
   return rows.map((row) => ({
@@ -133,7 +136,7 @@ export async function runPull(
     // omit both fields (nothing changed since the client's last snapshot).
     const currentVersion = await directoryVersion(db);
     if (request.devicesDirectoryVersion !== currentVersion) {
-      response.devices = await deviceSnapshot(db, identity.storeId);
+      response.devices = await deviceSnapshot(db);
       response.devicesDirectoryVersion = currentVersion;
     }
 
