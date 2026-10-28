@@ -5,6 +5,7 @@
 import {
   app,
   BrowserWindow,
+  Menu,
   session,
   shell,
   type IpcMainEvent,
@@ -77,6 +78,8 @@ function createWindow(): void {
       nodeIntegration: false,
       webviewTag: false,
       spellcheck: false,
+      // An installed app opens no developer tools, also not from the keyboard.
+      devTools: !app.isPackaged,
       preload: PRELOAD,
     },
   });
@@ -97,6 +100,25 @@ function createWindow(): void {
   else void window.loadFile(RENDERER_INDEX);
 }
 
+/**
+ * An installed app's menu, in place of Electron's default whose View menu opens the developer tools
+ * and reloads the page. The bar stays hidden; only the shortcuts the counter uses remain: editing
+ * keys in fields, zoom, and F11 for fullscreen.
+ */
+const INSTALLED_MENU: Electron.MenuItemConstructorOptions[] = [
+  { role: 'editMenu' },
+  {
+    label: 'View',
+    submenu: [
+      { role: 'resetZoom' },
+      { role: 'zoomIn' },
+      { role: 'zoomOut' },
+      { type: 'separator' },
+      { role: 'togglefullscreen' },
+    ],
+  },
+];
+
 // Indonesian for what Chromium draws itself, such as a date field's dd/mm/yyyy order.
 app.commandLine.appendSwitch('lang', 'id');
 
@@ -113,6 +135,7 @@ app.on('second-instance', () => {
 
 void app.whenReady().then(() => {
   if (!primary) return;
+  if (app.isPackaged) Menu.setApplicationMenu(Menu.buildFromTemplate(INSTALLED_MENU));
   // Only copying (a phone number), the webcam and its microphone are allowed: no location, screen
   // capture or other device.
   const counter = (contents: Electron.WebContents | null): boolean =>
