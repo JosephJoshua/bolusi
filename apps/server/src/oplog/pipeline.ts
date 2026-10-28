@@ -180,10 +180,15 @@ export async function processPushBatch(
     const reject = (op: SignedOperation, code: RejectionCode, reason: string): void => {
       results.push({ id: op.id, status: 'rejected', code, reason });
     };
-    // Refuse an op that is proven to be this device's (signature) at the next chain position
-    // (chain): record the refusal and advance the head past it, so the device's later ops, which
-    // link to this one, are not stranded behind a gap forever. The op itself never enters the log.
-    const refuse = async (op: SignedOperation, code: RejectionCode, reason: string) => {
+    // Spend a chain position the device used for an op the log does not take from it: record it and
+    // advance the head past it, so the device's later ops, which link to this one, are not stranded
+    // behind a gap forever. `code` is the refusal code, or `DUPLICATE` for an op already logged from
+    // another device. Only for an op proven to be this device's (signature) at its next position.
+    const spendPosition = async (
+      op: SignedOperation,
+      reason: string,
+      code: RejectionCode | 'DUPLICATE' = 'DUPLICATE',
+    ) => {
       await db
         .insertInto('refusedOperations')
         .values({
@@ -204,9 +209,13 @@ export async function processPushBatch(
         // turn this verdict into a 500 that rolls back the batch; the answer stands either way.
         .onConflict((oc) => oc.doNothing())
         .execute();
+      head = { seq: op.seq, hash: op.hash };
+    };
+    // Refuse such an op: spend its position and answer with the refusal.
+    const refuse = async (op: SignedOperation, code: RejectionCode, reason: string) => {
+      await spendPosition(op, reason, code);
       if (!verdicts.refused.has(op.id))
         verdicts.refused.set(op.id, { hash: op.hash, code, reason });
-      head = { seq: op.seq, hash: op.hash };
       reject(op, code, reason);
     };
     const authors = createAuthorLookup(db, identity.tenantId);
@@ -239,6 +248,18 @@ export async function processPushBatch(
 
       // 1. dedupe (05 §5): a replay consumes nothing, and a refused op is answered as before.
       if (verdicts.accepted.has(op.id)) {
+        // One exception spends a position: a re-enrolled phone re-signs the changes its old
+        // registration saved under its new device (core auth/carry-over.ts), and one the server
+        // already took (its answer was lost) arrives at the new device's next chain position. It is
+        // still a duplicate, but the device's later ops link to it, so the head moves past it like a
+        // refusal would. Only a genuine op of this device, exactly at its next position, does this.
+        if (
+          op.deviceId === identity.deviceId &&
+          classifyChain(op, head).kind === 'ok' &&
+          verifyPushedSignature(op, device.publicKey, deps.crypto).ok
+        ) {
+          await spendPosition(op, 'already in the log from an earlier registration of this device');
+        }
         results.push({ id: op.id, status: 'duplicate' });
         continue;
       }

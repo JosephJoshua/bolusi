@@ -15,6 +15,7 @@
 //
 // Enrollment logs NOBODY in (§4.4): it returns with no open session — the device shows the switcher,
 // and the enrolling owner authenticates by PIN like everyone else.
+import type { SignedOperation } from '@bolusi/schemas';
 import type { Kysely } from 'kysely';
 
 import type { CryptoPort } from '../crypto/port.js';
@@ -22,7 +23,9 @@ import { bytesToBase64 } from '../crypto/bytes.js';
 import type { AppendedOp } from '../oplog/append.js';
 import type { CommandRuntime, DeviceIdentity } from '../runtime/execute.js';
 import type { IdSource } from '../runtime/ports.js';
+import { resetSyncStateForNewDevice } from '../sync/state.js';
 import { applyBundle } from './bundle-apply.js';
+import { carryOverUnsyncedChanges } from './carry-over.js';
 import { AUTH_ENTITY, AUTH_OP } from './operations.js';
 import type { EnrollResponse, EnrollTransportPort, KeyStorePort } from './ports.js';
 import {
@@ -67,6 +70,11 @@ export interface EnrollmentDeps<DB> {
    * key. Used only to emit the genesis op through the sanctioned channel (04 §5.1).
    */
   readonly runtimeFor: (device: DeviceIdentity) => CommandRuntime;
+  /**
+   * Re-fold the record an op belongs to (`ProjectionEngine.refoldEntityOf`), used when a re-enrolled
+   * phone carries its unsynced changes over to the new device.
+   */
+  readonly refold: (op: SignedOperation) => Promise<unknown>;
 }
 
 export interface EnrollmentParams {
@@ -78,12 +86,20 @@ export interface EnrollmentParams {
   readonly deviceName: string;
   readonly platform: 'android' | 'ios';
   readonly appVersion: string;
+  /**
+   * The registration this enrolment replaces, when that registration is still active on the server
+   * (a voluntary re-enrolment): the server revokes it in the same transaction. Left out when the
+   * server revoked or forgot it, since there is nothing left to revoke.
+   */
+  readonly replacesDeviceId?: string;
 }
 
 export interface EnrollmentResult {
   readonly deviceId: string;
   readonly response: EnrollResponse;
   readonly genesis: readonly AppendedOp[];
+  /** How many unsynced changes from an earlier registration of this phone were carried over. */
+  readonly carriedOver: number;
   /** Enrollment opens no session (§4.4) — always false. Present so the property is asserted, not assumed. */
   readonly loggedIn: false;
 }
@@ -97,6 +113,14 @@ export async function runEnrollment<DB>(
   deps: EnrollmentDeps<DB>,
   params: EnrollmentParams,
 ): Promise<EnrollmentResult> {
+  // RE-ENROLMENT. A phone that was enrolled before keeps its data, so it may only rejoin the store
+  // that data belongs to: its records and unsynced changes are that store's (the screen offers no
+  // other store; this is the backstop).
+  const previousStoreId = await readMeta(deps.db, STORE_ID_META_KEY);
+  if (previousStoreId !== null && previousStoreId !== params.storeId) {
+    throw new Error('a phone that holds a store’s data can only be re-enrolled into that store');
+  }
+
   const draft = await loadOrCreateDraft(deps);
 
   // Step 3 — POST with the draft's Idempotency-Key (reused on retry, §4.3).
@@ -107,6 +131,7 @@ export async function runEnrollment<DB>(
     deviceName: params.deviceName,
     platform: params.platform,
     appVersion: params.appVersion,
+    ...(params.replacesDeviceId === undefined ? {} : { replacesDeviceId: params.replacesDeviceId }),
   });
 
   // Step 4 — token to SecureStore, THEN the bundle into the directory tables. The directory persist
@@ -120,13 +145,13 @@ export async function runEnrollment<DB>(
 
   // Step 5 — the genesis op, ONLY after the directory persist. Guarded so a resumed run that already
   // appended it does not attempt a second seq 1 (which would fail the genesis rules, 05 §9.5).
+  const runtime = deps.runtimeFor({
+    tenantId: response.tenant.id,
+    storeId: response.store.id,
+    deviceId: draft.deviceId,
+  });
   let genesis: readonly AppendedOp[] = [];
   if (!(await deviceHasGenesis(deps.db, draft.deviceId))) {
-    const runtime = deps.runtimeFor({
-      tenantId: response.tenant.id,
-      storeId: response.store.id,
-      deviceId: draft.deviceId,
-    });
     genesis = await runtime.emitRuntimeOp({
       type: AUTH_OP.deviceEnrolled,
       entityType: AUTH_ENTITY.device,
@@ -139,6 +164,23 @@ export async function runEnrollment<DB>(
       userId: params.ownerUserId,
       source: 'system',
     });
+  }
+
+  // Step 6 — re-enrolment only: the unsynced changes the owner just reviewed move to the new
+  // device, after its genesis, and the sync state starts over for the new registration. Both are
+  // safe to repeat, so a crash-resumed run simply does them again (a no-op once done).
+  const { carried } = await carryOverUnsyncedChanges(
+    {
+      db: deps.db,
+      crypto: deps.crypto,
+      secretKey: deps.keystore.getSigningKey(),
+      refold: deps.refold,
+    },
+    runtime,
+    { deviceId: draft.deviceId, ownerUserId: params.ownerUserId },
+  );
+  if ((await readMeta(deps.db, DEVICE_ID_META_KEY)) !== draft.deviceId) {
+    await resetSyncStateForNewDevice(deps.db);
   }
 
   // Step 7 — persist the device identity to `meta_kv` (10-db §9; task 88), BEFORE the draft is
@@ -157,7 +199,7 @@ export async function runEnrollment<DB>(
   }
 
   await deleteMeta(deps.db, ENROLLMENT_DRAFT_KEY); // enrollment complete — the draft is spent
-  return { deviceId: draft.deviceId, response, genesis, loggedIn: false };
+  return { deviceId: draft.deviceId, response, genesis, carriedOver: carried, loggedIn: false };
 }
 
 /**

@@ -259,6 +259,12 @@ function journey(world: ChainWorld): OpSpec[] {
 
     // auth (the genesis `auth.device_enrolled` is pushed first, by the test)
     {
+      type: 'auth.device_changes_transferred',
+      entityType: 'device',
+      entityId: world.deviceId,
+      payload: { fromDeviceIds: [id(0x300)], opCount: 1 },
+    },
+    {
       type: 'auth.user_switched',
       entityType: 'auth_session',
       entityId: id(6),

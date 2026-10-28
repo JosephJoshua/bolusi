@@ -97,6 +97,8 @@ export interface EnrollRequest {
   readonly deviceName: string;
   readonly platform: 'android' | 'ios';
   readonly appVersion: string;
+  /** The still-active registration this one replaces; the server revokes it in the same step. */
+  readonly replacesDeviceId?: string;
 }
 
 /**

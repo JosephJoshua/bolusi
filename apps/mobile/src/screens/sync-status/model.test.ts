@@ -56,6 +56,8 @@ function state(overrides: Partial<SyncState> = {}): SyncState {
     syncDisabledReason: null,
     lastSyncError: null,
     backoffUntil: null,
+    tokenRejectedSince: null,
+    tokenRejectedCount: 0,
     lastServerTime: NOW,
     lastServerTimeReceivedAt: NOW,
     ...overrides,
@@ -225,6 +227,8 @@ describe('the counters are DERIVED — no stored count column exists to read (01
       'pushHalted',
       'syncDisabled',
       'syncDisabledReason',
+      'tokenRejectedCount',
+      'tokenRejectedSince',
     ]);
     expect(record).not.toHaveProperty('pendingOperationCount');
     expect(record).not.toHaveProperty('pendingMediaCount');
@@ -440,6 +444,16 @@ describe('manual sync (§8.4 item 3)', () => {
       state: state({ syncDisabled: true, syncDisabledReason: 'device_revoked' }),
     });
     expect(manualSync(given).kind).toBe('disabled');
+  });
+
+  test('a phone the server forgot offers re-enrolment instead of a sync that cannot work', () => {
+    const given = input({
+      pendingOperationCount: 4,
+      state: state({ syncDisabled: true, syncDisabledReason: 'device_unrecognised' }),
+    });
+    expect(syncProblems(given)).toEqual([{ kind: 'deviceUnrecognised' }]);
+    expect(syncChipState(given)).toBe('attention');
+    expect(manualSync(given)).toEqual({ kind: 'reenroll' });
   });
 
   test('a manual-sync failure is carried as inline text, never as a modal (§8.4 item 3)', () => {

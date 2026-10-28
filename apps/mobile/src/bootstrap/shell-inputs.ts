@@ -1,13 +1,13 @@
 // The shell's inputs, derived from the booted app + the LIVE sync client (task 89).
 //
-// PURE and NODE-SAFE BY CONSTRUCTION: every import here is `import type`, so this module pulls in no
-// native code and can be unit-tested directly (shell-inputs.test.ts) — unlike Root.tsx, which
+// PURE and NODE-SAFE BY CONSTRUCTION: every import here is `import type` or platform-free core, so this
+// module pulls in no native code and can be unit-tested directly (shell-inputs.test.ts) — unlike Root.tsx, which
 // transitively imports expo-location/expo-notifications and cannot load under Node. The reason it is
 // a separate module rather than an inline block in Root is exactly that testability: review-50b caught
 // a false "gated on a persisted deviceId" comment in this area, and the standing risk is the §2.11
 // one — a refactor that quietly re-hardcodes `loopState: 'idle'` / `isOffline: true`. A test watches
 // the difference between "reads the live loop" and "returns a literal".
-import type { SyncLoopState, SyncState } from '@bolusi/core';
+import { DEVICE_UNRECOGNISED_REASON, type SyncLoopState, type SyncState } from '@bolusi/core';
 
 import type { DeviceStatus } from '../navigation/zone.js';
 import type { FirstSyncProgress, SyncStatusInput } from '../screens/sync-status/model.js';
@@ -79,7 +79,9 @@ export function resolveShellInputs(
   const loopState: SyncLoopState = sync !== null ? sync.state() : 'idle';
   const isOffline = sync !== null ? sync.isOffline() : true;
   const device: DeviceStatus = syncState.syncDisabled
-    ? 'revoked'
+    ? syncState.syncDisabledReason === DEVICE_UNRECOGNISED_REASON
+      ? 'unrecognised'
+      : 'revoked'
     : app.deviceId !== null
       ? 'active'
       : 'unenrolled';

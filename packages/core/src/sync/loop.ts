@@ -32,6 +32,7 @@ import { SYNC_LOOP_MACHINE, type SyncLoopEvent, type SyncLoopState } from './loo
 import {
   DEVICE_REVOKED_ERROR_CODE,
   SyncTransportError,
+  TOKEN_INVALID_ERROR_CODE,
   type BundleRefreshPort,
   type CancelTimer,
   type SyncSurfacePort,
@@ -84,6 +85,18 @@ const EARLY_EXIT_REASONS: ReadonlySet<SyncTriggerReason> = new Set<SyncTriggerRe
  */
 export const BUNDLE_REFRESH_INTERVAL_MS = 50_000;
 
+/**
+ * When a server that keeps refusing this device's token counts as "no longer knows this phone".
+ * Device tokens never expire, so a lasting `AUTH_TOKEN_INVALID` means the server lost the device
+ * (reset, restore, row removed, wrong server). Both limits must be met: three refusals in a row so
+ * one odd answer never trips it, and ten minutes so a deploy or a brief server fault rides through.
+ * Only a successful sync breaks the streak; a network failure in between proves nothing either way.
+ */
+export const DEVICE_UNRECOGNISED_AFTER = { refusals: 3, ms: 10 * 60_000 } as const;
+
+/** `syncDisabledReason` for a device the server no longer recognises. */
+export const DEVICE_UNRECOGNISED_REASON = 'device_unrecognised';
+
 export interface SyncLoopOptions<DB> {
   readonly db: Kysely<DB>;
   readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -130,6 +143,9 @@ export class SyncLoop<DB> {
   /** Mirrors of the persisted guards, so the trigger guard needs no `await` (see the header). */
   private syncDisabled = false;
   private pushHalted = false;
+  /** Mirrors of the persisted token-refusal streak (see DEVICE_UNRECOGNISED_AFTER). */
+  private tokenRejectedSince: number | null = null;
+  private tokenRejectedCount = 0;
   /** Clock time of the last successful bundle refresh; null until the first (in-memory on purpose). */
   private bundleRefreshedAt: number | null = null;
   /** A manual trigger asked for a fresh bundle, possibly while a cycle was running. */
@@ -149,6 +165,8 @@ export class SyncLoop<DB> {
     const state = await readSyncState(this.options.db);
     this.syncDisabled = state.syncDisabled;
     this.pushHalted = state.pushHalted;
+    this.tokenRejectedSince = state.tokenRejectedSince;
+    this.tokenRejectedCount = state.tokenRejectedCount;
     this.hydrated = true;
   }
 
@@ -310,11 +328,15 @@ export class SyncLoop<DB> {
       // ── drain complete (03 §10: `pulling → idle`) ───────────────────────────────────────
       this.transition('pull_drained');
       this.failureCount = 0;
+      this.tokenRejectedSince = null;
+      this.tokenRejectedCount = 0;
       const now = this.options.clock.now();
       await writeSyncState(this.options.db, {
         lastSuccessfulSyncAt: now,
         lastSyncError: null,
         backoffUntil: null,
+        tokenRejectedSince: null,
+        tokenRejectedCount: 0,
         ...(pull.serverTime === null
           ? {}
           : { lastServerTime: pull.serverTime, lastServerTimeReceivedAt: now }),
@@ -344,21 +366,31 @@ export class SyncLoop<DB> {
     if (isDeviceRevoked(error)) {
       // 03 §10 "any → idle on 401 DEVICE_REVOKED": all sync stops, no further automatic cycles
       // until re-enrollment. Terminal for this enrollment by design — there is no un-revoke (03 §5).
-      this.transition('device_revoked');
-      this.syncDisabled = true;
-      this.rerun = false;
-      this.clearBackoffTimer();
-      await writeSyncState(this.options.db, {
-        syncDisabled: true,
-        syncDisabledReason: 'device_revoked',
-        lastSyncError: DEVICE_REVOKED_ERROR_CODE,
-      });
-      this.emit({
-        kind: 'sync_disabled',
-        reason: 'device_revoked',
-        labelKey: 'auth.revoked.title',
-      });
+      await this.disableSync('device_revoked', DEVICE_REVOKED_ERROR_CODE, 'auth.revoked.title');
       return;
+    }
+
+    if (isTokenRejected(error)) {
+      // The server does not know this token. Count it; past DEVICE_UNRECOGNISED_AFTER it stops
+      // sync like a revocation, otherwise it backs off below like any other failure.
+      const now = this.options.clock.now();
+      this.tokenRejectedSince ??= now;
+      this.tokenRejectedCount += 1;
+      await writeSyncState(this.options.db, {
+        tokenRejectedSince: this.tokenRejectedSince,
+        tokenRejectedCount: this.tokenRejectedCount,
+      });
+      if (
+        this.tokenRejectedCount >= DEVICE_UNRECOGNISED_AFTER.refusals &&
+        now - this.tokenRejectedSince >= DEVICE_UNRECOGNISED_AFTER.ms
+      ) {
+        await this.disableSync(
+          DEVICE_UNRECOGNISED_REASON,
+          TOKEN_INVALID_ERROR_CODE,
+          'auth.unrecognised.title',
+        );
+        return;
+      }
     }
 
     // Transport/server failure ⇒ backoff (03 §10). Op-level rejections never reach here — they are
@@ -379,6 +411,21 @@ export class SyncLoop<DB> {
       this.transition('timer_elapsed');
       this.cycle = this.runCycle();
     });
+  }
+
+  /** Stop all automatic sync until the device is enrolled again (03 §10 `syncDisabled`). */
+  private async disableSync(reason: string, errorCode: string, labelKey: string): Promise<void> {
+    this.transition('device_revoked');
+    this.syncDisabled = true;
+    this.rerun = false;
+    this.clearBackoffTimer();
+    await writeSyncState(this.options.db, {
+      syncDisabled: true,
+      syncDisabledReason: reason,
+      lastSyncError: errorCode,
+      backoffUntil: null,
+    });
+    this.emit({ kind: 'sync_disabled', reason, labelKey });
   }
 
   private notifyPushed(settled: PushSettled): void {
@@ -408,6 +455,19 @@ export class SyncLoop<DB> {
  */
 function isDeviceRevoked(error: unknown): boolean {
   return error instanceof SyncTransportError && error.code === DEVICE_REVOKED_ERROR_CODE;
+}
+
+/**
+ * Did the server refuse this device's token as unknown? Only the server's own answer counts: a
+ * locally missing token (`AUTH_TOKEN_MISSING`, e.g. a keystore not readable before first unlock)
+ * says nothing about whether the server still knows the device.
+ */
+function isTokenRejected(error: unknown): boolean {
+  return (
+    error instanceof SyncTransportError &&
+    error.code === TOKEN_INVALID_ERROR_CODE &&
+    error.status === 401
+  );
 }
 
 /** The label-catalog code for `lastSyncError` (01 §5.2: "last failure, label-catalog code"). */

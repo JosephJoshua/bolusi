@@ -488,6 +488,21 @@ export class HarnessServer {
     };
   }
 
+  /**
+   * QA: make the server forget every enrolled phone's token, keeping the tenant, its staff and every
+   * accepted change. Each phone's next request then gets 401 `AUTH_TOKEN_INVALID`, as after a server
+   * restore that lost the device, so the "HP ini perlu didaftarkan ulang" flow can be tried on a
+   * device. Returns the ids of the phones forgotten.
+   */
+  async forgetDeviceTokens(): Promise<string[]> {
+    const { rows } = await sql<{ id: string }>`
+      UPDATE devices SET token_hash = NULL
+      WHERE token_hash IS NOT NULL AND status <> 'revoked'
+      RETURNING id
+    `.execute(this.db);
+    return rows.map((row) => row.id);
+  }
+
   async close(): Promise<void> {
     await this.#deliveries?.flush();
     // Destroying the Kysely handle closes the PGlite instance the dialect owns; closing it again

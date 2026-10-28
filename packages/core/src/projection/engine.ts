@@ -205,6 +205,15 @@ export class ProjectionEngine<DB> {
    * transaction, the one that marks the op refused, so the two land together.
    */
   async refoldRefused(op: ProjectionOperation): Promise<void> {
+    await this.refoldEntityOf(op);
+  }
+
+  /**
+   * Re-fold the record `op` belongs to from its full log, inside the caller's transaction. For a
+   * change that alters the record's history without being a new op: a refusal, or a re-enrolled
+   * phone's unsynced changes moving to its new device.
+   */
+  async refoldEntityOf(op: ProjectionOperation): Promise<void> {
     const module = this.registry.moduleForType(op.type);
     if (module === undefined) return;
     await refoldEntities(this.db, this.registry, module, op.entityType, [op.entityId], this.fold);

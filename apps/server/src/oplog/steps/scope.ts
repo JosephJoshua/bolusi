@@ -16,6 +16,7 @@ import type { DeviceRecord, OpRegistry } from '../types.js';
  *  here: every type's declared permission is the authorization step's (steps/permission.ts). */
 export const GENESIS_TYPE = 'auth.device_enrolled';
 export const AUTH_PIN_CHANGED = 'auth.pin_changed';
+export const AUTH_DEVICE_CHANGES_TRANSFERRED = 'auth.device_changes_transferred';
 export const AUTH_PIN_RESET = 'auth.pin_reset';
 export const AUTH_PIN_LOCKOUT_CLEARED = 'auth.pin_lockout_cleared';
 export const PLATFORM_CONFLICT_DETECTED = 'platform.conflict_detected';
@@ -216,6 +217,19 @@ export async function checkScope(
         };
       }
       return null;
+
+    case AUTH_DEVICE_CHANGES_TRANSFERRED: {
+      // A re-enrolled phone's audit record: about the device that signs it, moving changes from
+      // OTHER registrations. The server may never have known those (that is why the phone
+      // re-enrolled), so it cannot check them further; each carried change is checked on its own.
+      const from = (op.payload as { fromDeviceIds?: unknown }).fromDeviceIds;
+      if (op.entityId !== op.deviceId || (Array.isArray(from) && from.includes(op.deviceId))) {
+        return {
+          reason: `${op.type} must name the signing device and move changes from other devices`,
+        };
+      }
+      return null;
+    }
 
     case AUTH_PIN_CHANGED:
       // Self only: envelope userId == entityId (target).
