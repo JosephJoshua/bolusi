@@ -381,6 +381,36 @@ export interface PushTokens {
   userId: string | null;
 }
 
+export interface QrisCharges {
+  accountId: string;
+  amount: Int8;
+  checkedAt: Int8 | null;
+  createdAt: Int8;
+  deviceId: string;
+  documentJson: string;
+  environment: string;
+  expiresAt: Int8;
+  id: string;
+  paidAt: Int8 | null;
+  paymentId: string | null;
+  qrString: string;
+  requestedBy: string;
+  storeId: string;
+  tenantId: string;
+  xenditQrId: string;
+}
+
+export interface QrisConnections {
+  accountId: string;
+  callbackTokenHash: string;
+  connectedAt: Int8;
+  connectedBy: string;
+  disconnectedAt: Int8 | null;
+  environment: string;
+  secretSealed: string;
+  tenantId: string;
+}
+
 export interface RefusedOperations {
   code: string;
   deviceId: string;
@@ -655,6 +685,8 @@ export interface DB {
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;
+  qrisCharges: QrisCharges;
+  qrisConnections: QrisConnections;
   refusedOperations: RefusedOperations;
   repairCustomers: RepairCustomers;
   repairIntakeOptions: RepairIntakeOptions;

@@ -37,6 +37,12 @@ export const HTTP_ERROR_CODES = [
   'ENROLL_KEY_REUSED',
   'LAST_ADMIN_PROTECTED',
   'LOGIN_IDENTIFIER_TAKEN',
+  // Integrated QRIS (./qris.ts).
+  'QRIS_UNAVAILABLE',
+  'QRIS_NOT_CONNECTED',
+  'QRIS_KEY_REFUSED',
+  'QRIS_AMOUNT_REFUSED',
+  'CHANGE_REFUSED',
 ] as const;
 
 export const zHttpErrorCode = z.enum(HTTP_ERROR_CODES);

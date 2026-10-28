@@ -20,7 +20,7 @@ export type RuleOutcome = null | { readonly reason: string };
 export async function checkRules(
   db: TenantDb,
   op: SignedOperation,
-  device: DeviceRecord,
+  device: Pick<DeviceRecord, 'storeId'>,
   registry: OpRegistry,
   lookup: AuthorLookup,
 ): Promise<RuleOutcome> {

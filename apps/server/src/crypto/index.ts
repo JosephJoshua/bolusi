@@ -146,3 +146,10 @@ export const noblePasswordKdf: PasswordKdf = {
   verify: verifyPassword,
   runDummy: runDummyPasswordKdf,
 };
+
+/** Constant-time equality of two hex digests (a presented secret's hash against the stored one). */
+export function timingSafeEqualHex(a: string, b: string): boolean {
+  const left = Buffer.from(a, 'hex');
+  const right = Buffer.from(b, 'hex');
+  return left.length === right.length && left.length > 0 && timingSafeEqual(left, right);
+}
