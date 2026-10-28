@@ -138,17 +138,21 @@ async function requireDiscountPermission(
   await requireWithinLimit(op, ctx, REPAIR_PERMISSION.discount, earlier + drop);
 }
 
-/** What the discounts still standing on the op's ticket take off, besides line `exceptLineId`. */
-async function discountsStanding(db: Db, op: SignedOperation, exceptLineId: string) {
-  const row = await db
+/**
+ * What the discounts still standing on the op's ticket take off, besides line `exceptLineId`: the
+ * price drops already on the servisan, which its limit counts together with a new one (a discount,
+ * or a cancel fee below the store's).
+ */
+async function discountsStanding(db: Db, op: SignedOperation, exceptLineId?: string) {
+  let query = db
     .selectFrom('repairQuoteLines')
     .select(sql<number>`coalesce(sum(-amount), 0)`.as('drop'))
     .where('ticketId', '=', op.entityId)
     .where('storeId', '=', storeOf(op))
     .where('amount', '<', 0)
-    .where('status', '!=', 'declined')
-    .where('id', '!=', exceptLineId)
-    .executeTakeFirst();
+    .where('status', '!=', 'declined');
+  if (exceptLineId !== undefined) query = query.where('id', '!=', exceptLineId);
+  const row = await query.executeTakeFirst();
   return Number(row?.drop ?? 0);
 }
 
@@ -799,8 +803,9 @@ export const markedRepairedRule: Rule = async (op, { db }) => {
 
 /**
  * Cancel an open ticket. A fee below the store's standard fee is a price drop: an owner's to give,
- * and a limited role's (a manager's) within its store's limit. The standard fee is the store's as
- * these records have it, not the payload's, which the device writing it could set to anything.
+ * and a limited role's (a manager's) within its store's limit, together with the servisan's
+ * discounts. The standard fee is the store's as these records have it, not the payload's, which the
+ * device writing it could set to anything.
  */
 export const ticketCancelledRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
@@ -819,7 +824,10 @@ export const ticketCancelledRule: Rule = async (op, ctx) => {
       ? NO_CANCEL_FEES
       : { beforeWork: Number(fees.beforeWork), afterWork: Number(fees.afterWork) },
   );
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, standard - fee);
+  // A smaller fee is a price drop on the servisan, counted with the discounts already on it.
+  const drop = standard - fee;
+  const total = drop > 0 ? drop + (await discountsStanding(ctx.db, op)) : drop;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, total);
 };
 
 /** A technician's suggestion; one the cashier could never apply would only block handover. */

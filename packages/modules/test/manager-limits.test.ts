@@ -164,6 +164,24 @@ describe('cancel fees', () => {
     );
   });
 
+  test('a smaller cancel fee counts with the discounts on the servisan', async () => {
+    h = await openRepairHarness(9203);
+    await h.run('setCancelFees', { beforeWork: 100_000, afterWork: 150_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await changePrice(h, ticketId, 30_000, h.managerId);
+    const cancel = (fee: number, userId: string, id = ticketId) =>
+      h!.run('cancelTicket', { ticketId: id, reason: 'Batal', fee }, userId);
+    // Rp 30.000 off the price and Rp 21.000 off the fee is past the Rp 50.000 limit.
+    await expectOverLimit(cancel(79_000, h.managerId), 'repair');
+    await cancel(80_000, h.managerId);
+
+    // At the store's fee the cancel drops nothing, whatever an owner took off before.
+    const discounted = await openTicket(h);
+    await changePrice(h, discounted, 200_000, h.storeOwnerId);
+    await expectOverLimit(cancel(99_999, h.managerId, discounted), 'repair');
+    await cancel(100_000, h.managerId, discounted);
+  });
+
   test('an older phone cancelling with no fee (v1) charges nothing, so the whole fee counts', async () => {
     h = await openRepairHarness(9202);
     await h.run('setCancelFees', { beforeWork: 100_000, afterWork: 150_000 }, h.storeOwnerId);
