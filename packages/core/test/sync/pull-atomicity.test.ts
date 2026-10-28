@@ -333,7 +333,7 @@ describe('an op from a newer app pauses the pull until this app updates', () => 
   it('applies nothing of the batch, keeps the cursor, and says an update is needed', async () => {
     ops[2] = { ...ops[2]!, schemaVersion: 99 };
     scriptBatch();
-    const knowsOp = (op: SignedOperation): boolean => op.schemaVersion === 1;
+    const knowsOp = (op: Pick<SignedOperation, 'schemaVersion'>): boolean => op.schemaVersion === 1;
 
     const pull = runPullPhase({ ...pullDeps((op) => harness.engine.applyPulledOp(op)), knowsOp });
 
