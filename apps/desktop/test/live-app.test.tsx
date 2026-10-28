@@ -176,6 +176,59 @@ describe('the PC over the offline core', () => {
     expect(screen.queryByTestId('desktop.shell')).toBeNull();
   });
 
+  it('says how many of a servisan’s changes were refused, and opens the sync panel from there', async () => {
+    const refused = (opId: string) => ({
+      opId,
+      type: 'repair.work_started',
+      at: 0,
+      rejectionCode: 'RULE_VIOLATED',
+      rejectionReason: 'repair.refusal.cancelled',
+      subject: 'Servisan K7Q-0012',
+    });
+    core = new FakeCore(
+      ready({
+        session: session(signedIn(OWNER, ALL)),
+        sync: {
+          state: {
+            cursor: 12,
+            devicesDirectoryVersion: 1,
+            lastSuccessfulSyncAt: 0,
+            lastPushAt: 0,
+            lastPullAt: 0,
+            lastServerTime: 0,
+            lastServerTimeReceivedAt: 0,
+            pushHalted: false,
+            syncDisabled: false,
+            syncDisabledReason: null,
+            lastSyncError: null,
+            backoffUntil: null,
+            tokenRejectedSince: null,
+            tokenRejectedCount: 0,
+          },
+          loopState: 'idle',
+          pendingOperationCount: 0,
+          pendingMediaCount: 0,
+          rejected: [refused('op-1'), refused('op-2')],
+          quarantined: [],
+          media: [],
+          isOffline: false,
+          manualSyncBusy: false,
+          manualSyncError: null,
+          firstSync: null,
+          now: 60_000,
+        },
+      }),
+    );
+    core.answers['repair.ticketSyncStatuses'] = () => ({ 't-1': ['rejected', 'rejected'] });
+    renderApp();
+    fireEvent.click(await screen.findByText('Yohanis Wenda'));
+    await screen.findByText('2 perubahan ditolak server.');
+    fireEvent.click(screen.getByRole('button', { name: 'Cek status sinkron' }));
+    const panel = await screen.findByTestId('desktop.sync.dialog');
+    expect(panel.textContent).toContain('Ditolak server (2)');
+    expect(panel.textContent).toContain('Sudah dibatalkan juga di komputer ini.');
+  });
+
   it('signs a person in with their PIN and offers the owner a new intake', async () => {
     core = new FakeCore(ready());
     core.answers['session.submitPin'] = (userId) => {

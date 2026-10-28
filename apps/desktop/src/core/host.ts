@@ -68,6 +68,7 @@ import type { Handlers } from '../main/rpc.js';
 import { actingSession, actingStaffAdmin } from './acting.js';
 import type { CoreState, HandoffEvent, SessionView } from './api.js';
 import { createHandoffClient } from './handoff.js';
+import { initCoreI18n } from './i18n.js';
 import { nodeRealtimeSocket } from './websocket.js';
 
 /** The repair runtime the core builds for whoever is signed in. */
@@ -151,6 +152,7 @@ function warn(message: string, error: unknown): void {
 }
 
 export function createCoreHost(deps: CoreHostDeps): CoreHost {
+  initCoreI18n();
   const clock = deps.clock ?? systemClock;
   const timer = deps.timer ?? systemTimer;
   const crypto = nodeCryptoPort;

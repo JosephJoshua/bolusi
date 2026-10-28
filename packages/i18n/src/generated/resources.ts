@@ -448,6 +448,8 @@ const source = {
         savedHere: '{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.',
         offline: 'Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.',
         mediaFailed: '{count} foto belum bisa dikirim. Fotonya aman di komputer ini.',
+        rejectedExplain: 'Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.',
+        rejectedBanner: '{count} perubahan ditolak server.',
       },
     },
     conflict: {
@@ -998,6 +1000,9 @@ export const resources = {
           offline: 'Changes are saved on this computer and sent when it is online.',
           mediaFailed:
             '{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}',
+          rejectedExplain: 'Also undone on this computer. Redo them if they’re still needed.',
+          rejectedBanner:
+            '{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}',
         },
       },
       conflict: {
