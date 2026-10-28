@@ -9,6 +9,7 @@ import {
   AppShell,
   Button,
   Chip,
+  EmptyState,
   List,
   SearchField,
   SegmentedControl,
@@ -61,6 +62,11 @@ export interface RepairBoardProps {
   readonly onOpenTicket: (ticketId: string) => void;
   readonly onNewIntake: () => void;
   readonly onOpenSyncStatus: () => void;
+  /**
+   * The ticket open beside the board on a tablet, marked so the eye finds it in the list. Its next
+   * step is then the screen's primary action, so "Servisan baru" steps back to an outlined button.
+   */
+  readonly selectedTicketId?: string | null | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -76,6 +82,7 @@ export function RepairBoard({
   onOpenTicket,
   onNewIntake,
   onOpenSyncStatus,
+  selectedTicketId = null,
   testID = 'repair.board',
 }: RepairBoardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -175,6 +182,7 @@ export function RepairBoard({
     (row: TicketSummaryRow) => (
       <TicketRow
         row={row}
+        selected={row.id === selectedTicketId}
         showCancel={showCancel}
         syncStatuses={statusesFor(statuses ?? {}, row.id)}
         onOpen={openTicket}
@@ -183,7 +191,7 @@ export function RepairBoard({
         syncTestID={`${testID}.sync.${row.id}`}
       />
     ),
-    [showCancel, statuses, openTicket, openSyncStatus, testID],
+    [selectedTicketId, showCancel, statuses, openTicket, openSyncStatus, testID],
   );
 
   return (
@@ -196,6 +204,8 @@ export function RepairBoard({
         can.intake ? (
           <Button
             label={tn('repair.action.newIntake')}
+            // One primary on screen: with a ticket open beside the board, its next step leads.
+            variant={selectedTicketId === null ? 'primary' : 'secondary'}
             onPress={onNewIntake}
             testID={`${testID}.newIntake`}
           />
@@ -248,8 +258,15 @@ export function RepairBoard({
   );
 }
 
+/** The space beside the board on a tablet before a ticket is picked. */
+export function NoTicketOpen(): React.JSX.Element {
+  return <EmptyState title={tn('repair.board.pickTicket')} testID="repair.board.noTicketOpen" />;
+}
+
 interface TicketRowProps {
   readonly row: TicketSummaryRow;
+  /** The ticket open beside the board on a tablet. */
+  readonly selected: boolean;
   /** The owners' cancelled view: who cancelled, why, and a fee that differs from the store's. */
   readonly showCancel: boolean;
   readonly syncStatuses: readonly OperationSyncStatus[];
@@ -266,6 +283,7 @@ interface TicketRowProps {
 function sameRow(prev: TicketRowProps, next: TicketRowProps): boolean {
   const keys = Object.keys(next.row) as (keyof TicketSummaryRow)[];
   return (
+    prev.selected === next.selected &&
     prev.showCancel === next.showCancel &&
     prev.onOpen === next.onOpen &&
     prev.onOpenSyncStatus === next.onOpenSyncStatus &&
@@ -285,6 +303,7 @@ function sameRow(prev: TicketRowProps, next: TicketRowProps): boolean {
  */
 const TicketRow = memo(function TicketRow({
   row,
+  selected,
   showCancel,
   syncStatuses,
   onOpen,
@@ -326,11 +345,14 @@ const TicketRow = memo(function TicketRow({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ selected }}
       onPress={() => onOpen(row.id)}
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: pressed ? color.surfaceAlt : color.surface },
+        {
+          backgroundColor: pressed ? color.surfaceAlt : selected ? color.infoBg : color.surface,
+        },
       ]}
     >
       <View style={styles.rowBody}>

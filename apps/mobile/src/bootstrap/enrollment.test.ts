@@ -317,6 +317,24 @@ test('the enroll POST carries the client-generated identity, not the server-echo
   expect(body.platform).toBe('android');
 });
 
+test('enrolling a working phone again replaces its registration, so the server revokes the old one', async () => {
+  const { platform, enrollBodies } = platformFor();
+  const { controller } = createAppEnrollment(app, platform, () => undefined);
+  expect(await controller.heldPhone()).toBeNull();
+  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  const first = await readDeviceId(app.db.db);
+  expect(enrollBodies[0]).not.toHaveProperty('replacesDeviceId');
+
+  // The empty-roster re-enrolment (task 168): the phone still syncs, so its registration is live.
+  expect(await controller.heldPhone()).toMatchObject({
+    storeId: STORE_ID,
+    replacesDeviceId: first,
+  });
+  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  expect(enrollBodies[1]?.replacesDeviceId).toBe(first);
+  expect(await readDeviceId(app.db.db)).not.toBe(first);
+});
+
 test('RESUME after crash-before-genesis: a FRESH keystore reloads the seed and completes enrollment', async () => {
   // THE REGRESSION (review-92 HIGH). The crash window (§4.3): the first attempt persisted the private
   // seed to SecureStore and wrote the enrollment draft, then the app was KILLED before the seq-1

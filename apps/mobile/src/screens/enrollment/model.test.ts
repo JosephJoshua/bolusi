@@ -160,6 +160,24 @@ describe('the 403 leg — the account is fine, it just may not enroll (permissio
     expect(owner.failure).toBeNull();
   });
 
+  test('a phone that holds a store’s data goes back to that store only', () => {
+    const phone = {
+      storeId: 'store-2',
+      storeName: 'Toko Sentani',
+      replacesDeviceId: null,
+      unsynced: [],
+    };
+    const back = afterLogin(typed({ phone }), LOGIN);
+    expect(back.step).toBe('confirm');
+    expect(back.login?.stores).toEqual([{ id: 'store-2', name: 'Toko Sentani' }]);
+    expect(back.selectedStoreId).toBe('store-2');
+
+    const elsewhere = afterLogin(typed({ phone: { ...phone, storeId: 'store-9' } }), LOGIN);
+    expect(elsewhere.step).toBe('credentials');
+    expect(elsewhere.failure).toEqual({ kind: 'otherStore' });
+    expect(failureKey({ kind: 'otherStore' })).toBe('auth.enroll.otherStore');
+  });
+
   test('a non-owner failure PRESERVES the wizard state — nothing is retyped', () => {
     // The owner is standing right there. Making the staff member retype the whole form to hand the
     // phone over is the wizard punishing the user for the server's answer.

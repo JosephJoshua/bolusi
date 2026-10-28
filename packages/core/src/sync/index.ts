@@ -15,6 +15,8 @@ export { readDeviceRegistry, replaceDeviceRegistry, type DeviceRegistryEntry } f
 export { SYNC_LOOP_MACHINE, type SyncLoopEvent, type SyncLoopState } from './loop-machine.js';
 export {
   BUNDLE_REFRESH_INTERVAL_MS,
+  DEVICE_UNRECOGNISED_AFTER,
+  DEVICE_UNRECOGNISED_REASON,
   SyncLoop,
   type SyncCycleStats,
   type SyncLoopOptions,
@@ -22,6 +24,7 @@ export {
 } from './loop.js';
 export {
   DEVICE_REVOKED_ERROR_CODE,
+  TOKEN_INVALID_ERROR_CODE,
   SyncTransportError,
   type BundleRefreshOutcome,
   type BundleRefreshPort,
@@ -60,6 +63,7 @@ export {
   pendingMediaCount,
   pendingOperationCount,
   readSyncState,
+  resetSyncStateForNewDevice,
   writeSyncState,
   type SyncState,
   type SyncStatePatch,

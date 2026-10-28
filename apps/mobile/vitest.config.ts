@@ -22,6 +22,8 @@ export default defineConfig({
       // The notes module screens (task 96) render a media thumbnail through `expo-image`, a native
       // module esbuild cannot load — doubled like `react-native`, types still checked against the SDK.
       'expo-image': resolve(HERE, 'test/doubles/expo-image.tsx'),
+      // Native insets provider; App reads its context and falls back without one.
+      'react-native-safe-area-context': resolve(HERE, 'test/doubles/safe-area-context.tsx'),
     },
   },
   test: {
