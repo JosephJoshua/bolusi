@@ -132,8 +132,9 @@ signature appear on it by themselves (signatures on a landscape pad). Both need 
 internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
 a server restart, or 30 minutes without a step.
 
-Releasing: set the `BOLUSI_API_URL` repository variable to the production server once
-(the workflow refuses to build without it), bump `version` in `apps/desktop/package.json`,
+Releasing: set the `BOLUSI_API_URL` repository variable to the production server's
+`https://` address once (the workflow refuses to build without one, and an installed app
+ignores a plain-HTTP address), bump `version` in `apps/desktop/package.json`,
 merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
 installer on Windows and publishes it with `latest.yml` to that GitHub Release.
 Installed apps check the latest release a minute after start and every 4 hours,

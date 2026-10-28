@@ -19,6 +19,7 @@ import { quitAfter, registerCore } from './core-process.js';
 import { DeviceSettingsFile } from './device-settings.js';
 import { opensExternally } from './external-links.js';
 import { registerPrinting } from './printing.js';
+import { serverAddress } from './server-address.js';
 import { registerUpdates } from './updater.js';
 import { frameOptions, registerWindowChrome, reportFullscreen } from './window-chrome.js';
 
@@ -39,7 +40,8 @@ if (DATA_DIR_OVERRIDE !== undefined) app.setPath('userData', join(DATA_DIR_OVERR
 
 /**
  * Where this build syncs: `BOLUSI_API_URL` when the build ran (written beside main by the core's
- * build, so an installed app carries it), or from the shell when developing.
+ * build, so an installed app carries it), or from the shell when developing. An installed app
+ * takes only an https address.
  */
 function apiBaseUrl(): string {
   const fromShell = app.isPackaged ? undefined : process.env['BOLUSI_API_URL'];
@@ -50,7 +52,7 @@ function apiBaseUrl(): string {
   } catch {
     built = undefined;
   }
-  return (fromShell ?? built ?? '').replace(/\/+$/, '');
+  return serverAddress(fromShell ?? built ?? '', app.isPackaged);
 }
 
 /** The counter windows this process opened; only their own page may call in. */
@@ -169,7 +171,9 @@ void app.whenReady().then(() => {
   registerUpdates(trusted, pages);
   registerWindowChrome(trusted);
   if (!DEMO && API_BASE_URL === '')
-    console.error('BOLUSI_API_URL is not set: nothing to sync with');
+    console.error(
+      'BOLUSI_API_URL is not set, or not https in an installed app: nothing to sync with',
+    );
   quitAfter(
     registerCore({
       dataDir: app.getPath('userData'),

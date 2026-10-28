@@ -31,9 +31,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc -b
       # The server the installed app syncs with is baked in at build time (repository variable).
-      - name: Check the server address is set
+      # An installed app only syncs over HTTPS (src/main/server-address.ts).
+      - name: Check the server address is set and https
         shell: pwsh
-        run: if (-not $env:BOLUSI_API_URL) { throw 'Set the BOLUSI_API_URL repository variable' }
+        run: |
+          if (-not $env:BOLUSI_API_URL) { throw 'Set the BOLUSI_API_URL repository variable' }
+          if ($env:BOLUSI_API_URL -notmatch '^https://[^/\s]') { throw 'BOLUSI_API_URL must be an https:// address' }
         env:
           BOLUSI_API_URL: ${{ vars.BOLUSI_API_URL }}
       - run: pnpm --filter @bolusi/desktop run build
