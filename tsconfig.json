@@ -38,6 +38,9 @@
       "path": "packages/harness/tsconfig.build.json"
     },
     {
+      "path": "packages/device/tsconfig.build.json"
+    },
+    {
       "path": "apps/server/tsconfig.build.json"
     }
   ]

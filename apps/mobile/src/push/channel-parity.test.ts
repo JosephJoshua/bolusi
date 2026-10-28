@@ -32,7 +32,7 @@ vi.mock('expo-notifications', () => ({
 }));
 
 import { createNotificationChannels } from '../bootstrap/notifications.js';
-import { defaultMuteState } from '../screens/settings/model.js';
+import { defaultMuteState } from '@bolusi/device/models/settings/model';
 
 /** api/04-push §3: the sole DATA-ONLY category — a wake with no visible notification, no channel. */
 const DATA_ONLY_CATEGORY = 'sync';

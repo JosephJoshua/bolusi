@@ -3,26 +3,17 @@
 // the drawn strokes, and null when the person backs out. Storing and signing what was taken is the
 // runtime's job.
 import { t } from '@bolusi/i18n';
-import type { CaptureRequest } from '@bolusi/modules/screen-kit';
-import { CameraDialog, SignatureDialog, type DrawnSignature } from '@bolusi/ui-web';
+import { Button, CameraDialog, SignatureDialog, type DrawnSignature } from '@bolusi/ui-web';
+import { FileImage } from 'lucide-react';
 import { useEffect, useSyncExternalStore } from 'react';
 
-export interface WebcamPhoto {
-  readonly bytes: Uint8Array<ArrayBuffer>;
-  readonly mime: 'image/jpeg';
-}
-
-/** What this PC can take: a webcam photo, or a signature drawn on screen. */
-export interface PcCapture {
-  photo(request?: CaptureRequest): Promise<WebcamPhoto | null>;
-  signature(request?: CaptureRequest): Promise<DrawnSignature | null>;
-}
+import { pickPhotoFile, type PcCapture, type PcPhoto } from './capture.js';
 
 type Pending =
   | {
       readonly kind: 'photo';
       readonly title: string;
-      readonly resolve: (photo: WebcamPhoto | null) => void;
+      readonly resolve: (photo: PcPhoto | null) => void;
     }
   | {
       readonly kind: 'signature';
@@ -51,13 +42,17 @@ export function createCaptureDialogs(): CaptureDialogs {
   };
   const close = (): void => set(null);
 
+  const keepPicture = (photo: PcPhoto | null): void => {
+    const current = pending;
+    if (current?.kind !== 'photo' || photo === null) return;
+    pending = null;
+    current.resolve(photo);
+    set(null);
+  };
   const keepPhoto = async (blob: Blob): Promise<void> => {
     const current = pending;
     if (current?.kind !== 'photo') return;
-    const photo: WebcamPhoto = {
-      bytes: new Uint8Array(await blob.arrayBuffer()),
-      mime: 'image/jpeg',
-    };
+    const photo: PcPhoto = { bytes: new Uint8Array(await blob.arrayBuffer()), mime: 'image/jpeg' };
     if (pending !== current) return;
     pending = null;
     current.resolve(photo);
@@ -83,6 +78,15 @@ export function createCaptureDialogs(): CaptureDialogs {
           title={current?.title ?? ''}
           onUse={keepPhoto}
           onClose={close}
+          // No webcam, or Windows refused it: a photo saved on this PC still works.
+          fallback={
+            <Button
+              label={t('core.camera.fromFile')}
+              icon={FileImage}
+              onClick={() => void pickPhotoFile().then(keepPicture, () => undefined)}
+              data-testid="desktop.camera.file"
+            />
+          }
           testId="desktop.camera"
           labels={{
             close: t('core.action.close'),

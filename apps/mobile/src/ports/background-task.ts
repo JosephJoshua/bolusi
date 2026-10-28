@@ -4,7 +4,7 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 
-import type { BackgroundTaskPlatform } from '../bootstrap/background-task.js';
+import type { BackgroundTaskPlatform } from '@bolusi/device/bootstrap/background-task';
 
 /**
  * The `expo-background-task` + `expo-task-manager` binding.

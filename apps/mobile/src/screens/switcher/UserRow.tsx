@@ -10,7 +10,7 @@ import { translateRoleKey } from '@bolusi/i18n';
 import { Avatar, ListRow } from '@bolusi/ui';
 import type { ReactNode } from 'react';
 
-import { initialsOf } from './model.js';
+import { initialsOf } from '@bolusi/device/models/switcher/model';
 
 export interface UserRowProps {
   readonly id: string;

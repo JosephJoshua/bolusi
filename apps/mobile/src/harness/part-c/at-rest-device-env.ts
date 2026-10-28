@@ -56,7 +56,7 @@ import {
   type SealedCell,
 } from '@bolusi/test-support/device';
 
-import { insertMediaItem } from '../../media/queue.js';
+import { insertMediaItem } from '@bolusi/device/media/queue';
 import type { AtRestDeviceEnv } from './at-rest-device-ctx.js';
 
 /** `"table.column"` — the key the coverage check names a missing column by. */

@@ -34,7 +34,7 @@ import {
   type MediaRow,
   type RejectedOpRow,
   type SyncStatusInput,
-} from './model.js';
+} from '@bolusi/device/models/sync-status/model';
 
 const NOW = 1_700_000_000_000;
 

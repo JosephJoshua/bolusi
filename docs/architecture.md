@@ -19,9 +19,9 @@ continuity, and persists operations in PostgreSQL. Replay must not duplicate eff
 | Sync/projections      | `packages/core/src/sync`, `packages/core/src/projection`                        |
 | Server acceptance     | `apps/server/src/oplog`, `apps/server/src/sync`                                 |
 | HTTP routes           | `apps/server/src/app.ts`, `apps/server/src/routes`                              |
-| Local bootstrap       | `apps/mobile/src/bootstrap`                                                     |
+| Device core           | `packages/device` (boot, runtime, PIN session, sync, media queue; phone + PC)   |
 | Identity/permissions  | `packages/core/src/auth`, `packages/core/src/authz`, `apps/server/src/identity` |
-| Media                 | `apps/mobile/src/media`, `apps/server/src/media`                                |
+| Media                 | `packages/device/src/media`, `apps/server/src/media`                            |
 | Translations          | `packages/i18n/catalogs`, module screen catalogs                                |
 | Search                | `packages/core/src/search`, each module's `search.ts`                           |
 | Printing              | `packages/core/src/print` (HTML, ESC/P), each module's `print.ts` templates     |

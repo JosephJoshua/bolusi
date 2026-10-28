@@ -5,11 +5,11 @@ import type { CaptureRequest, CapturedMedia, SignatureCapture } from '@bolusi/mo
 import { errorCodeOrUnexpected } from '@bolusi/core';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import type { CaptureIdentity } from './capture.js';
-import type { MediaClient } from './client.js';
+import type { CaptureIdentity } from '@bolusi/device/media/capture';
+import type { MediaClient } from '@bolusi/device/media/client';
 import { usePendingCapture } from './pending-capture.js';
 import type { SignaturePadState } from './SignaturePadScreen.js';
-import type { PadSize, SignaturePoint, SignatureStroke } from './signature-png.js';
+import type { PadSize, SignaturePoint, SignatureStroke } from '@bolusi/device/media/signature-png';
 
 /** What the shell renders while a signature is being taken. `null` ⇒ none is. */
 export interface SignatureSurface {

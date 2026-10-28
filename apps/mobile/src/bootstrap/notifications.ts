@@ -26,7 +26,7 @@ import {
   MUTABLE_PUSH_CATEGORIES,
   type MutablePushCategory,
   type PushMuteState,
-} from '../screens/settings/model.js';
+} from '@bolusi/device/models/settings/model';
 
 /**
  * The Android channel id for a category — the shared `pushChannelId` scheme (`@bolusi/schemas`), the

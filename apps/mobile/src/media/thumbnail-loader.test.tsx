@@ -18,10 +18,10 @@ import { act } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { fakeRuntime, page, renderNotes } from '../../test/notes-support.js';
-import type { MediaClient } from './client.js';
-import { loadMediaForRender } from './remote-cache.js';
+import type { MediaClient } from '@bolusi/device/media/client';
+import { loadMediaForRender } from '@bolusi/device/media/remote-cache';
 
-import { createThumbnailLoader } from './thumbnail-loader.js';
+import { createThumbnailLoader } from '@bolusi/device/media/thumbnail-loader';
 
 const NOW = 1_726_000_600_000;
 const MEDIA_ID = '01920000-0000-7000-8000-0000000f0099';

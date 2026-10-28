@@ -32,11 +32,11 @@ import {
   needsDiscardConfirm,
   type EnrollmentState,
   type EnrollmentStep,
-} from '../screens/enrollment/model.js';
+} from '@bolusi/device/models/enrollment/model';
 import { EnrollmentScreen } from '../screens/enrollment/EnrollmentScreen.js';
 import { ChangePinScreen } from '../screens/pin/ChangePinScreen.js';
-import type { PinTargetUser } from '../screens/pin/pin-target.js';
-import type { SwitcherUser } from '../screens/switcher/model.js';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
+import type { SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { PinScreen } from '../screens/pin/PinScreen.js';
 import { PinSetupScreen } from '../screens/pin/PinSetupScreen.js';
 import { StaffPinScreen } from '../screens/pin/StaffPinScreen.js';

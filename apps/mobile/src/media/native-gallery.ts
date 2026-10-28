@@ -4,7 +4,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
-import type { GalleryPort } from './import.js';
+import type { GalleryPort } from '@bolusi/device/media/import';
 
 /** A logo prints a few centimetres wide; this keeps it sharp at 300 dpi without carrying a photo. */
 const LOGO_MAX_EDGE = 800;

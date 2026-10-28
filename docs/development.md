@@ -74,15 +74,26 @@ Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 ### Counter PC app
 
 The Windows counter app (`apps/desktop`) is Electron with its own React DOM screens
-(`packages/ui-web` and `packages/modules/src/repair/desktop`). It currently runs over
-the in-memory repair demo; the offline core is wired in next.
+(`packages/ui-web` and `packages/modules/src/repair/desktop`). The phone's offline core
+(`packages/device`: SQLite store, op log, sync, media, PIN sessions) runs in an Electron
+utility process (`src/core`, bundled to `dist/main/core.js`); the window reaches it over a
+MessagePort (`src/renderer/core-client.ts`) and never sees a secret. Secrets are sealed
+with Windows DPAPI (`safeStorage`) by the main process. The PC enrols like a phone.
 
 ```sh
 pnpm exec tsc -b
-pnpm --filter @bolusi/desktop start   # build, then open the Electron window
-pnpm --filter @bolusi/desktop dev     # renderer only, in a browser at localhost:5183
+pnpm harness:serve-lane                # a local server with an owner (prints the login and PIN)
+BOLUSI_API_URL=http://127.0.0.1:3000 pnpm --filter @bolusi/desktop start
+BOLUSI_DESKTOP_DEMO=1 pnpm --filter @bolusi/desktop start   # seeded demo, no core
+pnpm --filter @bolusi/desktop dev     # renderer only (demo), in a browser at localhost:5183
 pnpm --filter @bolusi/desktop e2e     # Electron end-to-end tests; use xvfb-run on Linux
 ```
+
+`BOLUSI_API_URL` is read when the app is built (written to `dist/main/build-config.json`)
+and, in a development run, also at start. `BOLUSI_DESKTOP_DATA_DIR` keeps a development
+run's data away from a real install. On Linux without a keyring, development runs seal
+secrets with Electron's fixed key; an installed app never does. The e2e suite starts its
+own server (`e2e/live.spec.ts`) and runs the screen tests over the demo.
 
 Printing: the printer and paper are picked once in the app's Settings and kept in
 `device-settings.json` in the app's data folder. Dot-matrix paper (continuous) goes to
@@ -92,8 +103,9 @@ Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a 
 (XPS-only) driver does not pass RAW jobs. CI's `desktop-windows` job spools a real job
 to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
 
-Releasing: bump `version` in `apps/desktop/package.json`, merge, then push a tag
-`desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
+Releasing: set the `BOLUSI_API_URL` repository variable to the production server once
+(the workflow refuses to build without it), bump `version` in `apps/desktop/package.json`,
+merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
 installer on Windows and publishes it with `latest.yml` to that GitHub Release.
 Installed apps check the latest release a minute after start and every 4 hours,
 download in the background and install on the next close (or "Pasang sekarang" in
