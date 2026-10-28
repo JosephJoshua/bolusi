@@ -174,6 +174,62 @@ describe('a repaired phone', () => {
   });
 });
 
+describe('an overpaid handover', () => {
+  test('gives the overpayment back through the transfer that made it, not from the drawer', async () => {
+    h = await openRepairHarness(7103);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BRI toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const transfer = `account:${accountId}`;
+    const ticketId = await repaired(h, { downPayment: 200_000 });
+    // The whole bill again by a transfer nobody can see yet: the cash DP must stay in the drawer.
+    await h.run(
+      'returnDevice',
+      handover(h, ticketId, { payments: [{ account: transfer, amount: TOTAL }] }),
+      h.cashierId,
+    );
+    const money = await ledger(h, ticketId);
+    expect(money.balance).toBe(0);
+    expect(money.entries.at(-1)).toMatchObject({
+      kind: 'refund_paid',
+      account: transfer,
+      amount: 200_000,
+    });
+    await expectBalancedBooks(h);
+  });
+
+  test('a DP split across methods comes back from what was left of each', async () => {
+    h = await openRepairHarness(7104);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const qris = `account:${accountId}`;
+    const ticketId = await openTicket(h, { downPayment: 100_000 });
+    await h.money(
+      'receivePayments',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        payments: [{ account: qris, amount: 100_000 }],
+      },
+      h.cashierId,
+    );
+    await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 50_000 }, h.storeOwnerId);
+    await h.run('returnDevice', handover(h, ticketId), h.cashierId);
+    const money = await ledger(h, ticketId);
+    expect(money.balance).toBe(0);
+    // The cash DP came first and paid the fee: 50.000 cash and the whole QRIS go back.
+    expect(money.entries.filter((e) => e.kind === 'refund_paid')).toMatchObject([
+      { account: 'cash', amount: 50_000 },
+      { account: qris, amount: 100_000 },
+    ]);
+    await expectBalancedBooks(h);
+  });
+});
+
 describe('a cancelled phone', () => {
   test('goes back with the DP less the fee returned in cash', async () => {
     h = await openRepairHarness(7201);

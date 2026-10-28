@@ -73,6 +73,7 @@ import {
 } from '../money/commands.js';
 import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
+import { overpaidByAccount } from '../money/rules.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { formatTicketNumber } from './ticket-number.js';
@@ -762,30 +763,30 @@ export const returnDeviceInput = z
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
 /**
- * Money handed back at the counter, through the accounts the customer paid with: the drawer
- * first, then each account in the order it was paid. Never more than went in through each one.
+ * Money handed back at the counter, through the accounts that overpaid as the money rule reads
+ * them (`overpaidByAccount`): the drawer first, then each account in the order it was paid. The
+ * bill is what the servisan is charged once this handover's charge is recorded; `extra` are the
+ * payments taken now.
  */
 export function refundsFor(
   money: DocumentMoney,
   credit: number,
+  bill: number,
   extra: readonly { account: string; amount: number }[] = [],
 ): { account: string; amount: number }[] {
-  const paidIn = new Map<string, number>();
-  const add = (account: string, amount: number) =>
-    paidIn.set(account, (paidIn.get(account) ?? 0) + amount);
-  paidIn.set(CASH_ACCOUNT, 0);
-  for (const entry of money.entries) {
-    if (entry.account === null) continue;
-    if (entry.kind === 'payment_received' && entry.voidedAt === null)
-      add(entry.account, entry.amount);
-    if (entry.kind === 'refund_paid') add(entry.account, -entry.amount);
-  }
-  for (const payment of extra) add(payment.account, payment.amount);
+  const overpaid = overpaidByAccount(
+    [
+      ...money.entries,
+      ...extra.map((payment) => ({ ...payment, kind: 'payment_received', voidedBy: null })),
+    ],
+    bill,
+  );
+  const accounts = [CASH_ACCOUNT, ...[...overpaid.keys()].filter((a) => a !== CASH_ACCOUNT)];
   const refunds: { account: string; amount: number }[] = [];
   let left = credit;
-  for (const [account, paid] of paidIn) {
+  for (const account of accounts) {
     if (left <= 0) break;
-    const amount = Math.min(left, paid);
+    const amount = Math.min(left, overpaid.get(account) ?? 0);
     if (amount <= 0) continue;
     refunds.push({ account, amount });
     left -= amount;
@@ -824,7 +825,8 @@ export async function returnDeviceHandler(
     balance = money.balance + toCharge - paidNow;
     if (balance < 0) {
       const reason = input.refundReason === '' ? HANDOVER_REFUND_REASON : input.refundReason;
-      for (const refund of refundsFor(money, -balance, input.payments)) {
+      const bill = money.charged + toCharge - money.reduced;
+      for (const refund of refundsFor(money, -balance, bill, input.payments)) {
         ops.push(refundOp(ctx, document, { ...refund, reason, reference: null }));
       }
     }

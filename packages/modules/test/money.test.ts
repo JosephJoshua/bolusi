@@ -317,6 +317,46 @@ describe('refunds and voids are guarded', () => {
     await expectBalancedBooks(h);
   });
 
+  test('credit made by a transfer goes back through it, never out of the drawer', async () => {
+    h = await openRepairHarness(517);
+    const document = await openTicket(h);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BRI toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const transfer = `account:${accountId}`;
+    // A real cash DP, then the whole bill by a transfer nobody can see yet.
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 200_000 }] },
+      h.cashierId,
+    );
+    await h.run(
+      'startWork',
+      { ticketId: document.id, beforePhotos: [h.photo(20)] },
+      h.technicianId,
+    );
+    await h.run(
+      'markRepaired',
+      { ticketId: document.id, afterPhotos: [h.photo(21)] },
+      h.technicianId,
+    );
+    await charge(h, document, TOTAL, h.cashierId);
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: transfer, amount: TOTAL }] },
+      h.cashierId,
+    );
+    const refund = (account: string, amount: number) =>
+      h!.money('refund', { document, account, amount, reason: 'Kelebihan bayar' }, h!.cashierId);
+    // The DP covered the bill first: the transfer is what overpaid.
+    await expectRefused(refund('cash', 1), 'PERMISSION_DENIED', 'refundAboveCredit');
+    await refund(transfer, 200_000);
+    expect(await documentMoney(h, document)).toMatchObject({ balance: 0 });
+    await expectBalancedBooks(h);
+  });
+
   test('an owner gives back a DP, even through an account the store no longer uses', async () => {
     h = await openRepairHarness(511);
     const document = await openTicket(h);

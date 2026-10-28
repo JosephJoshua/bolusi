@@ -4,7 +4,13 @@ export * from './constants.js';
 export type * from './schema.js';
 export * from './documents.js';
 export { postingsFor, reversalOf, type Posting } from './postings.js';
-export { MONEY_REFUSALS, documentBalance, documentTotal } from './rules.js';
+export {
+  MONEY_REFUSALS,
+  documentBalance,
+  documentTotal,
+  overpaidByAccount,
+  type OverpaymentEntry,
+} from './rules.js';
 export {
   chargeOp,
   paymentOp,
