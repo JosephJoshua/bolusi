@@ -273,6 +273,16 @@ export function isCrawlablePath(path: string): boolean {
   );
 }
 
+/** The device number in a model page's path, or null when `path` is not a model page. */
+export function modelIdOfPath(path: string): number | null {
+  const id = MODEL_PATH.exec(path)?.[1];
+  return id === undefined ? null : Number(id);
+}
+
+export function isBrandPath(path: string): boolean {
+  return BRAND_PATH.test(path);
+}
+
 export function isPhotoUrl(url: string): boolean {
   return PHOTO_HOST.test(url);
 }
