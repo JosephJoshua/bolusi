@@ -20,6 +20,7 @@ import { bearerAuth } from './middleware/auth.js';
 import { gzipDecompress } from './middleware/gzip-decompress.js';
 import { perDeviceRateLimit, perIpRateLimit } from './middleware/rate-limit.js';
 import { serverTime } from './middleware/server-time.js';
+import { createAppUpdatesRouter } from './routes/app-updates.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createCatalogRouter } from './routes/catalog.js';
 import { createDevicesRouter } from './routes/devices.js';
@@ -195,6 +196,8 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
       .route('/v1/handoff', createHandoffRouter(deps))
       // The store phone's page: no device token (the pairing key is its credential), so outside /v1.
       .route('/h', createHandoffPageRouter(deps))
+      // Phones check for an over-the-air update before they hold a token, so also outside /v1.
+      .route('/updates', createAppUpdatesRouter(deps.appUpdates))
   );
 }
 

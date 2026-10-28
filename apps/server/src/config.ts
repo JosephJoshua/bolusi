@@ -21,6 +21,13 @@ const zConfig = z.object({
   // `pushPortFromConfig` FAILS CLOSED and LOUD when it is missing. Set it, or the server refuses to
   // boot.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  // OPTIONAL. `owner/name` of the GitHub repository whose `mobile-ota-*` pre-releases carry the
+  // phones' signed over-the-air updates (app-updates/releases.ts). Unset ⇒ phones are told there
+  // is nothing newer.
+  APP_UPDATES_REPO: z
+    .string()
+    .regex(/^[\w.-]+\/[\w.-]+$/)
+    .optional(),
 });
 
 export type ServerConfig = {
@@ -31,6 +38,8 @@ export type ServerConfig = {
   /** Expo push bearer token (api/04-push §7). Absent ⇒ `pushPortFromConfig` fails closed at boot —
    *  push has no silent no-op (task 134). */
   readonly expoAccessToken?: string;
+  /** GitHub `owner/name` holding phone over-the-air updates; absent ⇒ none offered. */
+  readonly appUpdatesRepo?: string;
 };
 
 /** Validate and normalize the environment. Throws a readable error if a required var is missing. */
@@ -49,5 +58,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     ...(parsed.data.EXPO_ACCESS_TOKEN === undefined
       ? {}
       : { expoAccessToken: parsed.data.EXPO_ACCESS_TOKEN }),
+    ...(parsed.data.APP_UPDATES_REPO === undefined
+      ? {}
+      : { appUpdatesRepo: parsed.data.APP_UPDATES_REPO }),
   };
 }

@@ -132,6 +132,8 @@ signature appear on it by themselves (signatures on a landscape pad). Both need 
 internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
 a server restart, or 30 minutes without a step.
 
+How every app updates itself, and the phone release paths, are in `app-updates.md`.
+
 Releasing: set the `BOLUSI_API_URL` repository variable to the production server once
 (the workflow refuses to build without it), bump `version` in `apps/desktop/package.json`,
 merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user

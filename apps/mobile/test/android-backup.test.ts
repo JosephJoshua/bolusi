@@ -111,8 +111,12 @@ async function compileAndroidManifest(): Promise<string> {
     'android/app/proguard-rules.pro': '# template\n',
     'android/gradle.properties': 'android.useAndroidX=true\n',
     'android/build.gradle': 'buildscript { ext { minSdkVersion = 24 } }\n',
+    // The release-signing mod (withReleaseSigning) rewrites the template's signing blocks.
     'android/app/build.gradle':
-      "android { namespace 'com.bolusi.app'\n defaultConfig { applicationId 'com.bolusi.app' } }\n",
+      "android { namespace 'com.bolusi.app'\n defaultConfig { applicationId 'com.bolusi.app' }\n" +
+      '    signingConfigs {\n        debug {\n        }\n    }\n    buildTypes {\n        release {\n' +
+      '            // see https://reactnative.dev/docs/signed-apk-android.\n' +
+      '            signingConfig signingConfigs.debug\n        }\n    }\n}\n',
     'android/settings.gradle': "rootProject.name = 'bolusi'\n",
     'android/app/src/main/res/values/strings.xml':
       '<resources><string name="app_name">Bolusi</string></resources>',
@@ -127,6 +131,8 @@ async function compileAndroidManifest(): Promise<string> {
   // The icon and splash mods read the app's images by their config path, which the real prebuild
   // resolves from apps/mobile as its working directory.
   cpSync(join(MOBILE_ROOT, 'assets'), join(projectRoot, 'assets'), { recursive: true });
+  // The over-the-air update certificate, which the updates mod embeds in the manifest.
+  cpSync(join(MOBILE_ROOT, 'updates'), join(projectRoot, 'updates'), { recursive: true });
 
   const { exp } = await getPrebuildConfigAsync(MOBILE_ROOT, { platforms: ['android'] });
 

@@ -24,6 +24,7 @@ import { ALL_MODULES } from '@bolusi/modules';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
+import type { UpdateSource } from './app-updates/releases.js';
 import { HandoffRelay } from './handoff/relay.js';
 import { createDbVerifyToken } from './auth/verify-token.js';
 import { noblePasswordKdf, type PasswordKdf } from './crypto/index.js';
@@ -305,6 +306,8 @@ export interface ServerDeps {
   readonly phoneCatalog: PhoneCatalogReader;
   /** The counter PC ↔ store phone handoff (handoff/relay.ts); in memory, like the realtime hub. */
   readonly handoffRelay: HandoffRelay;
+  /** Where phones' over-the-air updates come from (app-updates/releases.ts); absent ⇒ none. */
+  readonly appUpdates?: UpdateSource;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -437,6 +440,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     },
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
+    ...(overrides.appUpdates === undefined ? {} : { appUpdates: overrides.appUpdates }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };

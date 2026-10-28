@@ -1,0 +1,70 @@
+name: mobile-play
+
+# Builds the Android app and sends it to the Google Play closed testing track (docs/app-updates.md):
+# push a tag like mobile-v1.2.0. Store phones then install it in the background through Play. Only
+# needed when native code changed (a new Expo SDK or native library); everything else ships as an
+# over-the-air update (mobile-ota). Release the server first if the app brings a new change type.
+on:
+  push:
+    tags: ['mobile-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b
+      - name: Check the release settings are set
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.BOLUSI_API_URL }}
+          KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          test -n "$EXPO_PUBLIC_API_URL" || { echo 'Set the BOLUSI_API_URL repository variable'; exit 1; }
+          test -n "$KEYSTORE" || { echo 'Set the ANDROID_UPLOAD_KEYSTORE_BASE64 secret'; exit 1; }
+          test -n "$PLAY" || { echo 'Set the PLAY_SERVICE_ACCOUNT_JSON secret'; exit 1; }
+      - name: Build the signed app bundle
+        env:
+          # The same server address as the over-the-air updates, so the fingerprints match.
+          EXPO_PUBLIC_API_URL: ${{ vars.BOLUSI_API_URL }}
+          KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          BOLUSI_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          BOLUSI_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          BOLUSI_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export BOLUSI_APP_VERSION="${GITHUB_REF_NAME#mobile-v}"
+          # Play needs a higher number for every upload.
+          export BOLUSI_VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))
+          export BOLUSI_UPLOAD_STORE_FILE="$RUNNER_TEMP/upload.keystore"
+          echo "$KEYSTORE" | base64 -d > "$BOLUSI_UPLOAD_STORE_FILE"
+          pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install
+          ./apps/mobile/android/gradlew -p apps/mobile/android bundleRelease
+      # Kept on the run too: Play takes the very first bundle of a new app only by hand.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+      - name: Send to the closed testing track
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.bolusi.app
+          releaseFiles: apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+          track: alpha
+          status: completed
