@@ -52,7 +52,7 @@ import {
   demoTicketCount,
   type DemoRepairRole,
 } from '@bolusi/modules/repair/demo';
-import { STAFF_ACTOR, STAFF_DEMO, STAFF_MANY, StaffDemo } from './staff-demo.js';
+import { LimitsDemo, STAFF_ACTOR, STAFF_DEMO, STAFF_MANY, StaffDemo } from './staff-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -182,6 +182,7 @@ function SettingsInteractive(): React.JSX.Element {
       onOpenSwitcher={noop}
       onOpenChangePin={noop}
       onOpenStaff={noop}
+      onOpenLimits={noop}
       onOpenStaffPins={noop}
       lockedStaffCount={1}
       modules={[
@@ -715,6 +716,23 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => (
       <ApproxFrame screen="staff" state={state}>
         <StaffDemo {...props} />
+      </ApproxFrame>
+    ),
+  })),
+
+  // Batas wewenang (store owner) — one limited role opens its form; two show a list first.
+  ...(
+    [
+      ['ready', {}],
+      ['list', { extraRole: true }],
+      ['offline', { offline: true }],
+    ] as const
+  ).map(([state, props]) => ({
+    screen: 'limits',
+    state,
+    render: () => (
+      <ApproxFrame screen="limits" state={state}>
+        <LimitsDemo {...props} />
       </ApproxFrame>
     ),
   })),

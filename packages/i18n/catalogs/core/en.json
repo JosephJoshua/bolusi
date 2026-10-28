@@ -164,5 +164,12 @@
     "photoOnPhone": "Take the photo on the phone",
     "signOnPhone": "Ask the customer to sign on the phone",
     "waitingSend": "Waiting for the phone to send…"
+  },
+  "video": {
+    "denied": "The camera or microphone isn’t allowed. Allow them in Windows Settings › Privacy, then try again.",
+    "saveFailed": "The video couldn’t be saved. Try again.",
+    "loading": "Loading video…",
+    "failed": "The video couldn’t play. Try again.",
+    "noMicrophone": "No microphone found. Plug in a microphone or a webcam that has one, then try again."
   }
 }

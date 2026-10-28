@@ -25,7 +25,7 @@ import {
 import { ArrowLeft, Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, type VideoMediaRef } from '../../screen-kit/index.js';
 import { PATTERN_MIN_DOTS, SCREEN_LOCK_KINDS } from '../screen-lock.js';
 import type { DeviceModelRow } from '../device-models.js';
 import { modelCaption, useModelPicker, type ModelPicker } from '../model-picker.js';
@@ -35,6 +35,7 @@ import {
   chosenReady,
   emptyIntakeDraft,
   intakeDirty,
+  intakeNeedsVideo,
   intakeTotal,
   phoneText,
   priceKinds,
@@ -78,15 +79,11 @@ import {
 import type { PaymentAccountRow } from '../../money/queries.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import type { MediaRef } from '@bolusi/schemas';
+import { useOwnershipVideo, useRestoredVideoCheck } from '../ownership-video.js';
+import { OwnershipVideoField } from './video.js';
 
-import {
-  ActionError,
-  ModelPhoto,
-  MoneyField,
-  photoLabels,
-  rupiahText,
-  usePhotoState,
-} from './parts.js';
+import { ActionError } from '../../screen-kit/desktop/index.js';
+import { ModelPhoto, MoneyField, photoLabels, rupiahText, usePhotoState } from './parts.js';
 
 /** The sections in page order; the phone's review step is the summary column here. */
 const SECTIONS = [
@@ -104,6 +101,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   deviceModel: 'repair.problem.deviceModel',
   complaint: 'repair.problem.complaint',
   photos: 'repair.problem.photos',
+  ownershipVideo: 'repair.problem.ownershipVideo',
   quoteLines: 'repair.problem.quoteLines',
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
@@ -119,6 +117,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   deviceModel: 'repair.desk.intake.model',
   complaint: 'repair.desk.intake.complaint',
   photos: 'repair.desk.intake.photos',
+  ownershipVideo: 'repair.desk.intake.video',
   quoteLines: 'repair.desk.intake.line.0.description',
   incompleteLine: 'repair.desk.intake.lines',
   negativeTotal: 'repair.desk.intake.lines',
@@ -159,6 +158,11 @@ export function IntakePage({
   const [leaving, setLeaving] = useState(false);
   const [photosExpired, setPhotosExpired] = useState(false);
   const [restoredOnce] = useState(restoredDraft ?? null);
+  const [videoExpired, setVideoExpired] = useState(false);
+  useRestoredVideoCheck(restoredOnce, () => {
+    setDraft((current) => ({ ...current, ownershipVideo: null }));
+    setVideoExpired(true);
+  });
   const pageRef = useRef<HTMLDivElement>(null);
 
   // The store's lists, live; if they cannot be read the built-in ones stand in, and the command
@@ -284,6 +288,23 @@ export function IntakePage({
       });
   };
 
+  const video = useOwnershipVideo();
+  const needsVideo = intakeNeedsVideo(draft, options);
+  const recordVideo =
+    video.record === undefined
+      ? undefined
+      : (): void => {
+          const record = video.record!;
+          void runner.run(record).then((captured) => {
+            if (captured === undefined || captured === null) return;
+            setDraft((current) => ({ ...current, ownershipVideo: captured.videoRef }));
+          });
+        };
+  const playVideo =
+    video.play === undefined
+      ? undefined
+      : (ref: VideoMediaRef): void => void runner.run(() => video.play!(ref));
+
   /** Every angle still missing, one after another; backing out of one stops there. */
   const takeMissing = (): void => {
     const missing = options.photoAngles.filter((angle) => draft.photos[angle.id] === undefined);
@@ -393,6 +414,39 @@ export function IntakePage({
                   onTakeMissing={takeMissing}
                   showMissing={showProblems}
                 />
+                {needsVideo ? (
+                  <div
+                    className="mt-6 flex flex-col gap-3 focus:outline-none"
+                    tabIndex={-1}
+                    data-testid="repair.desk.intake.video"
+                  >
+                    <div>
+                      <p className="text-body font-semibold text-text">
+                        {tn('repair.video.title')}
+                      </p>
+                      <p className="text-body text-text-muted">{tn('repair.video.hint')}</p>
+                    </div>
+                    {videoExpired && draft.ownershipVideo === null ? (
+                      <p role="status" className="text-small font-semibold text-warning">
+                        {tn('repair.video.expired')}
+                      </p>
+                    ) : null}
+                    <OwnershipVideoField
+                      video={draft.ownershipVideo}
+                      recordedAt={null}
+                      onRecord={recordVideo}
+                      onPlay={playVideo}
+                      noCamera={recordVideo === undefined}
+                      invalid={showProblems}
+                      testId="repair.desk.intake.video.clip"
+                    />
+                    {problemText('ownershipVideo') === undefined ? null : (
+                      <p role="alert" className="text-small text-danger">
+                        {problemText('ownershipVideo')}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </IntakeSection>
               <IntakeSection n={5} section="price" complete={problemsBy.price.length === 0}>
                 <PriceFields

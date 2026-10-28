@@ -1,7 +1,10 @@
 // The frame of every screen before someone is signed in (opening, registering the PC, choosing who
-// is here, the PIN): one card centred on a quiet background, the store's name above it once known.
+// is here, the PIN): the title bar, naming the store once known, over one card centred on a quiet
+// background.
 import { clsx } from 'clsx';
 import type { ReactNode } from 'react';
+
+import { TitleBar } from '../TitleBar.js';
 
 export function AuthLayout({
   storeName,
@@ -17,30 +20,25 @@ export function AuthLayout({
   readonly testId?: string | undefined;
 }): React.JSX.Element {
   return (
-    <main
-      className="flex h-full min-h-0 flex-col items-center overflow-auto bg-surface-alt px-6 py-12"
-      data-testid={testId}
-    >
-      {/* `my-auto` centres the card while it fits and lets a tall one scroll from its top. */}
-      <div
-        className={clsx(
-          'my-auto flex w-full flex-col gap-4',
-          width === 'wide' ? 'max-w-3xl' : 'max-w-md',
-        )}
+    <div className="flex h-full flex-col">
+      <TitleBar storeName={storeName} />
+      <main
+        className="flex min-h-0 flex-1 flex-col items-center overflow-auto bg-surface-alt px-6 py-12"
+        data-testid={testId}
       >
-        {storeName === null || storeName === undefined || storeName === '' ? null : (
-          <p
-            className="break-words text-center text-body font-semibold text-text-muted"
-            data-testid="auth.store"
-          >
-            {storeName}
-          </p>
-        )}
-        <section className="animate-rise-in rounded-md bg-surface p-8 shadow-sm">
-          {children}
-        </section>
-      </div>
-    </main>
+        {/* `my-auto` centres the card while it fits and lets a tall one scroll from its top. */}
+        <div
+          className={clsx(
+            'my-auto flex w-full flex-col gap-4',
+            width === 'wide' ? 'max-w-3xl' : 'max-w-md',
+          )}
+        >
+          <section className="animate-rise-in rounded-md bg-surface p-8 shadow-sm">
+            {children}
+          </section>
+        </div>
+      </main>
+    </div>
   );
 }
 

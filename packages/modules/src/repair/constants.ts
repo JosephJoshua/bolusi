@@ -142,6 +142,22 @@ export function workPhotoStage(slot: string): WorkPhotoStage | null {
 }
 
 /**
+ * The customer saying on camera that the phone is theirs, asked for by repair types such as an
+ * unlock (product-scope.md). Kept with the photos, one slot per clip; the latest one counts.
+ */
+export const OWNERSHIP_VIDEO_PREFIX = 'ownershipVideo';
+/** Up to a minute, at 720p (owner decision, 2026-10-28). */
+export const OWNERSHIP_VIDEO_MAX_MS = 60_000;
+
+export function ownershipVideoSlot(mediaId: string): string {
+  return `${OWNERSHIP_VIDEO_PREFIX}:${mediaId}`;
+}
+
+export function isOwnershipVideoSlot(slot: string): boolean {
+  return slot.startsWith(`${OWNERSHIP_VIDEO_PREFIX}:`);
+}
+
+/**
  * A repaired or cancelled phone still in the store this many days after it was ready is flagged as
  * not collected (owner decision, 2026-10-28: two months), unless the store set its own number.
  * Flagging only: nothing happens to the phone.

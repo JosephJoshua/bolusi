@@ -24,6 +24,7 @@ export {
 export {
   computeEffectiveSet,
   DENIAL_REASONS,
+  evaluateAllowance,
   evaluatePermission,
   parsePermissionIds,
   type DenialReason,
@@ -37,6 +38,7 @@ export {
   createDirectorySource,
   emptyDirectorySnapshot,
   loadDirectorySnapshot,
+  STORE_ID_META_KEY,
   TENANT_ID_META_KEY,
   type DirectoryGrant,
   type DirectoryRole,
@@ -44,6 +46,16 @@ export {
   type DirectorySource,
   type DirectoryUser,
 } from './directory.js';
+
+export {
+  allowanceCovers,
+  LIMIT_KINDS,
+  NO_LIMIT_AMOUNTS,
+  parseLimitAmounts,
+  type LimitAmounts,
+  type LimitKind,
+  type PermissionAllowance,
+} from './limits.js';
 
 export { PermissionEvaluator, type PermissionEvaluatorStats } from './memo.js';
 

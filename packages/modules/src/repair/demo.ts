@@ -8,7 +8,7 @@
  * Photos resolve to a labelled grey placeholder image, never anything that looks like a real photo.
  */
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
-import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
+import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/schemas';
 
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
@@ -18,6 +18,7 @@ import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
   REPAIR_PERMISSION,
+  ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
 import { partsInWork } from './flows.js';
@@ -26,6 +27,7 @@ import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
   handoverProblem,
+  needsOwnershipVideo,
   recordRepairTypes,
   storeIntakeOptions,
   type HandoverCheck,
@@ -91,6 +93,44 @@ export const DEMO_REPAIR_ROLES = {
     name: 'Budi Santoso',
     permissions: [P.read, P.work, I.read, I.useParts],
   },
+  /** A manager: counter and repair work, plus the owners' money decisions up to a limit. */
+  manager: {
+    userId: 'u-maria',
+    name: 'Maria Kogoya',
+    permissions: [
+      P.read,
+      P.intake,
+      P.assign,
+      P.quoteChange,
+      P.handover,
+      P.work,
+      P.cancel,
+      P.discount,
+      P.correctDownPayment,
+      P.warrantyException,
+      I.read,
+      I.useParts,
+      I.correctUse,
+      I.count,
+      M.read,
+      M.receive,
+      M.moveCash,
+      M.countCash,
+      M.adjustCash,
+      M.refund,
+      M.voidPayment,
+      M.extendCredit,
+    ],
+    /** Per servisan, as the store owner set them in "Batas wewenang". */
+    limits: {
+      [P.discount]: 50_000,
+      [P.cancel]: 50_000,
+      [P.correctDownPayment]: 50_000,
+      [M.refund]: 30_000,
+      [M.voidPayment]: 30_000,
+      [M.extendCredit]: 100_000,
+    },
+  },
   /** A store owner: may choose what this store uses, not change the franchise's lists. */
   storeOwner: {
     userId: 'u-yosua',
@@ -143,6 +183,17 @@ const DEMO_ACCOUNTS = [
 ] as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
 
+/** `ModulePort.limitOf` for a demo actor: their limit when they have one, else none if held. */
+function demoLimitOf(
+  actor: (typeof DEMO_REPAIR_ROLES)[DemoRepairRole],
+  permitted: ReadonlySet<string>,
+  id: string,
+): number | null {
+  if (!permitted.has(id)) return 0;
+  const limits = (actor as { readonly limits?: Readonly<Record<string, number>> }).limits ?? {};
+  return limits[id] ?? null;
+}
+
 /** The business's stores, for picking which ones share a central payment method. */
 const DEMO_STORES = [
   { id: '01920000-0000-7000-8000-0000000005a1', name: 'Bolusi Jayapura' },
@@ -158,6 +209,7 @@ const NAMES = new Map<string, string>([
   ['u-siti', 'Siti Rahayu'],
   ['u-budi', 'Budi Santoso'],
   ['u-yosua', 'Yosua Wonda'],
+  ['u-maria', 'Maria Kogoya'],
 ]);
 const TECHNICIANS = ['u-budi', 'u-yosua', 'u-andi'];
 
@@ -178,7 +230,22 @@ function demoMedia(mime: 'image/jpeg' | 'image/png' = 'image/jpeg'): MediaRef {
   };
 }
 
-function photoRow(slot: string, ref: MediaRef = demoMedia()): TicketPhotoRow {
+function demoVideo(): VideoRef {
+  const { mediaId, sha256, sizeBytes, capturedAt, location, userId, deviceId } = demoMedia();
+  return {
+    mediaId,
+    sha256,
+    mime: 'video/mp4',
+    type: 'video',
+    sizeBytes: sizeBytes * 60,
+    capturedAt,
+    location,
+    userId,
+    deviceId,
+  };
+}
+
+function photoRow(slot: string, ref: AnyMediaRef = demoMedia()): TicketPhotoRow {
   return {
     slot,
     mediaId: ref.mediaId,
@@ -1027,6 +1094,12 @@ export function demoRepairRuntime(
           throw REPAIR_REFUSALS.refuse(problem.reason);
         }
       }
+      const repairTypes = recordedTypes(input['repairTypes'], []);
+      const video = (input['ownershipVideo'] as VideoRef | null | undefined) ?? null;
+      // As the intake rule judges it.
+      if (video === null && needsOwnershipVideo(repairTypes)) {
+        throw REPAIR_REFUSALS.refuse('ownershipVideoNeeded');
+      }
       const created = withTotals({
         ...seedTickets()[0]!,
         id,
@@ -1055,7 +1128,7 @@ export function demoRepairRuntime(
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
         peripherals: input['peripherals'] as TicketDetailRow['peripherals'],
-        repairTypes: recordedTypes(input['repairTypes'], []),
+        repairTypes,
         claimOfTicketId: claimOf,
         intakePhotos: photos.map(({ slot, label }) => ({ slot, label })),
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
@@ -1065,7 +1138,10 @@ export function demoRepairRuntime(
         quoteLines: lines.map((l) =>
           line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
         ),
-        photos: photos.map(({ slot, ref }) => photoRow(slot, ref)),
+        photos: [
+          ...photos.map(({ slot, ref }) => photoRow(slot, ref)),
+          ...(video === null ? [] : [photoRow(ownershipVideoSlot(video.mediaId), video)]),
+        ],
       });
       tickets = [created, ...tickets];
       notify();
@@ -1136,6 +1212,7 @@ export function demoRepairRuntime(
     // Not agreed yet: the change waits for the customer, like a proposal.
     changeQuote: (input) => {
       chargeOnClaim(String(input['ticketId']), Number(input['amount']));
+      withinDiscountLimit(String(input['ticketId']), Number(input['amount']));
       return input['customerAgreed'] === true
         ? priceLine(input, 'applied', 'repair.quote_changed')
         : priceLine({ ...input, customerAgreed: undefined }, 'proposed', 'repair.quote_changed');
@@ -1240,6 +1317,19 @@ export function demoRepairRuntime(
     if (find(ticketId).claimOfTicketId === null || amount <= 0) return;
     if (permitted.has(P.warrantyException)) return;
     throw REPAIR_REFUSALS.refuse('claimChargeOwnerOnly');
+  }
+
+  /** A limited role's discounts on one servisan, together, stay within its limit (rules.ts). */
+  function withinDiscountLimit(ticketId: string, amount: number): void {
+    if (amount >= 0) return;
+    const limit = demoLimitOf(actor, new Set<string>(actor.permissions), P.discount);
+    if (limit === null) return;
+    const earlier = find(ticketId)
+      .quoteLines.filter((l) => l.amount < 0 && l.status !== 'declined')
+      .reduce((sum, l) => sum - l.amount, 0);
+    if (earlier - amount > limit) {
+      throw REPAIR_REFUSALS.refuse('overLimit', { code: 'PERMISSION_DENIED' });
+    }
   }
 
   function priceLine(input: Input, status: QuoteLineRow['status'], kind: string) {
@@ -1381,6 +1471,7 @@ export function demoRepairRuntime(
       }
     },
     hasPermission: (id: string) => permitted.has(id),
+    limitOf: (id: string) => demoLimitOf(actor, permitted, id),
     newId: () => `t-new-${String(counter)}-${String(Math.random()).slice(2, 8)}`,
     colleagueHasPermission: (userId: string, id: string) =>
       id === P.work ? TECHNICIANS.includes(userId) : false,
@@ -1405,6 +1496,7 @@ export function demoRepairRuntime(
       run: (name: string, input: Input) => ledger.run(name, input),
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
+      limitOf: (id: string) => demoLimitOf(actor, permitted, id),
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
       stores: () => Promise.resolve(DEMO_STORES),
       get userId() {
@@ -1416,6 +1508,9 @@ export function demoRepairRuntime(
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
     pickPhoto: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
+    recordVideo: () => Promise.resolve({ videoRef: demoVideo() }),
+    // The demo has no clip to show; the player closes at once.
+    playVideo: () => Promise.resolve(),
     printing,
     loadModelPhoto: demoModelPhoto,
     loadThumbnail: (ref: ThumbnailRef) =>

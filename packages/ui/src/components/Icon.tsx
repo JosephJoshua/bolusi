@@ -60,6 +60,8 @@ export const ICON_GLYPHS = Object.freeze({
   lock: 'lock-outline',
   /** Settings: PIN rows (change your own, manage staff PINs). */
   pin: 'dialpad',
+  /** Settings: how far a limited role (a manager) may go. */
+  limits: 'shield-account-outline',
   /** Settings: the language rows. */
   language: 'translate',
   /** Settings: notification rows. */
@@ -74,6 +76,8 @@ export const ICON_GLYPHS = Object.freeze({
   list: 'format-list-bulleted',
   /** Settings: a money setting (cancel fees). */
   money: 'cash',
+  /** Settings: the store's payment methods (QRIS, EDC, bank accounts). */
+  paymentMethods: 'credit-card-outline',
   /** Settings: printed slips (header, terms, paper). */
   print: 'printer-outline',
   /** The paper a device prints on. */
@@ -125,6 +129,10 @@ export const ICON_GLYPHS = Object.freeze({
   scan: 'barcode-scan',
   /** Lists: narrow what is shown (category, values, tags, stock). */
   filter: 'filter-variant',
+  /** PhotoSlot: an empty slot that takes a video clip, not a photo. */
+  video: 'video-outline',
+  /** A recorded clip: plays it, always beside a label. */
+  play: 'play-circle-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

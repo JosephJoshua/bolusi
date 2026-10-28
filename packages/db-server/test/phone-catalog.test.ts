@@ -141,6 +141,20 @@ describe('photos and details', () => {
     );
     expect((await writer.modelsNeedingPhoto(100)).map((m) => m.id)).toContain(10);
   });
+
+  test('removing a wrong photo clears its bytes and syncs the removal once', async () => {
+    const before = await revisionOf(10);
+    await writer.removePhoto(10, 10_100);
+    const changed = await read(before);
+    expect(changed).toHaveLength(1);
+    expect(changed[0]).toMatchObject({ id: 10, photoSha256: null });
+    expect(await readPhoneModelPhotoFrom(testDb.db, 10)).toBeNull();
+    expect((await writer.modelsNeedingPhoto(100)).map((m) => m.id)).not.toContain(10);
+
+    await writer.removePhoto(10, 10_200);
+    expect(await read(changed[0]!.revision)).toEqual([]);
+    await expect(writer.removePhoto(999_999, 10_300)).resolves.toBeUndefined();
+  });
 });
 
 test('brands remember when their listing was last walked', async () => {

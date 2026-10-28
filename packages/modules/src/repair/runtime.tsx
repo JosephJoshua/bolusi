@@ -9,7 +9,7 @@ import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
-import type { MoneyPort } from '../money/runtime.js';
+import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
@@ -26,6 +26,9 @@ import {
   type ThumbnailLoader,
   type ThumbnailRef,
   type ThumbnailState,
+  type VideoCapture,
+  type VideoMediaRef,
+  type VideoPlayback,
 } from '../screen-kit/index.js';
 
 /**
@@ -131,6 +134,12 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
    * web). Absent ⇒ this build cannot, and the photo viewer shows no share button.
    */
   readonly sharePhoto?: ((ref: ThumbnailRef) => Promise<'done' | 'failed'>) | undefined;
+  /** Record the customer's ownership video. Absent ⇒ this device cannot (a PC with no webcam). */
+  readonly recordVideo?: VideoCapture | undefined;
+  /** Play a stored clip. Absent ⇒ this build cannot, and the clip shows without a play button. */
+  readonly playVideo?: VideoPlayback | undefined;
+  /** Whether a clip taken here is still kept: a restored intake draft can outlive its video. */
+  readonly videoKept?: ((ref: VideoMediaRef) => Promise<boolean>) | undefined;
   /** Pick a picture from the device's gallery (the store logo). Absent ⇒ this build cannot. */
   readonly pickPhoto?: PhotoCapture | undefined;
   /** Absent ⇒ this build cannot print, and no print action shows. */
@@ -299,6 +308,22 @@ export async function servisanCustomers(
   return names;
 }
 const SERVISAN_PAGE = 100;
+
+/**
+ * The ledger as the Kas screens read it, from a repair runtime: its money port, live on the same
+ * change feed, naming each servisan's customer. `nameOf` names a colleague ("counted by").
+ */
+export function moneyRuntimeOf(
+  repair: RepairRuntime,
+  nameOf: (userId: string) => string | null,
+): MoneyRuntime {
+  return {
+    ...repair.money,
+    subscribe: repair.subscribe,
+    nameOf,
+    customersOf: (documents) => servisanCustomers(repair, documents),
+  };
+}
 
 export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
   const load = useRepairRuntime().loadModelPhoto;

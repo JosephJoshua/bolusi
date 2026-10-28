@@ -83,6 +83,7 @@ import {
 } from '@bolusi/device/bootstrap/sync-status-reads';
 import { useCaptureHost, type CapturePlatform } from '../media/CaptureHost.js';
 import { useSignatureHost } from '../media/SignatureHost.js';
+import { useVideoHost, type VideoPlatform } from '../media/VideoHost.js';
 import { useScanHost, type ScanPlatform } from '../media/ScanHost.js';
 import type { SyncClient } from '@bolusi/device/bootstrap/sync-client';
 import type { AppStatePort } from '@bolusi/device/bootstrap/triggers';
@@ -99,7 +100,12 @@ import {
 } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
-import type { PhotoCapture, SignatureCapture } from '@bolusi/modules/screen-kit';
+import type {
+  PhotoCapture,
+  SignatureCapture,
+  VideoCapture,
+  VideoPlayback,
+} from '@bolusi/modules/screen-kit';
 
 /**
  * The fallback enrollment controller when none is injected (Node-driven Root with no `createEnrollment`).
@@ -223,6 +229,9 @@ export interface RootProps {
     capture: {
       readonly capturePhoto: PhotoCapture;
       readonly captureSignature: SignatureCapture;
+      /** The ownership video recorder and player; absent without a camera. */
+      readonly recordVideo: VideoCapture | undefined;
+      readonly playVideo: VideoPlayback | undefined;
       /** Reads a barcode or QR code for the items screens; absent without a camera. */
       readonly scanCode: (() => Promise<string | null>) | undefined;
     },
@@ -288,6 +297,8 @@ export interface RootProps {
   readonly capturePlatform?: CapturePlatform | undefined;
   /** The camera's code scanner, bound at index.ts like `capturePlatform`. `undefined` ⇒ no scan. */
   readonly scanPlatform?: ScanPlatform | undefined;
+  /** The video recorder and player (`expo-camera`, `expo-video`). `undefined` ⇒ no video. */
+  readonly videoPlatform?: VideoPlatform | undefined;
   /**
    * The notification permission (Android 13+ POST_NOTIFICATIONS), bound over `expo-notifications` at
    * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
@@ -313,6 +324,7 @@ export function Root({
   staffAdmin,
   capturePlatform,
   scanPlatform,
+  videoPlatform,
   notificationPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
@@ -428,6 +440,7 @@ export function Root({
    */
   const [capturePlatformFixed] = useState(capturePlatform ?? null);
   const [scanPlatformFixed] = useState(scanPlatform ?? null);
+  const [videoPlatformFixed] = useState(videoPlatform ?? null);
 
   useEffect(() => {
     let disposed = false;
@@ -850,6 +863,14 @@ export function Root({
   /** The code scanner for the items list and form. It reads a code and stores nothing. */
   const scan = useScanHost(scanPlatformFixed);
 
+  /** The ownership video recorder and player, stamped with the same session identity. */
+  const video = useVideoHost({
+    media,
+    platform: videoPlatformFixed,
+    identity: notes?.identity ?? null,
+  });
+  const videoAvailable = videoPlatformFixed !== null;
+
   /**
    * THE IDLE TICK (task 133; api/02-auth §6.4) — the production caller `SessionManager.checkIdle()`
    * never had.
@@ -957,6 +978,8 @@ export function Root({
           createRepair?.(app, enrollment.runtime, identity, media, {
             capturePhoto: capture.capturePhoto,
             captureSignature: signature.captureSignature,
+            recordVideo: videoAvailable ? video.recordVideo : undefined,
+            playVideo: videoAvailable ? video.playVideo : undefined,
             scanCode: scan.scanCode,
           }) ?? null,
       });
@@ -973,6 +996,9 @@ export function Root({
     media,
     capture.capturePhoto,
     signature.captureSignature,
+    videoAvailable,
+    video.recordVideo,
+    video.playVideo,
     scan.scanCode,
   ]);
 
@@ -1124,6 +1150,8 @@ export function Root({
         signature={signature.surface}
         // The code scanner while it looks for a code, else null.
         scan={scan.surface}
+        // The video recorder or player while one is open, else null.
+        video={video.surface}
         // SEC-AUTH-08 work retention (task 155) — the READ and WRITE halves of task 133's path, which
         // shipped with a producer (`updateWorkspace`) and NO consumer, so a half-typed note was still
         // lost on a real device. `workspace` is the active user's retained work from the shell session
@@ -1193,6 +1221,7 @@ export function Root({
             : createStaffControls({
                 port: staffAdmin,
                 tenantAdmin: sessionSnapshot.tenantAdmin,
+                canSetLimits: sessionSnapshot.canSetLimits,
                 load: () => session.listStaff(),
                 context: () => session.staffContext(),
                 refreshDirectory: async () => {

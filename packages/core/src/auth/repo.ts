@@ -7,7 +7,8 @@
 // (01-domain-model §1); the permission evaluator and the switcher read them.
 import { sql, type Kysely, type RawBuilder } from 'kysely';
 
-import { TENANT_ID_META_KEY } from '../authz/directory.js';
+import { STORE_ID_META_KEY, TENANT_ID_META_KEY } from '../authz/directory.js';
+import type { LimitAmounts } from '../authz/limits.js';
 import { encryptColumnValue } from '../crypto/column-cipher.js';
 import { jsonColumnToObject, type JsonColumnValue } from '../projection/columns.js';
 import { int8ToNumber, type Int8Value } from '../projection/int8.js';
@@ -40,6 +41,8 @@ export interface DirectoryRoleRow {
   readonly scopeType: 'tenant' | 'store';
   readonly isSystemDefault: boolean;
   readonly permissionIds: readonly string[];
+  /** A limited role's amounts at this store; null for a role free of limits. */
+  readonly limits?: LimitAmounts | null | undefined;
 }
 
 /** A `user_roles_directory` row — the `UserRoleGrant` tuple (10-db §9.5). */
@@ -65,12 +68,7 @@ export const DEVICE_ID_META_KEY = 'deviceId';
  */
 export const FIRST_PIN_USER_META_KEY = 'auth.firstPinUserId';
 
-/**
- * `meta_kv` key holding the device's bound store id (10-db §9.1 names it). Written once by
- * enrollment from the ENROLL RESPONSE, never by `applyBundle`: §7.4's store binding is irreversible,
- * and a bundle refresh must not be able to silently re-bind the device's store (bundle-apply.ts).
- */
-export const STORE_ID_META_KEY = 'storeId';
+export { STORE_ID_META_KEY };
 
 /**
  * `meta_kv` key holding the store's DISPLAY NAME (10-db §9.1). Written by `applyBundle` from
@@ -208,8 +206,9 @@ export async function replaceRolesDirectory<DB>(
   await sql`DELETE FROM roles_directory`.execute(db);
   for (const r of roles) {
     await sql`
-      INSERT INTO roles_directory (id, name, scope_type, is_system_default, permission_ids)
-      VALUES (${r.id}, ${r.name}, ${r.scopeType}, ${r.isSystemDefault ? 1 : 0}, ${JSON.stringify(r.permissionIds)})
+      INSERT INTO roles_directory (id, name, scope_type, is_system_default, permission_ids, limits)
+      VALUES (${r.id}, ${r.name}, ${r.scopeType}, ${r.isSystemDefault ? 1 : 0},
+        ${JSON.stringify(r.permissionIds)}, ${r.limits == null ? null : JSON.stringify(r.limits)})
     `.execute(db);
   }
 }

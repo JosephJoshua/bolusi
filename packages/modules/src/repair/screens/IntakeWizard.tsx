@@ -9,7 +9,12 @@ import { ConfirmSheet, StepHeader, color, space, type } from '@bolusi/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
+import {
+  useActionRunner,
+  type DiscardGuard,
+  type StepBack,
+  type VideoMediaRef,
+} from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import { INTAKE_STEP_KEY, optionLabel } from '../labels.js';
@@ -19,6 +24,7 @@ import {
   claimWarrantyEnded,
   emptyIntakeDraft,
   intakeDirty,
+  intakeNeedsVideo,
   nextMissingPhoto,
   stepProblems,
   toOpenTicketInput,
@@ -32,6 +38,7 @@ import {
 } from '../intake-options.js';
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
 import { usePhotoBrowser } from './photos.js';
+import { useOwnershipVideo, useRestoredVideoCheck } from '../ownership-video.js';
 import { useIntakeOptionSettings, usePaymentAccounts, useRepairRuntime } from '../runtime.js';
 
 import {
@@ -50,6 +57,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   screenLock: 'repair.problem.screenLock',
   complaint: 'repair.problem.complaint',
   photos: 'repair.problem.photos',
+  ownershipVideo: 'repair.problem.ownershipVideo',
   quoteLines: 'repair.problem.quoteLines',
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
@@ -98,6 +106,11 @@ export function IntakeWizard({
   const [showProblems, setShowProblems] = useState(false);
   const [restoredOnce] = useState(restoredDraft ?? null);
   const [photosExpired, setPhotosExpired] = useState(false);
+  const [videoExpired, setVideoExpired] = useState(false);
+  useRestoredVideoCheck(restoredOnce, () => {
+    setDraft((d) => ({ ...d, ownershipVideo: null }));
+    setVideoExpired(true);
+  });
 
   // A draft kept across a lock can outlive its photos: a capture no saved ticket refers to is
   // deleted a day after it was taken (06 §7). Restored photos that no longer load are dropped, so
@@ -236,12 +249,39 @@ export function IntakeWizard({
         setDraft((d) => ({ ...d, photos: { ...d.photos, [angle.id]: captured.mediaRef } }));
       });
   };
-  // On the photos step the primary action walks round the phone: it takes the next missing shot.
+  const video = useOwnershipVideo();
+  const needsVideo = intakeNeedsVideo(draft, options);
+  const recordVideo =
+    video.record === undefined
+      ? undefined
+      : (): void => {
+          const record = video.record!;
+          void runner.run(record).then((captured) => {
+            if (captured === undefined || captured === null) return;
+            setDraft((d) => ({ ...d, ownershipVideo: captured.videoRef }));
+          });
+        };
+  const playVideo =
+    video.play === undefined
+      ? undefined
+      : (ref: VideoMediaRef): void => void runner.run(() => video.play!(ref));
+  // On the photos step the primary action walks round the phone: it takes the next missing shot,
+  // then the ownership video when a picked type asks for one.
   const missingPhoto = step === 'photos' ? nextMissingPhoto(draft, options.photoAngles) : null;
+  const videoNext =
+    step === 'photos' &&
+    missingPhoto === null &&
+    needsVideo &&
+    draft.ownershipVideo === null &&
+    recordVideo !== undefined;
 
   const next = (): void => {
     if (missingPhoto !== null) {
       takePhoto(missingPhoto);
+      return;
+    }
+    if (videoNext) {
+      recordVideo();
       return;
     }
     if (problems.length > 0) {
@@ -275,9 +315,11 @@ export function IntakeWizard({
       primaryLabel={
         missingPhoto !== null
           ? tn('repair.photo.takeNext', { slot: optionLabel('photoAngles', missingPhoto) })
-          : step === 'review'
-            ? tn('repair.action.openTicket')
-            : tn('repair.action.next')
+          : videoNext
+            ? tn('repair.video.recordNext')
+            : step === 'review'
+              ? tn('repair.action.openTicket')
+              : tn('repair.action.next')
       }
       onPrimary={next}
       busy={runner.busy}
@@ -319,6 +361,11 @@ export function IntakeWizard({
         {photosExpired && step === 'photos' ? (
           <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.photosExpired`}>
             {tn('repair.photo.expired')}
+          </Text>
+        ) : null}
+        {videoExpired && step === 'photos' && draft.ownershipVideo === null ? (
+          <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.videoExpired`}>
+            {tn('repair.video.expired')}
           </Text>
         ) : null}
         {draft.claimOf !== null && (step === 'customer' || step === 'review') ? (
@@ -391,6 +438,9 @@ export function IntakeWizard({
             draft={draft}
             angles={options.photoAngles}
             onTake={takePhoto}
+            needsVideo={needsVideo}
+            onRecordVideo={recordVideo}
+            onPlayVideo={playVideo}
             testID={`${testID}.photos`}
           />
         );

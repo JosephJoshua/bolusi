@@ -55,6 +55,7 @@ export { createModuleRuntime, type ModuleRuntime, type ModuleRuntimeOptions } fr
 
 export {
   bindModulePort,
+  limitOfAllowance,
   type CommandName,
   type ModuleOperations,
   type ModulePort,

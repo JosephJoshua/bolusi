@@ -149,6 +149,12 @@ const styles = StyleSheet.create({
     ...type.caption,
     marginLeft: space.sm,
   },
+  open: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: touch.min,
+  },
   affordance: {
     minWidth: touch.min,
     minHeight: touch.min,
@@ -205,8 +211,8 @@ export function Banner({
     );
   }
 
-  return (
-    <View testID={testID} accessibilityRole="alert" style={[styles.base, { backgroundColor: bg }]}>
+  const summary = (
+    <>
       {leadingGlyph ?? <Icon name={icon} size={size.iconInline} color={fg} />}
       <Text
         testID={`${testID}.message`}
@@ -228,16 +234,27 @@ export function Banner({
           +{suppressedCount}
         </Text>
       ) : null}
+    </>
+  );
 
-      {onPress === undefined ? null : (
+  return (
+    <View testID={testID} accessibilityRole="alert" style={[styles.base, { backgroundColor: bg }]}>
+      {onPress === undefined ? (
+        summary
+      ) : (
+        // The copy says "Ketuk untuk melihat", so the whole message opens Sync Status, not only the
+        // chevron. The action, collapse and dismiss buttons stay separate targets beside it.
         <Pressable
           testID={`${testID}.open`}
           accessibilityRole="button"
           accessibilityLabel={message}
           onPress={onPress}
-          style={styles.affordance}
+          style={({ pressed }) => [styles.open, { opacity: pressed ? 0.7 : 1 }]}
         >
-          <Icon name="chevron" size={size.iconInline} color={fg} />
+          {summary}
+          <View style={styles.affordance}>
+            <Icon name="chevron" size={size.iconInline} color={fg} />
+          </View>
         </Pressable>
       )}
 

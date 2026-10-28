@@ -213,6 +213,7 @@ describe('counter intake', () => {
       checks: {},
       peripherals: [],
       photos: {},
+      ownershipVideo: null,
       lines: [],
       downPayment: '',
       downPaymentAccount: 'cash',
@@ -940,6 +941,7 @@ describe('price and assignment details', () => {
       checks: {},
       peripherals: [],
       photos: {},
+      ownershipVideo: null,
       lines: [],
       downPayment: '',
       downPaymentAccount: 'cash',
@@ -971,6 +973,7 @@ describe('price and assignment details', () => {
       checks: {},
       peripherals: [],
       photos: { front: kept, back: gone },
+      ownershipVideo: null,
       lines: [],
       downPayment: '',
       downPaymentAccount: 'cash',
@@ -994,6 +997,55 @@ describe('price and assignment details', () => {
     expect(screen.query('repair.intake.photosExpired')).not.toBeNull();
     expect(screen.query('repair.intake.photos.slot.front.done')).not.toBeNull();
     expect(screen.query('repair.intake.photos.slot.back.done')).toBeNull();
+  });
+
+  test('a restored intake drops an ownership video deleted while it waited', async () => {
+    const harness = await openRepairScreenHarness(5604);
+    h = harness;
+    const photos = Object.fromEntries(
+      ['front', 'back', 'left', 'right', 'top', 'bottom'].map((slot, i) => [
+        slot,
+        harness.photo(80 + i),
+      ]),
+    );
+    const clip = { ...harness.photo(90), mime: 'video/mp4' as const, type: 'video' as const };
+    const draft: IntakeDraft = {
+      kind: 'intake',
+      step: 3,
+      customer: { kind: 'new', name: 'Ester', phone: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', lockKind: 'none', passcode: '' },
+      complaint: 'Lupa pola',
+      repairTypes: ['unlock'],
+      claimOf: null,
+      intakeNotes: '',
+      checks: {},
+      peripherals: [],
+      photos,
+      ownershipVideo: clip,
+      lines: [],
+      downPayment: '',
+      downPaymentAccount: 'cash',
+      downPaymentReference: '',
+      ready: 'tomorrow',
+    };
+    const runtime = repairRuntimeFor(h, h.cashierId);
+    const asked: string[] = [];
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: draft,
+      runtime: {
+        ...runtime,
+        loadThumbnail: () => Promise.resolve({ kind: 'ready', uri: 'file:///kept.jpg' }),
+        recordVideo: () => Promise.resolve(null),
+        videoKept: (ref) => {
+          asked.push(ref.mediaId);
+          return Promise.resolve(false);
+        },
+      },
+    });
+    await settle();
+    expect(asked).toEqual([clip.mediaId]);
+    expect(screen.query('repair.intake.videoExpired')).not.toBeNull();
+    expect(text(screen, 'repair.intake.primary')).toContain('Rekam video kepemilikan');
   });
 
   test('a proposal waiting on the counter is shown apart from the agreed total', async () => {

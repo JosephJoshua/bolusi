@@ -114,9 +114,11 @@ export function session(over: Partial<SessionView> = {}): SessionView {
     canUnlock: true,
     canReset: true,
     canManageStaff: true,
+    canSetLimits: true,
     tenantAdmin: true,
     permissions: [],
     colleaguePermissions: {},
+    limits: {},
     ...over,
   };
 }
@@ -134,6 +136,7 @@ export function ready(over: Partial<CoreState> = {}): CoreState {
       platform: 'windows',
       appVersion: '0.1.0',
     },
+    setupFor: null,
     session: session(),
     sync: null,
     ...over,

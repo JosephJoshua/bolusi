@@ -4,9 +4,13 @@ export { RepairBoardPage, type BoardFilters, type RepairBoardPageProps } from '.
 export { IntakePage, type IntakePageProps } from './Intake.js';
 export { TicketPane, type TicketPaneProps } from './TicketPane.js';
 export { PrintSettings } from './PrintSettings.js';
+export { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
+export { MoneyField } from './parts.js';
 export {
   CancelFeesSettings,
   DiscardChangesDialog,
+  FormFooter,
+  SaveBar,
   IntakeListSettings,
   repairSettingsAccess,
   SlipSettings,
@@ -17,6 +21,7 @@ export { repairAbilities } from '../flows.js';
 export { INTAKE_LIST_KEY } from '../labels.js';
 export { INTAKE_OPTION_LISTS, type IntakeOptionList } from '../intake-options.js';
 export {
+  moneyRuntimeOf,
   PrinterProblem,
   RepairRuntimeProvider,
   useRepairRuntime,

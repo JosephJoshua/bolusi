@@ -129,6 +129,147 @@ describe('webcam', () => {
   });
 });
 
+/** A webcam and microphone that give a frame at once, and a recorder that hands back its slices. */
+function liveCamera(): { asked: MediaStreamConstraints[]; recorders: FakeRecorder[] } {
+  const asked: MediaStreamConstraints[] = [];
+  const recorders: FakeRecorder[] = [];
+  vi.stubGlobal('navigator', {
+    ...navigator,
+    mediaDevices: {
+      enumerateDevices: () => Promise.resolve([{ kind: 'videoinput', deviceId: 'cam' }]),
+      getUserMedia: (constraints: MediaStreamConstraints) => {
+        asked.push(constraints);
+        return Promise.resolve({ getTracks: () => [] });
+      },
+    },
+  });
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(4);
+  class Recorder extends FakeRecorder {
+    constructor(_stream: unknown, options: MediaRecorderOptions) {
+      super();
+      this.options = options;
+      recorders.push(this);
+    }
+  }
+  vi.stubGlobal('MediaRecorder', Object.assign(Recorder, { isTypeSupported: () => true }));
+  vi.stubGlobal(
+    'URL',
+    class extends URL {
+      static override createObjectURL = (): string => 'blob:clip';
+      static override revokeObjectURL = (): void => undefined;
+    },
+  );
+  return { asked, recorders };
+}
+
+class FakeRecorder extends EventTarget {
+  state: 'inactive' | 'recording' = 'inactive';
+  options: MediaRecorderOptions = {};
+  start(): void {
+    this.state = 'recording';
+  }
+  stop(): void {
+    this.state = 'inactive';
+    const data = Object.assign(new Event('dataavailable'), {
+      data: new Blob([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])]),
+    });
+    this.dispatchEvent(data);
+    this.dispatchEvent(new Event('stop'));
+  }
+}
+
+const VIDEO = { title: 'Video kepemilikan', hint: 'Bilang HP ini milikmu.', maxMs: 60_000 };
+
+describe('video recorder', () => {
+  it('records with the microphone, then keeps the clip as MP4 once watched back', async () => {
+    const camera = liveCamera();
+    const dialogs = mount();
+    const video = track(dialogs.capture.video(VIDEO));
+    expect((await screen.findByTestId('desktop.video.hint')).textContent).toBe(VIDEO.hint);
+    const start = await screen.findByTestId('desktop.video.start');
+    await waitFor(() => expect(start.hasAttribute('disabled')).toBe(false));
+    expect(camera.asked[0]?.audio).toBe(true);
+    fireEvent.click(start);
+    expect(await screen.findByTestId('desktop.video.timer')).not.toBeNull();
+    expect(camera.recorders[0]?.options.videoBitsPerSecond).toBe(2_000_000);
+    fireEvent.click(screen.getByTestId('desktop.video.stop'));
+    expect(await screen.findByTestId('desktop.video.take')).not.toBeNull();
+    expect(video.value).toBe('pending');
+    fireEvent.click(screen.getByTestId('desktop.video.use'));
+    await waitFor(() =>
+      expect(video.value).toEqual({
+        bytes: new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]),
+        mime: 'video/mp4',
+      }),
+    );
+    expect(screen.queryByTestId('desktop.video')).toBeNull();
+  });
+
+  it('stops by itself at the limit', async () => {
+    const camera = liveCamera();
+    const dialogs = mount();
+    void dialogs.capture.video({ ...VIDEO, maxMs: 50 });
+    const start = await screen.findByTestId('desktop.video.start');
+    await waitFor(() => expect(start.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(start);
+    expect(await screen.findByTestId('desktop.video.take')).not.toBeNull();
+    expect(camera.recorders[0]?.state).toBe('inactive');
+  });
+
+  it('closing while recording keeps nothing', async () => {
+    liveCamera();
+    const dialogs = mount();
+    const video = track(dialogs.capture.video(VIDEO));
+    const start = await screen.findByTestId('desktop.video.start');
+    await waitFor(() => expect(start.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(start);
+    await screen.findByTestId('desktop.video.stop');
+    fireEvent.keyDown(screen.getByTestId('desktop.video'), { key: 'Escape' });
+    await waitFor(() => expect(video.value).toBeNull());
+  });
+
+  it('says when the camera or microphone is refused', async () => {
+    cameras([{ kind: 'videoinput', deviceId: 'cam' }], 'NotAllowedError');
+    const dialogs = mount();
+    act(() => void dialogs.capture.video(VIDEO));
+    const problem = await screen.findByTestId('desktop.video.problem');
+    expect(problem.textContent).toContain('mikrofon');
+  });
+});
+
+describe('video player', () => {
+  it('plays the clip and resolves once closed', async () => {
+    const dialogs = mount();
+    const closed = track(
+      dialogs.capture.play({ title: 'Video kepemilikan' }, () =>
+        Promise.resolve({ kind: 'ready', url: 'blob:stored' }),
+      ),
+    );
+    expect((await screen.findByTestId('desktop.videoPlayer.video')).getAttribute('src')).toBe(
+      'blob:stored',
+    );
+    fireEvent.click(screen.getByTestId('desktop.videoPlayer.close'));
+    await waitFor(() => expect(closed.value).toBeUndefined());
+    expect(screen.queryByTestId('desktop.videoPlayer')).toBeNull();
+  });
+
+  it('says when the clip is not here yet, and asks again on retry', async () => {
+    const dialogs = mount();
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'unavailable' })
+      .mockResolvedValueOnce({ kind: 'ready', url: 'blob:arrived' });
+    void dialogs.capture.play({ title: 'Video kepemilikan' }, load);
+    expect((await screen.findByTestId('desktop.videoPlayer.problem')).textContent).toContain(
+      'belum tersinkron',
+    );
+    fireEvent.click(screen.getByTestId('desktop.videoPlayer.retry'));
+    expect(await screen.findByTestId('desktop.videoPlayer.video')).not.toBeNull();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+});
+
 function fakeHandoff(opened: HandoffOpened): HandoffBridge & {
   emit: (event: HandoffEvent) => void;
   asks: { kind: string; title: string; seq: number }[];

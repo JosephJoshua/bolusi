@@ -162,6 +162,15 @@ const source = {
         signOnPhone: 'Minta pelanggan tanda tangan di HP',
         waitingSend: 'Menunggu kiriman dari HP…',
       },
+      video: {
+        denied:
+          'Kamera atau mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi, lalu coba lagi.',
+        saveFailed: 'Videonya belum bisa disimpan. Coba lagi.',
+        loading: 'Memuat video…',
+        failed: 'Videonya belum bisa diputar. Coba lagi.',
+        noMicrophone:
+          'Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi.',
+      },
     },
     auth: {
       switcher: {
@@ -302,6 +311,7 @@ const source = {
         roleHint: {
           cashier: 'Terima HP, atur harga, dan serahkan HP ke pelanggan',
           technician: 'Kerjakan servisan, termasuk foto sebelum dan sesudah',
+          manager: 'Tugas kasir dan teknisi, plus diskon dan refund terbatas',
           storeOwner: 'Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan',
         },
         save: 'Simpan',
@@ -388,6 +398,59 @@ const source = {
           lockedCount: '{count} terkunci',
           pinFor: 'PIN baru untuk {name}',
         },
+        setup: {
+          title: 'Siapkan komputer ini',
+          step: 'Langkah {step} dari {total}',
+          next: 'Lanjut',
+          back: 'Kembali',
+          later: 'Nanti saja',
+          laterHint: 'Bisa dibuka lagi di Pengaturan > Komputer ini.',
+          cameraTitle: 'Foto dan tanda tangan',
+          cameraWebcam: 'Foto HP pelanggan diambil dengan webcam ini.',
+          cameraPhone:
+            'Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.',
+          signatureScreen: 'Pelanggan tanda tangan langsung di layar sentuh ini.',
+          signaturePhone: 'Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.',
+          doneTitle: 'Komputer siap dipakai',
+          donePrinter: 'Printer',
+          donePaper: 'Kertas',
+          donePhotos: 'Foto',
+          doneSignature: 'Tanda tangan',
+          noPrinter: 'Belum dipilih',
+          viaWebcam: 'Webcam',
+          viaScreen: 'Layar sentuh',
+          viaPhone: 'HP toko',
+          start: 'Mulai',
+          reopen: 'Buka panduan persiapan',
+          printerReminder: 'Printer belum dipilih',
+          printerGone: 'Printer tidak ditemukan',
+          printerReminderHint: 'Nota belum bisa dicetak dari komputer ini.',
+        },
+      },
+      limits: {
+        title: 'Batas wewenang',
+        settingsSummary: 'Diskon, refund, dan bayar nanti',
+        formTitle: 'Batas {role}',
+        intro: 'Berlaku per servisan. Lebih dari batas ini harus pemilik toko.',
+        priceDrop: 'Diskon',
+        priceDropHint: 'Termasuk turun harga dan potongan biaya batal',
+        refund: 'Refund',
+        refundHint: 'Termasuk membatalkan pembayaran dan DP',
+        credit: 'Bayar nanti',
+        creditHint: 'Sisa tagihan saat HP dibawa pulang',
+        save: 'Simpan',
+        saved: 'Batas {role} tersimpan.',
+        missing: 'Isi ketiga batas. Tulis 0 kalau harus pemilik toko.',
+        empty: 'Belum ada tugas dengan batas',
+        emptyBody:
+          'Batas berlaku untuk tugas seperti Manajer. Batas untuk tugasmu sendiri diatur pemilik lain.',
+        failure: {
+          offline: 'Butuh internet untuk mengubah batas. Sambungkan HP, lalu ulangi.',
+          denied: 'Kamu tidak bisa mengubah batas ini. Minta pemilik utama.',
+          lastOwner: 'Harus tetap ada satu pemilik utama.',
+          rateLimited: 'Sudah terlalu banyak perubahan hari ini. Coba lagi besok.',
+          unexpected: 'Batasnya belum tersimpan. Coba lagi sebentar lagi.',
+        },
       },
     },
     sync: {
@@ -407,11 +470,11 @@ const source = {
         titleSyncing: 'Sedang menyinkronkan',
         titleOffline: 'Tidak ada koneksi',
         titleAttention: 'Ada yang perlu dicek',
-        titlePhotosPending: 'Foto belum tersinkron',
+        titlePhotosPending: 'Foto & video belum tersinkron',
         screenTitle: 'Status data',
         savedHere: '{count} perubahan tersimpan di HP ini dan akan disinkronkan otomatis.',
         changesLabel: 'Perubahan',
-        photosLabel: 'Foto',
+        photosLabel: 'Foto & video',
         waitingCount: '{count} belum tersinkron',
       },
       banner: {
@@ -483,6 +546,9 @@ const source = {
         camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
         cameraDeniedTitle: 'Kamera belum diizinkan',
         cameraDeniedBody: 'Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera.',
+        videoDeniedTitle: 'Kamera atau mikrofon belum diizinkan',
+        videoDeniedBody:
+          'Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera dan Mikrofon.',
       },
       storage: {
         lowWarning: 'Penyimpanan mulai menipis. Foto lama yang sudah tersinkron akan dibersihkan.',
@@ -496,6 +562,18 @@ const source = {
       },
       upload: { persistentFailure: '{count} foto belum sampai ke server.' },
       scan: { title: 'Pindai kode', hint: 'Arahkan kamera ke barcode atau kode QR.' },
+      video: {
+        start: 'Mulai rekam',
+        stop: 'Selesai rekam',
+        retake: 'Rekam ulang',
+        use: 'Pakai video ini',
+        time: '{elapsed} / {max}',
+        refusedBody:
+          'Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
+        unavailableTitle: 'Video belum ada di HP ini',
+        unavailableBody: 'Videonya belum tersinkron dari HP yang merekam. Coba lagi nanti.',
+        tooLarge: 'Videonya terlalu besar. Rekam ulang lebih singkat.',
+      },
     },
     platform: {
       opType: {
@@ -531,6 +609,7 @@ const source = {
       staff: { name: 'Staf' },
       cashier: { name: 'Kasir' },
       technician: { name: 'Teknisi' },
+      manager: { name: 'Manajer' },
     },
   },
 };
@@ -703,6 +782,15 @@ export const resources = {
           signOnPhone: 'Ask the customer to sign on the phone',
           waitingSend: 'Waiting for the phone to send…',
         },
+        video: {
+          denied:
+            'The camera or microphone isn’t allowed. Allow them in Windows Settings › Privacy, then try again.',
+          saveFailed: 'The video couldn’t be saved. Try again.',
+          loading: 'Loading video…',
+          failed: 'The video couldn’t play. Try again.',
+          noMicrophone:
+            'No microphone found. Plug in a microphone or a webcam that has one, then try again.',
+        },
       },
       auth: {
         switcher: {
@@ -845,6 +933,7 @@ export const resources = {
           roleHint: {
             cashier: 'Take in devices, set prices and hand devices back',
             technician: 'Work on repairs, including before and after photos',
+            manager: 'Cashier and technician work, plus limited discounts and refunds',
             storeOwner:
               'Everything in the store, including staff, discounts and cancelling repairs',
           },
@@ -934,6 +1023,59 @@ export const resources = {
             lockedCount: '{count} locked',
             pinFor: 'New PIN for {name}',
           },
+          setup: {
+            title: 'Set up this computer',
+            step: 'Step {step} of {total}',
+            next: 'Next',
+            back: 'Back',
+            later: 'Later',
+            laterHint: 'You can open it again in Settings > This computer.',
+            cameraTitle: 'Photos and signatures',
+            cameraWebcam: 'Customer phone photos are taken with this webcam.',
+            cameraPhone:
+              'This computer has no webcam, so photos are taken with a store phone. The first time you take a photo, scan the QR code that appears with the phone.',
+            signatureScreen: 'Customers sign right on this touch screen.',
+            signaturePhone: 'Customers sign on the store phone, through the same QR code.',
+            doneTitle: 'This computer is ready',
+            donePrinter: 'Printer',
+            donePaper: 'Paper',
+            donePhotos: 'Photos',
+            doneSignature: 'Signatures',
+            noPrinter: 'Not chosen',
+            viaWebcam: 'Webcam',
+            viaScreen: 'Touch screen',
+            viaPhone: 'Store phone',
+            start: 'Start',
+            reopen: 'Open the setup guide',
+            printerReminder: 'No printer chosen',
+            printerGone: 'Printer not found',
+            printerReminderHint: 'Slips cannot be printed from this computer yet.',
+          },
+        },
+        limits: {
+          title: 'Limits',
+          settingsSummary: 'Discounts, refunds and pay later',
+          formTitle: '{role} limits',
+          intro: 'Per servisan. Anything above needs a store owner.',
+          priceDrop: 'Discount',
+          priceDropHint: 'Includes price cuts and a lower cancel fee',
+          refund: 'Refund',
+          refundHint: 'Includes voiding payments and down payments',
+          credit: 'Pay later',
+          creditHint: 'What the customer still owes when they take the phone',
+          save: 'Save',
+          saved: '{role} limits saved.',
+          missing: 'Fill in all three. Enter 0 to always need a store owner.',
+          empty: 'No roles with limits yet',
+          emptyBody:
+            'Limits apply to roles such as Manager. Another owner sets the limits of your own role.',
+          failure: {
+            offline: 'Changing limits needs internet. Connect, then try again.',
+            denied: 'You can’t change these limits. Ask the main owner.',
+            lastOwner: 'There must always be one main owner.',
+            rateLimited: 'Too many changes today. Try again tomorrow.',
+            unexpected: 'The limits weren’t saved. Try again in a moment.',
+          },
         },
       },
       sync: {
@@ -955,12 +1097,12 @@ export const resources = {
           titleSyncing: 'Syncing',
           titleOffline: 'No connection',
           titleAttention: 'Something needs a look',
-          titlePhotosPending: 'Photos aren’t synced yet',
+          titlePhotosPending: 'Photos and videos aren’t synced yet',
           screenTitle: 'Sync status',
           savedHere:
             '{count, plural, one {# change is saved on this phone and will be synced automatically.} other {# changes are saved on this phone and will be synced automatically.}}',
           changesLabel: 'Changes',
-          photosLabel: 'Photos',
+          photosLabel: 'Photos & videos',
           waitingCount: '{count} not synced yet',
         },
         banner: {
@@ -1043,6 +1185,9 @@ export const resources = {
           cameraDeniedTitle: 'Camera is not allowed',
           cameraDeniedBody:
             'Open your phone Settings, find this app, then turn on the Camera permission.',
+          videoDeniedTitle: 'Camera or microphone not allowed',
+          videoDeniedBody:
+            'Open the phone’s Settings, find this app, then turn on Camera and Microphone.',
         },
         storage: {
           lowWarning:
@@ -1060,6 +1205,19 @@ export const resources = {
             '{count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}}',
         },
         scan: { title: 'Scan code', hint: 'Point the camera at a barcode or QR code.' },
+        video: {
+          start: 'Start recording',
+          stop: 'Stop recording',
+          retake: 'Record again',
+          use: 'Use this video',
+          time: '{elapsed} / {max}',
+          refusedBody:
+            'Can’t record because storage is almost full. Free up space, then try again.',
+          unavailableTitle: 'The video isn’t on this phone yet',
+          unavailableBody:
+            'It hasn’t been synced from the phone that recorded it. Try again later.',
+          tooLarge: 'The video is too big. Record a shorter one.',
+        },
       },
       platform: {
         opType: {
@@ -1095,6 +1253,7 @@ export const resources = {
         staff: { name: 'Staff' },
         cashier: { name: 'Cashier' },
         technician: { name: 'Technician' },
+        manager: { name: 'Manager' },
       },
     },
   },

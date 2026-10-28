@@ -1,0 +1,4 @@
+Dataset: Raw & Uncleaned Mobiles Dataset from Smartprix
+Publisher: Mayank Kumar Poddar
+https://www.kaggle.com/datasets/mayankkumarpoddar/smartprix-mobiles-dataset
+Dataset metadata retrieved 2026-10-27 lists licence MIT. The download contains no separate copyright or licence notice. Original metadata is retained locally.

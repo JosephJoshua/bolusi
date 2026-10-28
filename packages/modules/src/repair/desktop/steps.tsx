@@ -58,11 +58,10 @@ import {
 import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { outputSlip } from '../slip-output.js';
 
+import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import {
-  ActionError,
   MoneyField,
   PrinterProblemBanner,
-  QueryPanel,
   StaleNotice,
   photoLabels,
   usePhotoState,
@@ -665,6 +664,8 @@ export function PriceChangeDialog({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const kinds = priceKinds(runtime.hasPermission(REPAIR_PERMISSION.discount));
+  // A limited role (a manager) sees how far they may discount before the save refuses it.
+  const discountLimit = runtime.limitOf(REPAIR_PERMISSION.discount);
   const [kind, setKind] = useState<PriceKind>('part');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number | null>(null);
@@ -776,6 +777,11 @@ export function PriceChangeDialog({
             onChange={(event) => setReason(event.target.value)}
             data-testid={`${testId}.reason`}
           />
+          {kind !== 'discount' || discountLimit === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.discountLimit`}>
+              {tn('repair.hint.discountLimit', { amount: formatMoney(discountLimit) })}
+            </p>
+          )}
           {mode === 'change' ? (
             <p className="text-small text-text-muted">{tn('repair.price.waitsHint')}</p>
           ) : null}

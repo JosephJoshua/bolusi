@@ -37,6 +37,12 @@ export interface OpRuleContext<DB> {
    * user who must be able to do something (a technician being assigned).
    */
   holdsPermission(userId: string, permissionId: string): Promise<boolean>;
+  /**
+   * Whether `userId` holds `permissionId` in the op's store AND may use it for `amount` rupiah:
+   * within the limit their store set for a limited role (authz/limits.ts), or with no limit. The
+   * same directory as `holdsPermission`.
+   */
+  withinLimit(userId: string, permissionId: string, amount: number): Promise<boolean>;
 }
 
 /** Throws a `DomainError` when `op` must not be recorded against the current records. */

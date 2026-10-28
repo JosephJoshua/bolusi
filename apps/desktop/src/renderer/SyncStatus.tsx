@@ -1,5 +1,4 @@
-// Whether this PC's work has reached the server: a quiet line at the foot of the sidebar, and a
-// panel with the detail and "Sinkronkan sekarang". The phone's sync status rules decide every word
+// Whether this PC's work has reached the server: a quiet line in the title bar, and a panel with the detail and "Sinkronkan sekarang". The phone's sync status rules decide every word
 // (shared model); only the layout is the PC's.
 import { formatRelative, t, translateOpType, translateRejection } from '@bolusi/i18n';
 import {
@@ -26,6 +25,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { BAR_CONTROL } from './TitleBar.js';
+
 // Keyed by what the line says, so photos still waiting never show the all-sent tick.
 const ICON: Readonly<Record<SyncTitleState, LucideIcon>> = {
   synced: CircleCheck,
@@ -36,13 +37,14 @@ const ICON: Readonly<Record<SyncTitleState, LucideIcon>> = {
   attention: CircleAlert,
 };
 
-const TONE: Readonly<Record<SyncTitleState, string>> = {
-  synced: 'text-success',
-  pending: 'text-text-muted',
-  photosPending: 'text-text-muted',
-  syncing: 'text-text-muted',
-  offline: 'text-text-muted',
-  attention: 'text-warning',
+// On the dark title bar: only "all sent" and "check this" take a colour; the rest stay quiet.
+const TONE: Readonly<Record<SyncTitleState, string | undefined>> = {
+  synced: 'text-chrome-success',
+  pending: undefined,
+  photosPending: undefined,
+  syncing: undefined,
+  offline: undefined,
+  attention: 'text-chrome-warning',
 };
 
 /** How many refused changes the panel lists; the rest wait behind "Tampilkan lainnya". */
@@ -50,15 +52,12 @@ const REJECTED_SHOWN = 20;
 
 export function SyncStatusButton({
   input,
-  compact,
   open,
   onOpenChange: setOpen,
   onSyncNow,
   onReenrol,
 }: {
   readonly input: SyncStatusInput;
-  /** The collapsed sidebar: the icon only, named by its tooltip. */
-  readonly compact: boolean;
   /** The panel; the app holds it, since a refused change on a servisan opens it too. */
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -69,35 +68,26 @@ export function SyncStatusButton({
   const state = syncTitleState(input);
   const Icon = ICON[state];
   const title = t(SYNC_TITLE_KEY[state]);
-  const button = (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      aria-label={title}
-      data-testid="desktop.sync"
-      data-state={state}
-      className={clsx(
-        'flex w-full cursor-pointer items-center gap-2 rounded-sm text-left text-small hover:bg-black/5',
-        compact ? 'justify-center p-2' : 'px-2 py-1.5',
-      )}
-    >
-      <Icon
-        size={16}
-        aria-hidden
-        className={clsx('shrink-0', TONE[state], state === 'syncing' && 'animate-spin')}
-      />
-      {compact ? null : <span className="min-w-0 flex-1 break-words text-text-muted">{title}</span>}
-    </button>
-  );
   return (
     <>
-      {compact ? (
-        <Tooltip label={title} side="right">
-          {button}
-        </Tooltip>
-      ) : (
-        button
-      )}
+      {/* A narrow window keeps the icon, named by its tooltip; a wide one says it in words too. */}
+      <Tooltip label={title} side="bottom">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={title}
+          data-testid="desktop.sync"
+          data-state={state}
+          className={BAR_CONTROL}
+        >
+          <Icon
+            size={16}
+            aria-hidden
+            className={clsx('shrink-0', TONE[state], state === 'syncing' && 'animate-spin')}
+          />
+          <span className="hidden whitespace-nowrap @min-[56rem]:inline">{title}</span>
+        </button>
+      </Tooltip>
       <SyncStatusDialog
         open={open}
         input={input}

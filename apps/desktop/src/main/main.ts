@@ -1,5 +1,5 @@
-// The Electron main process: one locked-down window for the counter screens, and the offline core
-// in its own utility process. The renderer gets no Node and no way to open other pages; the preload
+// The Electron main process: one locked-down window for the counter screens (drawing its own title
+// bar, `window-chrome.ts`), and the offline core in its own utility process. The renderer gets no Node and no way to open other pages; the preload
 // gives it a few narrow calls (`bridge.ts`): printing, updates and a port to the core. Only `wa.me`
 // links open outside the app.
 import {
@@ -19,6 +19,7 @@ import { DeviceSettingsFile } from './device-settings.js';
 import { opensExternally } from './external-links.js';
 import { registerPrinting } from './printing.js';
 import { registerUpdates } from './updater.js';
+import { frameOptions, registerWindowChrome, reportFullscreen } from './window-chrome.js';
 
 // The dev server is for development only; an installed app never loads a page from elsewhere.
 const DEV_SERVER_URL = app.isPackaged ? undefined : process.env['BOLUSI_DESKTOP_DEV_URL'];
@@ -69,6 +70,7 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#ffffff',
     autoHideMenuBar: true,
+    ...frameOptions(process.platform),
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
@@ -81,6 +83,7 @@ function createWindow(): void {
   counterWindows.add(window);
   window.on('closed', () => counterWindows.delete(window));
   window.once('ready-to-show', () => window.show());
+  reportFullscreen(window);
 
   // The app is one page: nothing navigates it or opens another window. A link to a listed host
   // opens outside it, in the browser or the app that handles it (WhatsApp Desktop for wa.me).
@@ -110,16 +113,17 @@ app.on('second-instance', () => {
 
 void app.whenReady().then(() => {
   if (!primary) return;
-  // Only copying (a phone number) and the webcam are allowed: no microphone, location or other
-  // device.
+  // Only copying (a phone number), the webcam and its microphone are allowed: no location, screen
+  // capture or other device.
   const counter = (contents: Electron.WebContents | null): boolean =>
     contents !== null && [...counterWindows].some((window) => window.webContents === contents);
-  // The webcam for intake and handover photos, video only and only for the counter's own page.
+  // The webcam for intake and handover photos, and with the microphone for the ownership video
+  // (the customer says the phone is theirs), only for the counter's own page.
   const camera = (permission: string, kinds: readonly string[] | undefined): boolean =>
     permission === 'media' &&
     kinds !== undefined &&
     kinds.length > 0 &&
-    kinds.every((kind) => kind === 'video');
+    kinds.every((kind) => kind === 'video' || kind === 'audio');
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
     const kinds = 'mediaTypes' in details ? details.mediaTypes : undefined;
     callback(
@@ -140,6 +144,7 @@ void app.whenReady().then(() => {
   const pages = (): Electron.WebContents[] =>
     [...counterWindows].map((window) => window.webContents);
   registerUpdates(trusted, pages);
+  registerWindowChrome(trusted);
   if (!DEMO && API_BASE_URL === '')
     console.error('BOLUSI_API_URL is not set: nothing to sync with');
   quitAfter(

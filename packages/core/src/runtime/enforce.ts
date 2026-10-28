@@ -17,6 +17,7 @@
 // reference either of them uses.
 import type { DenialAttempt, DenialEmitter, DenialSurface } from '../authz/denials.js';
 import type { PermissionEvaluator } from '../authz/memo.js';
+import type { PermissionAllowance } from '../authz/limits.js';
 import { DomainError } from '../errors/domain-error.js';
 import type { CommandIdentity, InvocationMeta } from './ctx.js';
 import type { DenialAuditDiagnosticsPort, DenialAuditFailure, RuntimeTimerPort } from './ports.js';
@@ -95,6 +96,19 @@ export class PermissionEnforcementPoint {
       storeId: identity.storeId,
       permissionId,
     }).allowed;
+  }
+
+  /**
+   * How far the user may use a permission (authz/limits.ts): silent and synchronous like
+   * `hasPermission`, for screens that offer an amount. Rules decide again on save.
+   */
+  allowance(identity: CommandIdentity, permissionId: string): PermissionAllowance {
+    return this.#evaluator.allowance({
+      userId: identity.userId,
+      tenantId: identity.tenantId,
+      storeId: identity.storeId,
+      permissionId,
+    });
   }
 
   /**

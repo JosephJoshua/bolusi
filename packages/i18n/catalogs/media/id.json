@@ -15,7 +15,9 @@
   "permission": {
     "camera": "Izinkan aplikasi memakai kamera untuk ambil foto.",
     "cameraDeniedTitle": "Kamera belum diizinkan",
-    "cameraDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera."
+    "cameraDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera.",
+    "videoDeniedTitle": "Kamera atau mikrofon belum diizinkan",
+    "videoDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera dan Mikrofon."
   },
   "storage": {
     "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah tersinkron akan dibersihkan.",
@@ -31,5 +33,16 @@
   "scan": {
     "title": "Pindai kode",
     "hint": "Arahkan kamera ke barcode atau kode QR."
+  },
+  "video": {
+    "start": "Mulai rekam",
+    "stop": "Selesai rekam",
+    "retake": "Rekam ulang",
+    "use": "Pakai video ini",
+    "time": "{elapsed} / {max}",
+    "refusedBody": "Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.",
+    "unavailableTitle": "Video belum ada di HP ini",
+    "unavailableBody": "Videonya belum tersinkron dari HP yang merekam. Coba lagi nanti.",
+    "tooLarge": "Videonya terlalu besar. Rekam ulang lebih singkat."
   }
 }

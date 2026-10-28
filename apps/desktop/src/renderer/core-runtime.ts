@@ -1,16 +1,22 @@
 // The repair screens' runtime on the PC: every read and write goes to the offline core, named for
 // the person this runtime was built for (the core refuses it for anyone else). Permissions come
 // from the core's state, so a change in someone's grants builds a new runtime and the screens
-// re-derive what they show. Photos and signatures are taken in the window and handed to the core.
+// re-derive what they show. Photos, signatures and the ownership video are taken in the window and
+// handed to the core.
 import { createUuidV7Generator } from '@bolusi/core';
 import type { RepairPrinting, RepairRuntime } from '@bolusi/modules/repair/desktop';
 import type { CapturedMedia, CaptureRequest } from '@bolusi/modules/screen-kit';
 
-import type { CoreCaptureOutcome, SessionView } from '../core/api.js';
+import type {
+  CoreCaptureOutcome,
+  CoreVideoLoad,
+  CoreVideoOutcome,
+  SessionView,
+} from '../core/api.js';
 import { CORE_EVENTS } from '../core/api.js';
 import type { Client } from '../main/rpc.js';
 
-import { compressPhoto, pickPhotoFile, type PcCapture } from './capture.js';
+import { compressPhoto, pickPhotoFile, playableVideo, type PcCapture } from './capture.js';
 import { desktopPrinting } from './print.js';
 
 // The ids a form takes up front (a new ticket's) are UUIDv7 like every other id; the window mints
@@ -21,7 +27,11 @@ const newId = createUuidV7Generator({
 });
 
 class CaptureRefused extends Error {
-  constructor(readonly outcome: Exclude<CoreCaptureOutcome['kind'], 'captured'>) {
+  constructor(
+    readonly outcome:
+      | Exclude<CoreCaptureOutcome['kind'], 'captured'>
+      | Exclude<CoreVideoOutcome['kind'], 'captured'>,
+  ) {
     super(`capture refused: ${outcome}`);
     this.name = 'CaptureRefused';
   }
@@ -34,13 +44,15 @@ function captured(outcome: CoreCaptureOutcome): CapturedMedia {
 
 export function createCoreRepairRuntime(deps: {
   readonly client: Client;
-  readonly session: Pick<SessionView, 'permissions' | 'colleaguePermissions'>;
+  readonly session: Pick<SessionView, 'permissions' | 'colleaguePermissions' | 'limits'>;
   readonly userId: string;
   readonly storeName: string;
   readonly capture: PcCapture;
 }): RepairRuntime {
   const { client, userId, capture } = deps;
   const granted = new Set(deps.session.permissions);
+  const limitOf = (permission: string): number | null =>
+    granted.has(permission) ? (deps.session.limits[permission] ?? null) : 0;
   const call = <T>(method: string, ...args: readonly unknown[]): Promise<T> =>
     client.call<T>(method, userId, ...args);
 
@@ -66,6 +78,7 @@ export function createCoreRepairRuntime(deps: {
     hasPermission: (permission) => granted.has(permission),
     colleagueHasPermission: (colleague, permission) =>
       deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+    limitOf,
     newId,
     // The ledger's port: the same person, permissions and change feed as the repair screens.
     money: {
@@ -77,6 +90,7 @@ export function createCoreRepairRuntime(deps: {
       hasPermission: (permission) => granted.has(permission),
       colleagueHasPermission: (colleague, permission) =>
         deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+      limitOf,
       newId,
       stores: () => call('money.stores'),
     },
@@ -101,6 +115,18 @@ export function createCoreRepairRuntime(deps: {
       if (signature === null) return null;
       return captured(await call('media.captureSignature', signature.strokes, signature.pad));
     },
+    async recordVideo(request) {
+      const video = await capture.video(request);
+      if (video === null) return null;
+      const outcome = await call<CoreVideoOutcome>('media.importVideo', video);
+      if (outcome.kind !== 'captured') throw new CaptureRefused(outcome.kind);
+      return { videoRef: outcome.videoRef };
+    },
+    videoKept: (ref) => call<boolean>('media.hasLocal', ref.mediaId),
+    playVideo: (ref, request) =>
+      capture.play(request, async () =>
+        playableVideo(await call<CoreVideoLoad>('media.loadVideo', ref)),
+      ),
     printing,
   };
   return runtime;

@@ -65,6 +65,20 @@ narrow a run. Devices download the catalog after sync and photos when shown.
 GSMArena refuses cloud and datacenter addresses (429s, a Cloudflare check), so
 run it from a home or office connection; the crawler never tries to get past a check.
 
+The full catalog (about 15k models, assembled off-repo in October 2026) is committed
+without photos as `apps/server/seed/phone-catalog.ndjson.gz`; its sources and licences
+are in that folder's README. `pnpm db:seed-catalog` loads it into the dev database.
+The photos are copyrighted, so they are kept privately as a catalog file of their own.
+Load that, or any catalog file, with the owner role's URL:
+
+```sh
+DATABASE_URL=<owner url> pnpm --filter @bolusi/server load-phone-catalog <file.ndjson.gz>
+```
+
+A load merges through the crawler's writer, so it is safe on a catalog devices
+already synced: new or changed rows get new revisions, and loading the same file
+again changes nothing.
+
 To click through the screens in a browser without a server or device, run
 `pnpm dev:web`; hosted previews of main and each PR are in [Previews](previews.md).
 
@@ -127,6 +141,13 @@ download in the background and install on the next close (or "Pasang sekarang" i
 the sidebar). Updates only look at the repository's latest release, so keep other
 release kinds out of this repository or mark them pre-release. `pnpm --filter
 @bolusi/desktop dist` builds the installer locally (on Windows; Linux needs wine).
+
+### Logo
+
+The logo's SVGs live in `assets/brand` (mark, wordmark, full-bleed app icon; light and dark
+tones). To show the logo in the PC app, use `BrandMark` from `@bolusi/ui-web`. After changing an SVG, run
+`pnpm brand:assets` to redraw the phone icons, splash image and the Windows `icon.ico`
+(`CHROMIUM_PATH=/opt/pw-browsers/chromium` in cloud containers), and commit the results.
 
 ## Verify
 

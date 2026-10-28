@@ -18,11 +18,11 @@
     "titleSyncing": "Sedang menyinkronkan",
     "titleOffline": "Tidak ada koneksi",
     "titleAttention": "Ada yang perlu dicek",
-    "titlePhotosPending": "Foto belum tersinkron",
+    "titlePhotosPending": "Foto & video belum tersinkron",
     "screenTitle": "Status data",
     "savedHere": "{count} perubahan tersimpan di HP ini dan akan disinkronkan otomatis.",
     "changesLabel": "Perubahan",
-    "photosLabel": "Foto",
+    "photosLabel": "Foto & video",
     "waitingCount": "{count} belum tersinkron"
   },
   "banner": {

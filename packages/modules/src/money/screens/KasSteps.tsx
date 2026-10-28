@@ -14,19 +14,24 @@ import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js
 
 import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
 import { tm } from '../i18n.js';
-import { CASH_MOVE_LABEL, differenceToSettle, type NamedBalance } from '../kas.js';
+import {
+  CASH_MOVE_LABEL,
+  cashMoveCheck,
+  debtPayment,
+  differenceText,
+  settleState,
+  type NamedBalance,
+} from '../kas.js';
 import {
   digitsOf,
   digitsText,
   newPaymentLine,
-  paymentEntry,
   rupiah,
   type PaymentLine,
 } from '../payment-entry.js';
 import type { CashCountRow, PaymentAccountRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
-import { differenceText } from './Kas.js';
 import { PaymentLines } from './PaymentLines.js';
 
 interface StepProps {
@@ -216,21 +221,13 @@ export function MoveCashStep({
     testID,
   );
   const amount = rupiah(digits);
-  // Cash is deposited into a bank account; QRIS and card machines settle there on their own.
-  const banks: readonly PaymentAccountRow[] =
-    accounts.status === 'ready' ? accounts.data.filter((row) => row.kind === 'transfer') : [];
-  const depositAccount =
-    kind === 'deposit'
-      ? (banks.find((row) => `account:${row.id}` === account) ?? banks[0] ?? null)
-      : null;
-  const missing =
-    amount === null || amount <= 0
-      ? tm('money.move.hintAmount')
-      : reason.trim() === ''
-        ? tm('money.move.hintReason')
-        : kind === 'deposit' && depositAccount === null
-          ? tm('money.move.noAccount')
-          : null;
+  const { banks, depositAccount, missing } = cashMoveCheck({
+    kind,
+    account,
+    amount,
+    reason,
+    accounts: accounts.status === 'ready' ? accounts.data : [],
+  });
 
   const submit = (): void => {
     if (missing !== null || amount === null) return;
@@ -257,7 +254,7 @@ export function MoveCashStep({
       primaryLabel={tm('money.move.save')}
       onPrimary={submit}
       primaryDisabled={missing !== null}
-      primaryHint={missing ?? undefined}
+      primaryHint={missing === null ? undefined : tm(missing)}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -336,10 +333,7 @@ export function SettleCountStep({
     { chrome, onDone, onCancel, onRegisterDiscardGuard },
     testID,
   );
-  // The figures as they stand: a payment from before the count can sync while the owner reads.
-  const counts = drawer.status === 'ready' ? drawer.data.counts : null;
-  const live = counts?.find((row) => row.id === count.id) ?? count;
-  const open = counts === null || differenceToSettle(counts)?.id === count.id;
+  const { live, open } = settleState(drawer.status === 'ready' ? drawer.data.counts : null, count);
   const counter = runtime.nameOf(live.countedBy);
 
   const submit = (): void => {
@@ -436,10 +430,7 @@ export function ReceiveDebtStep({
   );
   const accountRows: readonly PaymentAccountRow[] =
     accounts.status === 'ready' ? accounts.data : [];
-  const entry = paymentEntry(balance.balance, lines, accountRows);
-  // Part of the debt is fine, so what is recorded is what was typed; more than the debt is not.
-  const taken =
-    entry.paid > 0 && entry.overpaid === 0 ? paymentEntry(entry.paid, lines, accountRows) : null;
+  const { entry, taken } = debtPayment(balance.balance, lines, accountRows);
   const ready = accounts.status === 'ready' && taken !== null && taken.complete;
 
   const submit = (): void => {

@@ -43,6 +43,7 @@ import {
   chosenRepairTypes,
   chosenReady,
   intakeDownPayment,
+  intakeNeedsVideo,
   intakeTotal,
   acceptsRupiahText,
   phoneText,
@@ -54,7 +55,7 @@ import {
   type IntakeStep,
   type QuoteLineDraft,
 } from '../flows.js';
-import { useSettledValue } from '../../screen-kit/index.js';
+import { useSettledValue, type VideoMediaRef } from '../../screen-kit/index.js';
 import type { PaymentAccountRow } from '../../money/queries.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 import type { IntakeOption, IntakeOptionLists } from '../intake-options.js';
@@ -71,6 +72,7 @@ import {
 } from './parts.js';
 import { useRepairQuery } from '../runtime.js';
 import { usePriceKinds, type PriceKind } from './TicketSteps.js';
+import { OwnershipVideoTile } from './video.js';
 
 export interface StepProps {
   readonly draft: IntakeDraft;
@@ -535,11 +537,18 @@ export function PhotosStep({
   draft,
   angles,
   onTake,
+  needsVideo,
+  onRecordVideo,
+  onPlayVideo,
   testID,
 }: {
   readonly draft: IntakeDraft;
   readonly angles: readonly IntakeOption[];
   readonly onTake: (angle: IntakeOption) => void;
+  /** A picked repair type asks for the ownership video, taken here with the photos. */
+  readonly needsVideo: boolean;
+  readonly onRecordVideo: (() => void) | undefined;
+  readonly onPlayVideo: ((video: VideoMediaRef) => void) | undefined;
   readonly testID: string;
 }): React.JSX.Element {
   const gridCell = usePhotoGridCell();
@@ -574,6 +583,18 @@ export function PhotosStep({
           })}
         </PhotoGrid>
       </View>
+      {needsVideo ? (
+        <View style={styles.videoSection} testID={`${testID}.video`}>
+          <Text style={styles.sectionTitle}>{tn('repair.video.title')}</Text>
+          <Text style={repairStyles.muted}>{tn('repair.video.hint')}</Text>
+          <OwnershipVideoTile
+            video={draft.ownershipVideo}
+            onRecord={onRecordVideo}
+            onPlay={onPlayVideo}
+            testID={`${testID}.video.tile`}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -821,7 +842,19 @@ export function ReviewStep({
           )}
         </>,
       )}
-      {section('photos', photoStrip)}
+      {section(
+        'photos',
+        <>
+          {photoStrip}
+          {intakeNeedsVideo(draft, options) && draft.ownershipVideo !== null ? (
+            <Field
+              label={tn('repair.video.title')}
+              value={tn('repair.video.recorded')}
+              testID={`${testID}.video`}
+            />
+          ) : null}
+        </>,
+      )}
       {section(
         'price',
         <>
@@ -878,6 +911,8 @@ const styles = StyleSheet.create({
   checkStacked: { flexDirection: 'column', alignItems: 'flex-start', rowGap: space.sm },
   checkDivider: { borderTopWidth: border.hairline, borderTopColor: color.border },
   checkLabel: { ...type.bodySm, color: color.text },
+  sectionTitle: { ...type.bodyBold, color: color.text },
+  videoSection: { marginTop: space.lg, gap: space.sm },
   checkLabelBeside: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },

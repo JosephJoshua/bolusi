@@ -22,6 +22,7 @@
     "tenderedTooLow": "Uang yang diterima kurang dari jumlah bayar.",
     "paymentNotFound": "Pembayaran ini tidak ditemukan.",
     "alreadyVoided": "Pembayaran ini sudah dibatalkan.",
+    "replacementNotFound": "Pembayaran penggantinya tidak ditemukan.",
     "refundAboveCredit": "Uang yang dikembalikan lebih dari kelebihan bayar. Minta pemilik.",
     "notCharged": "Tagihannya belum dicatat. Minta pemilik untuk mengembalikan uang.",
     "refundAbovePaid": "Uang yang dikembalikan lebih dari yang dibayar pelanggan.",
@@ -30,7 +31,8 @@
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
-    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan."
+    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
+    "overLimit": "Melebihi batasmu. Minta pemilik toko."
   },
   "method": {
     "cash": "Tunai"
@@ -72,7 +74,10 @@
     "short": "Kurang {amount}",
     "over": "Lebih {amount}",
     "difference": "Selisih kas",
-    "adjusted": "Selisih kas diselesaikan"
+    "adjusted": "Selisih kas diselesaikan",
+    "receive": "Terima",
+    "settle": "Selesaikan",
+    "nothingOwed": "Semua pelanggan sudah lunas."
   },
   "moveKind": {
     "withdrawal": "Setor ke pemilik",
@@ -125,7 +130,13 @@
     "nextDay": "Berikutnya",
     "none": "Belum ada catatan di hari ini.",
     "voided": "Dibatalkan: {reason}",
-    "more": "Muat lagi"
+    "more": "Muat lagi",
+    "void": "Batalkan",
+    "col": {
+      "time": "Waktu",
+      "record": "Catatan"
+    },
+    "voidLabel": "Batalkan pembayaran {amount} pukul {time}"
   },
   "void": {
     "title": "Batalkan pembayaran",
@@ -163,6 +174,7 @@
     "usedAt": "Dipakai di",
     "someStores": "Pilih toko",
     "storeCount": "{count} toko",
-    "storeRequired": "Pilih paling sedikit satu toko."
+    "storeRequired": "Pilih paling sedikit satu toko.",
+    "thisStore": "Toko ini"
   }
 }

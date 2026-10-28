@@ -9,7 +9,7 @@
 //   - VERIFIER MINIMIZATION (§5.1, security-guide §5.2): only this store's ACTIVE users carry a
 //     verifier; deactivated users appear with pinVerifier: null; a user unassigned from the store
 //     disappears entirely.
-import { canonicalizeJcs, type JsonValue } from '@bolusi/core';
+import { canonicalizeJcs, NO_LIMIT_AMOUNTS, type JsonValue } from '@bolusi/core';
 import type { TenantDb } from '@bolusi/db-server';
 
 import { sha256Hex } from '../crypto/index.js';
@@ -19,6 +19,7 @@ import {
   type DeviceBundle,
   type PinVerifier,
 } from '@bolusi/schemas';
+import { limitsByStore } from '../auth/permissions.js';
 import { PERMISSIONS } from './permissions.js';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
@@ -124,8 +125,14 @@ export async function buildBundle(
 
   const roles = await db
     .selectFrom('roles')
-    .select(['id', 'name', 'scopeType', 'isSystemDefault'])
+    .select(['id', 'name', 'scopeType', 'isSystemDefault', 'limited'])
     .where('tenantId', '=', tenantId)
+    .execute();
+  // A limited role's amounts at THIS store only: another store's limits are not this device's.
+  const limitRows = await db
+    .selectFrom('roleLimits')
+    .select(['roleId', 'storeId', 'kind', 'amount'])
+    .where('storeId', '=', storeId)
     .execute();
   const rolePerms = await db
     .selectFrom('rolePermissions')
@@ -176,6 +183,10 @@ export async function buildBundle(
         scopeType: r.scopeType === 'tenant' ? ('tenant' as const) : ('store' as const),
         isSystemDefault: r.isSystemDefault,
         permissionIds: (permsByRole.get(r.id) ?? []).slice().sort(),
+        limits: r.limited
+          ? (limitsByStore(limitRows.filter((l) => l.roleId === r.id)).get(storeId) ??
+            NO_LIMIT_AMOUNTS)
+          : null,
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     permissionsSnapshot: PERMISSIONS.map((p) => ({

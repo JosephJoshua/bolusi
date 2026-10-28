@@ -1,5 +1,6 @@
 // The fetch adapter for the owner's staff changes (api/02-auth §5.4; owner decision 2026-10-27):
-// `POST /v1/users`, `PATCH /v1/users/:id`, `POST /v1/users/:id/deactivate|reactivate`, each made as
+// `POST /v1/users`, `PATCH /v1/users/:id`, `POST /v1/users/:id/deactivate|reactivate`, and a store's
+// limits for a limited role (`PUT /v1/role-limits`), each made as
 // the signed-in owner (`X-Acting-User`) on this device's bearer — the same shape as
 // `pin-verifier-transport.ts`. The server is the authority; this only translates its answer into the
 // closed `StaffAdminFailure` set the screens explain.
@@ -22,7 +23,7 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
 
   const call = async (
     actingUserId: string,
-    method: 'POST' | 'PATCH',
+    method: 'POST' | 'PATCH' | 'PUT',
     path: string,
     body?: unknown,
   ): Promise<unknown> => {
@@ -76,6 +77,10 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
         'POST',
         `/v1/users/${userId}/${active ? 'reactivate' : 'deactivate'}`,
       );
+    },
+
+    async setLimits({ actingUserId, storeId, roleId, limits }) {
+      await call(actingUserId, 'PUT', '/v1/role-limits', { storeId, roleId, ...limits });
     },
   };
 }

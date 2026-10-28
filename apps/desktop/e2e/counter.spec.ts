@@ -158,21 +158,23 @@ test('a phone nobody collected shows in its own list, and the message opens What
   expect(app.windows()).toHaveLength(1);
 });
 
-test('the page gets only the narrow print, update and core calls, through the real preload', async () => {
+test('the page gets only the narrow print, update, window and core calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;
     return {
       keys: bridge === undefined ? null : Object.keys(bridge).sort(),
       printers: bridge?.['printers'] === undefined ? null : Object.keys(bridge['printers']).sort(),
       core: bridge?.['core'] === undefined ? null : Object.keys(bridge['core']).sort(),
+      window: bridge?.['window'] === undefined ? null : Object.keys(bridge['window']).sort(),
       node: typeof (window as { require?: unknown }).require,
       process: typeof (window as { process?: unknown }).process,
     };
   });
   expect(shape).toEqual({
-    keys: ['core', 'printers', 'updates'],
+    keys: ['core', 'printers', 'updates', 'window'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
     core: ['connect'],
+    window: ['fullscreen', 'onFullscreenChange'],
     node: 'undefined',
     process: 'undefined',
   });
@@ -221,6 +223,36 @@ test('takes an intake photo with the webcam', async () => {
   await expect(camera).toBeHidden();
   // The tile now shows the photo just taken.
   await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/);
+});
+
+test('records the ownership video with the webcam and microphone, and plays it back', async () => {
+  await page.keyboard.press('F2');
+  await page.getByTestId('repair.desk.intake.repairTypes').getByText('Buka kunci / akun').click();
+  const section = page.getByTestId('repair.desk.intake.video');
+  await section.getByTestId('repair.desk.intake.video.clip.record').click();
+  const recorder = page.getByTestId('desktop.video');
+  await expect(recorder.getByTestId('desktop.video.start')).toBeEnabled();
+  await recorder.getByTestId('desktop.video.start').click();
+  await expect(recorder.getByTestId('desktop.video.timer')).toBeVisible();
+  await page.waitForTimeout(1500);
+  await recorder.getByTestId('desktop.video.stop').click();
+  await expect(recorder.getByTestId('desktop.video.take')).toBeVisible();
+  await recorder.getByTestId('desktop.video.use').click();
+  await expect(recorder).toBeHidden();
+  await expect(section.getByTestId('repair.desk.intake.video.clip.recorded')).toBeVisible();
+  await section.getByTestId('repair.desk.intake.video.clip.play').click();
+  const player = page.getByTestId('desktop.videoPlayer');
+  await expect(player.getByTestId('desktop.videoPlayer.video')).toHaveAttribute('src', /^blob:/);
+  // The page's own policy lets it play what it recorded.
+  await expect
+    .poll(() =>
+      player
+        .getByTestId('desktop.videoPlayer.video')
+        .evaluate((video: HTMLVideoElement) => video.error?.code ?? 0),
+    )
+    .toBe(0);
+  await player.getByTestId('desktop.videoPlayer.close').click();
+  await expect(player).toBeHidden();
 });
 
 test('takes the customer signature at handover, over the handover dialog', async () => {
@@ -281,4 +313,44 @@ test('a phone back under warranty starts a claim from its servisan, with no type
   await expect(page.getByTestId('repair.desk.intake.claim')).toContainText('Dari K7Q-0005');
   await expect(page.getByTestId('repair.desk.intake')).toContainText('Yakob Tabuni');
   await expect(page.getByTestId('repair.desk.intake.repairTypes')).toHaveCount(0);
+});
+
+test('the title bar is ours, but minimise, maximise, close and snapping stay Windows’ own', async () => {
+  const bar = page.getByTestId('desktop.titlebar');
+  await expect(bar).toBeVisible();
+  // Windows draws its caption buttons over the bar and says where they are; the bar's own
+  // controls end before them, and the empty part drags the window (double click maximises).
+  const layout = await page.evaluate(() => {
+    const overlay = (
+      navigator as Navigator & {
+        windowControlsOverlay?: { visible: boolean; getTitlebarAreaRect(): DOMRect };
+      }
+    ).windowControlsOverlay;
+    const header = document.querySelector('[data-testid="desktop.titlebar"]')!;
+    const person = document.querySelector('[data-testid="desktop.person"]')!;
+    const region = (element: Element): string =>
+      getComputedStyle(element).getPropertyValue('-webkit-app-region') ||
+      getComputedStyle(element).getPropertyValue('app-region');
+    return {
+      overlay: overlay?.visible ?? false,
+      area: overlay?.getTitlebarAreaRect().toJSON() as { x: number; width: number } | undefined,
+      barHeight: header.getBoundingClientRect().height,
+      personRight: person.getBoundingClientRect().right,
+      barRegion: region(header),
+      personRegion: region(person.parentElement!),
+    };
+  });
+  expect(layout.overlay).toBe(true);
+  expect(layout.barHeight).toBe(40);
+  expect(layout.personRight).toBeLessThanOrEqual(layout.area!.x + layout.area!.width);
+  expect(layout.barRegion).toBe('drag');
+  expect(layout.personRegion).toBe('no-drag');
+
+  // Maximised keeps the bar; fullscreen (F11) has no caption buttons, so the bar takes the width.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.maximize());
+  await expect(bar).toBeVisible();
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setFullScreen(true));
+  await expect(bar).toHaveAttribute('data-fullscreen', 'true');
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setFullScreen(false));
+  await expect(bar).not.toHaveAttribute('data-fullscreen');
 });

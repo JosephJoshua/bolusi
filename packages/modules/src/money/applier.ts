@@ -142,6 +142,7 @@ interface EntryPayload {
   readonly note?: string;
   readonly tendered?: number | null;
   readonly countId?: string | null;
+  readonly replaces?: string;
 }
 
 /** The account an entry moved money through, as its payload names it. */
@@ -177,7 +178,7 @@ export const entryRecordedApplier: ProjectionApplier<MoneyDatabase> = async (db,
       reference: payload.reference ?? null,
       reason: payload.reason ?? payload.note ?? null,
       tendered: payload.tendered ?? null,
-      relatedEntryId: payload.countId ?? null,
+      relatedEntryId: payload.countId ?? payload.replaces ?? null,
       createdBy: op.userId,
       createdAt: op.timestamp,
       voidedBy: null,

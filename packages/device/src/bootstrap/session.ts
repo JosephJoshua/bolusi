@@ -137,6 +137,11 @@ export interface AppSessionSnapshot {
    */
   readonly canManageStaff: boolean;
   /**
+   * Does the ACTIVE user hold `auth.limit_manage` here? Gates "Batas wewenang", a UX gate like the
+   * others: the server decides every change.
+   */
+  readonly canSetLimits: boolean;
+  /**
    * Is the ACTIVE user a tenant admin (tenant-wide `auth.role_manage`, the main owner)? Only they are
    * offered owner roles and other owners to manage; the server enforces the same rule.
    */
@@ -369,6 +374,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         canUnlock: actingUserHolds(AUTH_PERMISSION.pinUnlock),
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
         canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
+        canSetLimits: actingUserHolds(AUTH_PERMISSION.limitManage),
         tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };
     },

@@ -177,6 +177,9 @@ const zPermissionId = z
 /** A free-form display name (store/tenant/role). No spec length bound → bounded generously. */
 const zDisplayName = z.string().min(1).max(200);
 
+/** A limit in rupiah: a whole amount, never negative (core authz/limits.ts). */
+const zLimitAmount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+
 /**
  * The bundle's PIN verifier — structural shape only (see the section note). `.strict()` rejects a
  * mis-shaped verifier; the §5.3 value bounds are re-checked by `assertVerifierInBounds` on the device.
@@ -227,6 +230,17 @@ export const DeviceBundleSchema = z
           scopeType: z.enum(['tenant', 'store']),
           isSystemDefault: z.boolean(),
           permissionIds: z.array(zPermissionId),
+          // A limited role's amounts at this bundle's store, in rupiah; null for a role free of
+          // limits. Absent from an older server, which knows no limits.
+          limits: z
+            .object({
+              priceDrop: zLimitAmount,
+              refund: zLimitAmount,
+              credit: zLimitAmount,
+            })
+            .strict()
+            .nullable()
+            .optional(),
         })
         .strict(),
     ),
@@ -294,6 +308,22 @@ export const PutPinVerifierReq = z
   })
   .strict();
 export type PutPinVerifierReq = z.infer<typeof PutPinVerifierReq>;
+
+// ============ PUT /v1/role-limits (product-scope.md, "Managers, limits, approvals and roles") ============
+/** The highest limit a store can set, in rupiah: the largest price line a servisan takes. */
+export const ROLE_LIMIT_MAX = 1_000_000_000_000;
+const zRoleLimit = z.number().int().min(0).max(ROLE_LIMIT_MAX);
+/** A limited role's three amounts at one store, replacing what was there. */
+export const PutRoleLimitsReq = z
+  .object({
+    storeId: z.string().uuid(),
+    roleId: z.string().uuid(),
+    priceDrop: zRoleLimit,
+    refund: zRoleLimit,
+    credit: zRoleLimit,
+  })
+  .strict();
+export type PutRoleLimitsReq = z.infer<typeof PutRoleLimitsReq>;
 
 // ============ PATCH /v1/tenant/settings (§6.4) ============
 export const TenantSettingsReq = z
