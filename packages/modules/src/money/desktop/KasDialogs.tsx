@@ -348,7 +348,7 @@ export function ReceiveDebtDialog({
         }
         onSubmit={submit}
         submitDisabled={!receipt.paidByQr && input === null}
-        hint={receipt.paidByQr || input !== null ? null : tm('money.receive.hint')}
+        hint={receipt.hint}
         size="md"
         testId={testId}
       >

@@ -1018,7 +1018,8 @@ export function HandoverDialog({
           </div>
           {downPayment === null || downPayment === 0 ? null : (
             <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t border-border pt-2 text-body">
-              <dt className="text-text-muted">{tn('repair.price.downPayment')}</dt>
+              {/* The DP and anything paid at this counter already (a QR): all of it is paid. */}
+              <dt className="text-text-muted">{tn('repair.price.paid')}</dt>
               <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
               <dt className="font-semibold text-text">
                 {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}

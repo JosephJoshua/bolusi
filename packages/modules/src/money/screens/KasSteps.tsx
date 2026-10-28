@@ -463,7 +463,7 @@ export function ReceiveDebtStep({
       }
       onPrimary={submit}
       primaryDisabled={!receipt.paidByQr && input === null}
-      primaryHint={tm('money.receive.hint')}
+      primaryHint={receipt.hint ?? undefined}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}

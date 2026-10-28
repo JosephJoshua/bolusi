@@ -112,7 +112,8 @@
     "owed": "Belum dibayar",
     "save": "Terima {amount}",
     "saveEmpty": "Terima pembayaran",
-    "hint": "Isi jumlah yang dibayar, paling banyak sisa tagihannya."
+    "hint": "Isi jumlah yang dibayar, paling banyak sisa tagihannya.",
+    "waitQr": "Tunggu pelanggan bayar QR-nya."
   },
   "discard": {
     "title": "Keluar tanpa menyimpan?",
@@ -222,6 +223,7 @@
     "showKey": "Tampilkan kunci",
     "hideKey": "Sembunyikan kunci",
     "cancel": "Batal",
-    "unresolved": "QR {amount} tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
+    "unresolved": "QR {amount} tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar.",
+    "unresolvedMany": "{count} QR tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
   }
 }

@@ -226,6 +226,8 @@ export function Handover({
               <DownPaymentRows
                 total={amountOwed(shown)}
                 downPayment={shown.downPayment}
+                // The DP and anything paid at this counter already (a QR): all of it is paid.
+                paidLabel="repair.price.paid"
                 testID={testID}
               />
             </Card>

@@ -5,6 +5,7 @@
 // A QR payment is recorded by the server, not by this device, and reaches it by sync a moment
 // later. Until then the screen subtracts it from what is due (`pending`), so nobody takes the same
 // money twice, and a step that checks the ledger (the handover) waits for it.
+import { formatMoney } from '@bolusi/i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -16,6 +17,7 @@ import {
 } from '@bolusi/schemas';
 
 import type { MoneyDocument } from './documents.js';
+import { tm } from './i18n.js';
 import { rupiah, type PaymentLine } from './payment-entry.js';
 import { qrisFailure, type QrisFailure, type QrisPort } from './qris.js';
 
@@ -61,6 +63,14 @@ export function forgetShownQrs(): void {
 }
 
 /** Paid by QR for the document but not yet in this device's ledger (`recorded`, by entry id). */
+/** The warning for QRs shown earlier and not paid yet; null when there are none. */
+export function unresolvedText(unresolved: readonly number[]): string | null {
+  if (unresolved.length === 0) return null;
+  return unresolved.length === 1
+    ? tm('money.qris.unresolved', { amount: formatMoney(unresolved[0]!) })
+    : tm('money.qris.unresolvedMany', { count: unresolved.length });
+}
+
 export function pendingQrPayments(
   documentId: string | undefined,
   recorded: ReadonlySet<string> | null,
@@ -109,8 +119,11 @@ export interface QrisCheckout {
   readonly pending: number;
   /** Paid by QR for this document since the app started, synced in or not. */
   readonly received: number;
-  /** QRs shown earlier that are still payable but no longer on a line: they may yet be paid. */
-  readonly unresolved: number;
+  /**
+   * QRs shown earlier that are still payable but no longer on a line (they may yet be paid), each
+   * by its amount: they are separate QRs, so never summed into one figure.
+   */
+  readonly unresolved: readonly number[];
   readonly open: OpenQr | null;
   /** Show the line's QR: the one already made for its amount, or a new one. */
   readonly show: (key: string) => void;
@@ -165,7 +178,7 @@ export function useQrisCheckout({
   // Shown and still payable, but not on screen now: checked on while this screen is open (the open
   // one checks itself). Payable until the server says it expired, whatever this device's clock says.
   const unseen = shown.filter((c) => c.status === 'waiting' && c.id !== open?.body.id);
-  const unresolved = unseen.filter((c) => !onLines.has(c.id)).reduce((sum, c) => sum + c.amount, 0);
+  const unresolved = unseen.filter((c) => !onLines.has(c.id)).map((c) => c.amount);
   const strayKey = unseen.map((c) => c.id).join(',');
   useEffect(() => {
     if (port === undefined || documentId === undefined || strayKey === '') return;

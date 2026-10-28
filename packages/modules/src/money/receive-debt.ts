@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from 'react';
 
 import type { NamedBalance } from './kas.js';
 import { debtPayment, type DebtPayment } from './kas.js';
+import { tm } from './i18n.js';
 import { newPaymentLine, type PaymentLine } from './payment-entry.js';
 import { pendingQrPayments, useQrisCheckout, type QrisCheckout } from './qris-hooks.js';
 import type { PaymentAccountRow } from './queries.js';
@@ -27,6 +28,8 @@ export interface DebtReceipt extends DebtPayment {
   /** Paid by QR with nothing else to record: the step is finished. */
   readonly paidByQr: boolean;
   readonly input: ReceivePaymentsInput | null;
+  /** Why it cannot be taken yet, under the button: a QR still unpaid, or the amounts. */
+  readonly hint: string | null;
 }
 
 export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
@@ -67,6 +70,9 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
     accounts.status === 'ready' ? accounts.data : [];
   const payment = debtPayment(owed, qris.lines, accountRows, qris.qrAccounts);
   const ready = accounts.status === 'ready' && payment.taken !== null && payment.taken.complete;
+  const paidByQr = qris.received > 0 && qris.lines.length === 0;
+  const input =
+    ready && payment.taken !== null ? { document, payments: [...payment.taken.payments] } : null;
   return {
     ...payment,
     accounts: accountRows,
@@ -77,8 +83,13 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
     owed,
     dirty: typed !== null,
     ready,
-    paidByQr: qris.received > 0 && qris.lines.length === 0,
-    input:
-      ready && payment.taken !== null ? { document, payments: [...payment.taken.payments] } : null,
+    paidByQr,
+    input,
+    hint:
+      paidByQr || input !== null
+        ? null
+        : Object.values(payment.entry.problems).includes('qr')
+          ? tm('money.receive.waitQr')
+          : tm('money.receive.hint'),
   };
 }

@@ -112,7 +112,8 @@
     "owed": "Unpaid",
     "save": "Take {amount}",
     "saveEmpty": "Take payment",
-    "hint": "Enter what was paid, up to what is left."
+    "hint": "Enter what was paid, up to what is left.",
+    "waitQr": "Wait for the customer to pay the QR."
   },
   "discard": {
     "title": "Leave without saving?",
@@ -222,6 +223,7 @@
     "showKey": "Show key",
     "hideKey": "Hide key",
     "cancel": "Cancel",
-    "unresolved": "The earlier QR for {amount} is not paid yet. If the customer paid, wait a moment."
+    "unresolved": "The earlier QR for {amount} is not paid yet. If the customer paid, wait a moment.",
+    "unresolvedMany": "{count} earlier QRs are not paid yet. If the customer paid, wait a moment."
   }
 }

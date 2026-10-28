@@ -35,7 +35,7 @@ import {
   type PaymentLine,
 } from '../payment-entry.js';
 import type { PaymentAccountRow } from '../queries.js';
-import { qrAmountOk, type QrisCheckout } from '../qris-hooks.js';
+import { qrAmountOk, unresolvedText, type QrisCheckout } from '../qris-hooks.js';
 
 export interface PaymentLinesProps {
   readonly lines: readonly PaymentLine[];
@@ -76,9 +76,9 @@ export function PaymentLines({
           {tm('money.qris.received', { amount: formatMoney(qris.received) })}
         </Text>
       ) : null}
-      {qris !== undefined && qris.unresolved > 0 ? (
+      {qris !== undefined && qris.unresolved.length > 0 ? (
         <Text style={styles.unresolved} testID={`${testID}.qrisUnresolved`}>
-          {tm('money.qris.unresolved', { amount: formatMoney(qris.unresolved) })}
+          {unresolvedText(qris.unresolved)}
         </Text>
       ) : null}
       {lines.map((line, index) => {

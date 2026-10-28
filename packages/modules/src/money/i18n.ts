@@ -109,6 +109,7 @@ export const MONEY_KEYS = [
   'money.receive.save',
   'money.receive.saveEmpty',
   'money.receive.hint',
+  'money.receive.waitQr',
   'money.history.open',
   'money.history.title',
   'money.history.today',
@@ -194,6 +195,7 @@ export const MONEY_KEYS = [
   'money.qris.hideKey',
   'money.qris.cancel',
   'money.qris.unresolved',
+  'money.qris.unresolvedMany',
 ] as const;
 
 export type MoneyKey = (typeof MONEY_KEYS)[number];
