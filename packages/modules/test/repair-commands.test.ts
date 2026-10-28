@@ -526,6 +526,38 @@ describe('a price change waits for the customer', () => {
     expect(t.quoteTotal).toBe(750_000);
     expect(t.pendingProposals).toBe(0);
   });
+
+  test('an older phone (v1) cannot count a change the customer has not agreed to', async () => {
+    h = await openRepairHarness(38);
+    const { ticketId } = await open(h);
+    const line = {
+      ticketId,
+      kind: 'part',
+      description: 'Baterai',
+      amount: 200_000,
+      reason: 'Baterai kembung',
+    } as const;
+    await h.run('changeQuote', { ...line, customerAgreed: true }, h.cashierId);
+    const v2 = (await h.ownOps()).filter((op) => op.type === 'repair.quote_changed').at(-1)!;
+    const v1Payload: Record<string, unknown> = { ...v2.payload };
+    delete v1Payload['waitsForCustomer'];
+    // v1 had no waiting: a line counted at once, so only the customer's yes lets it through.
+    const v1 = (customerAgreed: boolean, n: number) => ({
+      ...v2,
+      id: `0191e000-0000-7000-8000-00000000c0d${n}`,
+      schemaVersion: 1,
+      payload: { ...v1Payload, lineId: `0191e000-0000-7000-8000-00000000c0e${n}`, customerAgreed },
+    });
+    await expectCode(h.checkRule(v1(false, 1)), 'VALIDATION_FAILED', 'customerAgreementMismatch');
+    await h.checkRule(v1(true, 2));
+
+    // History an older phone synced before still replays: rules judge new changes, not pulls.
+    await h.deliverPulled(
+      { ...v1(false, 3), deviceId: '0191e000-0000-7000-8000-00000000d0de', seq: 1 },
+      1,
+    );
+    expect((await ticket(h, ticketId)).quoteTotal).toBe(1_150_000);
+  });
 });
 
 describe('price changes', () => {

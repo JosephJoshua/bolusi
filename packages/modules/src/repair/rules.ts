@@ -837,16 +837,18 @@ export const quoteChangeProposedRule: Rule = async (op, ctx) => {
 /**
  * A price change by the cashier: a new line, or applying a technician's open proposal. Applying a
  * proposal is the customer agreeing to it; a new line waits exactly when the customer has not
- * agreed yet (v2; a v1 line has no `waitsForCustomer` and counted at once).
+ * agreed yet. A v1 line has no `waitsForCustomer` and counts at once, so it needs the customer's
+ * yes too (synced v1 history replays through the applier, which no rule judges).
  */
 export const quoteChangedRule: Rule = async (op, ctx) => {
   const { db, holdsPermission } = ctx;
   const line = payloadOf<Payload<typeof quoteChangedPayload>>(op);
   checkLineSign(line.kind, line.amount);
   await requireDiscountPermission(op, ctx, [line.amount], line.lineId);
+  const waits = op.schemaVersion >= 2 && line.waitsForCustomer;
   const agreementMismatch = line.fromProposal
     ? !line.customerAgreed
-    : op.schemaVersion >= 2 && line.waitsForCustomer !== !line.customerAgreed;
+    : waits !== !line.customerAgreed;
   if (agreementMismatch) {
     throw refuse('customerAgreementMismatch', {
       code: 'VALIDATION_FAILED',
