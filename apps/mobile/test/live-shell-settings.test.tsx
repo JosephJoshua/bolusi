@@ -253,4 +253,25 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     expect(screen.query('switcher-screen')).not.toBeNull();
     expect(screen.query('shell-open-settings')).toBeNull();
   });
+
+  test('Sync Status opened from Settings goes back to Settings, header and hardware back alike', async () => {
+    const screen = await unlockedShell();
+    fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'shell-open-settings');
+    await settle();
+
+    fireOn(screen, 'ui.syncChip');
+    await settle();
+    expect(screen.query('sync-status-screen')).not.toBeNull();
+    fireOn(screen, 'sync-status-screen.back');
+    await settle();
+    expect(screen.query('settings-screen')).not.toBeNull();
+
+    fireOn(screen, 'ui.syncChip');
+    await settle();
+    expect(screen.query('sync-status-screen')).not.toBeNull();
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(screen.query('settings-screen')).not.toBeNull();
+  });
 });
