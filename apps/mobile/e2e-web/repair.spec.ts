@@ -635,7 +635,8 @@ test('a type added later that needs the video holds the handover until it is tak
   await page.getByTestId('repair.handover.video').scrollIntoViewIfNeeded();
   await shoot(page, 'video-handover-needed');
   await tap(page, 'repair.handover.video.tile.slot.press');
-  await expect(page.getByTestId('repair.handover.video')).toHaveCount(0);
+  // The clip just taken stays in sight, and the handover goes through.
+  await expect(page.getByTestId('repair.handover.video.recordedAt')).toBeVisible();
   await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
 });
 

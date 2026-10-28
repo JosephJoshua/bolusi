@@ -1,11 +1,11 @@
 // The ownership video the same on the phone and the PC: recording and playing it through the
 // platform, and a servisan's clip as its screens show it (the latest one taken, whether one is
 // still needed, and taking one after intake). The views around it are each platform's own.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ActionRunner, CapturedVideo, VideoMediaRef } from '../screen-kit/index.js';
 import { OWNERSHIP_VIDEO_MAX_MS } from './constants.js';
-import { ownershipVideoOf, videoRefOf, type IntakeDraft } from './flows.js';
+import { ownershipVideoMissing, ownershipVideoOf, videoRefOf, type IntakeDraft } from './flows.js';
 import { tn } from './i18n.js';
 import { needsOwnershipVideo } from './intake-options.js';
 import type { TicketDetailRow, TicketPhotoRow } from './queries.js';
@@ -118,4 +118,19 @@ export function useTicketVideo({
     noCamera: canRecord && record === undefined,
     play: play === undefined ? undefined : (ref) => void runner.run(() => play(ref)),
   };
+}
+
+/**
+ * The handover's video: `missing` holds a repaired phone back until the clip is taken; `shown`
+ * stays true once it was asked for, so the clip just taken shows instead of the section vanishing.
+ */
+export function useHandoverVideo(ticket: TicketDetailRow | undefined): {
+  readonly missing: boolean;
+  readonly shown: boolean;
+} {
+  const missing =
+    ticket !== undefined && ticket.outcome === 'repaired' && ownershipVideoMissing(ticket);
+  const [asked, setAsked] = useState(missing);
+  if (missing && !asked) setAsked(true);
+  return { missing, shown: missing || asked };
 }

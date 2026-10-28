@@ -31,11 +31,11 @@ import {
   balanceAfterDownPayment,
   capturedThumbnailRef,
   amountOwed,
-  ownershipVideoMissing,
   repairAbilities,
   staleStep,
   ticketStatus,
 } from '../flows.js';
+import { useHandoverVideo } from '../ownership-video.js';
 import {
   DownPaymentRows,
   FlowScreen,
@@ -99,10 +99,9 @@ export function Handover({
   const { settled } = payment;
   const checks = useHandoverChecks(ticket);
   // A repair type added after intake can still ask for the video: it is taken here, before pickup.
-  const videoMissing =
-    ticket !== undefined && ticket.outcome === 'repaired' && ownershipVideoMissing(ticket);
+  const video = useHandoverVideo(ticket);
   const ready =
-    !videoMissing &&
+    !video.missing &&
     photo !== null &&
     signature !== null &&
     settled &&
@@ -160,7 +159,7 @@ export function Handover({
       onPrimary={submit}
       primaryDisabled={!ready}
       primaryHint={tn(
-        videoMissing
+        video.missing
           ? 'repair.refusal.ownershipVideoNeeded'
           : !settled
             ? 'repair.hint.handoverPayment'
@@ -215,7 +214,7 @@ export function Handover({
           )
         }
       </QueryView>
-      {!videoMissing || stale !== null || ticket === undefined ? null : (
+      {!video.shown || stale !== null || ticket === undefined ? null : (
         <TicketVideoSection
           ticket={ticket}
           canRecord={can.intake}

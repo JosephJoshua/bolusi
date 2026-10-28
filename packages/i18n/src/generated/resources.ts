@@ -415,11 +415,11 @@ const source = {
         titleSyncing: 'Sedang mengirim',
         titleOffline: 'Tidak ada koneksi',
         titleAttention: 'Ada yang perlu dicek',
-        titlePhotosPending: 'Foto belum terkirim',
+        titlePhotosPending: 'Foto & video belum terkirim',
         screenTitle: 'Status data',
         savedHere: '{count} perubahan tersimpan di HP ini dan akan dikirim otomatis.',
         changesLabel: 'Perubahan',
-        photosLabel: 'Foto',
+        photosLabel: 'Foto & video',
         waitingCount: '{count} belum terkirim',
       },
       banner: {
@@ -985,12 +985,12 @@ export const resources = {
           titleSyncing: 'Sending',
           titleOffline: 'No connection',
           titleAttention: 'Something needs a look',
-          titlePhotosPending: 'Photos aren’t sent yet',
+          titlePhotosPending: 'Photos and videos aren’t sent yet',
           screenTitle: 'Sync status',
           savedHere:
             '{count, plural, one {# change is saved on this phone and will be sent automatically.} other {# changes are saved on this phone and will be sent automatically.}}',
           changesLabel: 'Changes',
-          photosLabel: 'Photos',
+          photosLabel: 'Photos & videos',
           waitingCount: '{count} not sent yet',
         },
         banner: {

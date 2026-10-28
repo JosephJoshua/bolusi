@@ -35,7 +35,6 @@ import {
   balanceAfterDownPayment,
   capturedThumbnailRef,
   downPaymentEntry,
-  ownershipVideoMissing,
   printableSlips,
   priceKinds,
   signedAmount,
@@ -43,6 +42,7 @@ import {
   type PriceKind,
   type StaleStep,
 } from '../flows.js';
+import { useHandoverVideo } from '../ownership-video.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
@@ -925,7 +925,7 @@ export function HandoverDialog({
   const { settled } = payment;
   const checks = useHandoverChecks(ticket);
   // A repair type added after intake can still ask for the video: it is taken here, before pickup.
-  const videoMissing = ticket.outcome === 'repaired' && ownershipVideoMissing(ticket);
+  const video = useHandoverVideo(ticket);
   const leave = useLeaveGuard(
     stale === null &&
       (photo !== null ||
@@ -948,7 +948,7 @@ export function HandoverDialog({
   };
   const captured = photo !== null && signature !== null;
   const complete =
-    !videoMissing && captured && settled && loadedAccounts !== null && checks.ready(note);
+    !video.missing && captured && settled && loadedAccounts !== null && checks.ready(note);
   const submit = (): void => {
     if (!complete || photo === null || signature === null) return;
     void runner
@@ -980,7 +980,7 @@ export function HandoverDialog({
             {complete ? null : (
               <p className="mr-auto text-small text-text-muted">
                 {tn(
-                  videoMissing
+                  video.missing
                     ? 'repair.refusal.ownershipVideoNeeded'
                     : !settled
                       ? 'repair.hint.handoverPayment'
@@ -1036,7 +1036,7 @@ export function HandoverDialog({
         {cancelled ? (
           <p className="mt-2 text-small text-text-muted">{tn('repair.handover.cancelled')}</p>
         ) : null}
-        {!videoMissing || stale !== null ? null : (
+        {!video.shown || stale !== null ? null : (
           <HandoverVideo
             ticket={ticket}
             canRecord={runtime.hasPermission(REPAIR_PERMISSION.intake)}
