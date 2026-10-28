@@ -74,6 +74,11 @@ class MemoryCatalog implements PhoneCatalogWriter {
     model.photoDone = true;
     if (photo !== null) model.photo = photo;
   }
+  async removePhoto(id: number) {
+    const model = this.models.get(id)!;
+    model.photo = null;
+    model.photoDone = true;
+  }
   async modelsNeedingDetails(limit: number) {
     return this.#pending((m) => !m.detailsDone, limit);
   }
