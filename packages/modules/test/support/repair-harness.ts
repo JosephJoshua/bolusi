@@ -27,8 +27,9 @@ import {
   type ModuleRuntime,
 } from '@bolusi/core';
 
-import { inventoryModule } from '../../src/index.js';
+import { inventoryModule, moneyModule } from '../../src/index.js';
 import { INVENTORY_PERMISSION } from '../../src/inventory/index.js';
+import { MONEY_PERMISSION } from '../../src/money/index.js';
 import { repairModule, REPAIR_PERMISSION } from '../../src/repair/index.js';
 import { SqliteOpStore } from './harness.js';
 
@@ -37,6 +38,7 @@ const TECHNICIAN_ROLE = 'role-technician';
 const OWNER_ROLE = 'role-owner';
 const STORE_OWNER_ROLE = 'role-store-owner';
 const P = REPAIR_PERMISSION;
+const M = MONEY_PERMISSION;
 const I = INVENTORY_PERMISSION;
 
 const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
@@ -88,6 +90,18 @@ export interface RepairHarness {
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Run a money command as `userId`. */
+  money<K extends keyof typeof moneyModule.commands>(
+    command: K,
+    input: Parameters<(typeof moneyModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run a money query as `userId`. */
+  moneyQuery<K extends keyof typeof moneyModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
   /** Run a repair query as `userId`. */
   query<K extends keyof typeof repairModule.queries>(
     query: K,
@@ -115,6 +129,7 @@ export async function openRepairHarness(
   const registry = registerModules([
     repairModule as unknown as AnyModuleDefinition<ClientDatabase>,
     inventoryModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    moneyModule as unknown as AnyModuleDefinition<ClientDatabase>,
   ]);
   const engine = createProjectionEngine(db, registry.projections);
 
@@ -139,6 +154,7 @@ export async function openRepairHarness(
     assemblePermissionRegistry([
       repairModule as unknown as ModulePermissionManifest,
       inventoryModule as unknown as ModulePermissionManifest,
+      moneyModule as unknown as ModulePermissionManifest,
     ]),
     {
       load: () =>
@@ -152,10 +168,25 @@ export async function openRepairHarness(
           roles: new Map<string, DirectoryRole>([
             [
               CASHIER_ROLE,
-              role([P.read, P.intake, P.assign, P.quoteChange, P.handover, I.read, I.useParts]),
+              role([
+                P.read,
+                P.intake,
+                P.assign,
+                P.quoteChange,
+                P.handover,
+                M.read,
+                M.receive,
+                M.moveCash,
+                M.countCash,
+                I.read,
+                I.useParts,
+              ]),
             ],
             [TECHNICIAN_ROLE, role([P.read, P.work, I.read, I.useParts])],
-            [OWNER_ROLE, role([...Object.values(P), ...Object.values(I)], 'tenant')],
+            [
+              OWNER_ROLE,
+              role([...Object.values(P), ...Object.values(I), ...Object.values(M)], 'tenant'),
+            ],
             [
               STORE_OWNER_ROLE,
               role([
@@ -171,6 +202,7 @@ export async function openRepairHarness(
                 P.setUncollectedDays,
                 // Categories are the business owner's alone (a tenant-wide permission).
                 ...Object.values(I).filter((id) => id !== I.manageCategories),
+                ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
               ]),
             ],
           ]),
@@ -251,6 +283,22 @@ export async function openRepairHarness(
         { tenantId, storeId, userId, deviceId },
       )) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    money: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        moneyModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    moneyQuery: async (query, input, userId) => {
+      return (await runtime.queries.execute(moneyModule.queries[query] as never, input as never, {
+        tenantId,
+        storeId,
+        userId,
+        deviceId,
+      })) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
     query: async (query, input, userId) => {
       return (await runtime.queries.execute(repairModule.queries[query] as never, input as never, {
         tenantId,
@@ -264,7 +312,13 @@ export async function openRepairHarness(
         .selectFrom('operations')
         .select(['signedCoreJcs', 'hash', 'signature'])
         .where('deviceId', '=', deviceId)
-        .where((eb) => eb.or([eb('type', 'like', 'repair.%'), eb('type', 'like', 'inventory.%')]))
+        .where((eb) =>
+          eb.or([
+            eb('type', 'like', 'repair.%'),
+            eb('type', 'like', 'inventory.%'),
+            eb('type', 'like', 'money.%'),
+          ]),
+        )
         .orderBy('seq', 'asc')
         .execute();
       return rows.map((row) => operationFromSignedCoreJcs(row.signedCoreJcs, row));

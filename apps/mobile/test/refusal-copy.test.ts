@@ -26,6 +26,7 @@ const WITH_RULES = ALL_MODULES.filter((module) =>
 test('the modules with rules are the ones expected (the denominator)', () => {
   expect(WITH_RULES.map((module) => module.id).sort()).toEqual([
     'inventory',
+    'money',
     'notes',
     'platform',
     'repair',

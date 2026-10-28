@@ -96,6 +96,12 @@ const CASHIER_PERMS = [
   'repair.quote_change',
   'repair.handover',
   ...PARTS_USER_PERMS,
+  // Money (product-scope.md, "Repair payments"): the counter takes payments, gives back overpayments,
+  // moves and counts cash. Bigger refunds, lower bills, voids and cash adjustments are owners'.
+  'money.read',
+  'money.receive',
+  'money.move_cash',
+  'money.count_cash',
 ];
 const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work', ...PARTS_USER_PERMS];
 

@@ -7,6 +7,7 @@ export * from './screen-lock.js';
 export type * from './schema.js';
 export * from './search.js';
 export { REPAIR_REFUSALS } from './rules.js';
+export { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 // The module's translator, for device code that names a servisan outside the screens (sync problems).
 export { tn } from './i18n.js';
 // The phone catalog as the parts list's "fits" picker searches it, bound by the device core.
