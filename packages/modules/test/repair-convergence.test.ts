@@ -7,7 +7,12 @@ import { afterEach, expect, test } from 'vitest';
 import type { SignedOperation } from '@bolusi/schemas';
 import { mulberry32 } from '@bolusi/test-support';
 
-import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import {
+  intake,
+  openRepairHarness,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 const open: RepairHarness[] = [];
 afterEach(async () => {
@@ -107,11 +112,7 @@ async function writeJourney(a: RepairHarness): Promise<void> {
     { ticketId: first.ticketId, note: 'OK', afterPhotos: [a.photo(21)] },
     a.technicianId,
   );
-  await a.run(
-    'returnDevice',
-    { ticketId: first.ticketId, handoverPhoto: a.photo(7), signature: a.photo(8) },
-    a.cashierId,
-  );
+  await a.run('returnDevice', (await paidHandover(a, first.ticketId)) as never, a.cashierId);
   await a.run(
     'cancelTicket',
     { ticketId: second.ticketId, reason: 'Tidak jadi', fee: 25_000 },
@@ -206,16 +207,8 @@ test('two devices acting on one ticket offline converge; approval beats a concur
     a.cashierId,
   );
   await b.run('declineProposal', { ticketId, lineId: proposal.lineId, note: 'Mahal' }, b.cashierId);
-  await a.run(
-    'returnDevice',
-    { ticketId, handoverPhoto: a.photo(7), signature: a.photo(8) },
-    a.cashierId,
-  );
-  await b.run(
-    'returnDevice',
-    { ticketId, handoverPhoto: b.photo(7), signature: b.photo(8) },
-    b.cashierId,
-  );
+  await a.run('returnDevice', (await paidHandover(a, ticketId)) as never, a.cashierId);
+  await b.run('returnDevice', (await paidHandover(b, ticketId)) as never, b.cashierId);
 
   // Reconnect: each receives the other's offline ops.
   let arrivalA = 1;

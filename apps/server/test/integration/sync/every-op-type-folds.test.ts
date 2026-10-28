@@ -312,11 +312,16 @@ function journey(world: ChainWorld): OpSpec[] {
     money('money.cash_counted', 0x409, { counted: 30_000, note: '' }),
     money('money.cash_adjusted', 0x40a, { amount: -10_000, countId: id(0x409), reason: 'Kurang' }),
 
-    onTicket('repair.device_returned', {
-      handoverPhoto: photo(10),
-      signature: photo(11),
-      note: '',
-    }),
+    // Paid in full above, so the phone may leave.
+    {
+      ...onTicket('repair.device_returned', {
+        handoverPhoto: photo(10),
+        signature: photo(11),
+        note: '',
+        unpaidReason: null,
+      }),
+      schemaVersion: 2,
+    },
     onTicket('repair.slip_printed', { slip: 'handover' }),
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {

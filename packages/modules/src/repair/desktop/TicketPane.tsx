@@ -52,6 +52,7 @@ import {
   CONTEXTUAL_ACTIONS,
   downPaymentAction,
   downPaymentStale,
+  paidLabelKey,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -615,6 +616,7 @@ export function TicketPane({
         <DownPaymentLines
           total={amountOwed(row)}
           downPayment={row.downPayment}
+          paidLabel={paidLabelKey(row)}
           action={downPaymentAction(row, can)}
           disabled={runner.busy}
           onAction={(mode) => {
@@ -759,7 +761,8 @@ export function TicketPane({
             {...common}
             customerName={row.customerName}
             cancelled={row.outcome === 'cancelled'}
-            amount={row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal}
+            amount={amountOwed(row)}
+            downPayment={row.downPayment}
             onDone={() => finishStep(DONE_KEY.handover)}
           />
         );
@@ -1032,12 +1035,14 @@ function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
 function DownPaymentLines({
   total,
   downPayment,
+  paidLabel,
   action,
   disabled,
   onAction,
 }: {
   readonly total: number;
   readonly downPayment: number | null;
+  readonly paidLabel: RepairKey;
   readonly action: 'record' | 'correct' | null;
   readonly disabled: boolean;
   readonly onAction: (mode: 'record' | 'correct') => void;
@@ -1061,7 +1066,7 @@ function DownPaymentLines({
     <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
       <div className="flex items-center justify-between gap-4 text-body text-text-muted">
         <dt className="flex items-center gap-2">
-          {tn('repair.price.downPayment')}
+          {tn(paidLabel)}
           {action === 'correct' ? (
             <Tooltip label={tn('repair.downPayment.correctTitle')}>
               <Button

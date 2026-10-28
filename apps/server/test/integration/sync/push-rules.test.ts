@@ -580,6 +580,31 @@ describe('money: the counter cannot take cash out through the ledger', () => {
   });
 });
 
+describe('a phone goes home paid, whatever version sent it', () => {
+  test('a version-1 handover of an unpaid repaired phone is refused', async () => {
+    const { world, builder } = await setupWorld(3370);
+    await db
+      .updateTable('repairTickets')
+      .set({ outcome: 'repaired' })
+      .where('id', '=', TICKET)
+      .execute();
+    const handover = ticketOp(
+      builder,
+      'repair.device_returned',
+      { handoverPhoto: photo(world, 7), signature: photo(world, 8), note: '' },
+      { schemaVersion: 1 },
+    );
+
+    const result = await push(world, [handover]);
+
+    expect(result.results[0]).toMatchObject({
+      status: 'rejected',
+      code: 'RULE_VIOLATED',
+      reason: 'repair.refusal.notPaid',
+    });
+  });
+});
+
 describe('a pushed op stamped in the future is refused', () => {
   test('beyond the margin: CLOCK_AHEAD with a device alarm, and the next op still syncs', async () => {
     const { world, builder } = await setupWorld(3310);

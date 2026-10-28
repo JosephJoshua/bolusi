@@ -111,17 +111,23 @@ function lineRow(line: QuoteLineRow): PrintAmountRow {
 }
 
 /**
- * Total, then the down payment and what is left to pay, or what the store gives back when the
- * down payment was more (a cancelled servisan whose fee is below it).
+ * Total, then what was paid and what is left to pay, or what the store gives back when more was
+ * paid (a cancelled servisan whose fee is below its DP). At intake that payment is the DP; on the
+ * handover slip it is everything paid so far, the DP and the rest at pickup.
  */
-function totals(totalLabel: string, total: number, downPayment: number | null): PrintAmountRow[] {
-  const paid = downPayment ?? 0;
+function totals(
+  totalLabel: string,
+  total: number,
+  paidSoFar: number | null,
+  paidLabel: string,
+): PrintAmountRow[] {
+  const paid = paidSoFar ?? 0;
   const rows: PrintAmountRow[] = [
     { label: totalLabel, amount: formatMoney(total), strong: paid === 0 },
   ];
   if (paid > 0) {
     const balance = balanceAfterDownPayment(total, paid);
-    rows.push({ label: tn('repair.slip.downPayment'), amount: formatMoney(-paid) });
+    rows.push({ label: paidLabel, amount: formatMoney(-paid) });
     rows.push({
       label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
       amount: formatMoney(balance.amount),
@@ -198,7 +204,13 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
     {
       kind: 'amounts',
       rows: lines.map(lineRow),
-      totals: totals(tn('repair.slip.estimateTotal'), total, ticket.downPayment),
+      totals: totals(
+        tn('repair.slip.estimateTotal'),
+        total,
+        ticket.downPayment,
+        // Reprinted after pickup, what was paid is more than the DP.
+        tn(ticket.location === 'returned' ? 'repair.slip.paid' : 'repair.slip.downPayment'),
+      ),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
   ];
@@ -248,7 +260,12 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
     ? {
         kind: 'amounts',
         rows: [{ label: tn('repair.cancel.fee'), amount: formatMoney(ticket.cancelFee ?? 0) }],
-        totals: totals(tn('repair.slip.total'), ticket.cancelFee ?? 0, ticket.downPayment),
+        totals: totals(
+          tn('repair.slip.total'),
+          ticket.cancelFee ?? 0,
+          ticket.downPayment,
+          tn('repair.slip.paid'),
+        ),
       }
     : {
         kind: 'amounts',
@@ -256,7 +273,12 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
         rows: ticket.quoteLines
           .filter((line) => line.status === 'intake' || line.status === 'applied')
           .map(lineRow),
-        totals: totals(tn('repair.slip.total'), ticket.quoteTotal, ticket.downPayment),
+        totals: totals(
+          tn('repair.slip.total'),
+          ticket.quoteTotal,
+          ticket.downPayment,
+          tn('repair.slip.paid'),
+        ),
       };
   const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.costs') },

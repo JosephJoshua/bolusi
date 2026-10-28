@@ -8,6 +8,10 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
+import type { MoneyModule } from '../money/manifest.js';
+import { CASH_ACCOUNT } from '../money/constants.js';
+import type { PaymentAccountRow } from '../money/queries.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { repairModule } from './manifest.js';
 import {
   createRuntimeContext,
@@ -107,6 +111,8 @@ export interface RepairTechnician {
 }
 
 export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSource {
+  /** The money ledger: payment methods, a servisan's payments, and taking money at handover. */
+  readonly money: ModulePort<MoneyModule>;
   /** Op sync statuses per ticket id (design-system §3.5); an absent ticket is all-synced. */
   ticketSyncStatuses(ticketIds: readonly string[]): Promise<EntitySyncStatuses>;
   /** Active colleagues who hold `repair.work` in this store, by name. */
@@ -219,6 +225,51 @@ export function useIntakeOptionSettings(reloadKey = 0): QueryState<IntakeOptionS
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
     `intakeOptionSettings:${String(reloadKey)}`,
   );
+}
+
+const NO_ACCOUNTS: readonly PaymentAccountRow[] = [];
+
+/**
+ * The store's payment methods besides cash, live; null while they load, so a method picked before
+ * (a restored draft's) is not taken for cash. If they cannot be read, cash stands alone.
+ */
+export function usePaymentAccounts(): readonly PaymentAccountRow[] | null {
+  const accounts = useRepairQuery(
+    async (rt) => (await rt.money.query('paymentAccounts', {})).rows,
+    'paymentAccounts',
+  );
+  if (accounts.status === 'ready') return accounts.data;
+  return accounts.status === 'error' ? NO_ACCOUNTS : null;
+}
+
+export interface PaymentMethodChoice {
+  readonly account: string;
+  readonly reference: string;
+}
+
+/**
+ * The method a down payment step records through: cash for a new DP; for a correction, the one the
+ * DP came in by, until the owner picks another.
+ */
+export function useDownPaymentMethod(
+  ticketId: string,
+  mode: 'record' | 'correct',
+): readonly [PaymentMethodChoice, (method: PaymentMethodChoice) => void] {
+  const [picked, setPicked] = useState<PaymentMethodChoice | null>(null);
+  const original = useRepairQuery(async (rt): Promise<PaymentMethodChoice | null> => {
+    if (mode === 'record') return null;
+    const money = (
+      await rt.money.query('documentMoney', { kind: REPAIR_DOCUMENT_KIND, id: ticketId })
+    ).rows[0];
+    const first = money?.entries.find(
+      (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
+    );
+    return first?.account == null
+      ? null
+      : { account: first.account, reference: first.reference ?? '' };
+  }, `downPaymentMethod:${ticketId}:${mode}`);
+  const fallback = original.status === 'ready' ? original.data : null;
+  return [picked ?? fallback ?? { account: CASH_ACCOUNT, reference: '' }, setPicked];
 }
 
 /** A model photo's uri once loaded; null while loading or when there is none to show. */

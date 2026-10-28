@@ -8,7 +8,7 @@
 // Every read is constrained to the op's own store, so an op naming another store's ticket finds
 // nothing. Reads are dialect-neutral (SQLite on the device, Postgres on the server); Postgres hands
 // `bigint` columns back as strings, hence the `Number(...)` on money.
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import type { z } from 'zod';
 
 import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
@@ -25,8 +25,12 @@ import {
   type RepairOutcome,
   type WorkPhotoStage,
 } from './constants.js';
+import { MONEY_PERMISSION } from '../money/constants.js';
+import { documentBalance, documentTotal } from '../money/rules.js';
 import { intakeListProblems } from './intake-options.js';
+import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 import type {
+  deviceReturnedPayload,
   downPaymentReceivedPayload,
   intakeOptionsChangedPayload,
   quoteChangedPayload,
@@ -79,6 +83,9 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'customerAgreementMismatch',
   'downPaymentAboveTotal',
   'downPaymentRecorded',
+  'notPaid',
+  'unpaidOwnerOnly',
+  'downPaymentRefunded',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -601,7 +608,7 @@ export const quoteProposalDeclinedRule: Rule = async (op, { db }) => {
  * proposals must be decided first, because they could change what the customer owes; on a
  * cancelled one they can no longer be decided, so they must not keep the phone in the store.
  */
-export const deviceReturnedRule: Rule = async (op, { db }) => {
+export const deviceReturnedRule: Rule = async (op, { db, holdsPermission }) => {
   const ticket = await loadTicket(db, op);
   if (ticket.location === 'returned') {
     throw invalidTransition(ticket, op.type, 'returned', 'already returned');
@@ -617,7 +624,51 @@ export const deviceReturnedRule: Rule = async (op, { db }) => {
       'price proposals are undecided',
     );
   }
+  // Every version: an older payload carries no reason, so it hands over only a paid phone.
+  await requirePaid(db, op, holdsPermission);
 };
+
+/**
+ * The phone leaves only once the servisan is charged what it costs and nothing is left to pay,
+ * unless an owner lets it go as a debt. The charge and payments are the ops just before this one
+ * (`returnDeviceHandler`), and the server judges each on its own: a refused charge or payment
+ * leaves a balance, so this is refused too.
+ */
+async function requirePaid(
+  db: Parameters<Rule>[1]['db'],
+  op: SignedOperation,
+  holdsPermission: Parameters<Rule>[1]['holdsPermission'],
+): Promise<void> {
+  const unpaidReason =
+    payloadOf<Partial<Payload<typeof deviceReturnedPayload>>>(op).unpaidReason ?? null;
+  const lookup = { tenantId: op.tenantId, storeId: op.storeId ?? '', documentId: op.entityId };
+  const ledger = db as unknown as Kysely<never>;
+  const expected = await repairMoneyDocument.charge(ledger, lookup);
+  const document = { kind: REPAIR_DOCUMENT_KIND, id: op.entityId };
+  const charged = await documentTotal(ledger, lookup.storeId, document, 'charge_recorded');
+  const owed = (expected?.amount ?? 0) > charged;
+  const balance = await documentBalance(ledger, lookup.storeId, document);
+  if (!owed && balance <= 0) return;
+  if (unpaidReason === null) {
+    throw refuse('notPaid', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'payments', issue: 'the servisan is not paid in full' },
+    });
+  }
+  if (!(await holdsPermission(op.userId, MONEY_PERMISSION.extendCredit))) {
+    throw refuse('unpaidOwnerOnly', {
+      code: 'PERMISSION_DENIED',
+      details: { permissionId: MONEY_PERMISSION.extendCredit },
+    });
+  }
+  // A debt is what the customer owes, so the full price is on the books first.
+  if (owed) {
+    throw refuse('notPaid', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'charge', issue: 'the servisan is not charged' },
+    });
+  }
+}
 
 /** One franchise list, written to the tenant's single options record and meeting the list rules. */
 export const intakeOptionsChangedRule: Rule = (op) => {

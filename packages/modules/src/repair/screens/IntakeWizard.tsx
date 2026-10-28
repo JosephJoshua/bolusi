@@ -31,7 +31,7 @@ import {
 } from '../intake-options.js';
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
 import { usePhotoBrowser } from './photos.js';
-import { useIntakeOptionSettings, useRepairRuntime } from '../runtime.js';
+import { useIntakeOptionSettings, usePaymentAccounts, useRepairRuntime } from '../runtime.js';
 
 import {
   ConditionStep,
@@ -53,12 +53,14 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
   downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
+  downPaymentReference: 'repair.problem.downPaymentReference',
 };
 
 /** Problems said on their own field rather than in the step's list. */
 const FIELD_PROBLEMS: ReadonlySet<IntakeProblem> = new Set([
   'incompleteLine',
   'downPaymentAboveTotal',
+  'downPaymentReference',
 ]);
 
 export interface IntakeWizardProps {
@@ -156,7 +158,10 @@ export function IntakeWizard({
 
   const stepIndex = Math.min(draft.step, INTAKE_STEPS.length - 1);
   const step = INTAKE_STEPS[stepIndex]!;
-  const problems = stepProblems(draft, step, options);
+  // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
+  const problems = stepProblems(draft, step, options, accounts);
   const dirty = intakeDirty(draft);
   const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
   // The review shows the photos as a strip that opens full screen, like a saved ticket.
@@ -246,8 +251,9 @@ export function IntakeWizard({
       goTo(stepIndex + 1);
       return;
     }
+    if (loadedAccounts === null) return;
     void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now())))
+      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
       .then((opened) => {
         if (opened === undefined) return;
         onDraftChange?.(null);
@@ -381,6 +387,8 @@ export function IntakeWizard({
             update={update}
             options={options}
             lineError={problemText('incompleteLine')}
+            accounts={accounts}
+            referenceError={problemText('downPaymentReference')}
             // Wrong as soon as it is typed, not merely unfinished, so it shows straight away.
             downPaymentError={
               problems.includes('downPaymentAboveTotal')

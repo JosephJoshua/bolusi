@@ -198,6 +198,27 @@ describe('the PC over the offline core', () => {
     expect(query?.args[0]).toBe('u-owner');
   });
 
+  it('takes the store’s payment methods from the core, for the person signed in', async () => {
+    core = new FakeCore(ready());
+    core.answers['session.submitPin'] = (userId) => {
+      core.session(signedIn(OWNER, ALL));
+      return { kind: 'opened', session: { sessionId: 's', userId } };
+    };
+    renderApp();
+    await waitFor(() => expect(core.methods()).toContain('session.refresh'));
+    fireEvent.click(screen.getByText('Andi Pratama'));
+    for (const key of '314159') fireEvent.keyDown(window, { key });
+    fireEvent.click(await screen.findByTestId('repair.desk.board.newIntake'));
+    await screen.findByTestId('repair.desk.intake');
+    await waitFor(() =>
+      expect(core.calls.find((call) => call.method === 'money.query')?.args).toEqual([
+        'u-owner',
+        'paymentAccounts',
+        {},
+      ]),
+    );
+  });
+
   it('hides a new intake from a technician without the grant', async () => {
     core = new FakeCore(
       ready({ session: session(signedIn(TECH, [REPAIR_PERMISSION.read, REPAIR_PERMISSION.work])) }),

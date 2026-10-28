@@ -4,7 +4,7 @@ export * from './constants.js';
 export type * from './schema.js';
 export * from './documents.js';
 export { postingsFor, reversalOf, type Posting } from './postings.js';
-export { MONEY_REFUSALS } from './rules.js';
+export { MONEY_REFUSALS, documentBalance, documentTotal } from './rules.js';
 export {
   chargeOp,
   paymentOp,
@@ -24,6 +24,7 @@ export {
 } from './commands.js';
 export {
   documentMoneyQuery,
+  paidOnDocumentSql,
   paymentAccountsQuery,
   type CashCountRow,
   type CashDrawer,
