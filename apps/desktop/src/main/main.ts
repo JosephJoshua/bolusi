@@ -110,16 +110,17 @@ app.on('second-instance', () => {
 
 void app.whenReady().then(() => {
   if (!primary) return;
-  // Only copying (a phone number) and the webcam are allowed: no microphone, location or other
-  // device.
+  // Only copying (a phone number), the webcam and its microphone are allowed: no location, screen
+  // capture or other device.
   const counter = (contents: Electron.WebContents | null): boolean =>
     contents !== null && [...counterWindows].some((window) => window.webContents === contents);
-  // The webcam for intake and handover photos, video only and only for the counter's own page.
+  // The webcam for intake and handover photos, and with the microphone for the ownership video
+  // (the customer says the phone is theirs), only for the counter's own page.
   const camera = (permission: string, kinds: readonly string[] | undefined): boolean =>
     permission === 'media' &&
     kinds !== undefined &&
     kinds.length > 0 &&
-    kinds.every((kind) => kind === 'video');
+    kinds.every((kind) => kind === 'video' || kind === 'audio');
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
     const kinds = 'mediaTypes' in details ? details.mediaTypes : undefined;
     callback(

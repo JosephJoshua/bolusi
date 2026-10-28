@@ -3,6 +3,7 @@
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import { nodeColumnAead } from '@bolusi/test-support';
 import { sql } from 'kysely';
+import { VIDEO_MAX_SIZE_BYTES } from '@bolusi/schemas';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
@@ -77,6 +78,18 @@ describe('importing a gallery picture', () => {
     expect(outcome.kind).toBe('refused_low_storage');
     const rows = await sql`SELECT id FROM media_items`.execute(db.db);
     expect(rows.rows).toHaveLength(0);
+    // The clip not kept is not left lying around unencrypted.
+    expect(fs.files.has('/cache/clip.webm')).toBe(false);
+  });
+
+  test('a clip bigger than the server takes is refused and dropped', async () => {
+    const fs = new FakeFs();
+    fs.write('/cache/clip.mp4', bytesOfLength(VIDEO_MAX_SIZE_BYTES + 1));
+    const outcome = await importVideo(deps(fs), { uri: '/cache/clip.mp4', mime: 'video/mp4' });
+    expect(outcome).toEqual({ kind: 'refused_too_large', sizeBytes: VIDEO_MAX_SIZE_BYTES + 1 });
+    expect(fs.files.has('/cache/clip.mp4')).toBe(false);
+    const rows = await sql`SELECT id FROM media_items`.execute(db.db);
+    expect(rows.rows).toHaveLength(0);
   });
 });
 
@@ -107,6 +120,18 @@ describe('keeping a recorded video clip', () => {
     fs.write('/cache/clip.webm', bytesOfLength(10));
     const outcome = await importVideo(deps(fs, 1), { uri: '/cache/clip.webm', mime: 'video/webm' });
     expect(outcome.kind).toBe('refused_low_storage');
+    const rows = await sql`SELECT id FROM media_items`.execute(db.db);
+    expect(rows.rows).toHaveLength(0);
+    // The clip not kept is not left lying around unencrypted.
+    expect(fs.files.has('/cache/clip.webm')).toBe(false);
+  });
+
+  test('a clip bigger than the server takes is refused and dropped', async () => {
+    const fs = new FakeFs();
+    fs.write('/cache/clip.mp4', bytesOfLength(VIDEO_MAX_SIZE_BYTES + 1));
+    const outcome = await importVideo(deps(fs), { uri: '/cache/clip.mp4', mime: 'video/mp4' });
+    expect(outcome).toEqual({ kind: 'refused_too_large', sizeBytes: VIDEO_MAX_SIZE_BYTES + 1 });
+    expect(fs.files.has('/cache/clip.mp4')).toBe(false);
     const rows = await sql`SELECT id FROM media_items`.execute(db.db);
     expect(rows.rows).toHaveLength(0);
   });

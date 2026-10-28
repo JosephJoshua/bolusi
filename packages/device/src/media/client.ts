@@ -171,6 +171,11 @@ export interface MediaClient {
   loadForRender(ref: RenderableMediaRef): Promise<RenderableMedia>;
   /** 06 §6 for an attachment with NO signed hash (v1/v2 payloads): local file or nothing. */
   loadLocalForRender(mediaId: string): Promise<RenderableMedia>;
+  /**
+   * Whether a capture taken here is still kept (its row and file), without reading it: a draft
+   * kept across a lock can outlive a capture nothing referred to (06 §7's orphan rule).
+   */
+  hasLocal(mediaId: string): Promise<boolean>;
   /** 06 §5.2 (b): an append attached captures to its op, so they are drainable now. */
   notifyAttached(): void;
   /** 06 §5.2 (e). */
@@ -395,6 +400,11 @@ class MediaClientImpl implements MediaClient {
       },
       mediaId,
     );
+  }
+
+  async hasLocal(mediaId: string): Promise<boolean> {
+    const path = (await findMediaItem(this.deps.db.db, mediaId))?.localPath ?? null;
+    return path !== null && (await this.deps.files.exists(path));
   }
 
   notifyAttached(): void {

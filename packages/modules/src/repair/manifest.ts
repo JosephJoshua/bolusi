@@ -44,6 +44,8 @@ import {
   proposeQuoteChangeInput,
   recordDownPaymentHandler,
   recordDownPaymentInput,
+  recordOwnershipVideoHandler,
+  recordOwnershipVideoInput,
   recordSlipPrintedHandler,
   recordSlipPrintedInput,
   registerCustomerHandler,
@@ -206,6 +208,11 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.intake,
       input: openTicketInput,
       handler: openTicketHandler,
+    },
+    recordOwnershipVideo: {
+      permission: REPAIR_PERMISSION.intake,
+      input: recordOwnershipVideoInput,
+      handler: recordOwnershipVideoHandler,
     },
     claimTicket: {
       permission: REPAIR_PERMISSION.work,

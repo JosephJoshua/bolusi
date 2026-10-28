@@ -8,7 +8,7 @@
  * Photos resolve to a labelled grey placeholder image, never anything that looks like a real photo.
  */
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
-import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
+import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/schemas';
 
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
@@ -18,14 +18,16 @@ import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
   REPAIR_PERMISSION,
+  ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
-import { partsInWork } from './flows.js';
+import { ownershipVideoMissing, partsInWork } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
   handoverProblem,
+  needsOwnershipVideo,
   recordRepairTypes,
   storeIntakeOptions,
   type HandoverCheck,
@@ -178,7 +180,22 @@ function demoMedia(mime: 'image/jpeg' | 'image/png' = 'image/jpeg'): MediaRef {
   };
 }
 
-function photoRow(slot: string, ref: MediaRef = demoMedia()): TicketPhotoRow {
+function demoVideo(): VideoRef {
+  const { mediaId, sha256, sizeBytes, capturedAt, location, userId, deviceId } = demoMedia();
+  return {
+    mediaId,
+    sha256,
+    mime: 'video/mp4',
+    type: 'video',
+    sizeBytes: sizeBytes * 60,
+    capturedAt,
+    location,
+    userId,
+    deviceId,
+  };
+}
+
+function photoRow(slot: string, ref: AnyMediaRef = demoMedia()): TicketPhotoRow {
   return {
     slot,
     mediaId: ref.mediaId,
@@ -1027,6 +1044,12 @@ export function demoRepairRuntime(
           throw REPAIR_REFUSALS.refuse(problem.reason);
         }
       }
+      const repairTypes = recordedTypes(input['repairTypes'], []);
+      const video = (input['ownershipVideo'] as VideoRef | null | undefined) ?? null;
+      // As the intake rule judges it.
+      if (video === null && needsOwnershipVideo(repairTypes)) {
+        throw REPAIR_REFUSALS.refuse('ownershipVideoNeeded');
+      }
       const created = withTotals({
         ...seedTickets()[0]!,
         id,
@@ -1055,7 +1078,7 @@ export function demoRepairRuntime(
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
         peripherals: input['peripherals'] as TicketDetailRow['peripherals'],
-        repairTypes: recordedTypes(input['repairTypes'], []),
+        repairTypes,
         claimOfTicketId: claimOf,
         intakePhotos: photos.map(({ slot, label }) => ({ slot, label })),
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
@@ -1065,11 +1088,21 @@ export function demoRepairRuntime(
         quoteLines: lines.map((l) =>
           line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
         ),
-        photos: photos.map(({ slot, ref }) => photoRow(slot, ref)),
+        photos: [
+          ...photos.map(({ slot, ref }) => photoRow(slot, ref)),
+          ...(video === null ? [] : [photoRow(ownershipVideoSlot(video.mediaId), video)]),
+        ],
       });
       tickets = [created, ...tickets];
       notify();
       return { ticketId: id, ticketNumber: number, customerId: created.customerId };
+    },
+    recordOwnershipVideo: (input) => {
+      const t = find(String(input['ticketId']));
+      const video = input['video'] as VideoRef;
+      return update(t.id, 'repair.ownership_video_recorded', {
+        photos: [...t.photos, photoRow(ownershipVideoSlot(video.mediaId), video)],
+      });
     },
     claimTicket: (input) =>
       update(String(input['ticketId']), 'repair.ticket_claimed', {
@@ -1215,6 +1248,9 @@ export function demoRepairRuntime(
       const note = String(input['note'] ?? '');
       const problem = handoverProblem(checklist, t.peripherals, note);
       if (problem !== null) throw REPAIR_REFUSALS.refuse(problem);
+      if (t.outcome === 'repaired' && ownershipVideoMissing(t)) {
+        throw REPAIR_REFUSALS.refuse('ownershipVideoNeeded');
+      }
       return update(
         t.id,
         'repair.device_returned',
@@ -1416,6 +1452,9 @@ export function demoRepairRuntime(
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
     pickPhoto: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
+    recordVideo: () => Promise.resolve({ videoRef: demoVideo() }),
+    // The demo has no clip to show; the player closes at once.
+    playVideo: () => Promise.resolve(),
     printing,
     loadModelPhoto: demoModelPhoto,
     loadThumbnail: (ref: ThumbnailRef) =>

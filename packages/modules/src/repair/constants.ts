@@ -54,6 +54,7 @@ export const REPAIR_OP = {
   slipPrinted: 'repair.slip_printed',
   storePrintSettingsChanged: 'repair.store_print_settings_changed',
   storeUncollectedDaysChanged: 'repair.store_uncollected_days_changed',
+  ownershipVideoRecorded: 'repair.ownership_video_recorded',
 } as const;
 
 /**
@@ -139,6 +140,22 @@ export function workPhotoStage(slot: string): WorkPhotoStage | null {
   return (WORK_PHOTO_STAGES as readonly string[]).includes(stage)
     ? (stage as WorkPhotoStage)
     : null;
+}
+
+/**
+ * The customer saying on camera that the phone is theirs, asked for by repair types such as an
+ * unlock (product-scope.md). Kept with the photos, one slot per clip; the latest one counts.
+ */
+export const OWNERSHIP_VIDEO_PREFIX = 'ownershipVideo';
+/** Up to a minute, at 720p (owner decision, 2026-10-28). */
+export const OWNERSHIP_VIDEO_MAX_MS = 60_000;
+
+export function ownershipVideoSlot(mediaId: string): string {
+  return `${OWNERSHIP_VIDEO_PREFIX}:${mediaId}`;
+}
+
+export function isOwnershipVideoSlot(slot: string): boolean {
+  return slot.startsWith(`${OWNERSHIP_VIDEO_PREFIX}:`);
 }
 
 /**

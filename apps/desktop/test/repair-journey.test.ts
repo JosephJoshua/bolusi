@@ -18,7 +18,7 @@ import {
   type LaneCredentials,
   type RunningHarnessServer,
 } from '@bolusi/harness';
-import type { MediaRef } from '@bolusi/schemas';
+import type { MediaRef, VideoRef } from '@bolusi/schemas';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
@@ -210,6 +210,26 @@ async function photo(device: Device): Promise<MediaRef> {
   return outcome.mediaRef;
 }
 
+/** The EBML header a WebM clip starts with, and a little after it: what the webcam recorder gives. */
+const WEBM = new Uint8Array([
+  0x1a,
+  0x45,
+  0xdf,
+  0xa3,
+  ...Array.from({ length: 2048 }, (_, i) => i % 251),
+]);
+
+async function video(device: Device): Promise<VideoRef> {
+  const userId = (await device.state()).session!.active!.userId;
+  const outcome = await device.call<{ kind: string; videoRef: VideoRef }>(
+    'media.importVideo',
+    userId,
+    { bytes: new Uint8Array(WEBM), mime: 'video/webm' },
+  );
+  expect(outcome.kind).toBe('captured');
+  return outcome.videoRef;
+}
+
 async function signature(device: Device): Promise<MediaRef> {
   const userId = (await device.state()).session!.active!.userId;
   const stroke = [
@@ -258,6 +278,8 @@ const EXPECTED_SERVER_OPS = {
   'repair.customer_registered': 1,
   'repair.device_returned': 1,
   'repair.marked_repaired': 1,
+  // Unlocking was added after intake, so the counter takes the ownership video at pickup.
+  'repair.ownership_video_recorded': 1,
   'repair.quote_change_proposed': 1,
   // The counter's screen protector and the technician's battery once the customer agreed.
   'repair.quote_changed': 2,
@@ -339,7 +361,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     await bench.setOnline(false);
     await tech('claimTicket', { ticketId });
     await tech('startWork', { ticketId, beforePhotos: [await photo(bench)] });
-    await tech('setRepairTypes', { ticketId, repairTypes: ['screen', 'battery'] });
+    await tech('setRepairTypes', { ticketId, repairTypes: ['screen', 'battery', 'unlock'] });
     const proposal = await tech('proposeQuoteChange', {
       ticketId,
       kind: 'part',
@@ -370,7 +392,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     await cash('applyProposal', { ticketId, lineId: proposal['lineId'], customerAgreed: true });
     await counter.setOnline(false);
     const total = INTAKE_TOTAL + GLASS + EXTRA;
-    await cash('returnDevice', {
+    const handover = {
       ticketId,
       handoverPhoto: await photo(counter),
       signature: await signature(counter),
@@ -381,7 +403,14 @@ describe('one servisan from intake to handover, offline in between', () => {
         { kind: 'check', item: 'repairWorks', label: null, done: true },
         { kind: 'accessory', item: 'charger', label: null, done: true },
       ],
+    };
+    // Unlocking needs the customer on video saying the phone is theirs before it goes home.
+    await expect(cash('returnDevice', handover)).rejects.toMatchObject({
+      message: 'repair.refusal.ownershipVideoNeeded',
     });
+    const clip = await video(counter);
+    await cash('recordOwnershipVideo', { ticketId, video: clip });
+    await cash('returnDevice', handover);
     const drawer = (await read(counter, 'money', 'cashDrawer', {}))[0]!;
     expect(drawer['expected']).toBe(total);
     await act(counter, 'money')('countCash', { counted: total, note: '' });
@@ -434,7 +463,23 @@ describe('one servisan from intake to handover, offline in between', () => {
     expect((first!.ticket['repairTypes'] as { item: string }[]).map((type) => type.item)).toEqual([
       'screen',
       'battery',
+      'unlock',
     ]);
+    // The clip the counter took plays on a device that never had it: fetched and checked.
+    const clips = (first!.ticket['photos'] as { slot: string; mediaId: string }[]).filter((p) =>
+      p.slot.startsWith('ownershipVideo:'),
+    );
+    expect(clips.map((p) => p.mediaId)).toEqual([clip.mediaId]);
+    await until(
+      () =>
+        fresh.call<{ kind: string; bytes?: Uint8Array }>('media.loadVideo', owner, {
+          mediaId: clip.mediaId,
+          sha256: clip.sha256,
+          mime: clip.mime,
+        }),
+      (loaded) => loaded.kind === 'ready',
+      'the ownership video to reach the new device',
+    ).then((loaded) => expect(new Uint8Array(loaded.bytes!)).toEqual(WEBM));
     expect(first!.money).toMatchObject({ balance: 0, charged: total, paid: total });
     expect(
       (first!.money['entries'] as { kind: string; amount: number }[]).map((e) => [
@@ -485,12 +530,13 @@ describe('one servisan from intake to handover, offline in between', () => {
       SELECT location, quote_total::text AS quote_total FROM repair_tickets WHERE id = ${ticketId}
     `.execute(db);
     expect(ticketRow.rows[0]).toEqual({ location: 'returned', quoteTotal: String(total) });
-    // Six intake photos, before, after, the handover photo and the signature: all uploaded, once.
+    // Six intake photos, before, after, the ownership video, the handover photo and the signature:
+    // all uploaded, once.
     const media = await sql<{ status: string; n: number }>`
       SELECT status, count(*)::int AS n FROM media WHERE tenant_id = ${lane.tenantId}
       GROUP BY status
     `.execute(db);
-    expect(media.rows).toEqual([{ status: 'complete', n: 10 }]);
+    expect(media.rows).toEqual([{ status: 'complete', n: 11 }]);
   }, 300_000);
 
   test('an owner cancels while the technician repairs it offline', async () => {

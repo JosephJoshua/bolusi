@@ -60,9 +60,12 @@ async function ticket(h: RepairHarness, ticketId: string) {
 
 /** A screen repair (30 days' warranty) that went home repaired. */
 async function pickedUp(h: RepairHarness, repairTypes: string[] = ['screen']): Promise<string> {
-  const { ticketId } = (await h.run('openTicket', intake(h, { repairTypes }), h.cashierId)) as {
-    ticketId: string;
-  };
+  const ownershipVideo = repairTypes.includes('unlock') ? h.video(9) : null;
+  const { ticketId } = (await h.run(
+    'openTicket',
+    intake(h, { repairTypes, ownershipVideo }),
+    h.cashierId,
+  )) as { ticketId: string };
   await h.run('startWork', { ticketId, beforePhotos: [h.photo(1)] }, h.technicianId);
   await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(2)] }, h.technicianId);
   await h.run('returnDevice', (await paidHandover(h, ticketId, {}, [3, 4])) as never, h.cashierId);

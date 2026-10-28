@@ -223,6 +223,36 @@ test('takes an intake photo with the webcam', async () => {
   await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/);
 });
 
+test('records the ownership video with the webcam and microphone, and plays it back', async () => {
+  await page.keyboard.press('F2');
+  await page.getByTestId('repair.desk.intake.repairTypes').getByText('Buka kunci / akun').click();
+  const section = page.getByTestId('repair.desk.intake.video');
+  await section.getByTestId('repair.desk.intake.video.clip.record').click();
+  const recorder = page.getByTestId('desktop.video');
+  await expect(recorder.getByTestId('desktop.video.start')).toBeEnabled();
+  await recorder.getByTestId('desktop.video.start').click();
+  await expect(recorder.getByTestId('desktop.video.timer')).toBeVisible();
+  await page.waitForTimeout(1500);
+  await recorder.getByTestId('desktop.video.stop').click();
+  await expect(recorder.getByTestId('desktop.video.take')).toBeVisible();
+  await recorder.getByTestId('desktop.video.use').click();
+  await expect(recorder).toBeHidden();
+  await expect(section.getByTestId('repair.desk.intake.video.clip.recorded')).toBeVisible();
+  await section.getByTestId('repair.desk.intake.video.clip.play').click();
+  const player = page.getByTestId('desktop.videoPlayer');
+  await expect(player.getByTestId('desktop.videoPlayer.video')).toHaveAttribute('src', /^blob:/);
+  // The page's own policy lets it play what it recorded.
+  await expect
+    .poll(() =>
+      player
+        .getByTestId('desktop.videoPlayer.video')
+        .evaluate((video: HTMLVideoElement) => video.error?.code ?? 0),
+    )
+    .toBe(0);
+  await player.getByTestId('desktop.videoPlayer.close').click();
+  await expect(player).toBeHidden();
+});
+
 test('takes the customer signature at handover, over the handover dialog', async () => {
   await page.getByTestId('repair.desk.board.views.pickup').click();
   await page.getByText('Ester Mandowen').click();

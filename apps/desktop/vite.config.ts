@@ -5,7 +5,7 @@ import { defineConfig, type Plugin } from 'vite';
 // The shipped page may load only its own files; the dev server's inline refresh script needs more,
 // so the policy goes into the built page only.
 const CONTENT_SECURITY_POLICY =
-  "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
+  "default-src 'self'; img-src 'self' data: blob:; media-src blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
 
 function contentSecurityPolicy(): Plugin {
   return {

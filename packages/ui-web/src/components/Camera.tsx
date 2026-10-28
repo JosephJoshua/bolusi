@@ -2,12 +2,13 @@
 // to keep or retake. The camera runs only while the dialog is open. Copy comes from the caller.
 import { clsx } from 'clsx';
 import { Camera, CameraOff, RefreshCw, SwitchCamera } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Banner } from './Banner.js';
 import { Button } from './Button.js';
 import { Dialog } from './Dialog.js';
 import { IconButton } from './IconButton.js';
+import { useWebcam } from './webcam.js';
 
 export interface CameraLabels {
   readonly close: string;
@@ -27,20 +28,11 @@ export interface CameraLabels {
   readonly saveFailed: string;
 }
 
-type CameraState =
-  | { readonly kind: 'starting' }
-  | { readonly kind: 'live' }
-  | { readonly kind: 'shot'; readonly blob: Blob; readonly url: string }
-  | { readonly kind: 'none' | 'denied' | 'failed' };
+type Shot = { readonly blob: Blob; readonly url: string };
 
 // Webcams give 720p or 1080p; the photo is taken at what the camera gives, within these.
 const IDEAL = { width: 1600, height: 1200 };
 export const CAMERA_JPEG_QUALITY = 0.7;
-
-async function videoInputs(): Promise<MediaDeviceInfo[]> {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  return devices.filter((device) => device.kind === 'videoinput');
-}
 
 function shoot(video: HTMLVideoElement): Promise<Blob | null> {
   const canvas = document.createElement('canvas');
@@ -71,111 +63,46 @@ export function CameraDialog({
   readonly fallback?: React.ReactNode;
   readonly testId?: string;
 }): React.JSX.Element {
-  const video = useRef<HTMLVideoElement>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const [state, setState] = useState<CameraState>({ kind: 'starting' });
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
-  const [cameraIndex, setCameraIndex] = useState(0);
-  const [attempt, setAttempt] = useState(0);
+  const webcam = useWebcam({ open, ideal: IDEAL });
+  const { video } = webcam;
+  const [shot, setShot] = useState<Shot | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
-  const stop = useCallback(() => {
-    for (const track of stream.current?.getTracks() ?? []) track.stop();
-    stream.current = null;
-  }, []);
-
+  // Each opening starts from the live camera.
   useEffect(() => {
     if (!open) return;
-    let live = true;
-    setState({ kind: 'starting' });
+    setShot(null);
     setSaveFailed(false);
-    void (async () => {
-      try {
-        const inputs = await videoInputs();
-        if (!live) return;
-        setCameras(inputs);
-        if (inputs.length === 0) {
-          setState({ kind: 'none' });
-          return;
-        }
-        const chosen = inputs[cameraIndex % inputs.length];
-        const media = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            ...(chosen?.deviceId ? { deviceId: { exact: chosen.deviceId } } : {}),
-            width: { ideal: IDEAL.width },
-            height: { ideal: IDEAL.height },
-          },
-        });
-        if (!live) {
-          for (const track of media.getTracks()) track.stop();
-          return;
-        }
-        stream.current = media;
-        const preview = video.current;
-        if (preview === null) {
-          setState({ kind: 'failed' });
-          return;
-        }
-        preview.srcObject = media;
-        await preview.play().catch(() => undefined);
-        // Shooting needs a frame; a slow USB webcam takes a moment to give the first one.
-        if (preview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-          await new Promise((resolve) =>
-            preview.addEventListener('loadeddata', resolve, { once: true }),
-          );
-        }
-        if (!live) return;
-        // Before the first grant Windows may list the cameras without ids; read them again.
-        setCameras(await videoInputs());
-        setState({ kind: 'live' });
-      } catch (error) {
-        if (!live) return;
-        const name = error instanceof DOMException ? error.name : '';
-        setState({
-          kind:
-            name === 'NotAllowedError' || name === 'SecurityError'
-              ? 'denied'
-              : name === 'NotFoundError' || name === 'OverconstrainedError'
-                ? 'none'
-                : 'failed',
-        });
-      }
-    })();
-    return () => {
-      live = false;
-      stop();
-    };
-  }, [open, cameraIndex, attempt, stop]);
+  }, [open]);
 
   // A kept or dropped shot frees its preview.
   useEffect(() => {
-    if (state.kind !== 'shot') return;
-    return () => URL.revokeObjectURL(state.url);
-  }, [state]);
+    if (shot === null) return;
+    return () => URL.revokeObjectURL(shot.url);
+  }, [shot]);
 
   const take = (): void => {
     if (video.current === null) return;
     void shoot(video.current).then((blob) => {
-      if (blob !== null) setState({ kind: 'shot', blob, url: URL.createObjectURL(blob) });
+      if (blob !== null) setShot({ blob, url: URL.createObjectURL(blob) });
     });
   };
   const retake = (): void => {
     setSaveFailed(false);
-    setState({ kind: 'live' });
+    setShot(null);
   };
   const use = (): void => {
-    if (state.kind !== 'shot') return;
+    if (shot === null) return;
     setSaving(true);
     setSaveFailed(false);
-    void onUse(state.blob)
+    void onUse(shot.blob)
       .catch(() => setSaveFailed(true))
       .finally(() => setSaving(false));
   };
 
-  const problem =
-    state.kind === 'none' || state.kind === 'denied' || state.kind === 'failed' ? state.kind : null;
+  const state = webcam.state;
+  const problem = state.kind === 'starting' || state.kind === 'live' ? null : state.kind;
 
   return (
     <Dialog
@@ -187,7 +114,7 @@ export function CameraDialog({
       testId={testId}
       banner={saveFailed ? <Banner tone="danger" message={labels.saveFailed} /> : undefined}
       footer={
-        problem !== null ? undefined : state.kind === 'shot' ? (
+        problem !== null ? undefined : shot !== null ? (
           <>
             <Button
               label={labels.retake}
@@ -206,11 +133,11 @@ export function CameraDialog({
           </>
         ) : (
           <>
-            {cameras.length > 1 ? (
+            {webcam.canSwitch ? (
               <IconButton
                 icon={SwitchCamera}
                 label={labels.switchCamera}
-                onClick={() => setCameraIndex((n) => n + 1)}
+                onClick={webcam.switchCamera}
                 className="mr-auto"
                 data-testid={`${testId}.switch`}
               />
@@ -235,11 +162,14 @@ export function CameraDialog({
           muted
           playsInline
           aria-hidden
-          className={clsx('size-full object-contain', state.kind === 'live' ? 'block' : 'hidden')}
+          className={clsx(
+            'size-full object-contain',
+            state.kind === 'live' && shot === null ? 'block' : 'hidden',
+          )}
         />
-        {state.kind === 'shot' ? (
+        {shot !== null ? (
           <img
-            src={state.url}
+            src={shot.url}
             alt={title}
             className="size-full object-contain"
             data-testid={`${testId}.shot`}
@@ -257,12 +187,14 @@ export function CameraDialog({
             className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface-alt px-8 text-center"
           >
             <CameraOff size={32} aria-hidden className="text-text-muted" />
-            <p className="max-w-md text-body text-text">{labels[problem]}</p>
+            <p className="max-w-md text-body text-text">
+              {labels[problem === 'noMicrophone' ? 'none' : problem]}
+            </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Button
                 label={labels.retry}
                 icon={RefreshCw}
-                onClick={() => setAttempt((n) => n + 1)}
+                onClick={webcam.retry}
                 data-testid={`${testId}.retry`}
               />
               {fallback}

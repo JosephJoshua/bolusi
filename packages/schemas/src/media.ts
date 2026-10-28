@@ -114,6 +114,13 @@ export const MEDIA_EXTENSION: Readonly<Record<MediaMime, string>> = {
   'video/webm': 'webm',
 };
 
+/**
+ * A video clip's cap: a 60 s ownership video at 720p is about 15 to 25 MB from a phone or a
+ * webcam, so this leaves room for a high-bitrate camera without letting a device park anything.
+ * The server refuses a bigger upload for good, so a device refuses to keep one.
+ */
+export const VIDEO_MAX_SIZE_BYTES = 48 * 1024 * 1024;
+
 export function isVideoMime(mime: string): mime is VideoMime {
   return (VIDEO_MIMES as readonly string[]).includes(mime);
 }

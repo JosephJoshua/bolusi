@@ -6,7 +6,7 @@
 import { z } from 'zod';
 
 import type { OperationDeclaration } from '@bolusi/core';
-import { zMediaRef, zMoneyIdr, zMsEpoch, zUuid, zUuidV7 } from '@bolusi/schemas';
+import { zMediaRef, zMoneyIdr, zMsEpoch, zUuid, zUuidV7, zVideoRef } from '@bolusi/schemas';
 
 import {
   intakeOptionsChangedApplier,
@@ -27,6 +27,7 @@ import {
   ticketCancelledApplier,
   ticketClaimedApplier,
   ticketOpenedApplier,
+  ownershipVideoRecordedApplier,
   ticketRepairTypesChangedApplier,
   workPausedApplier,
   workPhotosAddedApplier,
@@ -77,6 +78,7 @@ import {
   ticketCancelledRule,
   ticketClaimedRule,
   ticketOpenedRule,
+  ownershipVideoRecordedRule,
   ticketRepairTypesChangedRule,
   workPausedRule,
   workPhotosAddedRule,
@@ -225,9 +227,20 @@ export const ticketOpenedPayloadV2 = ticketOpenedPayloadV1
  * `repair.ticket_opened` v3: the repair types picked at intake, with their terms (may be none), and
  * the servisan this one is a warranty claim on (null for an ordinary one).
  */
-export const ticketOpenedPayload = ticketOpenedPayloadV2
+export const ticketOpenedPayloadV3 = ticketOpenedPayloadV2
   .extend({ repairTypes: zRecordedRepairTypes, claimOf: zUuid.nullable() })
   .strict();
+
+/**
+ * `repair.ticket_opened` v4: the ownership video, when a repair type asks for one (null when none
+ * does). The customer is at the counter, so it is taken with the intake.
+ */
+export const ticketOpenedPayload = ticketOpenedPayloadV3
+  .extend({ ownershipVideo: zVideoRef.nullable() })
+  .strict();
+
+/** An ownership video taken after intake: a type that needs one was added, or a clip retaken. */
+export const ownershipVideoRecordedPayload = z.object({ video: zVideoRef }).strict();
 
 /** The repair types of an open servisan, replacing the previous ones (after the diagnosis). */
 export const ticketRepairTypesChangedPayload = z
@@ -422,9 +435,13 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
   [REPAIR_OP.ticketOpened]: {
-    schemaVersion: 3,
+    schemaVersion: 4,
     payload: ticketOpenedPayload,
-    payloadByVersion: { 1: ticketOpenedPayloadV1, 2: ticketOpenedPayloadV2 },
+    payloadByVersion: {
+      1: ticketOpenedPayloadV1,
+      2: ticketOpenedPayloadV2,
+      3: ticketOpenedPayloadV3,
+    },
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
@@ -459,6 +476,15 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: workPhotosAddedApplier,
     rule: workPhotosAddedRule,
     permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
+  },
+  [REPAIR_OP.ownershipVideoRecorded]: {
+    schemaVersion: 1,
+    payload: ownershipVideoRecordedPayload,
+    reversal: 'Not reversible: a clip is evidence; a retake is shown in its place.',
+    apply: ownershipVideoRecordedApplier,
+    rule: ownershipVideoRecordedRule,
+    permission: REPAIR_PERMISSION.intake,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.workStarted]: {

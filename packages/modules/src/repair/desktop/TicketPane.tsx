@@ -39,6 +39,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { rejectedCount, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { TicketVideoSection } from './video.js';
 import {
   MESSAGE_ACTION_KEY,
   customerMessageKind,
@@ -525,6 +526,13 @@ export function TicketPane({
 
         {renderPrice(row)}
         <TicketPhotos ticket={row} />
+        <TicketVideoSection
+          ticket={row}
+          canRecord={can.intake && row.location !== 'returned' && row.outcome !== 'cancelled'}
+          runner={runner}
+          onRecorded={() => setDone('repair.done.video')}
+          testId="repair.desk.ticket.video"
+        />
         {renderCondition(row)}
         <DeviceSpecs brand={row.deviceBrand} model={row.deviceModel} repairs={can.work} />
 

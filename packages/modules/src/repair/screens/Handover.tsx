@@ -31,6 +31,7 @@ import {
   balanceAfterDownPayment,
   capturedThumbnailRef,
   amountOwed,
+  ownershipVideoMissing,
   repairAbilities,
   staleStep,
   ticketStatus,
@@ -47,6 +48,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
+import { TicketVideoSection } from './video.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { useHandoverPayment } from '../handover-payment.js';
 import { usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
@@ -96,7 +98,11 @@ export function Handover({
   const payment = useHandoverPayment(due, accounts, canPayLater);
   const { settled } = payment;
   const checks = useHandoverChecks(ticket);
+  // A repair type added after intake can still ask for the video: it is taken here, before pickup.
+  const videoMissing =
+    ticket !== undefined && ticket.outcome === 'repaired' && ownershipVideoMissing(ticket);
   const ready =
+    !videoMissing &&
     photo !== null &&
     signature !== null &&
     settled &&
@@ -154,11 +160,13 @@ export function Handover({
       onPrimary={submit}
       primaryDisabled={!ready}
       primaryHint={tn(
-        !settled
-          ? 'repair.hint.handoverPayment'
-          : checks.loaded && !checks.ready(note)
-            ? 'repair.hint.handoverChecks'
-            : 'repair.hint.handover',
+        videoMissing
+          ? 'repair.refusal.ownershipVideoNeeded'
+          : !settled
+            ? 'repair.hint.handoverPayment'
+            : checks.loaded && !checks.ready(note)
+              ? 'repair.hint.handoverChecks'
+              : 'repair.hint.handover',
       )}
       busy={runner.busy}
       errorCode={runner.errorCode}
@@ -207,6 +215,17 @@ export function Handover({
           )
         }
       </QueryView>
+      {!videoMissing || stale !== null || ticket === undefined ? null : (
+        <TicketVideoSection
+          ticket={ticket}
+          canRecord={can.intake}
+          runner={runner}
+          // The servisan reads live: the clip shows, and the handover unblocks, without a reload.
+          onRecorded={() => undefined}
+          atHandover
+          testID={`${testID}.video`}
+        />
+      )}
       {checks.lines.length === 0 || stale !== null ? null : (
         <Section title={tn('repair.handover.checks')} testID={`${testID}.checks`}>
           {/* Wrapped, not a sideways row: every line must be in sight to be gone through. */}

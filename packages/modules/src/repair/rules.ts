@@ -15,6 +15,7 @@ import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } f
 import type { SignedOperation } from '@bolusi/schemas';
 
 import {
+  OWNERSHIP_VIDEO_PREFIX,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
@@ -30,6 +31,7 @@ import { documentBalance, documentTotal } from '../money/rules.js';
 import {
   handoverProblem,
   intakeListProblems,
+  needsOwnershipVideo,
   recordedOption,
   warrantyUntil,
   type RecordedRepairType,
@@ -103,6 +105,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'downPaymentRefunded',
   'handoverAccessories',
   'handoverNoteNeeded',
+  'ownershipVideoNeeded',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -638,6 +641,14 @@ export const ticketOpenedRule: Rule = async (op, { db, holdsPermission }) => {
   );
   const total = payload.quoteLines.reduce((sum, line) => sum + line.amount, 0);
   checkTotal(0, total);
+  // From v4 the customer's ownership video comes with the intake that needs one.
+  if (
+    op.schemaVersion >= 4 &&
+    payload.ownershipVideo === null &&
+    needsOwnershipVideo(payload.repairTypes)
+  ) {
+    throw ownershipVideoNeeded();
+  }
   // v1 and v2 intakes were signed before claims.
   const claimOf = (payload as { claimOf?: string | null }).claimOf ?? null;
   if (claimOf !== null) {
@@ -825,9 +836,47 @@ export const deviceReturnedRule: Rule = async (op, { db, holdsPermission }) => {
   }
   // Every version: an older payload carries no reason, so it hands over only a paid phone.
   await requirePaid(db, op, holdsPermission);
-  // Before v3 there was no checklist to judge.
-  if (op.schemaVersion >= 3) await requireHandoverChecks(db, op);
+  // Before v3 there was no checklist to judge, and no video to ask for.
+  if (op.schemaVersion >= 3) {
+    await requireHandoverChecks(db, op);
+    if (ticket.outcome === 'repaired') await requireOwnershipVideo(db, op);
+  }
 };
+
+/**
+ * A clip taken after intake (a type that needs one was added after the diagnosis, or a retake),
+ * while the phone is still in the store and the servisan open.
+ */
+export const ownershipVideoRecordedRule: Rule = async (op, { db }) => {
+  requireOpen(await loadTicket(db, op), op.type);
+};
+
+function ownershipVideoNeeded(): DomainError {
+  return refuse('ownershipVideoNeeded', {
+    code: 'VALIDATION_FAILED',
+    details: { field: 'ownershipVideo', issue: 'a repair type needs the ownership video' },
+  });
+}
+
+/** A repaired phone whose repair types ask for the ownership video leaves only once there is one. */
+async function requireOwnershipVideo(db: Db, op: SignedOperation): Promise<void> {
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('repairTypesJson')
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirstOrThrow();
+  if (!needsOwnershipVideo(JSON.parse(row.repairTypesJson) as RecordedRepairType[])) return;
+  const video = await db
+    .selectFrom('repairTicketPhotos')
+    .select('slot')
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeOf(op))
+    .where('slot', 'like', `${OWNERSHIP_VIDEO_PREFIX}:%`)
+    .executeTakeFirst();
+  if (video === undefined) throw ownershipVideoNeeded();
+}
 
 /** Every accessory left at intake is on the checklist, and whatever is not ticked has a note. */
 async function requireHandoverChecks(db: Db, op: SignedOperation): Promise<void> {

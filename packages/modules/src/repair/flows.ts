@@ -1,14 +1,15 @@
 // Pure decisions behind the repair screens on every client (phone today, desktop next): which
 // tickets a board view shows, what a user may do next on a ticket, and how an intake draft becomes
 // an `openTicket` input. Platform-free so each client reuses them and each rule is tested directly.
-import type { MediaRef, MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
-import { zMediaRef } from '@bolusi/schemas';
+import type { MediaRef, MediaRefMime, ThumbnailRef, VideoMime } from '@bolusi/schemas';
+import { zMediaRef, zVideoRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
+import type { VideoMediaRef } from '../screen-kit/media.js';
 import type { OpenTicketInput } from './commands.js';
 import type { RepairKey } from './i18n.js';
 import {
@@ -17,6 +18,7 @@ import {
   MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_PERMISSION,
+  isOwnershipVideoSlot,
   workPhotoStage,
   type ChecklistState,
   type QuoteLineKind,
@@ -25,6 +27,7 @@ import {
   type WorkPhotoStage,
 } from './constants.js';
 import {
+  needsOwnershipVideo,
   readyDays,
   warrantyUntil,
   type IntakeOption,
@@ -641,6 +644,26 @@ export function workPhotos(
     .sort((a, b) => a.capturedAt - b.capturedAt);
 }
 
+/** The ticket's ownership video: the latest clip taken, or null when there is none. */
+export function ownershipVideoOf(ticket: Pick<TicketDetailRow, 'photos'>): TicketPhotoRow | null {
+  return (
+    ticket.photos
+      .filter((photo) => isOwnershipVideoSlot(photo.slot))
+      .sort((a, b) => b.capturedAt - a.capturedAt)[0] ?? null
+  );
+}
+
+/** A repair type on the ticket asks for the ownership video and none was taken yet. */
+export function ownershipVideoMissing(
+  ticket: Pick<TicketDetailRow, 'photos' | 'repairTypes'>,
+): boolean {
+  return needsOwnershipVideo(ticket.repairTypes) && ownershipVideoOf(ticket) === null;
+}
+
+export function videoRefOf(photo: TicketPhotoRow): VideoMediaRef {
+  return { mediaId: photo.mediaId, sha256: photo.mediaSha256, mime: photo.mediaMime as VideoMime };
+}
+
 export function photoInSlot(
   ticket: Pick<TicketDetailRow, 'photos'>,
   slot: string,
@@ -773,6 +796,8 @@ const zIntakeDraft = z.strictObject({
   peripherals: z.array(z.string()),
   /** Photo per angle id. */
   photos: z.record(z.string(), zMediaRef),
+  /** The customer's ownership video, when a picked repair type asks for one. */
+  ownershipVideo: zVideoRef.nullable().default(null),
   lines: z.array(zLineDraft),
   /** Rupiah the customer paid up front, as typed; '' when nothing was paid. */
   downPayment: z.string().default(''),
@@ -816,6 +841,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     checks: {},
     peripherals: [],
     photos: {},
+    ownershipVideo: null,
     lines: [],
     downPayment: '',
     downPaymentAccount: CASH_ACCOUNT,
@@ -861,6 +887,7 @@ export type IntakeProblem =
   | 'screenLock'
   | 'complaint'
   | 'photos'
+  | 'ownershipVideo'
   | 'quoteLines'
   | 'incompleteLine'
   | 'negativeTotal'
@@ -895,6 +922,9 @@ export function stepProblems(
       break;
     case 'photos':
       if (nextMissingPhoto(draft, options.photoAngles) !== null) problems.push('photos');
+      if (intakeNeedsVideo(draft, options) && draft.ownershipVideo === null) {
+        problems.push('ownershipVideo');
+      }
       break;
     case 'price':
       // An amount with no description would be dropped on save, so it is named, not lost.
@@ -938,6 +968,17 @@ export function nextMissingPhoto(
   angles: readonly IntakeOption[],
 ): IntakeOption | null {
   return angles.find((angle) => draft.photos[angle.id] === undefined) ?? null;
+}
+
+/** Whether a repair type picked for this intake asks for the customer's ownership video. */
+export function intakeNeedsVideo(
+  draft: Pick<IntakeDraft, 'repairTypes' | 'claimOf'>,
+  options: Pick<IntakeOptionLists, 'repairTypes'>,
+): boolean {
+  return (
+    draft.claimOf === null &&
+    chosenRepairTypes(draft, options.repairTypes).some((type) => type.needsVideo === true)
+  );
 }
 
 /** Every check not yet answered marked OK, after the counter has called out the ones with issues. */
@@ -1054,6 +1095,8 @@ export function toOpenTicketInput(
       label,
       ref: draft.photos[id]!,
     })),
+    // A clip taken for a type the counter then unpicked is not this servisan's.
+    ownershipVideo: intakeNeedsVideo(draft, options) ? draft.ownershipVideo : null,
     downPayment,
     downPaymentAccount: method.account,
     downPaymentReference: method.reference,

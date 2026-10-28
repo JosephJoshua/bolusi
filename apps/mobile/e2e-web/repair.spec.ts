@@ -583,6 +583,62 @@ test('intake picks the repair types and the ticket shows each warranty', async (
   await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText('Ganti layar');
 });
 
+test('unlocking takes the ownership video after the intake photos', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.device.brandChoice.Oppo');
+  await fill(page, 'repair.intake.device.model', 'A57');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.condition.complaint', 'Lupa pola');
+  await tap(page, 'repair.intake.condition.repairType.unlock');
+  await tap(page, 'repair.intake.condition.restOk');
+  await tap(page, 'repair.intake.primary');
+  for (let shot = 0; shot < 6; shot += 1) await tap(page, 'repair.intake.primary');
+  // The walk round the phone ends with the video, not the next step.
+  await expect(page.getByTestId('repair.intake.primary')).toContainText('Rekam video kepemilikan');
+  await page.getByTestId('repair.intake.photos.video').scrollIntoViewIfNeeded();
+  await shoot(page, 'video-intake-needed');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.photos.video.tile.retake')).toBeVisible();
+  await page.getByTestId('repair.intake.photos.video').scrollIntoViewIfNeeded();
+  await shoot(page, 'video-intake-recorded');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.price.description.0', 'Buka pola');
+  await fill(page, 'repair.intake.price.amount.0', '100000');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.review.video')).toContainText('Sudah direkam');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.ticket.video.recordedAt')).toBeVisible();
+  await page.getByTestId('repair.ticket.video').scrollIntoViewIfNeeded();
+  await shoot(page, 'video-ticket');
+});
+
+test('a type added later that needs the video holds the handover until it is taken', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.repairTypes');
+  await tap(page, 'repair.repairTypes.type.unlock');
+  await tap(page, 'repair.repairTypes.primary');
+  await expect(page.getByTestId('repair.ticket.video.needed')).toBeVisible();
+  await tap(page, 'repair.ticket.action.handover');
+  await expect(page.getByTestId('repair.handover.video.hint')).toBeVisible();
+  await fill(page, 'repair.handover.pay.line0.tendered', '20000');
+  await tickHandoverChecks(page);
+  await tap(page, 'repair.handover.photo.press');
+  await tap(page, 'repair.handover.signature.press');
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
+  await page.getByTestId('repair.handover.video').scrollIntoViewIfNeeded();
+  await shoot(page, 'video-handover-needed');
+  await tap(page, 'repair.handover.video.tile.slot.press');
+  await expect(page.getByTestId('repair.handover.video')).toHaveCount(0);
+  await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
+});
+
 test('once the phone goes home, the warranty shows its last day', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');

@@ -22,7 +22,8 @@
     "slipPrinted": "Slip printed",
     "storePrintSettingsChanged": "Slip details changed",
     "storeUncollectedDaysChanged": "Not-collected limit changed",
-    "ticketRepairTypesChanged": "Repair type changed"
+    "ticketRepairTypesChanged": "Repair type changed",
+    "ownershipVideoRecorded": "Ownership video recorded"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -253,7 +254,8 @@
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentReference": "Enter the approval code from the EDC machine.",
-    "screenLock": "Enter the screen lock, or choose None."
+    "screenLock": "Enter the screen lock, or choose None.",
+    "ownershipVideo": "The ownership video isn’t recorded yet."
   },
   "ready": {
     "today": "Today",
@@ -296,7 +298,8 @@
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved.",
-    "repairTypes": "Repair type saved."
+    "repairTypes": "Repair type saved.",
+    "video": "Ownership video saved."
   },
   "passcode": {
     "show": "Show",
@@ -653,7 +656,8 @@
     "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
     "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan.",
     "handoverAccessories": "An accessory is missing from the handover list.",
-    "handoverNoteNeeded": "Something isn’t ticked. Write a note first."
+    "handoverNoteNeeded": "Something isn’t ticked. Write a note first.",
+    "ownershipVideoNeeded": "Record the ownership video first."
   },
   "paper": {
     "title": "Slip paper",
@@ -746,5 +750,19 @@
   "handoverCheck": {
     "customerTried": "Customer tried it",
     "repairWorks": "The repaired part works"
+  },
+  "video": {
+    "title": "Ownership video",
+    "hint": "Ask the customer to say on video that the phone is theirs. Up to 1 minute.",
+    "record": "Record video",
+    "retake": "Record again",
+    "play": "Play",
+    "recordNext": "Record ownership video",
+    "needed": "Needs the ownership video before pickup.",
+    "recorded": "Recorded",
+    "recordedAt": "Recorded {at}",
+    "noCamera": "Record it on a store phone: open this servisan there.",
+    "label": "Video",
+    "expired": "The ownership video was deleted. Record it again."
   }
 }
