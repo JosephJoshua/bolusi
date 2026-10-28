@@ -96,7 +96,7 @@ export function statusQrText(site: string, code: string): string {
   return statusLink(site, code).toUpperCase();
 }
 
-/** The link without its scheme, to type from paper: `bolusi.id/c/K7M2Q9XA4B`. */
+/** The link without its scheme, to type from paper: `bolusi.id/c/K7M2Q9XA4BRS`. */
 export function statusAddress(site: string, code: string): string {
   return statusLink(site, code).replace(/^https?:\/\//i, '');
 }

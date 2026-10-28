@@ -278,7 +278,7 @@ describe('slip layout', () => {
       expect(pages).toHaveLength(1);
       expect(geometry.linesPerInch).toBe(6);
       const leads = (pages[0] ?? []).filter((row) => row.kind === 'image').map(rowText);
-      expect(leads.join('\n')).toContain('bolusi.id/c/K7M2Q9XA4B');
+      expect(leads.join('\n')).toContain('bolusi.id/c/K7M2Q9XA4BRS');
       expect(leads.join('\n')).toContain('Cek status servisan');
     }
   });
@@ -436,7 +436,7 @@ describe('slip layout', () => {
 describe('status link', () => {
   it('points at the servisan’s page on the device’s site, in capitals for a smaller code', () => {
     const link = slipLink(sampleTicket(), 'https://bolusi.id/');
-    expect(link?.address).toBe('bolusi.id/c/K7M2Q9XA4B');
+    expect(link?.address).toBe('bolusi.id/c/K7M2Q9XA4BRS');
     expect(link?.title).toBe('Cek status servisan');
     // Version 2 (25 modules): the capitals pack into the code's alphanumeric mode.
     expect(link?.modules).toHaveLength(25);

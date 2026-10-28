@@ -29,7 +29,7 @@ export interface PrintLink {
   readonly modules: readonly (readonly boolean[])[];
   /** What it opens, e.g. "Cek status servisan". */
   readonly title: string;
-  /** The address to type when the code will not scan, e.g. `bolusi.id/c/K7M2Q9XA4B`. */
+  /** The address to type when the code will not scan, e.g. `bolusi.id/c/K7M2Q9XA4BRS`. */
   readonly address: string;
 }
 

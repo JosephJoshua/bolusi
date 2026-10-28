@@ -183,12 +183,12 @@ describe('the status link', () => {
       [
         'Halo Kak Yohanes Wanimbo, HP Samsung Galaxy A15 sudah kami terima untuk diservis di Bolusi Cell Sorong.',
         'No. servisan: K7Q-0042',
-        'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4B',
+        'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
         'Terima kasih.',
       ].join('\n'),
     );
     expect(customerMessage('ready', repaired, null, SITE)).toContain(
-      'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4B',
+      'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
     );
     expect(customerMessage('ready', repaired, null)).not.toContain('/c/');
   });

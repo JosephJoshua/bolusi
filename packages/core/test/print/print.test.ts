@@ -271,7 +271,7 @@ const LINK: PrintLink = {
     Array.from({ length: 21 }, (_, x) => (x + y) % 2 === 0),
   ),
   title: 'Cek status servisan',
-  address: 'bolusi.id/c/K7M2Q9XA4B',
+  address: 'bolusi.id/c/K7M2Q9XA4BRS',
 };
 
 /** A page's height in 1/216 inch: text lines at the layout's spacing, pictures by 8-dot band. */
@@ -358,7 +358,7 @@ describe('a link beside the signatures', () => {
   it('is drawn with the address on plain paper', () => {
     const html = renderHtml(sampleDoc({ link: LINK }), PAPER_PRESETS.a4);
     expect(html).toContain('<svg class="qr"');
-    expect(html).toContain('bolusi.id/c/K7M2Q9XA4B');
+    expect(html).toContain('bolusi.id/c/K7M2Q9XA4BRS');
     expect(renderHtml(sampleDoc(), PAPER_PRESETS.a4)).not.toContain('<svg');
   });
 
@@ -414,7 +414,7 @@ describe('ESC/P bytes', () => {
     const bytes = renderEscp(sampleDoc({ link: LINK }), PAPER_PRESETS.continuous_half);
     const text = new TextDecoder('latin1').decode(bytes);
     // The address in bold, then spaces up to the code, then the code's bit image.
-    expect(text).toMatch(/\x1bEbolusi\.id\/c\/K7M2Q9XA4B\x1bF *\x1b\*\x01/);
+    expect(text).toMatch(/\x1bEbolusi\.id\/c\/K7M2Q9XA4BRS\x1bF *\x1b\*\x01/);
   });
 });
 
