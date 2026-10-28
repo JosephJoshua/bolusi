@@ -34,17 +34,35 @@ export function FactGrid({ children }: { readonly children: ReactNode }): React.
   );
 }
 
+/**
+ * A label over its value, with the one action that changes it. A `wide` fact takes the whole row
+ * (a list one per line), and its action sits at the end of the label's line, so it stays put
+ * however many lines the value takes.
+ */
 export function Fact({
   label,
   value,
   action,
+  wide = false,
   testId,
 }: {
   readonly label: string;
   readonly value: ReactNode;
   readonly action?: ReactNode;
+  readonly wide?: boolean | undefined;
   readonly testId?: string | undefined;
 }): React.JSX.Element {
+  if (wide) {
+    return (
+      <div data-testid={testId} className="col-span-full min-w-0">
+        <dt className="flex items-center justify-between gap-2 text-small text-text-muted">
+          {label}
+          {action}
+        </dt>
+        <dd className="break-words text-body font-semibold text-text">{value}</dd>
+      </div>
+    );
+  }
   return (
     <div data-testid={testId} className="min-w-0">
       <dt className="text-small text-text-muted">{label}</dt>

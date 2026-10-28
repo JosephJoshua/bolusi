@@ -57,6 +57,7 @@ const SPEC_INDEXES = [
   'idx_operations_rejected',
   'idx_repair_quote_lines_ticket',
   'idx_repair_ticket_events_ticket',
+  'idx_repair_tickets_claim_of',
   'idx_repair_tickets_customer',
   'idx_repair_tickets_device_counter',
   'idx_repair_tickets_number',

@@ -440,8 +440,9 @@ export function ConditionStep({
         multiline
         testID={`${testID}.complaint`}
       />
-      {/* What the counter expects to fix; the technician can change it after the diagnosis. */}
-      {options.repairTypes.length === 0 ? null : (
+      {/* What the counter expects to fix; the technician can change it after the diagnosis. A claim
+          repairs what its servisan did, so it has none of its own. */}
+      {options.repairTypes.length === 0 || draft.claimOf !== null ? null : (
         <Section title={tn('repair.condition.repairTypes')}>
           <ChipRow testID={`${testID}.repairTypes`}>
             {options.repairTypes.map((option) => (

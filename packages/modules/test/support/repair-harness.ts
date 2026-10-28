@@ -81,6 +81,8 @@ export interface RepairHarness {
   ownOps(): Promise<SignedOperation[]>;
   deliverPulled(op: SignedOperation, arrivalSeq: number): Promise<void>;
   photo(n: number): MediaRef;
+  /** Moves the device's clock on, so changes after it are signed that much later. */
+  advance(ms: number): void;
   close(): Promise<void>;
 }
 
@@ -145,6 +147,7 @@ export async function openRepairHarness(
                 P.correctDownPayment,
                 P.setPrintSettings,
                 P.setUncollectedDays,
+                P.warrantyException,
               ]),
             ],
           ]),
@@ -233,6 +236,9 @@ export async function openRepairHarness(
         arrivalSeq,
       });
       await engine.applyPulledOp(op);
+    },
+    advance: (ms: number): void => {
+      clock.value += ms;
     },
     photo: (n: number): MediaRef => {
       photoCounter += 1;

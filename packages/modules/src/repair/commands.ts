@@ -198,6 +198,11 @@ export const openTicketInput = z
     peripherals: z.array(zRecordedOption).max(50).default([]),
     /** What is being repaired, by the ids on this store's list; the terms are recorded here. */
     repairTypes: zRepairTypeIds.default([]),
+    /**
+     * The servisan this intake is a warranty claim on: one that went home repaired. A claim repairs
+     * what that one did, so it picks no repair types of its own.
+     */
+    claimOf: z.string().min(1).nullable().default(null),
     estimatedReadyAt: z.number().int().nullable().default(null),
     quoteLines: z.array(zLineInput).min(1).max(100),
     /** One photo per angle the store asks for, labelled as the counter saw it. */
@@ -283,6 +288,7 @@ export async function openTicketHandler(
       peripherals: input.peripherals,
       estimatedReadyAt: input.estimatedReadyAt,
       repairTypes,
+      claimOf: input.claimOf,
       quoteLines: input.quoteLines.map((line) => ({ lineId: ctx.newId(), ...line })),
       photos: input.photos,
     }),

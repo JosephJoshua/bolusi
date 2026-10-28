@@ -139,6 +139,14 @@ export interface IntakePhotoAngle {
   readonly label: string | null;
 }
 
+/** The servisan a warranty claim is on: its number, and what its warranty counts from. */
+export interface ClaimedTicket {
+  readonly id: string;
+  readonly ticketNumber: string;
+  readonly repairTypes: readonly RecordedRepairType[];
+  readonly returnedAt: number | null;
+}
+
 export interface TicketDetailRow extends TicketSummaryRow {
   readonly devicePasscode: string | null;
   readonly intakeNotes: string;
@@ -146,6 +154,12 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly peripherals: readonly RecordedOption[];
   /** What is being repaired, with each type's warranty as recorded; none on older tickets. */
   readonly repairTypes: readonly RecordedRepairType[];
+  /** The servisan this one is a warranty claim on; null for an ordinary servisan. */
+  readonly claimOfTicketId: string | null;
+  /** That servisan, with the types and pickup its warranty counts from. */
+  readonly claimOf: ClaimedTicket | null;
+  /** The warranty claims opened on this servisan, oldest first. */
+  readonly claims: readonly { readonly id: string; readonly ticketNumber: string }[];
   readonly intakePhotos: readonly IntakePhotoAngle[];
   readonly createdBy: string;
   readonly createdByName: string | null;
@@ -659,6 +673,7 @@ export async function getTicketHandler(
       'checklistJson',
       'peripheralsJson',
       'repairTypesJson',
+      'claimOfTicketId',
       'intakePhotosJson',
       'createdBy',
       'returnedBy',
@@ -668,6 +683,26 @@ export async function getTicketHandler(
     ])
     .where('id', '=', input.ticketId)
     .executeTakeFirstOrThrow();
+
+  const claimed =
+    detail.claimOfTicketId === null
+      ? undefined
+      : await qctx.db
+          .selectFrom('repairTickets')
+          .select(['id', 'ticketNumber', 'repairTypesJson', 'returnedAt'])
+          .where('id', '=', detail.claimOfTicketId)
+          .where('tenantId', '=', qctx.tenantId)
+          .where('storeId', '=', qctx.storeId)
+          .executeTakeFirst();
+  const claims = await qctx.db
+    .selectFrom('repairTickets')
+    .select(['id', 'ticketNumber'])
+    .where('claimOfTicketId', '=', input.ticketId)
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .orderBy('createdAt', 'asc')
+    .orderBy('id', 'asc')
+    .execute();
 
   const lines = await qctx.db
     .selectFrom('repairQuoteLines')
@@ -719,6 +754,17 @@ export async function getTicketHandler(
         ).map((check) => ({ ...recordedOption(check), state: check.state, note: check.note })),
         peripherals: parseJson<unknown[]>(detail.peripheralsJson, []).map(recordedOption),
         repairTypes: parseJson<RecordedRepairType[]>(detail.repairTypesJson, []),
+        claimOfTicketId: detail.claimOfTicketId,
+        claimOf:
+          claimed === undefined
+            ? null
+            : {
+                id: claimed.id,
+                ticketNumber: claimed.ticketNumber,
+                repairTypes: parseJson<RecordedRepairType[]>(claimed.repairTypesJson, []),
+                returnedAt: claimed.returnedAt === null ? null : Number(claimed.returnedAt),
+              },
+        claims,
         intakePhotos: intakePhotoAngles(detail.intakePhotosJson),
         createdBy: detail.createdBy,
         createdByName: names.get(detail.createdBy) ?? null,
@@ -906,11 +952,15 @@ export interface CancelFees {
   readonly afterWork: number;
 }
 
-/** The store's fee for cancelling this ticket now: after-work once work has ever started. */
+/**
+ * The store's fee for cancelling this ticket now: after-work once work has ever started. A warranty
+ * claim was free, so it costs nothing to cancel unless the owner sets a fee.
+ */
 export function standardCancelFee(
-  ticket: Pick<TicketDetailRow, 'workStarted'>,
+  ticket: Pick<TicketDetailRow, 'workStarted' | 'claimOfTicketId'>,
   fees: CancelFees,
 ): number {
+  if (ticket.claimOfTicketId !== null) return 0;
   return ticket.workStarted ? fees.afterWork : fees.beforeWork;
 }
 

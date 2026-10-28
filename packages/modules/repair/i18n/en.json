@@ -86,7 +86,8 @@
     "changeFeeLabel": "Change the cancellation fee",
     "feeInput": "Fee the customer pays",
     "storeFee": "This store’s usual fee: {amount}",
-    "feeChangedHint": "Also say why you changed the fee."
+    "feeChangedHint": "Also say why you changed the fee.",
+    "claimFree": "Warranty claim, no fee"
   },
   "check": {
     "biometrics": "Fingerprint or face unlock",
@@ -424,7 +425,8 @@
       "accessories": "Accessories",
       "technician": "Technician",
       "status": "Status",
-      "cancelReason": "Cancel reason"
+      "cancelReason": "Cancel reason",
+      "claimOf": "Claim on"
     },
     "section": {
       "complaint": "Complaint",
@@ -609,7 +611,13 @@
     "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it.",
-    "repairTypesNotYours": "Only the counter or a technician can change the repair type."
+    "repairTypesNotYours": "Only the counter or a technician can change the repair type.",
+    "claimNotReturned": "A warranty claim is only for a phone that was repaired and collected.",
+    "claimOfClaim": "Open the claim from the original repair, not from another claim.",
+    "claimWithTypes": "A warranty claim uses the repair types of the original repair.",
+    "warrantyEnded": "The warranty has ended. Only an owner can open this claim.",
+    "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
+    "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan."
   },
   "paper": {
     "title": "Slip paper",
@@ -689,5 +697,15 @@
     "choose": "Choose",
     "title": "Repair type",
     "save": "Save"
+  },
+  "warrantyClaim": {
+    "action": "Warranty claim",
+    "title": "Warranty claim",
+    "line": "Warranty claim",
+    "of": "Warranty claim on",
+    "claims": "Warranty claim",
+    "open": "Open",
+    "intakeNote": "From {number}. Its repair types and warranty carry over.",
+    "ended": "The warranty has ended. Only an owner can open this claim."
   }
 }

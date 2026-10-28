@@ -1,7 +1,7 @@
 // The lists the counter picks from at intake, which the owner edits (product-scope.md, "Configurable
 // intake lists"): condition checks, accessories left with the phone, intake photo angles, one-tap
-// brands, ready-by choices and repair types ("Jenis servis", each with its warranty). The owner keeps one list of each for the whole franchise; a store
-// hides the items it does not use. A ticket records the label it showed, so a later rename or
+// brands, ready-by choices and repair types ("Jenis servisan", each with its warranty). The owner
+// keeps one list of each for the whole franchise; a store hides the items it does not use. A ticket records the label it showed, so a later rename or
 // removal never rewrites an old servisan.
 //
 // Platform-free and pure, so the command, the intake screens and the owner's editor share every rule.
@@ -297,6 +297,22 @@ export function warrantyEnds(
   return type.warrantyDays === 0 || returnedAt === null
     ? null
     : returnedAt + type.warrantyDays * DAY_MS;
+}
+
+/**
+ * The last moment a servisan that went home can be claimed for free: the latest end among its
+ * types' warranties. Null when none of them carries a warranty, or the phone is still in the store.
+ */
+export function warrantyUntil(
+  types: readonly Pick<RecordedRepairType, 'warrantyDays'>[],
+  returnedAt: number | null,
+): number | null {
+  let until: number | null = null;
+  for (const type of types) {
+    const ends = warrantyEnds(type, returnedAt);
+    if (ends !== null && (until === null || ends > until)) until = ends;
+  }
+  return until;
 }
 
 /** Whether two recorded lists are the same types in the same order. */

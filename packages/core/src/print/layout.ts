@@ -156,10 +156,14 @@ function fieldRows(fields: readonly PrintField[], width: number): TextRow[] {
   const longest = fields.reduce((max, f) => Math.max(max, f.label.length), 0);
   const twoColumns = width >= 72 && fields.length > 1;
   const colWidth = twoColumns ? Math.floor((width - COLUMN_GAP) / 2) : width;
-  // Labels are short words; a label longer than this wraps rather than squeezing the value.
-  const labelWidth = Math.max(1, Math.min(longest, twoColumns ? 13 : 16, Math.floor(width / 3)));
+  // Labels are short words; a label longer than this wraps rather than squeezing the value. A
+  // half-line column has room for a shorter one than a full line does.
+  const labelWidthFor = (cap: number): number =>
+    Math.max(1, Math.min(longest, cap, Math.floor(width / 3)));
   // Paired only when every value fits half a line, so the labels line up down the block.
-  const paired = twoColumns && fields.every((f) => f.value.length <= colWidth - labelWidth - 3);
+  const paired =
+    twoColumns && fields.every((f) => f.value.length <= colWidth - labelWidthFor(13) - 3);
+  const labelWidth = labelWidthFor(paired ? 13 : 18);
   const rows: TextRow[] = [];
   for (let i = 0; i < fields.length; i += 1) {
     const field = fields[i] as PrintField;

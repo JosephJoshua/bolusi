@@ -112,20 +112,27 @@ function customerFields(ticket: TicketDetailRow): PrintField[] {
       value: ticket.repairTypes.map(repairTypeLabel).join(', '),
     });
   }
+  if (ticket.claimOf !== null) {
+    fields.push({ label: tn('repair.slip.field.claimOf'), value: ticket.claimOf.ticketNumber });
+  }
   return fields;
 }
 
-/** Each repair type's warranty, from the day the phone went home: "Ganti layar : s/d 27/11/2026". */
+/**
+ * Each repair type's warranty, from the day the phone went home: "Ganti layar : s/d 27/11/2026". A
+ * claim runs under its servisan's warranty, so its slip prints that one: a claim never extends it.
+ */
 function warrantyBlocks(ticket: TicketDetailRow): PrintBlock[] {
-  return ticket.repairTypes.length === 0
+  const { repairTypes, returnedAt } = ticket.claimOf === null ? ticket : ticket.claimOf;
+  return repairTypes.length === 0
     ? []
     : [
         { kind: 'heading', text: tn('repair.warranty.title') },
         {
           kind: 'fields',
-          fields: ticket.repairTypes.map((type) => ({
+          fields: repairTypes.map((type) => ({
             label: repairTypeLabel(type),
-            value: warrantyTerms(type, ticket.returnedAt),
+            value: warrantyTerms(type, returnedAt),
           })),
         },
       ];

@@ -83,6 +83,8 @@ export const REPAIR_PERMISSION = {
   setPrintSettings: 'repair.set_print_settings',
   /** Store-scoped: set after how many days a phone nobody collected is flagged. */
   setUncollectedDays: 'repair.set_uncollected_days',
+  /** Store-scoped: open a warranty claim after the warranty ended, or charge for one (owners). */
+  warrantyException: 'repair.warranty_exception',
 } as const;
 
 /** The slips a servisan prints: the intake receipt, and the handover slip (pickup or cancel). */

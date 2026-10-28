@@ -22,7 +22,7 @@
     "slipPrinted": "Nota dicetak",
     "storePrintSettingsChanged": "Tampilan nota diubah",
     "storeUncollectedDaysChanged": "Batas HP belum diambil diubah",
-    "ticketRepairTypesChanged": "Jenis servis diubah"
+    "ticketRepairTypesChanged": "Jenis servisan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -86,7 +86,8 @@
     "changeFeeLabel": "Ubah biaya pembatalan",
     "feeInput": "Biaya yang dibayar pelanggan",
     "storeFee": "Biaya biasa di toko ini: {amount}",
-    "feeChangedHint": "Tulis juga kenapa biayanya diubah."
+    "feeChangedHint": "Tulis juga kenapa biayanya diubah.",
+    "claimFree": "Klaim garansi, tanpa biaya"
   },
   "check": {
     "biometrics": "Sidik jari & wajah",
@@ -110,7 +111,7 @@
     "peripherals": "Kelengkapan yang dititipkan",
     "restOk": "Sisanya normal",
     "notesLabel": "Catatan",
-    "repairTypes": "Jenis servis"
+    "repairTypes": "Jenis servisan"
   },
   "customer": {
     "change": "Ganti pelanggan",
@@ -279,7 +280,7 @@
     "printed": "Nota dicetak.",
     "shared": "PDF nota sudah dikirim.",
     "downPayment": "DP tersimpan.",
-    "repairTypes": "Jenis servis disimpan."
+    "repairTypes": "Jenis servisan disimpan."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -304,7 +305,7 @@
   },
   "options": {
     "title": "Pilihan saat terima HP",
-    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi, jenis servis",
+    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi, jenis servisan",
     "intro": "Berlaku di semua toko. Servisan yang sudah masuk tidak ikut berubah.",
     "introStore": "Pilih yang tampil di toko ini.",
     "count": "{count} pilihan",
@@ -315,7 +316,7 @@
       "photoAngles": "Sisi HP yang difoto",
       "brands": "Merek pilihan cepat",
       "readyBy": "Estimasi selesai",
-      "repairTypes": "Jenis servis"
+      "repairTypes": "Jenis servisan"
     },
     "hint": {
       "checks": "Dicek kasir di depan pelanggan, urut dari atas.",
@@ -424,7 +425,8 @@
       "accessories": "Kelengkapan",
       "technician": "Teknisi",
       "status": "Status",
-      "cancelReason": "Alasan batal"
+      "cancelReason": "Alasan batal",
+      "claimOf": "Klaim dari"
     },
     "section": {
       "complaint": "Keluhan",
@@ -609,7 +611,13 @@
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
-    "repairTypesNotYours": "Hanya kasir atau teknisi yang bisa mengubah jenis servis."
+    "repairTypesNotYours": "Hanya kasir atau teknisi yang bisa mengubah jenis servisan.",
+    "claimNotReturned": "Klaim garansi hanya untuk HP yang sudah selesai diservis dan diambil.",
+    "claimOfClaim": "Klaim garansi dibuat dari servisan aslinya, bukan dari klaim lain.",
+    "claimWithTypes": "Klaim garansi memakai jenis servisan dari servisan aslinya.",
+    "warrantyEnded": "Garansinya sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
+    "claimChargeOwnerOnly": "Klaim garansi gratis. Hanya pemilik yang bisa menagih biaya.",
+    "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya."
   },
   "paper": {
     "title": "Kertas nota",
@@ -687,7 +695,17 @@
     "none": "Belum dipilih",
     "change": "Ubah",
     "choose": "Pilih",
-    "title": "Jenis servis",
+    "title": "Jenis servisan",
     "save": "Simpan"
+  },
+  "warrantyClaim": {
+    "action": "Klaim garansi",
+    "title": "Klaim garansi",
+    "line": "Klaim garansi",
+    "of": "Klaim garansi dari",
+    "claims": "Klaim garansi",
+    "open": "Buka",
+    "intakeNote": "Dari {number}. Jenis servisan dan garansinya ikut servisan itu.",
+    "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini."
   }
 }

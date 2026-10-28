@@ -29,6 +29,7 @@ import {
   Plus,
   Printer,
   SearchX,
+  ShieldCheck,
   TriangleAlert,
   X,
 } from 'lucide-react';
@@ -47,6 +48,7 @@ import {
   amountOwed,
   balanceAfterDownPayment,
   canSetRepairTypes,
+  claimIntakeDraft,
   downPaymentAction,
   downPaymentStale,
   photoInSlot,
@@ -58,7 +60,9 @@ import {
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
+  warrantyClaimAction,
   workPhotos,
+  type IntakeDraft,
   type TicketAction,
   type StaleStep,
   type TicketStep,
@@ -145,6 +149,10 @@ export interface TicketPaneProps {
   readonly onClose: () => void;
   /** Where a refused change is explained; without it the banner only says so. */
   readonly onOpenSyncStatus?: (() => void) | undefined;
+  /** Starts a warranty claim's intake from this servisan; without it the claim is not offered. */
+  readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
+  /** Opens a linked servisan: the one a claim is on, or a claim on this one. */
+  readonly onOpenTicket?: ((ticketId: string) => void) | undefined;
 }
 
 export function TicketPane({
@@ -152,6 +160,8 @@ export function TicketPane({
   now,
   onClose,
   onOpenSyncStatus,
+  onStartClaim,
+  onOpenTicket,
 }: TicketPaneProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
@@ -235,6 +245,10 @@ export function TicketPane({
   const storeName = useStoreDisplayName();
   const uncollectedLimit = useUncollectedLimit();
   const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const claimAction =
+    ticket === undefined || onStartClaim === undefined
+      ? null
+      : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
     const url = customerMessageUrl(kind, row, storeName);
@@ -361,6 +375,9 @@ export function TicketPane({
               {row.ticketNumber}
             </span>
             <StatusChip status={ticketStatus(row)} />
+            {row.claimOf === null ? null : (
+              <Chip label={tn('repair.warrantyClaim.title')} icon={ShieldCheck} tone="info" />
+            )}
             {waited === null ? null : (
               <Chip
                 label={tn('repair.board.waited', { days: waited })}
@@ -395,7 +412,8 @@ export function TicketPane({
         {primary === undefined &&
         rowActions.length === 0 &&
         printing === undefined &&
-        messageKind === null ? null : (
+        messageKind === null &&
+        claimAction === null ? null : (
           <div className="flex flex-wrap gap-2">
             {primary === undefined ? null : (
               <Button
@@ -422,6 +440,17 @@ export function TicketPane({
                 onClick={() => sendMessage(messageKind, row)}
                 disabled={runner.busy}
                 data-testid="repair.desk.ticket.action.message"
+              />
+            )}
+            {claimAction === null ? null : (
+              <Button
+                label={tn('repair.warrantyClaim.action')}
+                icon={ShieldCheck}
+                onClick={() =>
+                  onStartClaim?.(claimIntakeDraft(row, tn('repair.warrantyClaim.line')))
+                }
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.action.warrantyClaim"
               />
             )}
             {/* An icon with its name on hover, so the steps that move the servisan keep one line. */}
@@ -469,6 +498,7 @@ export function TicketPane({
 
         <FactGrid>
           {renderRepairTypes(row)}
+          {renderClaimLinks(row)}
           <Fact
             label={tn('repair.ticket.technician')}
             value={row.technicianName ?? tn('repair.ticket.unassigned')}
@@ -734,9 +764,61 @@ export function TicketPane({
             />
           ) : null
         }
+        wide
         testId="repair.desk.ticket.repairTypes"
       />
     );
+  }
+
+  /**
+   * The servisan a claim is on, with the warranty the claim runs under, or the claims on this one,
+   * each a click away (the phone's ticket shows the same).
+   */
+  function renderClaimLinks(row: TicketDetailRow): React.ReactNode {
+    const { claimOf } = row;
+    const links = [
+      ...(claimOf === null
+        ? []
+        : [
+            {
+              id: claimOf.id,
+              number: claimOf.ticketNumber,
+              lines: claimOf.repairTypes.map((type) => warrantyLine(type, claimOf.returnedAt)),
+              key: 'of' as const,
+            },
+          ]),
+      ...row.claims.map((claim) => ({
+        id: claim.id,
+        number: claim.ticketNumber,
+        lines: [],
+        key: 'claims' as const,
+      })),
+    ];
+    return links.map((link) => (
+      <Fact
+        key={link.id}
+        label={tn(`repair.warrantyClaim.${link.key}`)}
+        value={[link.number, ...link.lines].map((line) => (
+          <span key={line} className="block">
+            {line}
+          </span>
+        ))}
+        action={
+          onOpenTicket === undefined ? null : (
+            <Button
+              label={tn('repair.warrantyClaim.open')}
+              aria-label={`${tn(`repair.warrantyClaim.${link.key}`)} ${link.number}`}
+              variant="text"
+              size="sm"
+              onClick={() => onOpenTicket(link.id)}
+              data-testid={`repair.desk.ticket.claimLink.${link.id}`}
+            />
+          )
+        }
+        wide
+        testId="repair.desk.ticket.claimLink"
+      />
+    ));
   }
 
   function renderStep(row: TicketDetailRow): React.JSX.Element | null {
@@ -760,6 +842,7 @@ export function TicketPane({
           <CancelDialog
             {...common}
             workStarted={row.workStarted}
+            claimOf={row.claimOfTicketId}
             onDone={() => finishStep(undefined)}
           />
         );

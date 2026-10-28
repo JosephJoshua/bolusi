@@ -75,6 +75,8 @@ export interface RepairTicketsTable {
    */
   /** JSON array of the repair types, as recorded: `{ item, label, warrantyDays, needsVideo }`. */
   repairTypesJson: string;
+  /** The servisan this one is a warranty claim on; null for an ordinary servisan. */
+  claimOfTicketId: string | null;
   readyAt: number | null;
 }
 

@@ -220,9 +220,12 @@ export const ticketOpenedPayloadV2 = ticketOpenedPayloadV1
   })
   .strict();
 
-/** `repair.ticket_opened` v3: the repair types picked at intake, with their terms (may be none). */
+/**
+ * `repair.ticket_opened` v3: the repair types picked at intake, with their terms (may be none), and
+ * the servisan this one is a warranty claim on (null for an ordinary one).
+ */
 export const ticketOpenedPayload = ticketOpenedPayloadV2
-  .extend({ repairTypes: zRecordedRepairTypes })
+  .extend({ repairTypes: zRecordedRepairTypes, claimOf: zUuid.nullable() })
   .strict();
 
 /** The repair types of an open servisan, replacing the previous ones (after the diagnosis). */

@@ -1,6 +1,6 @@
-// Repair types ("Jenis servis") through the real runtime: the owner's list and its terms, the types a
-// servisan records at intake and keeps however the list changes later, who may change them until the
-// phone goes home, and the warranty each one promises from pickup.
+// Repair types ("Jenis servisan") through the real runtime: the owner's list and its terms, the
+// types a servisan records at intake and keeps however the list changes later, who may change them
+// until the phone goes home, and the warranty each one promises from pickup.
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import { DomainError } from '@bolusi/core';

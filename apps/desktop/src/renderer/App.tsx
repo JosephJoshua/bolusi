@@ -18,7 +18,10 @@ import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from '.
 import { UpdateNotice, useAppVersion } from './updates.js';
 
 type Page =
-  { readonly kind: 'board' } | { readonly kind: 'intake' } | { readonly kind: 'settings' };
+  | { readonly kind: 'board' }
+  // A warranty claim's intake starts from a draft made from the servisan it claims on.
+  | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
+  | { readonly kind: 'settings' };
 
 const SIDEBAR_KEY = 'bolusi.sidebar';
 const NARROW_PX = 1280;
@@ -141,11 +144,13 @@ function Counter({
         <SettingsPage />
       ) : page.kind === 'intake' ? (
         <IntakePage
+          // A claim is its own intake: it starts from its servisan and leaves the other one be.
+          key={page.claim === undefined ? 'intake' : 'claim'}
           now={Date.now}
-          restoredDraft={draft}
-          onDraftChange={setDraft}
+          restoredDraft={page.claim ?? draft}
+          onDraftChange={page.claim === undefined ? setDraft : undefined}
           onOpened={(ticketId) => {
-            setDraft(null);
+            if (page.claim === undefined) setDraft(null);
             setSelectedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
@@ -158,6 +163,7 @@ function Counter({
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
+          onStartClaim={(claim) => setPage({ kind: 'intake', claim })}
         />
       )}
     </AppShell>

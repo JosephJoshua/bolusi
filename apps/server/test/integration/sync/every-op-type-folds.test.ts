@@ -103,7 +103,7 @@ function journey(world: ChainWorld): OpSpec[] {
     entityId: ticketId,
     schemaVersion: repairTypes === undefined ? 2 : 3,
     payload: {
-      ...(repairTypes === undefined ? {} : { repairTypes }),
+      ...(repairTypes === undefined ? {} : { repairTypes, claimOf: null }),
       ticketNumber,
       customerId: customer,
       device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },

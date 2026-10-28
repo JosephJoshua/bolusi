@@ -426,9 +426,14 @@ export function CancelDialog({
   ticketId,
   stale,
   workStarted,
+  claimOf,
   onDone,
   onClose,
-}: StepDialogProps & { readonly workStarted: boolean }): React.JSX.Element {
+}: StepDialogProps & {
+  readonly workStarted: boolean;
+  /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
+  readonly claimOf: string | null;
+}): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -437,7 +442,10 @@ export function CancelDialog({
   // Null until the owner chooses to change it; the store's fee applies until then.
   const [fee, setFee] = useState<number | null | undefined>(undefined);
   const changing = fee !== undefined;
-  const standard = fees.status === 'ready' ? standardCancelFee({ workStarted }, fees.data) : null;
+  const standard =
+    fees.status === 'ready'
+      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf }, fees.data)
+      : null;
   const charged = changing ? fee : standard;
   const changed = standard !== null && charged !== null && charged !== standard;
   const complete = charged !== null && reason.trim() !== '';
@@ -527,7 +535,13 @@ export function CancelDialog({
               <p className="mt-1 text-small text-text-muted">
                 {changed
                   ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })
-                  : tn(workStarted ? 'repair.cancel.afterWork' : 'repair.cancel.beforeWork')}
+                  : tn(
+                      claimOf !== null
+                        ? 'repair.cancel.claimFree'
+                        : workStarted
+                          ? 'repair.cancel.afterWork'
+                          : 'repair.cancel.beforeWork',
+                    )}
               </p>
             </div>
           )}

@@ -498,6 +498,54 @@ test('once the phone goes home, the warranty shows its last day', async ({ page 
   await shoot(page, 'types-returned');
 });
 
+test('a phone back under warranty opens a free claim linked to its servisan', async ({ page }) => {
+  await open(page, 'counter');
+  await fill(page, 'repair.board.search', 'K7Q-0005');
+  await tap(page, 'repair.board.row.t-8');
+  await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText('· garansi s/d');
+  await tap(page, 'repair.ticket.action.warrantyClaim');
+  // The same customer and phone, and the claim says where its warranty comes from.
+  await expect(page.getByTestId('repair.intake.claim')).toContainText('Dari K7Q-0005');
+  await expect(page.getByTestId('repair.intake.claim.ended')).toHaveCount(0);
+  await shoot(page, 'claim-intake');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Redmi Note 12');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.condition.complaint', 'Layar berkedip lagi');
+  // A claim repairs what its servisan did: it picks no types of its own.
+  await expect(page.getByTestId('repair.intake.condition.repairTypes')).toHaveCount(0);
+  await tap(page, 'repair.intake.condition.restOk');
+  await tap(page, 'repair.intake.primary');
+  for (let shot = 0; shot < 6; shot += 1) await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.price.description.0.field')).toHaveValue(
+    'Klaim garansi',
+  );
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.review.total')).toHaveText('Rp 0');
+  await expect(page.getByTestId('repair.intake.claim')).toBeVisible();
+  await tap(page, 'repair.intake.primary');
+
+  const link = page.getByTestId('repair.ticket.claimLink');
+  await expect(link).toContainText('K7Q-0005');
+  await expect(link).toContainText(/Ganti layar · garansi s\/d \d{2}\/\d{2}\/\d{4}/);
+  await expect(page.getByTestId('repair.ticket.repairTypes')).toHaveCount(0);
+  await shoot(page, 'claim-ticket');
+  // Each servisan links to the other.
+  await tap(page, 'repair.ticket.claimLink.t-8');
+  await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Yakob Tabuni');
+  await expect(page.getByTestId('repair.ticket.claimLink')).toBeVisible();
+  await shoot(page, 'claim-original');
+});
+
+test('a technician cannot start a warranty claim', async ({ page }) => {
+  await open(page, 'technician');
+  await fill(page, 'repair.board.search', 'K7Q-0005');
+  await tap(page, 'repair.board.row.t-8');
+  await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Yakob Tabuni');
+  await expect(page.getByTestId('repair.ticket.action.warrantyClaim')).toHaveCount(0);
+});
+
 test('the preview start page signs in, and switching user keeps the same tickets', async ({
   page,
 }) => {

@@ -393,6 +393,7 @@ export interface RepairTickets {
   cancelledBy: string | null;
   cancelStandardFee: Int8 | null;
   checklistJson: string;
+  claimOfTicketId: string | null;
   complaint: string;
   createdAt: Int8;
   createdBy: string;

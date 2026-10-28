@@ -6,6 +6,7 @@
 import { formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   Button,
+  Banner,
   CaptureTile,
   ConfirmDialog,
   IconButton,
@@ -41,6 +42,7 @@ import {
   toggled,
   stepProblems,
   toOpenTicketInput,
+  claimWarrantyEnded,
   acceptsRupiahText,
   balanceAfterDownPayment,
   intakeDownPayment,
@@ -273,7 +275,9 @@ export function IntakePage({
   return (
     <div ref={pageRef} className="flex min-h-0 flex-1 flex-col" data-testid="repair.desk.intake">
       <PageHeader
-        title={tn('repair.action.newIntake')}
+        title={tn(
+          draft.claimOf === null ? 'repair.action.newIntake' : 'repair.warrantyClaim.title',
+        )}
         leading={
           <IconButton
             icon={ArrowLeft}
@@ -307,6 +311,19 @@ export function IntakePage({
         <div className="@container min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-8 px-6 pb-12 pt-2 @3xl:grid-cols-[minmax(0,1fr)_248px] @5xl:grid-cols-[minmax(0,1fr)_300px]">
             <div className="@container flex min-w-0 flex-col gap-6">
+              {draft.claimOf === null ? null : (
+                <div className="flex flex-col gap-2" data-testid="repair.desk.intake.claim">
+                  <Banner
+                    tone="info"
+                    message={tn('repair.warrantyClaim.intakeNote', {
+                      number: draft.claimOf.ticketNumber,
+                    })}
+                  />
+                  {claimWarrantyEnded(draft.claimOf, now()) ? (
+                    <Banner tone="warning" message={tn('repair.warrantyClaim.ended')} />
+                  ) : null}
+                </div>
+              )}
               <IntakeSection
                 n={1}
                 section="customer"
@@ -698,7 +715,8 @@ function ModelField({
   readonly picker: ModelPicker;
   readonly error: string | undefined;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(true);
+  // Opens once something is typed: a model already filled in (a claim, a kept draft) needs no list.
+  const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const rows = open ? picker.suggestions : [];
   const listId = 'repair.desk.intake.models';
@@ -904,8 +922,9 @@ function ConditionFields({
         rows={2}
         data-testid="repair.desk.intake.complaint"
       />
-      {/* What the counter expects to fix; the technician can change it after the diagnosis. */}
-      {options.repairTypes.length === 0 ? null : (
+      {/* What the counter expects to fix; the technician can change it after the diagnosis. A claim
+          repairs what its servisan did, so it has none of its own. */}
+      {options.repairTypes.length === 0 || draft.claimOf !== null ? null : (
         <div>
           <p className="mb-2 text-small font-semibold text-text">
             {tn('repair.condition.repairTypes')}

@@ -248,11 +248,14 @@ export function CancelStep({
   ticketId,
   stale,
   workStarted,
+  claimOf,
   onDone,
   onCancel,
   testID = 'repair.cancel',
 }: StepProps & {
   readonly workStarted: boolean;
+  /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
+  readonly claimOf: string | null;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -263,7 +266,10 @@ export function CancelStep({
   // Null until the owner taps "Ubah"; the store's fee applies until then.
   const [feeText, setFeeText] = useState<string | null>(null);
 
-  const standard = fees.status === 'ready' ? standardCancelFee({ workStarted }, fees.data) : null;
+  const standard =
+    fees.status === 'ready'
+      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf }, fees.data)
+      : null;
   const fee = feeText === null ? standard : parseRupiah(feeText);
   const changed = standard !== null && fee !== null && fee !== standard;
   const complete = fee !== null && reason.trim() !== '';
@@ -331,7 +337,13 @@ export function CancelStep({
             <Text style={repairStyles.caption} testID={`${testID}.feeBasis`}>
               {changed
                 ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })
-                : tn(workStarted ? 'repair.cancel.afterWork' : 'repair.cancel.beforeWork')}
+                : tn(
+                    claimOf !== null
+                      ? 'repair.cancel.claimFree'
+                      : workStarted
+                        ? 'repair.cancel.afterWork'
+                        : 'repair.cancel.beforeWork',
+                  )}
             </Text>
           </View>
         )}

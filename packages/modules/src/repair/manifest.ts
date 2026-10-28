@@ -183,6 +183,12 @@ export const repairModuleManifest = {
       description:
         'Can set after how many days a repaired or cancelled phone nobody collected is flagged.',
     },
+    [REPAIR_PERMISSION.warrantyException]: {
+      scope: 'store',
+      // A free repair outside the warranty is money the store gives away.
+      isDangerous: true,
+      description: 'Can open a warranty claim after the warranty ended, or charge for a claim.',
+    },
   },
 
   commands: {

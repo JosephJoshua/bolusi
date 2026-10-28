@@ -98,6 +98,7 @@ export const repairTicketsTable: ProjectionTableManifest = {
     down_payment_at: 'integer',
     ready_at: 'integer',
     repair_types_json: 'text',
+    claim_of_ticket_id: 'text',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
@@ -283,12 +284,13 @@ export interface TicketOpenedPayload {
   readonly quoteLines: readonly QuoteLineDraft[];
   readonly photos: readonly { slot: string; label: string | null; ref: MediaRef }[];
   readonly repairTypes: readonly RecordedRepairType[];
+  readonly claimOf: string | null;
 }
 
 /** v1: checks without labels, accessories as plain keys, exactly the six default photo angles. */
 interface TicketOpenedV1Payload extends Omit<
   TicketOpenedPayload,
-  'checklist' | 'peripherals' | 'photos' | 'repairTypes'
+  'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
 > {
   readonly checklist: readonly { item: string; state: string; note: string }[];
   readonly peripherals: readonly string[];
@@ -459,12 +461,16 @@ export const customerDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> 
  * editable need no rebuild and every device keeps converging on the same bytes.
  */
 function ticketOpenedRows(op: ProjectionOperation): {
-  payload: Omit<TicketOpenedPayload, 'checklist' | 'peripherals' | 'photos' | 'repairTypes'>;
+  payload: Omit<
+    TicketOpenedPayload,
+    'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
+  >;
   checklist: readonly object[];
   peripherals: readonly unknown[];
   photos: readonly { slot: string; ref: MediaRef }[];
   intakePhotos: readonly { slot: string; label: string | null }[] | null;
   repairTypes: readonly object[];
+  claimOf: string | null;
 } {
   switch (op.schemaVersion) {
     case 1: {
@@ -476,6 +482,7 @@ function ticketOpenedRows(op: ProjectionOperation): {
         photos: INTAKE_PHOTO_SLOTS.map((slot) => ({ slot, ref: payload.photos[slot] })),
         intakePhotos: null,
         repairTypes: [],
+        claimOf: null,
       };
     }
     case 2:
@@ -489,6 +496,7 @@ function ticketOpenedRows(op: ProjectionOperation): {
         intakePhotos: payload.photos.map(({ slot, label }) => ({ slot, label })),
         // v2 tickets were opened before repair types.
         repairTypes: op.schemaVersion === 3 ? payload.repairTypes : [],
+        claimOf: op.schemaVersion === 3 ? payload.claimOf : null,
       };
     }
     default:
@@ -500,7 +508,7 @@ function ticketOpenedRows(op: ProjectionOperation): {
 }
 
 export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { payload, checklist, peripherals, photos, intakePhotos, repairTypes } =
+  const { payload, checklist, peripherals, photos, intakePhotos, repairTypes, claimOf } =
     ticketOpenedRows(op);
   const storeId = storeIdOf(op);
   await db
@@ -541,6 +549,7 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       downPaymentAt: null,
       readyAt: null,
       repairTypesJson: canonicalJson(repairTypes),
+      claimOfTicketId: claimOf,
     })
     .execute();
 

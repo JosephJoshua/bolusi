@@ -19,7 +19,12 @@ import {
   type SlipKind,
   type WorkPhotoStage,
 } from './constants.js';
-import { readyDays, type IntakeOption, type IntakeOptionLists } from './intake-options.js';
+import {
+  readyDays,
+  warrantyUntil,
+  type IntakeOption,
+  type IntakeOptionLists,
+} from './intake-options.js';
 import { SCREEN_LOCK_KINDS, encodeScreenLock } from './screen-lock.js';
 import type {
   ListTicketsInput,
@@ -173,6 +178,8 @@ export interface RepairAbilities {
   readonly setPrintSettings: boolean;
   /** Set after how many days a phone nobody collected is flagged here. */
   readonly setUncollectedDays: boolean;
+  /** Open a warranty claim after the warranty ended, or charge for one (owners). */
+  readonly warrantyException: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -192,6 +199,7 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     correctDownPayment: hasPermission(P.correctDownPayment),
     setPrintSettings: hasPermission(P.setPrintSettings),
     setUncollectedDays: hasPermission(P.setUncollectedDays),
+    warrantyException: hasPermission(P.warrantyException),
   };
 }
 
@@ -270,17 +278,82 @@ export function downPaymentAction(
  * technician, while the servisan is open (the warranty taken home must not change).
  */
 export function canSetRepairTypes(
-  ticket: Pick<TicketSummaryRow, 'location' | 'outcome'>,
+  ticket: Pick<TicketDetailRow, 'location' | 'outcome' | 'claimOfTicketId'>,
   can: Pick<RepairAbilities, 'intake' | 'work'>,
 ): boolean {
   return (
-    ticket.location === 'in_store' && ticket.outcome !== 'cancelled' && (can.intake || can.work)
+    ticket.location === 'in_store' &&
+    ticket.outcome !== 'cancelled' &&
+    ticket.claimOfTicketId === null &&
+    (can.intake || can.work)
   );
+}
+
+/**
+ * Whether the counter can open a warranty claim on this servisan now: `free` while its warranty
+ * runs, `owner` once it ended (only an owner may still open one), null when it cannot be claimed
+ * (still in the store, cancelled, itself a claim) or not by this user. Mirrors the claim rule.
+ */
+export function warrantyClaimAction(
+  ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'location' | 'claimOfTicketId' | 'repairTypes' | 'returnedAt'
+  >,
+  can: Pick<RepairAbilities, 'intake' | 'warrantyException'>,
+  now: number,
+): 'free' | 'owner' | null {
+  if (!can.intake || ticket.location !== 'returned' || ticket.outcome !== 'repaired') return null;
+  if (ticket.claimOfTicketId !== null) return null;
+  const until = warrantyUntil(ticket.repairTypes, ticket.returnedAt);
+  if (until !== null && now <= until) return 'free';
+  return can.warrantyException ? 'owner' : null;
+}
+
+/**
+ * A warranty claim's intake, started from the servisan it claims on: the same customer and phone,
+ * and a free line for the repair. The counter still records the complaint, checks and photos,
+ * since the phone comes back in whatever state it is in now.
+ */
+export function claimIntakeDraft(ticket: TicketDetailRow, lineDescription: string): IntakeDraft {
+  return {
+    ...emptyIntakeDraft(),
+    customer: {
+      kind: 'existing',
+      customerId: ticket.customerId,
+      name: ticket.customerName,
+      phone: ticket.customerPhone,
+    },
+    device: {
+      brand: ticket.deviceBrand,
+      model: ticket.deviceModel,
+      color: ticket.deviceColor,
+      imei: ticket.deviceImei ?? '',
+      lockKind: 'none',
+      passcode: '',
+    },
+    lines: [{ kind: 'labour', description: lineDescription, amount: 0 }],
+    claimOf: {
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      warrantyUntil: warrantyUntil(ticket.repairTypes, ticket.returnedAt),
+    },
+  };
+}
+
+/**
+ * Whether a claim's warranty has ended by now, so only an owner can open it. Judged when shown, not
+ * when the intake started: an intake kept overnight may have outlived the warranty.
+ */
+export function claimWarrantyEnded(
+  claimOf: NonNullable<IntakeDraft['claimOf']>,
+  now: number,
+): boolean {
+  return claimOf.warrantyUntil === null || now > claimOf.warrantyUntil;
 }
 
 /** Why an open repair type step can no longer finish. */
 export function repairTypesStale(
-  ticket: Pick<TicketSummaryRow, 'location' | 'outcome'>,
+  ticket: Pick<TicketDetailRow, 'location' | 'outcome' | 'claimOfTicketId'>,
   can: Pick<RepairAbilities, 'intake' | 'work'>,
 ): StaleStep | null {
   if (canSetRepairTypes(ticket, can)) return null;
@@ -598,6 +671,16 @@ const zIntakeDraft = z.strictObject({
   ready: z.string().transform((ready) => LEGACY_READY[ready] ?? ready),
   /** The id the ticket will get, taken when the intake starts so it can only be opened once. */
   ticketId: z.string().optional(),
+  /** The servisan this intake is a warranty claim on; null for an ordinary intake. */
+  claimOf: z
+    .strictObject({
+      ticketId: z.string(),
+      ticketNumber: z.string(),
+      /** When that servisan's warranty ends; null when it had none. */
+      warrantyUntil: z.number().int().nullable(),
+    })
+    .nullable()
+    .default(null),
 });
 
 export type IntakeDraft = z.infer<typeof zIntakeDraft>;
@@ -623,6 +706,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     lines: [],
     downPayment: '',
     ready: '',
+    claimOf: null,
   };
 }
 
@@ -817,7 +901,12 @@ export function toOpenTicketInput(
           : encodeScreenLock({ kind: draft.device.lockKind, value: draft.device.passcode }),
     },
     complaint: draft.complaint.trim(),
-    repairTypes: chosenRepairTypes(draft, options.repairTypes).map(({ id }) => id),
+    // A claim repairs what its servisan did, so it carries that one's types, not its own.
+    repairTypes:
+      draft.claimOf === null
+        ? chosenRepairTypes(draft, options.repairTypes).map(({ id }) => id)
+        : [],
+    claimOf: draft.claimOf?.ticketId ?? null,
     intakeNotes: draft.intakeNotes.trim(),
     checklist,
     peripherals: chosenAccessories(draft, options.accessories).map(({ id, label }) => ({
