@@ -114,7 +114,12 @@ function harness() {
     if (set !== null) jar.set(/Path=([^;]+)/.exec(set)![1]!, set.split(';')[0]!);
     return res;
   };
-  const open = (page: string): Promise<Response> => phone(page);
+  /** Opens the page as a browser does: the page, then its script's first ask for the step. */
+  const open = async (page: string): Promise<Response> => {
+    const res = await phone(page);
+    if (res.status === 200) await phone(`${page}/next?v=-1`);
+    return res;
+  };
   const next = async (
     page: string,
     v: number,
@@ -127,7 +132,7 @@ function harness() {
   };
   const send = (page: string, seq: number, body: Uint8Array<ArrayBuffer> | string) =>
     phone(`${page}/send?seq=${String(seq)}`, { method: 'POST', body });
-  return { h, time, auth, call, pair, ask, events, gone, open, next, send };
+  return { h, time, auth, call, pair, ask, events, gone, phone, open, next, send };
 }
 
 describe('the phone page', () => {
@@ -168,11 +173,12 @@ describe('the phone page', () => {
 
 describe('only the phone that opened the page', () => {
   test('can use the pairing; someone else holding the QR key gets 410 and cannot send', async () => {
-    const { h, pair, ask, events, open, next, send } = harness();
+    const { h, pair, ask, events, phone, open, next, send } = harness();
     const { id, page } = await pair();
-    const opened = await open(page);
-    expect(opened.status).toBe(200);
-    const cookie = opened.headers.get('set-cookie')!;
+    expect((await phone(page)).status).toBe(200);
+    const bound = await phone(`${page}/next?v=-1`);
+    expect(bound.status).toBe(200);
+    const cookie = bound.headers.get('set-cookie')!;
     expect(cookie).toMatch(/HttpOnly/);
     expect(cookie).toMatch(/SameSite=Lax/);
     expect(cookie).toContain(`Path=${new URL(page).pathname}`);
@@ -206,6 +212,30 @@ describe('only the phone that opened the page', () => {
     expect((await open(page)).status).toBe(200);
     expect((await send(page, sign, strokes)).status).toBe(204);
     expect((await events(id, 1)).events.map((event) => event.type)).toEqual(['signature']);
+  });
+});
+
+describe('serving the page binds nothing', () => {
+  test('a HEAD or a link preview leaves the pairing to the browser that runs the page', async () => {
+    const { h, pair, events, phone, open, next } = harness();
+    const { id, page } = await pair();
+    const head = await h.app.request(page, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('set-cookie')).toBeNull();
+    const preview = await h.app.request(page);
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get('set-cookie')).toBeNull();
+
+    // The person's browser runs the page and becomes the phone; it reloads fine.
+    expect((await open(page)).status).toBe(200);
+    // Its first event: nothing paired before it ran the page.
+    expect((await events(id, 0)).events).toEqual([{ n: 1, type: 'paired' }]);
+    expect((await phone(page)).status).toBe(200);
+    expect((await next(page, -1)).status).toBe(200);
+
+    // The previewer coming back now gets 410, as anyone else holding the key does.
+    expect((await h.app.request(page)).status).toBe(410);
+    expect((await h.app.request(page, { method: 'HEAD' })).status).toBe(410);
   });
 });
 
