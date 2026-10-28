@@ -71,6 +71,8 @@ export interface CaptureIdentity {
 
 export interface CaptureDeps<DB> {
   readonly db: Kysely<DB>;
+  /** The connection's transaction queue (db-client `ClientDb.transaction`), for the row. */
+  readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
   /**
    * Passed per call rather than closed over at construction: this device is SHARED and PIN-switched
    * (PRD-011 §2), so a capture must stamp whoever is signed in NOW. A cached identity would freeze

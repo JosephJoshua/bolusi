@@ -282,7 +282,12 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     idleLockSeconds: await readIdleLockSeconds(db),
     // Each user's drafts also go to disk (sealed), so a half-entered servisan survives Android
     // recreating the activity or killing the app; only that user's next PIN unlock reads it back.
-    workStore: createWorkStore(db, parseUserWorkspace, () => deps.clock.now()),
+    workStore: createWorkStore(
+      db,
+      parseUserWorkspace,
+      () => deps.clock.now(),
+      (fn) => deps.app.db.transaction(() => fn()),
+    ),
     onWorkStoreError: reportWorkStoreError,
   });
   const lockedOut = createLockedOutEmitter(commands);

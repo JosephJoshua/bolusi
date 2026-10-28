@@ -63,30 +63,35 @@ async function besideARolledBackCommand(write: () => Promise<void>): Promise<voi
 
 test('a photo captured while a command rolls back keeps its row', async () => {
   await besideARolledBackCommand(() =>
-    insertMediaItem(connection.db, {
-      id: 'media-1',
-      tenantId: 'tenant-1',
-      storeId: 'store-1',
-      userId: 'user-1',
-      deviceId: 'device-1',
-      type: 'image',
-      mime: 'image/jpeg',
-      sizeBytes: 1234,
-      sha256: 'a'.repeat(64),
-      capturedAt: 1_700_000_000_000,
-      location: null,
-      localPath: '/documents/media-1.jpg',
-    }),
+    insertMediaItem(
+      connection.db,
+      {
+        id: 'media-1',
+        tenantId: 'tenant-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        deviceId: 'device-1',
+        type: 'image',
+        mime: 'image/jpeg',
+        sizeBytes: 1234,
+        sha256: 'a'.repeat(64),
+        capturedAt: 1_700_000_000_000,
+        location: null,
+        localPath: '/documents/media-1.jpg',
+      },
+      (fn) => connection.transaction(() => fn()),
+    ),
   );
   const rows = await sql<{ id: string }>`SELECT id FROM media_items`.execute(connection.db);
   expect(rows.rows.map((row) => row.id)).toEqual(['media-1']);
 });
 
 test('a draft saved while a command rolls back is still there', async () => {
-  const store = createWorkStore<unknown, { draft: string }>(
+  const store = createWorkStore(
     connection.db,
     (value) => value as { draft: string },
     () => 1,
+    (fn) => connection.transaction(() => fn()),
   );
   await besideARolledBackCommand(() => store.save('user-1', { draft: 'Layar retak' }));
   expect(await store.load('user-1')).toEqual({ draft: 'Layar retak' });

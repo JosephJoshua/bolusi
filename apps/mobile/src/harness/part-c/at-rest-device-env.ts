@@ -241,20 +241,24 @@ async function seedAllColumns(target: SeedTarget, skip: ReadonlySet<ColumnKey>):
 
   // media_items.location — capture GPS from a media attach, via apps/mobile's real writer.
   if (run('media_items.location')) {
-    await insertMediaItem(target.db, {
-      id: 'media-atrest-1',
-      tenantId: 'tenant-1',
-      storeId: 'store-1',
-      userId: 'user-1',
-      deviceId: 'device-1',
-      type: 'image',
-      mime: 'image/jpeg',
-      sizeBytes: 1234,
-      sha256: 'a'.repeat(64),
-      capturedAt: 1_700_000_000_000,
-      location: { lat: MEDIA_LAT, lng: 106.8, accuracyMeters: 5 },
-      localPath: '/documents/media-atrest-1.jpg',
-    });
+    await insertMediaItem(
+      target.db,
+      {
+        id: 'media-atrest-1',
+        tenantId: 'tenant-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        deviceId: 'device-1',
+        type: 'image',
+        mime: 'image/jpeg',
+        sizeBytes: 1234,
+        sha256: 'a'.repeat(64),
+        capturedAt: 1_700_000_000_000,
+        location: { lat: MEDIA_LAT, lng: 106.8, accuracyMeters: 5 },
+        localPath: '/documents/media-atrest-1.jpg',
+      },
+      (fn) => fn(),
+    );
   }
 }
 

@@ -236,7 +236,13 @@ function parseWork(value: unknown): Work | undefined {
 }
 
 function sqliteStore(h: AuthHarness): WorkStore<Work> {
-  return createWorkStore(h.db, parseWork, () => h.clock.now());
+  // Nothing else writes here at once: the store's writes need no queue to wait in.
+  return createWorkStore(
+    h.db,
+    parseWork,
+    () => h.clock.now(),
+    (fn) => fn(),
+  );
 }
 
 /** A new manager over the same database: what the app builds after Android killed it. */
