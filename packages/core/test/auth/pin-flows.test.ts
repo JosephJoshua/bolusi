@@ -12,6 +12,7 @@ import {
   DomainError,
   drainPendingVerifiers,
   readPendingVerifiers,
+  readPinAttempt,
   readVerifier,
   resetPin,
   setFirstPin,
@@ -197,9 +198,14 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
 
   it('auth.clearPinLockout without auth.pin_unlock → denied (+ evaluator denial op, reason not_granted)', async () => {
     const s = await setup(4);
-    // Lock the store owner directly, then a staff member (no pin_unlock) tries to clear it.
+    // Lock a colleague of the same rank directly (an owner is the main owner's to unlock, which
+    // would deny first), then a staff member (no pin_unlock) tries to clear it.
+    const colleagueId = 'c3333333-3333-7333-8333-333333333333';
+    await sql`
+      INSERT INTO users_directory (id, name, status) VALUES (${colleagueId}, 'Rina', 'active')
+    `.execute(s.h.db);
     await writePinAttempt(s.h.db, {
-      userId: s.h.storeOwnerId,
+      userId: colleagueId,
       deviceId: s.h.deviceId,
       consecutiveFailures: 10,
       windowStartedAt: 1,
@@ -208,7 +214,7 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
     await expectDomain(
       clearPinLockoutFlow(s.flowDeps(), {
         actorUserId: s.h.staffId,
-        targetUserId: s.h.storeOwnerId,
+        targetUserId: colleagueId,
       }),
       'PERMISSION_DENIED',
     );
@@ -256,6 +262,58 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
       scopeStoreId: s.h.storeId,
       suppressedRepeats: 0,
     });
+  });
+});
+
+describe('owner unlock leaves an owner’s lockout to the main owner', () => {
+  async function lock(s: Setup, userId: string): Promise<void> {
+    await writePinAttempt(s.h.db, {
+      userId,
+      deviceId: s.h.deviceId,
+      consecutiveFailures: 10,
+      windowStartedAt: 1,
+      notBefore: null,
+    });
+  }
+
+  it('a store owner cannot clear the main owner’s lockout: refused before the counter moves', async () => {
+    const s = await setup(13);
+    await lock(s, s.h.ownerId);
+    await expectDomain(
+      clearPinLockoutFlow(s.flowDeps(), {
+        actorUserId: s.h.storeOwnerId,
+        targetUserId: s.h.ownerId,
+      }),
+      'PERMISSION_DENIED',
+      'restriction_violated',
+    );
+    expect((await readPinAttempt(s.h.db, s.h.ownerId, s.h.deviceId))?.consecutiveFailures).toBe(10);
+    const all = await s.pinOps();
+    expect(all.filter((o) => o.type === 'auth.pin_lockout_cleared')).toHaveLength(0);
+    expect(all.filter((o) => o.type === 'auth.permission_denied')).toHaveLength(1);
+  });
+
+  it('a store owner cannot clear a peer store owner’s lockout; the main owner can', async () => {
+    const s = await setup(14);
+    await sql`
+      INSERT INTO user_roles_directory (user_id, role_id, store_id)
+      SELECT ${s.h.staffId}, id, ${s.h.storeId} FROM roles_directory WHERE name = 'store_owner'
+    `.execute(s.h.db);
+    await lock(s, s.h.staffId);
+    await expectDomain(
+      clearPinLockoutFlow(s.flowDeps(), {
+        actorUserId: s.h.storeOwnerId,
+        targetUserId: s.h.staffId,
+      }),
+      'PERMISSION_DENIED',
+      'restriction_violated',
+    );
+    expect((await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures).toBe(10);
+    await clearPinLockoutFlow(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+    });
+    expect((await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures).toBe(0);
   });
 });
 

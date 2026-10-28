@@ -418,8 +418,9 @@ export async function resetPin<DB>(
  * target to be locked (else `INVALID_TRANSITION` — nothing to clear) and present in the directory
  * (§5.4.6). Emits `auth.pin_lockout_cleared` and resets the target's counter. Offline-capable.
  *
- * @throws {DomainError} `PERMISSION_DENIED` `restriction_violated` (target absent); `INVALID_TRANSITION`
- *   (target not locked); `PERMISSION_DENIED` (+ denial op) when the actor lacks `auth.pin_unlock`.
+ * @throws {DomainError} `PERMISSION_DENIED` `restriction_violated` (target absent, or an owner and the
+ *   actor not the main owner); `INVALID_TRANSITION` (target not locked); `PERMISSION_DENIED` (+ denial
+ *   op) when the actor lacks `auth.pin_unlock`.
  */
 export async function clearPinLockoutFlow<DB>(
   deps: PinFlowDeps<DB>,
@@ -431,6 +432,16 @@ export async function clearPinLockoutFlow<DB>(
       clearPinLockoutCommand.permission,
       clearPinLockoutCommand.name,
       'target is not in this device’s directory (§5.4.6)',
+    );
+  }
+  // Checked here, before the counter is touched: the server refuses the op, but a counter reset on
+  // this device would already let the guessing go on offline.
+  if (!(await mayManageOwnerPin(deps.db, input.actorUserId, input.targetUserId))) {
+    return deps.runtime.denyRestriction(
+      input.actorUserId,
+      clearPinLockoutCommand.permission,
+      clearPinLockoutCommand.name,
+      'unlocking an owner’s PIN requires the main owner (§6.6, owner powers)',
     );
   }
   // The read→gate→write on `pin_attempt_state` is the SAME read-modify-write `verifyPin` serializes
