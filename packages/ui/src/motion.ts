@@ -16,9 +16,9 @@ export const NATIVE_DRIVER = Platform.OS !== 'web';
 export const easeEnter = Easing.bezier(...motion.easing.enter);
 export const easeExit = Easing.bezier(...motion.easing.exit);
 
-// One subscription for the whole app instead of one query per animated component.
+// One subscription for the whole app instead of one query per animated component, started when
+// this module loads so the setting is known before the first sheet or toast plays.
 let reduced = false;
-let started = false;
 const listeners = new Set<() => void>();
 
 function setReduced(next: boolean): void {
@@ -27,13 +27,11 @@ function setReduced(next: boolean): void {
   for (const listener of listeners) listener();
 }
 
+void AccessibilityInfo.isReduceMotionEnabled().then(setReduced, () => {});
+AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
-  if (!started) {
-    started = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced, () => {});
-    AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
-  }
   return () => listeners.delete(listener);
 }
 

@@ -44,7 +44,6 @@ export function themeVariables(): Record<string, string> {
     vars[`--b-duration-${name}`] = `${String(ms)}ms`;
   for (const [name, points] of Object.entries(motion.easing))
     vars[`--b-ease-${name}`] = `cubic-bezier(${points.join(', ')})`;
-  vars['--b-press-scale'] = String(motion.pressScale);
   for (const [name, { size, line }] of Object.entries(desktopType)) {
     vars[`--b-text-${name}`] = `${String(size)}px`;
     vars[`--b-text-${name}-line`] = `${String(line)}px`;
