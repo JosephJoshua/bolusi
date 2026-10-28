@@ -753,7 +753,8 @@
     "ended": "The warranty has ended. Only an owner can open this claim.",
     "replaceTitle": "Start a warranty claim?",
     "replaceMessage": "What you have not saved yet will be discarded.",
-    "replaceConfirm": "Start claim"
+    "replaceConfirm": "Start claim",
+    "sameDevice": "A claim is only for this phone."
   },
   "handoverCheck": {
     "customerTried": "Customer tried it",

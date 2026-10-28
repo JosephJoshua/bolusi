@@ -753,7 +753,8 @@
     "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
     "replaceTitle": "Mulai klaim garansi?",
     "replaceMessage": "Isian yang belum disimpan akan dibuang.",
-    "replaceConfirm": "Mulai klaim"
+    "replaceConfirm": "Mulai klaim",
+    "sameDevice": "Klaim hanya untuk HP ini."
   },
   "handoverCheck": {
     "customerTried": "Sudah dicoba pelanggan",

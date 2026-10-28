@@ -682,47 +682,58 @@ function DeviceFields({
     update({ device: { ...device, ...patch } });
   const picker = useModelPicker(device, set);
   const { matched, colours, memory } = picker;
+  const claim = draft.claimOf !== null;
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
-        <ModelField
-          value={device.model}
-          onChange={(model) => set({ model })}
-          picker={picker}
-          error={modelError}
-        />
-        <div className="flex flex-col gap-2">
-          <TextField
-            label={tn('repair.device.brand')}
-            value={device.brand}
-            onChange={(event) => set({ brand: event.target.value })}
-            error={brandError}
-            autoComplete="off"
-            data-testid="repair.desk.intake.brand"
+      {/* A claim is for the phone its servisan repaired: shown, never retyped. */}
+      {!claim ? (
+        <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+          <ModelField
+            value={device.model}
+            onChange={(model) => set({ model })}
+            picker={picker}
+            error={modelError}
           />
-          {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
-          {matched !== null ? null : (
-            <div
-              className="flex flex-wrap gap-2"
-              aria-label={tn('repair.options.list.brands')}
-              role="group"
-            >
-              {options.brands.map((option) => {
-                const brand = optionLabel('brands', option);
-                return (
-                  <ToggleChip
-                    key={option.id}
-                    label={brand}
-                    selected={device.brand === brand}
-                    onToggle={() => set({ brand })}
-                    skipTab
-                  />
-                );
-              })}
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <TextField
+              label={tn('repair.device.brand')}
+              value={device.brand}
+              onChange={(event) => set({ brand: event.target.value })}
+              error={brandError}
+              autoComplete="off"
+              data-testid="repair.desk.intake.brand"
+            />
+            {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
+            {matched !== null ? null : (
+              <div
+                className="flex flex-wrap gap-2"
+                aria-label={tn('repair.options.list.brands')}
+                role="group"
+              >
+                {options.brands.map((option) => {
+                  const brand = optionLabel('brands', option);
+                  return (
+                    <ToggleChip
+                      key={option.id}
+                      label={brand}
+                      selected={device.brand === brand}
+                      onToggle={() => set({ brand })}
+                      skipTab
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : matched === null ? (
+        <p
+          className="text-body font-semibold text-text"
+          data-testid="repair.desk.intake.claimDevice"
+        >
+          {device.brand} {device.model}
+        </p>
+      ) : null}
       {matched === null ? null : (
         <div
           className="flex items-center gap-4 rounded-sm bg-surface-alt px-4 py-3"
@@ -744,6 +755,11 @@ function DeviceFields({
           </div>
         </div>
       )}
+      {claim ? (
+        <p className="text-small text-text-muted" data-testid="repair.desk.intake.claimDevice.note">
+          {tn('repair.warrantyClaim.sameDevice')}
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
         <div className="flex flex-col gap-2">
           <TextField

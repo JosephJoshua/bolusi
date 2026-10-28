@@ -192,6 +192,23 @@ describe('whose phone, and when', () => {
     );
     // A phone whose IMEI was not written down can still be claimed on.
     await claim(h, original, h.cashierId, { device: { ...otherPhone, imei: '' } });
+    // But not another model brought in under its number (PC exploratory QA, F6).
+    await expectRefusal(
+      claim(h, original, h.ownerId, {
+        device: { brand: 'Apple', model: 'iPhone 15 Pro Max', color: 'Hitam', imei: '' },
+      }),
+      'VALIDATION_FAILED',
+      'claimOtherPhone',
+    );
+    await expectRefusal(
+      claim(h, original, h.ownerId, { device: { ...otherPhone, model: 'Galaxy A54', imei: '' } }),
+      'VALIDATION_FAILED',
+      'claimOtherPhone',
+    );
+    // The same phone written another way is the same phone.
+    await claim(h, original, h.cashierId, {
+      device: { ...otherPhone, brand: 'samsung', model: 'A14', imei: '' },
+    });
   });
 
   test('a claim signed before the phone went home is not covered', async () => {

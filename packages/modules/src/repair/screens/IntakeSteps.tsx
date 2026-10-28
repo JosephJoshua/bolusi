@@ -195,37 +195,51 @@ export function DeviceStep({
   const set = (patch: Partial<IntakeDraft['device']>): void =>
     update({ device: { ...device, ...patch } });
   const { matched, suggestions, memory, colours, pick, tidyModel } = useModelPicker(device, set);
+  const claim = draft.claimOf !== null;
 
   return (
     <View>
-      <TextInput
-        label={tn('repair.device.model')}
-        placeholder={tn('repair.device.modelHint')}
-        value={device.model}
-        onChangeText={(value) => set({ model: value })}
-        onBlur={tidyModel}
-        errorMessage={modelError}
-        autoCorrect={false}
-        revealOnFocus="to-top"
-        testID={`${testID}.model`}
-      />
-      {suggestions.length > 0 ? (
-        <View style={styles.modelList} testID={`${testID}.models`}>
-          {suggestions.map((row) => (
-            <ListRow
-              key={row.key}
-              leading={<ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />}
-              primaryText={row.model}
-              secondaryText={modelCaption(row)}
-              onPress={() => {
-                pick(row);
-                Keyboard.dismiss();
-              }}
-              testID={`${testID}.model.${row.key}`}
-            />
-          ))}
-        </View>
-      ) : null}
+      {/* A claim is for the phone its servisan repaired: shown, never retyped. */}
+      {claim ? (
+        matched === null ? (
+          <Text style={styles.reviewStrong} testID={`${testID}.claimDevice`}>
+            {device.brand} {device.model}
+          </Text>
+        ) : null
+      ) : (
+        <>
+          <TextInput
+            label={tn('repair.device.model')}
+            placeholder={tn('repair.device.modelHint')}
+            value={device.model}
+            onChangeText={(value) => set({ model: value })}
+            onBlur={tidyModel}
+            errorMessage={modelError}
+            autoCorrect={false}
+            revealOnFocus="to-top"
+            testID={`${testID}.model`}
+          />
+          {suggestions.length > 0 ? (
+            <View style={styles.modelList} testID={`${testID}.models`}>
+              {suggestions.map((row) => (
+                <ListRow
+                  key={row.key}
+                  leading={
+                    <ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />
+                  }
+                  primaryText={row.model}
+                  secondaryText={modelCaption(row)}
+                  onPress={() => {
+                    pick(row);
+                    Keyboard.dismiss();
+                  }}
+                  testID={`${testID}.model.${row.key}`}
+                />
+              ))}
+            </View>
+          ) : null}
+        </>
+      )}
       {matched !== null ? (
         <View style={styles.modelMatch} testID={`${testID}.modelMatch`}>
           <ModelPhoto photo={matched.photo} large testID={`${testID}.modelMatch.photo`} />
@@ -246,35 +260,41 @@ export function DeviceStep({
           </View>
         </View>
       ) : null}
-      <View style={repairStyles.gap}>
-        <TextInput
-          label={tn('repair.device.brand')}
-          value={device.brand}
-          onChangeText={(value) => set({ brand: value })}
-          errorMessage={brandError}
-          autoCorrect={false}
-          testID={`${testID}.brand`}
-        />
-        {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
-        {matched !== null ? null : (
-          <View style={styles.suggestions}>
-            <ChipRow testID={`${testID}.brandChoices`}>
-              {options.brands.map((option) => {
-                const choice = optionLabel('brands', option);
-                return (
-                  <ToggleChip
-                    key={option.id}
-                    label={choice}
-                    selected={device.brand === choice}
-                    onToggle={() => set({ brand: choice })}
-                    testID={`${testID}.brandChoice.${choice}`}
-                  />
-                );
-              })}
-            </ChipRow>
-          </View>
-        )}
-      </View>
+      {claim ? (
+        <Text style={[repairStyles.muted, repairStyles.gap]} testID={`${testID}.claimDevice.note`}>
+          {tn('repair.warrantyClaim.sameDevice')}
+        </Text>
+      ) : (
+        <View style={repairStyles.gap}>
+          <TextInput
+            label={tn('repair.device.brand')}
+            value={device.brand}
+            onChangeText={(value) => set({ brand: value })}
+            errorMessage={brandError}
+            autoCorrect={false}
+            testID={`${testID}.brand`}
+          />
+          {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
+          {matched !== null ? null : (
+            <View style={styles.suggestions}>
+              <ChipRow testID={`${testID}.brandChoices`}>
+                {options.brands.map((option) => {
+                  const choice = optionLabel('brands', option);
+                  return (
+                    <ToggleChip
+                      key={option.id}
+                      label={choice}
+                      selected={device.brand === choice}
+                      onToggle={() => set({ brand: choice })}
+                      testID={`${testID}.brandChoice.${choice}`}
+                    />
+                  );
+                })}
+              </ChipRow>
+            </View>
+          )}
+        </View>
+      )}
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.device.colorField')}

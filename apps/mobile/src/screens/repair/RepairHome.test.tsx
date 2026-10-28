@@ -231,6 +231,24 @@ describe('counter intake', () => {
   });
 });
 
+test('a warranty claim shows the phone of its servisan instead of asking for another', async () => {
+  h = await openRepairScreenHarness(5105);
+  const base = emptyIntakeDraft();
+  const draft: IntakeDraft = {
+    ...base,
+    step: 1,
+    customer: { kind: 'existing', customerId: 'c-1', name: 'Ester', phone: '' },
+    device: { ...base.device, brand: 'Samsung', model: 'Galaxy A54' },
+    claimOf: { ticketId: 't-1', ticketNumber: 'ZQ1-0001', warrantyUntil: null },
+  };
+  const screen = await mount(h, h.cashierId, { restoredDraft: draft });
+  expect(screen.query('repair.intake.step.device')).not.toBeNull();
+  expect(screen.query('repair.intake.device.model')).toBeNull();
+  expect(screen.query('repair.intake.device.brand')).toBeNull();
+  expect(text(screen, 'repair.intake.device.claimDevice')).toBe('Samsung Galaxy A54');
+  expect(text(screen, 'repair.intake.device.claimDevice.note')).toBe('Klaim hanya untuk HP ini.');
+});
+
 describe('an intake restored after the app died mid-submit', () => {
   const restored = (ticketId: string): IntakeDraft => {
     const base = emptyIntakeDraft();

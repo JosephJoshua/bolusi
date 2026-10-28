@@ -1099,6 +1099,8 @@ export function demoRepairRuntime(
         const problem = claimProblem(find(claimOf), {
           customerId: customer.customerId ?? '',
           imei: (input['device'] as { imei?: string | null }).imei ?? null,
+          brand: device.brand,
+          model: device.model,
           repairTypes: (input['repairTypes'] as string[] | undefined) ?? [],
           total: lines.reduce((sum, l) => sum + l.amount, 0),
           at: HARNESS_NOW,

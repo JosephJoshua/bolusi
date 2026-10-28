@@ -384,6 +384,23 @@ describe('counter app over demo data', () => {
     await within(dialog).findByText('Melebihi batasmu. Minta pemilik toko.');
   });
 
+  it('starts a warranty claim on the phone of its servisan, without asking for another', async () => {
+    renderApp();
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake');
+    expect(screen.queryByTestId('repair.desk.intake.model')).toBeNull();
+    expect(screen.queryByTestId('repair.desk.intake.brand')).toBeNull();
+    const shown =
+      screen.queryByTestId('repair.desk.intake.modelMatch') ??
+      byTestId('repair.desk.intake.claimDevice');
+    expect(shown.textContent).toContain('Redmi Note 12');
+    expect(byTestId('repair.desk.intake.claimDevice.note').textContent).toBe(
+      'Klaim hanya untuk HP ini.',
+    );
+  });
+
   it('suggests catalog models as the model is typed and fills in the brand', async () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');

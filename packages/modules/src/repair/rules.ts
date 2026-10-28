@@ -35,6 +35,7 @@ import {
   warrantyUntil,
   type RecordedRepairType,
 } from './intake-options.js';
+import { sameModelAnySpelling } from './device-models.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 import { NO_CANCEL_FEES, standardCancelFee } from './queries.js';
 import type {
@@ -561,12 +562,16 @@ export interface ClaimedServisan {
   readonly claimOfTicketId: string | null;
   readonly customerId: string;
   readonly deviceImei: string | null;
+  readonly deviceBrand: string;
+  readonly deviceModel: string;
 }
 
 /** What a new claim brings: who and which phone, what it picks, and what it costs. */
 export interface ClaimRequest {
   readonly customerId: string;
   readonly imei: string | null;
+  readonly brand: string;
+  readonly model: string;
   readonly repairTypes: readonly unknown[];
   readonly total: number;
   /** When it was signed. */
@@ -603,6 +608,15 @@ export function claimProblem(
   ) {
     return { reason: 'claimOtherPhone', owner: false };
   }
+  // Nor another model: a phone with no IMEI written down is still the brand and model it was.
+  if (
+    !sameModelAnySpelling(
+      { brand: original.deviceBrand, model: original.deviceModel },
+      { brand: claim.brand, model: claim.model },
+    )
+  ) {
+    return { reason: 'claimOtherPhone', owner: false };
+  }
   if (claim.total > 0) return { reason: 'claimChargeOwnerOnly', owner: true };
   const until = warrantyUntil(original.repairTypes, original.returnedAt);
   // Signed between pickup and the warranty's end: a phone clock set back before pickup proves
@@ -632,6 +646,8 @@ async function requireClaimable(
       'claimOfTicketId',
       'customerId',
       'deviceImei',
+      'deviceBrand',
+      'deviceModel',
     ])
     .where('id', '=', claimOf)
     .where('tenantId', '=', op.tenantId)
@@ -702,6 +718,8 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
       {
         customerId: payload.customerId,
         imei: payload.device.imei,
+        brand: payload.device.brand,
+        model: payload.device.model,
         repairTypes: payload.repairTypes,
         total,
       },

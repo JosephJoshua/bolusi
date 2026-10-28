@@ -618,6 +618,7 @@ export const REPAIR_KEYS = [
   'repair.warrantyClaim.replaceTitle',
   'repair.warrantyClaim.replaceMessage',
   'repair.warrantyClaim.replaceConfirm',
+  'repair.warrantyClaim.sameDevice',
   'repair.cancel.claimFree',
   'repair.refusal.claimOtherPhone',
   'repair.desk.settings.discard',
