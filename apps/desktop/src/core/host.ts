@@ -36,7 +36,11 @@ import {
   repairMediaSeamsFor,
 } from '@bolusi/device/bootstrap/repair';
 import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
-import { createStaffControls, type StaffControls } from '@bolusi/device/bootstrap/staff';
+import {
+  createStaffControls,
+  type RoleChange,
+  type StaffControls,
+} from '@bolusi/device/bootstrap/staff';
 import { createFetchQris } from '@bolusi/device/bootstrap/qris-transport';
 import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
@@ -803,6 +807,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       staffFor(userId).onSetActive(memberId, active),
     'staff.setLimits': (userId: string, roleId: string, limits: LimitAmounts) =>
       staffFor(userId).onSetLimits(roleId, limits),
+    'staff.createRole': (userId: string, name: string, copyFromRoleId: string) =>
+      staffFor(userId).onCreateRole(name, copyFromRoleId),
+    'staff.updateRole': (userId: string, roleId: string, change: RoleChange) =>
+      staffFor(userId).onUpdateRole(roleId, change),
+    'staff.deleteRole': (userId: string, roleId: string) => staffFor(userId).onDeleteRole(roleId),
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
     'sync.requestManual'() {

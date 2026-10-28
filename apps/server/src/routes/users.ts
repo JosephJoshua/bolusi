@@ -68,7 +68,7 @@ async function targetStoreIds(db: TenantDb, userId: string): Promise<string[]> {
  * uses to decide what to offer). A store owner manages the cashiers and technicians of their own
  * store, never a peer owner, so two store owners cannot remove each other.
  */
-async function rolesConferOwnerPowers(
+export async function rolesConferOwnerPowers(
   db: TenantDb,
   roles: readonly { readonly id: string; readonly scopeType: string }[],
 ): Promise<boolean> {
