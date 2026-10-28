@@ -2,17 +2,34 @@
 // rest (in one or more methods), a cancelled servisan's DP less its fee goes back, and only an
 // owner lets a phone go unpaid, which leaves a debt. The books stay balanced throughout.
 import { sql } from 'kysely';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
+import { formatMoney, initI18n } from '@bolusi/i18n';
+import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
+import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
+import { registerRepairCatalog } from '../src/repair/i18n.js';
 
-import { downPaymentAction, paidLabelKey, repairAbilities } from '../src/repair/flows.js';
+import {
+  downPaymentAction,
+  paidLabelKey,
+  repairAbilities,
+  ticketBalance,
+  ticketBill,
+} from '../src/repair/flows.js';
+import { handoverSlip } from '../src/repair/print.js';
+import type { TicketDetailRow } from '../src/repair/queries.js';
 import {
   accessoriesBack,
   openRepairHarness,
   intake,
   type RepairHarness,
 } from './support/repair-harness.js';
+
+beforeAll(() => {
+  initI18n({ locale: 'id' });
+  registerRepairCatalog({ id: idCatalog, en: enCatalog });
+});
 
 let h: RepairHarness | null = null;
 afterEach(async () => {
@@ -314,6 +331,77 @@ describe('Bayar nanti', () => {
       h.cashierId,
     );
     expect(await location(h, ticketId)).toBe('returned');
+  });
+});
+
+describe('the bill the screens, the slip and the ledger agree on', () => {
+  async function detail(harness: RepairHarness, ticketId: string): Promise<TicketDetailRow> {
+    return (await harness.query('getTicket', { ticketId }, harness.cashierId))
+      .rows[0] as TicketDetailRow;
+  }
+
+  test('an owner’s reduction on a debt comes off what the servisan and its slip say is left', async () => {
+    h = await openRepairHarness(7601);
+    const ticketId = await repaired(h, { downPayment: 100_000 });
+    await h.run('returnDevice', handover(h, ticketId, { unpaidReason: 'Bayar Jumat' }), h.ownerId);
+    await h.money(
+      'reduceCharge',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        amount: 20_000,
+        reason: 'Pelanggan tetap',
+      },
+      h.storeOwnerId,
+    );
+    const row = await detail(h, ticketId);
+    const owed = (await ledger(h, ticketId)).balance;
+    expect(owed).toBe(TOTAL - 100_000 - 20_000);
+    expect(ticketBill(row)).toBe(TOTAL - 20_000);
+    expect(ticketBalance(row)).toEqual({ kind: 'due', amount: owed });
+    const slip = handoverSlip(row, {
+      header: { name: 'Toko', lines: [], logo: null },
+      terms: null,
+      printedAt: 0,
+      printedByName: null,
+      handedOverByName: null,
+      signature: null,
+    });
+    const totals = slip.aside!.flatMap((block) => (block.kind === 'amounts' ? block.totals : []));
+    expect(totals.at(-1)?.amount).toBe(formatMoney(owed));
+  });
+
+  test('what goes back through each method is shown before the handover books it', async () => {
+    h = await openRepairHarness(7602);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const qris = `account:${accountId}`;
+    const ticketId = await openTicket(h, { downPayment: 100_000 });
+    await h.money(
+      'receivePayments',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        payments: [{ account: qris, amount: 100_000 }],
+      },
+      h.cashierId,
+    );
+    await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 50_000 }, h.storeOwnerId);
+    const before = await detail(h, ticketId);
+    expect(ticketBalance(before)).toEqual({ kind: 'refund', amount: 150_000 });
+    expect(before.refunds).toEqual([
+      { account: 'cash', name: null, amount: 50_000 },
+      { account: qris, name: 'QRIS toko', amount: 100_000 },
+    ]);
+
+    await h.run('returnDevice', handover(h, ticketId), h.cashierId);
+    const booked = (await ledger(h, ticketId)).entries.filter((e) => e.kind === 'refund_paid');
+    expect(booked.map(({ account, amount }) => ({ account, amount }))).toEqual(
+      before.refunds.map(({ account, amount }) => ({ account, amount })),
+    );
+    // Once handed back, nothing is left to give back.
+    expect((await detail(h, ticketId)).refunds).toEqual([]);
   });
 });
 

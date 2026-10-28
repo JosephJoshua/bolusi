@@ -239,7 +239,10 @@
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Dikembalikan"
+    "refund": "Dikembalikan",
+    "refundVia": "Kembalikan lewat {method}",
+    "refundCash": "Kembalikan tunai",
+    "reduced": "Potongan"
   },
   "problem": {
     "complaint": "Keluhan belum diisi.",
@@ -477,7 +480,9 @@
       "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
       "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
     },
-    "refund": "Dikembalikan"
+    "refund": "Dikembalikan",
+    "refundVia": "Dikembalikan lewat {method}",
+    "refundCash": "Dikembalikan tunai"
   },
   "print": {
     "askTitle": "Notanya sudah tercetak?",

@@ -16,7 +16,7 @@ import {
   ToggleChip,
 } from '@bolusi/ui-web';
 import { Check, Printer, Signature } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 
 import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/desktop/PaymentLines.js';
@@ -32,7 +32,8 @@ import {
   type WorkPhotoStage,
 } from '../constants.js';
 import {
-  balanceAfterDownPayment,
+  amountOwed,
+  ticketBalance,
   capturedThumbnailRef,
   downPaymentEntry,
   printableSlips,
@@ -45,7 +46,7 @@ import {
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel, refundLabel } from '../labels.js';
 import {
   useCancelFees,
   useIntakeOptionSettings,
@@ -900,20 +901,24 @@ export function HandoverDialog({
   ticketId,
   stale,
   customerName,
-  amount,
-  downPayment,
-  cancelled,
   onDone,
   onClose,
 }: StepDialogProps & {
-  /** What the checklist is made of: whether it was repaired, and what was left with it. */
-  readonly ticket: Pick<TicketDetailRow, 'outcome' | 'peripherals'>;
+  /**
+   * What the checklist is made of (whether it was repaired, what was left with it), and what the
+   * customer is billed, paid already and gets back through each method.
+   */
+  readonly ticket: Pick<
+    TicketDetailRow,
+    | 'outcome'
+    | 'peripherals'
+    | 'quoteTotal'
+    | 'cancelFee'
+    | 'chargeReduced'
+    | 'downPayment'
+    | 'refunds'
+  >;
   readonly customerName: string;
-  /** What the customer pays in all: the price, or a cancelled servisan's fee. */
-  readonly amount: number;
-  /** What they paid already (the DP), from the money ledger. */
-  readonly downPayment: number | null;
-  readonly cancelled: boolean;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
@@ -923,7 +928,12 @@ export function HandoverDialog({
   // Until the store's methods load, a method picked earlier would read as cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
-  const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
+  const cancelled = ticket.outcome === 'cancelled';
+  /** What the customer pays in all: the price, or a cancelled servisan's fee. */
+  const amount = amountOwed(ticket);
+  const { downPayment, chargeReduced: reduced } = ticket;
+  const balance = ticketBalance(ticket);
+  const split = balance.kind === 'refund' ? ticket.refunds : [];
   const due = balance.kind === 'due' ? balance.amount : 0;
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const payment = useHandoverPayment(due, accounts, canPayLater);
@@ -1017,19 +1027,50 @@ export function HandoverDialog({
               {formatMoney(amount)}
             </p>
           </div>
-          {downPayment === null || downPayment === 0 ? null : (
+          {(downPayment ?? 0) === 0 && reduced === 0 ? null : (
             <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t border-border pt-2 text-body">
-              <dt className="text-text-muted">{tn('repair.price.downPayment')}</dt>
-              <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
-              <dt className="font-semibold text-text">
-                {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
-              </dt>
-              <dd
-                className="tabular text-right font-semibold text-text"
-                data-testid="repair.desk.handover.balance"
-              >
-                {formatMoney(balance.amount)}
-              </dd>
+              {reduced === 0 ? null : (
+                <>
+                  <dt className="text-text-muted">{tn('repair.price.reduced')}</dt>
+                  <dd
+                    className="tabular text-right text-text"
+                    data-testid="repair.desk.handover.reduced"
+                  >
+                    {formatMoney(-reduced)}
+                  </dd>
+                </>
+              )}
+              {downPayment === null || downPayment === 0 ? null : (
+                <>
+                  <dt className="text-text-muted">{tn('repair.price.downPayment')}</dt>
+                  <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
+                </>
+              )}
+              {split.length === 0 ? (
+                <>
+                  <dt className="font-semibold text-text">
+                    {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+                  </dt>
+                  <dd
+                    className="tabular text-right font-semibold text-text"
+                    data-testid="repair.desk.handover.balance"
+                  >
+                    {formatMoney(balance.amount)}
+                  </dd>
+                </>
+              ) : (
+                split.map((refund) => (
+                  <Fragment key={refund.account}>
+                    <dt className="font-semibold text-text">{refundLabel(refund, 'screen')}</dt>
+                    <dd
+                      className="tabular text-right font-semibold text-text"
+                      data-testid={`repair.desk.handover.refund.${refund.account}`}
+                    >
+                      {formatMoney(refund.amount)}
+                    </dd>
+                  </Fragment>
+                ))
+              )}
             </dl>
           )}
         </div>

@@ -9,6 +9,7 @@ import { tn, type RepairKey } from './i18n.js';
 import type { DownPaymentGap, IntakeStep, StaleStep, TicketAction, TicketStatus } from './flows.js';
 import type { SpecFactKey } from './device-specs.js';
 import type { ScreenLockKind } from './screen-lock.js';
+import type { TicketRefund } from './queries.js';
 import {
   READY_UNKNOWN,
   readyDays,
@@ -293,4 +294,17 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
     }
   }
   return lines.length === 0 ? null : lines.join('\n');
+}
+
+/**
+ * One method's part of what goes back at handover: "Kembalikan lewat Transfer BCA" to the counter,
+ * "Dikembalikan lewat Transfer BCA" on the slip; cash reads "Kembalikan tunai".
+ */
+export function refundLabel(refund: Pick<TicketRefund, 'name'>, on: 'screen' | 'slip'): string {
+  if (refund.name === null) {
+    return tn(on === 'slip' ? 'repair.slip.refundCash' : 'repair.price.refundCash');
+  }
+  return tn(on === 'slip' ? 'repair.slip.refundVia' : 'repair.price.refundVia', {
+    method: refund.name,
+  });
 }

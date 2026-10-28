@@ -465,6 +465,26 @@ export function amountOwed(
 }
 
 /**
+ * What the customer is billed: `amountOwed` less what an owner took off the charge. The handover
+ * asks for it, the slip prints it and `returnDevice` settles against it, so they always agree.
+ */
+export function ticketBill(
+  ticket: Pick<TicketDetailRow, 'outcome' | 'cancelFee' | 'quoteTotal' | 'chargeReduced'>,
+): number {
+  return amountOwed(ticket) - ticket.chargeReduced;
+}
+
+/** What is left to pay on the bill, or what goes back, given what was paid so far. */
+export function ticketBalance(
+  ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'cancelFee' | 'quoteTotal' | 'chargeReduced' | 'downPayment'
+  >,
+): { readonly kind: 'due' | 'refund'; readonly amount: number } {
+  return balanceAfterDownPayment(ticketBill(ticket), ticket.downPayment ?? 0);
+}
+
+/**
  * What the money already paid on a servisan is called: its DP while the phone is in the store,
  * what was paid in all (DP and the rest) once it went home.
  */

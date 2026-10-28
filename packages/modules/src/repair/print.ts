@@ -18,7 +18,7 @@ import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 
 import type { SlipKind } from './constants.js';
 import {
-  amountOwed,
+  ticketBill,
   balanceAfterDownPayment,
   photoInSlot,
   photoThumbnailRef,
@@ -29,11 +29,12 @@ import {
   CHECK_STATE_KEY,
   PRICE_KIND_KEY,
   optionLabel,
+  refundLabel,
   repairTypeLabel,
   statusLabel,
   warrantyTerms,
 } from './labels.js';
-import type { PrintSettings, QuoteLineRow, TicketDetailRow } from './queries.js';
+import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketRefund } from './queries.js';
 
 /** What a slip needs besides the ticket. */
 export interface SlipContext {
@@ -164,6 +165,8 @@ function totals(
   paidLabel: string,
   /** False when the total is no longer what the customer owes, so a balance would be wrong. */
   withBalance = true,
+  /** What goes back through each method, when more was paid (`TicketDetailRow.refunds`). */
+  refunds: readonly TicketRefund[] = [],
 ): PrintAmountRow[] {
   const paid = paidSoFar ?? 0;
   const rows: PrintAmountRow[] = [
@@ -172,6 +175,16 @@ function totals(
   if (paid > 0) rows.push({ label: paidLabel, amount: formatMoney(-paid) });
   if (paid > 0 && withBalance) {
     const balance = balanceAfterDownPayment(total, paid);
+    if (balance.kind === 'refund' && refunds.length > 0) {
+      for (const refund of refunds) {
+        rows.push({
+          label: refundLabel(refund, 'slip'),
+          amount: formatMoney(refund.amount),
+          strong: true,
+        });
+      }
+      return rows;
+    }
     rows.push({
       label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
       amount: formatMoney(balance.amount),
@@ -179,11 +192,6 @@ function totals(
     });
   }
   return rows;
-}
-
-/** What the customer is billed: the agreed price or the cancellation fee, less any reduction. */
-function billTotal(ticket: TicketDetailRow): number {
-  return amountOwed(ticket) - ticket.chargeReduced;
 }
 
 function termsBlocks(terms: string | null, fallback: string): PrintBlock[] {
@@ -236,7 +244,7 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
   // What was paid counts against the estimate only while the estimate is still the bill: once the
   // price changed or the servisan was cancelled, the balance belongs on the handover slip.
-  const estimateStands = ticket.outcome !== 'cancelled' && billTotal(ticket) === total;
+  const estimateStands = ticket.outcome !== 'cancelled' && ticketBill(ticket) === total;
   const blocks: PrintBlock[] = [
     { kind: 'fields', fields },
     { kind: 'heading', text: tn('repair.slip.section.complaint') },
@@ -324,9 +332,11 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
     rows,
     totals: totals(
       tn('repair.slip.total'),
-      billTotal(ticket),
+      ticketBill(ticket),
       ticket.downPayment,
       tn('repair.slip.paid'),
+      true,
+      ticket.refunds,
     ),
   };
   const aside: PrintBlock[] = [

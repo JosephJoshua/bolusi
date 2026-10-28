@@ -28,7 +28,7 @@ import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/screens/PaymentLines.js';
 import { tn } from '../i18n.js';
 import {
-  balanceAfterDownPayment,
+  ticketBalance,
   capturedThumbnailRef,
   amountOwed,
   repairAbilities,
@@ -89,9 +89,7 @@ export function Handover({
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const ticket = query.status === 'ready' ? query.data : undefined;
   const balance =
-    ticket === undefined
-      ? { kind: 'due' as const, amount: 0 }
-      : balanceAfterDownPayment(amountOwed(ticket), ticket.downPayment ?? 0);
+    ticket === undefined ? { kind: 'due' as const, amount: 0 } : ticketBalance(ticket);
   const due = balance.kind === 'due' ? balance.amount : 0;
   const payment = useHandoverPayment(due, accounts, canPayLater);
   const { settled } = payment;
@@ -200,6 +198,8 @@ export function Handover({
               ) : null}
               <DownPaymentRows
                 total={amountOwed(shown)}
+                reduced={shown.chargeReduced}
+                refunds={shown.refunds}
                 downPayment={shown.downPayment}
                 testID={testID}
               />

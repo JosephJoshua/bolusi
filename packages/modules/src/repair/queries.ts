@@ -43,7 +43,9 @@ import {
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
 import { paidOnDocumentSql } from '../money/queries.js';
-import { documentTotal } from '../money/rules.js';
+import { CASH_ACCOUNT, paymentAccountIdOf } from '../money/constants.js';
+import { refundSplit } from '../money/rules.js';
+import { ticketBill } from './flows.js';
 import type { MoneyDatabase } from '../money/schema.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
@@ -156,6 +158,12 @@ export interface ClaimedTicket {
   readonly returnedAt: number | null;
 }
 
+export interface TicketRefund {
+  readonly account: string;
+  readonly name: string | null;
+  readonly amount: number;
+}
+
 export interface TicketDetailRow extends TicketSummaryRow {
   readonly devicePasscode: string | null;
   readonly intakeNotes: string;
@@ -181,6 +189,12 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly slipPrints: Readonly<Record<SlipKind, number>>;
   /** What an owner took off the charge on the money ledger, so the bill matches it; 0 when nothing. */
   readonly chargeReduced: number;
+  /**
+   * What goes back to the customer at handover, through each method that overpaid
+   * (`refundSplit`), as the handover records it; empty when nothing does or once handed back.
+   * `name` is the method's name, null for cash.
+   */
+  readonly refunds: readonly TicketRefund[];
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -638,6 +652,54 @@ function intakePhotoAngles(json: string | null): readonly IntakePhotoAngle[] {
   return parseJson<IntakePhotoAngle[]>(json, []);
 }
 
+/**
+ * What an owner took off a servisan's charge, and what its handover would give back through each
+ * method: what was paid beyond the bill (`ticketBill`), split as `returnDevice` records it.
+ */
+async function ticketMoney(
+  qctx: Qctx,
+  ticket: TicketSummaryRow,
+): Promise<{ chargeReduced: number; refunds: TicketRefund[] }> {
+  const db = qctx.db as unknown as Kysely<MoneyDatabase>;
+  const entries = (
+    await db
+      .selectFrom('moneyEntries')
+      .select(['kind', 'account', 'amount', 'voidedBy'])
+      .where('storeId', '=', qctx.storeId ?? '')
+      .where('documentKind', '=', REPAIR_DOCUMENT_KIND)
+      .where('documentId', '=', ticket.id)
+      .orderBy('createdAt')
+      .orderBy('id')
+      .execute()
+  ).map((entry) => ({ ...entry, amount: Number(entry.amount) }));
+  const chargeReduced = entries
+    .filter((entry) => entry.kind === 'charge_reduced')
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const bill = ticketBill({ ...ticket, chargeReduced });
+  const credit = (ticket.downPayment ?? 0) - bill;
+  const split =
+    ticket.location === 'returned' || credit <= 0 ? [] : refundSplit(entries, credit, bill);
+  const ids = split.flatMap(({ account }) => paymentAccountIdOf(account) ?? []);
+  const names =
+    ids.length === 0
+      ? []
+      : await db
+          .selectFrom('moneyAccounts')
+          .select(['id', 'name'])
+          .where('tenantId', '=', qctx.tenantId)
+          .where('id', 'in', ids)
+          .execute();
+  return {
+    chargeReduced,
+    refunds: split.map((refund) => ({
+      ...refund,
+      name:
+        names.find((row) => row.id === paymentAccountIdOf(refund.account))?.name ??
+        (refund.account === CASH_ACCOUNT ? null : refund.account),
+    })),
+  };
+}
+
 export async function getTicketHandler(
   input: GetTicketInput,
   qctx: Qctx,
@@ -718,12 +780,7 @@ export async function getTicketHandler(
     detail.createdBy,
     ...events.map((event) => event.actorId),
   ]);
-  const chargeReduced = await documentTotal(
-    qctx.db as unknown as Kysely<MoneyDatabase>,
-    qctx.storeId ?? '',
-    { kind: REPAIR_DOCUMENT_KIND, id: input.ticketId },
-    'charge_reduced',
-  );
+  const { chargeReduced, refunds } = await ticketMoney(qctx, toSummary(summary, names));
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -763,6 +820,7 @@ export async function getTicketHandler(
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
         slipPrints,
         chargeReduced,
+        refunds,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,

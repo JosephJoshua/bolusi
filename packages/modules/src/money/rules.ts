@@ -231,6 +231,29 @@ export function overpaidByAccount(
   return overpaid;
 }
 
+/**
+ * How `credit` goes back without an owner, through the accounts that overpaid
+ * (`overpaidByAccount`): the drawer first, then each account in the order it was paid.
+ */
+export function refundSplit(
+  entries: readonly OverpaymentEntry[],
+  credit: number,
+  bill: number,
+): { account: string; amount: number }[] {
+  const overpaid = overpaidByAccount(entries, bill);
+  const accounts = [CASH_ACCOUNT, ...[...overpaid.keys()].filter((a) => a !== CASH_ACCOUNT)];
+  const refunds: { account: string; amount: number }[] = [];
+  let left = credit;
+  for (const account of accounts) {
+    if (left <= 0) break;
+    const amount = Math.min(left, overpaid.get(account) ?? 0);
+    if (amount <= 0) continue;
+    refunds.push({ account, amount });
+    left -= amount;
+  }
+  return refunds;
+}
+
 /** What the counter may give back through one account of a document (`overpaidByAccount`). */
 async function overpaidThrough(
   db: Db,

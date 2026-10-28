@@ -73,7 +73,7 @@ import {
 } from '../money/commands.js';
 import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
-import { overpaidByAccount } from '../money/rules.js';
+import { refundSplit } from '../money/rules.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { formatTicketNumber } from './ticket-number.js';
@@ -762,9 +762,9 @@ export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
 /**
  * Money handed back at the counter, through the accounts that overpaid as the money rule reads
- * them (`overpaidByAccount`): the drawer first, then each account in the order it was paid. The
- * bill is what the servisan is charged once this handover's charge is recorded; `extra` are the
- * payments taken now.
+ * them (`refundSplit`), as the handover screens show it (`TicketDetailRow.refunds`). The bill is
+ * what the servisan is charged once this handover's charge is recorded; `extra` are the payments
+ * taken now.
  */
 export function refundsFor(
   money: DocumentMoney,
@@ -772,24 +772,14 @@ export function refundsFor(
   bill: number,
   extra: readonly { account: string; amount: number }[] = [],
 ): { account: string; amount: number }[] {
-  const overpaid = overpaidByAccount(
+  return refundSplit(
     [
       ...money.entries,
       ...extra.map((payment) => ({ ...payment, kind: 'payment_received', voidedBy: null })),
     ],
+    credit,
     bill,
   );
-  const accounts = [CASH_ACCOUNT, ...[...overpaid.keys()].filter((a) => a !== CASH_ACCOUNT)];
-  const refunds: { account: string; amount: number }[] = [];
-  let left = credit;
-  for (const account of accounts) {
-    if (left <= 0) break;
-    const amount = Math.min(left, overpaid.get(account) ?? 0);
-    if (amount <= 0) continue;
-    refunds.push({ account, amount });
-    left -= amount;
-  }
-  return refunds;
 }
 
 /**

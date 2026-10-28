@@ -302,6 +302,8 @@ function ticket(spec: {
   readyHoursAgo?: number;
   /** Repair type ids from the default list. */
   repairTypes?: readonly string[];
+  /** What its handover gives back through each method. */
+  refunds?: TicketDetailRow['refunds'];
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -363,6 +365,7 @@ function ticket(spec: {
     downPayment: spec.downPayment ?? null,
     slipPrints: { intake: 1, handover: 0 },
     chargeReduced: 0,
+    refunds: spec.refunds ?? [],
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
     events: [
@@ -474,6 +477,15 @@ function seedTickets(): TicketDetailRow[] {
       hoursAgo: 90,
       extraPhotos: [photoRow('before:m6')],
       downPayment: 100_000,
+      // The DP came in partly by QRIS, so part of what goes back goes back through it.
+      refunds: [
+        { account: 'cash', name: null, amount: 20_000 },
+        {
+          account: 'account:01920000-0000-7000-8000-00000000a001',
+          name: 'QRIS BCA',
+          amount: 30_000,
+        },
+      ],
       cancel: {
         fee: 50_000,
         standardFee: 50_000,
@@ -1137,6 +1149,7 @@ export function demoRepairRuntime(
         downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
         slipPrints: { intake: 0, handover: 0 },
         chargeReduced: 0,
+        refunds: [],
         quoteLines: lines.map((l) =>
           line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
         ),
@@ -1300,6 +1313,7 @@ export function demoRepairRuntime(
         {
           downPayment: paid === 0 ? null : paid,
           location: 'returned',
+          refunds: [],
           returnedBy: actor.userId,
           returnedByName: actor.name,
           returnedAt: HARNESS_NOW,

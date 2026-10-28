@@ -931,6 +931,7 @@ export function TicketDetail({
         )}
         <DownPaymentRows
           total={amountOwed(row)}
+          reduced={row.chargeReduced}
           downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
           action={

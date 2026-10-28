@@ -168,6 +168,23 @@ describe('handover slip', () => {
     expect(text).not.toContain('KETENTUAN');
   });
 
+  it('says which method each part of a refund goes back through', () => {
+    const cancelled = sampleTicket({
+      outcome: 'cancelled',
+      cancelFee: 50_000,
+      downPayment: 200_000,
+      refunds: [
+        { account: 'cash', name: null, amount: 50_000 },
+        { account: 'account:q', name: 'QRIS toko', amount: 100_000 },
+      ],
+    });
+    const text = allText(
+      handoverSlip(cancelled, { ...ctx, handedOverByName: null, signature: null }),
+    );
+    expect(text).toMatch(/Dikembalikan tunai\s+Rp 50\.000/);
+    expect(text).toMatch(/Dikembalikan lewat QRIS toko\s+Rp 100\.000/);
+  });
+
   it('prints each repair type’s warranty from the day the phone went home', () => {
     const typed = sampleTicket({
       outcome: 'repaired',

@@ -29,7 +29,8 @@ import {
 } from '../../screen-kit/screens/views.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
+import { SPEC_FACT_KEY, refundLabel, staleStepMessage, statusLabel } from '../labels.js';
+import type { TicketRefund } from '../queries.js';
 import {
   balanceAfterDownPayment,
   statusTone,
@@ -250,44 +251,80 @@ export { Fact, FactGrid };
 
 /**
  * Under a total: the down payment taken off it, then what the customer still pays, or what the
- * store gives back when the down payment was more. Nothing when no down payment was taken. `action`
- * sits beside the down payment, the one thing it changes.
+ * store gives back when the down payment was more, through each method it goes back by when
+ * `refunds` says. An owner's reduction comes off the total first. Nothing when no down payment was
+ * taken and nothing was taken off. `action` sits beside the down payment, the one thing it changes.
  */
 export function DownPaymentRows({
   total,
+  reduced = 0,
   downPayment,
+  refunds = [],
   paidLabel = 'repair.price.downPayment',
   action,
   testID,
 }: {
   readonly total: number;
+  /** What an owner took off the charge (`TicketDetailRow.chargeReduced`). */
+  readonly reduced?: number;
   readonly downPayment: number | null;
+  /** What goes back through each method (`TicketDetailRow.refunds`). */
+  readonly refunds?: readonly TicketRefund[];
   /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
   readonly paidLabel?: RepairKey;
   readonly action?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element | null {
-  if (downPayment === null || downPayment === 0) return null;
-  const balance = balanceAfterDownPayment(total, downPayment);
+  const paid = downPayment ?? 0;
+  if (paid === 0 && reduced === 0) return null;
+  const balance = balanceAfterDownPayment(total - reduced, paid);
+  const split = balance.kind === 'refund' ? refunds : [];
   return (
     <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
-      <View style={[repairStyles.row, styles.paidRow]}>
-        <View style={styles.paidLabel}>
-          <Text style={styles.paidText}>{tn(paidLabel)}</Text>
-          {action}
+      {reduced === 0 ? null : (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={[styles.paidText, repairStyles.rowText]}>{tn('repair.price.reduced')}</Text>
+          <Text style={[styles.paidText, styles.amount]} testID={`${testID}.reduced`}>
+            {formatMoney(-reduced)}
+          </Text>
         </View>
-        <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
-          {formatMoney(-downPayment)}
-        </Text>
-      </View>
-      <View style={[repairStyles.row, styles.paidRow]}>
-        <Text style={styles.balanceLabel}>
-          {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
-        </Text>
-        <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
-          {formatMoney(balance.amount)}
-        </Text>
-      </View>
+      )}
+      {paid === 0 ? null : (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <View style={styles.paidLabel}>
+            <Text style={styles.paidText}>{tn(paidLabel)}</Text>
+            {action}
+          </View>
+          <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
+            {formatMoney(-paid)}
+          </Text>
+        </View>
+      )}
+      {split.length === 0 ? (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={[styles.balanceLabel, repairStyles.rowText]}>
+            {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+          </Text>
+          <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
+            {formatMoney(balance.amount)}
+          </Text>
+        </View>
+      ) : (
+        split.map((refund) => (
+          <View
+            key={refund.account}
+            style={[repairStyles.row, styles.paidRow]}
+            testID={`${testID}.refund.${refund.account}`}
+          >
+            <Text style={[styles.balanceLabel, repairStyles.rowText]}>
+              {refundLabel(refund, 'screen')}
+            </Text>
+            <Text style={[styles.balanceValue, styles.amount, repairStyles.rowValue]}>
+              {formatMoney(refund.amount)}
+            </Text>
+          </View>
+        ))
+      )}
     </View>
   );
 }

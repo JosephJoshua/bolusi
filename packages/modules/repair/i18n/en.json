@@ -239,7 +239,10 @@
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Refunded"
+    "refund": "Refunded",
+    "refundVia": "Give back by {method}",
+    "refundCash": "Give back in cash",
+    "reduced": "Reduction"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -477,7 +480,9 @@
       "intake": "Bring this receipt to collect the phone.\nThe price is an estimate. The store checks with you before it goes up.\nThe store is not responsible for lost data.\nThe store is not responsible for a phone left 30 days after you are told.",
       "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and parts only. Bring this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
     },
-    "refund": "Refund"
+    "refund": "Refund",
+    "refundVia": "Refunded by {method}",
+    "refundCash": "Refunded in cash"
   },
   "print": {
     "askTitle": "Did the slip print?",
