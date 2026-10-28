@@ -133,7 +133,13 @@ export function Counter({
   const [claimAsked, setClaimAsked] = useState<IntakeDraft | null>(null);
   const startClaim = (claim: IntakeDraft): void => {
     if (restoredDraft === null) setPage({ kind: 'intake', claim });
-    else setClaimAsked(claim);
+    // A claim on the same servisan already started: carry on with it.
+    else if (
+      restoredDraft.claimOf !== null &&
+      restoredDraft.claimOf.ticketId === claim.claimOf?.ticketId
+    ) {
+      setPage({ kind: 'intake' });
+    } else setClaimAsked(claim);
   };
   // The queue and search the person was on are still there when they come back from an intake.
   const [filters, setFilters] = useState<BoardFilters | null>(null);
@@ -276,6 +282,7 @@ export function Counter({
           key={page.claim === undefined ? 'intake' : 'claim'}
           now={Date.now}
           restoredDraft={page.claim ?? restoredDraft}
+          prefilled={page.claim !== undefined}
           onDraftChange={onDraftChange}
           onOpened={(ticketId) => {
             onDraftChange(null);

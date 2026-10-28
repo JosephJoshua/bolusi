@@ -136,6 +136,11 @@ export interface IntakePageProps {
   /** Read when the ticket is opened, so a page left open for hours still dates it correctly. */
   readonly now: () => number;
   readonly restoredDraft?: IntakeDraft | null | undefined;
+  /**
+   * `restoredDraft` is a new warranty claim filled in from its servisan, not something the person
+   * typed: it is kept, and leaving asks, only once they change something.
+   */
+  readonly prefilled?: boolean | undefined;
   readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
   readonly onOpened: (ticketId: string) => void;
   readonly onCancel: () => void;
@@ -147,6 +152,7 @@ const SAVE_KEYS = 'Ctrl+Enter';
 export function IntakePage({
   now,
   restoredDraft,
+  prefilled = false,
   onDraftChange,
   onOpened,
   onCancel,
@@ -154,6 +160,7 @@ export function IntakePage({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [draft, setDraft] = useState<IntakeDraft>(() => restoredDraft ?? emptyIntakeDraft());
+  const [startedAs] = useState(draft);
   const [showProblems, setShowProblems] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [photosExpired, setPhotosExpired] = useState(false);
@@ -175,7 +182,8 @@ export function IntakePage({
   );
   const update = (patch: Partial<IntakeDraft>): void =>
     setDraft((current) => ({ ...current, ...patch }));
-  const dirty = intakeDirty(draft);
+  // A claim filled in from its servisan is not yet anything the person typed.
+  const dirty = intakeDirty(draft) && (!prefilled || draft !== startedAs);
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];

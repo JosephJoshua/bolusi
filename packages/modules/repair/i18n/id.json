@@ -752,7 +752,7 @@
     "intakeNote": "Dari {number}. Jenis servisan dan garansinya ikut servisan itu.",
     "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
     "replaceTitle": "Mulai klaim garansi?",
-    "replaceMessage": "Servisan yang belum selesai kamu isi akan dibuang.",
+    "replaceMessage": "Isian yang belum disimpan akan dibuang.",
     "replaceConfirm": "Mulai klaim"
   },
   "handoverCheck": {

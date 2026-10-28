@@ -290,7 +290,7 @@ describe('counter app over demo data', () => {
     await openTicket('Yakob Tabuni');
     fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
     const ask = await screen.findByTestId('desktop.claimReplacesIntake');
-    expect(ask.textContent).toContain('Servisan yang belum selesai kamu isi akan dibuang.');
+    expect(ask.textContent).toContain('Isian yang belum disimpan akan dibuang.');
     fireEvent.click(within(ask).getByRole('button', { name: 'Batal' }));
     await waitFor(() => expect(screen.queryByTestId('desktop.claimReplacesIntake')).toBeNull());
     expect(screen.queryByTestId('repair.desk.intake')).toBeNull();
@@ -311,6 +311,43 @@ describe('counter app over demo data', () => {
       }),
     );
     await screen.findByTestId('repair.desk.intake.claim');
+  });
+
+  it('keeps a warranty claim only once something is typed in it', async () => {
+    renderApp();
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    // Nothing typed: leaving asks nothing, and a new intake starts blank.
+    fireEvent.click(byTestId('repair.desk.intake.back'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.intake')).toBeNull());
+    fireEvent.keyDown(window, { key: 'F2' });
+    await screen.findByTestId('repair.desk.intake');
+    expect(screen.queryByTestId('repair.desk.intake.claim')).toBeNull();
+    expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('reopens a claim already started on the same servisan without asking', async () => {
+    renderApp();
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    fireEvent.change(byTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Layar bergaris lagi' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    expect(screen.queryByTestId('desktop.claimReplacesIntake')).toBeNull();
+    expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe(
+      'Layar bergaris lagi',
+    );
   });
 
   it('offers cancelling a servisan to owners only', async () => {
