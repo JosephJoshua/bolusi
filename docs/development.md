@@ -38,10 +38,13 @@ pnpm dev:mobile
 ```
 
 The DB uses a per-worktree Docker port. Use `pnpm db:url`, not an assumed port 5432.
-In another terminal, start the server with the reported URL and your configuration:
+That URL is the owner (a superuser) for migrations and CLIs. The server refuses to start
+as a superuser or BYPASSRLS role, because those skip row-level security; `pnpm db:app-url`
+sets a local password on `bolusi_app` (after `db:migrate`) and prints its URL.
+In another terminal, start the server with it and your configuration:
 
 ```sh
-DATABASE_URL="$(pnpm -s db:url)" pnpm dev:server
+DATABASE_URL="$(pnpm -s db:app-url)" pnpm dev:server
 ```
 
 Set `EXPO_ACCESS_TOKEN` in your local environment first. See

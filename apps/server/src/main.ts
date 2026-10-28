@@ -1,6 +1,7 @@
 // Boot entry (08 §5.1 `pnpm dev`). Reads config once (security-guide §10), builds the app with
 // the production per-IP key source (node-server's getConnInfo — a real socket address, not the
 // testable X-Forwarded-For fallback), and serves via @hono/node-server.
+import { assertRowSecurityRole } from '@bolusi/db-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
@@ -14,6 +15,10 @@ import { serveWithRealtime } from './realtime/serve.js';
 import { systemKeyStoreFromConfig } from './sync/system-key-store.js';
 
 const config = loadConfig();
+
+// Tenant isolation is RLS, and a superuser or BYPASSRLS login skips it even under FORCE. Refuse to
+// listen on such a DATABASE_URL (10-db §6.3: the server connects as bolusi_app).
+await assertRowSecurityRole();
 
 // PUSH DELIVERY (task 134; api/04-push §7, 08 §8). This is the ONE production injection point for
 // the push sender: build the real `ExpoPushSender` from `EXPO_ACCESS_TOKEN` and inject it, so a
