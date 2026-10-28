@@ -63,9 +63,19 @@ export interface NewMediaItem {
  * `MediaFilePort` seam (files.ts) writes the document-dir and render-cache files as AES-256-GCM
  * ciphertext (06 §7), so `local_path` pointing at ciphertext is the closed state, not the residual it
  * once was. What stays plaintext here is only the row's own columns per the rule above.
+ *
+ * In its own transaction: a bare write on the one client connection runs at once, so with a
+ * command's transaction open it would land inside it and vanish when that command rolls back,
+ * leaving a photo file with no row. Never call this from inside a transaction: the queue does not
+ * nest.
  */
 export async function insertMediaItem<DB>(db: Kysely<DB>, item: NewMediaItem): Promise<void> {
-  await sql`
+  const location = encryptColumnValue(
+    db,
+    item.location === null ? null : JSON.stringify(item.location),
+  );
+  await db.transaction().execute((trx) =>
+    sql`
     INSERT INTO media_items (
       id, tenant_id, store_id, captured_by_user_id, device_id, type, mime_type, byte_size,
       sha256, captured_at, location, local_path, attached_to_operation_id, upload_status,
@@ -73,11 +83,12 @@ export async function insertMediaItem<DB>(db: Kysely<DB>, item: NewMediaItem): P
     ) VALUES (
       ${item.id}, ${item.tenantId}, ${item.storeId}, ${item.userId}, ${item.deviceId},
       ${item.type}, ${item.mime}, ${item.sizeBytes}, ${item.sha256}, ${item.capturedAt},
-      ${encryptColumnValue(db, item.location === null ? null : JSON.stringify(item.location))},
+      ${location},
       ${item.localPath},
       NULL, 'pending', 0
     )
-  `.execute(db);
+  `.execute(trx),
+  );
 }
 
 /**
