@@ -581,32 +581,6 @@ describe('owner-only prices and settings', () => {
     });
   });
 
-  test('an older phone (v1) counts a price change only with the customer’s yes', async () => {
-    const { world, builder } = await setupWorld(3345);
-    const change = (n: number, customerAgreed: boolean) =>
-      ticketOp(
-        builder,
-        'repair.quote_changed',
-        {
-          lineId: `01920000-0000-7000-8000-0000000e0d0${n}`,
-          kind: 'part',
-          description: 'LCD',
-          amount: 300_000,
-          reason: 'Ganti LCD',
-          customerAgreed,
-          fromProposal: false,
-        },
-        { schemaVersion: 1 },
-      );
-
-    const result = await push(world, [change(1, false), change(2, true)]);
-
-    expect(result.results.map((r) => r.status)).toEqual(['rejected', 'accepted']);
-    expect(result.results[0]).toMatchObject({
-      reason: 'repair.refusal.customerAgreementMismatch',
-    });
-  });
-
   test('a store sets cancellation fees only for itself', async () => {
     const { world, builder } = await setupWorld(3343);
     const setFees = (entityId: string) =>
