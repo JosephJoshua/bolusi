@@ -78,6 +78,7 @@ export function Counter({
   menuHeader,
   menuItems,
   sync,
+  onOpenSyncStatus,
   settings = {},
   restoredDraft,
   onDraftChange,
@@ -91,6 +92,8 @@ export function Counter({
   readonly menuItems: readonly MenuItem[];
   /** The sync line at the foot of the sidebar; absent in the demo, which has nothing to send. */
   readonly sync?: ((compact: boolean) => ReactNode) | undefined;
+  /** Opens the sync panel, from a servisan the server refused a change on. */
+  readonly onOpenSyncStatus?: (() => void) | undefined;
   /** What Settings may do for this person besides the repair settings; the demo has none. */
   readonly settings?: SettingsAccess | undefined;
   /** This person's unfinished intake, kept across a lock or a switch to someone else. */
@@ -236,6 +239,7 @@ export function Counter({
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
           onStartClaim={(claim) => setPage({ kind: 'intake', claim })}
+          onOpenSyncStatus={onOpenSyncStatus}
         />
       )}
     </AppShell>

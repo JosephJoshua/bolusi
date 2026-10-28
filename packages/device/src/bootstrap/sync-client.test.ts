@@ -17,7 +17,9 @@ import {
   OP_SYNC_STATUS_TABLE,
   readSyncState,
   stalenessLevel,
+  SYNC_BACKOFF_SCHEDULE_MS,
   SyncTransportError,
+  type TimerPort,
 } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import type {
@@ -28,7 +30,7 @@ import type {
   SignedOperation,
 } from '@bolusi/schemas';
 import { ChainBuilder, makeWorld, noblePort, nodeColumnAead, opRowOf } from '@bolusi/test-support';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 import { FakeTimer } from '../media/_harness.test.js';
@@ -171,6 +173,7 @@ const clockT = { now: () => T };
 
 interface BuildOptions {
   readonly online?: boolean;
+  readonly timer?: TimerPort;
   readonly bundleThrows?: boolean;
   readonly pushRejects?: boolean;
   readonly pullRejects?: boolean;
@@ -181,7 +184,7 @@ async function build(options: BuildOptions = {}) {
   const transport = new FakeTransport();
   transport.pushRejects = options.pushRejects ?? false;
   transport.pullRejects = options.pullRejects ?? false;
-  const timer = new RecordingTimer();
+  const timer = options.timer ?? new RecordingTimer();
   const net = fakeNetInfo(options.online ?? true);
   let bundleCalls = 0;
   const applied: SignedOperation[] = [];
@@ -359,6 +362,25 @@ describe('falsification — each wiring broken makes the cycle FAIL LOUDLY (§2.
     await client.settle();
     expect(transport.pulls.length).toBeGreaterThan(0);
     expect((await readSyncState(db.db)).lastSuccessfulSyncAt).toBe(T);
+    client.stop();
+  });
+});
+
+describe('a retry after a failed cycle', () => {
+  test('tells the screens when it ends, though no trigger asked for it', async () => {
+    const timer = new FakeTimer();
+    const { client, transport } = await build({ online: true, pullRejects: true, timer });
+    await client.start();
+    await client.settle();
+    expect(client.state()).toBe('backoff');
+
+    // Only the subscription may tell the screens: they never poll the client.
+    const told: string[] = [];
+    client.subscribe(() => told.push(client.state()));
+    transport.pullRejects = false;
+    timer.runDelay(SYNC_BACKOFF_SCHEDULE_MS[0]);
+    await vi.waitFor(() => expect(told.at(-1)).toBe('idle'));
+    expect(client.syncState().lastSuccessfulSyncAt).toBe(T);
     client.stop();
   });
 });

@@ -2,7 +2,8 @@
   "extends": "@bolusi/tsconfig/node.json",
   "compilerOptions": {
     "noEmit": true,
-    "lib": ["ES2023", "DOM"]
+    "lib": ["ES2023", "DOM"],
+    "resolveJsonModule": true
   },
   "include": [".", "../main/rpc.ts", "../main/main-port.ts", "../main/process-api.ts"]
 }

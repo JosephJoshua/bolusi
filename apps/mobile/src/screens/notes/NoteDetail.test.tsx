@@ -162,6 +162,19 @@ describe('NoteDetail — rejected-op danger banner (the falsified deliverable)',
     expect(screen.query('notes.detail.rejectedBanner')).not.toBeNull();
   });
 
+  test('the banner counts every refused change, not just one', async () => {
+    const screen = detail(
+      fakeRuntime({
+        getNote: () => Promise.resolve(page([note()])),
+        noteSyncStatuses: () => Promise.resolve({ 'note-1': ['rejected', 'synced', 'rejected'] }),
+      }),
+    );
+    await settle();
+    expect(textsIn(screen.get('notes.detail.rejectedBanner')).join('')).toContain(
+      '2 perubahan ditolak server',
+    );
+  });
+
   test('POSITIVE CONTROL: an all-synced note renders NO banner (the banner tracks state)', async () => {
     // Without this, a screen that rendered the banner unconditionally would pass the test above.
     const screen = detail(

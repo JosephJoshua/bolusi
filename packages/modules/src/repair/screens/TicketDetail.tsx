@@ -39,7 +39,7 @@ import {
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
-  hasRejectedOp,
+  rejectedCount,
   useActionRunner,
   type DiscardGuard,
   type EntitySyncStatuses,
@@ -216,7 +216,8 @@ export function TicketDetail({
   const [moreOpen, setMoreOpen] = useState(false);
   const moreBack = useRef(moreOpen);
   moreBack.current = moreOpen;
-  const rejected = query.status === 'ready' && hasRejectedOp(query.data.statuses[ticketId] ?? []);
+  const rejected =
+    query.status === 'ready' ? rejectedCount(query.data.statuses[ticketId] ?? []) : 0;
   const closeStep = (): void => setStep({ kind: 'none' });
   const leaveStep = useCallback((): void => {
     const guard = stepGuardRef.current;
@@ -468,10 +469,10 @@ export function TicketDetail({
         onPress={() => setMessageFailed(false)}
         testID={`${testID}.messageFailed`}
       />
-    ) : rejected ? (
+    ) : rejected > 0 ? (
       <Banner
         variant="danger"
-        message={t('sync.rejected.banner', { count: 1 })}
+        message={t('sync.rejected.banner', { count: rejected })}
         onPress={onOpenSyncStatus}
         testID={`${testID}.rejectedBanner`}
       />

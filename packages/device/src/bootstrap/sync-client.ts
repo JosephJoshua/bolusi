@@ -208,6 +208,9 @@ class SyncClientImpl implements SyncClient {
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
       onPullBatch: (batch) => void this.noteFirstSyncBatch(batch),
       ...(deps.onPushed === undefined ? {} : { onPushed: deps.onPushed }),
+      // A retry after a failed cycle reports its end like any requested cycle, or the screens keep
+      // showing "sending" and the old counts until the next trigger.
+      onRetry: () => void this.afterCycle(),
     });
 
     this.triggers = createSyncTriggers({

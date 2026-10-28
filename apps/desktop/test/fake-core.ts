@@ -57,6 +57,9 @@ export class FakeCore {
       if (method === 'money.query') {
         return this.demo.money.query(args[1] as never, args[2] as never) as Promise<T>;
       }
+      if (method === 'repair.loadThumbnail') {
+        return this.demo.loadThumbnail(args[1] as never) as Promise<T>;
+      }
       if (method === 'repair.ticketSyncStatuses') {
         return this.demo.ticketSyncStatuses(args[1] as string[]) as Promise<T>;
       }

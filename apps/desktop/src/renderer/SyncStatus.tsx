@@ -51,17 +51,21 @@ const REJECTED_SHOWN = 20;
 export function SyncStatusButton({
   input,
   compact,
+  open,
+  onOpenChange: setOpen,
   onSyncNow,
   onReenrol,
 }: {
   readonly input: SyncStatusInput;
   /** The collapsed sidebar: the icon only, named by its tooltip. */
   readonly compact: boolean;
+  /** The panel; the app holds it, since a refused change on a servisan opens it too. */
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
   readonly onSyncNow: () => void;
   /** Opens registration again, for when the server no longer knows this PC. */
   readonly onReenrol: () => void;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
   const state = syncTitleState(input);
   const Icon = ICON[state];
   const title = t(SYNC_TITLE_KEY[state]);
@@ -194,7 +198,7 @@ function SyncStatusDialog({
             <h3 className="text-heading font-semibold text-text">
               {t('sync.rejected.title', { count: input.rejected.length })}
             </h3>
-            <p className="text-small text-text-muted">{t('sync.rejected.explain')}</p>
+            <p className="text-small text-text-muted">{t('sync.pc.rejectedExplain')}</p>
             <ul className="flex flex-col divide-y divide-border rounded-sm border border-border">
               {input.rejected.slice(0, rejectedShown).map((row) => (
                 <li key={row.opId} className="flex flex-col gap-1 px-3 py-2">

@@ -119,6 +119,11 @@ export interface SyncLoopOptions<DB> {
    * a later batch of the same push then fails.
    */
   readonly onPushed?: (settled: PushSettled) => void;
+  /**
+   * Called when the backoff timer starts a retry. Nobody asked for that cycle, so nobody is
+   * waiting on it: the caller uses this to hear when it ends, as it does for the cycles it asks for.
+   */
+  readonly onRetry?: () => void;
 }
 
 /** Observable cycle counters — for tests and diagnostics; not persisted, not a contract with the UI. */
@@ -428,6 +433,11 @@ export class SyncLoop<DB> {
       if (this.loopState !== 'backoff') return;
       this.transition('timer_elapsed');
       this.cycle = this.runCycle();
+      try {
+        this.options.onRetry?.();
+      } catch {
+        // A notification only: the retry is already running.
+      }
     });
   }
 
