@@ -458,4 +458,62 @@ describe('refunds and voids', () => {
     await voidOfReplacement();
     expect(judged).toBe(190_000);
   });
+
+  test('credit from a payment through one account does not come back free through another', async () => {
+    h = await openRepairHarness(9409);
+    const { ticketId } = await paidInFull(h, [750_000]);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    const qris = `account:${await saveAccount(h, 'qris')}`;
+    // A made-up Rp 5.000.000 QRIS payment leaves the customer that much "credit".
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: qris, amount: 5_000_000, reference: '77' }] },
+      h.cashierId,
+    );
+    const refund = (amount: number, userId: string) =>
+      h!.money('refund', { document, account: 'cash', amount, reason: 'Kembali' }, userId);
+    // Only Rp 750.000 came in as cash: the rest of a cash refund counts against the limit.
+    await expectOverLimit(refund(5_000_000, h.managerId), 'money');
+    await expectOverLimit(refund(750_000 + MANAGER_LIMITS.refund + 1, h.managerId), 'money');
+    await refund(750_000 + MANAGER_LIMITS.refund, h.managerId);
+    // That Rp 30.000 still counts for whatever comes next.
+    await expectOverLimit(
+      h.money('reduceCharge', { document, amount: 1, reason: 'Diskon' }, h.managerId),
+      'money',
+    );
+    await refund(1_000_000, h.storeOwnerId);
+  });
+
+  test('a refund through the wrong account and one beyond the credit count together', async () => {
+    h = await openRepairHarness(9410);
+    const { ticketId } = await paidInFull(h, [750_000]);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    const qris = `account:${await saveAccount(h, 'qris')}`;
+    const transfer = `account:${await saveAccount(h, 'transfer')}`;
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: qris, amount: 20_000, reference: '78' }] },
+      h.cashierId,
+    );
+    const refund = (account: string, amount: number) =>
+      h!.money(
+        'refund',
+        { document, account, amount, reason: 'Kembali', reference: '79' },
+        h!.managerId,
+      );
+    // Within the credit, but nothing came in by transfer: it counts.
+    await refund(transfer, 20_000);
+    // Rp 10.001 beyond the credit through cash, which paid the bill, is past the Rp 30.000 too.
+    await expectOverLimit(refund('cash', 10_001), 'money');
+    await refund('cash', 10_000);
+  });
 });
+
+async function saveAccount(harness: RepairHarness, kind: 'qris' | 'transfer'): Promise<string> {
+  const { accountId } = (await harness.money(
+    'saveAccount',
+    { kind, name: kind.toUpperCase() },
+    harness.storeOwnerId,
+  )) as { accountId: string };
+  return accountId;
+}

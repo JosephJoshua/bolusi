@@ -210,6 +210,36 @@ async function netPaidThrough(
   return Number(row?.net ?? 0);
 }
 
+/**
+ * What went back to a document's customer through its payment accounts beyond what was paid
+ * through each, `outgoing` (the op being judged) taken off its account first.
+ */
+async function overdrawnAccounts(
+  db: Db,
+  storeId: string,
+  document: { kind: string; id: string },
+  outgoing: readonly { readonly account: string; readonly amount: number }[],
+): Promise<number> {
+  const rows = await db
+    .selectFrom('moneyLines')
+    .select(['account', sql<string | number>`COALESCE(SUM(debit - credit), 0)`.as('net')])
+    .where('storeId', '=', storeId)
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .groupBy('account')
+    .execute();
+  const net = new Map<string, number>();
+  for (const row of rows) {
+    if (row.account === CASH_ACCOUNT || paymentAccountIdOf(row.account) !== null) {
+      net.set(row.account, Number(row.net));
+    }
+  }
+  for (const { account, amount } of outgoing) net.set(account, (net.get(account) ?? 0) - amount);
+  let overdrawn = 0;
+  for (const value of net.values()) overdrawn += Math.max(0, -value);
+  return overdrawn;
+}
+
 async function entryExists(db: Db, id: string): Promise<boolean> {
   const row = await db
     .selectFrom('moneyEntries')
@@ -268,10 +298,11 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
   /**
    * Everything taken off a document that its refund limit counts, `change` (the op being judged)
    * included: charge reductions, voided payments (`voidedOffDocument`) and refunds beyond what the
-   * customer overpaid. A refund leaves the customer owing what went back beyond their credit, so it
-   * counts only as far as that is still owed: the refund command lowers the bill by it first, and
-   * the two then count once, as the reduction. Before the document is charged in full, every
-   * refund counts.
+   * counter could give back. Once the document is charged in full, refunds count as far as they
+   * left the customer owing (the refund command lowers the bill by that first, and the two then
+   * count once, as the reduction), plus what went back through an account beyond what the customer
+   * paid through it (`overdrawnAccounts`), so credit from a payment through one account does not
+   * come back free through another. Before that, every refund counts.
    */
   async function takenOffDocument(
     db: Db,
@@ -279,13 +310,13 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     document: { readonly kind: string; readonly id: string },
     change: {
       readonly reduced?: number;
-      readonly refunded?: number;
-      readonly voiding?: { readonly id: string; readonly amount: number };
+      readonly refund?: { readonly account: string; readonly amount: number };
+      readonly voiding?: { readonly id: string; readonly amount: number; readonly account: string };
     },
   ): Promise<number> {
     const store = storeOf(op);
     const reduced = change.reduced ?? 0;
-    const refunded = change.refunded ?? 0;
+    const refunded = change.refund?.amount ?? 0;
     const voided = change.voiding?.amount ?? 0;
     const source = sources[document.kind];
     const expected =
@@ -299,15 +330,19 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     const charged = await documentTotal(db, store, document, 'charge_recorded');
     const refunds = (await documentTotal(db, store, document, 'refund_paid')) + refunded;
     const balance = (await documentBalance(db, store, document)) - reduced + refunded + voided;
-    const beyondOverpayment =
+    const outgoing = [change.refund, change.voiding].filter((move) => move !== undefined);
+    const refundsCounted =
       expected !== null && charged >= expected.amount
-        ? Math.max(0, Math.min(refunds, balance))
+        ? Math.min(
+            refunds,
+            Math.max(0, balance) + (await overdrawnAccounts(db, store, document, outgoing)),
+          )
         : refunds;
     return (
       (await documentTotal(db, store, document, 'charge_reduced')) +
       reduced +
       (await voidedOffDocument(db, store, { ...document, voiding: change.voiding ?? null })) +
-      beyondOverpayment
+      refundsCounted
     );
   }
 
@@ -393,7 +428,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     const { db } = ctx;
     const entry = await db
       .selectFrom('moneyEntries')
-      .select(['id', 'kind', 'voidedBy', 'amount', 'documentKind', 'documentId'])
+      .select(['id', 'kind', 'voidedBy', 'amount', 'account', 'documentKind', 'documentId'])
       .where('id', '=', op.entityId)
       .where('storeId', '=', storeOf(op))
       .executeTakeFirst();
@@ -413,7 +448,9 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
             db,
             op,
             { kind: entry.documentKind, id: entry.documentId },
-            { voiding: { id: entry.id, amount: Number(entry.amount) } },
+            {
+              voiding: { id: entry.id, amount: Number(entry.amount), account: entry.account ?? '' },
+            },
           );
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
   };
@@ -462,7 +499,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (counterRefusal === null) return;
     if (!(await holdsPermission(op.userId, MONEY_PERMISSION.refund))) throw counterRefusal;
     // A limited role (a manager): everything taken off the document, this with it, within limit.
-    const takenOff = await takenOffDocument(db, op, document, { refunded: amount });
+    const takenOff = await takenOffDocument(db, op, document, { refund: { account, amount } });
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
