@@ -48,6 +48,7 @@ export function SignatureDialog({
   labels,
   onUse,
   onClose,
+  fallback,
   testId = 'signature',
 }: {
   readonly open: boolean;
@@ -56,6 +57,8 @@ export function SignatureDialog({
   /** The drawn strokes. Resolve when they are stored; a rejection keeps the pad to retry. */
   readonly onUse: (signature: DrawnSignature) => Promise<void>;
   readonly onClose: () => void;
+  /** Beside "clear", such as "Pakai HP" to sign on a phone instead. */
+  readonly fallback?: React.ReactNode;
   readonly testId?: string;
 }): React.JSX.Element {
   const canvas = useRef<HTMLCanvasElement | null>(null);
@@ -145,9 +148,9 @@ export function SignatureDialog({
             variant="text"
             onClick={reset}
             disabled={empty || saving}
-            className="mr-auto"
             data-testid={`${testId}.clear`}
           />
+          <span className="mr-auto">{fallback}</span>
           <Button
             label={labels.use}
             variant="primary"

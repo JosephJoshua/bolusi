@@ -1,8 +1,10 @@
 // What the window shows: opening the data, registering the PC, choosing who is here and their PIN,
 // then the counter. Which one is a pure function of the core's state (the phone's `resolveZone`), so
 // a lock or a blocked PC can never leave someone's work on screen.
-import type { HeldPhone } from '@bolusi/core';
+import { derivePinAuthState, type HeldPhone, type StaffDirectory } from '@bolusi/core';
 import type { PinOutcome } from '@bolusi/device/bootstrap/session';
+import type { StaffControls } from '@bolusi/device/bootstrap/staff';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { tapTarget, type SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { resolveZone } from '@bolusi/device/navigation/zone';
@@ -26,8 +28,10 @@ import { AuthLayout } from './auth/AuthLayout.js';
 import { FirstPinScreen, PinScreen, type PinSubmitResult } from './auth/PinScreen.js';
 import { SwitcherScreen } from './auth/SwitcherScreen.js';
 import { createCaptureDialogs } from './capture-dialogs.js';
+import { windowHandoff } from './phone-handoff.js';
 import type { PcCapture } from './capture.js';
 import { createCoreRepairRuntime } from './core-runtime.js';
+import type { SettingsAccess } from './settings/access.js';
 import { Counter } from './Counter.js';
 import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from './demo.js';
 import { SyncStatusButton } from './SyncStatus.js';
@@ -37,8 +41,8 @@ import { useCore } from './use-core.js';
 const ACTIVITY_EVERY_MS = 5_000;
 
 export function App(): React.JSX.Element {
-  // The webcam and signature dialogs, once for the window; leaving the counter backs out of either.
-  const [dialogs] = useState(createCaptureDialogs);
+  // The webcam, signature and phone dialogs, once for the window; leaving the counter backs out.
+  const [dialogs] = useState(() => createCaptureDialogs(windowHandoff()));
   return (
     <>
       <Gate capture={dialogs.capture} />
@@ -307,6 +311,8 @@ function LiveCounter({
     [client, grants, userId, storeName, capture],
   );
 
+  const settings = useSettingsAccess(client, state, session, userId);
+
   // The intake in progress lives in this person's workspace in the core, so it survives a lock, a
   // switch to a colleague and a restart, and only this person's PIN brings it back.
   const workspace = session.workspace?.ownerUserId === userId ? session.workspace : null;
@@ -352,11 +358,61 @@ function LiveCounter({
             />
           )
         }
+        settings={settings}
         restoredDraft={restoredDraft}
         onDraftChange={onDraftChange}
       />
     </RepairRuntimeProvider>
   );
+}
+
+/**
+ * What Settings may do for the person signed in, each part only when the core says they may: their
+ * own PIN always, colleagues' PINs with unlock or reset, "Karyawan" with staff rights. Every call
+ * names the person, and the core refuses it for anyone else.
+ */
+function useSettingsAccess(
+  client: Client,
+  state: CoreState,
+  session: SessionView,
+  userId: string,
+): SettingsAccess {
+  const { canUnlock, canReset, canManageStaff, tenantAdmin, pinRows } = session;
+  // Colleagues whose PIN is locked here, from the same lockout machine as the PIN pad.
+  const lockedCount = Object.entries(pinRows).filter(
+    ([id, row]) => id !== userId && derivePinAuthState(row) === 'locked_out',
+  ).length;
+  const device = state.deviceInfo;
+  return useMemo((): SettingsAccess => {
+    const call = <T,>(method: string, ...args: readonly unknown[]): Promise<T> =>
+      client.call<T>(method, userId, ...args);
+    const staff: StaffControls | undefined = canManageStaff
+      ? {
+          tenantAdmin,
+          load: () => call<StaffDirectory>('staff.list'),
+          onCreate: (draft) => call<{ readonly userId: string }>('staff.create', draft),
+          onUpdate: (memberId, change) => call<void>('staff.update', memberId, change),
+          onSetActive: (memberId, active) => call<void>('staff.setActive', memberId, active),
+        }
+      : undefined;
+    return {
+      changePin: (currentPin, newPin) => call<void>('session.changePin', currentPin, newPin),
+      staffPins:
+        canUnlock || canReset
+          ? {
+              canUnlock,
+              canReset,
+              lockedCount,
+              list: () => call<readonly PinTargetUser[]>('session.listPinTargets'),
+              clearLockout: (targetUserId) => call<void>('session.clearLockout', targetUserId),
+              resetPin: (targetUserId, newPin) =>
+                call<void>('session.resetPin', targetUserId, newPin),
+            }
+          : undefined,
+      staff,
+      device,
+    };
+  }, [client, userId, canUnlock, canReset, canManageStaff, tenantAdmin, lockedCount, device]);
 }
 
 /** The seeded demo (the dev server in a browser, and the demo build): four people, no core. */

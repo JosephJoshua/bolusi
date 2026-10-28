@@ -159,7 +159,7 @@ describe('counter app over demo data', () => {
     for (const key of ['1', '5', '9', '6', 'Enter']) fireEvent.keyDown(pad, { key });
     await waitFor(() => expect(pad.getAttribute('data-value')).toBe('1596'));
     fireEvent.click(byTestId('repair.desk.intake.restOk'));
-    const tiles = screen.getAllByTestId(/^repair\.desk\.intake\.photo\./);
+    const tiles = screen.getAllByTestId(/^repair\.desk\.intake\.photo\.(?!all)/);
     for (const [index, tile] of tiles.entries()) {
       await act(async () => {
         fireEvent.click(tile);
@@ -201,6 +201,22 @@ describe('counter app over demo data', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tampilkan' }));
     expect(byTestId('repair.desk.ticket.passcode').textContent).toContain('1-5-9-6');
   }, 20_000);
+
+  it('takes every missing intake photo in a row', async () => {
+    renderApp();
+    fireEvent.click(await screen.findByTestId('repair.desk.board.newIntake'));
+    const tiles = await screen.findAllByTestId(/^repair\.desk\.intake\.photo\.(?!all)/);
+    await act(async () => {
+      fireEvent.click(tiles[0]!);
+    });
+    await waitFor(() => expect(screen.queryAllByText(RETAKE)).toHaveLength(1));
+    await act(async () => {
+      fireEvent.click(byTestId('repair.desk.intake.photo.all'));
+    });
+    await waitFor(() => expect(screen.queryAllByText(RETAKE)).toHaveLength(tiles.length));
+    // Nothing left to take: the button goes.
+    expect(screen.queryByTestId('repair.desk.intake.photo.all')).toBeNull();
+  });
 
   it('closes only the dialog on Escape, keeping the servisan open', async () => {
     renderApp();
@@ -418,6 +434,7 @@ describe('counter app over demo data', () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
     fireEvent.click(byTestId('nav.settings'));
+    fireEvent.click(await screen.findByTestId('desktop.settings.nav.computer'));
     const a4 = await screen.findByTestId('repair.desk.printing.paper.a4');
     await waitFor(() =>
       expect(

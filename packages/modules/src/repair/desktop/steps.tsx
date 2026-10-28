@@ -986,6 +986,7 @@ export function HandoverDialog({
             state={signature === null ? null : signatureState}
             labels={photoLabels()}
             icon={Signature}
+            whole
             onCapture={() =>
               capture(
                 () => runtime.captureSignature({ title: tn('repair.handover.signatureTitle') }),

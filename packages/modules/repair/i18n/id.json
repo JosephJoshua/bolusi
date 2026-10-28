@@ -188,6 +188,7 @@
       "top": "Atas"
     },
     "take": "Ambil foto",
+    "takeAll": "Ambil semua foto",
     "takeNext": "Ambil foto: {slot}",
     "expired": "Ada foto yang sudah terhapus. Ambil ulang, ya.",
     "title": "Foto",
@@ -576,6 +577,14 @@
       "next": "Halaman berikutnya",
       "page": "Halaman {page}",
       "pages": "Halaman"
+    },
+    "settings": {
+      "discard": "Buang perubahan",
+      "slipLead": "Nama toko, logo dan ketentuan yang tercetak di nota toko ini."
+    },
+    "options": {
+      "dragHandle": "Seret untuk mengubah urutan, atau pakai panah atas dan bawah",
+      "new": "Baru"
     }
   },
   "refusal": {

@@ -164,7 +164,6 @@ export function useRepairThumbnail(ref: ThumbnailRef | null): ThumbnailState {
   return useThumbnailState(useRepairRuntime().loadThumbnail, ref);
 }
 
-/** The franchise's intake lists and this store's hidden items, kept live as either syncs in. */
 /** This store's cancellation fees; `reloadKey` re-reads them after a failed load. */
 export function useCancelFees(reloadKey = 0): QueryState<CancelFees> {
   return useRepairQuery(
@@ -204,10 +203,27 @@ export function useStoreDisplayName(): string | null {
   return name.status === 'ready' ? name.data : null;
 }
 
-export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
+/** The enrolled store's name, which slips print while the owner leaves theirs empty. */
+export function usePrintStoreName(): string {
+  const printing = useRepairRuntime().printing;
+  const [name, setName] = useState('');
+  useEffect(() => {
+    let live = true;
+    void printing?.storeName().then((loaded) => {
+      if (live) setName(loaded);
+    });
+    return () => {
+      live = false;
+    };
+  }, [printing]);
+  return name;
+}
+
+/** The franchise's intake lists and this store's hidden items, kept live as either syncs in. */
+export function useIntakeOptionSettings(reloadKey = 0): QueryState<IntakeOptionSettings> {
   return useRepairQuery(
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
-    'intakeOptionSettings',
+    `intakeOptionSettings:${String(reloadKey)}`,
   );
 }
 

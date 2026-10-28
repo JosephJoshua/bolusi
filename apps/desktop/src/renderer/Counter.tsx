@@ -4,25 +4,18 @@
 import { t } from '@bolusi/i18n';
 import {
   IntakePage,
-  PrintSettings,
   RepairBoardPage,
   tn,
   type BoardFilters,
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
-import {
-  AppShell,
-  Avatar,
-  Menu,
-  PageHeader,
-  Sidebar,
-  Tooltip,
-  type MenuItem,
-} from '@bolusi/ui-web';
+import { AppShell, Avatar, Menu, Sidebar, Tooltip, type MenuItem } from '@bolusi/ui-web';
 import { ChevronsUpDown, Settings, Wrench } from 'lucide-react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { UpdateNotice, useAppVersion } from './updates.js';
+import type { SettingsAccess } from './settings/access.js';
+import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
+import { UpdateNotice } from './updates.js';
 
 type Page =
   { readonly kind: 'board' } | { readonly kind: 'intake' } | { readonly kind: 'settings' };
@@ -77,6 +70,7 @@ export function Counter({
   menuHeader,
   menuItems,
   sync,
+  settings = {},
   restoredDraft,
   onDraftChange,
 }: {
@@ -87,6 +81,8 @@ export function Counter({
   readonly menuItems: readonly MenuItem[];
   /** The sync line at the foot of the sidebar; absent in the demo, which has nothing to send. */
   readonly sync?: ((compact: boolean) => ReactNode) | undefined;
+  /** What Settings may do for this person besides the repair settings; the demo has none. */
+  readonly settings?: SettingsAccess | undefined;
   /** This person's unfinished intake, kept across a lock or a switch to someone else. */
   readonly restoredDraft: IntakeDraft | null;
   readonly onDraftChange: (draft: IntakeDraft | null) => void;
@@ -99,6 +95,33 @@ export function Counter({
   // The queue and search the person was on are still there when they come back from an intake.
   const [filters, setFilters] = useState<BoardFilters | null>(null);
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
+  // Settings asks before it is left with unsaved changes.
+  const leaveGuard = useRef<LeaveGuard | null>(null);
+  const leave = (proceed: () => void): void => {
+    const guard = leaveGuard.current;
+    if (guard === null) proceed();
+    else guard(proceed);
+  };
+  const go = (next: Page): void => {
+    if (next.kind !== page.kind) leave(() => setPage(next));
+  };
+  // Settings opens from the person menu too, as on the phone. Switching person leaves Settings
+  // as well; locking keeps everything as it is.
+  const personMenu: readonly MenuItem[] = [
+    ...menuItems.map((item) =>
+      item.key === 'lock' ? item : { ...item, onSelect: () => leave(item.onSelect) },
+    ),
+    {
+      key: 'settings',
+      label: t('core.settings.title'),
+      icon: Settings,
+      separated: true,
+      onSelect: () => go({ kind: 'settings' }),
+    },
+  ];
+  const registerLeaveGuard = useCallback((guard: LeaveGuard | null) => {
+    leaveGuard.current = guard;
+  }, []);
 
   return (
     <AppShell
@@ -135,28 +158,33 @@ export function Counter({
               label: tn('repair.board.title'),
               icon: Wrench,
               active: page.kind !== 'settings',
-              onSelect: () => setPage({ kind: 'board' }),
+              onSelect: () => go({ kind: 'board' }),
             },
             {
               key: 'settings',
               label: t('core.settings.title'),
               icon: Settings,
               active: page.kind === 'settings',
-              onSelect: () => setPage({ kind: 'settings' }),
+              onSelect: () => go({ kind: 'settings' }),
             },
           ]}
           footer={(compact) => (
             <div className="flex flex-col gap-3">
               <UpdateNotice compact={compact} />
               {sync?.(compact)}
-              <PersonMenu person={person} compact={compact} header={menuHeader} items={menuItems} />
+              <PersonMenu
+                person={person}
+                compact={compact}
+                header={menuHeader}
+                items={personMenu}
+              />
             </div>
           )}
         />
       }
     >
       {page.kind === 'settings' ? (
-        <SettingsPage />
+        <SettingsPage person={person} access={settings} onRegisterLeaveGuard={registerLeaveGuard} />
       ) : page.kind === 'intake' ? (
         <IntakePage
           now={Date.now}
@@ -179,26 +207,6 @@ export function Counter({
         />
       )}
     </AppShell>
-  );
-}
-
-/** This PC's own settings; the store's (slip header, intake lists) come with the owner screens. */
-function SettingsPage(): React.JSX.Element {
-  const version = useAppVersion();
-  return (
-    <>
-      <PageHeader title={t('core.settings.title')} />
-      <div className="min-h-0 flex-1 overflow-auto px-6 pb-6" data-testid="desktop.settings">
-        <div className="flex max-w-2xl flex-col gap-4">
-          <PrintSettings />
-          {version === null ? null : (
-            <p className="text-small text-text-muted" data-testid="desktop.version">
-              {t('core.settings.appVersion')} {version}
-            </p>
-          )}
-        </div>
-      </div>
-    </>
   );
 }
 

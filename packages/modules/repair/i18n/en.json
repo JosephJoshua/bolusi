@@ -188,6 +188,7 @@
       "top": "Top"
     },
     "take": "Take photo",
+    "takeAll": "Take all photos",
     "takeNext": "Take photo: {slot}",
     "expired": "Some photos from this unfinished intake were deleted. Take them again.",
     "title": "Photos",
@@ -576,6 +577,14 @@
       "next": "Next page",
       "page": "Page {page}",
       "pages": "Pages"
+    },
+    "settings": {
+      "discard": "Discard changes",
+      "slipLead": "The store name, logo and terms printed on this store’s slips."
+    },
+    "options": {
+      "dragHandle": "Drag to reorder, or use the up and down arrows",
+      "new": "New"
     }
   },
   "refusal": {
