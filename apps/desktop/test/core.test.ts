@@ -18,6 +18,9 @@ import {
 } from '@bolusi/test-support';
 import { describe, expect, it } from 'vitest';
 
+import type { AppSessionController } from '@bolusi/device/bootstrap/session';
+
+import { actingSession, actingStaffAdmin } from '../src/core/acting.js';
 import { nodeCryptoPort } from '../src/core/crypto.js';
 import { openNodeSqliteDriver } from '../src/core/sqlite-driver.js';
 import { connect, serve, type Channel } from '../src/main/rpc.js';
@@ -147,5 +150,48 @@ describe('window to core calls', () => {
     expect((lastOwner as StaffAdminError).reason).toBe('lastOwner');
     const forged = await client.call('forged').catch((error: unknown) => error);
     expect((forged as StaffAdminError).reason).toBe('unexpected');
+  });
+});
+
+describe('who a window call may act as', () => {
+  const sessionAs = (
+    userId: string | null,
+    flags: { locked?: boolean; canManageStaff?: boolean } = {},
+  ): AppSessionController =>
+    ({
+      snapshot: () => ({
+        session: userId === null ? null : { userId },
+        locked: flags.locked ?? false,
+        canManageStaff: flags.canManageStaff ?? false,
+      }),
+    }) as unknown as AppSessionController;
+
+  const code = (run: () => unknown): string | undefined => {
+    try {
+      run();
+      return undefined;
+    } catch (error) {
+      return error instanceof DomainError ? error.code : (error as StaffAdminError).reason;
+    }
+  };
+
+  it('is the person signed in and unlocked, never anyone else', () => {
+    expect(code(() => actingSession(sessionAs('u-1'), 'u-1'))).toBeUndefined();
+    expect(code(() => actingSession(sessionAs('u-1'), 'u-2'))).toBe('NOT_AUTHENTICATED');
+    expect(code(() => actingSession(sessionAs('u-1', { locked: true }), 'u-1'))).toBe(
+      'NOT_AUTHENTICATED',
+    );
+    expect(code(() => actingSession(sessionAs(null), 'u-1'))).toBe('NOT_AUTHENTICATED');
+    expect(code(() => actingSession(null, 'u-1'))).toBe('NOT_AUTHENTICATED');
+  });
+
+  it('manages staff only with the permission to add staff', () => {
+    expect(code(() => actingStaffAdmin(sessionAs('u-1'), 'u-1'))).toBe('denied');
+    expect(
+      code(() => actingStaffAdmin(sessionAs('u-1', { canManageStaff: true }), 'u-1')),
+    ).toBeUndefined();
+    expect(code(() => actingStaffAdmin(sessionAs('u-1', { canManageStaff: true }), 'u-2'))).toBe(
+      'NOT_AUTHENTICATED',
+    );
   });
 });

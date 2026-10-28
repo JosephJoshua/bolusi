@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import { repairAbilities, type RepairAbilities } from '../flows.js';
+import { rebaseForm } from '../form-rebase.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
   READY_UNKNOWN,
@@ -51,6 +52,7 @@ import {
 import {
   printSettingsForm,
   printSettingsInput,
+  samePrintSettingsField,
   samePrintSettingsForm,
   type PrintSettingsForm,
 } from '../print-settings-form.js';
@@ -121,6 +123,21 @@ function useReportDirty(dirty: boolean, onDirtyChange: RepairSettingsProps['onDi
 }
 
 /**
+ * Runs `onChange` when the live read brings new saved settings (another device's save, or this
+ * page's own coming back), so an open form follows them: see `rebaseForm`.
+ */
+function useFollowSaved<T>(saved: T, onChange: (next: T) => void): void {
+  const seen = useRef(saved);
+  const latest = useRef(onChange);
+  latest.current = onChange;
+  useEffect(() => {
+    if (seen.current === saved) return;
+    seen.current = saved;
+    latest.current(saved);
+  }, [saved]);
+}
+
+/**
  * The bar at the bottom of a settings form: what the last save did, a way to drop the changes and
  * the save itself (Ctrl+S as well), which waits until something changed.
  */
@@ -148,6 +165,8 @@ function SaveBar({
     const onKey = (event: KeyboardEvent): void => {
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
         event.preventDefault();
+        // Not from behind a dialog (the discard question, a picker): only the page in front saves.
+        if (document.querySelector('[role="dialog"], [role="alertdialog"]') !== null) return;
         save.current();
       }
     };
@@ -196,7 +215,8 @@ export function IntakeListSettings({
 }: RepairSettingsProps & { readonly list: IntakeOptionList }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  const settings = useIntakeOptionSettings();
+  const [reload, setReload] = useState(0);
+  const settings = useIntakeOptionSettings(reload);
   const testId = `repair.desk.options.${list}`;
   return (
     <SettingsPanel
@@ -206,7 +226,7 @@ export function IntakeListSettings({
       )}`}
       testId={testId}
     >
-      <QueryPanel query={settings} onRetry={() => undefined}>
+      <QueryPanel query={settings} onRetry={() => setReload((n) => n + 1)}>
         {(data) => (
           <ListEditor
             key={list}
@@ -284,10 +304,22 @@ function ListEditor({
     }
     void runner
       .run(async () => {
+        const read = async () => (await runtime.query('intakeOptionSettings', {})).rows[0]!;
         // The list first: hiding then applies to the list as saved.
         if (items !== null) await runtime.run('changeIntakeOptions', { list, items });
-        if (hidden !== null) await runtime.run('hideIntakeOptions', { list, hidden });
-        return (await runtime.query('intakeOptionSettings', {})).rows[0]!;
+        try {
+          if (hidden !== null) await runtime.run('hideIntakeOptions', { list, hidden });
+        } catch (error) {
+          // The list did save, and its new rows now have ids: show it as saved, so saving again
+          // never adds them twice. What was to be hidden is chosen again.
+          if (items !== null) {
+            const fresh = await read();
+            setBase(fresh);
+            setState(editorFor(list, fresh, builtInName));
+          }
+          throw error;
+        }
+        return read();
       })
       .then((fresh) => {
         if (fresh === undefined) return;
@@ -554,6 +586,10 @@ function FeesForm({
   const [notice, setNotice] = useState<string | null>(null);
   const dirty = fees.beforeWork !== baseline.beforeWork || fees.afterWork !== baseline.afterWork;
   useReportDirty(dirty, onDirtyChange);
+  useFollowSaved(saved, (next) => {
+    setFees((current) => rebaseForm(current, baseline, next));
+    setBaseline(next);
+  });
   const testId = 'repair.desk.fees';
 
   const save = (): void => {
@@ -646,6 +682,11 @@ function SlipForm({
   const [notice, setNotice] = useState<string | null>(null);
   const dirty = !samePrintSettingsForm(form, baseline);
   useReportDirty(dirty, onDirtyChange);
+  useFollowSaved(saved, (next) => {
+    const nextForm = printSettingsForm(next);
+    setForm((current) => rebaseForm(current, baseline, nextForm, samePrintSettingsField));
+    setBaseline(nextForm);
+  });
   const storeName = usePrintStoreName();
   const testId = 'repair.desk.slip';
 

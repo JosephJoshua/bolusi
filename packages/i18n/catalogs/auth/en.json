@@ -187,18 +187,18 @@
     "hidePassword": "Hide password",
     "settings": {
       "account": "Account",
-      "pinSummary": "The PIN you sign in with on this computer",
+      "pinTitle": "PIN",
+      "pinSummary": "For signing in on the store’s phones and computers.",
       "thisPc": "This computer",
-      "staffOffline": "Changing staff needs the internet. Connect this computer, then try again.",
+      "staffOffline": "This computer is offline. Connect it, then try again.",
       "handOverTitle": "{name}’s turn",
       "handOverBody": "Ask {name} to type their new PIN themselves. You do not need to know it.",
       "noOtherStaff": "No other staff on this computer yet.",
-      "notYetHere": "{name} will appear on this computer after it syncs. Make their PIN later under Staff PINs.",
+      "notYetHere": "{name} shows up here shortly. Set their PIN later in Staff PINs.",
       "addedBody": "If they are here, ask them to make their own PIN now.",
       "colName": "Name",
       "colRoles": "Roles",
       "colStatus": "Status",
-      "colActions": "Actions",
       "lockedCount": "{count} locked",
       "pinFor": "New PIN for {name}"
     }

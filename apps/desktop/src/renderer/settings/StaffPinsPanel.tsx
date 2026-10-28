@@ -63,7 +63,10 @@ export function StaffPinsPanel({
 }): React.JSX.Element {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [query, setQuery] = useState('');
-  const [notice, setNotice] = useState<{ tone: 'success' | 'info'; text: string } | null>(null);
+  const [notice, setNotice] = useState<{
+    tone: 'success' | 'info' | 'danger';
+    text: string;
+  } | null>(null);
   const [unlock, dispatchUnlock] = useReducer(clearActionReducer, CLEAR_IDLE);
   const [resetFor, setResetFor] = useState<PinTargetUser | null>(null);
   const latest = useRef(access);
@@ -109,7 +112,7 @@ export function StaffPinsPanel({
         ? { tone: 'success', text: t('auth.pin.staff.unlockDoneBody', { name }) }
         : unlock.reason === 'notLocked'
           ? { tone: 'info', text: t('auth.pin.unlock.notLocked', { name }) }
-          : { tone: 'info', text: t('core.errors.UNEXPECTED') },
+          : { tone: 'danger', text: t('core.errors.UNEXPECTED') },
     );
     dispatchUnlock({ kind: 'dismiss' });
     void reload();
@@ -210,7 +213,7 @@ export function StaffPinsPanel({
                 {user.lockedOut ? (
                   <Chip label={t('auth.switcher.locked')} icon={Lock} tone="warning" />
                 ) : user.needsFirstPin === true ? (
-                  <Chip label={t('auth.switcher.noPin')} icon={KeyRound} />
+                  <Chip label={t('auth.switcher.noPin')} icon={KeyRound} tone="warning" />
                 ) : null}
                 <div className="ml-auto flex shrink-0 items-center gap-2">
                   {actions.includes('reset') ? (

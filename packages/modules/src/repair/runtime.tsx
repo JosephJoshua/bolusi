@@ -158,7 +158,6 @@ export function useRepairThumbnail(ref: ThumbnailRef | null): ThumbnailState {
   return useThumbnailState(useRepairRuntime().loadThumbnail, ref);
 }
 
-/** The franchise's intake lists and this store's hidden items, kept live as either syncs in. */
 /** This store's cancellation fees; `reloadKey` re-reads them after a failed load. */
 export function useCancelFees(reloadKey = 0): QueryState<CancelFees> {
   return useRepairQuery(
@@ -191,10 +190,11 @@ export function usePrintStoreName(): string {
   return name;
 }
 
-export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
+/** The franchise's intake lists and this store's hidden items, kept live as either syncs in. */
+export function useIntakeOptionSettings(reloadKey = 0): QueryState<IntakeOptionSettings> {
   return useRepairQuery(
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
-    'intakeOptionSettings',
+    `intakeOptionSettings:${String(reloadKey)}`,
   );
 }
 

@@ -9,7 +9,6 @@ import { extname, join } from 'node:path';
 import {
   createUuidV7Generator,
   DomainError,
-  StaffAdminError,
   type ClockPort,
   type CommandIdentity,
   type LocationPort,
@@ -63,6 +62,7 @@ import type { ThumbnailRef } from '@bolusi/modules/screen-kit';
 import type { MediaRef } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
+import { actingSession, actingStaffAdmin } from './acting.js';
 import type { CoreState, SessionView } from './api.js';
 import { nodeRealtimeSocket } from './websocket.js';
 
@@ -352,15 +352,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   /**
    * "Karyawan" as the person signed in now, the phone's composition: each change is a server call
    * as them, then a sync so this PC's directory holds the server's answer before the window reads
-   * it again. Refused for anyone who may not add staff here; the server decides every change too.
+   * it again.
    */
   function staffFor(userId: string): StaffControls {
-    const current = sessionFor(userId);
-    const snapshot = current.snapshot();
-    if (!snapshot.canManageStaff) throw new StaffAdminError('denied');
+    const current = actingStaffAdmin(session, userId);
     return createStaffControls({
       port: staffAdmin,
-      tenantAdmin: snapshot.tenantAdmin,
+      tenantAdmin: current.snapshot().tenantAdmin,
       load: () => current.listStaff(),
       context: () => current.staffContext(),
       refreshDirectory: async () => {
@@ -372,14 +370,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   }
 
   /** The PIN session, for a window call made for the person signed in now. */
-  function sessionFor(userId: string): AppSessionController {
-    const current = requireSession();
-    const snapshot = current.snapshot();
-    if (snapshot.session?.userId !== userId || snapshot.locked) {
-      throw new DomainError('NOT_AUTHENTICATED');
-    }
-    return current;
-  }
+  const sessionFor = (userId: string): AppSessionController => actingSession(session, userId);
 
   function requireEnrollment(): AppEnrollment {
     if (enrollment === null) throw new Error('the core has not booted');

@@ -47,7 +47,9 @@ export function AccountPanel({
                 <KeyRound size={18} aria-hidden />
               </span>
               <div className="flex min-w-0 flex-col">
-                <p className="text-body font-semibold text-text">{t('auth.pin.change.title')}</p>
+                <p className="text-body font-semibold text-text">
+                  {t('auth.pc.settings.pinTitle')}
+                </p>
                 <p className="text-small text-text-muted">{t('auth.pc.settings.pinSummary')}</p>
               </div>
             </div>

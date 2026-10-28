@@ -97,11 +97,18 @@ export function Counter({
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
   // Settings asks before it is left with unsaved changes.
   const leaveGuard = useRef<LeaveGuard | null>(null);
-  const go = (next: Page): void => {
+  const leave = (proceed: () => void): void => {
     const guard = leaveGuard.current;
-    if (guard === null) setPage(next);
-    else guard(() => setPage(next));
+    if (guard === null) proceed();
+    else guard(proceed);
   };
+  const go = (next: Page): void => {
+    if (next.kind !== page.kind) leave(() => setPage(next));
+  };
+  // Switching person leaves Settings too; locking keeps everything as it is.
+  const personMenu = menuItems.map((item) =>
+    item.key === 'lock' ? item : { ...item, onSelect: () => leave(item.onSelect) },
+  );
   const registerLeaveGuard = useCallback((guard: LeaveGuard | null) => {
     leaveGuard.current = guard;
   }, []);
@@ -155,7 +162,12 @@ export function Counter({
             <div className="flex flex-col gap-3">
               <UpdateNotice compact={compact} />
               {sync?.(compact)}
-              <PersonMenu person={person} compact={compact} header={menuHeader} items={menuItems} />
+              <PersonMenu
+                person={person}
+                compact={compact}
+                header={menuHeader}
+                items={personMenu}
+              />
             </div>
           )}
         />

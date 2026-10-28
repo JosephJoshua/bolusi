@@ -135,3 +135,34 @@ test('locks the screen and opens again only with the PIN', async () => {
   await counter.keyboard.type(lane.credentials.pin);
   await expect(counter.getByTestId('desktop.shell')).toBeVisible();
 });
+
+test('the owner adds a cashier with a first PIN, and changes their own PIN, on the PC alone', async () => {
+  await counter.getByTestId('nav.settings').click();
+  await counter.getByTestId('desktop.settings.nav.staff').click();
+  await counter.getByTestId('desktop.settings.staff.add').click();
+  await counter.getByTestId('desktop.staff.add.name').fill('Maria Kambu');
+  await counter.getByTestId('desktop.staff.add.role.cashier').click();
+  await counter.getByTestId('desktop.staff.add.save').click();
+  await counter.getByTestId('desktop.staff.added.makePin').click();
+  await counter.getByTestId('desktop.resetPin.proceed').click();
+  await counter.keyboard.type('135790');
+  await counter.keyboard.type('135790');
+  await expect(counter.getByTestId('desktop.resetPin.done')).toBeVisible({ timeout: 15_000 });
+  await counter.getByTestId('desktop.resetPin.finish').click();
+  await expect(counter.getByTestId('desktop.settings.staff')).toContainText('Maria Kambu');
+
+  await counter.getByTestId('desktop.settings.nav.account').click();
+  await counter.getByTestId('desktop.settings.changePin').click();
+  await counter.keyboard.type(lane.credentials.pin);
+  await counter.keyboard.type('246802');
+  await counter.keyboard.type('246802');
+  await expect(counter.getByTestId('desktop.changePin.done')).toBeVisible({ timeout: 15_000 });
+  await counter.getByTestId('desktop.changePin.finish').click();
+
+  // The new cashier signs in on this PC with the PIN the owner set.
+  await counter.getByTestId('desktop.person').click();
+  await counter.getByRole('menuitem', { name: 'Kunci layar' }).click();
+  await counter.getByTestId('switcher.person').filter({ hasText: 'Maria Kambu' }).click();
+  await counter.keyboard.type('135790');
+  await expect(counter.getByTestId('desktop.shell')).toBeVisible();
+});
