@@ -3,7 +3,7 @@
 // ── THE BRICK THIS CLOSES (post-D22 — the SQLCipher mechanism is HISTORY, see below) ────────────
 // On an iOS restore-to-new-hardware the `bolusi.db` file DOES restore (it cannot be excluded at the
 // build-artifact level — security-guide §6.6, Apple's own docs) while the DB key does NOT
-// (`ports/db-keystore.ts` sets `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, so the Keychain item never migrates
+// (`ports/secure-item.ts` sets `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`, so the Keychain item never migrates
 // to new hardware — the §7.4 "never resurrected" property working as intended). `bootstrap()` then
 // MINTS A FRESH key.
 //

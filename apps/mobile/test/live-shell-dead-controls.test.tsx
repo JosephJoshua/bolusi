@@ -30,6 +30,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 /** The native modules `Root`'s import graph reaches — doubled exactly as `live-shell-notes` does. */
 vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),
@@ -133,6 +134,9 @@ function fakeMediaClient(
         background: null,
         prune: null,
       } satisfies MediaStartReport),
+    startForBackgroundPass: () => Promise.resolve(),
+    requestBackground: () => undefined,
+    pause: () => undefined,
     stop: () => undefined,
     // RECORDS FIRST, ALWAYS. An earlier version of this double let a per-test override REPLACE this
     // method, so the scripted outcome silently stopped recording and `captureCalls` stayed empty

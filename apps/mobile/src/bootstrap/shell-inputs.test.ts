@@ -45,6 +45,7 @@ function fakeClient(over: {
     // command runtime's step-7 hook (task 136), which is a different seam entirely.
     scheduler: { schedule: () => undefined },
     start: () => Promise.resolve(),
+    startForBackgroundPass: () => Promise.resolve(),
     requestManual: () => undefined,
     requestBackground: () => undefined,
     pause: () => undefined,

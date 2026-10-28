@@ -41,6 +41,7 @@ import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),
@@ -49,9 +50,14 @@ vi.mock('expo-secure-store', () => ({
 
 import * as SecureStore from 'expo-secure-store';
 
-import { listPermissionDenialsHandler, type ProjectionOperation } from '@bolusi/core';
+import {
+  DEVICE_ID_META_KEY,
+  listPermissionDenialsHandler,
+  writeMeta,
+  type ProjectionOperation,
+} from '@bolusi/core';
 
-import { bootstrap } from '../src/bootstrap/bootstrap.js';
+import { bootOncePerRealm, bootstrap } from '../src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/bootstrap/recovery.js';
 import { CLIENT_MODULES } from '../src/bootstrap/modules.js';
 import { SecureStoreDbKeyStore } from '../src/ports/db-keystore.js';
@@ -219,6 +225,43 @@ describe('EXACTLY ONE connection per DB, app-wide (08 §2.2 — a data-corruptio
     const again = await boot();
     expect(isClientDbOpen()).toBe(true);
     await again.close();
+  });
+});
+
+describe('one boot shared by the UI and background tasks (bootOncePerRealm)', () => {
+  test('a later caller reuses the one connection and sees an enrollment made after boot', async () => {
+    const shared = bootOncePerRealm(() => boot());
+    const first = await shared();
+    expect(first.deviceId).toBeNull();
+
+    await writeMeta(first.db.db as never, DEVICE_ID_META_KEY, 'device-enrolled-live');
+    const later = await shared(); // a second bootstrap() would fail: one connection per DB
+    expect(later.db).toBe(first.db);
+    expect(later.deviceId).toBe('device-enrolled-live');
+    await first.close();
+  });
+
+  test('a caller that joined a failed background boot retries once its own way', async () => {
+    const launches: string[] = [];
+    let failBackground: (() => void) | null = null;
+    const shared = bootOncePerRealm(async (launch: 'foreground' | 'background') => {
+      launches.push(launch);
+      if (launch === 'background') {
+        await new Promise<void>((resolve) => (failBackground = resolve));
+        throw new Error('keychain locked'); // a background boot never wipes to heal
+      }
+      return boot();
+    });
+
+    const background = shared('background');
+    const foreground = shared('foreground'); // the user opens the app while it is in flight
+    failBackground!();
+
+    await expect(background).rejects.toThrow('keychain locked');
+    const app = await foreground;
+    expect(launches).toEqual(['background', 'foreground']);
+    expect(isClientDbOpen()).toBe(true);
+    await app.close();
   });
 });
 
