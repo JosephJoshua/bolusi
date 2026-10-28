@@ -23,8 +23,10 @@
  * gestures, no native a11y bridging, no font scaling.
  */
 export {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
+  Easing,
   Dimensions,
   PanResponder,
   FlatList,

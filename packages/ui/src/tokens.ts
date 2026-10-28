@@ -135,6 +135,24 @@ export const border = Object.freeze({
   focus: 2,
 } as const);
 
+/**
+ * Motion, shared by the phone and the counter PC (`@bolusi/ui-web` publishes it as CSS variables).
+ * Short and calm: a counter used all day never waits on an animation, so nothing runs past `slow`.
+ * Only transform and opacity ever move, on the native driver, so a cheap phone keeps its frames.
+ * `enter` decelerates into place; `exit` accelerates away. Control points of a cubic bezier.
+ */
+export const motion = Object.freeze({
+  duration: Object.freeze({ fast: 120, base: 180, slow: 220 } as const),
+  easing: Object.freeze({
+    enter: Object.freeze([0.16, 1, 0.3, 1] as const),
+    exit: Object.freeze([0.4, 0, 1, 1] as const),
+  }),
+  /** How far something travels as it arrives: a step, a toast, a sheet's first frames. */
+  distance: Object.freeze({ step: 24, rise: 8 } as const),
+  /** A pressed control shrinks this much, enough to feel without looking like a jump. */
+  pressScale: 0.97,
+} as const);
+
 /** Touch-target floors (design-system §1.4). `min` is a hard floor with no exceptions. */
 export const touch = Object.freeze({
   /** EVERY interactive element, via size or `hitSlop`. */

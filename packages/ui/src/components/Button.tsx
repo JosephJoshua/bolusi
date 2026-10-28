@@ -6,8 +6,9 @@
  * passes `color.danger` for emphasis and the meaning of red is gone app-wide. A new look = a new
  * variant = a design-system change first.
  */
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text } from 'react-native';
 
+import { usePressScale } from '../motion.js';
 import { border, color, radius, size as sizes, space, touch, type } from '../tokens.js';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'destructive';
@@ -86,53 +87,59 @@ export function Button({
 }: ButtonProps): React.JSX.Element {
   const inert = disabled || busy;
   const compact = size === 'compact';
+  const press = usePressScale(!inert);
 
   return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: inert, busy }}
-      // Gate the handler here rather than leaning on Pressable's own `disabled` behaviour: an
-      // unwired `onPress` is a fact a test can witness, and it is what stops a double-tap from
-      // firing a second command in the frame before `busy` re-renders (§3.1).
-      onPress={inert ? undefined : onPress}
-      disabled={inert}
-      android_ripple={{ color: color.overlay, borderless: false }}
-      hitSlop={compact ? { top: COMPACT_SLOP, bottom: COMPACT_SLOP } : undefined}
-      style={({ pressed }) => [
-        styles.base,
-        compact ? styles.compact : null,
-        variant === 'secondary' ? styles.secondaryOutline : null,
-        // `disabled` wins over `busy` for fill: a disabled button is inert-looking, a busy one
-        // keeps its identity while it works.
-        {
-          backgroundColor: disabled
-            ? color.surfaceAlt
-            : FILL[variant][pressed ? 'pressed' : 'default'],
-        },
-      ]}
-    >
-      {busy ? (
-        // Width-stable by construction (§3.1): the row keeps its `paddingHorizontal` and any width
-        // the caller set, and the spinner simply takes the label's place in the same flex row.
-        <ActivityIndicator
-          testID={testID === undefined ? undefined : `${testID}.spinner`}
-          color={disabled ? color.textDisabled : LABEL_COLOR[variant]}
-        />
-      ) : (
-        <Text
-          testID={testID === undefined ? undefined : `${testID}.label`}
-          // §3.1: labels wrap to 2 lines rather than truncate — ID/EN length variance (§0).
-          numberOfLines={compact ? 1 : 2}
-          style={[
-            compact ? styles.compactLabel : styles.label,
-            { color: disabled ? color.textDisabled : LABEL_COLOR[variant] },
-          ]}
-        >
-          {label}
-        </Text>
-      )}
-    </Pressable>
+    // The scale lives on a wrapper because Pressable's style function cannot carry an animated value.
+    <Animated.View style={press.style}>
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled: inert, busy }}
+        // Gate the handler here rather than leaning on Pressable's own `disabled` behaviour: an
+        // unwired `onPress` is a fact a test can witness, and it is what stops a double-tap from
+        // firing a second command in the frame before `busy` re-renders (§3.1).
+        onPress={inert ? undefined : onPress}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        disabled={inert}
+        android_ripple={{ color: color.overlay, borderless: false }}
+        hitSlop={compact ? { top: COMPACT_SLOP, bottom: COMPACT_SLOP } : undefined}
+        style={({ pressed }) => [
+          styles.base,
+          compact ? styles.compact : null,
+          variant === 'secondary' ? styles.secondaryOutline : null,
+          // `disabled` wins over `busy` for fill: a disabled button is inert-looking, a busy one
+          // keeps its identity while it works.
+          {
+            backgroundColor: disabled
+              ? color.surfaceAlt
+              : FILL[variant][pressed ? 'pressed' : 'default'],
+          },
+        ]}
+      >
+        {busy ? (
+          // Width-stable by construction (§3.1): the row keeps its `paddingHorizontal` and any width
+          // the caller set, and the spinner simply takes the label's place in the same flex row.
+          <ActivityIndicator
+            testID={testID === undefined ? undefined : `${testID}.spinner`}
+            color={disabled ? color.textDisabled : LABEL_COLOR[variant]}
+          />
+        ) : (
+          <Text
+            testID={testID === undefined ? undefined : `${testID}.label`}
+            // §3.1: labels wrap to 2 lines rather than truncate — ID/EN length variance (§0).
+            numberOfLines={compact ? 1 : 2}
+            style={[
+              compact ? styles.compactLabel : styles.label,
+              { color: disabled ? color.textDisabled : LABEL_COLOR[variant] },
+            ]}
+          >
+            {label}
+          </Text>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
