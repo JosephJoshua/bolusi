@@ -84,6 +84,23 @@ pnpm --filter @bolusi/desktop dev     # renderer only, in a browser at localhost
 pnpm --filter @bolusi/desktop e2e     # Electron end-to-end tests; use xvfb-run on Linux
 ```
 
+Printing: the printer and paper are picked once in the app's Settings and kept in
+`device-settings.json` in the app's data folder. Dot-matrix paper (continuous) goes to
+the printer as a RAW ESC/P job through the Windows spooler (`src/main/raw-print.ts`,
+PowerShell calling winspool); A4/A5 pages print without a dialog. The printer's
+Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a v4
+(XPS-only) driver does not pass RAW jobs. CI's `desktop-windows` job spools a real job
+to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
+
+Releasing: bump `version` in `apps/desktop/package.json`, merge, then push a tag
+`desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
+installer on Windows and publishes it with `latest.yml` to that GitHub Release.
+Installed apps check the latest release a minute after start and every 4 hours,
+download in the background and install on the next close (or "Pasang sekarang" in
+the sidebar). Updates only look at the repository's latest release, so keep other
+release kinds out of this repository or mark them pre-release. `pnpm --filter
+@bolusi/desktop dist` builds the installer locally (on Windows; Linux needs wine).
+
 ## Verify
 
 ```sh

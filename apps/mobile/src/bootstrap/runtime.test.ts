@@ -43,6 +43,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 vi.mock('expo-secure-store', () => {
   const store = new Map<string, string>();
   return {
+    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
     setItemAsync: vi.fn((key: string, value: string) => {
       store.set(key, value);

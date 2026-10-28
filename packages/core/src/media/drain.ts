@@ -100,6 +100,10 @@ export class MediaDrainLoop<DB> {
   private manualPending = false;
   /** Set by a halting code (api/03 §8). No automatic exit — mirrors `syncDisabled` (03 §10). */
   private halted = false;
+  /** Set by `pause()`: the pass stops after its current item and no rerun follows. */
+  private pauseRequested = false;
+  /** Set by `stop()`: no further pass ever starts. */
+  private stopped = false;
   private cycle: Promise<void> | null = null;
 
   constructor(private readonly options: MediaDrainOptions<DB>) {}
@@ -116,7 +120,7 @@ export class MediaDrainLoop<DB> {
    * rows.
    */
   requestDrain(reason: MediaDrainTrigger): void {
-    if (this.halted) return;
+    if (this.halted || this.stopped) return;
     if (this.running) {
       this.rerun = true;
       // A manual retry arriving mid-pass must not be downgraded to an ordinary re-run: the user
@@ -126,8 +130,25 @@ export class MediaDrainLoop<DB> {
     }
     if (reason === 'manual') this.manualPending = true;
     // Claim the slot with NO await in between (see the header).
+    this.pauseRequested = false;
     this.running = true;
     this.cycle = this.runCycle();
+  }
+
+  /**
+   * Stop the running pass after the item it is uploading, with no re-run. The next trigger resumes
+   * from the queue. For a time-limited background run, or handing the queue to another owner: an
+   * item is never left mid-upload by a pause, so the next owner's crash recovery cannot reset a row
+   * this loop is still sending.
+   */
+  pause(): void {
+    if (this.running) this.pauseRequested = true;
+  }
+
+  /** Retire this loop: `pause()`, and ignore every later trigger. */
+  stop(): void {
+    this.stopped = true;
+    this.pause();
   }
 
   /** Resolves when the in-flight cycle (and any coalesced re-run) has settled. Tests only. */
@@ -144,7 +165,7 @@ export class MediaDrainLoop<DB> {
    * `uploadAttempts`, and skips the auto-retry-exempt codes. Then triggers a pass.
    */
   async onConnectivityRegained(): Promise<void> {
-    if (this.halted) return;
+    if (this.halted || this.stopped) return;
     await clearBackoffForRetry(this.options.db, [...nonRetryableCodeList()]);
     this.requestDrain('connectivity');
   }
@@ -154,9 +175,10 @@ export class MediaDrainLoop<DB> {
       do {
         this.rerun = false;
         await this.pass();
-      } while (this.rerun && !this.halted);
+      } while (this.rerun && !this.halted && !this.pauseRequested);
     } finally {
       this.running = false;
+      this.pauseRequested = false;
     }
   }
 
@@ -167,7 +189,7 @@ export class MediaDrainLoop<DB> {
     this.manualPending = false;
     const items = await selectDrainable(db, clock.now(), { ignoreBackoff: manual });
     for (const item of items) {
-      if (this.halted) return;
+      if (this.halted || this.pauseRequested) return;
       // An exempt item IS still selected by the SQL — its `nextAttemptAt` is null, which the
       // predicate reads as "eligible now" (there is no exempt column; 10-db §9.4). So the
       // exemption is enforced here, for EVERY trigger including manual: 06 §8 says the only

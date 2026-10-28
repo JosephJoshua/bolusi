@@ -18,7 +18,7 @@
 //   (c) periodic every 60 s while online + foreground — **WIRED**, `start()`.
 //   (d) background task, best-effort                  — **WIRED**, background-sync.ts. Defined at
 //       module scope in index.ts, registered by the client's `start()`, one bounded pass over the
-//       live loop. Not run on an Android headless launch of a killed app (no client boots there).
+//       live loop, or over a headless client when the OS woke a killed app (background-task.ts).
 //       08 §2.2: "never a correctness dependency" — the foreground loop is the primary driver.
 //   (e) manual pull-to-refresh                        — **WIRED**, `requestManual()`.
 //

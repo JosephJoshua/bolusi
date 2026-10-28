@@ -23,6 +23,10 @@ import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
+import { fakeBackgroundPlatform } from '../bootstrap/_background-platform.test.js';
+import { createBackgroundHost } from '../bootstrap/background-task.js';
+import { headlessPass } from '../bootstrap/headless.js';
+import { MEDIA_DRAIN_TASK } from './background-task.js';
 import {
   FakeFs,
   FakeMediaServer,
@@ -280,6 +284,42 @@ describe('capture → compress → queue → drain → the real MediaTransportPo
     const report = await rig.client.start();
     expect(report.recovered).toBe(1);
     expect((await rowFor(outcome.ref.mediaId))['uploadStatus']).toBe('pending');
+  });
+
+  test('a killed app woken by the OS finishes an interrupted upload in a headless pass', async () => {
+    // The app died mid-upload and Android later woke it with no UI: the host builds a client for
+    // the pass, which recovers the row and uploads it without starting any trigger of its own.
+    const rig = buildRig();
+    const outcome = await rig.client.capturePhoto(IDENTITY, rig.camera);
+    if (outcome.kind !== 'captured') throw new Error('expected a capture');
+    await rig.client.attach(outcome.ref, { id: OPERATION_ID, userId: outcome.ref.userId });
+    await sql`UPDATE media_items SET upload_status = 'uploading' WHERE id = ${outcome.ref.mediaId}`.execute(
+      db.db,
+    );
+
+    let builds = 0;
+    const host = createBackgroundHost({
+      timer: new FakeTimer(),
+      startHeadless: headlessPass(
+        () => Promise.resolve('booted'),
+        () => {
+          builds += 1;
+          return rig.client;
+        },
+      ),
+    });
+    await host.runPass();
+
+    expect((await rowFor(outcome.ref.mediaId))['uploadStatus']).toBe('uploaded');
+    expect(sha256Hex(rig.server.assembled(outcome.ref.mediaId))).toBe(outcome.ref.sha256);
+
+    // The user opens the app: its client claims the host and registers, and passes drive it.
+    const platform = fakeBackgroundPlatform({});
+    const opened = buildRig({ background: { platform, host } });
+    const report = await opened.client.start();
+    expect(report.background).toEqual({ kind: 'registered' });
+    await platform.executors.get(MEDIA_DRAIN_TASK)?.();
+    expect(builds).toBe(1);
   });
 
   test('`start()` reports NO background registration when no platform is wired', async () => {

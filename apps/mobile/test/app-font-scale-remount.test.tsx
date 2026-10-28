@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),

@@ -37,8 +37,11 @@ import { Root, type RootProps } from './src/bootstrap/Root.js';
 import { lockPhonesToPortrait } from './src/ports/orientation.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
-import { createBackgroundSyncHost, SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
+import { SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
+import { createBackgroundHost, type BackgroundHost } from './src/bootstrap/background-task.js';
+import { headlessPass } from './src/bootstrap/headless.js';
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
+import { MEDIA_DRAIN_TASK } from './src/media/background-task.js';
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
@@ -107,7 +110,7 @@ import './src/harness/register.js';
  */
 const APP_VERSION = '';
 
-function bootDataLayer(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
+function bootDataLayer(launch: 'foreground' | 'background'): Promise<Bootstrapped> {
   // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
@@ -123,17 +126,22 @@ function bootDataLayer(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // boot minted and throws `ForeignDatabaseError` on a mismatch, which `isUnrecoverableLocalDbError`
   // routes into the SAME wipe below. The old `missing_key`/`not_a_database` branches remain as
   // defensive backstops. Same defence covers the Android partial-data-clear (file kept, key lost).
+  const open = (): Promise<Bootstrapped> =>
+    bootstrap({
+      driverFactory: openOpSqliteDriver,
+      keyStore,
+      crypto: quickCryptoPort,
+      // D22: the 32-byte SecureStore key now drives app-layer AES-256-GCM over the sensitive columns
+      // (via quick-crypto's OpenSSL), replacing SQLCipher's whole-file encryption — task 148.
+      aead: deviceColumnAead,
+      clock: systemClock,
+    });
+  // A BACKGROUND LAUNCH NEVER WIPES. Nobody is there to re-enroll, and a locked iPhone's keychain is
+  // no evidence that the key is gone. The background boot fails instead, the shared boot forgets
+  // the failure (`bootOncePerRealm`), and the next foreground boot decides.
+  if (launch === 'background') return open();
   return bootWithLocalRecovery({
-    boot: () =>
-      bootstrap({
-        driverFactory: openOpSqliteDriver,
-        keyStore,
-        crypto: quickCryptoPort,
-        // D22: the 32-byte SecureStore key now drives app-layer AES-256-GCM over the sensitive columns
-        // (via quick-crypto's OpenSSL), replacing SQLCipher's whole-file encryption — task 148.
-        aead: deviceColumnAead,
-        clock: systemClock,
-      }),
+    boot: open,
     // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the column-cipher
     // key FIRST (from this moment the PROTECTED COLUMNS are unrecoverable — the file itself is still a
     // readable SQLite file since D22, so this is a value-erase, not a file-erase), then (2) delete the DB file(s) +
@@ -150,9 +158,14 @@ function bootDataLayer(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   });
 }
 
-// Root boots again whenever Android recreates the activity in the same process; the data layer must
-// not (see `bootOncePerRealm`).
+/**
+ * ONE BOOT PER PROCESS. Root boots again whenever Android recreates the activity in the same process,
+ * and the background tasks below boot when the OS wakes a killed app. They all share one connection
+ * to one database (see `bootOncePerRealm`).
+ */
 const boot = bootOncePerRealm(bootDataLayer);
+const foregroundBoot = (): Promise<Bootstrapped> => boot('foreground');
+const backgroundBoot = (): Promise<Bootstrapped> => boot('background');
 
 /**
  * THE OTHER NATIVE-BINDING SITE (task 89): NetInfo and RN `AppState` are native modules that cannot
@@ -175,21 +188,54 @@ function apiBaseUrl(): string {
   return requireApiBaseUrl(process.env['EXPO_PUBLIC_API_URL']);
 }
 
+function reportBackgroundError(task: string): (error: unknown) => void {
+  return (error) =>
+    consoleDiagnostics.warn('background pass failed', {
+      task,
+      error: error instanceof Error ? error.message : String(error),
+    });
+}
+
 /**
- * TRIGGER (d) FOR SYNC, DEFINED AT MODULE SCOPE. An OS launch straight into the background runs this
- * file and then dispatches the task, so the definition has to exist before any boot. The executor
- * drives whichever client `createSync` built once it attaches (bootstrap/background-sync.ts).
+ * TRIGGER (d) FOR SYNC AND MEDIA, DEFINED AT MODULE SCOPE. An OS launch straight into the background
+ * runs this file and then dispatches the task; a task with no executor at that moment is
+ * unregistered by expo-task-manager and never runs again. Each host drives the client Root started,
+ * or, when Root never mounts (a killed Android app woken by WorkManager), boots and drives a client
+ * for that one pass (bootstrap/background-task.ts).
  */
-const backgroundSync = createBackgroundSyncHost(systemTimer);
+const backgroundSync: BackgroundHost = createBackgroundHost({
+  timer: systemTimer,
+  startHeadless: headlessPass(backgroundBoot, (app) => buildSync(app, { background: false })),
+  onError: reportBackgroundError(SYNC_BACKGROUND_TASK),
+});
+const backgroundMedia: BackgroundHost = createBackgroundHost({
+  timer: systemTimer,
+  startHeadless: headlessPass(backgroundBoot, (app) => buildMedia(app, { background: false })),
+  onError: reportBackgroundError(MEDIA_DRAIN_TASK),
+});
 expoBackgroundTaskPlatform.defineTask(SYNC_BACKGROUND_TASK, () => backgroundSync.runPass());
+expoBackgroundTaskPlatform.defineTask(MEDIA_DRAIN_TASK, () => backgroundMedia.runPass());
 
 function createSync(
   app: Bootstrapped,
   onBundleRefreshed?: () => void | Promise<void>,
   onBundleChecked?: () => void | Promise<void>,
 ): SyncClient | null {
+  return buildSync(app, { background: true, onBundleRefreshed, onBundleChecked });
+}
+
+/** `background: false` builds a client for one headless pass: the host drives it directly. */
+function buildSync(
+  app: Bootstrapped,
+  options: {
+    readonly background: boolean;
+    readonly onBundleRefreshed?: (() => void | Promise<void>) | undefined;
+    readonly onBundleChecked?: (() => void | Promise<void>) | undefined;
+  },
+): SyncClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
+  const { onBundleRefreshed, onBundleChecked } = options;
   return createSyncClientForApp(app, {
     baseUrl: apiBaseUrl(),
     deviceId: app.deviceId,
@@ -198,7 +244,9 @@ function createSync(
     clock: systemClock,
     appState: appStatePort,
     netInfo: netInfoPort,
-    background: { platform: expoBackgroundTaskPlatform, host: backgroundSync },
+    ...(options.background
+      ? { background: { platform: expoBackgroundTaskPlatform, host: backgroundSync } }
+      : {}),
     ...(onBundleRefreshed === undefined ? {} : { onBundleRefreshed }),
     ...(onBundleChecked === undefined ? {} : { onBundleChecked }),
   });
@@ -222,6 +270,14 @@ function createSync(
  * authenticating at once (api/02-auth §7.3) — the same rule the sync legs follow.
  */
 function createMedia(app: Bootstrapped): MediaClient | null {
+  return buildMedia(app, { background: true });
+}
+
+/** `background: false` builds a client for one headless pass: the host drives it directly. */
+function buildMedia(
+  app: Bootstrapped,
+  options: { readonly background: boolean },
+): MediaClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
   // Reads (never mints) the at-rest DB key so the media-file cipher can derive its sibling key (task
@@ -229,6 +285,7 @@ function createMedia(app: Bootstrapped): MediaClient | null {
   // completes would see `null` and fail closed rather than write plaintext.
   const dbKeyStore = new SecureStoreDbKeyStore(quickCryptoPort);
   return createMediaClientForApp({
+    background: options.background ? { host: backgroundMedia } : null,
     db: app.db,
     dbKeyHex: () => dbKeyStore.getDatabaseEncryptionKey(),
     transport: createFetchMediaTransport({
@@ -492,7 +549,7 @@ let rootProps: RootProps | null = null;
 
 function buildRootProps(): RootProps {
   return {
-    boot,
+    boot: foregroundBoot,
     createSync,
     createEnrollment,
     createMedia,

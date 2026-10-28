@@ -9,7 +9,9 @@ export {
   type ButtonSize,
   type ButtonVariant,
 } from './components/Button.js';
+export { CameraDialog, type CameraLabels } from './components/Camera.js';
 export { Chip, ToggleChip, type ChipTone } from './components/Chip.js';
+export { ChoiceList, type ChoiceOption } from './components/ChoiceList.js';
 export { ConfirmDialog } from './components/ConfirmDialog.js';
 export {
   DataTable,
@@ -56,6 +58,13 @@ export { Pagination, pageWindow, type PaginationLabels } from './components/Pagi
 export { OverflowText } from './components/OverflowText.js';
 export { PatternPad } from './components/PatternPad.js';
 export { SearchField } from './components/SearchField.js';
+export {
+  SignatureDialog,
+  SIGNATURE_PX,
+  type DrawnSignature,
+  type SignatureLabels,
+  type SignatureStroke,
+} from './components/SignaturePad.js';
 export { Segmented, type SegmentedOption } from './components/Segmented.js';
 export { AppShell, PageHeader, Sidebar, type NavItem } from './components/Shell.js';
 export { Spinner } from './components/Spinner.js';

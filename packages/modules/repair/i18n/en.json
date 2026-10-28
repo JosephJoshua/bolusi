@@ -458,7 +458,13 @@
     "paperFull": "Full form",
     "paperA4": "A4",
     "paperA5": "A5",
-    "onPaper": "{paper} paper"
+    "onPaper": "{paper} paper",
+    "onPrinter": "Prints on {printer}, {paper} paper",
+    "problem": {
+      "noPrinter": "Choose a printer in Settings first.",
+      "printerMissing": "Printer not found. Check its cable and power, or choose another printer in Settings.",
+      "failed": "Couldn’t print. Check the printer, then try again."
+    }
   },
   "downPayment": {
     "recordTitle": "Record down payment",
@@ -592,7 +598,23 @@
   "paper": {
     "title": "Slip paper",
     "phoneSummary": "Paper size on this phone",
-    "phoneHint": "Every slip from this phone prints on this paper.",
-    "deskHint": "Every slip from this computer prints on this paper."
+    "phoneHint": "Every slip from this phone prints on this paper."
+  },
+  "testPage": {
+    "job": "Test page",
+    "title": "TEST PAGE",
+    "ruler": "This line should fit whole from left to right.",
+    "check": "If anything is cut off or crooked, adjust the paper and print again.",
+    "print": "Print test page",
+    "sent": "Test page sent to the printer."
+  },
+  "printer": {
+    "title": "Printer and paper",
+    "hint": "Used for every slip from this computer.",
+    "printer": "Printer",
+    "refresh": "Look for printers again",
+    "none": "No printer on this computer yet. Install it in Windows first, then look again.",
+    "loadFailed": "Couldn’t open the printer list.",
+    "gone": "{name} is no longer installed on this computer. Choose another printer."
   }
 }

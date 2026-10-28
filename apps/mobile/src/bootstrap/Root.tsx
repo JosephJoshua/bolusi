@@ -462,6 +462,9 @@ export function Root({
       syncRef.current = client;
       unsubRef.current = client.subscribe(() => bump());
       await client.start();
+      // `start` can wait on a background pass that is still finishing (background-task.ts). If Root
+      // unmounted meanwhile, the teardown already stopped this client: do not bind its scheduler.
+      if (disposed) return;
       // ── STEP 7 GETS ITS PRODUCER (04 §5.1; api/01-sync §5 (b); task 136) ────────────────────────
       // The one place in the app where the runtime and the loop are both in scope, which is the only
       // place this bind can happen: the runtime is built BEFORE any loop (it appends the genesis that
@@ -595,16 +598,30 @@ export function Root({
       try {
         const info = await readDeviceInfoStable(booted);
         if (!disposed) setDeviceInfo(info);
-        await startSyncIfEnrolled(booted, enroll);
-        await startMediaIfEnrolled(booted);
-        // Through the ref, so an append after teardown (ref cleared) notifies nothing.
-        enroll?.runtime.bindMediaAttached(() => mediaRef.current?.notifyAttached());
       } catch (error) {
         consoleDiagnostics.warn('enrolled-services start failed after session open', {
           via,
           error: error instanceof Error ? error.message : String(error),
         });
       }
+      // The two loops start side by side (FR-1138: independent), so a sync start that waits for a
+      // background pass to hand over (background-task.ts) does not hold up the media queue.
+      const loops = await Promise.allSettled([
+        startSyncIfEnrolled(booted, enroll),
+        startMediaIfEnrolled(booted),
+      ]);
+      for (const [index, outcome] of loops.entries()) {
+        if (outcome.status === 'rejected') {
+          consoleDiagnostics.warn('enrolled-services start failed after session open', {
+            via,
+            service: index === 0 ? 'sync' : 'media',
+            error:
+              outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+          });
+        }
+      }
+      // Through the ref, so an append after teardown (ref cleared) notifies nothing.
+      enroll?.runtime.bindMediaAttached(() => mediaRef.current?.notifyAttached());
     };
 
     void (async () => {

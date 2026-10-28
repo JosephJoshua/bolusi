@@ -33,11 +33,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 import { FakeTimer } from '../media/_harness.test.js';
 import { fakeBackgroundPlatform } from './_background-platform.test.js';
-import {
-  createBackgroundSyncHost,
-  SYNC_BACKGROUND_TASK,
-  type BackgroundSyncBinding,
-} from './background-sync.js';
+import { SYNC_BACKGROUND_TASK } from './background-sync.js';
+import { createBackgroundHost, type BackgroundBinding } from './background-task.js';
 import type { Bootstrapped } from './bootstrap.js';
 import { createSyncClient, createSyncClientForApp, type SyncClientDeps } from './sync-client.js';
 import { APPEND_DEBOUNCE_MS } from './triggers.js';
@@ -95,9 +92,13 @@ class FakeTransport {
 function fakeNetInfo(initial: boolean) {
   let connected = initial;
   const listeners = new Set<(c: boolean) => void>();
+  let subscriptions = 0;
   return {
+    /** How many times anything subscribed: the triggers and the UI mirror each do once on start. */
+    subscriptions: () => subscriptions,
     port: {
       subscribe: (listener: (c: boolean) => void) => {
+        subscriptions += 1;
         listeners.add(listener);
         listener(connected);
         return () => {
@@ -173,7 +174,7 @@ interface BuildOptions {
   readonly bundleThrows?: boolean;
   readonly pushRejects?: boolean;
   readonly pullRejects?: boolean;
-  readonly background?: BackgroundSyncBinding;
+  readonly background?: BackgroundBinding;
 }
 
 async function build(options: BuildOptions = {}) {
@@ -582,7 +583,7 @@ describe('a new device reports first-sync progress per committed batch', () => {
 describe('trigger (d): the OS background task drives the started client', () => {
   test('start registers the sync task, and a pass runs a real background cycle', async () => {
     const platform = fakeBackgroundPlatform({});
-    const host = createBackgroundSyncHost(new FakeTimer());
+    const host = createBackgroundHost({ timer: new FakeTimer() });
     const { client, transport } = await build({ online: false, background: { platform, host } });
     await client.start();
     expect(client.backgroundRegistration()).toEqual({ kind: 'registered' });
@@ -598,20 +599,70 @@ describe('trigger (d): the OS background task drives the started client', () => 
   test('a stopped client is no longer driven by a background pass', async () => {
     const platform = fakeBackgroundPlatform({});
     const timer = new FakeTimer();
-    const host = createBackgroundSyncHost(timer);
+    const host = createBackgroundHost({ timer });
     const { client, transport } = await build({ online: false, background: { platform, host } });
     await client.start();
     client.stop();
 
-    const pass = host.runPass();
-    timer.runPending(); // no client attaches, so the boot wait expires
-    await pass;
+    await host.runPass(); // no client, and this host has no headless boot
     expect(transport.pulls).toHaveLength(0);
+  });
+
+  test('a headless pass syncs without starting triggers, then passes drive the opened app', async () => {
+    // A killed app woken by the OS: the host builds a client for the pass, hydrated but with no
+    // triggers of its own. The user opening the app mid-pass must not start a second loop.
+    const timer = new FakeTimer();
+    const headless = await build({ online: true });
+    let headlessStopped = false;
+    const host = createBackgroundHost({
+      timer,
+      startHeadless: async () => {
+        await headless.client.startForBackgroundPass();
+        return {
+          target: headless.client,
+          stop: () => {
+            headlessStopped = true;
+            headless.client.stop();
+          },
+        };
+      },
+    });
+    await host.runPass();
+    expect(headless.transport.pulls.length).toBeGreaterThan(0);
+    expect(headless.net.subscriptions()).toBe(0); // no trigger or UI subscription was opened
+    expect(headlessStopped).toBe(true);
+    expect((await readSyncState(db.db)).lastSuccessfulSyncAt).toBe(T);
+
+    const platform = fakeBackgroundPlatform({});
+    const fg = await build({ online: false, background: { platform, host } });
+    await fg.client.start();
+    expect(fg.client.backgroundRegistration()).toEqual({ kind: 'registered' });
+    const before = fg.transport.pulls.length;
+    await platform.executors.get(SYNC_BACKGROUND_TASK)?.();
+    expect(fg.transport.pulls.length).toBeGreaterThan(before); // passes now drive the open app
+    fg.client.stop();
+  });
+
+  test('a client stopped while waiting for its claim gives the host straight back', async () => {
+    const timer = new FakeTimer();
+    const host = createBackgroundHost({ timer });
+    const platform = fakeBackgroundPlatform({});
+    const { client } = await build({ online: false, background: { platform, host } });
+    const starting = client.start();
+    client.stop();
+    await starting;
+    expect(platform.registered).toHaveLength(0);
+
+    // The host is free: a later client claims and is driven without waiting out a stale lease.
+    const next = await build({ online: false, background: { platform, host } });
+    await next.client.start();
+    expect(next.client.backgroundRegistration()).toEqual({ kind: 'registered' });
+    next.client.stop();
   });
 
   test('a restricted platform is reported, not mistaken for a registration', async () => {
     const platform = fakeBackgroundPlatform({ status: 1 });
-    const host = createBackgroundSyncHost(new FakeTimer());
+    const host = createBackgroundHost({ timer: new FakeTimer() });
     const { client } = await build({ online: false, background: { platform, host } });
     await client.start();
     expect(client.backgroundRegistration()).toEqual({ kind: 'restricted' });

@@ -138,8 +138,10 @@ export class SyncLoop<DB> {
   private cancelBackoff: CancelTimer | null = null;
   private cycle: Promise<void> = Promise.resolve();
   private hydrated = false;
-  /** Set by `pause()`: the running pull stops at its next batch boundary and no rerun follows. */
+  /** Set by `pause()`: the running cycle stops at its next batch boundary and no rerun follows. */
   private pauseRequested = false;
+  /** Set by `stop()`: this loop never starts another cycle. */
+  private stopped = false;
   /** Mirrors of the persisted guards, so the trigger guard needs no `await` (see the header). */
   private syncDisabled = false;
   private pushHalted = false;
@@ -189,7 +191,7 @@ export class SyncLoop<DB> {
       throw new Error('SyncLoop.hydrate() must be awaited before requestSync()');
     }
     // 03 §10 trigger guard: `syncDisabled` ⇒ no cycle starts, for ANY reason including manual.
-    if (this.syncDisabled) return;
+    if (this.syncDisabled || this.stopped) return;
     // Realtime pokes arrive as `connectivity` too (apps/mobile sync-client), so only a person's
     // explicit refresh skips the bundle interval.
     if (reason === 'manual') this.bundleWanted = true;
@@ -213,12 +215,25 @@ export class SyncLoop<DB> {
   }
 
   /**
-   * Stop the running cycle at its next committed pull batch, without counting it as a sync. For a
+   * Stop the running cycle at its next push or committed pull batch, without counting it as a sync.
+   * A pause during push ends the push there and lets at most one pull batch through. For a
    * time-limited background run, or handing the database to another owner. The next trigger clears
    * the pause and resumes from the committed cursor. A no-op when nothing is running.
    */
   pause(): void {
     if (this.loopState === 'pushing' || this.loopState === 'pulling') this.pauseRequested = true;
+  }
+
+  /**
+   * Retire this loop: the running cycle stops as `pause()` would, no rerun or backoff retry
+   * follows, and every later trigger is ignored. For an owner that is going away, so a loop left
+   * in backoff cannot keep syncing behind the next owner's back.
+   */
+  stop(): void {
+    this.stopped = true;
+    this.pause();
+    this.rerun = false;
+    this.clearBackoffTimer();
   }
 
   /** Resolves when the current cycle (and any rerun it chains) has settled. Tests only. */
@@ -257,6 +272,7 @@ export class SyncLoop<DB> {
           surface: this.options.surface,
           clock: this.options.clock,
           deviceId: this.options.deviceId,
+          shouldContinue: () => !this.pauseRequested,
           onBatchSettled: (settled) => this.notifyPushed(settled),
           transaction: this.options.transaction,
           refoldRefused: this.options.refoldRefused,
@@ -356,7 +372,7 @@ export class SyncLoop<DB> {
     this.pauseRequested = false;
     // 03 §10: "if the rerun flag is set, immediately re-enter `pushing`". ONE follow-up regardless
     // of how many triggers coalesced into it.
-    if (this.rerun && !this.syncDisabled && !paused) {
+    if (this.rerun && !this.syncDisabled && !paused && !this.stopped) {
       this.transition('trigger');
       this.cycle = this.runCycle();
     }
@@ -396,6 +412,8 @@ export class SyncLoop<DB> {
     // Transport/server failure ⇒ backoff (03 §10). Op-level rejections never reach here — they are
     // results inside a resolved response, not thrown (push.ts).
     this.transition('transport_failure');
+    // A retired loop records nothing: the next owner has its own state and its own retries.
+    if (this.stopped) return;
     this.failureCount += 1;
     const delay = syncBackoffDelayMs(this.failureCount);
     const until = this.options.clock.now() + delay;
@@ -406,7 +424,7 @@ export class SyncLoop<DB> {
     this.clearBackoffTimer();
     this.cancelBackoff = this.options.timer.schedule(delay, () => {
       this.cancelBackoff = null;
-      if (this.syncDisabled) return;
+      if (this.syncDisabled || this.stopped) return;
       if (this.loopState !== 'backoff') return;
       this.transition('timer_elapsed');
       this.cycle = this.runCycle();
