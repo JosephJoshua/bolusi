@@ -33,7 +33,9 @@ export class FakeCore {
   readonly calls: { method: string; args: unknown[] }[] = [];
   answers: Record<string, (...args: unknown[]) => unknown> = {};
   private readonly listeners = new Set<() => void>();
-  private readonly demo = demoRepairRuntime('owner', { volume: 'sample' });
+  /** The seeded repair data the core's repair calls answer from; a test can change it directly. */
+  readonly demo = demoRepairRuntime('owner', { volume: 'sample' });
+  private readonly events = new Map<string, Set<(payload: unknown) => void>>();
 
   constructor(state: CoreState) {
     this.state = state;
@@ -57,7 +59,12 @@ export class FakeCore {
       }
       return Promise.resolve(undefined as T);
     },
-    on: () => () => undefined,
+    on: (event: string, listener: (payload: unknown) => void) => {
+      const listeners = this.events.get(event) ?? new Set();
+      this.events.set(event, listeners);
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     close: () => undefined,
   };
 
@@ -65,6 +72,13 @@ export class FakeCore {
     this.state = { ...this.state, ...next };
     act(() => {
       for (const listener of this.listeners) listener();
+    });
+  }
+
+  /** A push from the core, such as `repair.changed` when another device's change syncs in. */
+  emit(event: string, payload?: unknown): void {
+    act(() => {
+      for (const listener of this.events.get(event) ?? []) listener(payload);
     });
   }
 

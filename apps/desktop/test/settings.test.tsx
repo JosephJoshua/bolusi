@@ -275,7 +275,7 @@ describe('Settings on the PC', () => {
 
     fireEvent.click(within(byTestId('desktop.staff.add.role.cashier')).getByRole('checkbox'));
     fireEvent.click(byTestId('desktop.staff.add.save'));
-    await screen.findByText(/Sambungkan komputer ini ke internet/);
+    await screen.findByText(/belum terhubung internet/);
 
     online = true;
     fireEvent.click(byTestId('desktop.staff.add.save'));
@@ -342,6 +342,57 @@ describe('repair settings on the PC', () => {
     const change = callsTo('repair.run')[0]![2] as { items: { label: string | null }[] };
     expect(change.items[0]!.label).toBe('Casing HP');
     expect(change.items.at(-1)!.label).toBe('Tali gantungan');
+  });
+
+  it("follows another device's slip change, keeping what was typed here", async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    renderApp();
+    await openSettings('slip');
+    fireEvent.change(await screen.findByTestId('repair.desk.slip.phone'), {
+      target: { value: '0811 4800 123' },
+    });
+    const before = (await core.demo.query('printSettings', {})).rows[0]!;
+    await core.demo.run('setPrintSettings', {
+      name: before.name ?? '',
+      address: 'Jl. Ahmad Yani 12, Sorong',
+      phone: before.phone,
+      logoOnDotMatrix: before.logoOnDotMatrix,
+      intakeTerms: before.intakeTerms,
+      handoverTerms: before.handoverTerms,
+    });
+    core.emit('repair.changed');
+    await waitFor(() =>
+      expect((byTestId('repair.desk.slip.address') as HTMLTextAreaElement).value).toBe(
+        'Jl. Ahmad Yani 12, Sorong',
+      ),
+    );
+    expect((byTestId('repair.desk.slip.phone') as HTMLInputElement).value).toBe('0811 4800 123');
+
+    fireEvent.click(byTestId('repair.desk.slip.save'));
+    await screen.findByTestId('repair.desk.slip.saved');
+    const saved = callsTo('repair.run').find((args) => args[1] === 'setPrintSettings');
+    expect(saved?.[2]).toMatchObject({
+      address: 'Jl. Ahmad Yani 12, Sorong',
+      phone: '0811 4800 123',
+    });
+  });
+
+  it('asks before switching person with unsaved changes, and not on a second Settings click', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    renderApp();
+    await openSettings('fees');
+    fireEvent.change(await screen.findByTestId('repair.desk.fees.beforeWork'), {
+      target: { value: '35.000' },
+    });
+    // Settings again, while on Settings, is not leaving: no question, and the edit stays guarded.
+    fireEvent.click(byTestId('nav.settings'));
+    expect(screen.queryByTestId('desktop.settings.discard')).toBeNull();
+
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ganti pengguna' }));
+    await screen.findByTestId('desktop.settings.discard');
+    fireEvent.click(byTestId('desktop.settings.discard.cancel'));
+    expect((byTestId('repair.desk.fees.beforeWork') as HTMLInputElement).value).toBe('35.000');
   });
 
   it('asks before leaving a page with unsaved changes', async () => {

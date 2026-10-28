@@ -32,15 +32,22 @@ export function printSettingsForm(saved: PrintSettings): PrintSettingsForm {
   };
 }
 
+/** Whether one field holds the same in two forms: text ignoring outer spaces, a logo by its media. */
+export function samePrintSettingsField<K extends keyof PrintSettingsForm>(
+  key: K,
+  a: PrintSettingsForm[K],
+  b: PrintSettingsForm[K],
+): boolean {
+  if (key === 'logo') {
+    const [x, y] = [a as PrintSettingsForm['logo'], b as PrintSettingsForm['logo']];
+    return (x?.mediaId ?? null) === (y?.mediaId ?? null);
+  }
+  return typeof a === 'string' && typeof b === 'string' ? a.trim() === b.trim() : a === b;
+}
+
 export function samePrintSettingsForm(a: PrintSettingsForm, b: PrintSettingsForm): boolean {
-  return (
-    a.name.trim() === b.name.trim() &&
-    a.address.trim() === b.address.trim() &&
-    a.phone.trim() === b.phone.trim() &&
-    (a.logo?.mediaId ?? null) === (b.logo?.mediaId ?? null) &&
-    a.logoOnDotMatrix === b.logoOnDotMatrix &&
-    a.intakeTerms.trim() === b.intakeTerms.trim() &&
-    a.handoverTerms.trim() === b.handoverTerms.trim()
+  return (Object.keys(a) as (keyof PrintSettingsForm)[]).every((key) =>
+    samePrintSettingsField(key, a[key], b[key]),
   );
 }
 

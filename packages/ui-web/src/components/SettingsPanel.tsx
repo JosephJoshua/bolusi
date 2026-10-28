@@ -16,7 +16,7 @@ export function SettingsPanel({
   readonly testId?: string | undefined;
 }): React.JSX.Element {
   return (
-    <section className="flex min-h-full flex-col pb-6" data-testid={testId}>
+    <section className="flex flex-1 flex-col pb-6" data-testid={testId}>
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 pb-6">
         <div className="flex min-w-0 max-w-2xl flex-1 flex-col gap-1">
           <h2 className="break-words text-heading font-semibold text-text">{title}</h2>

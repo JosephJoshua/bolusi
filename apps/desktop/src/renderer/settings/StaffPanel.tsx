@@ -267,7 +267,7 @@ function StaffTable({
     >
       <div
         aria-hidden
-        className="grid grid-cols-[minmax(200px,2fr)_minmax(140px,2fr)_minmax(120px,1fr)] gap-x-4 border-b border-border px-4 py-2 text-small font-semibold text-text-muted"
+        className="grid grid-cols-[minmax(200px,2fr)_minmax(140px,2fr)_minmax(160px,1fr)] gap-x-4 border-b border-border px-4 py-2 text-small font-semibold text-text-muted"
       >
         <span>{t('auth.pc.settings.colName')}</span>
         <span>{t('auth.pc.settings.colRoles')}</span>
@@ -328,7 +328,7 @@ function MemberRow({
     </>
   );
   const grid =
-    'grid w-full grid-cols-[minmax(200px,2fr)_minmax(140px,2fr)_minmax(120px,1fr)] items-center gap-x-4 px-4 py-3 text-left';
+    'grid w-full grid-cols-[minmax(200px,2fr)_minmax(140px,2fr)_minmax(160px,1fr)] items-center gap-x-4 px-4 py-3 text-left';
   return (
     <li
       className="border-b border-border last:border-b-0"
