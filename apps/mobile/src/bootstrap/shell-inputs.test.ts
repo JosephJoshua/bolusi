@@ -23,6 +23,8 @@ function syncState(over: Partial<SyncState> = {}): SyncState {
     syncDisabledReason: null,
     lastSyncError: null,
     backoffUntil: null,
+    tokenRejectedSince: null,
+    tokenRejectedCount: 0,
     ...over,
   };
 }
@@ -43,6 +45,7 @@ function fakeClient(over: {
     // command runtime's step-7 hook (task 136), which is a different seam entirely.
     scheduler: { schedule: () => undefined },
     start: () => Promise.resolve(),
+    startForBackgroundPass: () => Promise.resolve(),
     requestManual: () => undefined,
     requestBackground: () => undefined,
     pause: () => undefined,
@@ -94,5 +97,12 @@ describe('resolveShellInputs — live reads, never literals (task 89)', () => {
     const app = bootstrapped('device-1', syncState({ syncDisabled: true }));
     const client = fakeClient({ syncState: syncState({ syncDisabled: true }) });
     expect(resolveShellInputs(app, client, 1000).device).toBe('revoked');
+  });
+
+  test('a phone the server no longer recognises is told apart from a revoked one', () => {
+    const forgotten = syncState({ syncDisabled: true, syncDisabledReason: 'device_unrecognised' });
+    const app = bootstrapped('device-1', forgotten);
+    const client = fakeClient({ syncState: forgotten });
+    expect(resolveShellInputs(app, client, 1000).device).toBe('unrecognised');
   });
 });

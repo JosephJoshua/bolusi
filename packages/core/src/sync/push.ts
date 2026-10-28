@@ -91,6 +91,8 @@ export interface PushPhaseDeps<DB> {
    */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly batchSize?: number;
+  /** Asked after each batch; `false` stops the phase there (the loop's `pause()`). Ops stay `local`. */
+  readonly shouldContinue?: () => boolean;
   /**
    * Called after each batch that changed ops' sync status, with that batch's counts. Per batch, not
    * per phase: when a later batch fails on the wire, the ops already marked still get reported.
@@ -182,6 +184,9 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
 
     // A short batch means the queue is drained; a full one may have more behind it.
     if (ops.length < batchSize) return { synced, rejected, halted: false, gapped: false, batches };
+    if (deps.shouldContinue?.() === false) {
+      return { synced, rejected, halted: false, gapped: false, batches };
+    }
   }
 }
 

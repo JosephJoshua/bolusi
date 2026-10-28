@@ -57,7 +57,7 @@ describe('every zone renders — no state maps to a blank screen', () => {
     // Drive the real gate across its whole input space and render each result. This is what catches
     // a zone that `resolveZone` can emit but `renderZone` has no arm for — the seam between the two
     // total functions, which is exactly where a blank screen would live.
-    const devices: DeviceStatus[] = ['unenrolled', 'active', 'revoked'];
+    const devices: DeviceStatus[] = ['unenrolled', 'active', 'revoked', 'unrecognised'];
     const routes: ShellRoute[] = ['home', 'syncStatus', 'settings', 'changePin'];
     const seen: string[] = [];
     let count = 0;

@@ -5,7 +5,7 @@ import { PAPER_PRESETS, type PaperSettings } from '@bolusi/core';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { RepairKey } from './i18n.js';
-import type { RepairPrinting } from './runtime.js';
+import type { DevicePrinter, DevicePrinters, RepairPrinting } from './runtime.js';
 
 /** The sizes a slip prints on; core's landscape and custom sizes wait for a store that needs them. */
 export type PaperChoice = 'continuous_half' | 'continuous_full' | 'a4' | 'a5';
@@ -72,4 +72,59 @@ export function useDevicePaper(
     [printing, paper],
   );
   return [paper, choose];
+}
+
+export type DevicePrintersState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'failed' }
+  | {
+      readonly kind: 'ready';
+      readonly printers: readonly DevicePrinter[];
+      /** The chosen printer's name, even when it is no longer installed; null before a pick. */
+      readonly chosen: string | null;
+    };
+
+/**
+ * The device's printers for its settings screen: the list as the system has it now, the one chosen,
+ * a pick that saves at once, and a reload for a printer plugged in after the screen opened.
+ */
+export function useDevicePrinters(printers: DevicePrinters | undefined): {
+  readonly state: DevicePrintersState;
+  readonly choose: (name: string) => Promise<void>;
+  readonly reload: () => void;
+} {
+  const [state, setState] = useState<DevicePrintersState>({ kind: 'loading' });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (printers === undefined) return;
+    let live = true;
+    setState({ kind: 'loading' });
+    void Promise.all([printers.list(), printers.chosen()]).then(
+      ([list, chosen]) => {
+        if (live) setState({ kind: 'ready', printers: list, chosen });
+      },
+      () => {
+        if (live) setState({ kind: 'failed' });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [printers, attempt]);
+  const choose = useCallback(
+    async (name: string): Promise<void> => {
+      if (printers === undefined || state.kind !== 'ready') return;
+      const before = state;
+      setState({ ...state, chosen: name });
+      try {
+        await printers.choose(name);
+      } catch {
+        // Not saved: show the printer prints will still use.
+        setState(before);
+      }
+    },
+    [printers, state],
+  );
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
+  return { state, choose, reload };
 }

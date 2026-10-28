@@ -645,6 +645,24 @@ export default function App(props: AppProps): React.JSX.Element {
     if (zone.kind !== 'shell') setAccountMenu(false);
   }, [zone.kind]);
 
+  // A phone enrolled before goes back to its own store, and its owner sees the unsynced changes
+  // that will be carried over (core auth/carry-over.ts). Read each time the wizard opens.
+  const inEnrollment = zone.kind === 'enrollment';
+  const readHeldPhone = props.enrollment.heldPhone;
+  useEffect(() => {
+    if (!inEnrollment) return;
+    let live = true;
+    readHeldPhone()
+      .then((phone) => {
+        if (live) setEnrollment((s) => ({ ...s, phone }));
+      })
+      // Unreadable: the wizard still works, and core refuses a bind into another store anyway.
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [inEnrollment, readHeldPhone]);
+
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
 
@@ -853,7 +871,10 @@ export default function App(props: AppProps): React.JSX.Element {
               discardPrompt={discardPrompt}
               onConfirmDiscard={() => {
                 setDiscardPrompt(false);
-                setEnrollment(initialEnrollmentState(revoked));
+                setEnrollment((previous) => ({
+                  ...initialEnrollmentState(revoked),
+                  phone: previous.phone,
+                }));
               }}
               onCancelDiscard={() => setDiscardPrompt(false)}
             />
@@ -969,6 +990,17 @@ export default function App(props: AppProps): React.JSX.Element {
             );
           },
           shell: (shellZone) => {
+            // Switching user, or re-enrolling (which ends the session), unmounts the home surface
+            // kept under Sync Status, so go back to it first and let its discard question run where
+            // the person can see it.
+            const leaveSyncStatusThen = (proceed: () => void): void => {
+              if (syncReturn !== 'home') {
+                proceed();
+                return;
+              }
+              setRoute('home');
+              leaveHome(proceed);
+            };
             const syncStatus =
               shellZone.route === 'syncStatus' ? (
                 <SyncStatusScreen
@@ -990,16 +1022,8 @@ export default function App(props: AppProps): React.JSX.Element {
                   // there is no per-item retry to call and pretending otherwise would be a control
                   // that looks more precise than the engine underneath it.
                   onRetryMedia={props.onRetryMedia}
-                  // Switching user unmounts the home surface kept under Sync Status, so go back to it
-                  // first and let its discard question run where the person can see it.
-                  onOpenSwitcher={() => {
-                    if (syncReturn !== 'home') {
-                      setSwitching(true);
-                      return;
-                    }
-                    setRoute('home');
-                    leaveHome(() => setSwitching(true));
-                  }}
+                  onOpenSwitcher={() => leaveSyncStatusThen(() => setSwitching(true))}
+                  onReenroll={() => leaveSyncStatusThen(() => setReenrolling(true))}
                 />
               ) : null;
             if (syncStatus !== null && syncReturn !== 'home') return syncStatus;

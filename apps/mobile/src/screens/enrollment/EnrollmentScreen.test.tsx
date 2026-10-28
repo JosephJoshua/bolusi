@@ -3,7 +3,7 @@
 // round trip. The control is now the step's one button NAMING the picked store, with the picked row
 // checked; a separate "Ya, lanjutkan" toggle above a "Masuk" button used to do this job, and the
 // first Android QA run found the pair confusing. These tests pin the replacement.
-import { initI18n, t } from '@bolusi/i18n';
+import { initI18n, t, translateOpType } from '@bolusi/i18n';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 
 import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
@@ -203,5 +203,35 @@ describe('enrollment fields stay single-line after the §8.6 multiline variant (
     const screen = renderScreen(onA(), vi.fn());
 
     expect(screen.get('enroll-device-name.field').props['multiline']).toBe(false);
+  });
+});
+
+describe('re-enrolling a phone that still holds unsent changes', () => {
+  const phone = {
+    storeId: STORE_A.id,
+    storeName: STORE_A.name,
+    replacesDeviceId: null,
+    unsynced: [
+      { userId: 'user-ana', name: 'Ana', count: 3, types: ['repair.ticket_opened'] },
+      { userId: 'user-gone', name: null, count: 1, types: ['auth.pin_changed'] },
+    ],
+  };
+
+  test('lists whose changes will go with the phone, right above the bind button', () => {
+    const screen = renderScreen(onA({ phone }), vi.fn());
+    const list = textsIn(screen.get('enroll-unsynced'));
+    expect(list).toContain(t('auth.enroll.unsyncedTitle'));
+    expect(list).toContain('Ana');
+    expect(list).toContain(t('auth.enroll.unsyncedCount', { count: 3 }));
+    expect(list).toContain(translateOpType('repair.ticket_opened'));
+    // Someone no longer on the staff list is still shown, not dropped.
+    expect(textsIn(screen.get('enroll-unsynced-user-gone'))).toContain(
+      t('auth.enroll.formerStaff'),
+    );
+  });
+
+  test('says nothing when every change reached the server', () => {
+    const screen = renderScreen(onA({ phone: { ...phone, unsynced: [] } }), vi.fn());
+    expect(screen.query('enroll-unsynced')).toBeNull();
   });
 });

@@ -38,8 +38,11 @@ export class SyncTransportError extends Error {
   }
 }
 
-/** api/00 §7 `error.code` for a revoked device — the one code with a terminal client reaction. */
+/** api/00 §7 `error.code` for a revoked device — terminal at once. */
 export const DEVICE_REVOKED_ERROR_CODE = 'DEVICE_REVOKED';
+
+/** api/00 §7 `error.code` for an unknown token — terminal only once it persists (loop.ts). */
+export const TOKEN_INVALID_ERROR_CODE = 'AUTH_TOKEN_INVALID';
 
 /**
  * The sync wire (api/01-sync §3–§4), typed by schemas DTOs only.

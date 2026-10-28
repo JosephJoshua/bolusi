@@ -35,10 +35,10 @@
 // There is no escrow and no recovery path: SecureStore wipe / app-data clear ⇒ the DB is
 // unreadable ciphertext ⇒ re-enroll and re-pull. That is what makes `ensureDatabaseEncryptionKey`'s
 // read-before-generate load-bearing rather than an optimisation — see its own comment.
-import * as SecureStore from 'expo-secure-store';
-
 import { bytesToHex, type CryptoPort } from '@bolusi/core';
 import type { DbKeyStore } from '@bolusi/db-client';
+
+import { secureItem } from './secure-item';
 
 /** security-guide §6.4's key. Owned by THIS surface; `ports/keystore.ts` owns the other two. */
 export const DB_ENCRYPTION_KEY = 'bolusi.db_encryption_key';
@@ -46,13 +46,9 @@ export const DB_ENCRYPTION_KEY = 'bolusi.db_encryption_key';
 /** §6.4: "Key = 32 CSPRNG bytes". Hex-encoded ⇒ 64 chars, far inside SecureStore's 2 KB limit. */
 export const DB_KEY_BYTES = 32;
 
-const OPTIONS: SecureStore.SecureStoreOptions = {
-  // iOS-only: Android accepts and ignores this field. See ports/keystore.ts's platform note — the
-  // §7.4 "never resurrected" property is carried by Android Keystore + the backup exclusion there,
-  // and by this option on iOS (D17: iOS is a first-class target). Kept identical to the other
-  // credentials so all four SecureStore items share one storage policy.
-  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-};
+// The same storage policy as the other credentials (ports/secure-item.ts). On iOS that is after
+// first unlock, so a background boot on a locked phone can still open the database.
+const keyItem = secureItem(DB_ENCRYPTION_KEY);
 
 /**
  * The SecureStore-backed `DbKeyStore` — structurally what `openClientDb` injects.
@@ -86,7 +82,7 @@ export class SecureStoreDbKeyStore implements DbKeyStore {
    * bootstrap, where the decision is visible.
    */
   async getDatabaseEncryptionKey(): Promise<string | null> {
-    return SecureStore.getItemAsync(DB_ENCRYPTION_KEY, OPTIONS);
+    return keyItem.get();
   }
 
   /**
@@ -113,13 +109,13 @@ export class SecureStoreDbKeyStore implements DbKeyStore {
   }
 
   async #readOrGenerate(): Promise<string> {
-    const existing = await SecureStore.getItemAsync(DB_ENCRYPTION_KEY, OPTIONS);
+    const existing = await keyItem.get();
     // An empty string is treated as absent: `openClientDb` rejects `''` as `missing_key`, so
     // returning it here would produce a `missing_key` throw on a device we could have healed.
     if (existing !== null && existing !== '') return existing;
 
     const key = bytesToHex(this.crypto.randomBytes(DB_KEY_BYTES));
-    await SecureStore.setItemAsync(DB_ENCRYPTION_KEY, key, OPTIONS);
+    await keyItem.set(key);
     return key;
   }
 
@@ -129,6 +125,6 @@ export class SecureStoreDbKeyStore implements DbKeyStore {
    * the remaining steps (the seed, the token — `ports/keystore.ts`) are interrupted by a crash.
    */
   async wipe(): Promise<void> {
-    await SecureStore.deleteItemAsync(DB_ENCRYPTION_KEY, OPTIONS);
+    await keyItem.delete();
   }
 }

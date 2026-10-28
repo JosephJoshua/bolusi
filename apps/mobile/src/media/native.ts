@@ -14,6 +14,7 @@
 import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
+import type { BackgroundHost } from '../bootstrap/background-task.js';
 import { expoBackgroundTaskPlatform } from '../ports/background-task.js';
 import type { CompressedImage, ImageCompressorPort } from './compression.js';
 import { availableDiskSpaceBytes, createEncryptingMediaFileParts } from './files.js';
@@ -63,8 +64,11 @@ export type MediaClientForAppConfig = Omit<
   | 'clearRenderTemps'
   | 'background'
 > & {
-  /** Pass `false` to compose without trigger (d) — an explicit choice, never a silent absence. */
-  readonly registerBackgroundTask?: boolean;
+  /**
+   * Trigger (d): the module-scope host to register with (index.ts), or `null` for a client built for
+   * one headless pass, which the host drives directly. Required, so leaving it out is not an option.
+   */
+  readonly background: { readonly host: BackgroundHost } | null;
   /**
    * Reads the 32-byte SecureStore DB key as hex (task 158). The media-file cipher derives a sibling
    * key from it; `null` (never post-boot) fails media file ops closed rather than writing plaintext.
@@ -81,7 +85,7 @@ export type MediaClientForAppConfig = Omit<
  * being importable under Node.
  */
 export function createMediaClientForApp(config: MediaClientForAppConfig): MediaClient {
-  const { registerBackgroundTask = true, dbKeyHex, ...rest } = config;
+  const { background, dbKeyHex, ...rest } = config;
   // The encrypting file parts (task 158): one cipher, lazily keyed from the DB key, behind every
   // media file read/write. `client.ts` still names only interfaces — the expo + crypto binding is here.
   const parts = createEncryptingMediaFileParts(dbKeyHex);
@@ -98,6 +102,7 @@ export function createMediaClientForApp(config: MediaClientForAppConfig): MediaC
     listRemoteCache: parts.listRemoteCache,
     toRenderUri: parts.toRenderUri,
     clearRenderTemps: parts.clearRenderTemps,
-    background: registerBackgroundTask ? expoBackgroundTaskPlatform : null,
+    background:
+      background === null ? null : { platform: expoBackgroundTaskPlatform, host: background.host },
   });
 }

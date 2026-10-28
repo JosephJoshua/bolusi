@@ -95,6 +95,12 @@ const MATRIX: readonly Row[] = [
     text: 'Sedang mengirim',
   },
   { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
+  {
+    screen: 'sync-status',
+    state: 'unrecognised',
+    testId: 'sync-unrecognised',
+    text: 'HP ini perlu didaftarkan ulang',
+  },
   // The §8.4-item-4 disclosure (task 130). Probed on the REASON node, not the section: the section
   // is already visible in `attention`, so keying this row on it would pass with the detail collapsed
   // — a screenshot row that cannot see the thing it was added for.
@@ -110,6 +116,12 @@ const MATRIX: readonly Row[] = [
   { screen: 'enrollment', state: 'confirm', testId: 'enroll-step-confirm' },
   { screen: 'enrollment', state: 'done', testId: 'enroll-step-done' },
   { screen: 'enrollment', state: 'revoked', testId: 'enroll-revoked-banner' },
+  {
+    screen: 'enrollment',
+    state: 'reenrolWithChanges',
+    testId: 'enroll-unsynced',
+    text: 'Perubahan yang belum terkirim',
+  },
 
   // Capture (media) — camera is a labelled placeholder, never a faked photo.
   { screen: 'capture', state: 'loading', testId: 'capture-loading' },

@@ -226,30 +226,41 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
 }
 
 /**
- * Boot the data layer once per JS realm, however many times the React tree mounts.
+ * Boot the data layer once per JS realm, however many callers want it.
  *
  * Android can destroy and recreate the activity while the process lives on ("Don't keep
  * activities", backing out and relaunching from the launcher, memory pressure). The JS realm
- * survives, so React mounts `Root` again and its boot effect calls `boot()` a second time. The first
- * boot's connection is still open, and op-sqlite allows one per database (08 §2.2), so a second
+ * survives, so React mounts `Root` again and its boot effect calls `boot()` a second time. A killed
+ * app woken for a background task boots before any Root exists, and a Root that mounts later joins
+ * that realm too (headless.ts). op-sqlite allows one connection per database (08 §2.2), so a second
  * `bootstrap()` throws `already_open`, and the shell renders nothing until a force-stop.
  *
  * A later call reuses the first boot's connection, registry and engine, and re-reads `deviceId` and
- * `syncState`, because the device may have enrolled or synced since. A failed boot is not kept, so
- * the next mount retries it.
+ * `syncState`, because the device may have enrolled or synced since. `arg` reaches `boot` only for
+ * the call that boots. A failed boot is not kept, so the next caller retries it, and a caller that
+ * joined someone else's failed boot retries once with its own `arg`: the UI still gets its
+ * self-healing boot after a background boot (which never wipes) failed.
  */
-export function bootOncePerRealm(boot: () => Promise<Bootstrapped>): () => Promise<Bootstrapped> {
+export function bootOncePerRealm<A = void>(
+  boot: (arg: A) => Promise<Bootstrapped>,
+): (arg: A) => Promise<Bootstrapped> {
   let first: Promise<Bootstrapped> | null = null;
-  return async () => {
+  const run = async (arg: A, mayRetry: boolean): Promise<Bootstrapped> => {
     if (first === null) {
-      const attempt = boot();
+      const attempt = boot(arg);
       first = attempt;
       attempt.catch(() => {
         if (first === attempt) first = null;
       });
       return attempt;
     }
-    const app = await first;
+    let app: Bootstrapped;
+    try {
+      app = await first;
+    } catch (error) {
+      if (mayRetry) return run(arg, false);
+      throw error;
+    }
     return {
       ...app,
       migrationsApplied: [],
@@ -257,4 +268,5 @@ export function bootOncePerRealm(boot: () => Promise<Bootstrapped>): () => Promi
       syncState: await readSyncState(app.db.db as never),
     };
   };
+  return (arg) => run(arg, true);
 }

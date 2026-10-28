@@ -47,6 +47,7 @@ import type { LoginResult } from '../screens/enrollment/model.js';
 vi.mock('expo-secure-store', () => {
   const store = new Map<string, string>();
   return {
+    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
     setItemAsync: vi.fn((key: string, value: string) => {
       store.set(key, value);
@@ -315,6 +316,24 @@ test('the enroll POST carries the client-generated identity, not the server-echo
   expect(body.deviceId).toBe(deviceId);
   expect(body.storeId).toBe(STORE_ID);
   expect(body.platform).toBe('android');
+});
+
+test('enrolling a working phone again replaces its registration, so the server revokes the old one', async () => {
+  const { platform, enrollBodies } = platformFor();
+  const { controller } = createAppEnrollment(app, platform, () => undefined);
+  expect(await controller.heldPhone()).toBeNull();
+  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  const first = await readDeviceId(app.db.db);
+  expect(enrollBodies[0]).not.toHaveProperty('replacesDeviceId');
+
+  // The empty-roster re-enrolment (task 168): the phone still syncs, so its registration is live.
+  expect(await controller.heldPhone()).toMatchObject({
+    storeId: STORE_ID,
+    replacesDeviceId: first,
+  });
+  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  expect(enrollBodies[1]?.replacesDeviceId).toBe(first);
+  expect(await readDeviceId(app.db.db)).not.toBe(first);
 });
 
 test('RESUME after crash-before-genesis: a FRESH keystore reloads the seed and completes enrollment', async () => {

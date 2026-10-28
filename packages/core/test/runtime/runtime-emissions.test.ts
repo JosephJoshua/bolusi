@@ -1,4 +1,4 @@
-// The five sanctioned runtime emissions (04-module-contract §5.1; 02-permissions §4).
+// The six sanctioned runtime emissions (04-module-contract §5.1; 02-permissions §4).
 //
 // THE SET IS THE ASSERTION (testing-guide T-14). A suite that checks "these five are allowed" is
 // green whether the channel permits five types or five hundred — the interesting question is the
@@ -27,18 +27,19 @@ function allOps(fixture: RuntimeFixture): SignedOperation[] {
 }
 
 describe('the sanctioned set is CLOSED (04 §5.1)', () => {
-  it('is exactly these five types — no more, no fewer', () => {
-    // Pinned as a SET, verbatim from 04 §5.1 / 02 §4. A sixth type added to the constant fails
+  it('is exactly these six types — no more, no fewer', () => {
+    // Pinned as a SET, verbatim from 04 §5.1 / 02 §4. A seventh type added to the constant fails
     // here, which is the entire point: the runtime bypassing the only write path is not something
     // that should be possible to do quietly.
     expect([...SANCTIONED_RUNTIME_EMISSION_TYPES].sort()).toEqual([
+      'auth.device_changes_transferred',
       'auth.device_enrolled',
       'auth.permission_denied',
       'auth.pin_locked_out',
       'auth.session_ended',
       'auth.user_switched',
     ]);
-    expect(SANCTIONED_RUNTIME_EMISSION_TYPES).toHaveLength(5);
+    expect(SANCTIONED_RUNTIME_EMISSION_TYPES).toHaveLength(6);
   });
 
   it('every sanctioned type is an `auth.*` type', () => {

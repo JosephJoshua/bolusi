@@ -3,7 +3,7 @@
 // queries come straight from the module through `ModulePort`, so a new command needs no new wiring.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-import type { ModulePort, PaperSettings } from '@bolusi/core';
+import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
@@ -24,17 +24,57 @@ import {
   type ThumbnailState,
 } from '../screen-kit/index.js';
 
-/** A slip ready to leave the app: a self-contained HTML page for paper of this size. */
+/**
+ * A slip ready to leave the app: a self-contained HTML page for paper of this size, and the document
+ * it was drawn from, for a printer that takes text (a dot-matrix gets it as ESC/P).
+ */
 export interface SlipOutput {
   readonly html: string;
+  readonly document: PrintDocument;
   /** Names the print job and the PDF file. */
   readonly jobName: string;
   readonly paper: PaperSettings;
 }
 
+/** Why a print did not go out: no printer picked yet, the picked one is gone, or it refused the job. */
+export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed';
+
+/** Thrown by `RepairPrinting.output` when the job did not reach the printer. */
+export class PrinterProblem extends Error {
+  override readonly name = 'PrinterProblem';
+  constructor(readonly reason: PrinterProblemReason) {
+    super(`print: ${reason}`);
+  }
+}
+
+/** A printer installed on this device, as its system names it. */
+export interface DevicePrinter {
+  /** The system's own name, which jobs are sent to. */
+  readonly name: string;
+  readonly label: string;
+}
+
+/**
+ * The printers of a device that sends slips straight to one (the counter PC). Picked once in
+ * Settings, like the paper; a phone has none of this and prints through the system dialog.
+ */
+export interface DevicePrinters {
+  list(): Promise<readonly DevicePrinter[]>;
+  /** The chosen printer's name; null before anyone picks one. */
+  chosen(): Promise<string | null>;
+  choose(name: string): Promise<void>;
+}
+
+/** Decoded pixels of a picture, for turning a logo into dot-matrix dots. */
+export interface DecodedImage {
+  readonly rgba: Uint8Array | Uint8ClampedArray;
+  readonly width: number;
+  readonly height: number;
+}
+
 /**
  * What printing a slip needs from the platform (core `print`). The phone prints through the system
- * dialog or shares a PDF; the desktop app will add its dot-matrix printers.
+ * dialog or shares a PDF; the counter PC prints on its chosen printer, in text mode on a dot-matrix.
  */
 export interface RepairPrinting {
   /** The store's name as enrolled, printed when the owner has not set another. */
@@ -45,12 +85,20 @@ export interface RepairPrinting {
   readPaper(): Promise<PaperSettings | null>;
   writePaper(paper: PaperSettings): Promise<void>;
   /**
-   * Hand the page to the system print dialog, or share it as a PDF. A failure rejects.
-   * `unconfirmed` is a dialog that cannot say whether it printed (Android): the screen asks.
+   * Hand the page to the system print dialog or the chosen printer, or share it as a PDF. A failure
+   * rejects, with `PrinterProblem` when the printer is the reason. `unconfirmed` is a dialog that
+   * cannot say whether it printed (Android): the screen asks.
    */
   output(slip: SlipOutput, how: 'print' | 'share'): Promise<'done' | 'cancelled' | 'unconfirmed'>;
   /** A verified picture (the logo, a signature) as a `data:` URI; null when it is not here yet. */
   imageDataUri(ref: ThumbnailRef): Promise<string | null>;
+  /** Present where slips go straight to a printer picked in Settings. */
+  readonly printers?: DevicePrinters | undefined;
+  /**
+   * Pixels of a `data:` URI picture; present where a dot-matrix can print the store's logo. Null
+   * when it cannot be decoded, and the slip prints without it.
+   */
+  readonly decodeImage?: ((dataUri: string) => Promise<DecodedImage | null>) | undefined;
 }
 
 /** A colleague who can work repairs here, for the "assign to" picker. */

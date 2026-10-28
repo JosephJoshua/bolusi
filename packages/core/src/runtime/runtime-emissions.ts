@@ -1,11 +1,11 @@
 // The sanctioned runtime-emission channel (04-module-contract §5.1; 02-permissions §4).
 //
-// COMMANDS ARE THE ONLY WRITE PATH — with exactly FIVE lint-enforced exceptions, where the
+// COMMANDS ARE THE ONLY WRITE PATH — with exactly SIX lint-enforced exceptions, where the
 // RUNTIME ITSELF appends an op without a command and therefore without a permission check. This
 // module is that channel, and the list below is the whole of it. "Nothing else" (04 §5.1) is the
 // load-bearing half of the sentence: the set is CLOSED, and adding to it changes 04 §5 first.
 //
-// WHY EACH OF THE FIVE IS EXEMPT (02 §4) — the exemptions are not a convenience list, and each
+// WHY EACH OF THE SIX IS EXEMPT (02 §4) — the exemptions are not a convenience list, and each
 // one has a reason that would survive an auditor:
 //
 //   auth.user_switched / auth.session_ended — authentication PRECEDES authorization (FR-1014).
@@ -16,19 +16,22 @@
 //     directory tables; there is no directory to evaluate against yet (§6 bootstrap rule).
 //   auth.pin_locked_out — a lockout record must not depend on the locked-out user's permissions
 //     (api/02-auth §6.5).
+//   auth.device_changes_transferred — written during re-enrolment, right after the genesis, by the
+//     owner who just signed in with their password (no PIN session exists yet). The server still
+//     checks the owner holds auth.device_enroll, and checks every carried change on its own.
 //
 // Each is a case where requiring a permission check would make the record impossible to write at
 // exactly the moment it matters most. Nothing else has that property — which is why nothing else
 // is on the list.
 //
 // THE SET IS THE GUARD'S DENOMINATOR (testing-guide T-14). A sixth emission slipping in is the
-// exact failure this channel exists to prevent, and a guard that spot-checks "are these five
+// exact failure this channel exists to prevent, and a guard that spot-checks "are these six
 // allowed?" would never notice a sixth. So the suite asserts the SET — exact membership and exact
 // size — not a sample of it, and the channel rejects by allowlist (deny-by-default), never by
 // blocklist.
 
 /**
- * The five op types the runtime appends without a command (04 §5.1, 02 §4). CLOSED SET.
+ * The six op types the runtime appends without a command (04 §5.1, 02 §4). CLOSED SET.
  *
  * Exported as an enumerable, ordered constant so callers, tests, and the
  * `bolusi/runtime-emission-allowlist` lint rule all read ONE definition (CLAUDE.md §2.8) — a
@@ -40,10 +43,11 @@ export const SANCTIONED_RUNTIME_EMISSION_TYPES = [
   'auth.permission_denied',
   'auth.pin_locked_out',
   'auth.device_enrolled',
+  'auth.device_changes_transferred',
 ] as const;
 
 /**
- * The five sanctioned types as a union. A non-sanctioned type is a COMPILE-TIME error at every
+ * The six sanctioned types as a union. A non-sanctioned type is a COMPILE-TIME error at every
  * typed call site of the channel; `assertSanctionedEmission` is the runtime backstop for the
  * untyped ones (a JS caller, a value crossing a boundary, a cast).
  */
@@ -52,7 +56,7 @@ export type SanctionedRuntimeEmissionType = (typeof SANCTIONED_RUNTIME_EMISSION_
 /** Membership set — built FROM the constant above, so it cannot disagree with it. */
 const SANCTIONED_SET: ReadonlySet<string> = new Set(SANCTIONED_RUNTIME_EMISSION_TYPES);
 
-/** Is `type` one of the five (04 §5.1)? The one membership predicate; nothing re-derives it. */
+/** Is `type` one of the six (04 §5.1)? The one membership predicate; nothing re-derives it. */
 export function isSanctionedRuntimeEmission(type: string): type is SanctionedRuntimeEmissionType {
   return SANCTIONED_SET.has(type);
 }
@@ -83,7 +87,7 @@ export class RuntimeEmissionError extends Error {
  * Called BEFORE anything is appended, so a rejected type leaves the log untouched: no op row, no
  * projection apply, no chain advance.
  *
- * @throws {RuntimeEmissionError} when `type` is not one of the five.
+ * @throws {RuntimeEmissionError} when `type` is not one of the six.
  */
 export function assertSanctionedEmission(
   type: string,
