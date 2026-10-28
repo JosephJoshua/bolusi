@@ -10,7 +10,9 @@
  * reorder without dragging.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, PanResponder, Platform, StyleSheet, View } from 'react-native';
+import { Animated, PanResponder, StyleSheet, View } from 'react-native';
+
+import { NATIVE_DRIVER } from '../motion.js';
 import type { PanResponderInstance } from 'react-native';
 
 import { useScrollLock } from '../shell/scroll-lock.js';
@@ -32,7 +34,6 @@ export interface ReorderableListProps<T> {
   readonly testID?: string | undefined;
 }
 
-const NATIVE_DRIVER = Platform.OS !== 'web';
 const SETTLE_MS = 150;
 
 const styles = StyleSheet.create({
