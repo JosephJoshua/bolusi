@@ -12,10 +12,11 @@
  */
 import { sql, type Kysely } from 'kysely';
 
+import { parseLimitAmounts, type LimitAmounts } from '../authz/limits.js';
 import { AUTH_PERMISSION } from './operations.js';
 
 /** The roles an owner picks from, in the order they are offered. Custom roles come later. */
-export const STAFF_ROLE_KEYS = ['cashier', 'technician', 'store_owner'] as const;
+export const STAFF_ROLE_KEYS = ['cashier', 'technician', 'manager', 'store_owner'] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
 export interface StaffRole {
@@ -23,6 +24,9 @@ export interface StaffRole {
   readonly key: StaffRoleKey;
   /** An owner role (power over other accounts): only a main owner may hand it out. */
   readonly ownerRole: boolean;
+  /** A limited role's amounts at this store (unreadable amounts read as Rp 0); null when free of
+   *  limits. */
+  readonly limits: LimitAmounts | null;
 }
 
 export interface StaffMember {
@@ -51,6 +55,7 @@ interface RoleRow {
   readonly name: string;
   readonly scopeType: string;
   readonly permissionIds: string | readonly unknown[];
+  readonly limits: string | null;
 }
 
 /**
@@ -84,7 +89,7 @@ function isStaffRoleKey(name: string): name is StaffRoleKey {
 export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirectory> {
   const [roleRows, userRows, grantRows] = await Promise.all([
     sql<RoleRow>`
-      SELECT id, name, scope_type AS "scopeType", permission_ids AS "permissionIds"
+      SELECT id, name, scope_type AS "scopeType", permission_ids AS "permissionIds", limits
       FROM roles_directory
     `.execute(db),
     sql<{ id: string; name: string; status: string; hasPin: number }>`
@@ -99,7 +104,9 @@ export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirec
 
   const roles = STAFF_ROLE_KEYS.flatMap((key) => {
     const row = roleRows.rows.find((role) => role.name === key);
-    return row === undefined ? [] : [{ id: row.id, key, ownerRole: isOwnerRole(row) }];
+    return row === undefined
+      ? []
+      : [{ id: row.id, key, ownerRole: isOwnerRole(row), limits: limitsOf(row.limits) }];
   });
 
   const members = userRows.rows.map((user): StaffMember => {
@@ -122,6 +129,16 @@ export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirec
     a.active !== b.active ? (a.active ? -1 : 1) : a.name.localeCompare(b.name),
   );
   return { roles, members };
+}
+
+/** The mirror's JSON, read the way the authorizer reads it: a corrupt row stays limited, at Rp 0. */
+function limitsOf(json: string | null): LimitAmounts | null {
+  if (json === null) return null;
+  try {
+    return parseLimitAmounts(JSON.parse(json));
+  } catch {
+    return parseLimitAmounts(null);
+  }
 }
 
 /** Owners first, then the staff roles in offer order, then anything custom. */
@@ -152,6 +169,18 @@ export function grantableRoles(
  */
 export function canManageMember(member: StaffMember, actor: StaffActor): boolean {
   return member.id !== actor.userId && (actor.tenantAdmin || !member.owner);
+}
+
+/**
+ * The limited roles whose amounts this actor may set here: never one they hold themselves (nobody
+ * raises their own limit; the server refuses it too).
+ */
+export function settableLimitRoles(
+  directory: StaffDirectory,
+  actor: StaffActor,
+): readonly StaffRole[] {
+  const held = directory.members.find((member) => member.id === actor.userId)?.roleIds ?? [];
+  return directory.roles.filter((role) => role.limits !== null && !held.includes(role.id));
 }
 
 /** The longest name the server takes (`CreateUserReq.name`). */
@@ -233,5 +262,12 @@ export interface StaffAdminPort {
     readonly actingUserId: string;
     readonly userId: string;
     readonly active: boolean;
+  }): Promise<void>;
+  /** Set how far a limited role may go at this store, per servisan. */
+  setLimits(input: {
+    readonly actingUserId: string;
+    readonly storeId: string;
+    readonly roleId: string;
+    readonly limits: LimitAmounts;
   }): Promise<void>;
 }

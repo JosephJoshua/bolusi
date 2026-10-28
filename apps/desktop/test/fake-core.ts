@@ -114,9 +114,11 @@ export function session(over: Partial<SessionView> = {}): SessionView {
     canUnlock: true,
     canReset: true,
     canManageStaff: true,
+    canSetLimits: true,
     tenantAdmin: true,
     permissions: [],
     colleaguePermissions: {},
+    limits: {},
     ...over,
   };
 }

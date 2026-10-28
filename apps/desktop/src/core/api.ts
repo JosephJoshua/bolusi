@@ -22,6 +22,8 @@ export interface SessionView {
   readonly canUnlock: boolean;
   readonly canReset: boolean;
   readonly canManageStaff: boolean;
+  /** May set limited roles' amounts at this store (`auth.limit_manage`). */
+  readonly canSetLimits: boolean;
   readonly tenantAdmin: boolean;
   /**
    * Every module's permissions the signed-in person holds (repair's, money's, ...), for showing
@@ -30,6 +32,8 @@ export interface SessionView {
   readonly permissions: readonly string[];
   /** The same for each colleague, for pickers. */
   readonly colleaguePermissions: Readonly<Record<string, readonly string[]>>;
+  /** For each of those permissions, how far the person may use it (`ModulePort.limitOf`). */
+  readonly limits: Readonly<Record<string, number | null>>;
 }
 
 export interface CoreState {

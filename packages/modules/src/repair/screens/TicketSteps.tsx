@@ -708,6 +708,8 @@ export function PriceChangeStep({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const kinds = usePriceKinds();
+  // A limited role (a manager) sees how far they may discount before the save refuses it.
+  const discountLimit = runtime.limitOf(REPAIR_PERMISSION.discount);
   const [kind, setKind] = useState<PriceKind>('part');
   const [description, setDescription] = useState('');
   const [amountText, setAmountText] = useState('');
@@ -785,6 +787,11 @@ export function PriceChangeStep({
         {amount === null ? null : (
           <Text style={repairStyles.caption} testID={`${testID}.amountPreview`}>
             {formatMoney(signedAmount(kind, amount))}
+          </Text>
+        )}
+        {kind !== 'discount' || discountLimit === null ? null : (
+          <Text style={repairStyles.caption} testID={`${testID}.discountLimit`}>
+            {tn('repair.hint.discountLimit', { amount: formatMoney(discountLimit) })}
           </Text>
         )}
       </View>

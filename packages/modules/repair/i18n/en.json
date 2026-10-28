@@ -313,6 +313,7 @@
     "downPaymentCorrect": "Enter the correct down payment first.",
     "downPaymentSame": "The amount has not changed.",
     "handoverPayment": "Complete the payment first.",
+    "discountLimit": "Your discount limit is {amount} per servisan.",
     "handoverChecks": "Tick everything, or write why not."
   },
   "discardPhotos": {
@@ -652,6 +653,7 @@
     "warrantyEnded": "The warranty has ended. Only an owner can open this claim.",
     "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
     "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan.",
+    "overLimit": "Over your limit. Ask a store owner.",
     "handoverAccessories": "An accessory is missing from the handover list.",
     "handoverNoteNeeded": "Something isn’t ticked. Write a note first."
   },

@@ -4,9 +4,12 @@ export { RepairBoardPage, type BoardFilters, type RepairBoardPageProps } from '.
 export { IntakePage, type IntakePageProps } from './Intake.js';
 export { TicketPane, type TicketPaneProps } from './TicketPane.js';
 export { PrintSettings } from './PrintSettings.js';
+export { MoneyField } from './parts.js';
 export {
   CancelFeesSettings,
   DiscardChangesDialog,
+  FormFooter,
+  SaveBar,
   IntakeListSettings,
   repairSettingsAccess,
   SlipSettings,

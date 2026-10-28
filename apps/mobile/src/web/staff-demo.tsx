@@ -13,17 +13,25 @@ import {
 import { useRef, useState } from 'react';
 
 import { StaffPinScreen } from '../screens/pin/StaffPinScreen.js';
+import { LimitsScreen } from '../screens/staff/LimitsScreen.js';
 import { StaffScreen } from '../screens/staff/StaffScreen.js';
 
 const ROLES: readonly StaffRole[] = [
-  { id: 'r-cashier', key: 'cashier', ownerRole: false },
-  { id: 'r-tech', key: 'technician', ownerRole: false },
-  { id: 'r-store', key: 'store_owner', ownerRole: true },
+  { id: 'r-cashier', key: 'cashier', ownerRole: false, limits: null },
+  { id: 'r-tech', key: 'technician', ownerRole: false, limits: null },
+  {
+    id: 'r-manager',
+    key: 'manager',
+    ownerRole: false,
+    limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+  },
+  { id: 'r-store', key: 'store_owner', ownerRole: true, limits: null },
 ];
 
 const KEY_BY_ID: Record<string, string> = {
   'r-cashier': 'cashier',
   'r-tech': 'technician',
+  'r-manager': 'manager',
   'r-store': 'store_owner',
   'r-main': 'main_owner',
 };
@@ -55,6 +63,7 @@ export const STAFF_DEMO: readonly StaffMember[] = [
   member('u-ocep', 'Ocep Wanggai', ['r-main']),
   member('u-yohanis', 'Yohanis Mandowen', ['r-cashier', 'r-tech']),
   member('u-maria', 'Maria Kogoya', ['r-tech']),
+  member('u-daniel', 'Daniel Rumaropen', ['r-manager']),
   member('u-petrus', 'Petrus Yikwa', ['r-cashier'], { hasPin: false }),
   member('u-selfina', 'Selfina Ayomi', ['r-cashier'], { active: false, hasPin: false }),
 ];
@@ -165,6 +174,50 @@ export function StaffDemo({
         change((all) => all.map((m) => (m.id === userId ? { ...m, active } : m)));
       }}
       onMakePin={setPinFor}
+      onClose={() => undefined}
+    />
+  );
+}
+
+/**
+ * "Batas wewenang" in the visual harness: the real `LimitsScreen` over the same in-memory server.
+ * `extraRole` adds a second limited role, for the list a business with custom roles sees.
+ */
+export function LimitsDemo({
+  offline = false,
+  extraRole = false,
+}: {
+  readonly offline?: boolean;
+  readonly extraRole?: boolean;
+}): React.JSX.Element {
+  const latest = useRef<StaffDirectory>({
+    roles: extraRole
+      ? [
+          ...ROLES,
+          {
+            id: 'r-senior',
+            key: 'technician',
+            ownerRole: false,
+            limits: { priceDrop: 25_000, refund: 0, credit: 0 },
+          },
+        ]
+      : ROLES,
+    members: sortMembers(STAFF_DEMO),
+  });
+  return (
+    <LimitsScreen
+      actor={{ userId: STAFF_ACTOR, tenantAdmin: false }}
+      load={() => Promise.resolve(latest.current)}
+      onSave={async (roleId, limits) => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        if (offline) throw new StaffAdminError('offline');
+        latest.current = {
+          ...latest.current,
+          roles: latest.current.roles.map((role) =>
+            role.id === roleId ? { ...role, limits } : role,
+          ),
+        };
+      }}
       onClose={() => undefined}
     />
   );
