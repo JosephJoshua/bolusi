@@ -147,7 +147,6 @@
     "editTitle": "Edit method",
     "cashAlways": "Always available",
     "central": "All stores",
-    "centralSome": "Head office",
     "inactive": "Not in use",
     "none": "No QRIS, EDC or bank accounts yet.",
     "noneHint": "Add them so the counter can pick them when taking a payment.",
@@ -155,11 +154,15 @@
     "name": "Name",
     "namePlaceholder": "E.g. QRIS BCA",
     "nameRequired": "Enter a name.",
-    "allStores": "For all stores",
-    "allStoresCaption": "Owned centrally, usable at every store.",
+    "allStores": "Head office method",
+    "allStoresCaption": "Usable at every store or the stores you pick.",
     "active": "In use",
     "activeCaption": "When off, the counter can no longer pick it. Past records stay.",
     "save": "Save",
-    "saved": "{name} saved."
+    "saved": "{name} saved.",
+    "usedAt": "Used at",
+    "someStores": "Pick stores",
+    "storeCount": "{count} stores",
+    "storeRequired": "Pick at least one store."
   }
 }

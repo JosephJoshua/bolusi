@@ -15,6 +15,7 @@ import { noblePort } from '@bolusi/test-support';
 import {
   applyBundle,
   buildPinVerifier,
+  readStores,
   FLOOR_KDF_PARAMS,
   readIdleLockSeconds,
   readMeta,
@@ -156,6 +157,19 @@ describe('applyBundle — the four directory tables (api/02-auth §5.2)', () => 
     );
     expect(await readMeta(k, 'auth.storeName')).toBe('Toko Baru');
     expect(await readMeta(k, 'auth.tenantName')).toBe('PT Baru');
+  });
+
+  it('keeps the business’s stores by name, or only this store from a server that sends none', async () => {
+    const k = await open();
+    await applyBundle(k, bundle([], { store: { id: 'store-1', name: 'Toko Jayapura' } }));
+    expect(await readStores(k)).toEqual([{ id: 'store-1', name: 'Toko Jayapura' }]);
+
+    const stores = [
+      { id: 'store-1', name: 'Toko Jayapura' },
+      { id: 'store-2', name: 'Toko Sorong' },
+    ];
+    await applyBundle(k, { ...bundle([], { store: stores[0]! }), stores });
+    expect(await readStores(k)).toEqual(stores);
   });
 
   it('persists the tenant`s idleLockSeconds into meta_kv, clamped, refreshing it on a change (§6.4)', async () => {

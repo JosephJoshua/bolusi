@@ -217,3 +217,22 @@ test('the server-emitted bundle satisfies the client DeviceBundleSchema (task 18
   firstPerm!.id = overCapId;
   expect(DeviceBundleSchema.safeParse(drifted).success).toBe(false);
 });
+
+test('the bundle names every store of its business, and no other business’s', async () => {
+  const { tenantId, s1, s2 } = await twoStoreTenant();
+  const other = await provision(h, {
+    tenantName: 'Other',
+    storeNames: ['Elsewhere'],
+    ownerName: 'Other owner',
+    ownerLogin: `other-${Date.now()}`,
+  });
+  expect(other.storeIds).toHaveLength(1);
+  const device = await seedDevice(h, { tenantId, storeId: s1 });
+  const bundle = (await fetchBundle(device.token)) as unknown as {
+    stores: { id: string; name: string }[];
+  };
+  expect([...bundle.stores].sort((a, b) => a.name.localeCompare(b.name))).toEqual([
+    { id: s1, name: 'Store One' },
+    { id: s2, name: 'Store Two' },
+  ]);
+});

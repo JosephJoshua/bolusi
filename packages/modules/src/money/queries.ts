@@ -46,6 +46,11 @@ export const paymentAccountsInput = z
   .object({
     /** Settings list inactive accounts too; the payment step does not. */
     includeInactive: z.boolean().default(false),
+    /**
+     * The business owner's Settings: central methods given to other stores too, so they can give
+     * one back to this store. Ignored for anyone who cannot change central methods.
+     */
+    everyStore: z.boolean().default(false),
   })
   .strict();
 
@@ -54,6 +59,7 @@ async function paymentAccountsHandler(
   qctx: Qctx,
 ): Promise<QueryPage<PaymentAccountRow>> {
   const store = storeOf(qctx);
+  const everyStore = input.everyStore && qctx.hasPermission(MONEY_PERMISSION.manageCentralAccounts);
   let query = qctx.db
     .selectFrom('moneyAccounts')
     .selectAll()
@@ -72,7 +78,8 @@ async function paymentAccountsHandler(
     }))
     // Own accounts are this store's by the query; central ones only where they are shared.
     .filter(
-      (account) => !account.central || accountVisibleTo({ ...account, storeId: null }, store),
+      (account) =>
+        !account.central || everyStore || accountVisibleTo({ ...account, storeId: null }, store),
     );
   return { rows: accounts, nextCursor: null };
 }

@@ -43,7 +43,9 @@ function methodSummary(account: PaymentAccountRow): string {
     tm(KIND_KEY[account.kind]),
     // A franchise method given to some stores only is the head office's, not every store's.
     account.central
-      ? tm(account.storeIds.length === 0 ? 'money.methods.central' : 'money.methods.centralSome')
+      ? account.storeIds.length === 0
+        ? tm('money.methods.central')
+        : tm('money.methods.storeCount', { count: account.storeIds.length })
       : '',
     account.active ? '' : tm('money.methods.inactive'),
   ]
@@ -150,7 +152,9 @@ export function PaymentMethodList({
   const mayEditCentral = runtime.hasPermission(MONEY_PERMISSION.manageCentralAccounts);
   const [nonce, setNonce] = useState(0);
   const query = useMoneyQuery<readonly PaymentAccountRow[]>(
-    async (rt) => (await rt.query('paymentAccounts', { includeInactive: true })).rows,
+    async (rt) =>
+      (await rt.query('paymentAccounts', { includeInactive: true, everyStore: mayEditCentral }))
+        .rows,
     `methods:${String(nonce)}`,
   );
   return (
@@ -238,12 +242,22 @@ export function PaymentMethodForm({
   const [active, setActive] = useState(account?.active ?? true);
   // Someone who manages only the franchise's methods adds franchise ones.
   const [central, setCentral] = useState(account?.central ?? !mayStore);
+  // A central method is every store's unless it names some: none named means all of them.
+  const [picked, setPicked] = useState<readonly string[]>(account?.storeIds ?? []);
+  const [everyStore, setEveryStore] = useState((account?.storeIds.length ?? 0) === 0);
   const [tried, setTried] = useState(false);
+  const stores = useMoneyQuery((rt) => rt.stores(), 'stores');
+  const storeList = stores.status === 'ready' ? stores.data : [];
+  // One store has nothing to pick between.
+  const picksStores = central && mayCentral && storeList.length > 1;
+  const storeIds = everyStore ? [] : [...picked].sort();
 
   const dirty =
     account === undefined
       ? name.trim() !== ''
-      : name.trim() !== account.name || active !== account.active;
+      : name.trim() !== account.name ||
+        active !== account.active ||
+        storeIds.join() !== [...account.storeIds].sort().join();
   const discard = useDiscardConfirm({
     dirty,
     copy: {
@@ -256,10 +270,11 @@ export function PaymentMethodForm({
     testID,
   });
   const nameMissing = name.trim() === '';
+  const noStore = picksStores && !everyStore && picked.length === 0;
 
   const save = (): void => {
     setTried(true);
-    if (nameMissing) return;
+    if (nameMissing || noStore) return;
     if (account !== undefined && !dirty) {
       onCancel();
       return;
@@ -273,11 +288,7 @@ export function PaymentMethodForm({
     void runner
       .run(() =>
         central
-          ? // A franchise method keeps the stores it was given; the phone only knows its own.
-            runtime.run('saveCentralAccount', {
-              ...fields,
-              storeIds: [...(account?.storeIds ?? [])],
-            })
+          ? runtime.run('saveCentralAccount', { ...fields, storeIds })
           : runtime.run('saveAccount', fields),
       )
       .then((result) => {
@@ -338,6 +349,42 @@ export function PaymentMethodForm({
             testID={`${testID}.central`}
           />
         ) : null}
+        {picksStores ? (
+          <View testID={`${testID}.stores`}>
+            <Text style={styles.label}>{tm('money.methods.usedAt')}</Text>
+            <SegmentedControl
+              options={[
+                { value: 'all', label: tm('money.methods.central') },
+                { value: 'some', label: tm('money.methods.someStores') },
+              ]}
+              value={everyStore ? 'all' : 'some'}
+              onChange={(value) => setEveryStore(value === 'all')}
+              testID={`${testID}.scope`}
+            />
+            {everyStore ? null : (
+              <View style={styles.storeRows}>
+                {storeList.map((store) => (
+                  <ListRow
+                    key={store.id}
+                    primaryText={store.name}
+                    checked={picked.includes(store.id)}
+                    onPress={() =>
+                      setPicked((current) =>
+                        current.includes(store.id)
+                          ? current.filter((id) => id !== store.id)
+                          : [...current, store.id],
+                      )
+                    }
+                    testID={`${testID}.store.${store.id}`}
+                  />
+                ))}
+                {tried && noStore ? (
+                  <Text style={styles.error}>{tm('money.methods.storeRequired')}</Text>
+                ) : null}
+              </View>
+            )}
+          </View>
+        ) : null}
         {account === undefined ? null : (
           <SwitchRow
             label={tm('money.methods.active')}
@@ -357,4 +404,6 @@ const styles = StyleSheet.create({
   groups: { gap: space.lg },
   label: { ...type.caption, color: color.textMuted, marginBottom: space.xs },
   value: { ...type.body, color: color.text },
+  storeRows: { marginTop: space.sm, marginHorizontal: -space.lg },
+  error: { ...type.caption, color: color.danger, marginTop: space.xs, marginHorizontal: space.lg },
 });

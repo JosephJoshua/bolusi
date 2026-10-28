@@ -90,6 +90,13 @@ export const STORE_NAME_META_KEY = 'auth.storeName';
 export const TENANT_NAME_META_KEY = 'auth.tenantName';
 
 /**
+ * `meta_kv` key holding every store of the business as JSON `[{id, name}]`, written by `applyBundle`
+ * from `bundle.stores` on every bundle, so a new or renamed store reaches the device on the next pull.
+ * Read through `readStores`.
+ */
+export const STORES_META_KEY = 'auth.stores';
+
+/**
  * `meta_kv` key holding the tenant's effective idle-lock timeout, in SECONDS (api/02-auth §6.4).
  *
  * Written by `applyBundle` from `bundle.settings.idleLockSeconds` on EVERY bundle — the enroll
@@ -527,4 +534,22 @@ export async function resolveDisplayRoleKeys<DB>(
   }));
   const top = Math.max(...ranked.map((r) => r.breadth));
   return ranked.filter((r) => r.breadth === top).map((r) => r.roleKey);
+}
+
+/** A store of the business, as the bundle names it. */
+export interface StoreName {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** The business's stores as the last bundle listed them, by name; empty before the first bundle. */
+export async function readStores<DB>(db: Kysely<DB>): Promise<readonly StoreName[]> {
+  const saved = await readMeta(db, STORES_META_KEY);
+  if (saved === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(saved);
+    return Array.isArray(parsed) ? (parsed as StoreName[]) : [];
+  } catch {
+    return [];
+  }
 }

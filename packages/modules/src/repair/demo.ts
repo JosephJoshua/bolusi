@@ -141,6 +141,13 @@ const DEMO_ACCOUNTS = [
 ] as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
 
+/** The business's stores, for picking which ones share a central payment method. */
+const DEMO_STORES = [
+  { id: '01920000-0000-7000-8000-0000000005a1', name: 'Bolusi Jayapura' },
+  { id: '01920000-0000-7000-8000-0000000005a2', name: 'Bolusi Sorong' },
+  { id: '01920000-0000-7000-8000-0000000005a3', name: 'Bolusi Manokwari' },
+];
+
 /** The `window` key of the colleague hook `demoRepairRuntime` installs (browser tests only). */
 export const DEMO_COLLEAGUE_HOOK = '__repairDemoColleague';
 
@@ -1383,6 +1390,7 @@ export function demoRepairRuntime(
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
+      stores: () => Promise.resolve(DEMO_STORES),
       get userId() {
         return actor.userId;
       },

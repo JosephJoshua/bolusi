@@ -147,7 +147,6 @@
     "editTitle": "Ubah metode",
     "cashAlways": "Selalu ada",
     "central": "Semua toko",
-    "centralSome": "Pusat",
     "inactive": "Tidak dipakai",
     "none": "Belum ada QRIS, EDC, atau rekening.",
     "noneHint": "Tambahkan supaya kasir bisa memilihnya saat menerima pembayaran.",
@@ -155,11 +154,15 @@
     "name": "Nama",
     "namePlaceholder": "Contoh: QRIS BCA",
     "nameRequired": "Isi namanya.",
-    "allStores": "Untuk semua toko",
-    "allStoresCaption": "Milik pusat, bisa dipakai di semua toko.",
+    "allStores": "Milik pusat",
+    "allStoresCaption": "Bisa dipakai di semua toko atau toko yang dipilih.",
     "active": "Dipakai",
     "activeCaption": "Kalau dimatikan, kasir tidak bisa memilihnya lagi. Catatan lamanya tetap ada.",
     "save": "Simpan",
-    "saved": "{name} disimpan."
+    "saved": "{name} disimpan.",
+    "usedAt": "Dipakai di",
+    "someStores": "Pilih toko",
+    "storeCount": "{count} toko",
+    "storeRequired": "Pilih paling sedikit satu toko."
   }
 }

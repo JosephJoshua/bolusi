@@ -4,6 +4,7 @@ import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog, type MoneyRuntime } from '@bolusi/modules/money/screens';
 import { servisanCustomers } from '@bolusi/modules/repair/screens';
+import { STORES_META_KEY, writeMeta } from '@bolusi/core';
 import { afterEach, expect, test } from 'vitest';
 
 import {
@@ -126,6 +127,43 @@ test('the business owner adds one for every store; a store owner cannot change i
   const row = storeOwner.all(`money.methods.row.${central!.id}`)[0]!;
   expect(text(storeOwner, `money.methods.row.${central!.id}`)).toContain('Semua toko');
   expect(row.props['onPress']).toBeUndefined();
+});
+
+test('the business owner gives a method to some stores only, and can give it to all again', async () => {
+  h = await openRepairScreenHarness(5505);
+  const sorong = '01920000-0000-7000-8000-0000000005b2';
+  await writeMeta(
+    h.db,
+    STORES_META_KEY,
+    JSON.stringify([
+      { id: h.storeId, name: 'Toko Jayapura' },
+      { id: sorong, name: 'Toko Sorong' },
+    ]),
+  );
+  const owner = await mount(h, h.ownerId);
+  await press(owner, 'money.methods.primary');
+  type(owner, 'money.methodForm.name', 'QRIS pusat');
+  await settle();
+  await press(owner, 'money.methodForm.central');
+  await press(owner, 'money.methodForm.scope.some');
+  // Picking none is not "every store" by accident.
+  await press(owner, 'money.methodForm.primary');
+  expect(text(owner, 'money.methodForm.stores')).toContain('Pilih paling sedikit satu toko.');
+  await press(owner, `money.methodForm.store.${sorong}`);
+  await press(owner, 'money.methodForm.primary');
+
+  // Given to Sorong only: not offered here, but the business owner still sees it to change it.
+  expect(await accounts(h, h.cashierId)).toEqual([]);
+  const [shared] = (
+    await h.moneyQuery('paymentAccounts', { includeInactive: true, everyStore: true }, h.ownerId)
+  ).rows as { id: string; storeIds: string[] }[];
+  expect(shared!.storeIds).toEqual([sorong]);
+  expect(text(owner, `money.methods.row.${shared!.id}`)).toContain('1 toko');
+
+  await press(owner, `money.methods.row.${shared!.id}`);
+  await press(owner, 'money.methodForm.scope.all');
+  await press(owner, 'money.methodForm.primary');
+  expect((await accounts(h, h.cashierId)).map((a) => a.name)).toEqual(['QRIS pusat']);
 });
 
 test('back from a half-typed method asks before dropping it', async () => {
