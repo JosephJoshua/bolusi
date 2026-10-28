@@ -75,7 +75,7 @@ import {
   type RejectedOpRow,
   type SyncStatusInput,
   type SyncTitleState,
-} from './model.js';
+} from '@bolusi/device/models/sync-status/model';
 
 export interface SyncStatusScreenProps {
   readonly input: SyncStatusInput;

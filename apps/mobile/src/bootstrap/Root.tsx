@@ -43,16 +43,16 @@ import { View } from 'react-native';
 
 import App from '../../App.js';
 import { bootstrapI18n, writeDeviceLocale, type LocaleStorePort } from '../i18n.js';
-import { defaultMuteState, type DeviceInfo } from '../screens/settings/model.js';
-import { systemClock } from '../ports/clock.js';
+import { defaultMuteState, type DeviceInfo } from '@bolusi/device/models/settings/model';
+import { systemClock } from '@bolusi/device/ports/clock';
 import { startLocationWatcher } from '../ports/location.js';
 import { useLatestCallback } from '../hooks/useLatestCallback.js';
 import type { Locale } from '@bolusi/i18n';
 
-import type { Bootstrapped } from './bootstrap.js';
-import type { AppEnrollment, EnrollmentController } from './enrollment.js';
-import { readSessionIdentity } from './notes.js';
-import { createUserLocaleWriter } from './user-locale.js';
+import type { Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import type { AppEnrollment, EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
+import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
+import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import { createNotificationChannels } from './notifications.js';
 import {
   answerNotificationAsk,
@@ -70,24 +70,24 @@ import {
   type PushRouteRequest,
   type PushRouterPort,
 } from '../push/router.js';
-import { REPAIR_REJECTED_SUBJECTS } from './repair.js';
-import type { AppRuntime } from './runtime.js';
-import type { AppSessionController as AppSession } from './session.js';
-import { resolveShellInputs } from './shell-inputs.js';
-import { createStaffControls } from './staff.js';
-import type { UserWorkspace } from '../state/user-workspaces.js';
+import { REPAIR_REJECTED_SUBJECTS } from '@bolusi/device/bootstrap/repair';
+import type { AppRuntime } from '@bolusi/device/bootstrap/runtime';
+import type { AppSessionController as AppSession } from '@bolusi/device/bootstrap/session';
+import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
+import { createStaffControls } from '@bolusi/device/bootstrap/staff';
+import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import {
   NO_SYNC_STATUS_READS,
   readSyncStatusRows,
   type SyncStatusReads,
-} from './sync-status-reads.js';
+} from '@bolusi/device/bootstrap/sync-status-reads';
 import { useCaptureHost, type CapturePlatform } from '../media/CaptureHost.js';
 import { useSignatureHost } from '../media/SignatureHost.js';
-import type { SyncClient } from './sync-client.js';
-import type { AppStatePort } from './triggers.js';
-import { createIdleTicker } from '../session/idle-ticker.js';
-import { consoleDiagnostics } from '../ports/diagnostics.js';
-import type { MediaClient } from '../media/client.js';
+import type { SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import type { AppStatePort } from '@bolusi/device/bootstrap/triggers';
+import { createIdleTicker } from '@bolusi/device/session/idle-ticker';
+import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
+import type { MediaClient } from '@bolusi/device/media/client';
 import type {
   CommandIdentity,
   PinVerifierUploadPort,

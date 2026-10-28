@@ -59,18 +59,22 @@ import {
   type AeadCipher,
   type ClientDb,
   type DbDriverFactory,
+  type DbKeyStore,
 } from '@bolusi/db-client';
-
-import type { SecureStoreDbKeyStore } from '../ports/db-keystore.js';
 
 import { assertDatabaseKeyBinding } from './db-identity.js';
 import { CLIENT_MODULES } from './modules.js';
+
+/** The database-key store a boot needs: read the key, and mint it once on a first boot. */
+export interface BootDbKeyStore extends DbKeyStore {
+  ensureDatabaseEncryptionKey(): Promise<string>;
+}
 
 export interface BootstrapDeps {
   /** op-sqlite on device, better-sqlite3 in CI. See the header. */
   readonly driverFactory: DbDriverFactory;
   /** The database-key surface (security-guide §6.4) — feeds the at-rest column cipher (D22). */
-  readonly keyStore: SecureStoreDbKeyStore;
+  readonly keyStore: BootDbKeyStore;
   readonly crypto: CryptoPort;
   /**
    * The AES-256-GCM primitive backing at-rest column encryption (D22). Device binds quick-crypto

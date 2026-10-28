@@ -58,8 +58,8 @@ vi.mock('expo-secure-store', () => {
 
 import * as SecureStore from 'expo-secure-store';
 
-import { bootstrap, type Bootstrapped } from './bootstrap.js';
-import { createAppRuntime, type AppRuntimeDeps } from './runtime.js';
+import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import { createAppRuntime, type AppRuntimeDeps } from '@bolusi/device/bootstrap/runtime';
 import { SecureStoreDbKeyStore } from '../ports/db-keystore.js';
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 

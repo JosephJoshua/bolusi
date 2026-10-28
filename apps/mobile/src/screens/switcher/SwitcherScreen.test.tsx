@@ -15,7 +15,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { fire, render } from '../../../../../packages/ui/test/render.js';
 
 import { SwitcherScreen } from './SwitcherScreen.js';
-import type { SwitcherState, SwitcherUser } from './model.js';
+import type { SwitcherState, SwitcherUser } from '@bolusi/device/models/switcher/model';
 
 const USER: SwitcherUser = {
   id: 'u-siti',

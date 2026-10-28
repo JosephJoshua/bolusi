@@ -30,7 +30,7 @@ vi.mock('expo-location', () => ({
 }));
 
 import App, { type AppProps } from '../App.js';
-import type { PinTargetUser } from '../src/screens/pin/pin-target.js';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { render, type RenderResult } from '../../../packages/ui/test/render.js';
 import {
   DEMO_DEVICE_INFO,

@@ -9,7 +9,12 @@ import React from 'react';
 import { describe, expect, test } from 'vitest';
 
 import { renderZone, type ZoneRenderers } from './RootNavigator.js';
-import { resolveZone, type DeviceStatus, type ShellRoute, type Zone } from './zone.js';
+import {
+  resolveZone,
+  type DeviceStatus,
+  type ShellRoute,
+  type Zone,
+} from '@bolusi/device/navigation/zone';
 
 /** Stub renderers that record which arm ran, so a wrong-arm bug is visible, not just non-blank. */
 function renderers(seen: string[]): ZoneRenderers {

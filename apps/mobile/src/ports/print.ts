@@ -5,7 +5,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
-import type { PrintPlatform } from '../bootstrap/repair-printing.js';
+import type { PrintPlatform } from '@bolusi/device/bootstrap/repair-printing';
 import type { SlipOutput } from '@bolusi/modules/repair/screens';
 
 /** expo-print sizes the page in points (72 per inch). The HTML's own @page rule matches it. */

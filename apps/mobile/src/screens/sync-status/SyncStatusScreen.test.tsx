@@ -32,7 +32,7 @@ import {
   type RejectedOpRow,
   type SyncStatusInput,
   type SyncTitleState,
-} from './model.js';
+} from '@bolusi/device/models/sync-status/model';
 
 const NOW = 1_700_000_000_000;
 

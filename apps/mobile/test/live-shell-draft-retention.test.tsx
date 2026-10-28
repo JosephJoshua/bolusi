@@ -66,7 +66,7 @@ vi.mock('expo-location', () => ({
 import * as SecureStore from 'expo-secure-store';
 
 import { fire, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
-import type { AppSessionController } from '../src/bootstrap/session.js';
+import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 import {
   advanceableClock,
   bootFixture,

@@ -28,7 +28,7 @@ import { notesModule } from '@bolusi/modules/notes';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
-import { insertMediaItem } from '../src/media/queue.js';
+import { insertMediaItem } from '@bolusi/device/media/queue';
 
 import {
   bootFixture,

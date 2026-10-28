@@ -7,15 +7,15 @@
  */
 import type { CommandIdentity } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
-import { REPAIR_TICKET_ENTITY } from '@bolusi/modules/repair';
-import { tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { REPAIR_TICKET_ENTITY, tn } from '@bolusi/modules/repair';
+import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { PhotoCapture } from '@bolusi/modules/screen-kit';
 import type { Kysely } from 'kysely';
 
 import type { MediaClient } from '../media/client.js';
 import type { GalleryPort } from '../media/import.js';
 import { createPhotoSharer, type SharePlatform } from '../media/share.js';
-import { createRepairRuntime, type RepairMediaSeams } from '../screens/repair/runtime-adapter.js';
+import { createRepairRuntime, type RepairMediaSeams } from '../models/repair/runtime-adapter.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { notesMediaSeamsFor } from './notes.js';

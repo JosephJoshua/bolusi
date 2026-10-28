@@ -26,7 +26,7 @@ import {
   writeMeta,
 } from '@bolusi/core';
 
-import type { DeviceInfo } from '../screens/settings/model.js';
+import type { DeviceInfo } from '../models/settings/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 

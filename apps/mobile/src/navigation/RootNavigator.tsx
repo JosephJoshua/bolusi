@@ -13,7 +13,7 @@
  */
 import type { ReactElement } from 'react';
 
-import type { Zone } from './zone.js';
+import type { Zone } from '@bolusi/device/navigation/zone';
 
 export interface ZoneRenderers {
   readonly enrollment: (revoked: boolean) => ReactElement;

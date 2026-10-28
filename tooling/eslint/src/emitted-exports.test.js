@@ -350,13 +350,21 @@ describe('the whole tree emits every type it promises (task 57)', () => {
     expect(report, 'emitted .d.ts re-exports a type its package never emitted').toEqual([]);
   });
 
+  // A subpath pattern (`./dist/*.js`) promises files of that shape: at least one must be emitted.
+  const targetExists = (dir, target) => {
+    if (!target.includes('*')) return existsSync(resolve(dir, target));
+    const [prefix, suffix] = target.split('*');
+    const base = resolve(dir, prefix);
+    return existsSync(base) && walkFiles(base, (file) => file.endsWith(suffix)).length > 0;
+  };
+
   test('C) every package.json exports/types/main/module target exists on disk', () => {
     let targetsChecked = 0;
     const missing = [];
     for (const { dir, pkg } of workspaces) {
       for (const target of surfaceTargets(pkg)) {
         targetsChecked += 1;
-        if (!existsSync(resolve(dir, target))) {
+        if (!targetExists(dir, target)) {
           missing.push(`${pkg.name}: ${target}`);
         }
       }

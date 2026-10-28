@@ -42,7 +42,7 @@ import {
 } from '@bolusi/test-support';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-import type { LoginResult } from '../screens/enrollment/model.js';
+import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 
 vi.mock('expo-secure-store', () => {
   const store = new Map<string, string>();
@@ -62,9 +62,9 @@ vi.mock('expo-secure-store', () => {
 
 import * as SecureStore from 'expo-secure-store';
 
-import { bootstrap, type Bootstrapped } from './bootstrap.js';
-import { readDeviceInfo } from './device-info.js';
-import { createAppEnrollment, type EnrollmentPlatform } from './enrollment.js';
+import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import { readDeviceInfo } from '@bolusi/device/bootstrap/device-info';
+import { createAppEnrollment, type EnrollmentPlatform } from '@bolusi/device/bootstrap/enrollment';
 import { SecureStoreKeyStore } from '../ports/keystore.js';
 import { SecureStoreDbKeyStore } from '../ports/db-keystore.js';
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';

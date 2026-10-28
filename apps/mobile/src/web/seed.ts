@@ -26,11 +26,11 @@ import type { PinAttemptRow, SyncState } from '@bolusi/core';
 import type { NoteRow } from '@bolusi/modules/notes';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
-import type { LoginResult } from '../screens/enrollment/model.js';
-import type { DeviceInfo } from '../screens/settings/model.js';
-import type { RejectedOpRow, SyncStatusInput } from '../screens/sync-status/model.js';
-import type { SwitcherUser } from '../screens/switcher/model.js';
-import type { EnrollmentController } from '../bootstrap/enrollment.js';
+import type { LoginResult } from '@bolusi/device/models/enrollment/model';
+import type { DeviceInfo } from '@bolusi/device/models/settings/model';
+import type { RejectedOpRow, SyncStatusInput } from '@bolusi/device/models/sync-status/model';
+import type { SwitcherUser } from '@bolusi/device/models/switcher/model';
+import type { EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 
 /**
  * A FIXED clock instant for every timestamp the harness renders. Screenshots must be byte-stable

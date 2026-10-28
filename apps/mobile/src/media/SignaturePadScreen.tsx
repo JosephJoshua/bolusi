@@ -49,7 +49,7 @@ import {
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { PadSize, SignaturePoint, SignatureStroke } from './signature-png.js';
+import type { PadSize, SignaturePoint, SignatureStroke } from '@bolusi/device/media/signature-png';
 
 export type SignaturePadState =
   | { readonly kind: 'loading' }

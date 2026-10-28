@@ -43,13 +43,16 @@ vi.mock('expo-secure-store', () => ({
 
 import * as SecureStore from 'expo-secure-store';
 
-import { bootstrap, type Bootstrapped } from '../src/bootstrap/bootstrap.js';
-import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/bootstrap/recovery.js';
+import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import {
+  bootWithLocalRecovery,
+  isUnrecoverableLocalDbError,
+} from '@bolusi/device/bootstrap/recovery';
 import {
   assertDatabaseKeyBinding,
   DB_CIPHER_KEY_TAG_META_KEY,
   ForeignDatabaseError,
-} from '../src/bootstrap/db-identity.js';
+} from '@bolusi/device/bootstrap/db-identity';
 import { DB_ENCRYPTION_KEY, SecureStoreDbKeyStore } from '../src/ports/db-keystore.js';
 import { openBetterSqlite3Driver } from './better-sqlite3-driver.js';
 import { nodeColumnAead } from '@bolusi/test-support';

@@ -222,6 +222,9 @@ importers:
       '@bolusi/db-client':
         specifier: workspace:*
         version: link:../../packages/db-client
+      '@bolusi/device':
+        specifier: workspace:*
+        version: link:../../packages/device
       '@bolusi/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -536,6 +539,43 @@ importers:
       kysely-ctl:
         specifier: 'catalog:'
         version: 0.21.0(kysely@0.29.3)
+
+  packages/device:
+    dependencies:
+      '@bolusi/core':
+        specifier: workspace:*
+        version: link:../core
+      '@bolusi/db-client':
+        specifier: workspace:*
+        version: link:../db-client
+      '@bolusi/i18n':
+        specifier: workspace:*
+        version: link:../i18n
+      '@bolusi/modules':
+        specifier: workspace:*
+        version: link:../modules
+      '@bolusi/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      kysely:
+        specifier: 'catalog:'
+        version: 0.29.3
+    devDependencies:
+      '@bolusi/sqlite-test-driver':
+        specifier: workspace:*
+        version: link:../sqlite-test-driver
+      '@bolusi/test-support':
+        specifier: workspace:*
+        version: link:../test-support
+      '@bolusi/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@bolusi/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
 
   packages/harness:
     dependencies:
@@ -7629,7 +7669,7 @@ snapshots:
       '@jest/schemas': 29.6.3
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.4
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
@@ -8368,13 +8408,13 @@ snapshots:
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       '@types/ssh2': 1.15.5
 
   '@types/dockerode@4.0.1':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       '@types/ssh2': 1.15.5
 
   '@types/emscripten@1.41.5': {}
@@ -8441,11 +8481,11 @@ snapshots:
 
   '@types/ssh2-streams@0.1.13':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
 
   '@types/ssh2@0.5.52':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       '@types/ssh2-streams': 0.1.13
 
   '@types/ssh2@1.15.5':
@@ -9127,7 +9167,7 @@ snapshots:
 
   chrome-launcher@0.15.2:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       escape-string-regexp: 4.0.0
       is-wsl: 2.2.0
       lighthouse-logger: 1.4.2
@@ -9136,7 +9176,7 @@ snapshots:
 
   chromium-edge-launcher@0.3.0:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       escape-string-regexp: 4.0.0
       is-wsl: 2.2.0
       lighthouse-logger: 1.4.2
@@ -10450,7 +10490,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -10467,7 +10507,7 @@ snapshots:
 
   jest-worker@29.7.0:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       jest-util: 29.7.0
       merge-stream: 2.0.0
       supports-color: 8.1.1
@@ -11441,7 +11481,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 22.20.1
+      '@types/node': 24.19.2
       long: 5.3.2
 
   pump@3.0.4:

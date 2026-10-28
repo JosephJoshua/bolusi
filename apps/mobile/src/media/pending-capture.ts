@@ -4,7 +4,7 @@
 import type { CapturedMedia } from '@bolusi/modules/screen-kit';
 import { useCallback, useEffect, useRef } from 'react';
 
-import type { CaptureIdentity } from './capture.js';
+import type { CaptureIdentity } from '@bolusi/device/media/capture';
 
 export interface PendingCapture {
   /** Start a capture for the acting user. Rejects when one is already open. */

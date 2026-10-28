@@ -33,7 +33,7 @@ vi.mock('expo-location', () => ({
   watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
 }));
 
-import { bootOncePerRealm } from '../src/bootstrap/bootstrap.js';
+import { bootOncePerRealm } from '@bolusi/device/bootstrap/bootstrap';
 import { Root, type RootProps } from '../src/bootstrap/Root.js';
 import {
   bootAt,

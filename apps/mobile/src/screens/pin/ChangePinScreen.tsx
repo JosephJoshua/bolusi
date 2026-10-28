@@ -27,7 +27,7 @@ import {
   changePinReducer,
   changePromptKey,
   type ChangePinPhase,
-} from './change-pin.model.js';
+} from '@bolusi/device/models/pin/change-pin.model';
 import { PinEntry, type PinEntryPerson } from './PinEntry.js';
 
 export interface ChangePinScreenProps {

@@ -8,7 +8,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
 
-import type { PinTargetUser } from './pin-target.js';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { StaffPinScreen, type StaffPinScreenProps } from './StaffPinScreen.js';
 
 const OWNER = 'user-owner';

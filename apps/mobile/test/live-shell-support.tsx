@@ -34,13 +34,13 @@ import {
 import type { SignedOperation } from '@bolusi/schemas';
 import { act } from 'react';
 
-import { bootstrap, type Bootstrapped } from '../src/bootstrap/bootstrap.js';
-import { createAppRuntime, type AppRuntime } from '../src/bootstrap/runtime.js';
-import { createSessionNotesRuntime, notesMediaSeamsFor } from '../src/bootstrap/notes.js';
-import { createAppSession, type AppSessionController } from '../src/bootstrap/session.js';
+import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import { createAppRuntime, type AppRuntime } from '@bolusi/device/bootstrap/runtime';
+import { createSessionNotesRuntime, notesMediaSeamsFor } from '@bolusi/device/bootstrap/notes';
+import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
 import { Root, type RootProps } from '../src/bootstrap/Root.js';
-import type { AppEnrollment } from '../src/bootstrap/enrollment.js';
-import type { AppStatePort, AppStatus } from '../src/bootstrap/triggers.js';
+import type { AppEnrollment } from '@bolusi/device/bootstrap/enrollment';
+import type { AppStatePort, AppStatus } from '@bolusi/device/bootstrap/triggers';
 import { openBetterSqlite3Driver } from './better-sqlite3-driver.js';
 import { render, fire, type RenderResult } from '../../../packages/ui/test/render.js';
 import { ensureNotesCatalog } from './notes-support.js';

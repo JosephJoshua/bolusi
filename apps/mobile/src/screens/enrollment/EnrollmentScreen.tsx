@@ -45,7 +45,7 @@ import {
   failureKey,
   type EnrollmentFailure,
   type EnrollmentState,
-} from './model.js';
+} from '@bolusi/device/models/enrollment/model';
 // `needsDiscardConfirm` is deliberately NOT used here: whether a back press needs the ConfirmSheet
 // is the SHELL's question (hardware back and header back are one action — §8.1), so the root asks the
 // model and passes the answer down as `discardPrompt`. Deciding it inside this component would give
