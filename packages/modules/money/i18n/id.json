@@ -28,7 +28,9 @@
     "notThisStore": "Ini milik toko lain.",
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
-    "countSettled": "Selisih hitungan kas ini sudah diselesaikan."
+    "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
+    "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
+    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan."
   },
   "method": {
     "cash": "Tunai"
@@ -49,5 +51,118 @@
     },
     "method": "Metode pembayaran",
     "currency": "Rp"
+  },
+  "kas": {
+    "title": "Kas",
+    "expected": "Seharusnya di laci",
+    "notCounted": "Belum tutup kas hari ini",
+    "counted": "Sudah tutup kas pukul {time}",
+    "count": "Tutup kas",
+    "move": "Uang keluar/masuk",
+    "waitingOwner": "Menunggu pemilik",
+    "inToday": "Masuk hari ini",
+    "nothingIn": "Belum ada uang masuk hari ini.",
+    "total": "Total",
+    "movesToday": "Keluar/masuk laci hari ini",
+    "owed": "Belum lunas",
+    "since": "Sejak {date}",
+    "owedBack": "Lebih bayar",
+    "owedBackHint": "Uang ini perlu dikembalikan ke pelanggan.",
+    "exact": "Pas",
+    "short": "Kurang {amount}",
+    "over": "Lebih {amount}",
+    "difference": "Selisih kas",
+    "adjusted": "Selisih kas diselesaikan"
+  },
+  "moveKind": {
+    "withdrawal": "Setor ke pemilik",
+    "expense": "Biaya toko",
+    "deposit": "Setor ke bank",
+    "float": "Tambah uang kembalian"
+  },
+  "count": {
+    "counted": "Uang di laci",
+    "difference": "Selisih",
+    "note": "Catatan (opsional)",
+    "save": "Simpan hitungan",
+    "hint": "Hitung uang di laci, lalu isi jumlahnya."
+  },
+  "move": {
+    "kind": "Jenis",
+    "account": "Ke rekening",
+    "reason": "Keterangan",
+    "save": "Simpan",
+    "hintAmount": "Isi jumlahnya.",
+    "hintReason": "Isi keterangannya.",
+    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya."
+  },
+  "settle": {
+    "title": "Selesaikan selisih",
+    "countedBy": "Dihitung {name}, {time}",
+    "reason": "Alasan",
+    "save": "Selesaikan selisih",
+    "hint": "Isi alasannya.",
+    "closed": "Selisih ini sudah diselesaikan atau ada hitungan yang lebih baru."
+  },
+  "receive": {
+    "title": "Terima pembayaran",
+    "owed": "Belum dibayar",
+    "save": "Terima {amount}",
+    "saveEmpty": "Terima pembayaran",
+    "hint": "Isi jumlah yang dibayar, paling banyak sisa tagihannya."
+  },
+  "discard": {
+    "title": "Keluar tanpa menyimpan?",
+    "message": "Isian yang belum disimpan akan hilang.",
+    "confirm": "Keluar",
+    "keep": "Tetap di sini"
+  },
+  "history": {
+    "open": "Riwayat",
+    "title": "Riwayat kas",
+    "today": "Hari ini",
+    "previousDay": "Sebelumnya",
+    "nextDay": "Berikutnya",
+    "none": "Belum ada catatan di hari ini.",
+    "voided": "Dibatalkan: {reason}",
+    "more": "Muat lagi"
+  },
+  "void": {
+    "title": "Batalkan pembayaran",
+    "save": "Batalkan pembayaran",
+    "hint": "Isi alasannya.",
+    "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
+    "reason": "Alasan"
+  },
+  "kind": {
+    "qris": "QRIS",
+    "edc": "EDC",
+    "transfer": "Transfer bank"
+  },
+  "methods": {
+    "title": "Metode pembayaran",
+    "summary": "QRIS, EDC, dan rekening transfer",
+    "add": "Tambah metode",
+    "addTitle": "Tambah metode",
+    "editTitle": "Ubah metode",
+    "cashAlways": "Selalu ada",
+    "central": "Semua toko",
+    "inactive": "Tidak dipakai",
+    "none": "Belum ada QRIS, EDC, atau rekening.",
+    "noneHint": "Tambahkan supaya kasir bisa memilihnya saat menerima pembayaran.",
+    "kind": "Jenis",
+    "name": "Nama",
+    "namePlaceholder": "Contoh: QRIS BCA",
+    "nameRequired": "Isi namanya.",
+    "allStores": "Milik pusat",
+    "allStoresCaption": "Bisa dipakai di semua toko atau toko yang dipilih.",
+    "active": "Dipakai",
+    "activeCaption": "Kalau dimatikan, kasir tidak bisa memilihnya lagi. Catatan lamanya tetap ada.",
+    "save": "Simpan",
+    "saved": "{name} disimpan.",
+    "usedAt": "Dipakai di",
+    "someStores": "Pilih toko",
+    "storeCount": "{count} toko",
+    "storeRequired": "Pilih paling sedikit satu toko."
   }
 }

@@ -37,7 +37,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { NoteRow } from '../queries.js';
 
 import { tn } from './i18n.js';
-import { hasRejectedOp } from './model.js';
+import { rejectedCount } from './model.js';
 import { thumbnailRefFor } from '../media-ref.js';
 
 import { useCommand, useQuery, useThumbnail, type NoteSyncStatuses } from './runtime.js';
@@ -83,7 +83,7 @@ export function NoteDetail({
   );
 
   const note = query.status === 'ready' ? query.data.note : undefined;
-  const rejected = query.status === 'ready' && hasRejectedOp(query.data.statuses[noteId] ?? []);
+  const rejected = query.status === 'ready' ? rejectedCount(query.data.statuses[noteId] ?? []) : 0;
 
   // Hooks run unconditionally; the thumbnail loads only once a note with an attachment is in hand.
   // The ref carries the SIGNED sha256/mime when the note's op was v3 — that is what lets a note
@@ -109,10 +109,10 @@ export function NoteDetail({
       syncChip={syncChip}
       avatar={avatar}
       banner={
-        rejected ? (
+        rejected > 0 ? (
           <Banner
             variant="danger"
-            message={t('sync.rejected.banner', { count: 1 })}
+            message={t('sync.rejected.banner', { count: rejected })}
             onPress={onOpenSyncStatus}
             testID={`${testID}.rejectedBanner`}
           />

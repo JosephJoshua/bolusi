@@ -49,6 +49,8 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'accountKindChanged',
   'countNotFound',
   'countSettled',
+  'countSuperseded',
+  'differenceChanged',
 ] as const);
 const { refuse } = MONEY_REFUSALS;
 
@@ -135,6 +137,40 @@ export async function documentTotal(
     .where('documentId', '=', document.id)
     .executeTakeFirst();
   return Number(row?.total ?? 0);
+}
+
+/**
+ * What the book said was in the drawer when a count was made: the cash recorded before it, where a
+ * correction that settled an earlier count stands at that count's moment rather than its own. A
+ * count made before the owner settled the previous one, and synced after, so already includes it,
+ * whatever order the devices synced in. Counts order by time, then id, as the drawer lists them.
+ */
+export async function countExpected(
+  db: Db,
+  storeId: string,
+  count: { readonly id: string; readonly createdAt: number },
+): Promise<number> {
+  const row = await db
+    .selectFrom('moneyLines as l')
+    .innerJoin('moneyEntries as e', 'e.id', 'l.entryId')
+    .leftJoin('moneyEntries as c', (join) =>
+      join
+        .onRef('c.id', '=', 'e.relatedEntryId')
+        .on('e.kind', '=', 'cash_adjusted')
+        .on('c.kind', '=', 'cash_counted'),
+    )
+    .select(sql<string | number>`COALESCE(SUM(l.debit - l.credit), 0)`.as('balance'))
+    .where('l.storeId', '=', storeId)
+    .where('l.account', '=', CASH_ACCOUNT)
+    .where((eb) =>
+      eb.or([
+        eb.and([eb('c.id', 'is', null), eb('l.at', '<', count.createdAt)]),
+        eb('c.createdAt', '<', count.createdAt),
+        eb.and([eb('c.createdAt', '=', count.createdAt), eb('c.id', '<', count.id)]),
+      ]),
+    )
+    .executeTakeFirst();
+  return Number(row?.balance ?? 0);
 }
 
 /** What a document's customer paid through one account, less what went back through it. */
@@ -358,14 +394,14 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     await requireFreshEntry(db, op);
   };
 
-  /** An owner's adjustment settles a count of this store once, when it names one. */
+  /** An owner's adjustment settles this store's latest count once, when it names one. */
   const cashAdjustedRule: Rule = async (op, { db }) => {
-    const { countId } = payloadOf<{ countId: string | null }>(op);
+    const { amount, countId } = payloadOf<{ amount: number; countId: string | null }>(op);
     await requireFreshEntry(db, op);
     if (countId === null) return;
     const count = await db
       .selectFrom('moneyEntries')
-      .select('id')
+      .select(['id', 'amount', 'createdAt'])
       .where('id', '=', countId)
       .where('storeId', '=', storeOf(op))
       .where('kind', '=', 'cash_counted')
@@ -385,6 +421,35 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
       .executeTakeFirst();
     if (settled !== undefined) {
       throw refuse('countSettled', { details: { entityId: countId } });
+    }
+    // A later count found this difference again, since it was still in the book: only the latest
+    // count is settled, or the drawer would be corrected twice.
+    const later = await db
+      .selectFrom('moneyEntries')
+      .select('id')
+      .where('storeId', '=', storeOf(op))
+      .where('kind', '=', 'cash_counted')
+      // Newest first by time, then id, as the drawer lists them: two counts in one millisecond
+      // still have one latest.
+      .where((eb) =>
+        eb.or([
+          eb('createdAt', '>', count.createdAt),
+          eb.and([eb('createdAt', '=', count.createdAt), eb('id', '>', count.id)]),
+        ]),
+      )
+      .executeTakeFirst();
+    if (later !== undefined) {
+      throw refuse('countSuperseded', { details: { entityId: countId } });
+    }
+    // The correction is the difference as it stands: a payment from before the count that synced
+    // since changed it, and the owner settles what the count now shows.
+    const counted = Number(count.amount);
+    const expected = await countExpected(db, storeOf(op), {
+      id: count.id,
+      createdAt: Number(count.createdAt),
+    });
+    if (amount !== counted - expected) {
+      throw refuse('differenceChanged', { details: { entityId: countId } });
     }
   };
 

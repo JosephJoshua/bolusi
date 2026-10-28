@@ -13,6 +13,7 @@ import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
+import { demoMoneyLedger } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
@@ -81,6 +82,8 @@ export const DEMO_REPAIR_ROLES = {
       I.useParts,
       M.read,
       M.receive,
+      M.moveCash,
+      M.countCash,
     ],
   },
   technician: {
@@ -139,6 +142,13 @@ const DEMO_ACCOUNTS = [
   },
 ] as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
+
+/** The business's stores, for picking which ones share a central payment method. */
+const DEMO_STORES = [
+  { id: '01920000-0000-7000-8000-0000000005a1', name: 'Bolusi Jayapura' },
+  { id: '01920000-0000-7000-8000-0000000005a2', name: 'Bolusi Sorong' },
+  { id: '01920000-0000-7000-8000-0000000005a3', name: 'Bolusi Manokwari' },
+];
 
 /** The `window` key of the colleague hook `demoRepairRuntime` installs (browser tests only). */
 export const DEMO_COLLEAGUE_HOOK = '__repairDemoColleague';
@@ -465,6 +475,25 @@ function seedTickets(): TicketDetailRow[] {
       extraPhotos: [photoRow('before:m10'), photoRow('after:m11')],
       location: 'returned',
       returnedBy: 'u-siti',
+    }),
+    // Taken home last week before it was paid: on the Kas unpaid list.
+    ticket({
+      id: 't-9',
+      number: 'K7Q-0004',
+      customer: 'Yulianus Wenda',
+      phone: '0812-9988-7766',
+      brand: 'Samsung',
+      model: 'Galaxy A34',
+      color: 'Hitam',
+      complaint: 'Port cas longgar',
+      outcome: 'repaired',
+      technicianId: 'u-budi',
+      lines: [line('part', 'Konektor cas', 350_000), line('labour', 'Ganti konektor', 100_000)],
+      hoursAgo: 9 * 24,
+      readyHoursAgo: 7 * 24,
+      location: 'returned',
+      returnedBy: 'u-siti',
+      extraPhotos: [photoRow('before:m12'), photoRow('after:m13')],
     }),
   ].map(withTotals);
 }
@@ -839,10 +868,12 @@ export function demoRepairRuntime(
     const from = f['receivedFrom'] as number | undefined;
     const before = f['receivedBefore'] as number | undefined;
     const readyBefore = f['readyBefore'] as number | undefined;
+    const ids = f['ids'] as string[] | undefined;
     return tickets.filter(
       (t) =>
         (outcomes === undefined || outcomes.includes(t.outcome)) &&
         (f['location'] === undefined || t.location === f['location']) &&
+        (ids === undefined || ids.includes(t.id)) &&
         (f['technicianId'] === undefined || t.technicianId === f['technicianId']) &&
         (technicianIds === undefined
           ? f['unassigned'] !== true || t.technicianId === null
@@ -1316,6 +1347,20 @@ export function demoRepairRuntime(
     } as unknown as Pick<RepairRuntime, 'query'>),
   });
 
+  // A repaired phone that went home unpaid: the Kas unpaid list names its customer.
+  const unpaid = tickets.find((t) => t.id === 't-9');
+  const ledger = demoMoneyLedger(
+    {
+      now,
+      accounts: DEMO_ACCOUNTS,
+      actor: () => actor.userId,
+      debt:
+        unpaid === undefined
+          ? undefined
+          : { id: unpaid.id, label: unpaid.ticketNumber, amount: unpaid.quoteTotal },
+    },
+    notify,
+  );
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
     inventory,
@@ -1344,11 +1389,9 @@ export function demoRepairRuntime(
       return () => listeners.delete(listener);
     },
     ticketSyncStatuses: () => Promise.resolve({ 't-1': ['local'] }),
-    // The ledger as far as the screens read it: the store's methods and a servisan's payments.
+    // The ledger as the screens read it: the store's methods, a servisan's payments and the Kas.
     money: {
       query: (name: string, input: Input) => {
-        if (name === 'paymentAccounts')
-          return Promise.resolve({ rows: DEMO_ACCOUNTS, nextCursor: null });
         if (name === 'documentMoney') {
           const t = find(String(input['id']));
           const paid = t.downPayment ?? 0;
@@ -1357,12 +1400,13 @@ export function demoRepairRuntime(
             nextCursor: null,
           });
         }
-        return Promise.resolve({ rows: [], nextCursor: null });
+        return ledger.query(name, input);
       },
-      run: () => Promise.resolve(null),
+      run: (name: string, input: Input) => ledger.run(name, input),
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
+      stores: () => Promise.resolve(DEMO_STORES),
       get userId() {
         return actor.userId;
       },

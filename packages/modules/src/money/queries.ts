@@ -20,7 +20,7 @@ import {
   type EntryKind,
   type PaymentAccountKind,
 } from './constants.js';
-import { accountVisibleTo, centralStoreIds, documentBalance } from './rules.js';
+import { accountVisibleTo, centralStoreIds, countExpected, documentBalance } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
 
 type Qctx = QueryContext<MoneyDatabase>;
@@ -46,6 +46,11 @@ export const paymentAccountsInput = z
   .object({
     /** Settings list inactive accounts too; the payment step does not. */
     includeInactive: z.boolean().default(false),
+    /**
+     * The business owner's Settings: central methods given to other stores too, so they can give
+     * one back to this store. Ignored for anyone who cannot change central methods.
+     */
+    everyStore: z.boolean().default(false),
   })
   .strict();
 
@@ -54,6 +59,7 @@ async function paymentAccountsHandler(
   qctx: Qctx,
 ): Promise<QueryPage<PaymentAccountRow>> {
   const store = storeOf(qctx);
+  const everyStore = input.everyStore && qctx.hasPermission(MONEY_PERMISSION.manageCentralAccounts);
   let query = qctx.db
     .selectFrom('moneyAccounts')
     .selectAll()
@@ -72,7 +78,8 @@ async function paymentAccountsHandler(
     }))
     // Own accounts are this store's by the query; central ones only where they are shared.
     .filter(
-      (account) => !account.central || accountVisibleTo({ ...account, storeId: null }, store),
+      (account) =>
+        !account.central || everyStore || accountVisibleTo({ ...account, storeId: null }, store),
     );
   return { rows: accounts, nextCursor: null };
 }
@@ -218,14 +225,13 @@ export interface CashDrawer {
   readonly counts: readonly CashCountRow[];
 }
 
-async function cashBalanceBefore(qctx: Qctx, at: number | null): Promise<number> {
-  let query = qctx.db
+async function cashBalance(qctx: Qctx): Promise<number> {
+  const row = await qctx.db
     .selectFrom('moneyLines')
     .select(sql<string | number>`COALESCE(SUM(debit - credit), 0)`.as('balance'))
     .where('storeId', '=', storeOf(qctx))
-    .where('account', '=', CASH_ACCOUNT);
-  if (at !== null) query = query.where('at', '<', at);
-  const row = await query.executeTakeFirst();
+    .where('account', '=', CASH_ACCOUNT)
+    .executeTakeFirst();
   return Number(row?.balance ?? 0);
 }
 
@@ -267,7 +273,10 @@ async function cashDrawerHandler(
   const rows: CashCountRow[] = [];
   for (const count of counts) {
     const counted = Number(count.amount);
-    const expected = await cashBalanceBefore(qctx, Number(count.createdAt));
+    const expected = await countExpected(qctx.db, store, {
+      id: count.id,
+      createdAt: Number(count.createdAt),
+    });
     const settled = adjustments
       .filter((adjustment) => adjustment.relatedEntryId === count.id)
       .reduce((sum, adjustment) => sum + Number(adjustment.amount), 0);
@@ -283,7 +292,7 @@ async function cashDrawerHandler(
     });
   }
   return {
-    rows: [{ expected: await cashBalanceBefore(qctx, null), counts: rows }],
+    rows: [{ expected: await cashBalance(qctx), counts: rows }],
     nextCursor: null,
   };
 }

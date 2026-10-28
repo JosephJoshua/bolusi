@@ -68,6 +68,7 @@ import type { Handlers } from '../main/rpc.js';
 import { actingSession, actingStaffAdmin } from './acting.js';
 import type { CoreState, HandoffEvent, SessionView } from './api.js';
 import { createHandoffClient } from './handoff.js';
+import { initCoreI18n } from './i18n.js';
 import { nodeRealtimeSocket } from './websocket.js';
 
 /** The repair runtime the core builds for whoever is signed in. */
@@ -151,6 +152,7 @@ function warn(message: string, error: unknown): void {
 }
 
 export function createCoreHost(deps: CoreHostDeps): CoreHost {
+  initCoreI18n();
   const clock = deps.clock ?? systemClock;
   const timer = deps.timer ?? systemTimer;
   const crypto = nodeCryptoPort;
@@ -763,6 +765,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       untyped(repairFor(userId).money.query)(knownName(moneyModule.queries, name), input),
     'money.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).money.run)(knownName(moneyModule.commands, name), input),
+    'money.stores': (userId: string) => repairFor(userId).money.stores(),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),

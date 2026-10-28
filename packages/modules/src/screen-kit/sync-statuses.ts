@@ -13,7 +13,10 @@ export function statusesFor(
   return map[entityId] ?? [];
 }
 
-/** A rejected op is loud and never silent (05-operation-log §8): it drives the danger banner. */
-export function hasRejectedOp(statuses: readonly OperationSyncStatus[]): boolean {
-  return statuses.includes('rejected');
+/**
+ * How many of an entity's changes the server refused. A rejected op is loud and never silent
+ * (05-operation-log §8): any at all drives the danger banner, which says how many.
+ */
+export function rejectedCount(statuses: readonly OperationSyncStatus[]): number {
+  return statuses.filter((status) => status === 'rejected').length;
 }

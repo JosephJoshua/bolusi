@@ -197,6 +197,12 @@ export const DeviceBundleSchema = z
   .object({
     tenant: z.object({ id: zBundleId, name: zDisplayName }).strict(),
     store: z.object({ id: zBundleId, name: zDisplayName }).strict(),
+    // Every store of the business, by name: an owner picks which stores share a central payment
+    // method from any device. Optional so a device still applies a bundle from an older server.
+    stores: z
+      .array(z.object({ id: zBundleId, name: zDisplayName }).strict())
+      .max(500)
+      .optional(),
     // idleLockSeconds: integer seconds, NO range bound — the [60,3600] range is owned by the
     // device-side clamp (`applyBundle` → clampIdleLockSeconds), which swallows out-of-range values
     // rather than rejecting the bundle over them (§6.4). `.int()` only: the server always truncates.

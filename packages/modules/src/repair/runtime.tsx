@@ -9,7 +9,7 @@ import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
-import type { MoneyModule } from '../money/manifest.js';
+import type { MoneyPort } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
@@ -113,7 +113,7 @@ export interface RepairTechnician {
 
 export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSource {
   /** The money ledger: payment methods, a servisan's payments, and taking money at handover. */
-  readonly money: ModulePort<MoneyModule>;
+  readonly money: MoneyPort;
   /** Op sync statuses per ticket id (design-system §3.5); an absent ticket is all-synced. */
   ticketSyncStatuses(ticketIds: readonly string[]): Promise<EntitySyncStatuses>;
   /** Active colleagues who hold `repair.work` in this store, by name. */
@@ -276,6 +276,30 @@ export function useDownPaymentMethod(
 }
 
 /** A model photo's uri once loaded; null while loading or when there is none to show. */
+/**
+ * Who each servisan is for, by id: the Kas lists name the customer, not only the servisan number
+ * money records carry (their labels never hold a name). Someone who cannot read repairs gets none.
+ */
+export async function servisanCustomers(
+  port: ModulePort<typeof repairModule>,
+  documents: readonly { readonly kind: string; readonly id: string }[],
+): Promise<ReadonlyMap<string, string>> {
+  const ids = [
+    ...new Set(documents.filter((d) => d.kind === REPAIR_DOCUMENT_KIND).map((d) => d.id)),
+  ];
+  const names = new Map<string, string>();
+  for (let start = 0; start < ids.length; start += SERVISAN_PAGE) {
+    const page = ids.slice(start, start + SERVISAN_PAGE);
+    const result = await port
+      .query('listTickets', { filter: { ids: page }, limit: page.length })
+      .catch(() => null);
+    if (result === null) return names;
+    for (const row of result.rows) names.set(row.id, row.customerName);
+  }
+  return names;
+}
+const SERVISAN_PAGE = 100;
+
 export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
   const load = useRepairRuntime().loadModelPhoto;
   const loadRef = useRef(load);

@@ -77,6 +77,13 @@ export async function buildBundle(
     .where('id', '=', storeId)
     .executeTakeFirstOrThrow();
 
+  const stores = await db
+    .selectFrom('stores')
+    .select(['id', 'name'])
+    .where('tenantId', '=', tenantId)
+    .orderBy('id')
+    .execute();
+
   const storeUsers = await db
     .selectFrom('userStores')
     .select('userId')
@@ -159,6 +166,7 @@ export async function buildBundle(
   return {
     tenant: { id: tenant.id, name: tenant.name },
     store: { id: store.id, name: store.name },
+    stores: stores.map((row) => ({ id: row.id, name: row.name })),
     settings: { idleLockSeconds: readIdleLock(tenant.configuration) },
     users: bundleUsers,
     rolesSnapshot: roles
