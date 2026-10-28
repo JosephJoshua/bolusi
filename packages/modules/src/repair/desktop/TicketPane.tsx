@@ -83,15 +83,8 @@ import {
 } from '../runtime.js';
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
-import {
-  ActionError,
-  CatalogPhoto,
-  DeviceSpecs,
-  QueryPanel,
-  StatusChip,
-  photoLabels,
-  usePhotoState,
-} from './parts.js';
+import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
+import { CatalogPhoto, DeviceSpecs, StatusChip, photoLabels, usePhotoState } from './parts.js';
 import {
   AssignDialog,
   CancelDialog,
