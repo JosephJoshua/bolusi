@@ -10,6 +10,7 @@ import {
   Button,
   Icon,
   LoadingState,
+  RollingText,
   border,
   color,
   radius,
@@ -84,9 +85,13 @@ export function KasBoard({
       ) : drawerData === null ? null : (
         <View style={styles.drawer} testID={`${testID}.drawer`}>
           <Text style={styles.label}>{tm('money.kas.expected')}</Text>
-          <Text style={styles.expected} testID={`${testID}.expected`}>
+          <RollingText
+            value={drawerData.expected}
+            style={styles.expected}
+            testID={`${testID}.expected`}
+          >
             {formatMoney(drawerData.expected)}
-          </Text>
+          </RollingText>
           <Text style={styles.muted} testID={`${testID}.lastCount`}>
             {counted === null
               ? tm('money.kas.notCounted')

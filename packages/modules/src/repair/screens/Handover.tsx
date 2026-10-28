@@ -10,6 +10,7 @@ import { formatMoney } from '@bolusi/i18n';
 import {
   Card,
   PhotoSlot,
+  RollingText,
   TextButton,
   TextInput,
   ToggleChip,
@@ -211,12 +212,13 @@ export function Handover({
                 <Text style={[styles.totalLabel, repairStyles.rowText]}>
                   {tn(shown.outcome === 'cancelled' ? 'repair.cancel.fee' : 'repair.price.total')}
                 </Text>
-                <Text
+                <RollingText
+                  value={amountOwed(shown)}
                   style={[repairStyles.heading, repairStyles.rowValue]}
                   testID={`${testID}.total`}
                 >
                   {formatMoney(amountOwed(shown))}
-                </Text>
+                </RollingText>
               </View>
               {shown.outcome === 'cancelled' ? (
                 <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>

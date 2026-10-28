@@ -41,7 +41,7 @@ export function useReducedMotion(): boolean {
   return useSyncExternalStore(subscribe, () => reduced);
 }
 
-export type EntranceFrom = 'below' | 'end' | 'start' | 'none';
+export type EntranceFrom = 'below' | 'above' | 'end' | 'start' | 'none';
 
 export interface EntranceOptions {
   /** Where it arrives from; `none` only fades. */
@@ -79,11 +79,12 @@ function arrivalStyle(
   distance: number,
 ): Animated.WithAnimatedValue<object> {
   if (from === 'none') return { opacity: progress };
-  const offset = from === 'start' ? -distance : distance;
+  const offset = from === 'start' || from === 'above' ? -distance : distance;
   const travel = progress.interpolate({ inputRange: [0, 1], outputRange: [offset, 0] });
+  const vertical = from === 'below' || from === 'above';
   return {
     opacity: progress,
-    transform: [from === 'below' ? { translateY: travel } : { translateX: travel }],
+    transform: [vertical ? { translateY: travel } : { translateX: travel }],
   };
 }
 
@@ -176,6 +177,50 @@ export function useStamp(): Animated.WithAnimatedValue<object> {
     }),
     [progress],
   );
+}
+
+export interface Wipe {
+  /** For the window, which clips (`overflow: 'hidden'`). */
+  readonly window: Animated.WithAnimatedValue<object>;
+  /** For what is inside it, which stays put while the window opens over it. */
+  readonly content: Animated.WithAnimatedValue<object>;
+}
+
+/**
+ * Reveals something `width` wide from its leading edge, as if a pen drew it: a tick being made.
+ * The window slides in while its content slides the opposite way, so only transforms move. Plays
+ * once on mount, after `delay`.
+ */
+export function useWipe(width: number, delay = 0): Wipe {
+  const still = useReducedMotion();
+  const progress = useRef(new Animated.Value(still ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (still) {
+      progress.setValue(1);
+      return;
+    }
+    const animation = Animated.sequence([
+      Animated.delay(delay),
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: motion.duration.slow,
+        easing: easeEnter,
+        useNativeDriver: NATIVE_DRIVER,
+      }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [progress, still, delay]);
+
+  return useMemo(() => {
+    const shift = (from: number) =>
+      progress.interpolate({ inputRange: [0, 1], outputRange: [from, 0] });
+    return {
+      window: { overflow: 'hidden', transform: [{ translateX: shift(-width) }] },
+      content: { transform: [{ translateX: shift(width) }] },
+    };
+  }, [progress, width]);
 }
 
 export interface PressScale {

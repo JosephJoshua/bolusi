@@ -14,6 +14,7 @@ import {
   PatternPad,
   PhotoTile,
   PhotoViewer,
+  RollingText,
   Section,
   StatePanel,
   Timeline,
@@ -638,7 +639,7 @@ export function TicketPane({
             className={`tabular ${cancelled ? 'text-small text-text-muted line-through' : 'text-title font-bold text-text'}`}
             data-testid="repair.desk.ticket.total"
           >
-            {formatMoney(row.quoteTotal)}
+            <RollingText value={row.quoteTotal}>{formatMoney(row.quoteTotal)}</RollingText>
           </p>
         </div>
         {cancelled ? (
@@ -1220,11 +1221,17 @@ function DownPaymentLines({
             </Tooltip>
           ) : null}
         </dt>
-        <dd className="tabular">{formatMoney(-downPayment)}</dd>
+        <dd className="tabular">
+          <RollingText value={downPayment}>{formatMoney(-downPayment)}</RollingText>
+        </dd>
       </div>
       <div className="flex justify-between gap-4 text-body font-semibold text-text">
         <dt>{tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}</dt>
-        <dd className="tabular">{formatMoney(balance.amount)}</dd>
+        <dd className="tabular">
+          <RollingText value={balance.kind === 'due' ? balance.amount : -balance.amount}>
+            {formatMoney(balance.amount)}
+          </RollingText>
+        </dd>
       </div>
     </dl>
   );

@@ -18,9 +18,9 @@
  * placeholder) — must NOT go through @bolusi/i18n: the catalog is for shipping UI and is guarded by
  * the id/en parity gate (07-i18n §7.3), which pollution with dev copy would corrupt. The REAL screens
  * this harness renders resolve every user-visible label through the catalog, unchanged. */
-import { getLocale, setLocale, type Locale } from '@bolusi/i18n';
+import { formatMoney, getLocale, setLocale, type Locale } from '@bolusi/i18n';
 import type { PinAttemptRow } from '@bolusi/core';
-import { border, color, space, type } from '@bolusi/ui';
+import { OutcomeState, RollingText, border, color, space, type } from '@bolusi/ui';
 import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -124,6 +124,30 @@ function BrandIntroDemo(): React.JSX.Element {
         <Text style={{ ...type.title, color: color.text }}>Pilih siapa yang pakai</Text>
       </View>
       <BrandIntro ready={ready} />
+    </View>
+  );
+}
+
+/** The payment moments: the paid tick drawing itself, then the balance rolling down to Rp 0. */
+function PaidDemo(): React.JSX.Element {
+  const [balance, setBalance] = useState(250_000);
+  useEffect(() => {
+    const timer = setTimeout(() => setBalance(0), 600);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <View style={{ padding: space.lg, gap: space.lg }}>
+      <OutcomeState tone="success" icon="success" title="Pembayaran diterima" />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ ...type.body, color: color.text }}>Sisa</Text>
+        <RollingText
+          value={balance}
+          style={{ ...type.heading, color: color.text }}
+          testID="paid.balance"
+        >
+          {formatMoney(balance)}
+        </RollingText>
+      </View>
     </View>
   );
 }
@@ -763,6 +787,17 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => (
       <ApproxFrame screen="brand-intro" state="play">
         <BrandIntroDemo />
+      </ApproxFrame>
+    ),
+  },
+
+  // The paid tick and the rolling balance, to watch frame by frame.
+  {
+    screen: 'paid',
+    state: 'play',
+    render: () => (
+      <ApproxFrame screen="paid" state="play">
+        <PaidDemo />
       </ApproxFrame>
     ),
   },

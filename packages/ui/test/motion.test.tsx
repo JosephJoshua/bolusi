@@ -10,6 +10,7 @@ import type { ReactElement } from 'react';
 import { Button } from '../src/components/Button.js';
 import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
 import { OutcomeState } from '../src/components/OutcomeState.js';
+import { RollingText } from '../src/components/RollingText.js';
 import { Sheet } from '../src/components/Sheet.js';
 import { Toast } from '../src/components/Toast.js';
 import { AppShell } from '../src/shell/AppShell.js';
@@ -236,4 +237,43 @@ describe('step transitions', () => {
     r.rerender(<Probe step={0} />);
     expect(seen).toEqual([null, 'end', 'end', 'start']);
   });
+});
+
+describe('rolling figures', () => {
+  test('the first value is just there; a new one rolls in and lands in place', () => {
+    const r = render(
+      <RollingText value={100} testID="fig">
+        Rp 100
+      </RollingText>,
+    );
+    expect(r.styleOf('fig')['transform']).toBeUndefined();
+    r.rerender(
+      <RollingText value={50} testID="fig">
+        Rp 50
+      </RollingText>,
+    );
+    expect(transformOf(r.styleOf('fig'), 'translateY')).toBe(0);
+    expect(valueOf(r.styleOf('fig')['opacity'])).toBe(1);
+  });
+
+  test('a figure being typed changes without rolling', () => {
+    const r = render(
+      <RollingText value={1} still testID="fig">
+        1
+      </RollingText>,
+    );
+    r.rerender(
+      <RollingText value={12} still testID="fig">
+        12
+      </RollingText>,
+    );
+    expect(r.styleOf('fig')['transform']).toBeUndefined();
+  });
+});
+
+test('a success outcome draws its tick and it ends fully shown', () => {
+  const r = render(<OutcomeState tone="success" icon="success" title="Lunas" />);
+  const window = flat(r.get('ui.outcomeState.tick').props['style']);
+  expect(window['overflow']).toBe('hidden');
+  expect(transformOf(window, 'translateX')).toBe(0);
 });

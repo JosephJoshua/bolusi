@@ -7,6 +7,7 @@ import {
   FactGrid,
   Icon,
   LoadingState,
+  RollingText,
   color,
   radius,
   size,
@@ -258,6 +259,7 @@ export function DownPaymentRows({
   downPayment,
   paidLabel = 'repair.price.downPayment',
   action,
+  typing = false,
   testID,
 }: {
   readonly total: number;
@@ -265,6 +267,8 @@ export function DownPaymentRows({
   /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
   readonly paidLabel?: RepairKey;
   readonly action?: ReactNode;
+  /** The figures follow a DP being typed just above, so they change without rolling. */
+  readonly typing?: boolean;
   readonly testID: string;
 }): React.JSX.Element | null {
   if (downPayment === null || downPayment === 0) return null;
@@ -276,17 +280,27 @@ export function DownPaymentRows({
           <Text style={styles.paidText}>{tn(paidLabel)}</Text>
           {action}
         </View>
-        <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
+        <RollingText
+          value={downPayment}
+          still={typing}
+          style={[styles.paidText, styles.amount]}
+          testID={`${testID}.downPayment`}
+        >
           {formatMoney(-downPayment)}
-        </Text>
+        </RollingText>
       </View>
       <View style={[repairStyles.row, styles.paidRow]}>
         <Text style={styles.balanceLabel}>
           {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
         </Text>
-        <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
+        <RollingText
+          value={balance.kind === 'due' ? balance.amount : -balance.amount}
+          still={typing}
+          style={[styles.balanceValue, styles.amount]}
+          testID={`${testID}.balance`}
+        >
           {formatMoney(balance.amount)}
-        </Text>
+        </RollingText>
       </View>
     </View>
   );

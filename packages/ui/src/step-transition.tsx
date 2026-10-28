@@ -7,9 +7,10 @@
  * at the top): the flow remembers the direction with `useStepDirection`, which lives above the
  * remount, and the step's content arrives inside `StepTransition`.
  */
-import { useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Animated } from 'react-native';
 
+import { useChangeDirection } from './direction.js';
 import { useEntrance } from './motion.js';
 import { motion } from './tokens.js';
 
@@ -18,13 +19,8 @@ export type StepDirection = 'end' | 'start' | null;
 
 /** Call in the flow (above the content that remounts per step) with the step on show. */
 export function useStepDirection(step: number): StepDirection {
-  // Updated while rendering, so the direction is known on the very frame the new step mounts; a
-  // re-render on the same step keeps it.
-  const last = useRef<{ step: number; from: StepDirection }>({ step, from: null });
-  if (last.current.step !== step) {
-    last.current = { step, from: step > last.current.step ? 'end' : 'start' };
-  }
-  return last.current.from;
+  const change = useChangeDirection(step);
+  return change === null ? null : change === 'up' ? 'end' : 'start';
 }
 
 export interface StepTransitionProps {

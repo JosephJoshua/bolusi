@@ -24,6 +24,10 @@
     "./qr": {
       "types": "./dist/qr.d.ts",
       "default": "./dist/qr.js"
+    },
+    "./direction": {
+      "types": "./dist/direction.d.ts",
+      "default": "./dist/direction.js"
     }
   },
   "files": [

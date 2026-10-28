@@ -55,6 +55,7 @@ export { IconButton, type IconButtonProps } from './components/IconButton.js';
 export { Kbd } from './components/Kbd.js';
 export { Card, Fact, FactGrid, Section } from './components/Layout.js';
 export { Menu, type MenuItem } from './components/Menu.js';
+export { RollingText } from './components/RollingText.js';
 export {
   CaptureTile,
   PhotoTile,

@@ -14,6 +14,7 @@ import {
   Icon,
   ListRow,
   PatternLock,
+  RollingText,
   Sheet,
   TextButton,
   Timeline,
@@ -894,7 +895,8 @@ export function TicketDetail({
           <Text style={[cancelled ? styles.notCharged : styles.totalLabel, repairStyles.rowText]}>
             {tn('repair.price.total')}
           </Text>
-          <Text
+          <RollingText
+            value={row.quoteTotal}
             style={[
               cancelled ? styles.notCharged : styles.totalValue,
               styles.amount,
@@ -903,7 +905,7 @@ export function TicketDetail({
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
-          </Text>
+          </RollingText>
         </View>
         {cancelled ? (
           // The repair price stays as quiet history; the number that leads is what the customer

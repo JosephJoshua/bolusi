@@ -61,6 +61,11 @@
   --animate-shake: shake 280ms ease-in-out;
   /* A just-issued servisan number comes down like a rubber stamp. */
   --animate-stamp: stamp 320ms var(--b-ease-enter);
+  --animate-roll-up: roll-up var(--b-duration-base) var(--b-ease-enter);
+  --animate-roll-down: roll-down var(--b-duration-base) var(--b-ease-enter);
+  /* A tick drawn in: the window opens over it while the tick inside holds still. */
+  --animate-wipe-window: wipe-window var(--b-duration-slow) var(--b-ease-enter) 120ms backwards;
+  --animate-wipe-content: wipe-content var(--b-duration-slow) var(--b-ease-enter) 120ms backwards;
 
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
 }
@@ -144,6 +149,29 @@
   }
   70% {
     transform: scale(0.96) rotate(0deg);
+  }
+}
+
+@keyframes roll-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes roll-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@keyframes wipe-window {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes wipe-content {
+  from {
+    transform: translateX(100%);
   }
 }
 

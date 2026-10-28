@@ -996,6 +996,15 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  RollingText: [
+    {
+      id: 'default',
+      render: (l) => (
+        <componentInventory.RollingText value={1}>{l.title}</componentInventory.RollingText>
+      ),
+    },
+  ],
+
   OutcomeState: [
     {
       id: 'success',
