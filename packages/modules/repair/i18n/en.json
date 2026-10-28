@@ -622,8 +622,7 @@
   "paper": {
     "title": "Slip paper",
     "phoneSummary": "Paper size on this phone",
-    "phoneHint": "Every slip from this phone prints on this paper.",
-    "deskHint": "Every slip from this computer prints on this paper."
+    "phoneHint": "Every slip from this phone prints on this paper."
   },
   "uncollected": {
     "title": "Phones not collected",

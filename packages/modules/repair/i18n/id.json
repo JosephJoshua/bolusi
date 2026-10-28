@@ -622,8 +622,7 @@
   "paper": {
     "title": "Kertas nota",
     "phoneSummary": "Ukuran kertas di HP ini",
-    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini.",
-    "deskHint": "Semua nota dari komputer ini dicetak di kertas ini."
+    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini."
   },
   "uncollected": {
     "title": "HP belum diambil",
