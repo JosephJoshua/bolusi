@@ -131,7 +131,7 @@ release kinds out of this repository or mark them pre-release. `pnpm --filter
 ### Logo
 
 The logo's SVGs live in `assets/brand` (mark, wordmark, full-bleed app icon; light and dark
-tones). Screens on the PC use `BrandMark` from `@bolusi/ui-web`. After changing an SVG, run
+tones). To show the logo in the PC app, use `BrandMark` from `@bolusi/ui-web`. After changing an SVG, run
 `pnpm brand:assets` to redraw the phone icons, splash image and the Windows `icon.ico`
 (`CHROMIUM_PATH=/opt/pw-browsers/chromium` in cloud containers), and commit the results.
 
