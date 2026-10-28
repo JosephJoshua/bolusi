@@ -91,17 +91,29 @@ function harness() {
     expect(res.status).toBe(200);
     return ((await res.json()) as { seq: number }).seq;
   };
-  const events = async (id: string, after: number, as = auth): Promise<HandoffEventsResponse> =>
-    (await (
-      await call(`/${id}/events?after=${String(after)}`, {}, as)
-    ).json()) as HandoffEventsResponse;
-  const next = async (page: string, v: number) => {
-    const res = await h.app.request(`${page}/next?v=${String(v)}`);
-    return { status: res.status, body: res.status === 200 ? await res.json() : null };
+  const events = async (id: string, after: number, as = auth): Promise<HandoffEventsResponse> => {
+    const res = await call(`/${id}/events?after=${String(after)}`, {}, as);
+    expect(res.status).toBe(200);
+    return (await res.json()) as HandoffEventsResponse;
   };
-  const send = (page: string, seq: number, body: BodyInit) =>
+  /** The pairing is not (or no longer) this PC's: the same 404 whichever it is. */
+  const gone = async (id: string, as = auth): Promise<boolean> => {
+    const res = await call(`/${id}/events?after=0`, {}, as);
+    return res.status === 404 && (await readError(res)).error.code === 'NOT_FOUND';
+  };
+  const next = async (
+    page: string,
+    v: number,
+  ): Promise<{ status: number; body: { v: number; ask: { seq: number } | null } }> => {
+    const res = await h.app.request(`${page}/next?v=${String(v)}`);
+    return {
+      status: res.status,
+      body: res.status === 200 ? ((await res.json()) as never) : { v: -1, ask: null },
+    };
+  };
+  const send = (page: string, seq: number, body: Uint8Array<ArrayBuffer> | string) =>
     h.app.request(`${page}/send?seq=${String(seq)}`, { method: 'POST', body });
-  return { h, time, auth, call, pair, ask, events, next, send };
+  return { h, time, auth, call, pair, ask, events, gone, next, send };
 }
 
 describe('the phone page', () => {
@@ -216,13 +228,13 @@ describe('one pairing for every step', () => {
       expect((await send(page, sign, body)).status, body).toBe(400);
     }
     // None of that spent the step.
-    expect((await next(page, 0)).body.ask.seq).toBe(sign);
+    expect((await next(page, 0)).body.ask?.seq).toBe(sign);
   });
 });
 
 describe('the pairing', () => {
   test('belongs to the PC that made it', async () => {
-    const { h, pair, call, events } = harness();
+    const { h, pair, ask, call, gone } = harness();
     const other = enrollDevice(h, OTHER_PC);
     const { id } = await pair();
     const res = await call(
@@ -235,7 +247,9 @@ describe('the pairing', () => {
     );
     expect(res.status).toBe(404);
     expect((await readError(res)).error.code).toBe('NOT_FOUND');
-    expect(await events(id, 0, other)).toEqual({ events: [], ended: true });
+    expect(await gone(id, other)).toBe(true);
+    expect((await call(`/${id}`, { method: 'DELETE' }, other)).status).toBe(404);
+    await ask(id, 'photo', 'Depan'); // still the first PC's
   });
 
   test('a new code ends the old one, and a waiting phone and PC hear it', async () => {
@@ -251,7 +265,7 @@ describe('the pairing', () => {
   });
 
   test('ends after half an hour with no step, and a wait with no news is answered empty', async () => {
-    const { time, pair, ask, events, next } = harness();
+    const { time, pair, ask, events, gone, next } = harness();
     const { id, page } = await pair();
     const quiet = events(id, 0);
     await settle();
@@ -262,7 +276,7 @@ describe('the pairing', () => {
     expect((await next(page, 0)).status).toBe(200);
     time.advance(1);
     expect((await next(page, 0)).status).toBe(410);
-    expect(await events(id, 0)).toEqual({ events: [], ended: true });
+    expect(await gone(id)).toBe(true);
   });
 
   test('takes only well-formed asks', async () => {

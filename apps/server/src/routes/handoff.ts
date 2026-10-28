@@ -71,19 +71,15 @@ export function createHandoffRouter(deps: ServerDeps) {
       return c.body(null, 204);
     })
     .get('/:id/events', zQuery(z.object({ after: z.coerce.number().int().min(0) })), async (c) => {
-      const session = relay.forDevice(deviceOf(c), c.req.param('id'));
-      // Ended, expired or replaced: the PC shows a new code when it next needs the phone.
-      if (session === null) {
-        const ended: HandoffEventsResponse = { events: [], ended: true };
-        return c.json(ended);
-      }
+      // Ended, expired, replaced or not this PC's: 404, and the PC shows a new code when it next
+      // needs the phone.
+      const session = own(c);
       const events = await relay.collect(session, c.req.valid('query').after, c.req.raw.signal);
       const body: HandoffEventsResponse = { events, ended: session.ended };
       return c.json(body);
     })
     .delete('/:id', (c) => {
-      const session = relay.forDevice(deviceOf(c), c.req.param('id'));
-      if (session !== null) relay.end(session);
+      relay.end(own(c));
       return c.body(null, 204);
     });
 }
@@ -95,7 +91,7 @@ const PHONE_HEADERS = {
   'X-Frame-Options': 'DENY',
 } as const;
 
-function bare(c: Context<AppEnv>, status: 204 | 400 | 405 | 409 | 410 | 413 | 415): Response {
+function bare(c: Context<AppEnv>, status: 204 | 400 | 409 | 410 | 413 | 415): Response {
   for (const [name, value] of Object.entries(PHONE_HEADERS)) c.header(name, value);
   return c.body(null, status);
 }
@@ -144,7 +140,5 @@ export function createHandoffPageRouter(deps: ServerDeps) {
         const refused = relay.receive(session, Number(c.req.query('seq') ?? '0'), body);
         return bare(c, refused ?? 204);
       },
-    )
-    .all('/:key', (c) => bare(c, 405))
-    .all('/:key/*', (c) => bare(c, 405));
+    );
 }
