@@ -67,6 +67,10 @@ export {
   type SignatureStroke,
 } from './components/SignaturePad.js';
 export { Segmented, type SegmentedOption } from './components/Segmented.js';
+export { SectionNav, type SectionNavGroup, type SectionNavItem } from './components/SectionNav.js';
+export { SettingsPanel } from './components/SettingsPanel.js';
+export { SortableList } from './components/SortableList.js';
+export { Switch } from './components/Switch.js';
 export { AppShell, PageHeader, Sidebar, type NavItem } from './components/Shell.js';
 export { Spinner } from './components/Spinner.js';
 export { Skeleton, StatePanel } from './components/States.js';

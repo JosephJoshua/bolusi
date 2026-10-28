@@ -289,6 +289,7 @@ describe('counter app over demo data', () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
     fireEvent.click(byTestId('nav.settings'));
+    fireEvent.click(await screen.findByTestId('desktop.settings.nav.computer'));
     const a4 = await screen.findByTestId('repair.desk.printing.paper.a4');
     await waitFor(() =>
       expect(

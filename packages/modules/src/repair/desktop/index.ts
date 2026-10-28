@@ -5,8 +5,20 @@ export { IntakePage, type IntakePageProps } from './Intake.js';
 export { TicketPane, type TicketPaneProps } from './TicketPane.js';
 export { PrintSettings } from './PrintSettings.js';
 export {
+  CancelFeesSettings,
+  DiscardChangesDialog,
+  INTAKE_LIST_KEY,
+  IntakeListSettings,
+  repairSettingsAccess,
+  SlipSettings,
+  type RepairSettingsProps,
+} from './Settings.js';
+export { repairAbilities } from '../flows.js';
+export { INTAKE_OPTION_LISTS, type IntakeOptionList } from '../intake-options.js';
+export {
   PrinterProblem,
   RepairRuntimeProvider,
+  useRepairRuntime,
   type DecodedImage,
   type DevicePrinter,
   type DevicePrinters,

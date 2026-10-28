@@ -9,6 +9,7 @@ import { extname, join } from 'node:path';
 import {
   createUuidV7Generator,
   DomainError,
+  StaffAdminError,
   type ClockPort,
   type CommandIdentity,
   type LocationPort,
@@ -31,6 +32,8 @@ import {
   repairMediaSeamsFor,
 } from '@bolusi/device/bootstrap/repair';
 import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
+import { createStaffControls, type StaffControls } from '@bolusi/device/bootstrap/staff';
+import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
 import {
@@ -168,6 +171,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   const uploadPinVerifier = createFetchPinVerifierUpload({
     baseUrl: deps.apiBaseUrl,
     deviceToken: loadDeviceToken,
+  });
+  const staffAdmin = createFetchStaffAdmin({
+    baseUrl: deps.apiBaseUrl,
+    deviceToken: loadDeviceToken,
+    ...fetchOptions,
   });
 
   let app: Bootstrapped | null = null;
@@ -339,6 +347,38 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   function requireSession(): AppSessionController {
     if (session === null) throw new DomainError('NOT_AUTHENTICATED');
     return session;
+  }
+
+  /**
+   * "Karyawan" as the person signed in now, the phone's composition: each change is a server call
+   * as them, then a sync so this PC's directory holds the server's answer before the window reads
+   * it again. Refused for anyone who may not add staff here; the server decides every change too.
+   */
+  function staffFor(userId: string): StaffControls {
+    const current = sessionFor(userId);
+    const snapshot = current.snapshot();
+    if (!snapshot.canManageStaff) throw new StaffAdminError('denied');
+    return createStaffControls({
+      port: staffAdmin,
+      tenantAdmin: snapshot.tenantAdmin,
+      load: () => current.listStaff(),
+      context: () => current.staffContext(),
+      refreshDirectory: async () => {
+        if (sync === null) return;
+        sync.requestManual();
+        await sync.settle();
+      },
+    });
+  }
+
+  /** The PIN session, for a window call made for the person signed in now. */
+  function sessionFor(userId: string): AppSessionController {
+    const current = requireSession();
+    const snapshot = current.snapshot();
+    if (snapshot.session?.userId !== userId || snapshot.locked) {
+      throw new DomainError('NOT_AUTHENTICATED');
+    }
+    return current;
   }
 
   function requireEnrollment(): AppEnrollment {
@@ -614,8 +654,15 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       await requireSession().setFirstPin(userId, pin);
       emit();
     },
-    'session.changePin': (currentPin: string, newPin: string) =>
-      requireSession().changePin(currentPin, newPin),
+    // Every call below names the person its screen was built for, as repair calls do.
+    'session.changePin': (userId: string, currentPin: string, newPin: string) =>
+      sessionFor(userId).changePin(currentPin, newPin),
+    // A colleague's PIN, from "PIN karyawan". The core flows check the owner's permission.
+    'session.listPinTargets': (userId: string) => sessionFor(userId).listPinTargets(),
+    'session.clearLockout': (userId: string, targetUserId: string) =>
+      sessionFor(userId).clearLockout(targetUserId),
+    'session.resetPin': (userId: string, targetUserId: string, newPin: string) =>
+      sessionFor(userId).resetPin(targetUserId, newPin),
     'session.lock': () => requireSession().lockNow(),
     'session.recordActivity'() {
       session?.recordActivity();
@@ -623,6 +670,18 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'session.updateWorkspace'(next: UserWorkspace) {
       session?.updateWorkspace(next);
     },
+
+    // ── Karyawan (online only; each change is a server call as the signed-in owner) ────────────
+    'staff.list': (userId: string) => staffFor(userId).load(),
+    'staff.create': (userId: string, draft: Parameters<StaffControls['onCreate']>[0]) =>
+      staffFor(userId).onCreate(draft),
+    'staff.update': (
+      userId: string,
+      memberId: string,
+      change: Parameters<StaffControls['onUpdate']>[1],
+    ) => staffFor(userId).onUpdate(memberId, change),
+    'staff.setActive': (userId: string, memberId: string, active: boolean) =>
+      staffFor(userId).onSetActive(memberId, active),
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
     'sync.requestManual'() {

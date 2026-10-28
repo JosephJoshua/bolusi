@@ -513,6 +513,10 @@ export const REPAIR_KEYS = [
   'repair.desk.table.next',
   'repair.desk.table.page',
   'repair.desk.table.pages',
+  'repair.desk.settings.discard',
+  'repair.desk.settings.slipLead',
+  'repair.desk.options.dragHandle',
+  'repair.desk.options.new',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];
