@@ -23,6 +23,7 @@ import { PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
+import { freeHandoverNeedsOwner } from '../rules.js';
 import { useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
@@ -907,7 +908,10 @@ export function HandoverDialog({
   onClose,
 }: StepDialogProps & {
   /** What the checklist is made of: whether it was repaired, and what was left with it. */
-  readonly ticket: Pick<TicketDetailRow, 'outcome' | 'peripherals'>;
+  readonly ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'peripherals' | 'quoteTotal' | 'claimOfTicketId'
+  >;
   readonly customerName: string;
   /** What the customer pays in all: the price, or a cancelled servisan's fee. */
   readonly amount: number;
@@ -950,7 +954,10 @@ export function HandoverDialog({
     });
   };
   const captured = photo !== null && signature !== null;
-  const complete = captured && settled && loadedAccounts !== null && checks.ready(note);
+  const ownerNeeded =
+    freeHandoverNeedsOwner(ticket) && !runtime.hasPermission(REPAIR_PERMISSION.warrantyException);
+  const complete =
+    !ownerNeeded && captured && settled && loadedAccounts !== null && checks.ready(note);
   const submit = (): void => {
     if (!complete || photo === null || signature === null) return;
     void runner
@@ -982,11 +989,13 @@ export function HandoverDialog({
             {complete ? null : (
               <p className="mr-auto text-small text-text-muted">
                 {tn(
-                  !settled
-                    ? 'repair.hint.handoverPayment'
-                    : checks.loaded && !checks.ready(note)
-                      ? 'repair.hint.handoverChecks'
-                      : 'repair.hint.handover',
+                  ownerNeeded
+                    ? 'repair.hint.handoverFree'
+                    : !settled
+                      ? 'repair.hint.handoverPayment'
+                      : checks.loaded && !checks.ready(note)
+                        ? 'repair.hint.handoverChecks'
+                        : 'repair.hint.handover',
                 )}
               </p>
             )}

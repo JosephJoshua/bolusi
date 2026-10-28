@@ -38,7 +38,7 @@ import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } fro
 import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
 import { amountOwed } from './flows.js';
-import { REPAIR_REFUSALS, claimProblem } from './rules.js';
+import { REPAIR_REFUSALS, claimProblem, freeHandoverNeedsOwner } from './rules.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -1283,6 +1283,9 @@ export function demoRepairRuntime(
     },
     returnDevice: (input) => {
       const t = find(String(input['ticketId']));
+      if (freeHandoverNeedsOwner(t) && !permitted.has(P.warrantyException)) {
+        throw REPAIR_REFUSALS.refuse('freeHandoverOwnerOnly');
+      }
       const paidNow = ((input['payments'] as { amount: number }[] | undefined) ?? []).reduce(
         (sum, payment) => sum + payment.amount,
         0,

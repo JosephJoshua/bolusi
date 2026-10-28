@@ -275,6 +275,10 @@ book for repairs and starts the store's money ledger.
 - **Paid in full at pickup:** the phone goes back once what is left (Sisa) is
   paid. Only an owner can let it go unpaid ("Bayar nanti", with a reason). It
   then stays as a debt on the owners' unpaid list until the customer pays.
+- **Free repairs are owners'** (2026-10-28): a repaired servisan that totals
+  Rp 0 and is not a warranty claim goes home only with an owner (the
+  warranty-exception permission). A Rp 0 intake ("cek dulu") stays open to the
+  counter, and a cancelled phone is unchanged.
 - **Methods:** Tunai, QRIS (the store's own QR, marked received by the counter),
   EDC and Transfer, and one payment may be split across them. Owners set each
   store's methods and name the account the money lands in. An account belongs to

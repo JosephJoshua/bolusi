@@ -313,6 +313,7 @@
     "downPayment": "Enter the amount first.",
     "downPaymentCorrect": "Enter the correct down payment first.",
     "downPaymentSame": "The amount has not changed.",
+    "handoverFree": "This servisan is free. Ask an owner to hand it over.",
     "handoverPayment": "Complete the payment first.",
     "discountLimit": "Your discount limit is {amount} per servisan.",
     "handoverChecks": "Tick everything, or write why not."
@@ -646,6 +647,7 @@
     "partsNotYours": "Another technician is working on this repair.",
     "notPaid": "This servisan isn’t paid in full yet.",
     "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid.",
+    "freeHandoverOwnerOnly": "Only an owner can hand over a free servisan.",
     "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed.",
     "repairTypesNotYours": "Only the counter or a technician can change the repair type.",
     "claimNotReturned": "A warranty claim is only for a phone that was repaired and collected.",

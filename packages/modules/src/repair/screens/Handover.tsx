@@ -48,6 +48,7 @@ import {
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
+import { freeHandoverNeedsOwner } from '../rules.js';
 import { useHandoverPayment } from '../handover-payment.js';
 import { usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
 
@@ -96,7 +97,10 @@ export function Handover({
   const payment = useHandoverPayment(due, accounts, canPayLater);
   const { settled } = payment;
   const checks = useHandoverChecks(ticket);
+  const ownerNeeded =
+    ticket !== undefined && freeHandoverNeedsOwner(ticket) && !can.warrantyException;
   const ready =
+    !ownerNeeded &&
     photo !== null &&
     signature !== null &&
     settled &&
@@ -154,11 +158,13 @@ export function Handover({
       onPrimary={submit}
       primaryDisabled={!ready}
       primaryHint={tn(
-        !settled
-          ? 'repair.hint.handoverPayment'
-          : checks.loaded && !checks.ready(note)
-            ? 'repair.hint.handoverChecks'
-            : 'repair.hint.handover',
+        ownerNeeded
+          ? 'repair.hint.handoverFree'
+          : !settled
+            ? 'repair.hint.handoverPayment'
+            : checks.loaded && !checks.ready(note)
+              ? 'repair.hint.handoverChecks'
+              : 'repair.hint.handover',
       )}
       busy={runner.busy}
       errorCode={runner.errorCode}
