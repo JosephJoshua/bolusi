@@ -18,12 +18,17 @@
  * layer in tasks 24/25.
  */
 import type { ReactNode } from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import * as componentInventory from '../components/index.js';
 import * as shellInventory from '../shell/index.js';
 import type { SyncChipState } from '../shell/SyncChip.js';
-import { color, size } from '../tokens.js';
+import { brandSplash } from '../brand.js';
+import { color, size, space } from '../tokens.js';
+
+const brandStyles = StyleSheet.create({
+  splash: { backgroundColor: brandSplash, padding: space.md, alignSelf: 'flex-start' },
+});
 
 /**
  * Uniform per-state accessibility labels for the Gallery. Every SyncChip card renders exactly ONE
@@ -186,6 +191,18 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
       id: 'switcher',
       render: (l) => (
         <componentInventory.Avatar userId="u-3" initials={l.initials} size="switcher" />
+      ),
+    },
+  ],
+
+  BrandMark: [
+    { id: 'light', render: () => <componentInventory.BrandMark size={48} /> },
+    {
+      id: 'dark',
+      render: () => (
+        <View style={brandStyles.splash}>
+          <componentInventory.BrandMark size={48} tone="dark" />
+        </View>
       ),
     },
   ],

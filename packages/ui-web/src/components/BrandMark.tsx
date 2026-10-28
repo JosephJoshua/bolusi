@@ -1,10 +1,8 @@
 // The Bolusi logo: a lowercase b whose top curls like a bird of paradise's tail wire, with a
-// gold disc. Drawn from assets/brand (the source SVGs); keep the two in step.
+// gold disc. The mark's geometry is shared with the phone (`@bolusi/ui/brand`).
+import { brandMark, brandTones, type BrandTone } from '@bolusi/ui/brand';
 
-const TONES = {
-  light: { ink: '#0B4A41', disc: '#E8A21C' },
-  dark: { ink: '#FFF6E5', disc: '#F5B83D' },
-} as const;
+const { viewBox: box, ring, disc: dot } = brandMark;
 
 /** "olusi" in Plus Jakarta Sans ExtraBold, outlined, set after the mark. */
 const WORD = [
@@ -35,11 +33,11 @@ const WORD = [
 function Mark({ ink, disc }: { readonly ink: string; readonly disc: string }): React.JSX.Element {
   return (
     <>
-      <g fill="none" stroke={ink} strokeWidth={60} strokeLinecap="round">
-        <circle cx={290} cy={336} r={86} />
-        <path d="M204 336V158C204 106 166 82 128 100" />
+      <g fill="none" stroke={ink} strokeWidth={brandMark.strokeWidth} strokeLinecap="round">
+        <circle cx={ring.cx} cy={ring.cy} r={ring.r} />
+        <path d={brandMark.stem} />
       </g>
-      <circle cx={372} cy={158} r={38} fill={disc} />
+      <circle cx={dot.cx} cy={dot.cy} r={dot.r} fill={disc} />
     </>
   );
 }
@@ -55,16 +53,21 @@ export function BrandMark({
   label = 'Bolusi',
 }: {
   readonly size?: number;
-  readonly tone?: keyof typeof TONES;
+  readonly tone?: BrandTone;
   readonly variant?: 'mark' | 'wordmark';
   /** The accessible name; pass null when a visible "Bolusi" already sits beside it. */
   readonly label?: string | null;
 }): React.JSX.Element {
-  const colors = TONES[tone];
+  const colors = brandTones[tone];
   const a11y = label === null ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label };
   if (variant === 'mark') {
     return (
-      <svg viewBox="92 58 324 400" height={size} width={(size * 324) / 400} {...a11y}>
+      <svg
+        viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`}
+        height={size}
+        width={(size * box.width) / box.height}
+        {...a11y}
+      >
         <Mark {...colors} />
       </svg>
     );

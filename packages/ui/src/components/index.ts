@@ -11,6 +11,7 @@
  */
 export { Avatar } from './Avatar.js';
 export { Banner } from './Banner.js';
+export { BrandMark } from './BrandMark.js';
 export { Button } from './Button.js';
 export { Card } from './Card.js';
 export { Chip } from './Chip.js';

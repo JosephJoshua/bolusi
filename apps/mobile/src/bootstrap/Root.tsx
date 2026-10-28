@@ -54,6 +54,7 @@ import type { AppEnrollment, EnrollmentController } from '@bolusi/device/bootstr
 import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
 import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import { createNotificationChannels } from './notifications.js';
+import { BrandIntro } from './BrandIntro.js';
 import {
   answerNotificationAsk,
   shouldAskForNotifications,
@@ -304,6 +305,8 @@ export interface RootProps {
    * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
    */
   readonly notificationPermission?: NotificationPermissionPort | undefined;
+  /** Hides the native splash once the opening cover is drawn over it (index.ts). */
+  readonly hideSplash?: (() => void) | undefined;
 }
 
 export function Root({
@@ -326,7 +329,8 @@ export function Root({
   scanPlatform,
   videoPlatform,
   notificationPermission,
-}: RootProps): React.JSX.Element | null {
+  hideSplash,
+}: RootProps): React.JSX.Element {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
   // function that changes the language the catalog resolves in is `@bolusi/i18n`'s `setLocale`,
   // reached through `writeDeviceLocale`. Task 211 shipped because the toggle called this setter and
@@ -1072,7 +1076,15 @@ export function Root({
   // (07-i18n §1.2) — and a frame of the shell over a database that is not open is the other thing
   // worth never showing. `deviceInfo` resolves in the same boot pass (from the same booted app), so
   // gating on it here costs no extra wait and keeps the Settings screen from rendering blanks.
-  if (locale === null || app === null || deviceInfo === null) return null;
+  // The opening cover stays over everything until then, in the same place in the tree either way, so
+  // its animation carries on from the splash instead of restarting when the app appears.
+  const opening = (content: React.JSX.Element | null): React.JSX.Element => (
+    <View style={FILL}>
+      {content}
+      <BrandIntro ready={content !== null} onCovered={hideSplash} />
+    </View>
+  );
+  if (locale === null || app === null || deviceInfo === null) return opening(null);
 
   const shell = resolveShellInputs(app, sync, systemClock.now(), syncReads);
   const openSession = sessionSnapshot?.session ?? null;
@@ -1094,7 +1106,7 @@ export function Root({
       ? (notes.repair ?? undefined)
       : undefined;
 
-  return (
+  return opening(
     /**
      * THE ACTIVITY RESET (api/02-auth §6.4 — "any interaction resets the idle deadline"), as RN's
      * gesture-responder CAPTURE phase.
@@ -1266,7 +1278,7 @@ export function Root({
         pushRoute={pushRoute}
         onAnswerNotifications={notificationAsk ? answerNotifications : null}
       />
-    </View>
+    </View>,
   );
 }
 

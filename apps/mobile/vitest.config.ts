@@ -15,6 +15,7 @@ export default defineConfig({
   resolve: {
     alias: {
       'react-native': resolve(HERE, 'test/doubles/react-native.tsx'),
+      'react-native-svg': resolve(HERE, '../../packages/ui/test/doubles/react-native-svg.tsx'),
       '@expo/vector-icons/MaterialCommunityIcons.js': resolve(
         HERE,
         '../../packages/ui/test/doubles/expo-vector-icons.tsx',

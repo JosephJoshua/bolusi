@@ -21,10 +21,11 @@
 import { getLocale, setLocale, type Locale } from '@bolusi/i18n';
 import type { PinAttemptRow } from '@bolusi/core';
 import { border, color, space, type } from '@bolusi/ui';
-import { useReducer, useState, type ReactNode } from 'react';
+import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import App from '../../App.js';
+import { BrandIntro } from '../bootstrap/BrandIntro.js';
 import { CaptureScreen, type CaptureScreenState } from '../media/CaptureScreen.js';
 import { SignaturePadScreen, type SignaturePadState } from '../media/SignaturePadScreen.js';
 import {
@@ -110,6 +111,23 @@ function slot(testID: string): ReactNode {
  * this is the browser approximation, never the device lane. Rendered in the DOM so it is captured in
  * every screenshot and assertable by the suite.
  */
+function BrandIntroDemo(): React.JSX.Element {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const ms = Number(new URLSearchParams(window.location.search).get('ready') ?? 800);
+    const timer = setTimeout(() => setReady(true), ms);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <View style={{ height: 560 }}>
+      <View style={{ padding: space.lg }}>
+        <Text style={{ ...type.title, color: color.text }}>Pilih siapa yang pakai</Text>
+      </View>
+      <BrandIntro ready={ready} />
+    </View>
+  );
+}
+
 function ApproxFrame({
   screen,
   state,
@@ -736,6 +754,18 @@ export const ENTRIES: readonly HarnessEntry[] = [
       </ApproxFrame>
     ),
   })),
+
+  // The opening cover over the splash: holds, then the app is "ready" after `?ready=<ms>` (default
+  // 800), so the disc hop and the fade can be watched or captured frame by frame.
+  {
+    screen: 'brand-intro',
+    state: 'play',
+    render: () => (
+      <ApproxFrame screen="brand-intro" state="play">
+        <BrandIntroDemo />
+      </ApproxFrame>
+    ),
+  },
 
   // Settings — the live ID↔EN language toggle.
   {

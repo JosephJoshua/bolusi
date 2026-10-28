@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
@@ -610,6 +611,7 @@ function buildRootProps(): RootProps {
     scanPlatform: createExpoScanPlatform(),
     videoPlatform: createExpoVideoPlatform(),
     localeStore: fileLocaleStore,
+    hideSplash: () => void SplashScreen.hideAsync().catch(() => {}),
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process
     // facts, not DB values); the deviceId + names come from meta_kv.
@@ -629,4 +631,6 @@ function Bootstrapped(): React.JSX.Element | null {
 
 // Before the first screen, so a phone held sideways at launch turns upright straight away.
 lockPhonesToPortrait();
+// The splash stays until the opening cover (BrandIntro) is drawn over it, so no blank frame shows.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 registerRootComponent(Bootstrapped);

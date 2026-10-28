@@ -30,6 +30,8 @@ export type { ContrastPair } from './tokens.js';
 // ---- Motion (native driver, reduce-motion aware) ----------------------------------------------
 export {
   NATIVE_DRIVER,
+  easeEnter,
+  easeExit,
   useEntrance,
   usePop,
   usePressScale,
@@ -37,6 +39,9 @@ export {
   useSheetEntrance,
 } from './motion.js';
 export type { EntranceFrom, EntranceOptions } from './motion.js';
+
+// ---- Brand ------------------------------------------------------------------------------------
+export { brandMarkWidth } from './components/BrandMark.js';
 
 // ---- Platform insets (system-window measurements, NOT design tokens — task 205) -----------------
 export { NAV_BAR_INSET } from './platform-insets.js';
@@ -60,6 +65,7 @@ export type {
 } from './components/Banner.js';
 export type { FreshnessCellProps } from './components/FreshnessCell.js';
 export type { ListProps, ListState } from './components/List.js';
+export type { BrandMarkPart, BrandMarkProps } from './components/BrandMark.js';
 export type { ButtonProps, ButtonVariant } from './components/Button.js';
 export type { CardProps } from './components/Card.js';
 export type { ChipProps, ChipTone } from './components/Chip.js';
