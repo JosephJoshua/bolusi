@@ -115,7 +115,9 @@ test("a second PC gets the servisan, and the first sees the second's change live
   const workshop = await launchPc();
   await registerAndSignIn(workshop, 'PC Bengkel');
   await workshop.getByText('Yakobus Mandowen').click();
-  await workshop.getByRole('button', { name: 'Tunggu sparepart' }).click();
+  // Waiting for parts before the work starts is a rare move, kept under "Lainnya".
+  await workshop.getByTestId('repair.desk.ticket.more').click();
+  await workshop.getByRole('menuitem', { name: 'Tunggu sparepart' }).click();
   await workshop.getByRole('dialog').getByRole('button', { name: 'Tunggu sparepart' }).click();
 
   // No refresh and no "Kirim sekarang" on the counter: the server's nudge brings it in.

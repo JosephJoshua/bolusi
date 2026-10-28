@@ -27,7 +27,7 @@
     "assign": "Assign technician",
     "cancel": "Cancel repair",
     "changePrice": "Change price",
-    "claim": "Take this repair",
+    "claim": "Add to my tasks",
     "decidePrice": "Confirm price",
     "declinePrice": "Doesn’t agree",
     "handover": "Hand back to customer",
@@ -46,7 +46,9 @@
     "reassignShort": "Change",
     "backToTicket": "Back to the repair",
     "applyUnconfirmed": "Not yet",
-    "agreedYes": "Yes"
+    "agreedYes": "Yes",
+    "takeOver": "Take over",
+    "more": "More"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
