@@ -1,0 +1,30 @@
+{
+  "opType": {
+    "accountSaved": "Payment method changed",
+    "centralAccountSaved": "Shared payment method changed",
+    "chargeRecorded": "Bill recorded",
+    "chargeReduced": "Bill lowered",
+    "paymentReceived": "Payment received",
+    "paymentVoided": "Payment cancelled",
+    "refundPaid": "Money given back",
+    "cashMoved": "Cash in/out",
+    "cashCounted": "Cash counted",
+    "cashAdjusted": "Cash difference settled"
+  },
+  "refusal": {
+    "alreadyRecorded": "This record already exists.",
+    "documentNotFound": "This bill isn’t in this store.",
+    "notChargeable": "Can’t bill yet. The repair isn’t finished.",
+    "chargeMismatch": "The bill doesn’t match the agreed price.",
+    "aboveCharged": "The reduction is more than the bill.",
+    "accountNotUsable": "This payment method isn’t available in this store.",
+    "referenceRequired": "Enter the approval code from the EDC slip.",
+    "tenderedTooLow": "The cash received is less than the payment.",
+    "paymentNotFound": "This payment wasn’t found.",
+    "alreadyVoided": "This payment is already cancelled.",
+    "refundAboveCredit": "That’s more than the customer overpaid. Ask an owner.",
+    "notThisStore": "This belongs to another store.",
+    "accountKindChanged": "A payment method’s type can’t be changed.",
+    "countNotFound": "This cash count wasn’t found."
+  }
+}

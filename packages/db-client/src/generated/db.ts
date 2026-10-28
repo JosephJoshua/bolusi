@@ -96,6 +96,54 @@ export interface Migrations {
   version: Generated<number | null>;
 }
 
+export interface MoneyAccounts {
+  active: number;
+  createdAt: number;
+  id: string | null;
+  kind: string;
+  name: string;
+  storeId: string | null;
+  storeIdsJson: string | null;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface MoneyEntries {
+  account: string | null;
+  amount: number;
+  createdAt: number;
+  createdBy: string;
+  documentId: string | null;
+  documentKind: string | null;
+  documentLabel: string | null;
+  id: string | null;
+  kind: string;
+  reason: string | null;
+  reference: string | null;
+  relatedEntryId: string | null;
+  storeId: string;
+  subKind: string | null;
+  tenantId: string;
+  tendered: number | null;
+  voidedAt: number | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface MoneyLines {
+  account: string;
+  at: number;
+  credit: number;
+  debit: number;
+  documentId: string | null;
+  documentKind: string | null;
+  entryId: string;
+  id: string | null;
+  storeId: string;
+  tenantId: string;
+}
+
 export interface Notes {
   archived: Generated<number>;
   body: string;
@@ -403,6 +451,9 @@ export interface DB {
   mediaItems: MediaItems;
   metaKv: MetaKv;
   migrations: Migrations;
+  moneyAccounts: MoneyAccounts;
+  moneyEntries: MoneyEntries;
+  moneyLines: MoneyLines;
   notes: Notes;
   operations: Operations;
   pendingPinVerifiers: PendingPinVerifiers;

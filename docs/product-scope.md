@@ -223,6 +223,38 @@ elsewhere, so a self-made first PIN there would let a coworker sign in as them.
 - Phones set up before this change have no such owner on record, so an owner
   without a PIN there gets theirs from another owner.
 
+## Repair payments (2026-10-28)
+
+Agreed with the owner before building payments. This replaces the paper cash
+book for repairs and starts the store's money ledger.
+
+- **Paid in full at pickup:** the phone goes back once what is left (Sisa) is
+  paid. Only an owner can let it go unpaid ("Bayar nanti", with a reason). It
+  then stays as a debt on the owners' unpaid list until the customer pays.
+- **Methods:** Tunai, QRIS (the store's own QR, marked received by the counter),
+  EDC and Transfer, and one payment may be split across them. Owners set each
+  store's methods and name the account the money lands in. An account belongs to
+  one store or is a central account the franchise shares (the main owner picks
+  which stores use it). An EDC payment needs the slip's approval code; other
+  references are optional.
+- **DP:** a down payment is a real payment with its method, taken at intake or
+  later, and printed on the slips as before.
+- **Integrated QRIS:** Xendit (Bolusi shows a QR for the exact amount and Xendit
+  confirms it). Built after manual payments; each settlement owner (a store or
+  the franchise) opens its own Xendit account. Manual QRIS stays available.
+- **Refunds are owners':** the counter gives back only what a customer paid
+  beyond their bill, through the method they paid with (a cancelled servisan's
+  DP less its fee, an overpayment). Anything more, a lower bill or a cancelled
+  payment is an owner's. A cancel fee larger than the DP is paid at handover.
+- **Tutup kas, daily:** each store counts its drawer once a day. Bolusi knows
+  what should be there (cash in, less refunds, less cash taken out with a
+  reason: to the owner, a small expense, a bank deposit; or change money put
+  in). The difference is kept for the owners, and only an owner settles it.
+- **Real books behind it:** every money record posts balanced double-entry lines
+  in one ledger the stock and purchasing work also posts to. Owners see plain
+  views for now (money in by method, the drawer, the unpaid list); accountant
+  screens come later. POS and accounting record and read money the same way.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.

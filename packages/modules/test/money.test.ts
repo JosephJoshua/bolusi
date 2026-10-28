@@ -1,0 +1,439 @@
+// The money ledger through the real runtime: charges checked against the servisan, payments,
+// refunds, voids, the drawer and its counts, and the owner-only limits that keep cash from going
+// missing. Every record must leave the books balanced.
+import { sql } from 'kysely';
+import { afterEach, describe, expect, test } from 'vitest';
+
+import { DomainError, refusalKeyOf } from '@bolusi/core';
+
+import { REPAIR_DOCUMENT_KIND } from '../src/repair/index.js';
+import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
+
+let h: RepairHarness | null = null;
+afterEach(async () => {
+  await h?.close();
+  h = null;
+});
+
+async function expectRefused(p: Promise<unknown>, code: string, refusal?: string): Promise<void> {
+  const err = await p.then(
+    () => new Error(`expected ${code}, but the call resolved`),
+    (e: unknown) => e,
+  );
+  expect(err).toBeInstanceOf(DomainError);
+  expect((err as DomainError).code).toBe(code);
+  if (refusal !== undefined) expect(refusalKeyOf(err)).toBe(`money.refusal.${refusal}`);
+}
+
+const TOTAL = 750_000;
+
+async function openTicket(harness: RepairHarness) {
+  const { ticketId, ticketNumber } = (await harness.run(
+    'openTicket',
+    intake(harness),
+    harness.cashierId,
+  )) as { ticketId: string; ticketNumber: string };
+  return { kind: REPAIR_DOCUMENT_KIND, id: ticketId, label: ticketNumber };
+}
+
+async function repaired(harness: RepairHarness) {
+  const document = await openTicket(harness);
+  await harness.run(
+    'startWork',
+    { ticketId: document.id, beforePhotos: [harness.photo(20)] },
+    harness.technicianId,
+  );
+  await harness.run(
+    'markRepaired',
+    { ticketId: document.id, afterPhotos: [harness.photo(21)] },
+    harness.technicianId,
+  );
+  return document;
+}
+
+async function documentMoney(harness: RepairHarness, document: { kind: string; id: string }) {
+  return (
+    await harness.moneyQuery(
+      'documentMoney',
+      { kind: document.kind, id: document.id },
+      harness.cashierId,
+    )
+  ).rows[0];
+}
+
+/** The whole ledger balances, and so does every entry. */
+async function expectBalancedBooks(harness: RepairHarness): Promise<void> {
+  const { rows } = await sql<{ entry: string; net: number }>`
+    SELECT entry_id AS entry, SUM(debit) - SUM(credit) AS net FROM money_lines GROUP BY entry_id
+  `.execute(harness.db);
+  expect(rows.length).toBeGreaterThan(0);
+  for (const row of rows) expect(Number(row.net), row.entry).toBe(0);
+}
+
+/** Record charges and payments through the op builders, as a module's command does. */
+async function charge(harness: RepairHarness, document: object, amount: number, userId: string) {
+  // The money module has no charge command of its own: a business module records charges inside
+  // its own command. The ledger's rule still judges each one, so drive it through the runtime.
+  const { chargeOp } = await import('../src/money/index.js');
+  const ctx = harness.runtime.commands.createContext(userId);
+  return harness.runtime.commands.execute(
+    {
+      permission: 'money.receive',
+      input: { parse: (x: unknown) => x },
+      handler: (_input: unknown, c: typeof ctx) => ({
+        ops: [chargeOp(c, document as never, amount, 'service_revenue')],
+        result: null,
+      }),
+    } as never,
+    {} as never,
+    ctx,
+  );
+}
+
+describe('charges follow the servisan', () => {
+  test('a repaired servisan is charged exactly its agreed price, once', async () => {
+    h = await openRepairHarness(501);
+    const document = await openTicket(h);
+    await expectRefused(
+      charge(h, document, TOTAL, h.cashierId),
+      'INVALID_TRANSITION',
+      'notChargeable',
+    );
+
+    await h.run(
+      'startWork',
+      { ticketId: document.id, beforePhotos: [h.photo(20)] },
+      h.technicianId,
+    );
+    await h.run(
+      'markRepaired',
+      { ticketId: document.id, afterPhotos: [h.photo(21)] },
+      h.technicianId,
+    );
+    // Less than the price would let the counter hand back the difference as an "overpayment".
+    await expectRefused(
+      charge(h, document, TOTAL - 50_000, h.cashierId),
+      'VALIDATION_FAILED',
+      'chargeMismatch',
+    );
+    await charge(h, document, TOTAL, h.cashierId);
+    await expectRefused(charge(h, document, 1, h.cashierId), 'VALIDATION_FAILED', 'chargeMismatch');
+
+    const money = await documentMoney(h, document);
+    expect(money).toMatchObject({ balance: TOTAL, charged: TOTAL, paid: 0 });
+    await expectBalancedBooks(h);
+  });
+
+  test('a debt (charged, unpaid) shows on the unpaid list until it is paid', async () => {
+    h = await openRepairHarness(502);
+    const document = await repaired(h);
+    await charge(h, document, TOTAL, h.cashierId);
+    const before = await h.moneyQuery('openBalances', {}, h.cashierId);
+    expect(before.rows).toMatchObject([{ documentId: document.id, balance: TOTAL }]);
+
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: TOTAL }] },
+      h.cashierId,
+    );
+    expect((await h.moneyQuery('openBalances', {}, h.cashierId)).rows).toEqual([]);
+  });
+});
+
+describe('payments', () => {
+  test('a DP paid ahead leaves the servisan in credit, and a split pays the rest', async () => {
+    h = await openRepairHarness(503);
+    const document = await openTicket(h);
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 200_000, tendered: 250_000 }] },
+      h.cashierId,
+    );
+    expect(await documentMoney(h, document)).toMatchObject({ balance: -200_000 });
+    // Paid ahead is not a debt.
+    expect((await h.moneyQuery('openBalances', {}, h.cashierId)).rows).toEqual([]);
+
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS BCA toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    await h.run(
+      'startWork',
+      { ticketId: document.id, beforePhotos: [h.photo(20)] },
+      h.technicianId,
+    );
+    await h.run(
+      'markRepaired',
+      { ticketId: document.id, afterPhotos: [h.photo(21)] },
+      h.technicianId,
+    );
+    await charge(h, document, TOTAL, h.cashierId);
+    await h.money(
+      'receivePayments',
+      {
+        document,
+        payments: [
+          { account: 'cash', amount: 300_000 },
+          { account: `account:${accountId}`, amount: 250_000 },
+        ],
+      },
+      h.cashierId,
+    );
+    const money = await documentMoney(h, document);
+    expect(money).toMatchObject({ balance: 0, charged: TOTAL, paid: TOTAL });
+    expect(money.entries.map((e: { kind: string }) => e.kind)).toEqual([
+      'payment_received',
+      'charge_recorded',
+      'payment_received',
+      'payment_received',
+    ]);
+    await expectBalancedBooks(h);
+  });
+
+  test('payments go only through accounts this store uses, and EDC needs its approval code', async () => {
+    h = await openRepairHarness(504);
+    const document = await openTicket(h);
+    const pay = (payment: object) =>
+      h!.money('receivePayments', { document, payments: [payment] }, h!.cashierId);
+
+    await expectRefused(
+      pay({ account: 'account:01920000-0000-7000-8000-0000000000aa', amount: 10_000 }),
+      'VALIDATION_FAILED',
+      'accountNotUsable',
+    );
+    const edc = (await h.money(
+      'saveAccount',
+      { kind: 'edc', name: 'EDC Mandiri' },
+      h.storeOwnerId,
+    )) as {
+      accountId: string;
+    };
+    await expectRefused(
+      pay({ account: `account:${edc.accountId}`, amount: 10_000 }),
+      'VALIDATION_FAILED',
+      'referenceRequired',
+    );
+    await pay({ account: `account:${edc.accountId}`, amount: 10_000, reference: '004512' });
+    await expectRefused(
+      pay({ account: 'cash', amount: 10_000, tendered: 5_000 }),
+      'VALIDATION_FAILED',
+      'tenderedTooLow',
+    );
+
+    // A hidden account takes no new payments.
+    await h.money(
+      'saveAccount',
+      { accountId: edc.accountId, kind: 'edc', name: 'EDC Mandiri', active: false },
+      h.storeOwnerId,
+    );
+    await expectRefused(
+      pay({ account: `account:${edc.accountId}`, amount: 10_000, reference: '1' }),
+      'VALIDATION_FAILED',
+      'accountNotUsable',
+    );
+    // An account keeps its kind, and only owners set accounts up.
+    await expectRefused(
+      h.money('saveAccount', { accountId: edc.accountId, kind: 'qris', name: 'x' }, h.storeOwnerId),
+      'VALIDATION_FAILED',
+      'accountKindChanged',
+    );
+    await expectRefused(
+      h.money('saveAccount', { kind: 'qris', name: 'QRIS' }, h.cashierId),
+      'PERMISSION_DENIED',
+    );
+  });
+
+  test('a central account is usable only in the stores it names', async () => {
+    h = await openRepairHarness(505);
+    const document = await openTicket(h);
+    const otherStore = '01920000-0000-7000-8000-0000000000bb';
+    const { accountId } = (await h.money(
+      'saveCentralAccount',
+      { kind: 'transfer', name: 'BCA pusat', storeIds: [otherStore] },
+      h.ownerId,
+    )) as { accountId: string };
+    const pay = () =>
+      h!.money(
+        'receivePayments',
+        { document, payments: [{ account: `account:${accountId}`, amount: 10_000 }] },
+        h!.cashierId,
+      );
+    await expectRefused(pay(), 'VALIDATION_FAILED', 'accountNotUsable');
+    expect((await h.moneyQuery('paymentAccounts', {}, h.cashierId)).rows).toEqual([]);
+
+    await h.money(
+      'saveCentralAccount',
+      { accountId, kind: 'transfer', name: 'BCA pusat', storeIds: [] },
+      h.ownerId,
+    );
+    await pay();
+    expect((await h.moneyQuery('paymentAccounts', {}, h.cashierId)).rows).toMatchObject([
+      { id: accountId, central: true, name: 'BCA pusat' },
+    ]);
+    // A store owner cannot change the franchise's accounts.
+    await expectRefused(
+      h.money('saveCentralAccount', { accountId, kind: 'transfer', name: 'x' }, h.storeOwnerId),
+      'PERMISSION_DENIED',
+    );
+  });
+});
+
+describe('refunds and voids are guarded', () => {
+  test('the counter gives back only an overpayment, through the account it came in by', async () => {
+    h = await openRepairHarness(506);
+    const document = await openTicket(h);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BRI toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    // A transfer nobody can see yet: it must not come back out of the drawer as cash.
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: `account:${accountId}`, amount: 300_000 }] },
+      h.cashierId,
+    );
+    const refund = (account: string, amount: number, userId = h!.cashierId) =>
+      h!.money('refund', { document, account, amount, reason: 'Batal servis' }, userId);
+    await expectRefused(refund('cash', 300_000), 'PERMISSION_DENIED', 'refundAboveCredit');
+    await expectRefused(
+      refund(`account:${accountId}`, 300_001),
+      'PERMISSION_DENIED',
+      'refundAboveCredit',
+    );
+    await refund(`account:${accountId}`, 300_000);
+    expect(await documentMoney(h, document)).toMatchObject({ balance: 0 });
+    await expectBalancedBooks(h);
+  });
+
+  test("an owner's refund beyond the credit takes the rest off the bill, so nobody owes it", async () => {
+    h = await openRepairHarness(507);
+    const document = await repaired(h);
+    await charge(h, document, TOTAL, h.cashierId);
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: TOTAL }] },
+      h.cashierId,
+    );
+    // The customer came back unhappy; the owner gives back 100k.
+    await expectRefused(
+      h.money(
+        'refund',
+        { document, account: 'cash', amount: 100_000, reason: 'Komplain' },
+        h.cashierId,
+      ),
+      'PERMISSION_DENIED',
+      'refundAboveCredit',
+    );
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 100_000, reason: 'Komplain' },
+      h.storeOwnerId,
+    );
+    expect(await documentMoney(h, document)).toMatchObject({
+      balance: 0,
+      charged: TOTAL,
+      reduced: 100_000,
+      paid: TOTAL - 100_000,
+    });
+    await expectRefused(
+      h.money('reduceCharge', { document, amount: TOTAL, reason: 'x' }, h.storeOwnerId),
+      'VALIDATION_FAILED',
+      'aboveCharged',
+    );
+    await expectBalancedBooks(h);
+  });
+
+  test('only an owner voids a payment, once, and the void reverses its lines', async () => {
+    h = await openRepairHarness(508);
+    const document = await openTicket(h);
+    const { entryIds } = (await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 50_000 }] },
+      h.cashierId,
+    )) as { entryIds: string[] };
+    const entryId = entryIds[0]!;
+    await expectRefused(
+      h.money('voidPayment', { entryId, reason: 'Salah ketik' }, h.cashierId),
+      'PERMISSION_DENIED',
+    );
+    await h.money('voidPayment', { entryId, reason: 'Salah ketik' }, h.storeOwnerId);
+    await expectRefused(
+      h.money('voidPayment', { entryId, reason: 'Lagi' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'alreadyVoided',
+    );
+    const money = await documentMoney(h, document);
+    expect(money).toMatchObject({ balance: 0 });
+    expect(money.entries[0]).toMatchObject({ voidedBy: h.storeOwnerId, voidReason: 'Salah ketik' });
+    await expectBalancedBooks(h);
+  });
+});
+
+describe('the drawer', () => {
+  test('a count shows the difference against the book, and only an owner settles it', async () => {
+    h = await openRepairHarness(509);
+    const document = await openTicket(h);
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 100_000 }] },
+      h.cashierId,
+    );
+    await h.money('moveCash', { kind: 'expense', amount: 20_000, reason: 'Bensin' }, h.cashierId);
+    await h.money(
+      'moveCash',
+      { kind: 'float', amount: 50_000, reason: 'Uang kembalian' },
+      h.cashierId,
+    );
+    const drawer = async () => (await h!.moneyQuery('cashDrawer', {}, h!.cashierId)).rows[0];
+    expect((await drawer()).expected).toBe(130_000);
+
+    const { entryId: countId } = (await h.money(
+      'countCash',
+      { counted: 120_000, note: '' },
+      h.cashierId,
+    )) as { entryId: string };
+    expect((await drawer()).counts).toMatchObject([
+      { id: countId, counted: 120_000, expected: 130_000, difference: -10_000, settled: 0 },
+    ]);
+
+    const settle = { amount: -10_000, countId, reason: 'Kurang kembalian' };
+    await expectRefused(h.money('adjustCash', settle, h.cashierId), 'PERMISSION_DENIED');
+    await h.money('adjustCash', settle, h.storeOwnerId);
+    const after = await drawer();
+    expect(after.expected).toBe(120_000);
+    expect(after.counts[0]).toMatchObject({ difference: -10_000, settled: -10_000 });
+    await expectBalancedBooks(h);
+  });
+
+  test('a deposit goes into a store account; other moves touch only the drawer', async () => {
+    h = await openRepairHarness(510);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BRI toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    await expectRefused(
+      h.money('moveCash', { kind: 'deposit', amount: 10_000, reason: 'Setor bank' }, h.cashierId),
+      'VALIDATION_FAILED',
+      'accountNotUsable',
+    );
+    await h.money(
+      'moveCash',
+      { kind: 'deposit', amount: 10_000, reason: 'Setor bank', account: `account:${accountId}` },
+      h.cashierId,
+    );
+    await expectRefused(
+      h.money('moveCash', { kind: 'withdrawal', amount: 10_000, reason: 'x' }, h.technicianId),
+      'PERMISSION_DENIED',
+    );
+    const { rows } = await sql<{ account: string; net: number }>`
+      SELECT account, SUM(debit - credit) AS net FROM money_lines GROUP BY account ORDER BY account
+    `.execute(h.db);
+    expect(rows.map((r) => [r.account, Number(r.net)])).toEqual([
+      [`account:${accountId}`, 10_000],
+      ['cash', -10_000],
+    ]);
+  });
+});

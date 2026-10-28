@@ -513,6 +513,71 @@ describe('owner-only prices and settings', () => {
   });
 });
 
+describe('money: the counter cannot take cash out through the ledger', () => {
+  test('a charge must match the servisan, a refund the overpayment, and lowering a bill is owners`', async () => {
+    const { world, builder } = await setupWorld(3360, 'none');
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId: testId(3361),
+      roleName: 'cashier',
+      permissionIds: ['repair.read', 'money.read', 'money.receive'],
+    });
+    const document = { kind: 'repair.ticket', id: TICKET, label: 'ABC-0001' };
+    const entry = (n: number, type: string, payload: Record<string, unknown>) =>
+      builder.append({
+        type,
+        entityType: 'money_entry',
+        entityId: `01920000-0000-7000-8000-0000000e0c0${n}`,
+        payload,
+      });
+    // The seeded servisan is still being worked on: nothing is charged yet.
+    const charge = entry(1, 'money.charge_recorded', {
+      document,
+      amount: 1,
+      account: 'service_revenue',
+    });
+    const dp = entry(2, 'money.payment_received', {
+      document,
+      account: 'cash',
+      amount: 100_000,
+      reference: null,
+      tendered: null,
+    });
+    const tooMuch = entry(3, 'money.refund_paid', {
+      document,
+      account: 'cash',
+      amount: 150_000,
+      reason: 'Batal',
+      reference: null,
+    });
+    const back = entry(4, 'money.refund_paid', {
+      document,
+      account: 'cash',
+      amount: 100_000,
+      reason: 'Batal',
+      reference: null,
+    });
+    const lower = entry(5, 'money.charge_reduced', { document, amount: 10_000, reason: 'x' });
+
+    const result = await push(world, [charge, dp, tooMuch, back, lower]);
+
+    expect(result.results.map((r) => r.status)).toEqual([
+      'rejected',
+      'accepted',
+      'rejected',
+      'accepted',
+      'rejected',
+    ]);
+    expect(result.results[0]).toMatchObject({ reason: 'money.refusal.notChargeable' });
+    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.refundAboveCredit' });
+    const cash = await sql<{ net: string }>`
+      SELECT COALESCE(SUM(debit - credit), 0) AS net FROM money_lines WHERE account = 'cash'
+    `.execute(db);
+    expect(Number(cash.rows[0]!.net)).toBe(0);
+  });
+});
+
 describe('a pushed op stamped in the future is refused', () => {
   test('beyond the margin: CLOCK_AHEAD with a device alarm, and the next op still syncs', async () => {
     const { world, builder } = await setupWorld(3310);

@@ -7,6 +7,7 @@ export * from './screen-lock.js';
 export type * from './schema.js';
 export * from './search.js';
 export { REPAIR_REFUSALS } from './rules.js';
+export { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 export {
   PHONE_MODELS_TABLE,
   catalogKeys,
