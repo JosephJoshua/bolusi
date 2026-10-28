@@ -48,27 +48,9 @@ import {
 } from '../options-editor.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { builtInLabel, optionLabel } from '../labels.js';
+import { INTAKE_HINT_KEY, INTAKE_LIST_KEY, builtInLabel, optionLabel } from '../labels.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useIntakeOptionSettings, useRepairRuntime } from '../runtime.js';
-
-const LIST_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
-  checks: 'repair.options.list.checks',
-  accessories: 'repair.options.list.accessories',
-  photoAngles: 'repair.options.list.photoAngles',
-  brands: 'repair.options.list.brands',
-  readyBy: 'repair.options.list.readyBy',
-  repairTypes: 'repair.options.list.repairTypes',
-};
-
-const HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
-  checks: 'repair.options.hint.checks',
-  accessories: 'repair.options.hint.accessories',
-  photoAngles: 'repair.options.hint.photoAngles',
-  brands: 'repair.options.hint.brands',
-  readyBy: 'repair.options.hint.readyBy',
-  repairTypes: 'repair.options.hint.repairTypes',
-};
 
 const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
   emptyLabel: 'repair.options.problem.emptyLabel',
@@ -158,7 +140,7 @@ export function IntakeOptionsScreen({
               {INTAKE_OPTION_LISTS.map((list) => (
                 <ListRow
                   key={list}
-                  primaryText={tn(LIST_KEY[list])}
+                  primaryText={tn(INTAKE_LIST_KEY[list])}
                   secondaryText={listSummary(data, list)}
                   showChevron
                   onPress={() => setOpen(list)}
@@ -256,7 +238,7 @@ function ListEditor({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(LIST_KEY[list])}
+      title={tn(INTAKE_LIST_KEY[list])}
       onBack={leave}
       primaryLabel={tn('repair.options.save')}
       onPrimary={save}
@@ -282,7 +264,7 @@ function ListEditor({
       }
       testID={testID}
     >
-      <Text style={repairStyles.muted}>{tn(HINT_KEY[list])}</Text>
+      <Text style={repairStyles.muted}>{tn(INTAKE_HINT_KEY[list])}</Text>
       <View style={styles.rows} testID={`${testID}.rows`}>
         <ReorderableList
           items={state.rows}

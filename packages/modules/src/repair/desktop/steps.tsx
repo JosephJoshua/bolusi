@@ -22,6 +22,7 @@ import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
@@ -883,11 +884,13 @@ export function ProposalDialog({
 // ── handover ────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Giving the device back: a photo of the handover and the customer's signature, both required.
+ * Giving the device back: the checklist gone through with the customer (anything not ticked needs a
+ * note), the payment, then a photo of the handover and the customer's signature, both required.
  * The amount shown is what the customer owes and signs for: the price on a repaired phone, the
  * cancellation fee on a cancelled one.
  */
 export function HandoverDialog({
+  ticket,
   ticketId,
   stale,
   customerName,
@@ -897,6 +900,8 @@ export function HandoverDialog({
   onDone,
   onClose,
 }: StepDialogProps & {
+  /** What the checklist is made of: whether it was repaired, and what was left with it. */
+  readonly ticket: Pick<TicketDetailRow, 'outcome' | 'peripherals'>;
   readonly customerName: string;
   /** What the customer pays in all: the price, or a cancelled servisan's fee. */
   readonly amount: number;
@@ -917,9 +922,14 @@ export function HandoverDialog({
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const payment = useHandoverPayment(due, accounts, canPayLater);
   const { settled } = payment;
+  const checks = useHandoverChecks(ticket);
   const leave = useLeaveGuard(
     stale === null &&
-      (photo !== null || signature !== null || note.trim() !== '' || payment.touched),
+      (photo !== null ||
+        signature !== null ||
+        note.trim() !== '' ||
+        payment.touched ||
+        checks.touched),
     onClose,
   );
   const photoState = usePhotoState(photo === null ? null : capturedThumbnailRef(photo));
@@ -934,7 +944,7 @@ export function HandoverDialog({
     });
   };
   const captured = photo !== null && signature !== null;
-  const complete = captured && settled && loadedAccounts !== null;
+  const complete = captured && settled && loadedAccounts !== null && checks.ready(note);
   const submit = (): void => {
     if (!complete || photo === null || signature === null) return;
     void runner
@@ -944,6 +954,7 @@ export function HandoverDialog({
           handoverPhoto: photo,
           signature,
           note,
+          checklist: [...checks.lines],
           ...payment.input,
         }),
       )
@@ -964,7 +975,13 @@ export function HandoverDialog({
           <>
             {complete ? null : (
               <p className="mr-auto text-small text-text-muted">
-                {tn(settled ? 'repair.hint.handover' : 'repair.hint.handoverPayment')}
+                {tn(
+                  !settled
+                    ? 'repair.hint.handoverPayment'
+                    : checks.loaded && !checks.ready(note)
+                      ? 'repair.hint.handoverChecks'
+                      : 'repair.hint.handover',
+                )}
               </p>
             )}
             <CancelButton onClick={leave.requestClose} />
@@ -1013,6 +1030,23 @@ export function HandoverDialog({
         {cancelled ? (
           <p className="mt-2 text-small text-text-muted">{tn('repair.handover.cancelled')}</p>
         ) : null}
+        {checks.lines.length === 0 || stale !== null ? null : (
+          <section className="mt-4" data-testid="repair.desk.handover.checks">
+            <h3 className="mb-2 text-body font-semibold text-text">
+              {tn('repair.handover.checks')}
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {checks.lines.map((line) => (
+                <ToggleChip
+                  key={`${line.kind}:${line.item}`}
+                  label={handoverLineLabel(line)}
+                  selected={line.done}
+                  onToggle={() => checks.toggle(line)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
         {due > 0 && stale === null ? (
           <section className="mt-4" data-testid="repair.desk.handover.payment">
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -1086,7 +1120,7 @@ export function HandoverDialog({
         </div>
         <TextArea
           className="mt-4"
-          label={tn('repair.handover.note')}
+          label={tn(checks.noteNeeded ? 'repair.handover.noteNeeded' : 'repair.handover.note')}
           rows={2}
           value={note}
           onChange={(event) => setNote(event.target.value)}

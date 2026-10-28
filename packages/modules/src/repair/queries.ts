@@ -35,6 +35,7 @@ import {
   DEFAULT_INTAKE_OPTIONS,
   INTAKE_OPTION_LISTS,
   NOTHING_HIDDEN,
+  recordedOption,
   type IntakeOption,
   type IntakeOptionList,
   type IntakeOptionSettings,
@@ -620,13 +621,6 @@ function parseJson<T>(text: string, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-/** Old tickets stored accessories as plain keys and checks without labels; both read as built-in. */
-function recordedOption(value: unknown): RecordedOption {
-  if (typeof value === 'string') return { item: value, label: null };
-  const { item, label } = value as { item: string; label?: string | null };
-  return { item, label: label ?? null };
 }
 
 /** The angles a ticket asked for; tickets from before the editable list had the six defaults. */

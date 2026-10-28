@@ -234,7 +234,11 @@ Agreed with the owner after reviewing what the repair release still lacks.
   shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
   720p; it uploads in the background like photos.
 - **No separate QC step:** the technician's after photo stays, and the counter tests
-  the phone with the customer at handover from a short checklist.
+  the phone with the customer at handover from a short checklist: the owner's
+  "Cek saat serah terima" list (default: the customer tried the phone, the repaired
+  part works; a cancelled phone skips it), then every accessory left at intake.
+  Anything not ticked needs the handover note; the servisan history keeps what was
+  and was not checked.
 - **Phones not collected:** a repaired or cancelled phone still in the store is
   flagged once it has waited the store's number of days (60 until its owner sets
   another, 1 to 365). The counter and owners see it on the board ("Belum diambil",

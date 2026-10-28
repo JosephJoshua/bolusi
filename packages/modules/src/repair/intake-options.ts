@@ -1,8 +1,9 @@
 // The lists the counter picks from at intake, which the owner edits (product-scope.md, "Configurable
 // intake lists"): condition checks, accessories left with the phone, intake photo angles, one-tap
-// brands, ready-by choices and repair types ("Jenis servisan", each with its warranty). The owner
-// keeps one list of each for the whole franchise; a store hides the items it does not use. A ticket records the label it showed, so a later rename or
-// removal never rewrites an old servisan.
+// brands, ready-by choices, repair types ("Jenis servisan", each with its warranty) and what the
+// counter checks with the customer at handover. The owner keeps one list of each for the whole
+// franchise; a store hides the items it does not use. A ticket records the label it showed, so a
+// later rename or removal never rewrites an old servisan.
 //
 // Platform-free and pure, so the command, the intake screens and the owner's editor share every rule.
 import { INTAKE_PHOTO_SLOTS } from './constants.js';
@@ -14,6 +15,7 @@ export const INTAKE_OPTION_LISTS = [
   'brands',
   'readyBy',
   'repairTypes',
+  'handoverChecks',
 ] as const;
 export type IntakeOptionList = (typeof INTAKE_OPTION_LISTS)[number];
 
@@ -88,6 +90,13 @@ export const REPAIR_TYPES = [
 export type RepairTypeId = (typeof REPAIR_TYPES)[number]['id'];
 export const MAX_WARRANTY_DAYS = 365;
 
+/**
+ * What the counter goes through with the customer before the phone goes home, instead of a separate
+ * QC step: they tried it, and what was repaired works. The accessories left at intake come on top.
+ */
+export const HANDOVER_CHECKS = ['customerTried', 'repairWorks'] as const;
+export type HandoverCheckId = (typeof HANDOVER_CHECKS)[number];
+
 /** A ready-by choice's id is its number of days, or this for "not known yet". */
 export const READY_UNKNOWN = 'unknown';
 export const MAX_READY_DAYS = 60;
@@ -101,6 +110,7 @@ export const BUILT_IN_OPTION_IDS: Readonly<Record<IntakeOptionList, readonly str
   brands: [],
   readyBy: [],
   repairTypes: REPAIR_TYPES.map((type) => type.id),
+  handoverChecks: HANDOVER_CHECKS,
 };
 
 /** The most an owner can put on one list: past this, the intake screen stops being quick. */
@@ -120,6 +130,7 @@ export const DEFAULT_INTAKE_OPTIONS: IntakeOptionLists = {
   brands: COMMON_BRANDS.map((name) => ({ id: name.toLowerCase(), label: name })),
   readyBy: ['0', '1', '3', READY_UNKNOWN].map(builtIn),
   repairTypes: REPAIR_TYPES.map((type) => ({ ...type, label: null })),
+  handoverChecks: HANDOVER_CHECKS.map(builtIn),
 };
 
 export const NOTHING_HIDDEN: IntakeOptionSettings['hidden'] = {
@@ -129,6 +140,7 @@ export const NOTHING_HIDDEN: IntakeOptionSettings['hidden'] = {
   brands: [],
   readyBy: [],
   repairTypes: [],
+  handoverChecks: [],
 };
 
 /** Days until a ready-by choice, or null for "not known yet" (and for anything unreadable). */
@@ -168,6 +180,7 @@ export function storeIntakeOptions(settings: IntakeOptionSettings): IntakeOption
     brands: pick('brands'),
     readyBy: pick('readyBy'),
     repairTypes: pick('repairTypes'),
+    handoverChecks: pick('handoverChecks'),
   };
 }
 
@@ -244,6 +257,16 @@ export function sameOptions(a: readonly IntakeOption[], b: readonly IntakeOption
       );
     })
   );
+}
+
+/**
+ * A recorded list item as a ticket stored it: v1 tickets kept a built-in id alone, later ones the
+ * id with the label it showed.
+ */
+export function recordedOption(value: unknown): { item: string; label: string | null } {
+  if (typeof value === 'string') return { item: value, label: null };
+  const { item, label } = value as { item: string; label?: string | null };
+  return { item, label: label ?? null };
 }
 
 /** A repair type as a servisan recorded it: the name it showed and its terms then. */
@@ -341,4 +364,54 @@ export function repairTypeChoices(
       needsVideo: type.needsVideo,
     }));
   return [...offered, ...kept];
+}
+
+/**
+ * One line the counter goes through with the customer at handover, as the servisan records it: a
+ * check from the owner's list, or an accessory left at intake coming back, named as it was shown.
+ */
+export interface HandoverCheck {
+  readonly kind: 'check' | 'accessory';
+  readonly item: string;
+  readonly label: string | null;
+  readonly done: boolean;
+}
+
+/**
+ * What the counter goes through before the phone goes home: the store's handover checks on a
+ * repaired phone (a cancelled one was not repaired, so there is nothing to try), then every
+ * accessory left with it at intake. Nothing is ticked yet.
+ */
+export function handoverChecklist(
+  outcome: string | null,
+  accessories: readonly { readonly item: string; readonly label: string | null }[],
+  offered: readonly IntakeOption[],
+): HandoverCheck[] {
+  const checks = outcome === 'repaired' ? offered : [];
+  return [
+    ...checks.map(({ id, label }) => ({ kind: 'check' as const, item: id, label, done: false })),
+    ...accessories.map(({ item, label }) => ({
+      kind: 'accessory' as const,
+      item,
+      label,
+      done: false,
+    })),
+  ];
+}
+
+/**
+ * Why a handover checklist cannot go through, or null. Every accessory left at intake must be on
+ * it, so none can quietly go missing; anything not ticked needs the handover note to say why.
+ */
+export function handoverProblem(
+  checklist: readonly HandoverCheck[],
+  accessories: readonly { readonly item: string }[],
+  note: string,
+): 'handoverAccessories' | 'handoverNoteNeeded' | null {
+  const listed = new Set(
+    checklist.filter((line) => line.kind === 'accessory').map((line) => line.item),
+  );
+  if (accessories.some(({ item }) => !listed.has(item))) return 'handoverAccessories';
+  if (checklist.some((line) => !line.done) && note.trim() === '') return 'handoverNoteNeeded';
+  return null;
 }
