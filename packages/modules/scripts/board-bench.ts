@@ -113,7 +113,7 @@ async function main(): Promise<void> {
     // The first page of each view: what opening the board or switching a view costs.
     for (const view of BOARD_VIEWS) {
       const { ms: took, result } = await time(() =>
-        list({ filter: boardFilter(view, qctx.userId), sort: boardSort(view), limit: 50 }),
+        list({ filter: boardFilter(view, qctx.userId, 0), sort: boardSort(view), limit: 50 }),
       );
       report.push(`View ${view}: first page ${ms(took)} (${result.rows.length} rows)`);
     }
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
         let cursor: string | null = null;
         for (let n = 0; n < pages; n += 1) {
           const page: { nextCursor: string | null } = await list({
-            filter: boardFilter('returned', qctx.userId),
+            filter: boardFilter('returned', qctx.userId, 0),
             sort: boardSort('returned'),
             limit: 50,
             ...(cursor === null ? {} : { cursor }),

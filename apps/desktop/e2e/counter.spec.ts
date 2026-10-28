@@ -136,6 +136,27 @@ for (const [width, height, sidebar] of [
   });
 }
 
+test('a phone nobody collected shows in its own list, and the message opens WhatsApp outside the app', async () => {
+  // Stands in for the OS: records what the app asked to open instead of starting a browser.
+  await app.evaluate(({ shell }) => {
+    const opened: string[] = [];
+    (globalThis as { opened?: string[] }).opened = opened;
+    shell.openExternal = (url: string) => {
+      opened.push(url);
+      return Promise.resolve();
+    };
+  });
+  await page.getByTestId('repair.desk.board.views.uncollected').click();
+  await page.getByText('Markus Yikwa').click();
+  await expect(page.getByTestId('repair.desk.ticket.customer')).toHaveText('Markus Yikwa');
+  await page.getByTestId('repair.desk.ticket.action.message').click();
+  await expect
+    .poll(() => app.evaluate(() => (globalThis as { opened?: string[] }).opened ?? []))
+    .toEqual([expect.stringMatching(/^https:\/\/wa\.me\/6281344556677\?text=/)]);
+  // The app itself stays on its one page.
+  expect(app.windows()).toHaveLength(1);
+});
+
 test('the page gets only the narrow print and update calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;

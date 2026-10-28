@@ -20,7 +20,8 @@
     "downPaymentReceived": "DP diterima",
     "downPaymentCorrected": "DP diubah",
     "slipPrinted": "Nota dicetak",
-    "storePrintSettingsChanged": "Tampilan nota diubah"
+    "storePrintSettingsChanged": "Tampilan nota diubah",
+    "storeUncollectedDaysChanged": "Batas HP belum diambil diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -66,13 +67,15 @@
       "pickup": "Siap diambil",
       "returned": "Sudah diambil",
       "unassigned": "Belum ada teknisi",
-      "cancelled": "Dibatalkan"
+      "cancelled": "Dibatalkan",
+      "uncollected": "Belum diambil"
     },
     "clearSearch": "Hapus pencarian",
     "checkSync": "Cek status sinkron",
     "cancelledBy": "oleh {name}",
     "feeChanged": "Biaya diubah",
-    "pickTicket": "Pilih servisan untuk melihat detailnya."
+    "pickTicket": "Pilih servisan untuk melihat detailnya.",
+    "waited": "{days} hari belum diambil"
   },
   "cancel": {
     "reason": "Kenapa dibatalkan?",
@@ -601,6 +604,34 @@
     "title": "Kertas nota",
     "phoneSummary": "Ukuran kertas di HP ini",
     "phoneHint": "Semua nota dari HP ini dicetak di kertas ini."
+  },
+  "uncollected": {
+    "title": "HP belum diambil",
+    "summary": "Tandai HP yang lama tidak diambil",
+    "intro": "HP yang sudah selesai atau dibatalkan tapi belum diambil ditandai setelah sekian hari.",
+    "days": "Jumlah hari",
+    "save": "Simpan",
+    "saved": "Batas hari disimpan.",
+    "hint": "Isi 1 sampai 365 hari."
+  },
+  "message": {
+    "notify": "Kabari pelanggan",
+    "ask": "Tanya pelanggan",
+    "openFailed": "WhatsApp tidak bisa dibuka di perangkat ini.",
+    "ready": "Halo Kak {name}, HP {device} sudah selesai diservis dan bisa diambil.",
+    "readyAt": "Halo Kak {name}, HP {device} sudah selesai diservis dan bisa diambil di {store}.",
+    "cancelled": "Halo Kak {name}, servisan HP {device} dibatalkan. HP-nya bisa diambil kembali.",
+    "cancelledAt": "Halo Kak {name}, servisan HP {device} dibatalkan. HP-nya bisa diambil kembali di {store}.",
+    "priceChange": "Halo Kak {name}, ada perubahan biaya untuk servisan HP {device}.",
+    "number": "No. servisan: {number}",
+    "total": "Total: {amount}",
+    "fee": "Biaya pembatalan: {amount}",
+    "downPayment": "DP: {amount}",
+    "due": "Sisa bayar: {amount}",
+    "refund": "DP dikembalikan: {amount}",
+    "newTotal": "Total jadi {amount}.",
+    "askAgree": "Boleh kami lanjutkan, Kak?",
+    "thanks": "Terima kasih."
   },
   "testPage": {
     "job": "Halaman uji",

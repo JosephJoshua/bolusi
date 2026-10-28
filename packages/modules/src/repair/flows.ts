@@ -35,25 +35,72 @@ export const BOARD_VIEWS = [
   'mine',
   'unassigned',
   'pickup',
+  'uncollected',
   'returned',
   'cancelled',
 ] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
 
-/** The views this user gets: every cancel, with who and what it charged, is for owners only. */
+/**
+ * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
+ * nobody collected are for the counter and owners, who call the customer.
+ */
 export function boardViews(can: RepairAbilities): readonly BoardView[] {
-  return BOARD_VIEWS.filter((view) => view !== 'cancelled' || can.cancel);
+  return BOARD_VIEWS.filter((view) => {
+    if (view === 'cancelled') return can.cancel;
+    if (view === 'uncollected') return flagsUncollected(can);
+    return true;
+  });
 }
 
-/** The cancelled view lists the latest cancel first; every queue lists the newest ticket first. */
+/**
+ * The cancelled view lists the latest cancel first, phones not collected the longest waiting
+ * first; every queue lists the newest ticket first.
+ */
 export function boardSort(view: BoardView): ListTicketsInput['sort'] {
-  return view === 'cancelled' ? 'cancelledAt.desc' : 'createdAt.desc';
+  if (view === 'cancelled') return 'cancelledAt.desc';
+  if (view === 'uncollected') return 'readyAt.asc';
+  return 'createdAt.desc';
 }
 
 const IN_PROGRESS = IN_PROGRESS_OUTCOMES;
+const DAY_MS = 86_400_000;
+/** How often an open screen re-reads which phones are not collected, as days pass with no change. */
+export const UNCOLLECTED_REFRESH_MS = 3_600_000;
 
-/** The `listTickets` filter behind each board view. */
-export function boardFilter(view: BoardView, userId: string): ListTicketsInput['filter'] {
+/** Phones nobody collected are flagged to the counter and owners, who call the customer. */
+export function flagsUncollected(can: Pick<RepairAbilities, 'intake' | 'cancel'>): boolean {
+  return can.intake || can.cancel;
+}
+
+/** Phones ready to collect before this time are not collected: `days` (the store's) before `now`. */
+export function uncollectedBefore(days: number, now: number): number {
+  return now - days * DAY_MS;
+}
+
+/**
+ * Whole days a finished phone has waited in the store, when it has waited at least the store's
+ * `days`; null when it is not flagged (still worked on, back with its owner, or not long enough).
+ */
+export function uncollectedDays(
+  ticket: Pick<TicketSummaryRow, 'location' | 'readyAt'>,
+  days: number,
+  now: number,
+): number | null {
+  if (ticket.location !== 'in_store' || ticket.readyAt === null) return null;
+  if (ticket.readyAt >= uncollectedBefore(days, now)) return null;
+  return Math.floor((now - ticket.readyAt) / DAY_MS);
+}
+
+/**
+ * The `listTickets` filter behind each board view. `readyBefore` is the not-collected cut-off
+ * (`uncollectedBefore`), which only that view reads.
+ */
+export function boardFilter(
+  view: BoardView,
+  userId: string,
+  readyBefore: number,
+): ListTicketsInput['filter'] {
   switch (view) {
     case 'active':
       return { outcomes: [...IN_PROGRESS], location: 'in_store' };
@@ -63,6 +110,8 @@ export function boardFilter(view: BoardView, userId: string): ListTicketsInput['
       return { outcomes: [...IN_PROGRESS], location: 'in_store', unassigned: true };
     case 'pickup':
       return { outcomes: ['repaired', 'cancelled'], location: 'in_store' };
+    case 'uncollected':
+      return { outcomes: ['repaired', 'cancelled'], location: 'in_store', readyBefore };
     case 'returned':
       return { location: 'returned' };
     case 'cancelled':
@@ -122,6 +171,8 @@ export interface RepairAbilities {
   readonly correctDownPayment: boolean;
   /** Edit what this store's slips print. */
   readonly setPrintSettings: boolean;
+  /** Set after how many days a phone nobody collected is flagged here. */
+  readonly setUncollectedDays: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -140,6 +191,7 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     setCancelFees: hasPermission(P.setCancelFees),
     correctDownPayment: hasPermission(P.correctDownPayment),
     setPrintSettings: hasPermission(P.setPrintSettings),
+    setUncollectedDays: hasPermission(P.setUncollectedDays),
   };
 }
 

@@ -78,6 +78,8 @@ export const ICON_GLYPHS = Object.freeze({
   print: 'printer-outline',
   /** The paper a device prints on. */
   paper: 'file-outline',
+  /** Settings: how long until something is flagged (phones not collected). */
+  clock: 'clock-outline',
   /** PhotoSlot: an empty slot asks for a photo. */
   camera: 'camera-outline',
   /** ToggleChip / PhotoSlot: selected or done — always beside a label. */

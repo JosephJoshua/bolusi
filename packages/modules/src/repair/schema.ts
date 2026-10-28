@@ -69,6 +69,11 @@ export interface RepairTicketsTable {
   downPayment: number | null;
   downPaymentBy: string | null;
   downPaymentAt: number | null;
+  /**
+   * When the phone was last ready to collect: marked repaired, or cancelled. Null while it is being
+   * worked on (a reopen clears it). A phone still in the store long after this is flagged.
+   */
+  readyAt: number | null;
 }
 
 export interface RepairQuoteLinesTable {
@@ -172,6 +177,15 @@ export interface RepairStorePrintSettingsTable {
   updatedAt: number;
 }
 
+/** After how many days one store flags a phone nobody collected. A store that never set it uses 60. */
+export interface RepairStoreUncollectedTable {
+  storeId: string;
+  tenantId: string;
+  days: number;
+  updatedBy: string;
+  updatedAt: number;
+}
+
 /**
  * The phone catalog (client migration 8, server migration 0016). Not a repair projection: no op
  * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
@@ -206,4 +220,5 @@ export interface RepairDatabase {
   repairStoreIntakeOptions: RepairStoreIntakeOptionsTable;
   repairStoreCancelFees: RepairStoreCancelFeesTable;
   repairStorePrintSettings: RepairStorePrintSettingsTable;
+  repairStoreUncollected: RepairStoreUncollectedTable;
 }

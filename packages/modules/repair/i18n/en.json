@@ -20,7 +20,8 @@
     "downPaymentReceived": "Down payment received",
     "downPaymentCorrected": "Down payment changed",
     "slipPrinted": "Slip printed",
-    "storePrintSettingsChanged": "Slip details changed"
+    "storePrintSettingsChanged": "Slip details changed",
+    "storeUncollectedDaysChanged": "Not-collected limit changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -66,13 +67,15 @@
       "pickup": "Ready for pickup",
       "returned": "Returned",
       "unassigned": "Unassigned",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "uncollected": "Not collected"
     },
     "clearSearch": "Clear search",
     "checkSync": "Check sync status",
     "cancelledBy": "by {name}",
     "feeChanged": "Fee changed",
-    "pickTicket": "Pick a repair to see its details."
+    "pickTicket": "Pick a repair to see its details.",
+    "waited": "Not collected for {days} days"
   },
   "cancel": {
     "reason": "Why is it cancelled?",
@@ -601,6 +604,34 @@
     "title": "Slip paper",
     "phoneSummary": "Paper size on this phone",
     "phoneHint": "Every slip from this phone prints on this paper."
+  },
+  "uncollected": {
+    "title": "Phones not collected",
+    "summary": "Flag phones left too long",
+    "intro": "A repaired or cancelled phone still in the store is flagged after this many days.",
+    "days": "Days",
+    "save": "Save",
+    "saved": "Limit saved.",
+    "hint": "Enter 1 to 365 days."
+  },
+  "message": {
+    "notify": "Message customer",
+    "ask": "Ask customer",
+    "openFailed": "Couldn’t open WhatsApp on this device.",
+    "ready": "Hi {name}, your {device} is repaired and ready to collect.",
+    "readyAt": "Hi {name}, your {device} is repaired and ready to collect at {store}.",
+    "cancelled": "Hi {name}, the repair of your {device} was cancelled. You can collect the phone.",
+    "cancelledAt": "Hi {name}, the repair of your {device} was cancelled. You can collect the phone at {store}.",
+    "priceChange": "Hi {name}, the price for repairing your {device} has changed.",
+    "number": "Repair no.: {number}",
+    "total": "Total: {amount}",
+    "fee": "Cancellation fee: {amount}",
+    "downPayment": "Down payment: {amount}",
+    "due": "Left to pay: {amount}",
+    "refund": "Down payment returned: {amount}",
+    "newTotal": "New total: {amount}.",
+    "askAgree": "May we go ahead?",
+    "thanks": "Thank you."
   },
   "testPage": {
     "job": "Test page",

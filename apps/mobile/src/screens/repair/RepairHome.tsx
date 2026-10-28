@@ -117,6 +117,7 @@ export function RepairHome({
     <RepairBoard
       syncChip={syncChip}
       avatar={avatar}
+      now={now}
       selectedTicketId={
         split && (view.kind === 'ticket' || view.kind === 'handover') ? view.ticketId : null
       }
@@ -138,6 +139,7 @@ export function RepairHome({
         key={view.ticketId}
         ticketId={view.ticketId}
         chrome={chrome}
+        now={now}
         hideBack={split}
         onBack={() => setView({ kind: 'board' })}
         onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
