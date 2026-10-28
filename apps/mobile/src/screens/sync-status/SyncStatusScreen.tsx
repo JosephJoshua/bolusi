@@ -61,11 +61,10 @@ import { syncChipAccessibilityLabels } from './chip-a11y.js';
 import {
   bannerCauses,
   firstSyncPercent,
-  isOfflineButHealthy,
   manualSync,
   mediaQueue,
-  reassurance,
-  REASSURANCE_KEY,
+  reassuranceMessage,
+  relativeLabel,
   showsRejectedSection,
   staleness,
   SYNC_TITLE_KEY,
@@ -255,7 +254,7 @@ export function SyncStatusScreen({
             {t(SYNC_TITLE_KEY[titleState])}
           </Text>
           <Text style={styles.answer} testID="sync-reassurance-text">
-            {reassuranceText(input)}
+            {reassuranceMessage(input, 'phone')}
           </Text>
           <Text style={styles.meta} testID="sync-last-synced">
             {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
@@ -414,42 +413,6 @@ const TONE: Record<HeroTone, { readonly bg: string; readonly fg: string }> = {
   neutral: { bg: color.surfaceAlt, fg: color.textMuted },
   warning: { bg: color.warningBg, fg: color.warning },
 };
-
-/** `{relative}` arrives PRE-FORMATTED (07-i18n): the formatter is i18n's, never Intl here. */
-function relativeLabel(input: SyncStatusInput): string {
-  if (input.state.lastSuccessfulSyncAt === null) return t('core.status.empty');
-  return formatRelative(input.now - input.state.lastSuccessfulSyncAt);
-}
-
-/**
- * Tier 1's sentence — the answer to "is my work safe?".
- *
- * The key per `Reassurance` kind is read from `REASSURANCE_KEY` (model.ts), the ONE view→key mapping
- * (§2.8); this function supplies only the per-arm params. That makes `model.test.ts`'s
- * `REASSURANCE_KEY` assertions load-bearing rather than a decoy (task 65) — break a slot and both
- * this line AND those tests change. `offline-but-healthy` is handled BEFORE the map because it is not
- * a `Reassurance` kind at all: offline is an input, never a problem (model.ts's thesis), so it has
- * its own one-sentence copy.
- */
-function reassuranceText(input: SyncStatusInput): string {
-  if (isOfflineButHealthy(input)) return t('sync.status.offline');
-
-  const answer = reassurance(input);
-  switch (answer.kind) {
-    case 'allSent':
-      return t(REASSURANCE_KEY[answer.kind]);
-    case 'savedHere':
-      return t(REASSURANCE_KEY[answer.kind], { count: answer.pendingOperationCount });
-    case 'photosPending':
-      // Ops sent, photos still draining (FR-1138) — honest and calm, never "all sent".
-      return t(REASSURANCE_KEY[answer.kind]);
-    case 'syncing':
-      return t(REASSURANCE_KEY[answer.kind]);
-    case 'attention':
-      // The count lives on the banner + the section header, not the reassurance (task 144 item 3).
-      return t(REASSURANCE_KEY[answer.kind]);
-  }
-}
 
 /** The banner's already-localized message for the winning cause. */
 function bannerMessage(input: SyncStatusInput, cause: string): string {

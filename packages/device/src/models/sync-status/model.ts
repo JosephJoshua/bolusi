@@ -45,6 +45,7 @@ import {
   type SyncLoopState,
   type SyncState,
 } from '@bolusi/core';
+import { formatRelative, t } from '@bolusi/i18n';
 import type { BannerCause } from '@bolusi/ui';
 
 /** 03-state-machines §Operation.syncStatus. */
@@ -405,3 +406,43 @@ export function mediaQueue(input: SyncStatusInput): readonly MediaQueueRow[] {
 // that rebuilt the same key would be a second answer to one question (CLAUDE.md §2.8) — and the
 // copy without the fallback would render a raw missing key to a cashier the first time 05 §8 gained
 // a code. `rejection-keys.test.ts` proves every code in the closed set resolves in BOTH catalogs.
+
+/** `{relative}` arrives PRE-FORMATTED (07-i18n): the formatter is i18n's, never Intl here. */
+export function relativeLabel(input: SyncStatusInput): string {
+  if (input.state.lastSuccessfulSyncAt === null) return t('core.status.empty');
+  return formatRelative(input.now - input.state.lastSuccessfulSyncAt);
+}
+
+/**
+ * Tier 1's sentence — the answer to "is my work safe?".
+ *
+ * The key per `Reassurance` kind is read from `REASSURANCE_KEY` (model.ts), the ONE view→key mapping
+ * (§2.8); this function supplies only the per-arm params. That makes `model.test.ts`'s
+ * `REASSURANCE_KEY` assertions load-bearing rather than a decoy (task 65) — break a slot and both
+ * this line AND those tests change. `offline-but-healthy` is handled BEFORE the map because it is not
+ * a `Reassurance` kind at all: offline is an input, never a problem (model.ts's thesis), so it has
+ * its own one-sentence copy.
+ */
+export function reassuranceMessage(input: SyncStatusInput, device: 'phone' | 'computer'): string {
+  if (isOfflineButHealthy(input)) {
+    return t(device === 'phone' ? 'sync.status.offline' : 'sync.pc.offline');
+  }
+
+  const answer = reassurance(input);
+  switch (answer.kind) {
+    case 'allSent':
+      return t(REASSURANCE_KEY[answer.kind]);
+    case 'savedHere':
+      return t(device === 'phone' ? REASSURANCE_KEY[answer.kind] : 'sync.pc.savedHere', {
+        count: answer.pendingOperationCount,
+      });
+    case 'photosPending':
+      // Ops sent, photos still draining (FR-1138) — honest and calm, never "all sent".
+      return t(REASSURANCE_KEY[answer.kind]);
+    case 'syncing':
+      return t(REASSURANCE_KEY[answer.kind]);
+    case 'attention':
+      // The count lives on the banner + the section header, not the reassurance (task 144 item 3).
+      return t(REASSURANCE_KEY[answer.kind]);
+  }
+}

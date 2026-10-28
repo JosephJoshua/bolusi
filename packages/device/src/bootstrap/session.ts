@@ -219,6 +219,8 @@ export interface AppSessionController {
    * it. Resolves true iff this call locked the session.
    */
   tick(): Promise<boolean>;
+  /** Lock now (api/02-auth §6.4 `manual_lock`): the counter PC's "Kunci" before walking away. */
+  lockNow(): Promise<void>;
   /** Any user interaction resets the idle deadline (§6.4). Called from the shell's touch handler. */
   recordActivity(): void;
   /**
@@ -377,6 +379,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     },
 
     tick: () => shell.tick(),
+    lockNow: () => shell.lockNow(),
 
     recordActivity: () => shell.recordActivity(),
 

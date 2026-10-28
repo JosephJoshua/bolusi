@@ -318,7 +318,7 @@ const NOTIFICATION_KEY = {
 } as const satisfies Record<MutablePushCategory, string>;
 
 /** Brand names, the same in every language. */
-const PLATFORM_NAME = { android: 'Android', ios: 'iOS' } as const;
+const PLATFORM_NAME = { android: 'Android', ios: 'iOS', windows: 'Windows' } as const;
 
 const styles = StyleSheet.create({
   who: { paddingTop: space.sm },

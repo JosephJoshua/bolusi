@@ -18,6 +18,7 @@
 //     writers of one key that could disagree (§2.8).
 //   platform / appVersion: process facts, not DB values — supplied by the one native-binding site
 //     (index.ts). appVersion is `''` in v0 (expo-constants unpinned — decisions/2026-07-20-appversion-source).
+import type { DevicePlatform } from '@bolusi/schemas';
 import {
   readDeviceId,
   readMeta,
@@ -40,7 +41,7 @@ export const DEVICE_NAME_META_KEY = 'auth.deviceName';
 
 /** The process facts index.ts binds — the RN platform and the app version string (not DB values). */
 export interface DeviceInfoContext {
-  readonly platform: 'android' | 'ios';
+  readonly platform: DevicePlatform;
   readonly appVersion: string;
 }
 

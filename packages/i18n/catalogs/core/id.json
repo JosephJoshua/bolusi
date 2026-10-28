@@ -127,7 +127,8 @@
     "none": "Kamera tidak ditemukan. Pasang webcam, lalu coba lagi.",
     "denied": "Kamera belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Kamera, lalu coba lagi.",
     "failed": "Kamera belum bisa menyala. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.",
-    "saveFailed": "Fotonya belum bisa disimpan. Coba lagi."
+    "saveFailed": "Fotonya belum bisa disimpan. Coba lagi.",
+    "fromFile": "Pilih file foto"
   },
   "signature": {
     "hint": "Minta pelanggan tanda tangan di kotak ini.",
