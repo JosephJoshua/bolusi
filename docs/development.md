@@ -135,7 +135,9 @@ Photos and signatures: the webcam and the on-screen pad when the PC has them, ot
 a store phone, through the server (`apps/server/src/handoff`). The PC asks the server for
 a pairing and shows the phone page's address (`<BOLUSI_API_URL>/h/<key>`) as a QR; the
 phone opens it once in its own browser and stays paired, so every later photo and the
-signature appear on it by themselves (signatures on a landscape pad). Both need the
+signature appear on it by themselves (signatures on a landscape pad). The first browser to
+open the address gets a cookie for that pairing; any other browser with the same address gets
+410, so a photo of the QR is useless once the store phone has scanned it. Both need the
 internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
 a server restart, or 30 minutes without a step.
 

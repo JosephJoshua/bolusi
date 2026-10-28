@@ -154,7 +154,7 @@ const PHONE_PAGE: EndpointProbes = {
   unauthenticated: {
     kind: 'absent',
     reason:
-      'bearer-exempt by design: the store phone has no device token, so the unguessable key is its only credential',
+      'bearer-exempt by design: the store phone has no device token; the unguessable key opens the page once, then only that browser (its HttpOnly phone cookie) may use the pairing',
   },
   unauthenticatedRequest: unauthLeg('GET', () => `/h/${'A'.repeat(32)}`),
 };

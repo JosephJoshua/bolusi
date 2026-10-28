@@ -14,10 +14,17 @@
 // The phone routes answer with bare statuses the page reads (410 the pairing is over, 409 the step
 // was withdrawn or replaced, 413/415/400 a send it cannot take). A wrong key gets the same 410 as
 // an ended one, so keys cannot be probed.
+//
+// The key alone works once. The first browser to open the page gets a phone secret in an HttpOnly
+// cookie scoped to /h/<key>; /next, /send and any reopen need it, so someone who photographed the
+// QR gets 410 after the store phone scanned it. The same phone reloading still works. SameSite is
+// Lax, not Strict: a phone that opened the page from a QR scanner app and reloads it is a
+// cross-site navigation, and Strict would drop the cookie there.
 import { randomBytes } from 'node:crypto';
 
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 
 import {
@@ -96,29 +103,43 @@ function bare(c: Context<AppEnv>, status: 204 | 400 | 409 | 410 | 413 | 415): Re
   return c.body(null, status);
 }
 
+/** The cookie holding the paired phone's secret; its path keeps it to that one pairing. */
+const PHONE_COOKIE = 'handoff_phone';
+
 export function createHandoffPageRouter(deps: ServerDeps) {
   const relay = deps.handoffRelay;
   const sessionOf = (c: Context<AppEnv>): HandoffSession | null => {
     const key = c.req.param('key') ?? '';
     return KEY.test(key) ? relay.forKey(key) : null;
   };
+  /** The pairing, only when this request comes from the phone that opened it. */
+  const phoneSessionOf = (c: Context<AppEnv>): HandoffSession | null => {
+    const session = sessionOf(c);
+    return session !== null && relay.isPhone(session, getCookie(c, PHONE_COOKIE)) ? session : null;
+  };
 
   return new Hono<AppEnv>()
     .get('/:key', (c) => {
       const session = sessionOf(c);
       if (session === null) return bare(c, 410);
+      const secret = relay.opened(session, getCookie(c, PHONE_COOKIE));
+      if (secret === null) return bare(c, 410);
+      setCookie(c, PHONE_COOKIE, secret, {
+        path: `/h/${session.key}`,
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: new URL(c.req.url).protocol === 'https:',
+      });
       const nonce = randomBytes(16).toString('base64');
       for (const [name, value] of Object.entries(PHONE_HEADERS)) c.header(name, value);
       c.header(
         'Content-Security-Policy',
         `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'`,
       );
-      const html = handoffPage(session.labels, nonce, HANDOFF_PAD, HANDOFF_LIMITS);
-      relay.opened(session);
-      return c.html(html);
+      return c.html(handoffPage(session.labels, nonce, HANDOFF_PAD, HANDOFF_LIMITS));
     })
     .get('/:key/next', async (c) => {
-      const session = sessionOf(c);
+      const session = phoneSessionOf(c);
       if (session === null) return bare(c, 410);
       const seen = Number(c.req.query('v') ?? '-1');
       await relay.waitForStep(session, seen, c.req.raw.signal);
@@ -133,7 +154,7 @@ export function createHandoffPageRouter(deps: ServerDeps) {
         onError: (c) => bare(c, 413),
       }),
       async (c) => {
-        const session = sessionOf(c);
+        const session = phoneSessionOf(c);
         if (session === null) return bare(c, 410);
         const body = new Uint8Array(await c.req.arrayBuffer());
         if (session.ended) return bare(c, 410);
