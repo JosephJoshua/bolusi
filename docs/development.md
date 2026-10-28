@@ -128,6 +128,13 @@ the sidebar). Updates only look at the repository's latest release, so keep othe
 release kinds out of this repository or mark them pre-release. `pnpm --filter
 @bolusi/desktop dist` builds the installer locally (on Windows; Linux needs wine).
 
+### Logo
+
+The logo's SVGs live in `assets/brand` (mark, wordmark, full-bleed app icon; light and dark
+tones). Screens on the PC use `BrandMark` from `@bolusi/ui-web`. After changing an SVG, run
+`pnpm brand:assets` to redraw the phone icons, splash image and the Windows `icon.ico`
+(`CHROMIUM_PATH=/opt/pw-browsers/chromium` in cloud containers), and commit the results.
+
 ## Verify
 
 ```sh

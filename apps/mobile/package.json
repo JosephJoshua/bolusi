@@ -42,6 +42,7 @@
     "expo-screen-orientation": "57.0.3",
     "expo-secure-store": "57.0.0",
     "expo-sharing": "57.0.3",
+    "expo-splash-screen": "57.0.10",
     "expo-status-bar": "57.0.0",
     "expo-system-ui": "57.0.1",
     "expo-task-manager": "57.0.2",
