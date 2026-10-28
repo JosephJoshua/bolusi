@@ -74,8 +74,8 @@ import { noblePort } from '@bolusi/test-support';
 import * as SecureStore from 'expo-secure-store';
 
 import type { RootProps } from '../src/bootstrap/Root.js';
-import { createSyncClient, type SyncClient } from '../src/bootstrap/sync-client.js';
-import { APPEND_DEBOUNCE_MS, type NetInfoPort } from '../src/bootstrap/triggers.js';
+import { createSyncClient, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import { APPEND_DEBOUNCE_MS, type NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 import {
   bootFixture,
   closeClientDb,

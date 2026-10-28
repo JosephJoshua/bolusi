@@ -20,7 +20,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { fire, render } from '../../../../packages/ui/test/render.js';
 
 import { SignaturePadScreen, segmentsFor, type SignaturePadState } from './SignaturePadScreen.js';
-import type { SignatureStroke } from './signature-png.js';
+import type { SignatureStroke } from '@bolusi/device/media/signature-png';
 
 const STROKE: SignatureStroke = [
   { x: 10, y: 10 },

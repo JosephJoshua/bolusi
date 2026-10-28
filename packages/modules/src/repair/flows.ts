@@ -251,6 +251,66 @@ export function ticketActions(
   return actions;
 }
 
+/** Actions that change one fact, offered beside it (the technician, the price), never in a row. */
+export const CONTEXTUAL_ACTIONS: ReadonlySet<TicketAction> = new Set([
+  'assign',
+  'changePrice',
+  'proposePrice',
+]);
+
+/**
+ * The offered actions laid out by what this user does next, not as a row of every status change:
+ * one next step, at most one real alternative to it, and the rarer moves kept under "Lainnya".
+ * Cancelling is not here: it is final, so screens keep it apart at the end.
+ */
+export interface TicketActionLayout {
+  readonly next: TicketAction | null;
+  readonly alternative: TicketAction | null;
+  readonly more: readonly TicketAction[];
+}
+
+/** The steps that move a repair forward, likeliest first. */
+const FORWARD: readonly TicketAction[] = [
+  'decidePrice',
+  'handover',
+  'markRepaired',
+  'start',
+  'resume',
+];
+/** Bench work: offered only on a repair that is this user's or nobody's yet. */
+const BENCH_WORK: ReadonlySet<TicketAction> = new Set([
+  'start',
+  'resume',
+  'markRepaired',
+  'waitForParts',
+]);
+
+export function arrangeTicketActions(
+  actions: readonly TicketAction[],
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'technicianId'>,
+  userId: string,
+): TicketActionLayout {
+  // Someone else's repair is theirs to work on; this user first takes it over ("Ambil alih").
+  const mine = ticket.technicianId === null || ticket.technicianId === userId;
+  const offered = actions.filter(
+    (action) =>
+      action !== 'cancel' && !CONTEXTUAL_ACTIONS.has(action) && (mine || !BENCH_WORK.has(action)),
+  );
+  const forward = FORWARD.filter((action) => offered.includes(action));
+  // With nothing to push forward, picking a technician is what an unassigned repair waits on.
+  const assignNext = ticket.technicianId === null && actions.includes('assign');
+  const next = forward[0] ?? (assignNext ? 'assign' : null);
+  // Parts running out is the one real fork while working; before work starts it is rare.
+  const alternative =
+    forward[1] ??
+    (ticket.outcome === 'in_repair' && offered.includes('waitForParts') ? 'waitForParts' : null);
+  return {
+    next,
+    alternative,
+    more: offered.filter((action) => action !== next && action !== alternative),
+  };
+}
+
 /**
  * What this user may do about the down payment, shown beside it. Mirrors the commands: anyone at
  * the counter records one while the servisan is open and none is recorded; only an owner

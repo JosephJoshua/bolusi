@@ -4,6 +4,7 @@
 // interfaces are what `apps/mobile` binds (SecureStore for the keystore, the sync client's fetch for
 // the transport) and what tests fake. Everything effectful is here so the whole auth runtime is
 // constructible on Node from fakes (the task's headless-on-Node requirement).
+import type { DevicePlatform } from '@bolusi/schemas';
 import type { PinVerifier } from './verifier.js';
 
 /**
@@ -95,7 +96,7 @@ export interface EnrollRequest {
   readonly devicePublicKeyB64: string;
   readonly storeId: string;
   readonly deviceName: string;
-  readonly platform: 'android' | 'ios';
+  readonly platform: DevicePlatform;
   readonly appVersion: string;
   /** The still-active registration this one replaces; the server revokes it in the same step. */
   readonly replacesDeviceId?: string;

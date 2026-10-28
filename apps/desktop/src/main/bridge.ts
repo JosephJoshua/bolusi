@@ -52,4 +52,16 @@ export interface UpdatesBridge {
 export interface DesktopBridge {
   readonly printers: PrintersBridge;
   readonly updates: UpdatesBridge;
+  readonly core: CoreBridge;
 }
+
+/** The offline core's door: ask main for a port to it (on every page load, so a reload reconnects). */
+export interface CoreBridge {
+  connect(): void;
+}
+
+/** Main's answer, posted to the page's own window with the port attached. */
+export const CORE_PORT_MESSAGE = 'bolusi:core-port';
+
+/** `live`: a port to the core is attached; `demo`: run the seeded demo; `unavailable`: the core is down. */
+export type CorePortMode = 'live' | 'demo' | 'unavailable';

@@ -18,7 +18,7 @@ vi.mock('expo-notifications', () => ({
 }));
 
 import { channelId, createNotificationChannels } from '../bootstrap/notifications.js';
-import { defaultMuteState, MUTABLE_PUSH_CATEGORIES } from '../screens/settings/model.js';
+import { defaultMuteState, MUTABLE_PUSH_CATEGORIES } from '@bolusi/device/models/settings/model';
 
 beforeEach(() => {
   mocks.setNotificationChannelAsync.mockReset();

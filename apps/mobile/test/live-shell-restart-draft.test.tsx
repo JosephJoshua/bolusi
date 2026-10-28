@@ -36,8 +36,8 @@ vi.mock('expo-location', () => ({
 }));
 
 import { fire, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
-import { createSessionRepairRuntime, repairMediaSeamsFor } from '../src/bootstrap/repair.js';
-import type { AppSessionController } from '../src/bootstrap/session.js';
+import { createSessionRepairRuntime, repairMediaSeamsFor } from '@bolusi/device/bootstrap/repair';
+import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 import {
   bootFixture,
   closeClientDb,

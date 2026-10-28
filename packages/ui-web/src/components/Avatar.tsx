@@ -19,7 +19,7 @@ export function Avatar({
 }: {
   readonly userId: string;
   readonly name: string;
-  readonly size?: 28 | 32 | 40;
+  readonly size?: 28 | 32 | 40 | 56;
   readonly className?: string;
 }): React.JSX.Element {
   return (
@@ -28,7 +28,7 @@ export function Avatar({
       style={{ backgroundColor: identityColor(userId), width: size, height: size }}
       className={clsx(
         'inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white',
-        size === 40 ? 'text-body' : 'text-small',
+        size === 56 ? 'text-title' : size === 40 ? 'text-body' : 'text-small',
         className,
       )}
     >

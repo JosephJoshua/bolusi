@@ -15,7 +15,7 @@
 // the one file in the sync-status view that localizes, keeping translation in `apps/mobile`.
 import { t } from '@bolusi/i18n';
 
-import type { SyncChipState } from './model.js';
+import type { SyncChipState } from '@bolusi/device/models/sync-status/model';
 
 export interface SyncChipLabelInput {
   /**

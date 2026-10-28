@@ -15,7 +15,7 @@ import {
   type RepairHarness,
 } from '../../../packages/modules/test/support/repair-harness.js';
 import { fire, render, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
-import { createRepairRuntime } from '../src/screens/repair/runtime-adapter.js';
+import { createRepairRuntime } from '@bolusi/device/models/repair/runtime-adapter';
 
 export { openRepairHarness, intake, render, fire, textsIn, type RepairHarness, type RenderResult };
 

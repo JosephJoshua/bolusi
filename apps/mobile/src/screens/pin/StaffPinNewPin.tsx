@@ -8,8 +8,13 @@ import { t } from '@bolusi/i18n';
 import { AppShell } from '@bolusi/ui';
 import { View } from 'react-native';
 
-import { newPinFeedbackKey, newPinPadState, newPinPromptKey, type NewPinEntry } from './new-pin.js';
-import type { PinTargetUser } from './pin-target.js';
+import {
+  newPinFeedbackKey,
+  newPinPadState,
+  newPinPromptKey,
+  type NewPinEntry,
+} from '@bolusi/device/models/pin/new-pin';
+import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinEntry } from './PinEntry.js';
 
 export interface StaffPinNewPinProps {

@@ -30,7 +30,7 @@ import {
 import { createHash } from 'react-native-quick-crypto';
 
 import { deviceColumnAead } from '../ports/aead.js';
-import type { PhonePhotoFiles } from './phone-photos.js';
+import type { PhonePhotoFiles } from '@bolusi/device/media/phone-photos';
 
 /** `<documentDirectory>/media/` — self-captured evidence (06 §2.2 step 5). Encrypted at rest. */
 export function mediaDocumentDirectory(): Directory {

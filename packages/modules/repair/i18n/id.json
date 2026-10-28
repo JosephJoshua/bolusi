@@ -28,7 +28,7 @@
     "assign": "Pilih teknisi",
     "cancel": "Batalkan servisan",
     "changePrice": "Ubah harga",
-    "claim": "Ambil servisan ini",
+    "claim": "Masukkan ke Tugasku",
     "decidePrice": "Konfirmasi harga",
     "declinePrice": "Tidak setuju",
     "handover": "Serahkan HP",
@@ -47,7 +47,9 @@
     "reassignShort": "Ganti",
     "backToTicket": "Kembali ke servisan",
     "applyUnconfirmed": "Belum",
-    "agreedYes": "Sudah"
+    "agreedYes": "Sudah",
+    "takeOver": "Ambil alih",
+    "more": "Lainnya"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",

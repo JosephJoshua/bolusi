@@ -1,0 +1,21 @@
+{
+  "extends": "@bolusi/tsconfig/react-native.json",
+  "compilerOptions": {
+    "composite": true,
+    // fetch, WebSocket and TextDecoder: Hermes and Node both provide the web versions.
+    "lib": ["ES2022", "DOM"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  "references": [
+    { "path": "../core/tsconfig.build.json" },
+    { "path": "../schemas/tsconfig.build.json" },
+    { "path": "../i18n/tsconfig.build.json" },
+    { "path": "../db-client/tsconfig.build.json" },
+    { "path": "../modules/tsconfig.build.json" },
+    { "path": "../ui/tsconfig.build.json" }
+  ]
+}
