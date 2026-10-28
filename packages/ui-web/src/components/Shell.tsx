@@ -16,23 +16,27 @@ export interface NavItem {
 }
 
 export function AppShell({
+  titleBar,
   sidebar,
   collapsed = false,
   children,
   testId,
 }: {
+  /** The window's own title bar across the top, on the desktop app. */
+  readonly titleBar?: ReactNode;
   readonly sidebar: ReactNode;
   /** The sidebar shows icons only, leaving the page the room. */
   readonly collapsed?: boolean;
   readonly children: ReactNode;
   readonly testId?: string | undefined;
 }): React.JSX.Element {
-  return (
+  const shell = (
     <div
       data-testid={testId}
       data-sidebar={collapsed ? 'collapsed' : 'expanded'}
       className={clsx(
-        'grid h-full bg-surface transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
+        'grid min-h-0 flex-1 bg-surface transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
+        titleBar === undefined && 'h-full',
         collapsed ? 'grid-cols-[64px_minmax(0,1fr)]' : 'grid-cols-[232px_minmax(0,1fr)]',
       )}
     >
@@ -40,11 +44,19 @@ export function AppShell({
       <main className="flex min-h-0 min-w-0 flex-col">{children}</main>
     </div>
   );
+  if (titleBar === undefined) return shell;
+  return (
+    <div className="flex h-full flex-col">
+      {titleBar}
+      {shell}
+    </div>
+  );
 }
 
 /**
- * The app's sections down the left, the store at the top and the signed-in person at the bottom.
- * Collapsed, it keeps only icons, each named in a tooltip; Ctrl+B or the toggle switches it.
+ * The app's sections down the left, optionally with the store at the top and the signed-in person at
+ * the bottom. Collapsed, it keeps only icons, each named in a tooltip; Ctrl+B switches it, and so
+ * does the toggle, drawn here when `toggleLabels` is given or wherever the app puts `SidebarToggle`.
  */
 export function Sidebar({
   header,
@@ -56,13 +68,13 @@ export function Sidebar({
   toggleLabels,
 }: {
   /** The store as shown in each state: its name, or a mark that fits the icon rail. */
-  readonly header: (collapsed: boolean) => ReactNode;
+  readonly header?: ((collapsed: boolean) => ReactNode) | undefined;
   readonly nav: readonly NavItem[];
-  readonly footer: (collapsed: boolean) => ReactNode;
+  readonly footer?: ((collapsed: boolean) => ReactNode) | undefined;
   readonly label: string;
   readonly collapsed?: boolean;
   readonly onToggle?: (() => void) | undefined;
-  readonly toggleLabels?: { readonly collapse: string; readonly expand: string } | undefined;
+  readonly toggleLabels?: SidebarToggleLabels | undefined;
 }): React.JSX.Element {
   useEffect(() => {
     if (onToggle === undefined) return;
@@ -78,15 +90,11 @@ export function Sidebar({
 
   const toggle =
     onToggle === undefined || toggleLabels === undefined ? null : (
-      <IconButton
-        icon={collapsed ? PanelLeftOpen : PanelLeftClose}
-        label={collapsed ? toggleLabels.expand : toggleLabels.collapse}
-        shortcut="Ctrl+B"
+      <SidebarToggle
+        collapsed={collapsed}
+        onToggle={onToggle}
+        labels={toggleLabels}
         tooltipSide="right"
-        size="sm"
-        aria-expanded={!collapsed}
-        onClick={onToggle}
-        data-testid="nav.toggle"
       />
     );
   return (
@@ -94,18 +102,24 @@ export function Sidebar({
       className="flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-border bg-surface-alt"
       data-testid="nav.sidebar"
     >
-      <div
-        className={clsx(
-          'flex pb-3 pt-4',
-          collapsed ? 'flex-col items-center gap-2 px-2' : 'items-center gap-2 pl-4 pr-3',
-        )}
-      >
-        <div className={clsx('min-w-0', !collapsed && 'flex-1')}>{header(collapsed)}</div>
-        {toggle}
-      </div>
+      {header === undefined && toggle === null ? null : (
+        <div
+          className={clsx(
+            'flex pb-3 pt-4',
+            collapsed ? 'flex-col items-center gap-2 px-2' : 'items-center gap-2 pl-4 pr-3',
+          )}
+        >
+          <div className={clsx('min-w-0', !collapsed && 'flex-1')}>{header?.(collapsed)}</div>
+          {toggle}
+        </div>
+      )}
       <nav
         aria-label={label}
-        className={clsx('flex flex-1 flex-col gap-1', collapsed ? 'px-2' : 'px-3')}
+        className={clsx(
+          'flex flex-1 flex-col gap-1',
+          collapsed ? 'px-2' : 'px-3',
+          header === undefined && toggle === null && 'pt-3',
+        )}
       >
         {nav.map((item) => {
           const button = (
@@ -143,10 +157,46 @@ export function Sidebar({
           );
         })}
       </nav>
-      <div className={clsx('border-t border-border', collapsed ? 'p-2' : 'p-3')}>
-        {footer(collapsed)}
-      </div>
+      {footer === undefined ? null : (
+        <div className={clsx('border-t border-border', collapsed ? 'p-2' : 'p-3')}>
+          {footer(collapsed)}
+        </div>
+      )}
     </aside>
+  );
+}
+
+export interface SidebarToggleLabels {
+  readonly collapse: string;
+  readonly expand: string;
+}
+
+/** Folds the sidebar to icons and back (Ctrl+B), wherever the app places it. */
+export function SidebarToggle({
+  collapsed,
+  onToggle,
+  labels,
+  tooltipSide,
+  tone,
+}: {
+  readonly collapsed: boolean;
+  readonly onToggle: () => void;
+  readonly labels: SidebarToggleLabels;
+  readonly tooltipSide: 'right' | 'bottom';
+  readonly tone?: 'plain' | 'inverse' | undefined;
+}): React.JSX.Element {
+  return (
+    <IconButton
+      icon={collapsed ? PanelLeftOpen : PanelLeftClose}
+      label={collapsed ? labels.expand : labels.collapse}
+      shortcut="Ctrl+B"
+      tooltipSide={tooltipSide}
+      tone={tone ?? 'plain'}
+      size="sm"
+      aria-expanded={!collapsed}
+      onClick={onToggle}
+      data-testid="nav.toggle"
+    />
   );
 }
 

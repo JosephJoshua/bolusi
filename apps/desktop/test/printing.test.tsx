@@ -214,25 +214,20 @@ describe('printing on the counter PC', () => {
 });
 
 describe('updates', () => {
-  it('offers a downloaded version in the sidebar and shows the installed one in Settings', async () => {
-    window.innerWidth = 1440;
+  it('offers a downloaded version in the title bar and shows the installed one in Settings', async () => {
     const updates = fakeUpdates({ kind: 'ready', version: '0.2.0' });
     setBridge(fakePrinters(), updates);
     renderApp();
     const notice = await screen.findByTestId('desktop.update');
-    expect(notice.textContent).toContain('Versi baru siap');
-    fireEvent.click(screen.getByRole('button', { name: 'Pasang sekarang' }));
+    expect(notice.getAttribute('aria-label')).toBe('Versi baru siap');
+    // Installing restarts the app, so the notice opens a menu rather than installing on a click.
+    fireEvent.pointerDown(notice, { button: 0, pointerType: 'mouse' });
+    expect(updates.install).not.toHaveBeenCalled();
+    expect(screen.getByText('Terpasang sendiri saat aplikasi ditutup.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pasang sekarang' }));
     expect(updates.install).toHaveBeenCalledTimes(1);
     await openSettings();
     expect((await screen.findByTestId('desktop.version')).textContent).toBe('0.1.0');
-  });
-
-  it('keeps the offer as one labelled icon in the narrow sidebar', async () => {
-    window.innerWidth = 1100;
-    setBridge(fakePrinters(), fakeUpdates({ kind: 'ready', version: '0.2.0' }));
-    renderApp();
-    const icon = await screen.findByTestId('desktop.update');
-    expect(icon.getAttribute('aria-label')).toBe('Versi baru siap: Pasang sekarang');
   });
 
   it('shows nothing while there is nothing to install', async () => {
