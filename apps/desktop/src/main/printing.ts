@@ -138,18 +138,22 @@ export function registerPrinting(
     if (!(bytes instanceof Uint8Array) || bytes.length === 0 || bytes.length > MAX_RAW_BYTES) {
       throw new Error('printers:raw: bad job');
     }
-    const to = await target(event.sender, settings);
-    if ('problem' in to) return { ok: false, problem: to.problem };
-    return job(() => sendRaw(to.name, bytes, jobNameOf(jobName)));
+    return job(async () => {
+      const to = await target(event.sender, settings);
+      if ('problem' in to) return { ok: false, problem: to.problem };
+      return sendRaw(to.name, bytes, jobNameOf(jobName));
+    });
   });
   handle('printers:page', async (event, html, paper): Promise<PrintResult> => {
     const size = paperSizeOf(paper);
     if (typeof html !== 'string' || html.length > MAX_HTML_CHARS || size === null) {
       throw new Error('printers:page: bad page');
     }
-    const to = await target(event.sender, settings);
-    if ('problem' in to) return { ok: false, problem: to.problem };
-    return job(() => printPage(html, to.name, size));
+    return job(async () => {
+      const to = await target(event.sender, settings);
+      if ('problem' in to) return { ok: false, problem: to.problem };
+      return printPage(html, to.name, size);
+    });
   });
   return { busy: () => printing > 0 };
 }

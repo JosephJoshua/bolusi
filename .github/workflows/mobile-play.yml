@@ -52,7 +52,14 @@ jobs:
           export BOLUSI_VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))
           export BOLUSI_UPLOAD_STORE_FILE="$RUNNER_TEMP/upload.keystore"
           echo "$KEYSTORE" | base64 -d > "$BOLUSI_UPLOAD_STORE_FILE"
+          resolve() { (cd apps/mobile && npx expo-updates runtimeversion:resolve --platform android | node -pe 'JSON.parse(require("fs").readFileSync(0)).runtimeVersion'); }
+          before=$(resolve)
           pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install
+          # The fingerprint the build embeds must be the one the mobile-ota workflow computes
+          # without android/, or no over-the-air update would ever reach this build.
+          after=$(resolve)
+          test "$before" = "$after" || { echo "Fingerprint changed after prebuild: $before -> $after"; exit 1; }
+          echo "Android runtime version: $after" >> "$GITHUB_STEP_SUMMARY"
           ./apps/mobile/android/gradlew -p apps/mobile/android bundleRelease
       # Kept on the run too: Play takes the very first bundle of a new app only by hand.
       - uses: actions/upload-artifact@v4
@@ -61,7 +68,7 @@ jobs:
           path: apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
       - name: Send to the closed testing track
-        uses: r0adkll/upload-google-play@v1
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.bolusi.app

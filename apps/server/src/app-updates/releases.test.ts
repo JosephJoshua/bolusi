@@ -110,10 +110,15 @@ describe('picking the update for a phone', () => {
     );
   });
 
-  it('a GitHub failure is not cached, so the next phone tries again', async () => {
+  it('a GitHub failure is answered for a minute, then asked again', async () => {
+    let now = 0;
     const down = fakeGitHub([], 502);
-    const source = gitHubReleaseSource({ repo: REPO, fetch: down.fetch });
+    const source = gitHubReleaseSource({ repo: REPO, fetch: down.fetch, now: () => now });
     await expect(source.latest('android', 'fp-b')).rejects.toThrow('502');
+    now += 30_000;
+    await expect(source.latest('android', 'fp-b')).rejects.toThrow('502');
+    expect(down.calls).toHaveLength(1);
+    now += 31_000;
     await expect(source.latest('android', 'fp-b')).rejects.toThrow('502');
     expect(down.calls).toHaveLength(2);
   });

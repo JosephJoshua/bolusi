@@ -30,6 +30,8 @@ export function registerUpdates(deps: UpdateDeps): void {
     busy: () => pageBusy || deps.printing(),
     stopCore: deps.stopCore,
     relaunch: () => {
+      // Quitting must not start the installer a second time, racing the app opening again.
+      autoUpdater.autoInstallOnAppQuit = false;
       app.relaunch();
       app.exit(0);
     },

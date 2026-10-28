@@ -51,6 +51,7 @@ export interface GitHubReleaseSourceOptions {
 }
 
 const LIST_TTL_MS = 5 * 60_000;
+const FAILURE_TTL_MS = 60_000;
 /** Releases looked through for a phone's runtime version, newest first. */
 const RELEASES_SCANNED = 30;
 
@@ -75,8 +76,10 @@ export function gitHubReleaseSource(options: GitHubReleaseSourceOptions): Update
         return z.array(zRelease).parse(await response.json());
       })
       .catch((error: unknown) => {
-        // Not cached: the next phone asks again.
-        listed = null;
+        // Answered for a minute, so phones starting while GitHub is down or limiting us do not
+        // each ask it again.
+        if (listed?.releases === pending)
+          listed = { at: now() - ttl + FAILURE_TTL_MS, releases: pending };
         throw error;
       });
     listed = { at: now(), releases: pending };

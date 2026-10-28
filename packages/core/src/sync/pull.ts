@@ -87,7 +87,7 @@ export interface PullPhaseDeps<DB> {
    * newer app stops the pull before its batch, see {@link AppUpdateRequiredError}. Absent means
    * every op is foldable, which only a test or bench may assume.
    */
-  readonly knowsOp?: (op: SignedOperation) => boolean;
+  readonly knowsOp?: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
   readonly limit?: number;
   /**
    * Called after each batch commits, outside the transaction, so a long pull can show progress.
@@ -234,11 +234,25 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
   return { applied, quarantined, released, batches, refetches, serverTime, drained: true };
 }
 
+/**
+ * The first op in the batch this build cannot fold. That includes one that fails to parse yet
+ * names a type and version: the server validated it on push, so its shape is newer than this
+ * build's (an added envelope field, say). Dropping it would skip it for good.
+ */
 function firstUnknownOp(
   ops: readonly ParsedOp[],
-  knowsOp: (op: SignedOperation) => boolean,
-): SignedOperation | undefined {
-  for (const entry of ops) if (entry.ok && !knowsOp(entry.op)) return entry.op;
+  knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean,
+): Pick<SignedOperation, 'type' | 'schemaVersion'> | undefined {
+  for (const entry of ops) {
+    if (entry.ok) {
+      if (!knowsOp(entry.op)) return entry.op;
+      continue;
+    }
+    const raw = entry.raw as { type?: unknown; schemaVersion?: unknown } | null;
+    if (typeof raw?.type === 'string' && Number.isInteger(raw.schemaVersion)) {
+      return { type: raw.type, schemaVersion: raw.schemaVersion as number };
+    }
+  }
   return undefined;
 }
 

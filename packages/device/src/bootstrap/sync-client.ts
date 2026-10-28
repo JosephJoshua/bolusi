@@ -85,7 +85,7 @@ export interface SyncClientDeps {
   /** `ProjectionEngine.refoldRefused` — the push phase takes a refused op out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   /** Can this build fold the op? One from a newer app pauses the pull until this app updates. */
-  readonly knowsOp: (op: SignedOperation) => boolean;
+  readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;

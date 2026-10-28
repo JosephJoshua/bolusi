@@ -109,7 +109,7 @@ export interface SyncLoopOptions<DB> {
   readonly deviceId: string;
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   /** Passed to the pull phase: can this build fold the op (see `PullPhaseDeps.knowsOp`)? */
-  readonly knowsOp?: (op: SignedOperation) => boolean;
+  readonly knowsOp?: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
   /** `ProjectionEngine.refoldRefused`: the push phase takes a refused op back out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly pushBatchSize?: number;
@@ -335,19 +335,7 @@ export class SyncLoop<DB> {
       // therefore looks staler than it is while the bundle endpoint is down. That is the SAFE
       // direction: a false "your data may be old" costs a banner, a false "you are current" costs
       // a wrong business decision (03 §8 exists to prevent exactly the latter).
-      //
-      // At most once per BUNDLE_REFRESH_INTERVAL_MS, unless a person asked for it.
-      const refreshStartedAt = this.options.clock.now();
-      if (
-        this.bundleWanted ||
-        this.bundleRefreshedAt === null ||
-        refreshStartedAt - this.bundleRefreshedAt >= BUNDLE_REFRESH_INTERVAL_MS
-      ) {
-        await this.options.bundle.refresh();
-        this.bundleWanted = false;
-        this.bundleRefreshedAt = refreshStartedAt;
-        this.stats = { ...this.stats, bundleRefreshes: this.stats.bundleRefreshes + 1 };
-      }
+      await this.refreshBundleIfDue();
 
       // ── drain complete (03 §10: `pulling → idle`) ───────────────────────────────────────
       this.transition('pull_drained');
@@ -386,7 +374,29 @@ export class SyncLoop<DB> {
     }
   }
 
+  /** The bundle refresh, at most once per BUNDLE_REFRESH_INTERVAL_MS unless a person asked for it. */
+  private async refreshBundleIfDue(): Promise<void> {
+    const refreshStartedAt = this.options.clock.now();
+    if (
+      this.bundleWanted ||
+      this.bundleRefreshedAt === null ||
+      refreshStartedAt - this.bundleRefreshedAt >= BUNDLE_REFRESH_INTERVAL_MS
+    ) {
+      await this.options.bundle.refresh();
+      this.bundleWanted = false;
+      this.bundleRefreshedAt = refreshStartedAt;
+      this.stats = { ...this.stats, bundleRefreshes: this.stats.bundleRefreshes + 1 };
+    }
+  }
+
   private async handleCycleFailure(error: unknown): Promise<void> {
+    if (error instanceof AppUpdateRequiredError && !this.stopped) {
+      // The pull can wait days for an app update, but staff, roles and PIN verifiers cannot: a
+      // dismissed employee's PIN must stop working here too. A failed refresh just waits for the
+      // next cycle.
+      await this.refreshBundleIfDue().catch(() => undefined);
+    }
+
     if (isDeviceRevoked(error)) {
       // 03 §10 "any → idle on 401 DEVICE_REVOKED": all sync stops, no further automatic cycles
       // until re-enrollment. Terminal for this enrollment by design — there is no un-revoke (03 §5).

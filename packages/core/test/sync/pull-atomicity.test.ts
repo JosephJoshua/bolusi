@@ -362,4 +362,14 @@ describe('an op from a newer app pauses the pull until this app updates', () => 
     expect(await countRows(harness.db, 'notes')).toBe(5);
     expect(await cursor()).toBe(BATCH_CURSOR);
   });
+
+  it('an op whose shape is newer than this build (it fails to parse) also waits, never dropped', async () => {
+    ops[1] = { ...ops[1]!, addedLater: 'x' } as SignedOperation;
+    scriptBatch();
+    await expect(
+      runPullPhase({ ...pullDeps((op) => harness.engine.applyPulledOp(op)), knowsOp: () => true }),
+    ).rejects.toBeInstanceOf(AppUpdateRequiredError);
+    expect(await countRows(harness.db, 'operations')).toBe(0);
+    expect(await cursor()).toBe(0);
+  });
 });
