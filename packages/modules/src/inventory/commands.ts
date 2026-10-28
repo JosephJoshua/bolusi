@@ -5,17 +5,33 @@ import { z } from 'zod';
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
 
 import {
+  cleanTags,
+  cleanValues,
+  formatItemName,
+  zCategoryShape,
+  type CategoryField,
+  type FieldValues,
+} from './categories.js';
+import {
+  INVENTORY_CATEGORY_ENTITY,
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_OP,
   INVENTORY_ITEM_ENTITY,
+  MAX_ITEM_TAGS,
   MAX_COUNTED_QTY,
   MAX_MOVEMENT_QTY,
   MAX_PART_FITS,
   PART_USE_KINDS,
 } from './constants.js';
-import { MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME, zPartFit } from './operations.js';
+import { MAX_BARCODE, MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME, zPartFit } from './operations.js';
 import { compactModel } from '../shared/model-key.js';
-import { getItemQuery, type ItemDetailRow } from './queries.js';
+import {
+  getItemQuery,
+  itemsInCategoryQuery,
+  listCategoriesQuery,
+  type CategoryRow,
+  type ItemDetailRow,
+} from './queries.js';
 
 /** Blank optional text is no text. */
 const zOptionalText = (max: number) =>
@@ -29,8 +45,14 @@ const zOptionalText = (max: number) =>
 
 const zPartDetails = z
   .object({
-    name: z.string().trim().min(1).max(MAX_PART_NAME),
+    /** Ignored when `nameAuto`: the category's format names it. */
+    name: z.string().trim().max(MAX_PART_NAME).default(''),
+    nameAuto: z.boolean().default(false),
     code: zOptionalText(MAX_PART_CODE),
+    barcode: zOptionalText(MAX_BARCODE),
+    categoryId: z.string().min(1).nullable().default(null),
+    values: z.record(z.string(), z.array(z.string())).default({}),
+    tags: z.array(z.string()).default([]),
     // The same model picked twice is listed once.
     fits: z
       .array(zPartFit)
@@ -47,6 +69,47 @@ const zPartDetails = z
       ),
   })
   .strict();
+
+type PartDetailsInput = z.output<typeof zPartDetails>;
+
+async function loadCategory(ctx: CommandContext, categoryId: string): Promise<CategoryRow> {
+  const category = (await ctx.query(listCategoriesQuery, { includeArchived: true })).rows.find(
+    (row) => row.id === categoryId,
+  );
+  if (category === undefined) {
+    throw new DomainError('ENTITY_NOT_FOUND', {
+      entityType: INVENTORY_CATEGORY_ENTITY,
+      entityId: categoryId,
+    });
+  }
+  return category;
+}
+
+/**
+ * What an item's op says: values kept to its category's fields, tags once each, and the name
+ * filled in from the category's format when it is not typed.
+ */
+async function itemPayload(ctx: CommandContext, input: PartDetailsInput) {
+  const category = input.categoryId === null ? null : await loadCategory(ctx, input.categoryId);
+  const values: FieldValues = category === null ? {} : cleanValues(category.fields, input.values);
+  const tags = cleanTags(input.tags);
+  if (tags.length > MAX_ITEM_TAGS) {
+    throw new DomainError('VALIDATION_FAILED', { field: 'tags', issue: 'too many' });
+  }
+  const nameAuto = input.nameAuto && category !== null;
+  const name = nameAuto ? formatItemName(category, values, input.fits) : input.name;
+  if (name === '') throw new DomainError('VALIDATION_FAILED', { field: 'name', issue: 'empty' });
+  return {
+    name: name.slice(0, MAX_PART_NAME),
+    nameAuto,
+    code: input.code,
+    barcode: input.barcode,
+    categoryId: input.categoryId,
+    values,
+    tags,
+    fits: input.fits,
+  };
+}
 
 async function loadPart(ctx: CommandContext, itemId: string): Promise<ItemDetailRow> {
   const part = (await ctx.query(getItemQuery, { itemId })).rows[0];
@@ -78,10 +141,10 @@ function nothingChanged(field: string): DomainError {
 export const addItemInput = zPartDetails;
 export type AddPartInput = z.input<typeof addItemInput>;
 
-export function addItemHandler(
+export async function addItemHandler(
   input: z.output<typeof addItemInput>,
   ctx: CommandContext,
-): CommandHandlerResult<{ itemId: string }> {
+): Promise<CommandHandlerResult<{ itemId: string }>> {
   const itemId = ctx.newId();
   return {
     ops: [
@@ -89,7 +152,7 @@ export function addItemHandler(
         type: INVENTORY_OP.itemAdded,
         entityType: INVENTORY_ITEM_ENTITY,
         entityId: itemId,
-        payload: { name: input.name, code: input.code, fits: input.fits },
+        payload: await itemPayload(ctx, input),
       }),
     ],
     result: { itemId },
@@ -101,15 +164,25 @@ export const editItemInput = zPartDetails
   .strict();
 export type EditPartInput = z.input<typeof editItemInput>;
 
+function sameValues(a: FieldValues, b: FieldValues): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export async function editItemHandler(
   input: z.output<typeof editItemInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ itemId: string }>> {
   const part = await loadPart(ctx, input.itemId);
+  const payload = await itemPayload(ctx, input);
   if (
-    part.name === input.name &&
-    part.code === input.code &&
-    sameFits(part.models, input.fits) &&
+    part.name === payload.name &&
+    part.nameAuto === payload.nameAuto &&
+    part.code === payload.code &&
+    part.barcode === payload.barcode &&
+    part.categoryId === payload.categoryId &&
+    sameValues(part.values, payload.values) &&
+    sameValues({ tags: part.tags }, { tags: payload.tags }) &&
+    sameFits(part.models, payload.fits) &&
     part.archived === input.archived
   ) {
     throw nothingChanged('name');
@@ -120,11 +193,94 @@ export async function editItemHandler(
         type: INVENTORY_OP.itemEdited,
         entityType: INVENTORY_ITEM_ENTITY,
         entityId: part.id,
-        payload: { name: input.name, code: input.code, fits: input.fits, archived: input.archived },
+        payload: { ...payload, archived: input.archived },
       }),
     ],
     result: { itemId: part.id },
   };
+}
+
+// ── categories ─────────────────────────────────────────────────────────────────────────────────
+
+export const addCategoryInput = zCategoryShape.extend({ isPart: z.boolean() }).strict();
+export type AddCategoryInput = z.input<typeof addCategoryInput>;
+
+export function addCategoryHandler(
+  input: z.output<typeof addCategoryInput>,
+  ctx: CommandContext,
+): CommandHandlerResult<{ categoryId: string }> {
+  const categoryId = ctx.newId();
+  return {
+    ops: [
+      ctx.op({
+        type: INVENTORY_OP.categoryAdded,
+        entityType: INVENTORY_CATEGORY_ENTITY,
+        entityId: categoryId,
+        payload: input,
+      }),
+    ],
+    result: { categoryId },
+  };
+}
+
+export const editCategoryInput = addCategoryInput
+  .extend({ categoryId: z.string().min(1), archived: z.boolean() })
+  .strict();
+export type EditCategoryInput = z.input<typeof editCategoryInput>;
+
+/**
+ * Change a category. Its items named by its format are renamed to match, in the same save, so the
+ * list reads one way; names someone typed stay as they are.
+ */
+export async function editCategoryHandler(
+  input: z.output<typeof editCategoryInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ categoryId: string; renamed: number }>> {
+  const { categoryId, archived, ...shape } = input;
+  const current = await loadCategory(ctx, categoryId);
+  if (
+    current.name === shape.name &&
+    current.isPart === shape.isPart &&
+    current.nameFormat === shape.nameFormat &&
+    JSON.stringify(current.fields) === JSON.stringify(shape.fields) &&
+    current.archived === archived
+  ) {
+    throw nothingChanged('name');
+  }
+  const ops = [
+    ctx.op({
+      type: INVENTORY_OP.categoryEdited,
+      entityType: INVENTORY_CATEGORY_ENTITY,
+      entityId: categoryId,
+      payload: { ...shape, archived },
+    }),
+  ];
+  const fields: readonly CategoryField[] = shape.fields;
+  for (const item of (await ctx.query(itemsInCategoryQuery, { categoryId })).rows) {
+    if (!item.nameAuto) continue;
+    const values = cleanValues(fields, item.values);
+    const name = formatItemName({ fields, nameFormat: shape.nameFormat }, values, item.models);
+    if (name === '' || (name === item.name && sameValues(values, item.values))) continue;
+    ops.push(
+      ctx.op({
+        type: INVENTORY_OP.itemEdited,
+        entityType: INVENTORY_ITEM_ENTITY,
+        entityId: item.id,
+        payload: {
+          name: name.slice(0, MAX_PART_NAME),
+          nameAuto: true,
+          code: item.code,
+          barcode: item.barcode,
+          categoryId,
+          values,
+          tags: item.tags,
+          fits: item.models,
+          archived: item.archived,
+        },
+      }),
+    );
+  }
+  return { ops, result: { categoryId, renamed: ops.length - 1 } };
 }
 
 // ── counts ─────────────────────────────────────────────────────────────────────────────────────

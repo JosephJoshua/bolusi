@@ -166,7 +166,12 @@ export function TakePartStep({
   const query = useInventoryQuery(
     async (rt) => {
       const all = (
-        await rt.query('listItems', { text: searchText, filter: 'active', limit: PICK_LIMIT })
+        await rt.query('listItems', {
+          text: searchText,
+          filter: 'active',
+          partsOnly: true,
+          limit: PICK_LIMIT,
+        })
       ).rows;
       if (!fitsDevice) return { fitting: [] as readonly ItemRow[], rest: all };
       const fitting = (await rt.query('itemsFitting', { brand: device.brand, model: device.model }))
@@ -210,6 +215,24 @@ export function TakePartStep({
         {selected ? <Icon name="check" size={size.iconInline} color={color.primary} /> : null}
       </Pressable>
     );
+  };
+
+  /** A scanned code picks its part when it names exactly one; otherwise it is searched for. */
+  const scan = async (): Promise<void> => {
+    const code = (await runtime.scanCode?.())?.trim() ?? '';
+    if (code === '') return;
+    setText(code);
+    const [found, parts] = await Promise.all([
+      runtime.query('findByCode', { code }).then((page) => page.rows),
+      runtime.query('listItems', { text: code, partsOnly: true, limit: 20 }).then((p) => p.rows),
+    ]).catch(() => [[], []] as const);
+    const only = found.length === 1 ? found[0] : undefined;
+    // Only a sparepart on the list can be taken, as when picked by hand.
+    const part = parts.find((row) => row.id === only?.id);
+    if (part !== undefined && !part.archived) {
+      setPicked(part);
+      setQty(1);
+    }
   };
 
   const take = (): void => {
@@ -259,6 +282,16 @@ export function TakePartStep({
         onChangeText={setText}
         testID={`${testID}.search`}
       />
+      {runtime.scanCode === undefined ? null : (
+        <View style={styles.scan}>
+          <TextButton
+            label={ti('inventory.list.scan')}
+            icon="scan"
+            onPress={() => void scan()}
+            testID={`${testID}.scan`}
+          />
+        </View>
+      )}
       <QueryView
         query={query}
         onBack={onCancel}
@@ -356,6 +389,8 @@ export function PutBackStep({
 }
 
 const styles = StyleSheet.create({
+  // A text button lines its text up with the search field's edge, not its hit box.
+  scan: { flexDirection: 'row', marginTop: space.xs, marginLeft: -space.sm },
   muted: { ...type.bodySm, color: color.textMuted },
   empty: { marginTop: space.lg },
   name: { ...type.bodySm, fontWeight: '600', color: color.text },

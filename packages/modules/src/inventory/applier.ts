@@ -5,9 +5,12 @@
 // refuse what must not be recorded, and whatever the server accepted still folds.
 import type { ProjectionApplier, ProjectionOperation, ProjectionTableManifest } from '@bolusi/core';
 
+import { valueKey, type CategoryField, type FieldValues } from './categories.js';
 import {
+  INVENTORY_CATEGORY_ENTITY,
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_ITEM_ENTITY,
+  TAG_FACET,
   type MovementKind,
 } from './constants.js';
 import { compactModel } from '../shared/model-key.js';
@@ -20,7 +23,11 @@ export const inventoryItemsTable: ProjectionTableManifest = {
     id: 'text',
     tenant_id: 'text',
     name: 'text',
+    name_auto: 'integer',
     code: 'text',
+    barcode: 'text',
+    category_id: 'text',
+    field_values: 'text',
     fits: 'text',
     archived: 'integer',
     created_by: 'text',
@@ -47,6 +54,42 @@ export const inventoryItemFitsTable: ProjectionTableManifest = {
   primaryKey: ['item_id', 'position'],
   entityType: INVENTORY_ITEM_ENTITY,
   entityIdColumn: 'item_id',
+  projectionVersion: 1,
+};
+
+/** What an item is filed under (tags, field values): child rows of the item, rewritten with each edit. */
+export const inventoryItemFacetsTable: ProjectionTableManifest = {
+  columns: {
+    item_id: 'text',
+    position: 'integer',
+    tenant_id: 'text',
+    facet: 'text',
+    value: 'text',
+    value_key: 'text',
+  },
+  primaryKey: ['item_id', 'position'],
+  entityType: INVENTORY_ITEM_ENTITY,
+  entityIdColumn: 'item_id',
+  projectionVersion: 1,
+};
+
+export const inventoryCategoriesTable: ProjectionTableManifest = {
+  columns: {
+    id: 'text',
+    tenant_id: 'text',
+    name: 'text',
+    is_part: 'integer',
+    fields: 'text',
+    name_format: 'text',
+    archived: 'integer',
+    created_by: 'text',
+    created_at: 'integer',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['id'],
+  entityType: INVENTORY_CATEGORY_ENTITY,
+  entityIdColumn: 'id',
   projectionVersion: 1,
 };
 
@@ -83,8 +126,54 @@ interface PartFit {
 
 interface PartDetails {
   readonly name: string;
+  readonly nameAuto: boolean;
   readonly code: string | null;
+  readonly barcode: string | null;
+  readonly categoryId: string | null;
+  readonly values: FieldValues;
+  readonly tags: readonly string[];
   readonly fits: readonly PartFit[];
+}
+
+/** The item's columns a details payload sets. */
+function detailColumns(payload: PartDetails) {
+  return {
+    name: payload.name,
+    nameAuto: payload.nameAuto ? 1 : 0,
+    code: payload.code,
+    barcode: payload.barcode,
+    categoryId: payload.categoryId,
+    fieldValues: JSON.stringify(payload.values),
+    fits: fitsLine(payload.fits),
+  };
+}
+
+async function writeFacets(
+  db: Parameters<Applier>[0],
+  op: ProjectionOperation,
+  payload: PartDetails,
+) {
+  await db.deleteFrom('inventoryItemFacets').where('itemId', '=', op.entityId).execute();
+  const facets = [
+    ...payload.tags.map((value) => ({ facet: TAG_FACET as string, value })),
+    ...Object.entries(payload.values).flatMap(([facet, values]) =>
+      values.map((value) => ({ facet, value })),
+    ),
+  ];
+  if (facets.length === 0) return;
+  await db
+    .insertInto('inventoryItemFacets')
+    .values(
+      facets.map((facet, position) => ({
+        itemId: op.entityId,
+        position,
+        tenantId: op.tenantId,
+        facet: facet.facet,
+        value: facet.value,
+        valueKey: valueKey(facet.value),
+      })),
+    )
+    .execute();
 }
 
 /** "Xiaomi Redmi Note 10, Poco M5s": the fits as one line, for lists and the search index. */
@@ -121,9 +210,7 @@ export const itemAddedApplier: Applier = async (db, op) => {
     .values({
       id: op.entityId,
       tenantId: op.tenantId,
-      name: payload.name,
-      code: payload.code,
-      fits: fitsLine(payload.fits),
+      ...detailColumns(payload),
       archived: 0,
       createdBy: op.userId,
       createdAt: op.timestamp,
@@ -132,6 +219,7 @@ export const itemAddedApplier: Applier = async (db, op) => {
     })
     .execute();
   await writeFits(db, op, payload.fits);
+  await writeFacets(db, op, payload);
 };
 
 export const itemEditedApplier: Applier = async (db, op) => {
@@ -139,9 +227,7 @@ export const itemEditedApplier: Applier = async (db, op) => {
   await db
     .updateTable('inventoryItems')
     .set({
-      name: payload.name,
-      code: payload.code,
-      fits: fitsLine(payload.fits),
+      ...detailColumns(payload),
       archived: payload.archived ? 1 : 0,
       updatedBy: op.userId,
       updatedAt: op.timestamp,
@@ -150,6 +236,55 @@ export const itemEditedApplier: Applier = async (db, op) => {
     .where('tenantId', '=', op.tenantId)
     .execute();
   await writeFits(db, op, payload.fits);
+  await writeFacets(db, op, payload);
+};
+
+interface CategoryDetails {
+  readonly name: string;
+  readonly isPart: boolean;
+  readonly fields: readonly CategoryField[];
+  readonly nameFormat: string;
+}
+
+function categoryColumns(payload: CategoryDetails) {
+  return {
+    name: payload.name,
+    isPart: payload.isPart ? 1 : 0,
+    fields: JSON.stringify(payload.fields),
+    nameFormat: payload.nameFormat,
+  };
+}
+
+export const categoryAddedApplier: Applier = async (db, op) => {
+  const payload = payloadOf<CategoryDetails>(op);
+  await db
+    .insertInto('inventoryCategories')
+    .values({
+      id: op.entityId,
+      tenantId: op.tenantId,
+      ...categoryColumns(payload),
+      archived: 0,
+      createdBy: op.userId,
+      createdAt: op.timestamp,
+      updatedBy: op.userId,
+      updatedAt: op.timestamp,
+    })
+    .execute();
+};
+
+export const categoryEditedApplier: Applier = async (db, op) => {
+  const payload = payloadOf<CategoryDetails & { readonly archived: boolean }>(op);
+  await db
+    .updateTable('inventoryCategories')
+    .set({
+      ...categoryColumns(payload),
+      archived: payload.archived ? 1 : 0,
+      updatedBy: op.userId,
+      updatedAt: op.timestamp,
+    })
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .execute();
 };
 
 interface Movement {

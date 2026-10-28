@@ -7,7 +7,8 @@
 import { defineRefusals, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { INVENTORY_ITEM_ENTITY } from './constants.js';
+import { categoryProblem, type CategoryShape } from './categories.js';
+import { INVENTORY_CATEGORY_ENTITY, INVENTORY_ITEM_ENTITY } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import type { InventoryDatabase } from './schema.js';
 
@@ -17,6 +18,8 @@ type Db = Parameters<Rule>[1]['db'];
 /** Every reason a stock change is refused, each with copy at `inventory.refusal.<reason>`. */
 export const INVENTORY_REFUSALS = defineRefusals('inventory', [
   'alreadyRecorded',
+  'categoryInvalid',
+  'categoryNotFound',
   'itemNotFound',
   'itemArchived',
   'moreThanTaken',
@@ -92,6 +95,24 @@ export async function outOnUse(
   return -Number(row?.net ?? 0);
 }
 
+/** An item names a category of this business, if any. An archived one still counts. */
+async function requireCategoryOf(db: Db, op: SignedOperation): Promise<void> {
+  const { categoryId } = payloadOf<{ categoryId: string | null }>(op);
+  if (categoryId === null) return;
+  const row = await db
+    .selectFrom('inventoryCategories')
+    .select('id')
+    .where('id', '=', categoryId)
+    .where('tenantId', '=', op.tenantId)
+    .executeTakeFirst();
+  if (row === undefined) {
+    throw refuse('categoryNotFound', {
+      code: 'ENTITY_NOT_FOUND',
+      details: { entityType: INVENTORY_CATEGORY_ENTITY, entityId: categoryId },
+    });
+  }
+}
+
 export const itemAddedRule: Rule = async (op, { db }) => {
   const taken = await db
     .selectFrom('inventoryItems')
@@ -104,10 +125,54 @@ export const itemAddedRule: Rule = async (op, { db }) => {
       details: { field: 'itemId', issue: 'already exists' },
     });
   }
+  await requireCategoryOf(db, op);
 };
 
 export const itemEditedRule: Rule = async (op, { db }) => {
   await requirePart(db, op, op.entityId);
+  await requireCategoryOf(db, op);
+};
+
+/** The payload's shape is checked by its schema; what fields and format must agree on, here. */
+function requireSoundCategory(op: SignedOperation): void {
+  const problem = categoryProblem(payloadOf<CategoryShape>(op));
+  if (problem !== null) {
+    throw refuse('categoryInvalid', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'fields', issue: problem },
+    });
+  }
+}
+
+export const categoryAddedRule: Rule = async (op, { db }) => {
+  const taken = await db
+    .selectFrom('inventoryCategories')
+    .select('id')
+    .where('id', '=', op.entityId)
+    .executeTakeFirst();
+  if (taken !== undefined) {
+    throw refuse('alreadyRecorded', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'categoryId', issue: 'already exists' },
+    });
+  }
+  requireSoundCategory(op);
+};
+
+export const categoryEditedRule: Rule = async (op, { db }) => {
+  const row = await db
+    .selectFrom('inventoryCategories')
+    .select('id')
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .executeTakeFirst();
+  if (row === undefined) {
+    throw refuse('categoryNotFound', {
+      code: 'ENTITY_NOT_FOUND',
+      details: { entityType: INVENTORY_CATEGORY_ENTITY, entityId: op.entityId },
+    });
+  }
+  requireSoundCategory(op);
 };
 
 export const stockCountedRule: Rule = async (op, { db }) => {

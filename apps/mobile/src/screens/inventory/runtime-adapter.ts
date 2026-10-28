@@ -20,6 +20,8 @@ export interface InventoryRuntimeDeps {
   readonly identity: CommandIdentity;
   /** The phone catalog search for the "fits" picker. */
   readonly searchModels?: InventoryRuntime['searchModels'];
+  /** The camera's code scanner; absent where there is none. */
+  readonly scanCode?: InventoryRuntime['scanCode'];
 }
 
 export function createInventoryRuntime(deps: InventoryRuntimeDeps): InventoryRuntime {
@@ -28,5 +30,6 @@ export function createInventoryRuntime(deps: InventoryRuntimeDeps): InventoryRun
     subscribe: (listener) =>
       deps.invalidation.subscribeTables(Object.values(INVENTORY_TABLE), listener),
     searchModels: deps.searchModels,
+    scanCode: deps.scanCode,
   };
 }

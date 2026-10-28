@@ -2,6 +2,7 @@
 import { StyleSheet } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
+import { ChoiceChips } from '../src/components/ChoiceChips.js';
 import { ListRow } from '../src/components/ListRow.js';
 import { PatternLock } from '../src/components/PatternLock.js';
 import { PhotoSlot } from '../src/components/PhotoSlot.js';
@@ -241,5 +242,52 @@ describe('QuantityStepper', () => {
     fire(r.get('qty.input'), 'onChangeText', '99');
     expect(r.get('qty.input').props['value']).toBe('10');
     expect(onChange).toHaveBeenLastCalledWith(10);
+  });
+});
+
+describe('ChoiceChips', () => {
+  const chips = (
+    value: readonly string[],
+    onChange: (v: readonly string[]) => void,
+    multiple = false,
+  ) => (
+    <ChoiceChips
+      testID="cc"
+      label="Kualitas"
+      options={['Original', 'OEM', 'KW']}
+      value={value}
+      onChange={onChange}
+      multiple={multiple}
+      addLabel="Lainnya"
+    />
+  );
+
+  test('one value: a tap picks it in place of the last, a second tap clears it', () => {
+    const onChange = vi.fn();
+    const r = render(chips(['OEM'], onChange));
+    fire(r.get('cc.option.kw'), 'onPress');
+    expect(onChange).toHaveBeenLastCalledWith(['KW']);
+    fire(r.get('cc.option.oem'), 'onPress');
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  test('several values add up, and the picked ones lead the row', () => {
+    const onChange = vi.fn();
+    const r = render(chips(['KW'], onChange, true));
+    expect(textsIn(r.get('cc.chips'))).toStrictEqual(['KW', 'Original', 'OEM', 'Lainnya']);
+    fire(r.get('cc.option.original'), 'onPress');
+    expect(onChange).toHaveBeenLastCalledWith(['KW', 'Original']);
+  });
+
+  test('a typed value is added once, matching a listed one whatever its case', () => {
+    const onChange = vi.fn();
+    const r = render(chips([], onChange, true));
+    fire(r.get('cc.add'), 'onPress');
+    fire(r.get('cc.field.field'), 'onChangeText', 'oem');
+    fire(r.get('cc.field.field'), 'onSubmitEditing');
+    expect(onChange).toHaveBeenLastCalledWith(['OEM']);
+    fire(r.get('cc.field.field'), 'onChangeText', 'Copotan');
+    fire(r.get('cc.field.field'), 'onSubmitEditing');
+    expect(onChange).toHaveBeenLastCalledWith(['Copotan']);
   });
 });

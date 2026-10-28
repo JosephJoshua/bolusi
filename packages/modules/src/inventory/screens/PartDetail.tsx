@@ -1,7 +1,7 @@
 /**
- * PartDetail — one part: what this store has, what it is and fits, and every movement here (counts,
- * takes and put-backs, with who and for which servisan). Owners count it, edit it, or take it off
- * the list; the history stays either way.
+ * PartDetail — one item: what this store has, what it is (its category and fields, codes, phones
+ * and tags), and every movement here (counts, takes and put-backs, with who and for which
+ * servisan). Owners count it, edit it, or take it off the list; the history stays either way.
  */
 import { formatDateTime, t } from '@bolusi/i18n';
 import {
@@ -32,7 +32,7 @@ import {
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { ti, type InventoryKey } from '../i18n.js';
 import { movementTitle, signedQty, stockText } from '../labels.js';
-import type { ItemDetailRow, ItemRow } from '../queries.js';
+import { itemDetails, type ItemDetailRow, type ItemRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 
 export interface PartDetailProps {
@@ -77,15 +77,7 @@ export function PartDetail({
     onClearNotice();
     setDone(null);
     void runner
-      .run(() =>
-        runtime.run('editItem', {
-          itemId: row.id,
-          name: row.name,
-          code: row.code,
-          fits: [...row.models],
-          archived,
-        }),
-      )
+      .run(() => runtime.run('editItem', { itemId: row.id, archived, ...itemDetails(row) }))
       .then((result) => {
         if (result !== undefined)
           setDone(archived ? 'inventory.done.archived' : 'inventory.done.restored');
@@ -157,6 +149,7 @@ export function PartDetail({
 
   function renderPart(row: ItemDetailRow): React.JSX.Element {
     const below = row.onHand < 0;
+    const facts = factsOf(row);
     return (
       <View testID={`${testID}.content`}>
         <Card testID={`${testID}.summary`}>
@@ -176,7 +169,7 @@ export function PartDetail({
           ) : null}
         </Card>
 
-        {row.code === null && row.fits === null && !canManage ? null : (
+        {facts.length === 0 && !canManage ? null : (
           <Section
             title={ti('inventory.detail.title')}
             action={
@@ -191,17 +184,15 @@ export function PartDetail({
             }
           >
             <FactGrid>
-              <Fact
-                label={ti('inventory.detail.code')}
-                value={row.code ?? '–'}
-                testID={`${testID}.code`}
-              />
-              <Fact
-                label={ti('inventory.detail.fits')}
-                value={row.fits ?? '–'}
-                wide
-                testID={`${testID}.fits`}
-              />
+              {facts.map((fact) => (
+                <Fact
+                  key={fact.key}
+                  label={fact.label}
+                  value={fact.value}
+                  wide={fact.wide}
+                  testID={`${testID}.${fact.key}`}
+                />
+              ))}
             </FactGrid>
           </Section>
         )}
@@ -247,6 +238,32 @@ export function PartDetail({
       </View>
     );
   }
+}
+
+interface PartFact {
+  readonly key: string;
+  readonly label: string;
+  readonly value: string;
+  readonly wide: boolean;
+}
+
+/** What the item is, as filled in: its category and that category's fields, codes, phones, tags. */
+function factsOf(row: ItemDetailRow): PartFact[] {
+  const facts: PartFact[] = [];
+  const add = (key: string, label: string, value: string | null, wide = false): void => {
+    if (value !== null && value !== '') facts.push({ key, label, value, wide });
+  };
+  add('category', ti('inventory.detail.category'), row.category?.name ?? null);
+  for (const field of row.category?.fields ?? []) {
+    if (field.kind !== 'phones') {
+      add(`field.${field.id}`, field.label, (row.values[field.id] ?? []).join(', '));
+    }
+  }
+  add('code', ti('inventory.detail.code'), row.code);
+  add('barcode', ti('inventory.detail.barcode'), row.barcode);
+  add('fits', ti('inventory.detail.fits'), row.fits, true);
+  add('tags', ti('inventory.detail.tags'), row.tags.join(', '), true);
+  return facts;
 }
 
 const styles = StyleSheet.create({

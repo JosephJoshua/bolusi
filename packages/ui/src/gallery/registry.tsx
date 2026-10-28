@@ -476,6 +476,53 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  ActionChip: [
+    {
+      id: 'row',
+      render: (l) => (
+        <componentInventory.ChipRow>
+          <componentInventory.ActionChip
+            label={l.primaryText}
+            icon="filter"
+            onPress={noop}
+            active
+          />
+          <componentInventory.ToggleChip label={l.primaryText} selected onToggle={noop} />
+          <componentInventory.ToggleChip label={l.primaryText} selected={false} onToggle={noop} />
+          <componentInventory.ActionChip label={l.primaryText} icon="settings" onPress={noop} />
+        </componentInventory.ChipRow>
+      ),
+    },
+  ],
+
+  ChoiceChips: [
+    {
+      id: 'one',
+      render: (l) => (
+        <componentInventory.ChoiceChips
+          label={l.primaryText}
+          options={['Original', 'OEM', 'KW', 'Copotan']}
+          value={['OEM']}
+          onChange={noop}
+          addLabel={l.primaryText}
+        />
+      ),
+    },
+    {
+      id: 'many',
+      render: (l) => (
+        <componentInventory.ChoiceChips
+          label={l.primaryText}
+          options={Array.from({ length: 20 }, (_, i) => `${l.primaryText} ${i + 1}`)}
+          value={[`${l.primaryText} 3`, `${l.primaryText} 7`]}
+          onChange={noop}
+          multiple
+          addLabel={l.primaryText}
+        />
+      ),
+    },
+  ],
+
   QuantityStepper: [
     {
       id: 'one',

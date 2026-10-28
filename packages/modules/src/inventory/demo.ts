@@ -1,14 +1,32 @@
 /**
- * An `InventoryRuntime` over in-memory demo parts for the browser preview, built by the repair demo
- * so a part taken on a demo servisan comes off the same shelf the parts list shows. Mirrors the
- * real rules (rules.ts and repair/part-use.ts) closely enough that a reviewer sees the same refusals.
+ * An `InventoryRuntime` over in-memory demo items for the browser preview, built by the repair demo
+ * so a part taken on a demo servisan comes off the same shelf the list shows. Mirrors the real
+ * rules (rules.ts, commands.ts and repair/part-use.ts) closely enough that a reviewer sees the same
+ * names, filters and refusals.
  */
 import { DomainError, FuzzyIndex } from '@bolusi/core';
 
-import { INVENTORY_PERMISSION, type MovementKind } from './constants.js';
+import {
+  categoryProblem,
+  cleanTags,
+  cleanValues,
+  formatItemName,
+  valueKey,
+  type CategoryField,
+  type FieldValues,
+} from './categories.js';
+import { INVENTORY_PERMISSION, TAG_FACET, type MovementKind } from './constants.js';
 import { compactModel } from '../shared/model-key.js';
 import { fitsLine } from './applier.js';
-import type { MovementRow, ItemDetailRow, ItemFitRow, ItemRow, UsedPartRow } from './queries.js';
+import type {
+  CategoryRow,
+  FacetValueRow,
+  ItemDetailRow,
+  ItemFitRow,
+  ItemRow,
+  MovementRow,
+  UsedPartRow,
+} from './queries.js';
 import type { InventoryRuntime } from './runtime.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import { itemDocument } from './search.js';
@@ -33,50 +51,210 @@ export interface DemoInventoryOptions {
   readonly searchModels?: InventoryRuntime['searchModels'];
 }
 
-interface DemoPart {
+const DEMO_SCANNED_CODE = '6941059648208';
+
+interface DemoItem {
   id: string;
   name: string;
+  nameAuto: boolean;
   code: string | null;
+  barcode: string | null;
+  categoryId: string | null;
+  values: FieldValues;
+  tags: string[];
   models: ItemFitRow[];
   archived: boolean;
 }
 
 /** "Samsung Galaxy A14; Samsung Galaxy A14 5G": brand, then model, models apart by ";". */
-function models(spec: string | null): ItemFitRow[] {
-  if (spec === null) return [];
+function phones(spec: string): ItemFitRow[] {
+  if (spec === '') return [];
   return spec.split(';').map((one) => {
     const [brand = '', ...model] = one.trim().split(' ');
     return { brand, model: model.join(' ') };
   });
 }
 
-/** A store's shelf: screens, batteries and small parts, with a couple below zero to sort out. */
-const SEED: readonly (readonly [string, string | null, string | null, number])[] = [
-  ['LCD Samsung A14 + frame', 'LCD-A14', 'Samsung Galaxy A14; Samsung Galaxy A14 5G', 3],
-  ['LCD Redmi Note 10 + frame', 'LCD-RN10', 'Xiaomi Redmi Note 10; Xiaomi Redmi Note 10S', 2],
-  ['LCD iPhone 11', 'LCD-IP11', 'Apple iPhone 11', 1],
-  ['LCD Oppo A16', null, 'Oppo A16; Oppo A16s', 0],
-  ['LCD Oppo A57 + frame', 'LCD-A57', 'Oppo A57; Oppo A57s', 2],
-  ['Konektor cas Oppo A57', null, 'Oppo A57; Oppo A77', 5],
-  ['LCD Vivo Y20', 'LCD-Y20', 'vivo Y20; vivo Y20s; vivo Y12s', 4],
-  ['Baterai Samsung A10s', 'BAT-A10S', 'Samsung Galaxy A10s; Samsung Galaxy A20s', 6],
-  ['Baterai iPhone 11', 'BAT-IP11', 'Apple iPhone 11', -1],
-  ['Baterai Redmi 9', 'BN54', 'Xiaomi Redmi 9; Xiaomi Redmi Note 9', 5],
-  ['Konektor cas Type-C', null, null, 24],
-  ['Konektor cas micro USB', null, null, 15],
-  ['Flexible on/off Oppo A5s', null, 'Oppo A5s; Oppo A7; Oppo A12', 2],
-  ['Speaker buzzer Samsung A-series', null, 'Samsung Galaxy A10; Samsung Galaxy A20', 7],
-  ['Kaca kamera belakang iPhone XR', null, 'Apple iPhone XR', 3],
-  ['Tempered glass 9D (pak 10)', 'TG-9D', null, 12],
-  ['Lem B7000 15 ml', null, null, -2],
-  ['Backdoor Redmi Note 8', null, 'Xiaomi Redmi Note 8', 1],
+const field = (
+  id: string,
+  label: string,
+  kind: CategoryField['kind'],
+  options: string[] = [],
+): CategoryField => ({ id, label, kind, options });
+
+/** A franchise's categories: spareparts with the fields their names are built from, and goods. */
+const CATEGORIES: readonly Omit<CategoryRow, 'archived'>[] = [
+  {
+    id: 'cat-lcd',
+    name: 'LCD',
+    isPart: true,
+    fields: [
+      field('hp', 'HP', 'phones'),
+      field('q', 'Kualitas', 'one', ['Original', 'OEM', 'KW']),
+      field('x', 'Tambahan', 'many', ['+ frame', '+ touchscreen', '+ backdoor']),
+    ],
+    nameFormat: 'LCD {HP} {Kualitas} {Tambahan}',
+  },
+  {
+    id: 'cat-bat',
+    name: 'Baterai',
+    isPart: true,
+    fields: [
+      field('hp', 'HP', 'phones'),
+      field('q', 'Kualitas', 'one', ['Original', 'Double power']),
+    ],
+    nameFormat: 'Baterai {HP} {Kualitas}',
+  },
+  {
+    id: 'cat-con',
+    name: 'Konektor cas',
+    isPart: true,
+    fields: [
+      field('hp', 'HP', 'phones'),
+      field('t', 'Jenis', 'one', ['Type-C', 'Micro USB', 'Lightning']),
+    ],
+    nameFormat: 'Konektor cas {Jenis} {HP}',
+  },
+  {
+    id: 'cat-tg',
+    name: 'Tempered glass',
+    isPart: false,
+    fields: [
+      field('hp', 'HP', 'phones'),
+      field('t', 'Jenis', 'one', ['9D', 'Privacy', 'Anti-glare']),
+    ],
+    nameFormat: 'Tempered glass {Jenis} {HP}',
+  },
+  {
+    id: 'cat-chg',
+    name: 'Charger',
+    isPart: false,
+    fields: [
+      field('m', 'Merek', 'one', ['Samsung', 'Xiaomi', 'Oppo', 'Robot']),
+      field('w', 'Watt', 'one', ['10W', '18W', '33W', '65W']),
+      field('k', 'Kabel', 'one', ['Type-C', 'Micro USB', 'Lightning']),
+    ],
+    nameFormat: 'Charger {Merek} {Watt} {Kabel}',
+  },
+];
+
+interface Seed {
+  readonly category: string | null;
+  readonly values?: Record<string, string[]>;
+  readonly phones?: string;
+  /** A typed name; without it the category's format names the item. */
+  readonly name?: string;
+  readonly code?: string;
+  readonly barcode?: string;
+  readonly tags?: string[];
+  readonly stock: number;
+}
+
+/** A store's shelf: screens, batteries, small parts and goods, a couple below zero to sort out. */
+const SEED: readonly Seed[] = [
+  {
+    category: 'cat-lcd',
+    phones: 'Samsung Galaxy A14; Samsung Galaxy A14 5G',
+    values: { q: ['Original'], x: ['+ frame'] },
+    code: 'LCD-A14',
+    tags: ['Laris'],
+    stock: 3,
+  },
+  { category: 'cat-lcd', phones: 'Samsung Galaxy A14', values: { q: ['KW'] }, stock: 4 },
+  {
+    category: 'cat-lcd',
+    phones: 'Xiaomi Redmi Note 10; Xiaomi Redmi Note 10S',
+    values: { q: ['OEM'], x: ['+ frame'] },
+    code: 'LCD-RN10',
+    stock: 2,
+  },
+  { category: 'cat-lcd', phones: 'Apple iPhone 11', values: { q: ['OEM'] }, stock: 1 },
+  { category: 'cat-lcd', phones: 'Oppo A16; Oppo A16s', values: { q: ['KW'] }, stock: 0 },
+  {
+    category: 'cat-lcd',
+    phones: 'Oppo A57; Oppo A57s',
+    values: { q: ['Original'], x: ['+ frame'] },
+    tags: ['Laris'],
+    stock: 2,
+  },
+  {
+    category: 'cat-lcd',
+    phones: 'vivo Y20; vivo Y20s; vivo Y12s',
+    values: { q: ['OEM'], x: ['+ touchscreen'] },
+    stock: 4,
+  },
+  {
+    category: 'cat-bat',
+    phones: 'Samsung Galaxy A10s; Samsung Galaxy A20s',
+    values: { q: ['Original'] },
+    code: 'BAT-A10S',
+    stock: 6,
+  },
+  { category: 'cat-bat', phones: 'Apple iPhone 11', values: { q: ['Double power'] }, stock: -1 },
+  {
+    category: 'cat-bat',
+    phones: 'Xiaomi Redmi 9; Xiaomi Redmi Note 9',
+    values: { q: ['Original'] },
+    code: 'BN54',
+    barcode: '6941059648208',
+    stock: 5,
+  },
+  { category: 'cat-con', phones: 'Oppo A57; Oppo A77', values: { t: ['Type-C'] }, stock: 5 },
+  {
+    category: 'cat-con',
+    name: 'Konektor cas Type-C universal',
+    values: { t: ['Type-C'] },
+    tags: ['Laris'],
+    stock: 24,
+  },
+  {
+    category: 'cat-con',
+    name: 'Konektor cas micro USB universal',
+    values: { t: ['Micro USB'] },
+    stock: 15,
+  },
+  {
+    category: null,
+    name: 'Flexible on/off Oppo A5s',
+    phones: 'Oppo A5s; Oppo A7; Oppo A12',
+    stock: 2,
+  },
+  {
+    category: null,
+    name: 'Speaker buzzer Samsung A-series',
+    phones: 'Samsung Galaxy A10; Samsung Galaxy A20',
+    stock: 7,
+  },
+  { category: null, name: 'Kaca kamera belakang iPhone XR', phones: 'Apple iPhone XR', stock: 3 },
+  { category: null, name: 'Lem B7000 15 ml', stock: -2 },
+  { category: null, name: 'Backdoor Redmi Note 8', phones: 'Xiaomi Redmi Note 8', stock: 1 },
+  {
+    category: 'cat-tg',
+    phones: 'Samsung Galaxy A14',
+    values: { t: ['9D'] },
+    barcode: '8992222053242',
+    tags: ['Laris'],
+    stock: 12,
+  },
+  { category: 'cat-tg', phones: 'Apple iPhone 11', values: { t: ['Privacy'] }, stock: 5 },
+  {
+    category: 'cat-chg',
+    values: { m: ['Xiaomi'], w: ['33W'], k: ['Type-C'] },
+    barcode: '6934177757420',
+    stock: 3,
+  },
+  { category: 'cat-chg', values: { m: ['Robot'], w: ['10W'], k: ['Micro USB'] }, stock: 8 },
 ];
 
 export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRuntime {
   const { now, actor, checkUse } = options;
   let ids = 0;
   const newId = (prefix: string): string => `${prefix}-${String((ids += 1))}`;
-  const parts: DemoPart[] = [];
+  const categories: CategoryRow[] = CATEGORIES.map((category) => ({
+    ...category,
+    archived: false,
+  }));
+  const items: DemoItem[] = [];
   const movements: (MovementRow & { at: number })[] = [];
 
   const record = (
@@ -105,16 +283,42 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     return id;
   };
 
-  for (const [name, code, fits, stock] of SEED) {
-    const id = newId('part');
-    parts.push({ id, name, code, models: models(fits), archived: false });
-    if (stock !== 0) record(id, 'counted', stock, { counted: stock, at: now - 86_400_000 });
+  const categoryOf = (categoryId: string | null): CategoryRow | null =>
+    categories.find((c) => c.id === categoryId) ?? null;
+  const isPart = (item: DemoItem): boolean =>
+    item.categoryId === null || categoryOf(item.categoryId)?.isPart === true;
+
+  for (const seed of SEED) {
+    const id = newId('item');
+    const category = categoryOf(seed.category);
+    const values = category === null ? {} : cleanValues(category.fields, seed.values ?? {});
+    const models = phones(seed.phones ?? '');
+    items.push({
+      id,
+      name: seed.name ?? formatItemName(category!, values, models),
+      nameAuto: seed.name === undefined,
+      code: seed.code ?? null,
+      barcode: seed.barcode ?? null,
+      categoryId: seed.category,
+      values,
+      tags: seed.tags ?? [],
+      models,
+      archived: false,
+    });
+    if (seed.stock !== 0) {
+      record(id, 'counted', seed.stock, { counted: seed.stock, at: now - 86_400_000 });
+    }
   }
-  parts.push({
-    id: newId('part'),
+  items.push({
+    id: newId('item'),
     name: 'LCD Nokia 2.3',
+    nameAuto: false,
     code: null,
-    models: models('Nokia 2.3'),
+    barcode: null,
+    categoryId: 'cat-lcd',
+    values: {},
+    tags: [],
+    models: phones('Nokia 2.3'),
     archived: true,
   });
 
@@ -126,16 +330,21 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     const after = own.filter((m) => m.kind !== 'counted' && (last === undefined || m.at > last.at));
     return (last?.counted ?? 0) + after.reduce((sum, m) => sum + m.qty, 0);
   };
-  const row = ({ models: fits, ...part }: DemoPart): ItemRow => ({
-    ...part,
-    fits: fitsLine(fits),
-    onHand: onHand(part.id),
+  const row = (item: DemoItem): ItemRow => ({
+    id: item.id,
+    name: item.name,
+    code: item.code,
+    categoryId: item.categoryId,
+    fits: fitsLine(item.models),
+    archived: item.archived,
+    onHand: onHand(item.id),
   });
-  const find = (itemId: string): DemoPart => {
-    const part = parts.find((p) => p.id === itemId);
-    if (part === undefined)
+  const find = (itemId: string): DemoItem => {
+    const item = items.find((p) => p.id === itemId);
+    if (item === undefined) {
       throw INVENTORY_REFUSALS.refuse('itemNotFound', { code: 'ENTITY_NOT_FOUND' });
-    return part;
+    }
+    return item;
   };
   const require = (permission: string): DemoInventoryActor => {
     const who = actor();
@@ -150,6 +359,11 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
       .reduce((sum, m) => sum + m.qty, 0);
   const newestFirst = (list: readonly MovementRow[]): MovementRow[] =>
     [...list].sort((a, b) => b.at - a.at);
+  const has = (item: DemoItem, facet: string, wanted: readonly string[]): boolean => {
+    const keys = new Set(wanted.map(valueKey));
+    const values = facet === TAG_FACET ? item.tags : (item.values[facet] ?? []);
+    return values.some((value) => keys.has(valueKey(value)));
+  };
 
   type Input = Record<string, unknown>;
   const page = <T>(rows: readonly T[], nextCursor: string | null = null) => ({ rows, nextCursor });
@@ -158,39 +372,63 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     listItems: (input) => {
       const text = String(input['text'] ?? '').trim();
       const filter = (input['filter'] as string | undefined) ?? 'active';
+      const categoryId = (input['categoryId'] as string | null | undefined) ?? null;
+      const tags = (input['tags'] as string[] | undefined) ?? [];
+      const values = (input['values'] as Record<string, string[]> | undefined) ?? {};
       const limit = Number(input['limit'] ?? 50);
       const offset = Number(input['offset'] ?? 0);
-      const shown = parts
-        .map(row)
+      const inCategory = (item: DemoItem): boolean =>
+        categoryId === null ||
+        (categoryId === 'none' ? item.categoryId === null : item.categoryId === categoryId);
+      const shown = items
         .filter((p) => (filter === 'archived' ? p.archived : !p.archived))
-        .filter((p) => filter !== 'belowZero' || p.onHand < 0);
+        .filter(inCategory)
+        .filter((p) => input['partsOnly'] !== true || isPart(p))
+        .filter((p) => tags.every((tag) => has(p, TAG_FACET, [tag])))
+        .filter((p) =>
+          Object.entries(values).every(
+            ([facet, wanted]) => wanted.length === 0 || has(p, facet, wanted),
+          ),
+        )
+        .map((p) => ({ item: p, row: row(p) }))
+        .filter(({ row: r }) => filter !== 'belowZero' || r.onHand < 0)
+        .filter(({ row: r }) => filter !== 'outOfStock' || r.onHand <= 0);
       // The same typo-tolerant search the app runs, best match first.
       const matching =
         text === ''
-          ? shown.sort((a, b) => a.name.localeCompare(b.name))
-          : new FuzzyIndex(shown.map(itemDocument))
+          ? shown.map(({ row: r }) => r).sort((a, b) => a.name.localeCompare(b.name))
+          : new FuzzyIndex(
+              shown.map(({ item, row: r }) =>
+                itemDocument({ ...r, barcode: item.barcode, values: item.values, tags: item.tags }),
+              ),
+            )
               .search(text, shown.length)
-              .map((hit) => shown.find((p) => p.id === hit.id)!);
+              .map((hit) => shown.find(({ row: r }) => r.id === hit.id)!.row);
       const more = matching.length > offset + limit;
       return page(matching.slice(offset, offset + limit), more ? String(offset + limit) : null);
     },
     countBelowZero: () =>
-      page([{ count: parts.filter((p) => !p.archived && onHand(p.id) < 0).length }]),
+      page([{ count: items.filter((p) => !p.archived && onHand(p.id) < 0).length }]),
     getItem: (input) => {
-      const part = parts.find((p) => p.id === input['itemId']);
-      if (part === undefined) return page([]);
+      const item = items.find((p) => p.id === input['itemId']);
+      if (item === undefined) return page([]);
       const detail: ItemDetailRow = {
-        ...row(part),
-        models: part.models,
-        movements: newestFirst(movements.filter((m) => m.itemId === part.id)).slice(0, 100),
+        ...row(item),
+        nameAuto: item.nameAuto,
+        barcode: item.barcode,
+        category: categoryOf(item.categoryId),
+        values: item.values,
+        tags: item.tags,
+        models: item.models,
+        movements: newestFirst(movements.filter((m) => m.itemId === item.id)).slice(0, 100),
       };
       return page([detail]);
     },
     itemsFitting: (input) => {
       const key = compactModel(String(input['brand'] ?? ''), String(input['model']));
       const modelKey = compactModel(String(input['model']));
-      const fitting = parts
-        .filter((p) => !p.archived)
+      const fitting = items
+        .filter((p) => !p.archived && isPart(p))
         .filter((p) =>
           p.models.some((m) => [key, modelKey].includes(compactModel(m.brand, m.model))),
         )
@@ -203,11 +441,11 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
       const onUse = newestFirst(movements.filter((m) => m.useId === useId));
       const used: UsedPartRow[] = [...new Set(onUse.map((m) => m.itemId))]
         .map((itemId) => {
-          const part = find(itemId);
+          const item = find(itemId);
           return {
             itemId,
-            name: part.name,
-            code: part.code,
+            name: item.name,
+            code: item.code,
             out: outOn(itemId, useId),
             onHand: onHand(itemId),
           };
@@ -215,27 +453,118 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
         .sort((a, b) => a.name.localeCompare(b.name));
       return page([{ parts: used, movements: onUse }]);
     },
+    listCategories: (input) =>
+      page(
+        categories
+          .filter((c) => input['includeArchived'] === true || !c.archived)
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      ),
+    facetValues: (input) => {
+      const categoryId = (input['categoryId'] as string | null | undefined) ?? null;
+      const counts = new Map<string, FacetValueRow>();
+      for (const item of items) {
+        if (item.archived || (categoryId !== null && item.categoryId !== categoryId)) continue;
+        const facets = [
+          ...item.tags.map((value) => [TAG_FACET, value] as const),
+          ...Object.entries(item.values).flatMap(([facet, values]) =>
+            values.map((value) => [facet, value] as const),
+          ),
+        ];
+        for (const [facet, value] of facets) {
+          const key = `${facet}\u0000${valueKey(value)}`;
+          const seen = counts.get(key);
+          counts.set(key, { facet, value: seen?.value ?? value, count: (seen?.count ?? 0) + 1 });
+        }
+      }
+      return page(
+        [...counts.values()].sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+      );
+    },
+    findByCode: (input) => {
+      const code = String(input['code']).replace(/\s+/g, '').toLowerCase();
+      const same = (value: string | null): boolean =>
+        value !== null && value.replace(/\s+/g, '').toLowerCase() === code;
+      return page(items.filter((p) => same(p.barcode) || same(p.code)).map(row));
+    },
   };
 
-  const details = (input: Input) => ({
-    name: String(input['name']).trim(),
-    code: ((input['code'] as string | null | undefined) ?? '').trim() || null,
-    models: [...((input['fits'] as ItemFitRow[] | undefined) ?? [])],
-  });
+  const details = (input: Input) => {
+    const categoryId = (input['categoryId'] as string | null | undefined) ?? null;
+    const category = categoryOf(categoryId);
+    const models = [...((input['fits'] as ItemFitRow[] | undefined) ?? [])];
+    const values =
+      category === null
+        ? {}
+        : cleanValues(category.fields, (input['values'] as FieldValues | undefined) ?? {});
+    const nameAuto = input['nameAuto'] === true && category !== null;
+    const name = nameAuto
+      ? formatItemName(category, values, models)
+      : String(input['name'] ?? '').trim();
+    if (name === '') throw new DomainError('VALIDATION_FAILED', { field: 'name', issue: 'empty' });
+    return {
+      name,
+      nameAuto,
+      code: ((input['code'] as string | null | undefined) ?? '').trim() || null,
+      barcode: ((input['barcode'] as string | null | undefined) ?? '').trim() || null,
+      categoryId,
+      values,
+      tags: cleanTags((input['tags'] as string[] | undefined) ?? []),
+      models,
+    };
+  };
+  const categoryDetails = (input: Input) => {
+    const shape = {
+      name: String(input['name']).trim(),
+      isPart: input['isPart'] === true,
+      fields: input['fields'] as CategoryField[],
+      nameFormat: String(input['nameFormat']).trim(),
+    };
+    const problem = categoryProblem(shape);
+    if (problem !== null) {
+      throw INVENTORY_REFUSALS.refuse('categoryInvalid', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'fields', issue: problem },
+      });
+    }
+    return shape;
+  };
   const use = (input: Input) => input['use'] as { kind: string; id: string; label: string };
 
   const commands: Record<string, (input: Input) => unknown> = {
+    addCategory: (input) => {
+      require(I.manageCategories);
+      const id = newId('cat');
+      categories.push({ id, ...categoryDetails(input), archived: false });
+      return { categoryId: id };
+    },
+    editCategory: (input) => {
+      require(I.manageCategories);
+      const category = categories.find((c) => c.id === input['categoryId']);
+      if (category === undefined) {
+        throw INVENTORY_REFUSALS.refuse('categoryNotFound', { code: 'ENTITY_NOT_FOUND' });
+      }
+      Object.assign(category, categoryDetails(input), { archived: input['archived'] === true });
+      // As the command: its items named by the format follow the new one.
+      let renamed = 0;
+      for (const item of items.filter((p) => p.categoryId === category.id && p.nameAuto)) {
+        const values = cleanValues(category.fields, item.values);
+        const name = formatItemName(category, values, item.models);
+        if (name !== '' && name !== item.name) renamed += 1;
+        Object.assign(item, { values, name: name === '' ? item.name : name });
+      }
+      return { categoryId: category.id, renamed };
+    },
     addItem: (input) => {
       require(I.manageItems);
-      const id = newId('part');
-      parts.push({ id, ...details(input), archived: false });
+      const id = newId('item');
+      items.push({ id, ...details(input), archived: false });
       return { itemId: id };
     },
     editItem: (input) => {
       require(I.manageItems);
-      const part = find(String(input['itemId']));
-      Object.assign(part, details(input), { archived: input['archived'] === true });
-      return { itemId: part.id };
+      const item = find(String(input['itemId']));
+      Object.assign(item, details(input), { archived: input['archived'] === true });
+      return { itemId: item.id };
     },
     countStock: (input) => {
       require(I.count);
@@ -250,12 +579,12 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     },
     takePart: (input) => {
       const who = require(I.useParts);
-      const part = find(String(input['itemId']));
-      if (part.archived) throw INVENTORY_REFUSALS.refuse('itemArchived');
+      const item = find(String(input['itemId']));
+      if (item.archived) throw INVENTORY_REFUSALS.refuse('itemArchived');
       const target = use(input);
       checkUse(target.id, who);
       return {
-        movementId: record(part.id, 'taken', -Number(input['qty']), {
+        movementId: record(item.id, 'taken', -Number(input['qty']), {
           useKind: 'repair_ticket',
           useId: target.id,
           useLabel: target.label,
@@ -264,14 +593,14 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     },
     putBackPart: (input) => {
       const who = require(I.useParts);
-      const part = find(String(input['itemId']));
+      const item = find(String(input['itemId']));
       const target = use(input);
       checkUse(target.id, who);
-      if (Number(input['qty']) > outOn(part.id, target.id)) {
+      if (Number(input['qty']) > outOn(item.id, target.id)) {
         throw INVENTORY_REFUSALS.refuse('moreThanTaken', { code: 'VALIDATION_FAILED' });
       }
       return {
-        movementId: record(part.id, 'put_back', Number(input['qty']), {
+        movementId: record(item.id, 'put_back', Number(input['qty']), {
           useKind: 'repair_ticket',
           useId: target.id,
           useLabel: target.label,
@@ -306,6 +635,8 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     newId: () => newId('new'),
     subscribe: options.subscribe,
     searchModels: options.searchModels,
+    // The preview has no camera: a scan reads the Redmi 9 battery's barcode, so the flow can be tried.
+    scanCode: () => Promise.resolve(DEMO_SCANNED_CODE),
   };
   return runtime as unknown as InventoryRuntime;
 }

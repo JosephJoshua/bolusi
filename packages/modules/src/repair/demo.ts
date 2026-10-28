@@ -78,7 +78,8 @@ export const DEMO_REPAIR_ROLES = {
       P.setCancelFees,
       P.correctDownPayment,
       P.setPrintSettings,
-      ...Object.values(I),
+      // Categories are the business owner's alone.
+      ...Object.values(I).filter((id) => id !== I.manageCategories),
     ],
   },
 } as const;

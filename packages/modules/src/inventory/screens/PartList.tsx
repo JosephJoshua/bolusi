@@ -1,16 +1,19 @@
 /**
- * PartList — the business's parts with this store's stock, search first. Typing ranks every part by
- * fuzzy match on its name, code and the phones it fits; without text the list runs by name, a page
- * at a time, so thousands of parts stay quick. Stock below zero is flagged, and owners get a view of
- * just those to sort out.
+ * PartList — the business's items with this store's stock, search first. Typing ranks every item by
+ * fuzzy match on its name, codes, field values, tags and the phones it fits; without text the list
+ * runs by name, a page at a time, so thousands of items stay quick. A scanned barcode or QR code
+ * opens its item, and one row of chips narrows the list: the filters, then the categories. Stock
+ * below zero is flagged, and owners get a chip for just those to sort out.
  */
 import { t, translateErrorCode } from '@bolusi/i18n';
 import {
+  ActionChip,
   AppShell,
   Button,
+  ChipRow,
   List,
   SearchField,
-  SegmentedControl,
+  ToggleChip,
   border,
   color,
   space,
@@ -26,25 +29,45 @@ import type { ScreenChrome } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { stockText } from '../labels.js';
 import { ti, type InventoryKey } from '../i18n.js';
-import type { PartFilter, ItemRow } from '../queries.js';
+import { NO_CATEGORY, type CategoryRow, type ItemRow, type PartFilter } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 
 const PAGE = 50;
 
-const FILTER_KEY: Readonly<Record<PartFilter, InventoryKey>> = {
-  active: 'inventory.filter.active',
-  belowZero: 'inventory.filter.belowZero',
-  archived: 'inventory.filter.archived',
-};
+/** What the list is narrowed to. The surface keeps it, so it outlives a trip into an item. */
+export interface ListFilter {
+  readonly stock: PartFilter;
+  /** A category's id, `NO_CATEGORY`, or null for all. */
+  readonly categoryId: string | null;
+  readonly tags: readonly string[];
+  /** By field id of the chosen category. */
+  readonly values: Readonly<Record<string, readonly string[]>>;
+}
+
+export const NO_FILTER: ListFilter = { stock: 'active', categoryId: null, tags: [], values: {} };
+
+/** How many filters are in force beyond the category, which shows in its own chips. */
+export function filterCount(filter: ListFilter): number {
+  return (
+    (filter.stock === 'active' ? 0 : 1) +
+    filter.tags.length +
+    Object.values(filter.values).reduce((sum, values) => sum + values.length, 0)
+  );
+}
 
 const EMPTY_KEY: Readonly<Record<PartFilter, InventoryKey>> = {
   active: 'inventory.list.emptyHint',
   belowZero: 'inventory.list.noBelowZero',
+  outOfStock: 'inventory.list.noOutOfStock',
   archived: 'inventory.list.noArchived',
 };
 
 export interface PartListProps {
   readonly chrome: ScreenChrome;
+  readonly filter: ListFilter;
+  readonly onFilter: (filter: ListFilter) => void;
+  readonly onOpenFilters: () => void;
+  readonly onManageCategories: () => void;
   readonly onBack: () => void;
   readonly onOpenPart: (itemId: string) => void;
   readonly onAddPart: () => void;
@@ -59,6 +82,10 @@ interface LoadedParts {
 
 export function PartList({
   chrome,
+  filter,
+  onFilter,
+  onOpenFilters,
+  onManageCategories,
   onBack,
   onOpenPart,
   onAddPart,
@@ -66,7 +93,7 @@ export function PartList({
 }: PartListProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
-  const [filter, setFilter] = useState<PartFilter>('active');
+  const canSetUp = runtime.hasPermission(INVENTORY_PERMISSION.manageCategories);
   const [text, setText] = useState('');
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -74,7 +101,13 @@ export function PartList({
   const settledText = useSettledValue(typed);
   const searchText = typed === '' ? '' : settledText;
   const searching = searchText !== '';
+  const filterKey = JSON.stringify(filter);
+  const narrowed = filterCount(filter) > 0 || filter.categoryId !== null;
 
+  const categories = useInventoryQuery<readonly CategoryRow[]>(
+    async (rt) => (await rt.query('listCategories', {})).rows,
+    'listCategories',
+  );
   const query = useInventoryQuery<LoadedParts>(
     async (rt) => {
       // Every page scrolled to, re-read on each refresh so the live list stays whole.
@@ -84,7 +117,12 @@ export function PartList({
         const page: { readonly rows: readonly ItemRow[]; readonly nextCursor: string | null } =
           await rt.query('listItems', {
             text: searchText,
-            filter: searching ? 'active' : filter,
+            filter: filter.stock,
+            categoryId: filter.categoryId,
+            tags: [...filter.tags],
+            values: Object.fromEntries(
+              Object.entries(filter.values).map(([id, values]) => [id, [...values]]),
+            ),
             limit: PAGE,
             offset: Number(next),
           });
@@ -94,7 +132,7 @@ export function PartList({
       const belowZero = (await rt.query('countBelowZero', {})).rows[0]?.count ?? 0;
       return { rows, hasMore: next !== null, belowZero };
     },
-    `parts:${searching ? `q:${searchText}` : filter}:${String(pages)}:${String(reloadNonce)}`,
+    `parts:${searchText}:${filterKey}:${String(pages)}:${String(reloadNonce)}`,
   );
 
   const listState = useMemo((): ListState<ItemRow> => {
@@ -123,25 +161,71 @@ export function PartList({
         };
       case 'ready':
         if (query.data.rows.length === 0) {
+          // Only a stock view picked: say what that view lacks.
+          const onlyStock =
+            filter.stock !== 'active' && filterCount(filter) === 1 && filter.categoryId === null;
           return {
             kind: 'empty',
             empty: searching
               ? { title: ti('inventory.list.noMatches') }
-              : filter === 'active'
+              : !narrowed
                 ? { title: t('core.status.empty'), hint: ti(EMPTY_KEY.active) }
-                : { title: ti(EMPTY_KEY[filter]) },
+                : onlyStock
+                  ? { title: ti(EMPTY_KEY[filter.stock]) }
+                  : { title: ti('inventory.list.noFilterMatches') },
           };
         }
         return { kind: 'ready', items: query.data.rows };
     }
-  }, [query, searching, filter, onBack]);
+  }, [query, searching, narrowed, filter, onBack]);
 
   const loaded = query.status === 'ready' ? query.data : null;
   const belowZero = loaded?.belowZero ?? 0;
-  // Owners sort out stock below zero; anyone else only sees the flag on the part itself.
-  const filters: readonly PartFilter[] = canManage
-    ? ['active', 'belowZero', 'archived']
-    : ['active'];
+  const shownCategories = categories.status === 'ready' ? categories.data : [];
+  const count = filterCount(filter);
+  const update = (patch: Partial<ListFilter>): void => {
+    setPages(1);
+    onFilter({ ...filter, ...patch });
+  };
+  // Field values belong to a category's fields, so they go with it.
+  const pickCategory = (categoryId: string | null): void => update({ categoryId, values: {} });
+
+  // The categories as chips: all, each one, and none. The one picked comes first, beside the
+  // filter, so a narrowed list always shows what it is narrowed to.
+  const categoryChips: readonly { readonly id: string | null; readonly label: string }[] =
+    shownCategories.length === 0
+      ? []
+      : [
+          { id: null, label: ti('inventory.list.allCategories') },
+          ...shownCategories.map((category) => ({ id: category.id, label: category.name })),
+          { id: NO_CATEGORY, label: ti('inventory.list.noCategory') },
+        ];
+  const pickedChip =
+    filter.categoryId === null
+      ? undefined
+      : categoryChips.find((chip) => chip.id === filter.categoryId);
+  const categoryChip = (chip: (typeof categoryChips)[number]): React.JSX.Element => (
+    <ToggleChip
+      key={chip.id ?? 'all'}
+      label={chip.label}
+      selected={filter.categoryId === chip.id}
+      onToggle={() => pickCategory(filter.categoryId === chip.id ? null : chip.id)}
+      testID={`${testID}.category.${chip.id ?? 'all'}`}
+    />
+  );
+
+  /** A code names one item: open it. Several, or none: search for it, which also shows near ones. */
+  const scan = async (): Promise<void> => {
+    const code = await runtime.scanCode?.();
+    if (code === null || code === undefined || code.trim() === '') return;
+    const found = await runtime
+      .query('findByCode', { code })
+      .then((page) => page.rows)
+      .catch(() => []);
+    if (found.length === 1 && found[0] !== undefined) onOpenPart(found[0].id);
+    else setText(code.trim());
+  };
+
   const openRef = useRef(onOpenPart);
   openRef.current = onOpenPart;
   const open = useCallback((id: string) => openRef.current(id), []);
@@ -166,38 +250,62 @@ export function PartList({
       testID={testID}
     >
       <View style={styles.search}>
-        <SearchField
-          placeholder={ti('inventory.list.searchHint')}
-          accessibilityLabel={t('core.action.search')}
-          clearLabel={ti('inventory.list.clearSearch')}
-          value={text}
-          onChangeText={setText}
-          testID={`${testID}.search`}
-        />
-      </View>
-      {searching || filters.length === 1 ? null : (
-        <View style={styles.filters}>
-          <SegmentedControl
-            options={filters.map((value) => ({
-              value,
-              label:
-                value === 'belowZero' && belowZero > 0
-                  ? `${ti(FILTER_KEY[value])} (${String(belowZero)})`
-                  : ti(FILTER_KEY[value]),
-            }))}
-            value={filter}
-            size="compact"
-            bleed
-            onChange={(next) => {
-              setFilter(next);
-              setPages(1);
-            }}
-            testID={`${testID}.filters`}
+        <View style={styles.searchField}>
+          <SearchField
+            placeholder={ti('inventory.list.searchHint')}
+            accessibilityLabel={t('core.action.search')}
+            clearLabel={ti('inventory.list.clearSearch')}
+            value={text}
+            onChangeText={setText}
+            testID={`${testID}.search`}
           />
         </View>
-      )}
+        {runtime.scanCode === undefined ? null : (
+          <ActionChip
+            label={ti('inventory.list.scan')}
+            icon="scan"
+            onPress={() => void scan()}
+            testID={`${testID}.scan`}
+          />
+        )}
+      </View>
+      <View style={styles.chips}>
+        <ChipRow testID={`${testID}.chips`}>
+          <ActionChip
+            label={
+              count === 0
+                ? ti('inventory.list.filter')
+                : ti('inventory.list.filterCount', { count: String(count) })
+            }
+            icon="filter"
+            active={count > 0}
+            onPress={onOpenFilters}
+            testID={`${testID}.filter`}
+          />
+          {pickedChip === undefined ? null : categoryChip(pickedChip)}
+          {canManage && (belowZero > 0 || filter.stock === 'belowZero') ? (
+            <ToggleChip
+              label={`${ti('inventory.filter.belowZero')} (${String(belowZero)})`}
+              selected={filter.stock === 'belowZero'}
+              onToggle={() =>
+                update({ stock: filter.stock === 'belowZero' ? 'active' : 'belowZero' })
+              }
+              testID={`${testID}.belowZero`}
+            />
+          ) : null}
+          {categoryChips.filter((chip) => chip !== pickedChip).map(categoryChip)}
+          {canSetUp ? (
+            <ActionChip
+              label={ti('inventory.list.manageCategories')}
+              icon="settings"
+              onPress={onManageCategories}
+              testID={`${testID}.categories`}
+            />
+          ) : null}
+        </ChipRow>
+      </View>
       <List
-        key={searching ? `q:${searchText}` : filter}
+        key={`${searchText}:${filterKey}`}
         state={listState}
         keyExtractor={(row) => row.id}
         onEndReached={loaded?.hasMore === true ? () => setPages((n) => n + 1) : undefined}
@@ -214,7 +322,7 @@ interface PartListRowProps {
   readonly testID: string;
 }
 
-/** One part: its name, what it fits, and the store's stock on the right, flagged below zero. */
+/** One item: its name, what it fits, and the store's stock on the right, flagged below zero. */
 const PartListRow = memo(
   function PartListRow({ row, onOpen, testID }: PartListRowProps): React.JSX.Element {
     const details = [row.code, row.fits].filter((s) => s !== null && s !== '').join(' · ');
@@ -268,8 +376,9 @@ const PartListRow = memo(
 );
 
 const styles = StyleSheet.create({
-  search: { marginBottom: space.sm },
-  filters: { marginBottom: space.xs },
+  search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
+  searchField: { flex: 1 },
+  chips: { marginBottom: space.xs },
   row: {
     minHeight: touch.rowMin,
     flexDirection: 'row',

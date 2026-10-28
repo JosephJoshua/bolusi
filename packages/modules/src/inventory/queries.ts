@@ -6,10 +6,18 @@ import { z } from 'zod';
 import { searchIndexFor, type QueryContext, type QueryPage } from '@bolusi/core';
 
 import { compactModel } from '../shared/model-key.js';
+import {
+  parseFields,
+  parseValues,
+  valueKey,
+  type CategoryField,
+  type FieldValues,
+} from './categories.js';
 import { userNames } from '../shared/user-names.js';
 import {
   INVENTORY_PERMISSION,
   PART_USE_KINDS,
+  TAG_FACET,
   type MovementKind,
   type PartUseKind,
 } from './constants.js';
@@ -24,6 +32,7 @@ export interface ItemRow {
   readonly id: string;
   readonly name: string;
   readonly code: string | null;
+  readonly categoryId: string | null;
   readonly fits: string | null;
   readonly archived: boolean;
   /** What this store has: the sum of its movements. Below zero when more was taken than counted. */
@@ -52,11 +61,43 @@ export interface ItemFitRow {
   readonly model: string;
 }
 
+export interface CategoryRow {
+  readonly id: string;
+  readonly name: string;
+  readonly isPart: boolean;
+  readonly fields: readonly CategoryField[];
+  readonly nameFormat: string;
+  readonly archived: boolean;
+}
+
 export interface ItemDetailRow extends ItemRow {
+  readonly nameAuto: boolean;
+  readonly barcode: string | null;
+  /** Its category, archived or not; null when it has none. */
+  readonly category: CategoryRow | null;
+  readonly values: FieldValues;
+  readonly tags: readonly string[];
   /** The phone models it fits, in the order picked. */
   readonly models: readonly ItemFitRow[];
   /** Newest first, at most `MOVEMENTS_SHOWN`. */
   readonly movements: readonly MovementRow[];
+}
+
+/**
+ * An item's details as `editItem` takes them, so an edit of one thing (archiving it) sends the rest
+ * unchanged: a detail left out would be cleared.
+ */
+export function itemDetails(part: ItemDetailRow) {
+  return {
+    name: part.nameAuto ? '' : part.name,
+    nameAuto: part.nameAuto,
+    code: part.code,
+    barcode: part.barcode,
+    categoryId: part.categoryId,
+    values: Object.fromEntries(Object.entries(part.values).map(([id, v]) => [id, [...v]])),
+    tags: [...part.tags],
+    fits: part.models.map((fit) => ({ ...fit })),
+  };
 }
 
 /** One part a use has drawn on. */
@@ -129,7 +170,7 @@ function partsWithStock(qctx: Qctx, partIds?: readonly string[]) {
   let query = qctx.db
     .selectFrom('inventoryItems as p')
     .leftJoin(stockByPart(qctx, partIds).as('s'), 's.itemId', 'p.id')
-    .select(['p.id', 'p.name', 'p.code', 'p.fits', 'p.archived', 's.onHand'])
+    .select(['p.id', 'p.name', 'p.code', 'p.categoryId', 'p.fits', 'p.archived', 's.onHand'])
     .where('p.tenantId', '=', qctx.tenantId);
   if (partIds !== undefined) query = query.where('p.id', 'in', partIds);
   return query;
@@ -142,6 +183,7 @@ function toPart(row: RawPart): ItemRow {
     id: row.id,
     name: row.name,
     code: row.code,
+    categoryId: row.categoryId,
     fits: row.fits,
     archived: Number(row.archived) === 1,
     onHand: Number(row.onHand ?? 0),
@@ -172,6 +214,24 @@ async function toMovements(
   }));
 }
 
+function categories(qctx: Qctx) {
+  return qctx.db
+    .selectFrom('inventoryCategories')
+    .selectAll()
+    .where('tenantId', '=', qctx.tenantId);
+}
+
+function toCategory(row: InventoryDatabase['inventoryCategories']): CategoryRow {
+  return {
+    id: row.id,
+    name: row.name,
+    isPart: Number(row.isPart) === 1,
+    fields: parseFields(row.fields),
+    nameFormat: row.nameFormat,
+    archived: Number(row.archived) === 1,
+  };
+}
+
 function storeMovements(qctx: Qctx) {
   return qctx.db
     .selectFrom('inventoryMovements')
@@ -182,19 +242,88 @@ function storeMovements(qctx: Qctx) {
 
 // ── listItems ──────────────────────────────────────────────────────────────────────────────────
 
-/** `active`: on the list; `belowZero`: more taken than the store had, for the owner to sort out. */
-export const PART_FILTERS = ['active', 'belowZero', 'archived'] as const;
+/**
+ * `active`: on the list; `belowZero`: more taken than the store had, for the owner to sort out;
+ * `outOfStock`: none here (below zero included); `archived`: taken off the list.
+ */
+export const PART_FILTERS = ['active', 'belowZero', 'outOfStock', 'archived'] as const;
 export type PartFilter = (typeof PART_FILTERS)[number];
+
+/** `categoryId` 'none' means items filed under no category. */
+export const NO_CATEGORY = 'none' as const;
+
+const zFacetValues = z.array(z.string().trim().min(1).max(60)).max(50);
 
 export const listItemsInput = z
   .object({
     text: z.string().trim().max(200).default(''),
     filter: z.enum(PART_FILTERS).default('active'),
+    categoryId: z.string().min(1).nullable().default(null),
+    /** Every tag listed (all of them, not any). */
+    tags: zFacetValues.default([]),
+    /** By field id: any of the values listed, for every field listed. */
+    values: z.record(z.string().min(1).max(40), zFacetValues).default({}),
+    /** Only spareparts: items in a sparepart category, or in none (the take step). */
+    partsOnly: z.boolean().default(false),
     limit: z.number().int().min(1).max(200).default(50),
     offset: z.number().int().min(0).default(0),
   })
   .strict();
 export type ListPartsInput = z.input<typeof listItemsInput>;
+
+type ItemQuery = ReturnType<typeof partsWithStock>;
+
+/** Narrow to items filed under one of `values` for `facet`. Values match whatever their case. */
+function withFacet(query: ItemQuery, qctx: Qctx, facet: string, values: readonly string[]) {
+  const keys = [...new Set(values.map(valueKey))].filter((key) => key !== '');
+  if (keys.length === 0) return query;
+  return query.where(({ exists, selectFrom }) =>
+    exists(
+      selectFrom('inventoryItemFacets as f')
+        .select('f.itemId')
+        .whereRef('f.itemId', '=', 'p.id')
+        .where('f.tenantId', '=', qctx.tenantId)
+        .where('f.facet', '=', facet)
+        .where('f.valueKey', 'in', keys),
+    ),
+  );
+}
+
+/** Spareparts: items in a sparepart category, or in none. Accessories and goods are for the POS. */
+function onlyParts(query: ItemQuery): ItemQuery {
+  return query.where(({ or, eb, exists, selectFrom }) =>
+    or([
+      eb('p.categoryId', 'is', null),
+      exists(
+        selectFrom('inventoryCategories as c')
+          .select('c.id')
+          .whereRef('c.id', '=', 'p.categoryId')
+          .where('c.isPart', '=', 1),
+      ),
+    ]),
+  );
+}
+
+function filtered(qctx: Qctx, input: z.output<typeof listItemsInput>): ItemQuery {
+  let query = partsWithStock(qctx);
+  query =
+    input.filter === 'archived'
+      ? query.where('p.archived', '=', 1)
+      : query.where('p.archived', '=', 0);
+  // A part never moved here has no stock row, so it is never below zero.
+  if (input.filter === 'belowZero') query = query.where('s.onHand', '<', 0);
+  if (input.filter === 'outOfStock') {
+    query = query.where((eb) => eb.or([eb('s.onHand', 'is', null), eb('s.onHand', '<=', 0)]));
+  }
+  if (input.categoryId === NO_CATEGORY) query = query.where('p.categoryId', 'is', null);
+  else if (input.categoryId !== null) query = query.where('p.categoryId', '=', input.categoryId);
+  if (input.partsOnly) query = onlyParts(query);
+  for (const tag of input.tags) query = withFacet(query, qctx, TAG_FACET, [tag]);
+  for (const [fieldId, values] of Object.entries(input.values)) {
+    query = withFacet(query, qctx, fieldId, values);
+  }
+  return query;
+}
 
 /**
  * Parts by name, or by fuzzy match when `text` is given (best match first). `nextCursor` is the
@@ -204,18 +333,11 @@ export async function listItemsHandler(
   input: z.output<typeof listItemsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<ItemRow>> {
-  let query = partsWithStock(qctx);
-  query =
-    input.filter === 'archived'
-      ? query.where('p.archived', '=', 1)
-      : query.where('p.archived', '=', 0);
-  // A part never moved here has no stock row, so it is never below zero.
-  if (input.filter === 'belowZero') query = query.where('s.onHand', '<', 0);
+  const query = filtered(qctx, input);
 
   if (input.text !== '') {
-    // Ranked by the shared fuzzy index; the filter then narrows the hits it ranked. Hits the filter
-    // drops (archived, or in stock when only below zero is shown) leave gaps, so the window widens
-    // until it holds the page and one more.
+    // Ranked by the shared fuzzy index; the filters then narrow the hits it ranked. Hits they drop
+    // leave gaps, so the window widens until it holds the page and one more.
     const index = await searchIndexFor(qctx, itemSearchSource);
     const wanted = input.offset + input.limit + 1;
     let window = wanted;
@@ -290,8 +412,22 @@ export async function getItemHandler(
   input: z.output<typeof getItemInput>,
   qctx: Qctx,
 ): Promise<QueryPage<ItemDetailRow>> {
-  const row = await partsWithStock(qctx, [input.itemId]).executeTakeFirst();
+  const row = await partsWithStock(qctx, [input.itemId])
+    .select(['p.nameAuto', 'p.barcode', 'p.fieldValues'])
+    .executeTakeFirst();
   if (row === undefined) return { rows: [], nextCursor: null };
+  const category =
+    row.categoryId === null
+      ? undefined
+      : await categories(qctx).where('id', '=', row.categoryId).executeTakeFirst();
+  const tags = await qctx.db
+    .selectFrom('inventoryItemFacets')
+    .select('value')
+    .where('tenantId', '=', qctx.tenantId)
+    .where('itemId', '=', input.itemId)
+    .where('facet', '=', TAG_FACET)
+    .orderBy('position')
+    .execute();
   const models = await qctx.db
     .selectFrom('inventoryItemFits')
     .select(['brand', 'model'])
@@ -306,7 +442,18 @@ export async function getItemHandler(
     .limit(MOVEMENTS_SHOWN)
     .execute();
   return {
-    rows: [{ ...toPart(row), models, movements: await toMovements(qctx, movements) }],
+    rows: [
+      {
+        ...toPart(row),
+        nameAuto: Number(row.nameAuto) === 1,
+        barcode: row.barcode,
+        category: category === undefined ? null : toCategory(category),
+        values: parseValues(row.fieldValues),
+        tags: tags.map((tag) => tag.value),
+        models,
+        movements: await toMovements(qctx, movements),
+      },
+    ],
     nextCursor: null,
   };
 }
@@ -382,7 +529,7 @@ export const itemsFittingInput = z
 export type PartsFittingInput = z.input<typeof itemsFittingInput>;
 
 /**
- * The parts on the list that fit one phone model, for the take step to offer first: a servisan for
+ * The spareparts on the list that fit one phone model, for the take step to offer first: a servisan for
  * an Oppo A57 shows the A57 parts before anyone types. Matched on the compacted spelling, so
  * "OPPO A-57" finds parts picked as "Oppo A57"; a part listed by model alone matches on the model.
  */
@@ -403,7 +550,7 @@ export async function itemsFittingHandler(
       .execute()
   ).map((row) => row.itemId);
   if (ids.length === 0) return { rows: [], nextCursor: null };
-  const rows = await partsWithStock(qctx, ids)
+  const rows = await onlyParts(partsWithStock(qctx, ids))
     .where('p.archived', '=', 0)
     .orderBy(sql`lower(p.name)`)
     .limit(input.limit)
@@ -416,4 +563,203 @@ export const itemsFittingQuery = {
   permission: INVENTORY_PERMISSION.read,
   input: itemsFittingInput,
   handler: itemsFittingHandler,
+} as const;
+
+// ── listCategories ─────────────────────────────────────────────────────────────────────────────
+
+export const listCategoriesInput = z
+  .object({ includeArchived: z.boolean().default(false) })
+  .strict();
+export type ListCategoriesInput = z.input<typeof listCategoriesInput>;
+
+/** The business's categories by name. A short list: a shop has tens, not thousands. */
+export async function listCategoriesHandler(
+  input: z.output<typeof listCategoriesInput>,
+  qctx: Qctx,
+): Promise<QueryPage<CategoryRow>> {
+  let query = categories(qctx);
+  if (!input.includeArchived) query = query.where('archived', '=', 0);
+  const rows = await query
+    .orderBy(sql`lower(name)`)
+    .orderBy('id')
+    .execute();
+  return { rows: rows.map(toCategory), nextCursor: null };
+}
+
+export const listCategoriesQuery = {
+  name: 'listCategories',
+  permission: INVENTORY_PERMISSION.read,
+  input: listCategoriesInput,
+  handler: listCategoriesHandler,
+} as const;
+
+// ── facetValues ────────────────────────────────────────────────────────────────────────────────
+
+export const facetValuesInput = z
+  .object({ categoryId: z.string().min(1).nullable().default(null) })
+  .strict();
+export type FacetValuesInput = z.input<typeof facetValuesInput>;
+
+export interface FacetValueRow {
+  /** 'tag', or a field's id. */
+  readonly facet: string;
+  /** As most items spell it. */
+  readonly value: string;
+  /** How many items on the list have it. */
+  readonly count: number;
+}
+
+/**
+ * Every tag and field value in use on the list (of one category, when given), most used first:
+ * the filter's choices, and a field's choices beyond the ones its category lists.
+ */
+export async function facetValuesHandler(
+  input: z.output<typeof facetValuesInput>,
+  qctx: Qctx,
+): Promise<QueryPage<FacetValueRow>> {
+  let query = qctx.db
+    .selectFrom('inventoryItemFacets as f')
+    .innerJoin('inventoryItems as p', 'p.id', 'f.itemId')
+    .select([
+      'f.facet',
+      'f.valueKey',
+      (eb) => eb.fn.min('f.value').as('value'),
+      (eb) => eb.fn.count<number | string>('f.itemId').distinct().as('count'),
+    ])
+    .where('f.tenantId', '=', qctx.tenantId)
+    .where('p.archived', '=', 0)
+    .groupBy(['f.facet', 'f.valueKey']);
+  if (input.categoryId !== null) query = query.where('p.categoryId', '=', input.categoryId);
+  const rows = await query.execute();
+  return {
+    rows: rows
+      .map((row) => ({ facet: row.facet, value: String(row.value), count: Number(row.count) }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+    nextCursor: null,
+  };
+}
+
+export const facetValuesQuery = {
+  name: 'facetValues',
+  permission: INVENTORY_PERMISSION.read,
+  input: facetValuesInput,
+  handler: facetValuesHandler,
+} as const;
+
+// ── findByCode ─────────────────────────────────────────────────────────────────────────────────
+
+export const findByCodeInput = z.object({ code: z.string().trim().min(1).max(120) }).strict();
+export type FindByCodeInput = z.input<typeof findByCodeInput>;
+
+/**
+ * The items a scanned barcode or QR code names. Deliberately exact (ignoring case and spaces): a
+ * scanner reads machine codes without typos, and a near miss would open the wrong item. Typed
+ * text goes through `listItems`' fuzzy search instead, which also matches codes.
+ */
+export async function findByCodeHandler(
+  input: z.output<typeof findByCodeInput>,
+  qctx: Qctx,
+): Promise<QueryPage<ItemRow>> {
+  const code = input.code.replace(/\s+/g, '').toLowerCase();
+  const rows = await partsWithStock(qctx)
+    .where((eb) =>
+      eb.or([
+        eb(sql`lower(replace(p.barcode, ' ', ''))`, '=', code),
+        eb(sql`lower(replace(p.code, ' ', ''))`, '=', code),
+      ]),
+    )
+    .orderBy('p.archived')
+    .orderBy(sql`lower(p.name)`)
+    .limit(20)
+    .execute();
+  return { rows: rows.map(toPart), nextCursor: null };
+}
+
+export const findByCodeQuery = {
+  name: 'findByCode',
+  permission: INVENTORY_PERMISSION.read,
+  input: findByCodeInput,
+  handler: findByCodeHandler,
+} as const;
+
+// ── itemsInCategory ────────────────────────────────────────────────────────────────────────────
+
+export const itemsInCategoryInput = z.object({ categoryId: z.string().min(1) }).strict();
+
+export interface CategoryItemRow {
+  readonly id: string;
+  readonly name: string;
+  readonly nameAuto: boolean;
+  readonly code: string | null;
+  readonly barcode: string | null;
+  readonly values: FieldValues;
+  readonly tags: readonly string[];
+  readonly models: readonly ItemFitRow[];
+  readonly archived: boolean;
+}
+
+/** Every item of a category with what a rename needs: a format change renames them together. */
+export async function itemsInCategoryHandler(
+  input: z.output<typeof itemsInCategoryInput>,
+  qctx: Qctx,
+): Promise<QueryPage<CategoryItemRow>> {
+  const items = await qctx.db
+    .selectFrom('inventoryItems')
+    .select(['id', 'name', 'nameAuto', 'code', 'barcode', 'fieldValues', 'archived'])
+    .where('tenantId', '=', qctx.tenantId)
+    .where('categoryId', '=', input.categoryId)
+    .orderBy('id')
+    .execute();
+  const ids = items.map((item) => item.id);
+  const tags = new Map<string, string[]>();
+  const models = new Map<string, ItemFitRow[]>();
+  // In chunks: SQLite caps how many values one statement binds.
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const tagRows = await qctx.db
+      .selectFrom('inventoryItemFacets')
+      .select(['itemId', 'value'])
+      .where('tenantId', '=', qctx.tenantId)
+      .where('facet', '=', TAG_FACET)
+      .where('itemId', 'in', chunk)
+      .orderBy('itemId')
+      .orderBy('position')
+      .execute();
+    for (const row of tagRows) tags.set(row.itemId, [...(tags.get(row.itemId) ?? []), row.value]);
+    const fitRows = await qctx.db
+      .selectFrom('inventoryItemFits')
+      .select(['itemId', 'brand', 'model'])
+      .where('tenantId', '=', qctx.tenantId)
+      .where('itemId', 'in', chunk)
+      .orderBy('itemId')
+      .orderBy('position')
+      .execute();
+    for (const row of fitRows) {
+      models.set(row.itemId, [
+        ...(models.get(row.itemId) ?? []),
+        { brand: row.brand, model: row.model },
+      ]);
+    }
+  }
+  return {
+    rows: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      nameAuto: Number(item.nameAuto) === 1,
+      code: item.code,
+      barcode: item.barcode,
+      values: parseValues(item.fieldValues),
+      tags: tags.get(item.id) ?? [],
+      models: models.get(item.id) ?? [],
+      archived: Number(item.archived) === 1,
+    })),
+    nextCursor: null,
+  };
+}
+
+export const itemsInCategoryQuery = {
+  name: 'itemsInCategory',
+  permission: INVENTORY_PERMISSION.read,
+  input: itemsInCategoryInput,
+  handler: itemsInCategoryHandler,
 } as const;

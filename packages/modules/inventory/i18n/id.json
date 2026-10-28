@@ -1,38 +1,51 @@
 {
   "opType": {
-    "itemAdded": "Sparepart ditambahkan",
-    "itemEdited": "Sparepart diubah",
+    "itemAdded": "Barang ditambahkan",
+    "itemEdited": "Barang diubah",
     "stockCounted": "Stok dikoreksi",
     "itemTaken": "Sparepart diambil",
-    "itemPutBack": "Sparepart dikembalikan"
+    "itemPutBack": "Sparepart dikembalikan",
+    "categoryAdded": "Kategori ditambahkan",
+    "categoryEdited": "Kategori diubah"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
-    "itemNotFound": "Sparepart ini tidak ada di daftar.",
-    "itemArchived": "Sparepart ini sudah diarsipkan.",
+    "itemNotFound": "Barang ini tidak ada di daftar.",
+    "itemArchived": "Barang ini sudah diarsipkan.",
     "moreThanTaken": "Jumlahnya lebih dari yang diambil untuk servisan ini.",
-    "wrongUse": "Data servisannya tidak cocok. Coba lagi."
+    "wrongUse": "Data servisannya tidak cocok. Coba lagi.",
+    "categoryNotFound": "Kategori ini tidak ada.",
+    "categoryInvalid": "Isian atau format nama kategori ini belum benar."
   },
   "list": {
-    "title": "Sparepart",
-    "searchHint": "Cari nama, kode, tipe HP",
+    "title": "Barang",
+    "searchHint": "Cari nama, kode, HP",
     "clearSearch": "Hapus pencarian",
-    "emptyHint": "Sparepart yang ditambahkan akan muncul di sini.",
-    "noMatches": "Sparepart tidak ditemukan. Coba kata lain.",
+    "emptyHint": "Barang yang ditambahkan akan muncul di sini.",
+    "noMatches": "Barang tidak ditemukan. Coba kata lain.",
     "noBelowZero": "Tidak ada stok minus.",
-    "noArchived": "Belum ada sparepart yang diarsipkan.",
+    "noArchived": "Belum ada barang yang diarsipkan.",
     "stock": "Stok",
     "stockCount": "Stok: {count}",
     "belowZero": "Stok minus",
-    "archived": "Diarsipkan"
+    "archived": "Diarsipkan",
+    "noOutOfStock": "Tidak ada stok habis.",
+    "noFilterMatches": "Tidak ada barang yang cocok dengan filter ini.",
+    "allCategories": "Semua",
+    "noCategory": "Tanpa kategori",
+    "manageCategories": "Atur kategori",
+    "filter": "Filter",
+    "filterCount": "Filter ({count})",
+    "scan": "Pindai"
   },
   "filter": {
     "active": "Semua",
     "belowZero": "Stok minus",
-    "archived": "Diarsipkan"
+    "archived": "Diarsipkan",
+    "outOfStock": "Stok habis"
   },
   "action": {
-    "add": "Tambah sparepart",
+    "add": "Tambah barang",
     "edit": "Ubah",
     "count": "Koreksi stok",
     "archive": "Arsipkan",
@@ -40,21 +53,34 @@
     "save": "Simpan"
   },
   "form": {
-    "addTitle": "Sparepart baru",
-    "editTitle": "Ubah sparepart",
-    "name": "Nama sparepart",
+    "addTitle": "Barang baru",
+    "editTitle": "Ubah barang",
+    "name": "Nama barang",
     "namePlaceholder": "Contoh: LCD Redmi Note 10 + frame",
     "code": "Kode (opsional)",
     "fits": "Cocok untuk HP (opsional)",
     "fitsPlaceholder": "Contoh: Redmi Note 10, Note 10S",
     "stock": "Stok sekarang",
-    "nameRequired": "Tulis nama sparepartnya dulu.",
+    "nameRequired": "Tulis nama barangnya dulu.",
     "fitsSearch": "Cari tipe HP",
     "removeFit": "Hapus",
     "addTyped": "Tambah “{model}”",
     "notInCatalog": "Belum ada di daftar HP",
     "addAnother": "Tambah lagi",
-    "savedAnother": "“{name}” disimpan."
+    "savedAnother": "“{name}” disimpan.",
+    "category": "Kategori",
+    "noCategory": "Tanpa kategori",
+    "autoName": "Nama",
+    "autoNameEmpty": "Isi kolom di atas, namanya tersusun sendiri.",
+    "editName": "Ubah nama",
+    "useAutoName": "Pakai nama otomatis",
+    "barcode": "Barcode (opsional)",
+    "scan": "Pindai",
+    "tags": "Label (opsional)",
+    "addTag": "Tambah label",
+    "newTag": "Label baru",
+    "otherValue": "Lainnya",
+    "newValue": "Pilihan baru"
   },
   "count": {
     "title": "Koreksi stok",
@@ -72,7 +98,10 @@
     "fits": "Cocok untuk",
     "history": "Riwayat",
     "noHistory": "Belum ada keluar masuk stok di toko ini.",
-    "title": "Detail sparepart"
+    "title": "Detail barang",
+    "category": "Kategori",
+    "barcode": "Barcode",
+    "tags": "Label"
   },
   "movement": {
     "counted": "Dikoreksi jadi {count}",
@@ -84,7 +113,7 @@
     "increase": "Tambah"
   },
   "archive": {
-    "title": "Arsipkan sparepart ini?",
+    "title": "Arsipkan barang ini?",
     "message": "Tidak bisa diambil lagi untuk servisan. Riwayatnya tetap ada."
   },
   "use": {
@@ -107,11 +136,11 @@
     "otherParts": "Sparepart lain"
   },
   "done": {
-    "added": "Sparepart ditambahkan.",
+    "added": "Barang ditambahkan.",
     "saved": "Perubahan disimpan.",
     "counted": "Stok dikoreksi.",
-    "archived": "Sparepart diarsipkan.",
-    "restored": "Sparepart aktif lagi.",
+    "archived": "Barang diarsipkan.",
+    "restored": "Barang aktif lagi.",
     "taken": "Sparepart diambil.",
     "putBack": "Sparepart dikembalikan ke stok."
   },
@@ -120,5 +149,66 @@
     "message": "Isian yang belum disimpan akan hilang.",
     "confirm": "Keluar",
     "keep": "Tetap di sini"
+  },
+  "filterStep": {
+    "title": "Filter",
+    "stock": "Stok",
+    "tags": "Label",
+    "show": "Terapkan",
+    "clear": "Hapus filter"
+  },
+  "category": {
+    "listTitle": "Kategori",
+    "add": "Tambah kategori",
+    "addTitle": "Kategori baru",
+    "editTitle": "Ubah kategori",
+    "name": "Nama kategori",
+    "namePlaceholder": "Contoh: LCD",
+    "nameRequired": "Tulis nama kategorinya dulu.",
+    "isPart": "Sparepart",
+    "isPartCaption": "Bisa diambil untuk servisan.",
+    "fields": "Isian",
+    "fieldsHint": "Yang diisi untuk setiap barang di kategori ini.",
+    "addField": "Tambah isian",
+    "fieldLabel": "Nama isian",
+    "fieldLabelPlaceholder": "Contoh: Kualitas",
+    "kind": {
+      "one": "Pilih satu",
+      "many": "Pilih beberapa",
+      "text": "Teks",
+      "phones": "Tipe HP"
+    },
+    "options": "Pilihan",
+    "addOption": "Tambah",
+    "newOption": "Pilihan baru",
+    "optionCount": "{count} pilihan",
+    "removeField": "Hapus isian",
+    "done": "Selesai",
+    "format": "Format nama",
+    "formatHint": "Ketuk isian untuk menambahkannya ke nama.",
+    "example": "Contoh: {name}",
+    "saved": "Kategori disimpan.",
+    "savedRenamed": "Kategori disimpan. Nama {count} barang ikut diperbarui.",
+    "archive": "Arsipkan kategori",
+    "archiveTitle": "Arsipkan kategori ini?",
+    "archiveMessage": "Barangnya tetap ada, tapi kategori ini tidak bisa dipilih lagi.",
+    "restore": "Aktifkan lagi",
+    "archived": "Diarsipkan",
+    "fieldCount": "{count} isian",
+    "none": "Belum ada kategori.",
+    "noneHint": "Kategori membuat nama barang seragam dan mudah difilter.",
+    "problem": {
+      "labelEmpty": "Isi nama isiannya.",
+      "labelTwice": "Nama isian ini sudah dipakai.",
+      "phonesTwice": "Isian Tipe HP cukup satu.",
+      "formatUnknown": "Format menyebut isian yang tidak ada: {label}.",
+      "formatEmpty": "Isi format namanya."
+    },
+    "dragHandle": "Geser untuk mengubah urutan",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "removeOption": "Hapus pilihan {option}",
+    "addToName": "Tambahkan {label} ke nama",
+    "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang."
   }
 }

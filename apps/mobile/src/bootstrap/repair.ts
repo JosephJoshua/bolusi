@@ -75,6 +75,8 @@ export function createSessionRepairRuntime(deps: {
   readonly media: RepairMediaSeams;
   /** Absent ⇒ this build cannot print and the screens show no print action. */
   readonly print?: PrintPlatform | undefined;
+  /** The camera's code scanner for the items screens; absent ⇒ they offer no scan. */
+  readonly scanCode?: (() => Promise<string | null>) | undefined;
 }): RepairRuntime {
   const { app, identity } = deps;
   const printing =
@@ -99,6 +101,7 @@ export function createSessionRepairRuntime(deps: {
     invalidation: app.invalidation,
     identity,
     searchModels: (text, limit) => catalogModelSearch(repair!)(text, limit),
+    scanCode: deps.scanCode,
   });
   repair = createRepairRuntime({
     runtime,

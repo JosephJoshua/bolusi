@@ -301,6 +301,19 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
   A count is the shelf at the moment it was made (by the phone's clock): a take
   made after it still comes off when it syncs, one made before is already in the
   count, and of two counts the later one stands.
+- **Categories and built names (2026-10-28):** the list holds every item the
+  shops stock, not only parts. The business owner alone sets up categories:
+  each lists the fields its items fill in (pick one, pick several, text, or the
+  phones it fits) and a name format such as `LCD {HP} {Kualitas} {Tambahan}`,
+  so names read one way whoever enters them. Choices grow as new values are
+  typed ("+ frame"). A name can still be typed for an odd item; a format change
+  renames only the items it named. The owner marks which categories are
+  spareparts: the take step offers only those and items with no category. Tags
+  are free labels on any item.
+- **Finding items:** fuzzy, typo-tolerant search over names, codes, barcodes,
+  field values, tags and phones; filters by category, stock, field values and
+  tags; a camera scan of a barcode or QR code opens its item (exact match only,
+  never a near miss). The PC gets a spreadsheet-like table with paste from Excel.
 - **Next, in order:** supplier orders and receiving, supplier invoices and
   payments (on the shared money ledger), transfers between stores, supplier
   returns, stock counts across many parts (a fast table on the PC). Part costs

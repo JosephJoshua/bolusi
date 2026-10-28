@@ -15,6 +15,8 @@ const SPEC_TABLES = [
   'auth_sessions',
   'conflicts',
   'device_registry',
+  'inventory_categories',
+  'inventory_item_facets',
   'inventory_item_fits',
   'inventory_items',
   'inventory_movements',
@@ -50,7 +52,9 @@ const SPEC_TABLES = [
 // Every index the spec declares (10-db §9.2/§9.4/§9.6, §10 query-pattern table).
 const SPEC_INDEXES = [
   'idx_conflicts_surfaced',
+  'idx_inventory_item_facets_value',
   'idx_inventory_item_fits_model',
+  'idx_inventory_items_category',
   'idx_inventory_movements_part',
   'idx_inventory_movements_use',
   'idx_media_items_queue',

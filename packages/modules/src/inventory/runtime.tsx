@@ -29,6 +29,11 @@ export type InventoryRuntime = ModulePort<InventoryModule> &
      */
     readonly searchModels?:
       ((text: string, limit: number) => Promise<readonly PhoneModelOption[]>) | undefined;
+    /**
+     * Read a barcode or QR code with the camera: what it says, or null when the person backs out.
+     * Absent where there is no camera to scan with (a counter PC types codes with a USB scanner).
+     */
+    readonly scanCode?: (() => Promise<string | null>) | undefined;
   };
 
 const InventoryRuntimeContext = createRuntimeContext<InventoryRuntime>('inventory');

@@ -85,6 +85,8 @@ import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
 import type { SignatureSurface } from './src/media/SignatureHost.js';
 import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
+import type { ScanSurface } from './src/media/ScanHost.js';
+import { ScanScreen } from './src/media/ScanScreen.js';
 import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
@@ -148,6 +150,8 @@ export interface AppProps {
    * exactly like `capture`: it wins the screen inside the shell zone only, so a lock still wins.
    */
   readonly signature?: SignatureSurface | null;
+  /** The code scanner while it looks for a barcode or QR code, from `useScanHost`; like `capture`. */
+  readonly scan?: ScanSurface | null;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -573,6 +577,7 @@ export default function App(props: AppProps): React.JSX.Element {
 
   const captureSurface = props.capture ?? null;
   const signatureSurface = props.signature ?? null;
+  const scanSurface = props.scan ?? null;
   const goBack = useCallback((): boolean => {
     if (accountMenu) {
       setAccountMenu(false);
@@ -588,6 +593,10 @@ export default function App(props: AppProps): React.JSX.Element {
     }
     if (signatureSurface !== null) {
       signatureSurface.onBack();
+      return true;
+    }
+    if (scanSurface !== null) {
+      scanSurface.onBack();
       return true;
     }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
@@ -638,7 +647,7 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, syncReturn]);
+  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, scanSurface, syncReturn]);
 
   // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
   useEffect(() => {
@@ -800,6 +809,7 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const capture = zone.kind === 'shell' ? captureSurface : null;
   const signing = zone.kind === 'shell' ? signatureSurface : null;
+  const scanning = zone.kind === 'shell' ? scanSurface : null;
   const modal =
     capture !== null ? (
       <CaptureScreen
@@ -831,6 +841,14 @@ export default function App(props: AppProps): React.JSX.Element {
         onRetry={signing.onRetry}
         onBack={signing.onBack}
         onPadLayout={signing.onPadLayout}
+      />
+    ) : scanning !== null ? (
+      <ScanScreen
+        state={scanning.state}
+        preview={scanning.preview}
+        syncChip={modalSyncChip}
+        avatar={<View testID="scan-no-avatar" />}
+        onBack={scanning.onBack}
       />
     ) : null;
 

@@ -27,5 +27,9 @@
   },
   "upload": {
     "persistentFailure": "{count} foto belum sampai ke server."
+  },
+  "scan": {
+    "title": "Pindai kode",
+    "hint": "Arahkan kamera ke barcode atau kode QR."
   }
 }

@@ -34,6 +34,7 @@ import { Platform, StyleSheet } from 'react-native';
 
 import { createExpoCameraCapture, type CameraCapturePort } from './capture.js';
 import type { CapturePlatform } from './CaptureHost.js';
+import type { ScanPlatform } from './ScanHost.js';
 
 /**
  * The still size asked of the camera on Android. Without it CameraX takes the HIGHEST size the
@@ -106,6 +107,41 @@ export function createExpoCapturePlatform(): CapturePlatform {
     // crop would hide damage at the edge of the frame, on the one screen whose job is confirming the
     // damage is in frame.
     renderStill: (uri) => <Image source={{ uri }} style={styles.fill} contentFit="contain" />,
+  };
+}
+
+/**
+ * The codes a shop meets on parts and goods: retail barcodes (EAN, UPC), the Code 128/39 a
+ * supplier's label prints, and QR or Data Matrix codes the shop prints itself.
+ */
+const SCANNED_CODES = [
+  'ean13',
+  'ean8',
+  'upc_a',
+  'upc_e',
+  'code128',
+  'code39',
+  'code93',
+  'itf14',
+  'codabar',
+  'qr',
+  'datamatrix',
+] as const;
+
+/** The code scanner for the items list and form: the same camera, reading codes instead of photos. */
+export function createExpoScanPlatform(): ScanPlatform {
+  return {
+    async ensurePermission(): Promise<boolean> {
+      return (await Camera.requestCameraPermissionsAsync()).granted;
+    },
+    renderScanner: (onCode) => (
+      <CameraView
+        style={styles.fill}
+        facing="back"
+        barcodeScannerSettings={{ barcodeTypes: [...SCANNED_CODES] }}
+        onBarcodeScanned={(result) => onCode(result.data)}
+      />
+    ),
   };
 }
 

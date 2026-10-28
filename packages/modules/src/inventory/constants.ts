@@ -10,6 +10,8 @@ export const INVENTORY_MODULE_ID = 'inventory' as const;
 
 /** One part on the business's list. Tenant-wide: every store sees the same list. */
 export const INVENTORY_ITEM_ENTITY = 'inventory_item' as const;
+/** One category of the list (LCD, Baterai, Charger), with the fields its items fill in. */
+export const INVENTORY_CATEGORY_ENTITY = 'inventory_category' as const;
 /** One stock movement in one store. */
 export const INVENTORY_MOVEMENT_ENTITY = 'inventory_movement' as const;
 
@@ -17,12 +19,27 @@ export const INVENTORY_TABLE = {
   items: 'inventory_items',
   movements: 'inventory_movements',
   fits: 'inventory_item_fits',
+  facets: 'inventory_item_facets',
+  categories: 'inventory_categories',
 } as const;
 
 /** The most phone models one part can list as fitting. */
 export const MAX_PART_FITS = 50;
 
+/** What a category field holds: one pick, several picks, free text, or the phones the item fits. */
+export const FIELD_KINDS = ['one', 'many', 'text', 'phones'] as const;
+export type FieldKind = (typeof FIELD_KINDS)[number];
+
+/** Category limits: enough for any real list, small enough that a mistake cannot balloon a sync. */
+export const MAX_CATEGORY_FIELDS = 12;
+export const MAX_FIELD_OPTIONS = 100;
+export const MAX_ITEM_TAGS = 20;
+/** The facet a tag is filed under in `inventory_item_facets`; field values use the field's id. */
+export const TAG_FACET = 'tag' as const;
+
 export const INVENTORY_OP = {
+  categoryAdded: 'inventory.category_added',
+  categoryEdited: 'inventory.category_edited',
   itemAdded: 'inventory.item_added',
   itemEdited: 'inventory.item_edited',
   stockCounted: 'inventory.stock_counted',
@@ -32,6 +49,8 @@ export const INVENTORY_OP = {
 
 export const INVENTORY_PERMISSION = {
   read: 'inventory.read',
+  /** Set up the categories, their fields and how their items are named (the business owner). */
+  manageCategories: 'inventory.manage_categories',
   /** Add parts to the business's list and edit them. */
   manageItems: 'inventory.manage_items',
   /** Set how many of a part the store has, from a count. */

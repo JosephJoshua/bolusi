@@ -17,6 +17,8 @@ import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 const SUGGESTIONS = 5;
 
 export interface ModelsFieldProps {
+  /** Already-localized; a category's phones field brings its own ("HP"). */
+  readonly label?: string | undefined;
   readonly value: readonly ItemFitRow[];
   readonly onChange: (next: readonly ItemFitRow[]) => void;
   readonly testID: string;
@@ -29,7 +31,12 @@ export function fitLabel(fit: ItemFitRow): string {
   return `${fit.brand} ${fit.model}`.trim();
 }
 
-export function ModelsField({ value, onChange, testID }: ModelsFieldProps): React.JSX.Element {
+export function ModelsField({
+  label = ti('inventory.form.fits'),
+  value,
+  onChange,
+  testID,
+}: ModelsFieldProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
   const [text, setText] = useState('');
   const typed = text.trim();
@@ -61,7 +68,7 @@ export function ModelsField({ value, onChange, testID }: ModelsFieldProps): Reac
 
   return (
     <View testID={testID}>
-      <Text style={styles.label}>{ti('inventory.form.fits')}</Text>
+      <Text style={styles.label}>{label}</Text>
       {value.map((fit, i) => (
         <ListRow
           key={keyOf(fit)}

@@ -1,38 +1,51 @@
 {
   "opType": {
-    "itemAdded": "Part added",
-    "itemEdited": "Part changed",
+    "itemAdded": "Item added",
+    "itemEdited": "Item changed",
     "stockCounted": "Stock corrected",
     "itemTaken": "Part taken",
-    "itemPutBack": "Part put back"
+    "itemPutBack": "Part put back",
+    "categoryAdded": "Category added",
+    "categoryEdited": "Category changed"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
-    "itemNotFound": "This part is not on the list.",
-    "itemArchived": "This part has been archived.",
+    "itemNotFound": "This item isn’t on the list.",
+    "itemArchived": "This item has been archived.",
     "moreThanTaken": "That is more than this repair took.",
-    "wrongUse": "The repair details don’t match. Try again."
+    "wrongUse": "The repair details don’t match. Try again.",
+    "categoryNotFound": "This category doesn’t exist.",
+    "categoryInvalid": "This category’s fields or name format aren’t right yet."
   },
   "list": {
-    "title": "Parts",
-    "searchHint": "Search name, code, phone model",
+    "title": "Items",
+    "searchHint": "Search name, code, phone",
     "clearSearch": "Clear search",
-    "emptyHint": "Parts you add will show here.",
-    "noMatches": "No parts found. Try another word.",
+    "emptyHint": "Items you add will show here.",
+    "noMatches": "No items found. Try other words.",
     "noBelowZero": "No stock below zero.",
-    "noArchived": "No archived parts yet.",
+    "noArchived": "No archived items yet.",
     "stock": "Stock",
     "stockCount": "Stock: {count}",
     "belowZero": "Below zero",
-    "archived": "Archived"
+    "archived": "Archived",
+    "noOutOfStock": "Nothing is out of stock.",
+    "noFilterMatches": "No items match these filters.",
+    "allCategories": "All",
+    "noCategory": "No category",
+    "manageCategories": "Categories",
+    "filter": "Filter",
+    "filterCount": "Filter ({count})",
+    "scan": "Scan"
   },
   "filter": {
     "active": "All",
     "belowZero": "Below zero",
-    "archived": "Archived"
+    "archived": "Archived",
+    "outOfStock": "Out of stock"
   },
   "action": {
-    "add": "Add part",
+    "add": "Add item",
     "edit": "Edit",
     "count": "Correct stock",
     "archive": "Archive",
@@ -40,21 +53,34 @@
     "save": "Save"
   },
   "form": {
-    "addTitle": "New part",
-    "editTitle": "Edit part",
-    "name": "Part name",
+    "addTitle": "New item",
+    "editTitle": "Edit item",
+    "name": "Item name",
     "namePlaceholder": "E.g. LCD Redmi Note 10 + frame",
     "code": "Code (optional)",
     "fits": "Fits phones (optional)",
     "fitsPlaceholder": "E.g. Redmi Note 10, Note 10S",
     "stock": "Stock now",
-    "nameRequired": "Enter the part name first.",
+    "nameRequired": "Write the item’s name first.",
     "fitsSearch": "Search phone model",
     "removeFit": "Remove",
     "addTyped": "Add “{model}”",
     "notInCatalog": "Not in the phone list",
     "addAnother": "Add another",
-    "savedAnother": "“{name}” saved."
+    "savedAnother": "“{name}” saved.",
+    "category": "Category",
+    "noCategory": "No category",
+    "autoName": "Name",
+    "autoNameEmpty": "Fill in the fields above and the name builds itself.",
+    "editName": "Edit name",
+    "useAutoName": "Use the built name",
+    "barcode": "Barcode (optional)",
+    "scan": "Scan",
+    "tags": "Tags (optional)",
+    "addTag": "Add tag",
+    "newTag": "New tag",
+    "otherValue": "Other",
+    "newValue": "New choice"
   },
   "count": {
     "title": "Correct stock",
@@ -72,7 +98,10 @@
     "fits": "Fits",
     "history": "History",
     "noHistory": "No stock movements in this store yet.",
-    "title": "Part details"
+    "title": "Item details",
+    "category": "Category",
+    "barcode": "Barcode",
+    "tags": "Tags"
   },
   "movement": {
     "counted": "Corrected to {count}",
@@ -84,7 +113,7 @@
     "increase": "More"
   },
   "archive": {
-    "title": "Archive this part?",
+    "title": "Archive this item?",
     "message": "It can no longer be taken for repairs. Its history stays."
   },
   "use": {
@@ -107,11 +136,11 @@
     "otherParts": "Other parts"
   },
   "done": {
-    "added": "Part added.",
+    "added": "Item added.",
     "saved": "Changes saved.",
     "counted": "Stock corrected.",
-    "archived": "Part archived.",
-    "restored": "Part is active again.",
+    "archived": "Item archived.",
+    "restored": "Item is active again.",
     "taken": "Part taken.",
     "putBack": "Part put back in stock."
   },
@@ -120,5 +149,66 @@
     "message": "What you entered will be lost.",
     "confirm": "Leave",
     "keep": "Stay here"
+  },
+  "filterStep": {
+    "title": "Filter",
+    "stock": "Stock",
+    "tags": "Tags",
+    "show": "Apply",
+    "clear": "Clear filters"
+  },
+  "category": {
+    "listTitle": "Categories",
+    "add": "Add category",
+    "addTitle": "New category",
+    "editTitle": "Edit category",
+    "name": "Category name",
+    "namePlaceholder": "For example: LCD",
+    "nameRequired": "Write the category’s name first.",
+    "isPart": "Sparepart",
+    "isPartCaption": "Can be taken for a servisan.",
+    "fields": "Fields",
+    "fieldsHint": "What every item in this category fills in.",
+    "addField": "Add field",
+    "fieldLabel": "Field name",
+    "fieldLabelPlaceholder": "For example: Quality",
+    "kind": {
+      "one": "Pick one",
+      "many": "Pick several",
+      "text": "Text",
+      "phones": "Phones"
+    },
+    "options": "Choices",
+    "addOption": "Add",
+    "newOption": "New choice",
+    "optionCount": "{count} choices",
+    "removeField": "Remove field",
+    "done": "Done",
+    "format": "Name format",
+    "formatHint": "Tap a field to add it to the name.",
+    "example": "For example: {name}",
+    "saved": "Category saved.",
+    "savedRenamed": "Category saved. {count} item names were updated.",
+    "archive": "Archive category",
+    "archiveTitle": "Archive this category?",
+    "archiveMessage": "Its items stay, but the category can’t be picked any more.",
+    "restore": "Make active again",
+    "archived": "Archived",
+    "fieldCount": "{count} fields",
+    "none": "No categories yet.",
+    "noneHint": "Categories keep item names consistent and easy to filter.",
+    "problem": {
+      "labelEmpty": "Write the field’s name.",
+      "labelTwice": "This field name is already used.",
+      "phonesTwice": "One phones field is enough.",
+      "formatUnknown": "The format names a field that doesn’t exist: {label}.",
+      "formatEmpty": "Write the name format."
+    },
+    "dragHandle": "Drag to reorder",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "removeOption": "Remove choice {option}",
+    "addToName": "Add {label} to the name",
+    "noOptions": "No choices yet. New ones can also be typed when filling in an item."
   }
 }

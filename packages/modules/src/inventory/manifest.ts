@@ -5,12 +5,22 @@
 // registers, with repair's check for servisan.
 import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolusi/core';
 
-import { inventoryMovementsTable, inventoryItemFitsTable, inventoryItemsTable } from './applier.js';
 import {
+  inventoryCategoriesTable,
+  inventoryItemFacetsTable,
+  inventoryItemFitsTable,
+  inventoryItemsTable,
+  inventoryMovementsTable,
+} from './applier.js';
+import {
+  addCategoryHandler,
+  addCategoryInput,
   addItemHandler,
   addItemInput,
   countStockHandler,
   countStockInput,
+  editCategoryHandler,
+  editCategoryInput,
   editItemHandler,
   editItemInput,
   putBackPartHandler,
@@ -22,9 +32,13 @@ import { inventoryOperations } from './operations.js';
 import type { PartUseTargets } from './part-use.js';
 import {
   countBelowZeroQuery,
+  facetValuesQuery,
+  findByCodeQuery,
   getItemQuery,
-  listItemsQuery,
   itemsFittingQuery,
+  itemsInCategoryQuery,
+  listCategoriesQuery,
+  listItemsQuery,
   partsForUseQuery,
 } from './queries.js';
 import { INVENTORY_REFUSALS } from './rules.js';
@@ -35,6 +49,12 @@ export const INVENTORY_PERMISSIONS = {
     scope: 'store',
     isDangerous: false,
     description: 'Can see the parts list and how many of each part the store has.',
+  },
+  [INVENTORY_PERMISSION.manageCategories]: {
+    scope: 'tenant',
+    isDangerous: false,
+    description:
+      'Can set up the categories of the list, the fields their items fill in and how those items are named.',
   },
   [INVENTORY_PERMISSION.manageItems]: {
     scope: 'store',
@@ -74,12 +94,24 @@ export function inventoryModuleManifest(targets: PartUseTargets) {
         [INVENTORY_TABLE.items]: inventoryItemsTable,
         [INVENTORY_TABLE.movements]: inventoryMovementsTable,
         [INVENTORY_TABLE.fits]: inventoryItemFitsTable,
+        [INVENTORY_TABLE.facets]: inventoryItemFacetsTable,
+        [INVENTORY_TABLE.categories]: inventoryCategoriesTable,
       },
     },
 
     permissions: INVENTORY_PERMISSIONS,
 
     commands: {
+      addCategory: {
+        permission: INVENTORY_PERMISSION.manageCategories,
+        input: addCategoryInput,
+        handler: addCategoryHandler,
+      },
+      editCategory: {
+        permission: INVENTORY_PERMISSION.manageCategories,
+        input: editCategoryInput,
+        handler: editCategoryHandler,
+      },
       addItem: {
         permission: INVENTORY_PERMISSION.manageItems,
         input: addItemInput,
@@ -113,6 +145,10 @@ export function inventoryModuleManifest(targets: PartUseTargets) {
       getItem: getItemQuery,
       partsForUse: partsForUseQuery,
       itemsFitting: itemsFittingQuery,
+      listCategories: listCategoriesQuery,
+      facetValues: facetValuesQuery,
+      findByCode: findByCodeQuery,
+      itemsInCategory: itemsInCategoryQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

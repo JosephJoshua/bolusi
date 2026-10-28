@@ -91,6 +91,7 @@ function journey(world: ChainWorld): OpSpec[] {
   const cancelledTicket = id(3);
   const note = id(4);
   const part = id(8);
+  const category = id(9);
   // A part drawn for the servisan while it is being worked on, and the unused one put back.
   const partsUsed = (): OpSpec[] => {
     const use = { kind: 'repair_ticket', id: ticket, label: formatTicketNumber(world.deviceId, 1) };
@@ -100,15 +101,44 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId: id(0x300 + n),
       payload,
     });
+    const lcdFields = [
+      { id: 'hp', label: 'HP', kind: 'phones', options: [] },
+      { id: 'q', label: 'Kualitas', kind: 'one', options: ['Original', 'OEM'] },
+    ];
     return [
+      {
+        type: 'inventory.category_added',
+        entityType: 'inventory_category',
+        entityId: category,
+        storeId: null,
+        payload: { name: 'LCD', isPart: true, fields: lcdFields, nameFormat: 'LCD {HP}' },
+      },
+      {
+        type: 'inventory.category_edited',
+        entityType: 'inventory_category',
+        entityId: category,
+        storeId: null,
+        payload: {
+          name: 'LCD',
+          isPart: true,
+          fields: lcdFields,
+          nameFormat: 'LCD {HP} {Kualitas}',
+          archived: false,
+        },
+      },
       {
         type: 'inventory.item_added',
         entityType: 'inventory_item',
         entityId: part,
         storeId: null,
         payload: {
-          name: 'LCD Samsung A14',
+          name: 'LCD Samsung Galaxy A14 Original',
+          nameAuto: true,
           code: null,
+          barcode: '8991234567890',
+          categoryId: category,
+          values: { q: ['Original'] },
+          tags: ['laris'],
           fits: [{ brand: 'Samsung', model: 'Galaxy A14' }],
         },
       },
@@ -119,7 +149,12 @@ function journey(world: ChainWorld): OpSpec[] {
         storeId: null,
         payload: {
           name: 'LCD Samsung A14',
+          nameAuto: false,
           code: 'LCD-A14',
+          barcode: null,
+          categoryId: null,
+          values: {},
+          tags: [],
           fits: [
             { brand: 'Samsung', model: 'Galaxy A14' },
             { brand: '', model: 'A14 5G' },

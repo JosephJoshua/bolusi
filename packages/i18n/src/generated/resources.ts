@@ -417,6 +417,7 @@ const source = {
           'Tidak bisa ambil foto karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
       },
       upload: { persistentFailure: '{count} foto belum sampai ke server.' },
+      scan: { title: 'Pindai kode', hint: 'Arahkan kamera ke barcode atau kode QR.' },
     },
     platform: {
       opType: {
@@ -896,6 +897,7 @@ export const resources = {
           persistentFailure:
             '{count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}}',
         },
+        scan: { title: 'Scan code', hint: 'Point the camera at a barcode or QR code.' },
       },
       platform: {
         opType: {

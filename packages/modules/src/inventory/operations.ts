@@ -6,24 +6,31 @@ import type { OperationDeclaration } from '@bolusi/core';
 import { zUuidV7 } from '@bolusi/schemas';
 
 import {
+  categoryAddedApplier,
+  categoryEditedApplier,
   itemAddedApplier,
   itemEditedApplier,
   itemPutBackApplier,
   itemTakenApplier,
   stockCountedApplier,
 } from './applier.js';
+import { MAX_FIELD_VALUE, zCategoryShape, zFieldValues } from './categories.js';
 import {
+  INVENTORY_CATEGORY_ENTITY,
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_OP,
   MAX_PART_FITS,
   INVENTORY_ITEM_ENTITY,
   INVENTORY_PERMISSION,
   MAX_COUNTED_QTY,
+  MAX_ITEM_TAGS,
   MAX_MOVEMENT_QTY,
   PART_USE_KINDS,
 } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import {
+  categoryAddedRule,
+  categoryEditedRule,
   itemAddedRule,
   itemEditedRule,
   itemPutBackRule,
@@ -34,6 +41,7 @@ import type { InventoryDatabase } from './schema.js';
 
 export const MAX_PART_NAME = 200;
 export const MAX_PART_CODE = 60;
+export const MAX_BARCODE = 120;
 export const MAX_NOTE = 500;
 
 const zName = z.string().trim().min(1).max(MAX_PART_NAME);
@@ -48,9 +56,21 @@ export const zPartFit = z
 export const partDetailsPayload = z
   .object({
     name: zName,
+    /** True when the name is the category's format filled in; a format change renames it. */
+    nameAuto: z.boolean(),
     code: zOptional(MAX_PART_CODE),
+    barcode: zOptional(MAX_BARCODE),
+    categoryId: zUuidV7.nullable(),
+    values: zFieldValues,
+    tags: z.array(z.string().trim().min(1).max(MAX_FIELD_VALUE)).max(MAX_ITEM_TAGS),
     fits: z.array(zPartFit).max(MAX_PART_FITS),
   })
+  .strict();
+
+export const categoryAddedPayload = zCategoryShape.extend({ isPart: z.boolean() }).strict();
+
+export const categoryEditedPayload = categoryAddedPayload
+  .extend({ archived: z.boolean() })
   .strict();
 
 export const itemAddedPayload = partDetailsPayload;
@@ -83,6 +103,27 @@ export function inventoryOperations(
   targets: PartUseTargets,
 ): Readonly<Record<string, OperationDeclaration<InventoryDatabase>>> {
   return {
+    [INVENTORY_OP.categoryAdded]: {
+      schemaVersion: 1,
+      payload: categoryAddedPayload,
+      scope: 'tenant',
+      reversal: 'Taken off the list by inventory.category_edited with archived = true.',
+      apply: categoryAddedApplier,
+      rule: categoryAddedRule,
+      permission: INVENTORY_PERMISSION.manageCategories,
+      entityType: INVENTORY_CATEGORY_ENTITY,
+    },
+    [INVENTORY_OP.categoryEdited]: {
+      schemaVersion: 1,
+      payload: categoryEditedPayload,
+      scope: 'tenant',
+      reversal: 'Reversed by another inventory.category_edited with the previous details.',
+      apply: categoryEditedApplier,
+      rule: categoryEditedRule,
+      permission: INVENTORY_PERMISSION.manageCategories,
+      entityType: INVENTORY_CATEGORY_ENTITY,
+      conflict: { key: 'inventory_category.details', severity: 'minor' },
+    },
     [INVENTORY_OP.itemAdded]: {
       schemaVersion: 1,
       payload: itemAddedPayload,

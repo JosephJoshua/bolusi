@@ -119,6 +119,10 @@ export const ICON_GLYPHS = Object.freeze({
   decrease: 'minus',
   /** Stock: a count of what is on the shelf. */
   count: 'clipboard-check-outline',
+  /** Stock: find or fill in an item by scanning its barcode or QR code. */
+  scan: 'barcode-scan',
+  /** Lists: narrow what is shown (category, values, tags, stock). */
+  filter: 'filter-variant',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;
