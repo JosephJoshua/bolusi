@@ -196,6 +196,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   const cleanups: (() => void)[] = [];
   /** What the session and the loops subscribed; a re-enrolment drops them with the services. */
   const serviceCleanups: (() => void)[] = [];
+  // Bumped by `stopServices`: a start still awaiting when the services stop must not install itself.
+  let generation = 0;
 
   const stateListeners = new Set<(state: CoreState) => void>();
   const repairListeners = new Set<() => void>();
@@ -415,6 +417,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
   async function startSession(booted: Bootstrapped, enroll: AppEnrollment): Promise<void> {
     if (session !== null || booted.deviceId === null) return;
+    const started = generation;
     await enroll.loadSigningKey();
     const controller = await createAppSession({
       app: booted,
@@ -423,7 +426,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       clock,
       idSource: newId,
     });
-    if (controller === null || stopped) return;
+    if (controller === null || stopped || started !== generation) return;
     session = controller;
     serviceCleanups.push(
       controller.subscribe(() => {
@@ -445,6 +448,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
   async function startSync(booted: Bootstrapped, enroll: AppEnrollment): Promise<void> {
     if (sync !== null || booted.deviceId === null) return;
+    const started = generation;
     await enroll.evaluator.prime();
     const client = createSyncClientForApp(booted, {
       baseUrl: deps.apiBaseUrl,
@@ -467,7 +471,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         await session?.drainVerifiers(uploadPinVerifier);
       },
     });
-    if (stopped) {
+    if (stopped || started !== generation) {
       client.stop();
       return;
     }
@@ -522,6 +526,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
    * refuses once the PC pushes as the new one. The session ends without a record, like the phone's.
    */
   function stopServices(): void {
+    generation += 1;
     ticker?.stop();
     ticker = null;
     for (const cleanup of serviceCleanups.splice(0)) cleanup();
@@ -541,12 +546,10 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     if (app === null || enrollment === null || app.deviceId === deviceId) return;
     const reenrolled = app.deviceId !== null;
     if (reenrolled) stopServices();
+    // Claimed before the await, so a second signal for the same registration is the no-op above.
+    app = { ...app, deviceId };
     // Enrolment reset the sync state for the new registration; the boot-time copy is the old one's.
-    app = {
-      ...app,
-      deviceId,
-      syncState: reenrolled ? await readSyncState(app.db.db) : app.syncState,
-    };
+    if (reenrolled) app = { ...app, syncState: await readSyncState(app.db.db) };
     heldLogin = null;
     emit();
     void startEnrolledServices(app, enrollment);
@@ -565,8 +568,9 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         appVersion: deps.appVersion,
       });
       emit();
+      const started = generation;
       await startSync(booted, enroll);
-      await startMedia(booted, enroll);
+      if (started === generation) await startMedia(booted, enroll);
     } catch (error) {
       warn('enrolled services failed to start', error);
     }
