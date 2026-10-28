@@ -168,7 +168,10 @@ export interface RootProps {
    * never delay an op push; 06 §1 is explicit that "a note/ticket is usable before its media has
    * uploaded".
    */
-  readonly createMedia?: (app: Bootstrapped) => MediaClient | null;
+  readonly createMedia?: (
+    app: Bootstrapped,
+    hooks: { readonly onQueueChanged: () => void },
+  ) => MediaClient | null;
   /**
    * Build the session controller for a booted app, or `null` when the device is not enrolled
    * (task 119) — injected for the same reason as `createSync`: the real one binds quick-crypto and the
@@ -485,7 +488,8 @@ export function Root({
      */
     const startMediaIfEnrolled = async (booted: Bootstrapped): Promise<void> => {
       if (disposed || mediaRef.current !== null || booted.deviceId === null) return;
-      const client = createMedia?.(booted) ?? null;
+      // A photo that finishes uploading re-reads the sync status now, not at the next sync tick.
+      const client = createMedia?.(booted, { onQueueChanged: bump }) ?? null;
       if (client === null || disposed) {
         client?.stop();
         return;

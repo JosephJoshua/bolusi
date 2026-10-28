@@ -82,6 +82,11 @@ export interface MediaDrainOptions<DB> {
   readonly files: MediaFilePort;
   readonly clock: ClockPort;
   readonly surface: MediaSurfacePort;
+  /**
+   * Called after each item's attempt is written (uploaded or failed), so a status screen re-reads
+   * the queue then rather than at the next sync tick. Fire-and-forget, like `surface`.
+   */
+  readonly onItemSettled?: () => void;
 }
 
 /** How one item's attempt ended. `uploaded` and `restart` are both non-failures. */
@@ -183,15 +188,16 @@ export class MediaDrainLoop<DB> {
     switch (disposition.kind) {
       case 'uploaded':
         await markUploaded(this.options.db, item.id, this.options.clock.now());
-        return;
+        break;
       case 'halt':
         this.halted = true;
         await this.recordFailure(item, disposition.code, disposition.message);
-        return;
+        break;
       case 'failed':
         await this.recordFailure(item, disposition.code, disposition.message);
-        return;
+        break;
     }
+    this.options.onItemSettled?.();
   }
 
   /**
