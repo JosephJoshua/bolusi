@@ -15,7 +15,8 @@ import {
   space,
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import {
   Platform,
   StatusBar as RNStatusBar,
@@ -263,6 +264,8 @@ export interface AppProps {
 }
 
 export default function App(props: AppProps): React.JSX.Element {
+  // Live system insets from the entry's SafeAreaProvider; null where there is none (tests, web).
+  const safeArea = useContext(SafeAreaInsetsContext);
   const [route, setRoute] = useState<ShellRoute>('home');
   /** "PIN karyawan" opened from "Karyawan" for one person's first PIN; back returns to Karyawan. */
   const [staffPinFor, setStaffPinFor] = useState<string | null>(null);
@@ -360,9 +363,25 @@ export default function App(props: AppProps): React.JSX.Element {
    * — B's own landing surface, never the outgoing user's.
    */
   const [routeOwner, setRouteOwner] = useState<string | null>(sessionUserId);
+  /**
+   * Where Back from Sync Status goes: the route it was opened from, however it was opened (a header
+   * chip, the Settings row, a notification tap). Recorded during render, like `routeOwner`, so the
+   * frame that first shows Sync Status already knows its way back. When that is `home`, the home
+   * surface also stays mounted underneath (see the `shell` renderer), so the open servisan, its step
+   * and anything typed are still there.
+   */
+  const [shownRoute, setShownRoute] = useState<ShellRoute>(route);
+  const [syncReturn, setSyncReturn] = useState<ShellRoute>('home');
   if (routeOwner !== sessionUserId) {
+    const restored = workspace?.route ?? 'home';
     setRouteOwner(sessionUserId);
-    setRoute(workspace?.route ?? 'home');
+    setRoute(restored);
+    // Never another user's way back: a restored Sync Status returns home.
+    setShownRoute(restored);
+    setSyncReturn('home');
+  } else if (shownRoute !== route) {
+    setShownRoute(route);
+    if (route === 'syncStatus') setSyncReturn(shownRoute);
   }
 
   /**
@@ -616,16 +635,35 @@ export default function App(props: AppProps): React.JSX.Element {
       // switcher and the load-bearing clear on it — without it `resolveZone` would re-open the roster.
       setPinFor(null);
       setSwitching(false);
-      setRoute(target.route);
+      // Sync Status backs to where it was opened from, the same as its header back.
+      setRoute(zone.kind === 'shell' && zone.route === 'syncStatus' ? syncReturn : target.route);
       return true;
     }
     return false; // Let Android exit.
-  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface]);
+  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, syncReturn]);
 
   // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
   useEffect(() => {
     if (zone.kind !== 'shell') setAccountMenu(false);
   }, [zone.kind]);
+
+  // A phone enrolled before goes back to its own store, and its owner sees the unsynced changes
+  // that will be carried over (core auth/carry-over.ts). Read each time the wizard opens.
+  const inEnrollment = zone.kind === 'enrollment';
+  const readHeldPhone = props.enrollment.heldPhone;
+  useEffect(() => {
+    if (!inEnrollment) return;
+    let live = true;
+    readHeldPhone()
+      .then((phone) => {
+        if (live) setEnrollment((s) => ({ ...s, phone }));
+      })
+      // Unreadable: the wizard still works, and core refuses a bind into another store anyway.
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [inEnrollment, readHeldPhone]);
 
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
@@ -711,7 +749,7 @@ export default function App(props: AppProps): React.JSX.Element {
   // returns below — so the capture zone and the main zone can never drift on the top inset. The top
   // inset is read here (not at module scope) because `RNStatusBar.currentHeight` is not reliably ready
   // at bundle-eval; see `androidStatusBarInset`.
-  const shellStyle = [styles.shell, { paddingTop: androidStatusBarInset() }];
+  const shellStyle = [styles.shell, { paddingTop: topInset(safeArea) }];
 
   // The chrome for a capture or signature surface: the sync chip goes to Sync Status the way every
   // other screen's does; the avatar slot stays empty so the identity cannot switch mid-capture.
@@ -836,7 +874,10 @@ export default function App(props: AppProps): React.JSX.Element {
               discardPrompt={discardPrompt}
               onConfirmDiscard={() => {
                 setDiscardPrompt(false);
-                setEnrollment(initialEnrollmentState(revoked));
+                setEnrollment((previous) => ({
+                  ...initialEnrollmentState(revoked),
+                  phone: previous.phone,
+                }));
               }}
               onCancelDiscard={() => setDiscardPrompt(false)}
             />
@@ -952,12 +993,23 @@ export default function App(props: AppProps): React.JSX.Element {
             );
           },
           shell: (shellZone) => {
-            if (shellZone.route === 'syncStatus') {
-              return (
+            // Switching user, or re-enrolling (which ends the session), unmounts the home surface
+            // kept under Sync Status, so go back to it first and let its discard question run where
+            // the person can see it.
+            const leaveSyncStatusThen = (proceed: () => void): void => {
+              if (syncReturn !== 'home') {
+                proceed();
+                return;
+              }
+              setRoute('home');
+              leaveHome(proceed);
+            };
+            const syncStatus =
+              shellZone.route === 'syncStatus' ? (
                 <SyncStatusScreen
                   input={props.sync}
                   currentUser={currentUser}
-                  onBack={() => setRoute('home')}
+                  onBack={() => setRoute(syncReturn)}
                   onSyncNow={props.onSyncNow}
                   // 05 §2.3 / 06 §8: "rejections must be surfaced, never silent". The row already
                   // carries the code's explanation; the tap discloses the server's own words under
@@ -973,10 +1025,11 @@ export default function App(props: AppProps): React.JSX.Element {
                   // there is no per-item retry to call and pretending otherwise would be a control
                   // that looks more precise than the engine underneath it.
                   onRetryMedia={props.onRetryMedia}
-                  onOpenSwitcher={() => setSwitching(true)}
+                  onOpenSwitcher={() => leaveSyncStatusThen(() => setSwitching(true))}
+                  onReenroll={() => leaveSyncStatusThen(() => setReenrolling(true))}
                 />
-              );
-            }
+              ) : null;
+            if (syncStatus !== null && syncReturn !== 'home') return syncStatus;
             if (shellZone.route === 'settings' && currentUser !== null) {
               return (
                 <SettingsScreen
@@ -1066,7 +1119,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   }}
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}
-                  onOpenSync={() => setRoute('syncStatus')}
+                  onOpenSync={openSyncStatus}
                 />
               );
             }
@@ -1157,88 +1210,108 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
-            // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
-            // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
-            // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
-            // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
-            // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
-            // the copy the label catalog exists to prevent (07-i18n).
-            if (props.notes === undefined && props.repair === undefined) {
-              return <View testID="shell-home" style={FILL} />;
-            }
-            // The header chrome every home surface shares (§8.1).
-            const homeSyncChip = (
-              <SyncChip
-                state={chip}
-                pendingCount={props.sync.pendingOperationCount}
-                progressPercent={setupPercent}
-                accessibilityLabels={syncChipAccessibilityLabels({
-                  relative:
-                    props.sync.state.lastSuccessfulSyncAt === null
-                      ? t('core.status.empty')
-                      : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
-                  pendingCount: props.sync.pendingOperationCount,
-                  firstSyncPercent: setupPercent,
-                })}
-                onPress={() => leaveHome(() => setRoute('syncStatus'))}
-              />
-            );
-            const homeAvatar =
-              currentUser === null ? (
-                <View testID="notes-no-avatar" />
-              ) : (
-                // THE HEADER CHROME (§8.1): the avatar, which opens the account menu: switch user
-                // (the User Switcher) and Settings. It is the ONLY producer of `route: 'settings'`.
-                //
-                // Settings holds the language toggle, the owner's intake lists, the PIN and
-                // notification rows and the device readout. On an Indonesian-first product the
-                // language rows are the ONLY way out of a wrong locale (07-i18n §1.2), so both menu
-                // rows carry an icon that reads by shape: a cog and a person swap.
-                //
-                // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES (task 143) now goes through the menu.
-                // `setSwitching(true)` produces the switcher zone from a live session, and
-                // `backTarget` returns to `home` (this surface's route) when the switch is abandoned.
-                // Both rows go through `leaveHome` (task 145), so an open editor's discard gate runs
-                // before either leaves the surface.
-                <AvatarButton
-                  userId={currentUser.id}
-                  initials={currentUser.initials}
-                  accessibilityLabel={t('core.account.menu')}
-                  onPress={() => setAccountMenu(true)}
+            const homeSurface = (): React.JSX.Element => {
+              // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
+              // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
+              // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
+              // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
+              // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
+              // the copy the label catalog exists to prevent (07-i18n).
+              if (props.notes === undefined && props.repair === undefined) {
+                return <View testID="shell-home" style={FILL} />;
+              }
+              // The header chrome every home surface shares (§8.1).
+              const homeSyncChip = (
+                <SyncChip
+                  state={chip}
+                  pendingCount={props.sync.pendingOperationCount}
+                  progressPercent={setupPercent}
+                  accessibilityLabels={syncChipAccessibilityLabels({
+                    relative:
+                      props.sync.state.lastSuccessfulSyncAt === null
+                        ? t('core.status.empty')
+                        : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
+                    pendingCount: props.sync.pendingOperationCount,
+                    firstSyncPercent: setupPercent,
+                  })}
+                  // No leave guard: Sync Status keeps the surface mounted, so nothing is lost.
+                  onPress={openSyncStatus}
                 />
               );
-            // Repair is the slice-1 home; notes stays the home on a build without it.
-            if (props.repair !== undefined) {
+              const homeAvatar =
+                currentUser === null ? (
+                  <View testID="notes-no-avatar" />
+                ) : (
+                  // THE HEADER CHROME (§8.1): the avatar, which opens the account menu: switch user
+                  // (the User Switcher) and Settings. It is the ONLY producer of `route: 'settings'`.
+                  //
+                  // Settings holds the language toggle, the owner's intake lists, the PIN and
+                  // notification rows and the device readout. On an Indonesian-first product the
+                  // language rows are the ONLY way out of a wrong locale (07-i18n §1.2), so both menu
+                  // rows carry an icon that reads by shape: a cog and a person swap.
+                  //
+                  // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES (task 143) now goes through the menu.
+                  // `setSwitching(true)` produces the switcher zone from a live session, and
+                  // `backTarget` returns to `home` (this surface's route) when the switch is abandoned.
+                  // Both rows go through `leaveHome` (task 145), so an open editor's discard gate runs
+                  // before either leaves the surface.
+                  <AvatarButton
+                    userId={currentUser.id}
+                    initials={currentUser.initials}
+                    accessibilityLabel={t('core.account.menu')}
+                    onPress={() => setAccountMenu(true)}
+                  />
+                );
+              // Repair is the slice-1 home; notes stays the home on a build without it.
+              if (props.repair !== undefined) {
+                return (
+                  <RepairHome
+                    runtime={props.repair}
+                    // The clock itself, not this render's reading: an intake can sit open for hours.
+                    now={props.clock ?? systemClock.now}
+                    onRegisterSurfaceNav={registerSurfaceNav}
+                    restoredDraft={restoredIntakeDraft}
+                    onDraftChange={publishIntakeDraft}
+                    onOpenSyncStatus={openSyncStatus}
+                    syncChip={homeSyncChip}
+                    avatar={homeAvatar}
+                  />
+                );
+              }
+              if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
               return (
-                <RepairHome
-                  runtime={props.repair}
-                  // The clock itself, not this render's reading: an intake can sit open for hours.
-                  now={props.clock ?? systemClock.now}
+                <NotesHome
+                  runtime={props.notes}
+                  now={props.now}
+                  // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
                   onRegisterSurfaceNav={registerSurfaceNav}
-                  restoredDraft={restoredIntakeDraft}
-                  onDraftChange={publishIntakeDraft}
-                  onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
+                  // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
+                  // locked (owner-checked above, so it is theirs), and the write-back that keeps it
+                  // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
+                  restoredDraft={restoredNotesDraft}
+                  onDraftChange={publishNotesDraft}
+                  onOpenSyncStatus={openSyncStatus}
                   syncChip={homeSyncChip}
                   avatar={homeAvatar}
                 />
               );
-            }
-            if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
+            };
+            // Sync Status opened from home sits OVER the home surface instead of replacing it: the
+            // surface keeps its own state (the open servisan, its step, anything typed), so Back lands
+            // exactly where the person was. Same element shape on both routes, so React keeps it mounted.
             return (
-              <NotesHome
-                runtime={props.notes}
-                now={props.now}
-                // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
-                onRegisterSurfaceNav={registerSurfaceNav}
-                // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
-                // locked (owner-checked above, so it is theirs), and the write-back that keeps it
-                // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
-                restoredDraft={restoredNotesDraft}
-                onDraftChange={publishNotesDraft}
-                onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
-                syncChip={homeSyncChip}
-                avatar={homeAvatar}
-              />
+              <>
+                <View
+                  key="home"
+                  testID="shell-home-surface"
+                  style={syncStatus === null ? FILL : HIDDEN}
+                  accessibilityElementsHidden={syncStatus !== null}
+                  importantForAccessibility={syncStatus === null ? 'auto' : 'no-hide-descendants'}
+                >
+                  {homeSurface()}
+                </View>
+                {syncStatus}
+              </>
             );
           },
         })}
@@ -1349,6 +1422,7 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 }
 
 const FILL = { flex: 1 } as const;
+const HIDDEN = { display: 'none' } as const;
 
 /**
  * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
@@ -1377,9 +1451,8 @@ const ANDROID_STATUS_BAR_FALLBACK_DP = 24;
  * system status bar, whose window sits z-above ours and eats any touch that lands in it. The header
  * chrome (sync chip, language chip, avatar) is laid out at y=0, so at center it falls under the
  * status bar and is un-tappable — invisible to prop-level render tests, caught only on-device.
- * Inset the shell by the status-bar height so the header (and body) render below it. iOS is out of
- * v0 scope; `react-native-safe-area-context` is not a dependency, and `currentHeight` is the exact
- * occluding height, so it needs no extra package.
+ * Inset the shell by the status-bar height so the header (and body) render below it. This is the
+ * fallback behind the live safe-area inset (`topInset`), for a render before the insets arrive.
  *
  * READ AT RENDER, never at module-eval. `RNStatusBar.currentHeight` is a native constant marshalled
  * across the bridge; on a cold launch it is not reliably populated the instant the JS bundle evaluates.
@@ -1398,11 +1471,22 @@ function androidStatusBarInset(): number {
   return typeof measured === 'number' && measured > 0 ? measured : ANDROID_STATUS_BAR_FALLBACK_DP;
 }
 
+/**
+ * The shell's top inset. The live safe-area inset when the entry provides one: it follows a tablet
+ * turning, where the status bar's height changes and `currentHeight`, read once at launch, does not
+ * (a header launched in landscape slid under the taller portrait status bar). The status-bar read is
+ * the fallback for a render before the insets arrive, and where there is no provider.
+ */
+function topInset(safeArea: EdgeInsets | null): number {
+  if (safeArea !== null && safeArea.top > 0) return safeArea.top;
+  return androidStatusBarInset();
+}
+
 const styles = StyleSheet.create({
   /**
    * The app shell: fills the screen and clears the system nav bar so the bottom-docked primary action
    * stays tappable under edge-to-edge (§8.1). The TOP inset is applied per render via
-   * `androidStatusBarInset()` (see its docblock) — a static `paddingTop` here would freeze a possibly-
+   * `topInset()` (see its docblock) — a static `paddingTop` here would freeze a possibly-
    * unpopulated status-bar height at module-eval.
    *
    * `NAV_BAR_INSET` now lives in `@bolusi/ui` (`platform-insets.ts`), where its docblock explains the

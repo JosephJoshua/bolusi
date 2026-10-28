@@ -363,6 +363,8 @@ export interface SyncState {
   pushHalted: Generated<number>;
   syncDisabled: Generated<number>;
   syncDisabledReason: string | null;
+  tokenRejectedCount: Generated<number>;
+  tokenRejectedSince: number | null;
 }
 
 export interface UserPinVerifiers {

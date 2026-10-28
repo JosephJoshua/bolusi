@@ -20,6 +20,7 @@ import {
   grantRole,
   readAnomalies,
   readOps,
+  seedDevice,
   seedRepairTicket,
   seedUser,
   seedWorld,
@@ -84,6 +85,12 @@ async function setupWorld(
   await seedWorld(db, world, { lastSeq: 1, lastHash: genesis.hash, grants });
   await seedRepairTicket(db, world, TICKET);
   return { world, builder };
+}
+
+/** A new registration's own identity, for the same tenant, store and owner. */
+function pick(fresh: ChainWorld) {
+  const { deviceId, secretKey, publicKey, publicKeyB64 } = fresh;
+  return { deviceId, secretKey, publicKey, publicKeyB64 };
 }
 
 function push(world: ChainWorld, ops: Parameters<typeof processPushBatch>[2]) {
@@ -320,6 +327,70 @@ describe('a pushed repair op must be legal against the server`s records', () => 
       .where('ticketNumber', '=', own)
       .execute();
     expect(tickets).toEqual([{ id: ids[1] }]);
+  });
+
+  test('a re-enrolled phone may send tickets its earlier registrations numbered offline', async () => {
+    const { world: oldPhone } = await setupWorld(3310);
+    // The old registration numbered a ticket offline and never sent it. The server then forgot the
+    // phone, and the owner enrolled it again: a new device id, so a new device code.
+    const oldNumber = formatTicketNumber(oldPhone.deviceId, 2);
+    const reEnrol = async (seed: number, from: string) => {
+      const fresh = makeWorld(seed, serverCryptoPort);
+      const phone: ChainWorld = { ...oldPhone, ...pick(fresh) };
+      await seedDevice(db, phone);
+      const chain = new ChainBuilder(phone, serverCryptoPort);
+      const registration = [
+        chain.genesis(),
+        chain.append({
+          type: 'auth.device_changes_transferred',
+          entityType: 'device',
+          entityId: phone.deviceId,
+          payload: { fromDeviceIds: [from], opCount: 1 },
+          source: 'system',
+        }),
+      ];
+      return { phone, chain, registration };
+    };
+    const ids = ['f101', 'f102', 'f103'].map((s) => `01920000-0000-7000-8000-0000000e${s}`);
+
+    const second = await reEnrol(3311, oldPhone.deviceId);
+    const carried = await push(second.phone, [
+      ...second.registration,
+      openTicket(second.chain, second.phone, ids[0]!, oldNumber),
+      // Carrying it over does not make the number reusable.
+      openTicket(second.chain, second.phone, ids[1]!, oldNumber),
+    ]);
+    expect(carried.results.map((r) => r.status)).toEqual([
+      'accepted',
+      'accepted',
+      'accepted',
+      'rejected',
+    ]);
+    expect(carried.results[3]).toMatchObject({ reason: 'repair.refusal.numberUsed' });
+
+    // Enrolled once more: the first registration's numbers still follow through both transfers.
+    const third = await reEnrol(3312, second.phone.deviceId);
+    const later = await push(third.phone, [
+      ...third.registration,
+      openTicket(third.chain, third.phone, ids[2]!, formatTicketNumber(oldPhone.deviceId, 3)),
+    ]);
+    expect(later.results.map((r) => r.status)).toEqual(['accepted', 'accepted', 'accepted']);
+
+    // A phone that carried nothing over still cannot use those numbers.
+    const stranger = makeWorld(3313, serverCryptoPort);
+    const unrelated: ChainWorld = { ...oldPhone, ...pick(stranger) };
+    await seedDevice(db, unrelated);
+    const strangerChain = new ChainBuilder(unrelated, serverCryptoPort);
+    const refused = await push(unrelated, [
+      strangerChain.genesis(),
+      openTicket(
+        strangerChain,
+        unrelated,
+        '01920000-0000-7000-8000-0000000ef104',
+        formatTicketNumber(oldPhone.deviceId, 4),
+      ),
+    ]);
+    expect(refused.results[1]).toMatchObject({ reason: 'repair.refusal.numberNotThisDevice' });
   });
 
   test('a discount line that raises the price is refused', async () => {

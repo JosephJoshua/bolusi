@@ -621,6 +621,7 @@ export async function mountRoot(
     controller: {
       login: () => Promise.reject(new Error('login not used by this test')),
       enroll: () => Promise.reject(new Error('enroll not used by this test')),
+      heldPhone: () => Promise.resolve(null),
       finish: () => {
         throw new Error('finish not used by this test');
       },
@@ -724,6 +725,16 @@ export async function settle(): Promise<void> {
 /** Press a node by testID and let the tree settle. */
 export function fireOn(screen: RenderResult, testID: string): void {
   fire(screen.get(testID), 'onPress');
+}
+
+/**
+ * Whether the home surface is on screen. Sync Status opened from home keeps it mounted underneath,
+ * hidden, so "home is gone" is asked here rather than by a home testID being absent.
+ */
+export function homeShown(screen: RenderResult): boolean {
+  const surface = screen.query('shell-home-surface');
+  if (surface === null) return false;
+  return (surface.props['style'] as { display?: string }).display !== 'none';
 }
 
 /**

@@ -40,6 +40,7 @@ export const REPAIR_KEYS = [
   'repair.board.emptyHint',
   'repair.board.feeChanged',
   'repair.board.noMatches',
+  'repair.board.pickTicket',
   'repair.board.priceChangeWaiting',
   'repair.board.searchHint',
   'repair.board.title',

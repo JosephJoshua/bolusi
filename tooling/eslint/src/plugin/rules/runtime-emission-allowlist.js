@@ -1,8 +1,9 @@
 // bolusi/runtime-emission-allowlist — 04-module-contract §5.1 / 02-permissions §4:
 //
-//   "Commands are the only write path — with exactly five lint-enforced exceptions the RUNTIME
+//   "Commands are the only write path — with exactly six lint-enforced exceptions the RUNTIME
 //    itself appends without a command: auth.user_switched, auth.session_ended,
-//    auth.permission_denied, auth.pin_locked_out, auth.device_enrolled. Nothing else."
+//    auth.permission_denied, auth.pin_locked_out, auth.device_enrolled,
+//    auth.device_changes_transferred. Nothing else."
 //
 // THIS RULE IS THE "lint-enforced" IN THAT SENTENCE. The spec says the list is lint-enforced; this
 // is the lint. Two prongs, because there are two ways to append without a command:
@@ -16,16 +17,16 @@
 //     nothing at runtime would stop it: the append path cannot know whether its caller was a
 //     command. Only an allowlist of files can say that, so this prong is file-scoped.
 //
-// WHY THE CLOSED SET IS NOT DUPLICATED HERE. The five live once, in
+// WHY THE CLOSED SET IS NOT DUPLICATED HERE. The six live once, in
 // `packages/core/src/runtime/runtime-emissions.ts`. A hand-copied list in a lint rule is exactly
 // how a sixth type gets in — the copy drifts, and the rule then enforces last month's spec. The
-// rule reads its set from the `sanctionedTypes` option, and the shared config passes the five;
+// rule reads its set from the `sanctionedTypes` option, and the shared config passes the six;
 // core's own suite pins the constant against 04 §5.1.
 //
 // WHAT THIS RULE CANNOT DO. Only LITERAL `type` values are checked — the same documented limit as
 // `bolusi/permission-module-prefix`. A type built from a variable is invisible to a static rule,
 // and is covered by TypeScript instead: `RuntimeEmissionDraft.type` is typed
-// `SanctionedRuntimeEmissionType`, so a non-literal must still be one of the five to compile. The
+// `SanctionedRuntimeEmissionType`, so a non-literal must still be one of the six to compile. The
 // runtime `assertSanctionedEmission` is the third lock, for values that cross a boundary untyped.
 
 /** The channel's method name (packages/core/src/runtime/execute.ts). */
@@ -73,11 +74,11 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Only the five sanctioned op types may be appended outside a command, and only through the runtime emission channel.',
+        'Only the six sanctioned op types may be appended outside a command, and only through the runtime emission channel.',
     },
     messages: {
       unsanctionedType:
-        "'{{type}}' is not a sanctioned runtime emission. Commands are the only write path; the runtime appends without a command for exactly these five types: {{sanctioned}} (04-module-contract §5.1, 02-permissions §4). Adding to this list changes 04 §5 first.",
+        "'{{type}}' is not a sanctioned runtime emission. Commands are the only write path; the runtime appends without a command for exactly these six types: {{sanctioned}} (04-module-contract §5.1, 02-permissions §4). Adding to this list changes 04 §5 first.",
       appendOutsideRuntime:
         "'{{callee}}' appends to the op log directly, bypassing the command layer. Only the command runtime may call it ({{allowed}}); everything else writes by returning op drafts from a command handler (04-module-contract §5.1).",
     },

@@ -16,7 +16,7 @@
  *  - NO SYNC CHIP. There is no device identity yet, so there is no sync to report on; a permanent
  *    "offline" cloud here only said something false and alarming.
  */
-import { t, translateErrorCode, type TranslationKey } from '@bolusi/i18n';
+import { t, translateErrorCode, translateOpType, type TranslationKey } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -193,6 +193,38 @@ function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Elem
           testID="enroll-device-name"
         />
       </View>
+      <UnsyncedChanges state={state} />
+    </View>
+  );
+}
+
+/**
+ * A phone enrolled again still holds what never reached the server. The owner sees whose changes
+ * they are just above the button that binds the phone: pressing it carries them over (core
+ * auth/carry-over.ts), each still credited to whoever made it.
+ */
+function UnsyncedChanges({ state }: { readonly state: EnrollmentState }): React.JSX.Element | null {
+  const authors = state.phone?.unsynced ?? [];
+  if (authors.length === 0) return null;
+  return (
+    <View style={styles.section} testID="enroll-unsynced">
+      <Text style={styles.sectionTitle}>{t('auth.enroll.unsyncedTitle')}</Text>
+      <Text style={styles.sectionText}>{t('auth.enroll.unsyncedBody')}</Text>
+      <View style={styles.stores}>
+        {authors.map((author) => (
+          <ListRow
+            key={author.userId}
+            primaryText={author.name ?? t('auth.enroll.formerStaff')}
+            secondaryText={author.types.map((opType) => translateOpType(opType)).join(', ')}
+            trailing={
+              <Text style={styles.count}>
+                {t('auth.enroll.unsyncedCount', { count: author.count })}
+              </Text>
+            }
+            testID={`enroll-unsynced-${author.userId}`}
+          />
+        ))}
+      </View>
     </View>
   );
 }
@@ -317,6 +349,14 @@ const styles = StyleSheet.create({
     borderTopColor: color.border,
   },
   section: { marginTop: space.xl },
+  sectionTitle: { ...type.bodyBold, color: color.text },
+  sectionText: {
+    ...type.bodySm,
+    color: color.textMuted,
+    marginTop: space.xs,
+    marginBottom: space.md,
+  },
+  count: { ...type.bodySm, fontWeight: '600', color: color.text },
   onlyStore: {
     backgroundColor: color.surfaceAlt,
     borderRadius: radius.md,

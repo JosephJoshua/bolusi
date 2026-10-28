@@ -231,6 +231,8 @@ describe('SyncState persistence (10-db §9.3)', () => {
       syncDisabledReason: 'device_revoked',
       lastSyncError: 'NETWORK',
       backoffUntil: 666,
+      tokenRejectedSince: 777,
+      tokenRejectedCount: 4,
     });
 
     expect(await readSyncState(harness.db)).toEqual({
@@ -246,6 +248,8 @@ describe('SyncState persistence (10-db §9.3)', () => {
       syncDisabledReason: 'device_revoked',
       lastSyncError: 'NETWORK',
       backoffUntil: 666,
+      tokenRejectedSince: 777,
+      tokenRejectedCount: 4,
     });
   });
 

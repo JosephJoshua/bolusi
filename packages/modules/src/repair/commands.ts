@@ -24,6 +24,7 @@ import {
   WORK_PHOTOS_MAX,
   type WorkPhotoStage,
 } from './constants.js';
+import { findDeviceModelQuery } from './device-models.js';
 import {
   INTAKE_OPTION_LISTS,
   MAX_OPTIONS,
@@ -240,6 +241,16 @@ export async function openTicketHandler(
     );
   }
 
+  // "Samsung" + "A15" is the catalog's Galaxy A15: store it the catalog's way, whichever screen or
+  // keystroke order sent it, so the board and search name one phone one way.
+  const catalog = (
+    await ctx.query(findDeviceModelQuery, { brand: input.device.brand, model: input.device.model })
+  ).rows[0];
+  const device =
+    catalog === undefined
+      ? input.device
+      : { ...input.device, brand: catalog.brand, model: catalog.model };
+
   const counter = (await ctx.query(nextTicketCounterQuery, { deviceId: ctx.deviceId })).rows[0]!
     .counter;
   const ticketNumber = formatTicketNumber(ctx.deviceId, counter);
@@ -249,7 +260,7 @@ export async function openTicketHandler(
     ticketOp(ctx, ticketId, REPAIR_OP.ticketOpened, {
       ticketNumber,
       customerId,
-      device: input.device,
+      device,
       complaint: input.complaint,
       intakeNotes: input.intakeNotes,
       checklist: input.checklist,

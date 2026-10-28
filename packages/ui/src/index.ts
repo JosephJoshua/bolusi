@@ -29,6 +29,10 @@ export type { ContrastPair } from './tokens.js';
 // ---- Platform insets (system-window measurements, NOT design tokens — task 205) -----------------
 export { NAV_BAR_INSET } from './platform-insets.js';
 
+// ---- Room on screen (phone, tablet) -------------------------------------------------------------
+export { ViewportProvider, breakpoint, useViewport, widthClassOf } from './viewport.js';
+export type { Viewport, WidthClass } from './viewport.js';
+
 // ---- Component inventory (design-system §3) ----------------------------------------------------
 export * from './components/index.js';
 export * from './shell/index.js';

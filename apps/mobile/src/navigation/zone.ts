@@ -18,8 +18,12 @@
  * gating rules are tested directly (T-6) rather than through a rendered tree.
  */
 
-/** Device lifecycle (03-state-machines §Device; api/02-auth §7). `revoked` is terminal. */
-export type DeviceStatus = 'unenrolled' | 'active' | 'revoked';
+/**
+ * Device lifecycle (03-state-machines §Device; api/02-auth §7). `revoked` is terminal.
+ * `unrecognised`: the server no longer knows this phone (sync stopped after it kept refusing the
+ * token). Work goes on as on an active phone, every change kept here, until an owner re-enrols it.
+ */
+export type DeviceStatus = 'unenrolled' | 'active' | 'revoked' | 'unrecognised';
 
 /** Why the switcher is showing. `lock` renders no back (design-system §8.2). */
 export type SwitcherMode = 'lock' | 'choose';
@@ -107,6 +111,11 @@ export function resolveZone(input: ZoneInput): Zone {
   if (input.device === 'unenrolled')
     return { kind: 'enrollment', revoked: false, voluntary: false };
   if (input.device === 'revoked') return { kind: 'enrollment', revoked: true, voluntary: false };
+  // A phone the server forgot keeps working; the owner opens re-enrolment from the sync screen, so
+  // it is honoured from anywhere, even over an open session (enrolment restarts the session anyway).
+  if (input.device === 'unrecognised' && input.reenrolling && !input.locked) {
+    return { kind: 'enrollment', revoked: false, voluntary: true };
+  }
 
   // 2. No session (or a lock ended it) ⇒ the switcher, which doubles as the lock screen (§8.2).
   if (input.session === null) {

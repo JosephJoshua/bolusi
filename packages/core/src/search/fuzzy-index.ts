@@ -19,6 +19,7 @@ import {
   compactSimilarity,
   compileQuery,
   digitTolerance,
+  hasExactCode,
   MIN_SCORE,
   prepareDocument,
   SCORE_PART,
@@ -176,7 +177,8 @@ export class FuzzyIndex {
     }
     if (query.code.length >= 3) this.#gramCandidates('c', SCORE_PART.codes, query.code, candidates);
 
-    const hits: { id: string; score: number; rank: number }[] = [];
+    let hits: { id: string; score: number; rank: number; exact: boolean }[] = [];
+    let exactCode = false;
     for (let slot = 0; slot < total; slot += 1) {
       const indexed = this.#slots[slot];
       if (indexed === null || indexed === undefined) continue;
@@ -184,8 +186,11 @@ export class FuzzyIndex {
       if (candidates[slot] !== 0) {
         score = Math.max(score, scoreNumbers(query, indexed, candidates[slot]!));
       }
-      if (score > 0) hits.push({ id: indexed.doc.id, score, rank: indexed.doc.rank });
+      const exact = hasExactCode(query, indexed);
+      if (exact) exactCode = true;
+      if (score > 0) hits.push({ id: indexed.doc.id, score, rank: indexed.doc.rank, exact });
     }
+    if (exactCode) hits = hits.filter((hit) => hit.exact);
     hits.sort((a, b) => b.score - a.score || b.rank - a.rank || (a.id < b.id ? -1 : 1));
     return hits.slice(0, limit).map(({ id, score }) => ({ id, score }));
   }

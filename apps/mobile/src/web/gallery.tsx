@@ -497,6 +497,7 @@ function syncScreen(
         onOpenRejected={noop}
         onRetryMedia={noop}
         onOpenSwitcher={noop}
+        onReenroll={noop}
         expandedRejectedOpId={expandedRejectedOpId}
       />
     </ApproxFrame>
@@ -753,6 +754,12 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => syncScreen('rejectedDetail', SYNC_STATUS_STATES.attention(), DEMO_REJECTED_OP_ID),
   },
 
+  {
+    screen: 'sync-status',
+    state: 'unrecognised',
+    render: () => syncScreen('unrecognised', SYNC_STATUS_STATES.unrecognised()),
+  },
+
   // Enrollment — steps + revoked banner + the interactive discard ConfirmSheet.
   {
     screen: 'enrollment',
@@ -856,6 +863,49 @@ export const ENTRIES: readonly HarnessEntry[] = [
             loginIdentifier: 'kasir',
             password: 'sandi-benar-1',
             failure: { kind: 'notPermitted' },
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    // Re-enrolling a phone that holds a store's data: that store only, and whose unsent changes go
+    // with it, above the bind button.
+    screen: 'enrollment',
+    state: 'reenrolWithChanges',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="reenrolWithChanges">
+        <EnrollmentInteractive
+          revoked={false}
+          step="confirm"
+          over={{
+            login: { ...DEMO_LOGIN, stores: DEMO_LOGIN.stores.slice(0, 1) },
+            selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
+            deviceName: 'HP Kasir 1',
+            phone: {
+              storeId: DEMO_LOGIN.stores[0]?.id ?? '',
+              storeName: DEMO_LOGIN.stores[0]?.name ?? null,
+              replacesDeviceId: null,
+              unsynced: [
+                {
+                  userId: 'u-andi',
+                  name: 'Andi Pratama',
+                  count: 12,
+                  types: [
+                    'repair.ticket_opened',
+                    'repair.work_photos_added',
+                    'repair.work_started',
+                  ],
+                },
+                {
+                  userId: 'u-maria',
+                  name: 'Maria Wenda',
+                  count: 3,
+                  types: ['repair.quote_changed'],
+                },
+                { userId: 'u-old', name: null, count: 1, types: ['repair.marked_repaired'] },
+              ],
+            },
           }}
         />
       </ApproxFrame>

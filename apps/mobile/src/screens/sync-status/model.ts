@@ -18,6 +18,8 @@
  * The four things below are problems, and they have nothing to do with having a connection:
  *
  *   - `deviceRevoked`  — this device is blocked; nothing will EVER send again until re-enrollment.
+ *   - `deviceUnrecognised` — the server no longer knows this phone; work goes on and is kept here,
+ *                        but nothing sends until an owner re-enrols it (the changes then go with it).
  *   - `pushHalted`     — the local chain is broken (CHAIN_BROKEN, 05 §8); sending has STOPPED.
  *   - `rejected`       — the server refused these changes; they will never send (05 §8).
  *   - `quarantined`    — changes from another device failed verification and are being withheld.
@@ -37,6 +39,7 @@
  */
 
 import {
+  DEVICE_UNRECOGNISED_REASON,
   stalenessLevel,
   type StalenessLevel,
   type SyncLoopState,
@@ -154,6 +157,7 @@ export function firstSyncPercent(progress: FirstSyncProgress): number {
  */
 export type SyncProblem =
   | { readonly kind: 'deviceRevoked' }
+  | { readonly kind: 'deviceUnrecognised' }
   | { readonly kind: 'pushHalted' }
   | { readonly kind: 'rejected'; readonly count: number }
   | { readonly kind: 'quarantined'; readonly count: number };
@@ -167,6 +171,9 @@ export function syncProblems(input: SyncStatusInput): readonly SyncProblem[] {
   // Revocation first: it subsumes everything else. Nothing will send again, ever, until re-enroll.
   if (input.state.syncDisabled && input.state.syncDisabledReason === 'device_revoked') {
     problems.push({ kind: 'deviceRevoked' });
+  }
+  if (input.state.syncDisabled && input.state.syncDisabledReason === DEVICE_UNRECOGNISED_REASON) {
+    problems.push({ kind: 'deviceUnrecognised' });
   }
   // A broken chain has stopped the push permanently (05 §8 CHAIN_BROKEN → `pushHalted`).
   if (input.state.pushHalted) problems.push({ kind: 'pushHalted' });
@@ -363,11 +370,16 @@ export const SYNC_TITLE_KEY = {
 export type ManualSync =
   | { readonly kind: 'ready' }
   | { readonly kind: 'busy' }
-  | { readonly kind: 'disabled'; readonly reasonCode: string };
+  | { readonly kind: 'disabled'; readonly reasonCode: string }
+  /** Syncing cannot help until an owner re-enrols the phone, so that is the one action offered. */
+  | { readonly kind: 'reenroll' };
 
 export function manualSync(input: SyncStatusInput): ManualSync {
   if (input.state.syncDisabled && input.state.syncDisabledReason === 'device_revoked') {
     return { kind: 'disabled', reasonCode: 'DEVICE_REVOKED' };
+  }
+  if (input.state.syncDisabled && input.state.syncDisabledReason === DEVICE_UNRECOGNISED_REASON) {
+    return { kind: 'reenroll' };
   }
   if (input.manualSyncBusy) return { kind: 'busy' };
   // Deliberately ENABLED while offline: pressing it is how a user finds out whether the connection

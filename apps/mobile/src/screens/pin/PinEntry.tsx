@@ -5,8 +5,11 @@
  *
  * The question is its own line above the dots and the pad's message slot carries only feedback
  * (wrong PIN, attempts left), so the prompt never turns red and the feedback never replaces it.
+ *
+ * On a tablet held sideways the person stands on the left and the pad on the right: stacked, the
+ * pad would run below a short landscape screen and need scrolling to reach 0.
  */
-import { Avatar, PinPad, color, space, type, type PinPadState } from '@bolusi/ui';
+import { Avatar, PinPad, color, space, type, useViewport, type PinPadState } from '@bolusi/ui';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
@@ -52,11 +55,18 @@ export function PinEntry({
   busyLabel,
   testID,
 }: PinEntryProps): React.JSX.Element {
+  const viewport = useViewport();
+  // Sideways on a tablet: who, the question and the quiet link on the left, the pad alone on the
+  // right, so the whole pad fits a short landscape screen without scrolling.
+  const sideBySide =
+    person !== undefined && viewport.widthClass !== 'compact' && viewport.width > viewport.height;
+  const who =
+    person === undefined ? null : <PinPerson person={person} testID={`${testID}-person`} />;
   if (busyLabel !== undefined) {
     return (
-      <View style={styles.root} testID={testID}>
-        {person === undefined ? null : <PinPerson person={person} testID={`${testID}-person`} />}
-        <View style={styles.busy} testID={`${testID}-busy`}>
+      <View style={[styles.root, sideBySide ? styles.rootSide : null]} testID={testID}>
+        {sideBySide ? <View style={styles.side}>{who}</View> : who}
+        <View style={[styles.busy, sideBySide ? styles.side : null]} testID={`${testID}-busy`}>
           <ActivityIndicator color={color.primary} />
           <Text style={styles.prompt} accessibilityLiveRegion="polite">
             {busyLabel}
@@ -65,26 +75,40 @@ export function PinEntry({
       </View>
     );
   }
+  const question = (
+    <Text
+      style={person === undefined ? styles.promptAlone : styles.prompt}
+      accessibilityRole="header"
+      testID={`${testID}-prompt`}
+    >
+      {prompt}
+    </Text>
+  );
+  const pad = (
+    <PinPad
+      key={padKey}
+      onComplete={onComplete}
+      state={state}
+      message={message}
+      entryLabel={prompt}
+      backspaceLabel={backspaceLabel}
+      testID={`${testID}-pad`}
+    />
+  );
+  const link = footer === undefined ? null : <View style={styles.footer}>{footer}</View>;
+  // The same two boxes in both layouts, so turning the tablet mid-entry keeps the digits typed:
+  // only the link moves, and the pad never changes place in the tree.
   return (
-    <View style={styles.root} testID={testID}>
-      {person === undefined ? null : <PinPerson person={person} testID={`${testID}-person`} />}
-      <Text
-        style={person === undefined ? styles.promptAlone : styles.prompt}
-        accessibilityRole="header"
-        testID={`${testID}-prompt`}
-      >
-        {prompt}
-      </Text>
-      <PinPad
-        key={padKey}
-        onComplete={onComplete}
-        state={state}
-        message={message}
-        entryLabel={prompt}
-        backspaceLabel={backspaceLabel}
-        testID={`${testID}-pad`}
-      />
-      {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
+    <View style={[styles.root, sideBySide ? styles.rootSide : null]} testID={testID}>
+      <View style={sideBySide ? styles.side : styles.stack}>
+        {who}
+        {question}
+        {sideBySide ? link : null}
+      </View>
+      <View style={sideBySide ? styles.side : styles.stack}>
+        {pad}
+        {sideBySide ? null : link}
+      </View>
     </View>
   );
 }
@@ -111,6 +135,9 @@ export function PinPerson({
 
 const styles = StyleSheet.create({
   root: { alignItems: 'center', paddingTop: space.md },
+  rootSide: { flexDirection: 'row', justifyContent: 'center', gap: space['3xl'] },
+  stack: { alignItems: 'center' },
+  side: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   person: { alignItems: 'center', marginBottom: space.lg },
   name: { ...type.title, color: color.text, marginTop: space.md, textAlign: 'center' },
   role: { ...type.bodySm, color: color.textMuted, textAlign: 'center' },

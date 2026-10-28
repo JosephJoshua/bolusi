@@ -131,6 +131,8 @@ export interface TicketDetailProps {
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
   readonly onBack: () => void;
+  /** Beside the board on a tablet there is nothing to go back to: the board is already in view. */
+  readonly hideBack?: boolean | undefined;
   readonly onHandover: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
   /** Hardware back closes an open step back to the ticket before it leaves the ticket. */
@@ -150,6 +152,7 @@ export function TicketDetail({
   chrome,
   now,
   onBack,
+  hideBack = false,
   onHandover,
   onOpenSyncStatus,
   onRegisterStepBack,
@@ -394,7 +397,7 @@ export function TicketDetail({
       scrollable
       title={ticket?.ticketNumber ?? tn('repair.ticket.title')}
       titleVariant="detail"
-      onBack={onBack}
+      onBack={hideBack ? undefined : onBack}
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}

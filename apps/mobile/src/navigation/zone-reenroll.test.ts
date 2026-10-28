@@ -82,3 +82,20 @@ test('a revoked device can never reach an abandonable wizard, by construction', 
         expect(backTarget(zone)).toBeNull();
       }
 });
+
+test('a phone the server forgot keeps working, and re-enrols from an open session when asked', () => {
+  const session = { userId: 'user-a' };
+  expect(resolveZone(input({ device: 'unrecognised', session }))).toEqual({
+    kind: 'shell',
+    route: 'home',
+  });
+  expect(resolveZone(input({ device: 'unrecognised', session, reenrolling: true }))).toEqual({
+    kind: 'enrollment',
+    revoked: false,
+    voluntary: true,
+  });
+  // A lock still beats it: the wizard never opens over a locked phone.
+  expect(resolveZone(input({ device: 'unrecognised', locked: true, reenrolling: true })).kind).toBe(
+    'switcher',
+  );
+});

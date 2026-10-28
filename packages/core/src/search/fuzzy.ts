@@ -376,6 +376,14 @@ export function codeScore(query: string, stored: string): number {
   return best;
 }
 
+/**
+ * Whether the query is one of these codes exactly ("K7Q-0042", any case or dash). Searches then
+ * list only the records that carry it: the near misses beside it are noise.
+ */
+export function hasExactCode(query: CompiledQuery, fields: NumberFields): boolean {
+  return fields.codes.includes(query.code);
+}
+
 /** Below this a candidate is noise, not a match. */
 export const MIN_SCORE = 0.4;
 

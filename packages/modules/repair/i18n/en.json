@@ -72,6 +72,7 @@
     "checkSync": "Check sync status",
     "cancelledBy": "by {name}",
     "feeChanged": "Fee changed",
+    "pickTicket": "Pick a repair to see its details.",
     "waited": "Not collected for {days} days"
   },
   "cancel": {

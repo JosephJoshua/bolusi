@@ -72,6 +72,7 @@
     "checkSync": "Cek status sinkron",
     "cancelledBy": "oleh {name}",
     "feeChanged": "Biaya diubah",
+    "pickTicket": "Pilih servisan untuk melihat detailnya.",
     "waited": "{days} hari belum diambil"
   },
   "cancel": {

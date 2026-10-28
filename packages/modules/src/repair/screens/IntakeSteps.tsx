@@ -63,6 +63,7 @@ import {
   PhotoThumb,
   Section,
   repairStyles,
+  usePhotoGridCell,
 } from './parts.js';
 import { useRepairQuery } from '../runtime.js';
 import { usePriceKinds, type PriceKind } from './TicketSteps.js';
@@ -522,6 +523,7 @@ export function PhotosStep({
   readonly onTake: (angle: IntakeOption) => void;
   readonly testID: string;
 }): React.JSX.Element {
+  const gridCell = usePhotoGridCell();
   return (
     <View>
       <Text style={repairStyles.muted}>{tn('repair.photo.intakeHint')}</Text>
@@ -531,7 +533,7 @@ export function PhotosStep({
             const slot = angle.id;
             const photo = draft.photos[slot];
             return (
-              <View key={slot} style={repairStyles.gridCell}>
+              <View key={slot} style={gridCell}>
                 <PhotoSlot
                   label={optionLabel('photoAngles', angle)}
                   actionLabel={tn(

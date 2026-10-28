@@ -38,6 +38,7 @@ export default tseslint.config(
             'auth.permission_denied',
             'auth.pin_locked_out',
             'auth.device_enrolled',
+            'auth.device_changes_transferred',
           ],
           allowFiles: [
             'packages/core/src/runtime/execute.ts',
@@ -116,6 +117,19 @@ export default tseslint.config(
           allowFiles: ['packages/core/src/oplog/bookkeeping.ts'],
           allowColumns: ['syncStatus', 'syncedAt', 'rejectionCode', 'rejectionReason'],
         },
+      ],
+    },
+  },
+  {
+    // Re-enrolment re-signs the old registration's UNSYNCED ops under the new device, keeping their
+    // ids: each never-accepted row is replaced, in one transaction with the audit op that records it.
+    // Synced history is never touched (the query only reads sync_status = 'local').
+    name: 'bolusi/oplog-carry-over-allowlist',
+    files: ['packages/core/src/auth/carry-over.ts'],
+    rules: {
+      'bolusi/no-op-table-update': [
+        'error',
+        { allowFiles: ['packages/core/src/auth/carry-over.ts'] },
       ],
     },
   },
