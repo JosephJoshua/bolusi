@@ -169,5 +169,21 @@
     "discard": "Buang",
     "keepEditing": "Lanjut ubah",
     "makePinHint": "Belum bisa masuk karena belum punya PIN."
+  },
+  "pc": {
+    "enrollTitle": "Daftarkan komputer ini",
+    "instruction": "Cukup sekali di komputer ini. Pastikan ada internet.",
+    "deviceNameField": "Nama komputer",
+    "deviceNamePlaceholder": "Contoh: PC Kasir",
+    "nameDeviceFirst": "Kasih nama komputernya dulu.",
+    "emptyUsers": "Belum ada karyawan di komputer ini. Minta pemilik toko menambahkannya.",
+    "lock": "Kunci layar",
+    "opening": "Membuka data toko…",
+    "openFailed": "Data di komputer ini belum bisa dibuka",
+    "openFailedHint": "Tutup aplikasinya, lalu buka lagi. Kalau masih begini, hubungi pemilik toko.",
+    "backTo": "Kembali ke {name}",
+    "otherPerson": "Bukan kamu?",
+    "showPassword": "Lihat kata sandi",
+    "hidePassword": "Sembunyikan kata sandi"
   }
 }

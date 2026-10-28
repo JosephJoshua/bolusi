@@ -17,6 +17,7 @@
 // core + a type only. The native ports (SecureStore keystore, quick-crypto, expo-location, the fetch
 // transports) arrive as injected values from index.ts, so this whole caller runs headless under a
 // fake transport + a real better-sqlite3 client DB (the honest ceiling below a running server/device).
+import type { DevicePlatform } from '@bolusi/schemas';
 import {
   runEnrollment,
   type ClockPort,
@@ -75,7 +76,7 @@ export interface EnrollmentPlatform {
   readonly clock: ClockPort;
   readonly idSource: IdSource;
   readonly location: LocationPort;
-  readonly platform: 'android' | 'ios';
+  readonly platform: DevicePlatform;
   readonly appVersion: string;
 }
 

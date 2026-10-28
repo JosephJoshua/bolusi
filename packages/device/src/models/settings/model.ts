@@ -19,6 +19,7 @@
  *     identity to an owner over the phone during a revocation.
  */
 
+import type { DevicePlatform } from '@bolusi/schemas';
 import { SELECTABLE_LOCALES, type Locale } from '@bolusi/i18n';
 
 /**
@@ -72,7 +73,7 @@ export interface DeviceInfo {
   readonly deviceName: string;
   readonly storeName: string;
   readonly tenantName: string;
-  readonly platform: 'android' | 'ios';
+  readonly platform: DevicePlatform;
   readonly appVersion: string;
 }
 
