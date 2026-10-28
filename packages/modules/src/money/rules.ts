@@ -341,7 +341,11 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     return (
       (await documentTotal(db, store, document, 'charge_reduced')) +
       reduced +
-      (await voidedOffDocument(db, store, { ...document, voiding: change.voiding ?? null })) +
+      (await voidedOffDocument(db, store, {
+        ...document,
+        voiding: change.voiding === undefined ? null : { ...change.voiding, at: op.timestamp },
+        owed: balance,
+      })) +
       refundsCounted
     );
   }
@@ -642,9 +646,12 @@ async function requireReplaceable(
 }
 
 /**
- * The money voids took off a document, the void being judged (if any) included. A payment voided
- * after one was recorded in its place counts only beyond what that one holds, and only while the
- * document is not charged: once billed, every void counts in full.
+ * The money voids took off a document, the void being judged (if any) included. Before the document
+ * is charged, a payment voided after one was recorded in its place counts only beyond what that one
+ * holds. Once charged, a void made since counts only beyond the live payments recorded after it (a
+ * payment taken again, say through the right account), and never less than what the voids leave
+ * the customer owing (`owed`, the document's balance after the change), so a payment that settles
+ * the bill does not also excuse a void. Voids from before the charge count in full.
  */
 async function voidedOffDocument(
   db: Db,
@@ -652,12 +659,13 @@ async function voidedOffDocument(
   document: {
     readonly kind: string;
     readonly id: string;
-    readonly voiding: { readonly id: string; readonly amount: number } | null;
+    readonly voiding: { readonly id: string; readonly amount: number; readonly at: number } | null;
+    readonly owed: number;
   },
 ): Promise<number> {
   const payments = await db
     .selectFrom('moneyEntries')
-    .select(['id', 'amount', 'voidedBy', 'relatedEntryId'])
+    .select(['id', 'amount', 'voidedBy', 'voidedAt', 'createdAt', 'relatedEntryId'])
     .where('storeId', '=', storeId)
     .where('kind', '=', 'payment_received')
     .where('documentKind', '=', document.kind)
@@ -666,16 +674,44 @@ async function voidedOffDocument(
   const voided = [
     ...payments
       .filter((row) => row.voidedBy !== null)
-      .map((row) => ({ id: row.id, amount: Number(row.amount) })),
+      .map((row) => ({ id: row.id, amount: Number(row.amount), at: Number(row.voidedAt) })),
     ...(document.voiding === null ? [] : [document.voiding]),
   ];
   const total = voided.reduce((sum, { amount }) => sum + amount, 0);
-  if ((await documentTotal(db, storeId, document, 'charge_recorded')) > 0) return total;
-  const credit = voided.reduce((sum, { id, amount }) => {
-    const replacement = payments.find((row) => row.relatedEntryId === id);
-    return sum + (replacement === undefined ? 0 : Math.min(amount, Number(replacement.amount)));
-  }, 0);
-  return total - credit;
+  const billed = await db
+    .selectFrom('moneyEntries')
+    .select(sql<string | number | null>`MIN(created_at)`.as('at'))
+    .where('storeId', '=', storeId)
+    .where('kind', '=', 'charge_recorded')
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .executeTakeFirst();
+  if (billed?.at === null || billed?.at === undefined) {
+    const credit = voided.reduce((sum, { id, amount }) => {
+      const replacement = payments.find((row) => row.relatedEntryId === id);
+      return sum + (replacement === undefined ? 0 : Math.min(amount, Number(replacement.amount)));
+    }, 0);
+    return total - credit;
+  }
+  const billedAt = Number(billed.at);
+  // Latest first: each void since the charge takes what the live payments after it still hold.
+  const events = [
+    ...voided
+      .filter(({ at }) => at >= billedAt)
+      .map(({ amount, at }) => ({ at, voids: amount, pays: 0 })),
+    ...payments
+      .filter((row) => row.voidedBy === null)
+      .map((row) => ({ at: Number(row.createdAt), voids: 0, pays: Number(row.amount) })),
+  ].sort((a, b) => b.at - a.at || b.voids - a.voids);
+  let after = 0;
+  let credit = 0;
+  for (const { voids, pays } of events) {
+    after += pays;
+    const taken = Math.min(voids, after);
+    after -= taken;
+    credit += taken;
+  }
+  return Math.max(total - credit, Math.min(total, Math.max(0, document.owed)));
 }
 
 /** An account stays with the store that made it (or central), and keeps its kind. */

@@ -509,6 +509,59 @@ describe('refunds and voids', () => {
   });
 });
 
+describe('voids after the bill', () => {
+  test('a payment taken again after a void excuses it', async () => {
+    h = await openRepairHarness(9501);
+    const { ticketId, small } = await paidInFull(h, [700_000, 50_000]);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    h.advance(1_000);
+    await h.money('voidPayment', { entryId: small, reason: 'Salah akun' }, h.ownerId);
+    h.advance(1_000);
+    const [again] = await payments(h, document, [50_000]);
+    const reduce = (amount: number) =>
+      h!.money('reduceCharge', { document, amount, reason: 'Diskon' }, h!.managerId);
+    await reduce(20_000);
+    await expectOverLimit(reduce(10_001), 'money');
+    // Voiding the payment taken again leaves both voids counted.
+    await expectOverLimit(
+      h.money('voidPayment', { entryId: again!, reason: 'Dobel' }, h.managerId),
+      'money',
+    );
+  });
+
+  test('a payment from before the void does not excuse it', async () => {
+    h = await openRepairHarness(9502);
+    const { ticketId, small } = await paidInFull(h, [720_000, 30_000]);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    h.advance(1_000);
+    await payments(h, document, [50_000]);
+    h.advance(1_000);
+    await h.money('voidPayment', { entryId: small, reason: 'Salah' }, h.managerId);
+    await expectOverLimit(
+      h.money('reduceCharge', { document, amount: 1, reason: 'Diskon' }, h.managerId),
+      'money',
+    );
+  });
+
+  test('a later payment of the debt does not excuse a void', async () => {
+    h = await openRepairHarness(9503);
+    const ticketId = await repaired(h, {});
+    await h.run('returnDevice', unpaid(h, ticketId, 600_000), h.ownerId);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    h.advance(1_000);
+    const [paid] = await payments(h, document, [30_000]);
+    h.advance(1_000);
+    await h.money('voidPayment', { entryId: paid!, reason: 'Salah' }, h.managerId);
+    h.advance(1_000);
+    // The customer pays Rp 30.000 of what they owe: they still owe what the void took off.
+    await payments(h, document, [30_000]);
+    await expectOverLimit(
+      h.money('reduceCharge', { document, amount: 1, reason: 'Diskon' }, h.managerId),
+      'money',
+    );
+  });
+});
+
 async function saveAccount(harness: RepairHarness, kind: 'qris' | 'transfer'): Promise<string> {
   const { accountId } = (await harness.money(
     'saveAccount',
