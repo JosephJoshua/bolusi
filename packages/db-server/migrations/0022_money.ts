@@ -62,6 +62,13 @@ const PERMISSIONS = [
     description: "Can settle a difference between the counted cash and the store's records.",
   },
   {
+    id: 'money.extend_credit',
+    action: 'extend_credit',
+    scope: 'store',
+    isDangerous: true,
+    description: 'Can let a customer take their phone before paying in full, leaving a debt.',
+  },
+  {
     id: 'money.manage_accounts',
     action: 'manage_accounts',
     scope: 'store',

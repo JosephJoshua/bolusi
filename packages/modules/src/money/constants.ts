@@ -58,6 +58,8 @@ export const MONEY_PERMISSION = {
   countCash: 'money.count_cash',
   /** Settle a counted difference (owners). */
   adjustCash: 'money.adjust_cash',
+  /** Let a customer take their goods before paying in full, leaving a debt (owners). */
+  extendCredit: 'money.extend_credit',
   /** Store-scoped: the store's own QRIS, EDC and bank accounts. */
   manageAccounts: 'money.manage_accounts',
   /** Tenant-scoped: accounts shared by every store. */

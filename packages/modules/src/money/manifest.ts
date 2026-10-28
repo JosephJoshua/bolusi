@@ -95,6 +95,11 @@ function moneyManifest(sources: MoneyDocumentSources) {
         isDangerous: true,
         description: "Can settle a difference between the counted cash and the store's records.",
       },
+      [MONEY_PERMISSION.extendCredit]: {
+        scope: 'store',
+        isDangerous: true,
+        description: 'Can let a customer take their phone before paying in full, leaving a debt.',
+      },
       [MONEY_PERMISSION.manageAccounts]: {
         scope: 'store',
         isDangerous: true,
