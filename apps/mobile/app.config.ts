@@ -18,6 +18,8 @@ const config: ExpoConfig = {
   // "userInterfaceStyle: Install expo-system-ui …" and the app silently follows the OS dark/light
   // setting. The plugin is what makes this line true instead of a well-typed no-op.
   userInterfaceStyle: 'light',
+  // The logo (assets/brand). These PNGs are rendered from its SVGs by `pnpm brand:assets`.
+  icon: './assets/icon.png',
   platforms: ['android', 'ios', 'web'],
   android: {
     package: 'com.bolusi.app',
@@ -36,6 +38,11 @@ const config: ExpoConfig = {
     // leg is carried by the `dataExtractionRules` that `expo-secure-store` injects below, and both
     // legs are asserted against the GENERATED manifest in test/android-backup.test.ts.
     allowBackup: false,
+    adaptiveIcon: {
+      foregroundImage: './assets/adaptive-icon.png',
+      backgroundImage: './assets/adaptive-icon-background.png',
+      monochromeImage: './assets/adaptive-icon-monochrome.png',
+    },
   },
   ios: {
     // The iOS app identity (api/02-auth §7.4 scopes the Keychain to it; api/04-push ties APNs to
@@ -51,6 +58,7 @@ const config: ExpoConfig = {
   },
   // Where the web preview is served from, e.g. `/bolusi/pr-preview/pr-12` on GitHub Pages
   // (docs/previews.md). Empty for local runs. Native builds ignore it.
+  web: { favicon: './assets/favicon.png' },
   experiments: { baseUrl: process.env['EXPO_BASE_URL'] ?? '' },
   extra: {
     apiUrl: process.env['EXPO_PUBLIC_API_URL'] ?? null,
@@ -81,6 +89,11 @@ const config: ExpoConfig = {
     // (autolinking would also apply it once installed) so the enabling mechanism is visible beside
     // the option it enables, not an autolinking side-effect nobody chose.
     'expo-system-ui',
+    // The launch screen: the logo on the icon's green, until the first screen is ready.
+    [
+      'expo-splash-screen',
+      { image: './assets/splash-icon.png', imageWidth: 200, backgroundColor: '#0B4A41' },
+    ],
     'expo-dev-client',
     // quick-crypto ships its own config plugin (peer: expo-build-properties) — 08 §2.2.
     'react-native-quick-crypto',
@@ -164,6 +177,8 @@ const config: ExpoConfig = {
     './plugins/withActivityConfigChanges',
     // Android 15+ TextViews must lay text out the way React Native measured it, or a label sized to
     // fit drops its last word. See withTextViewBoundsForWidth.ts.
+    // The app is light-only; keep the Android window and system bars light in dark mode too.
+    './plugins/withLightTheme',
     './plugins/withTextViewBoundsForWidth',
   ],
 };

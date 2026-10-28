@@ -12,6 +12,19 @@ export const desktopType = Object.freeze({
   small: { size: 14, line: 20 },
 } as const);
 
+/**
+ * The window's own title bar on the counter PC: deep ink above the light app, so the frame reads as
+ * Bolusi's and not as a web page in a grey Windows frame. Muted text keeps 4.5:1 on the bar; the
+ * status colours are the light steps of success and warning, which read on dark.
+ */
+export const chromeColor = Object.freeze({
+  bar: '#0F172A',
+  text: '#F8FAFC',
+  muted: '#A3AEC2',
+  success: '#4ADE80',
+  warning: '#FBBF24',
+} as const);
+
 function kebab(name: string): string {
   return name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
@@ -20,6 +33,8 @@ function kebab(name: string): string {
 export function themeVariables(): Record<string, string> {
   const vars: Record<string, string> = {};
   for (const [name, value] of Object.entries(color)) vars[`--b-${kebab(name)}`] = value;
+  for (const [name, value] of Object.entries(chromeColor))
+    vars[`--b-chrome-${kebab(name)}`] = value;
   identityPalette.forEach((value, index) => {
     vars[`--b-identity-${String(index)}`] = value;
   });

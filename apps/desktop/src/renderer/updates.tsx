@@ -1,11 +1,13 @@
-// A downloaded update, offered in the sidebar: it installs by itself when the app closes, or now if
-// the counter has a quiet moment. Nothing shows while there is nothing to install.
+// A downloaded update, offered in the title bar: it installs by itself when the app closes, or now
+// if the counter has a quiet moment. Nothing shows while there is nothing to install.
 import { t } from '@bolusi/i18n';
-import { Button, IconButton } from '@bolusi/ui-web';
-import { CircleArrowUp } from 'lucide-react';
+import { Menu } from '@bolusi/ui-web';
+import { CircleArrowUp, RotateCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { UpdatesBridge, UpdateState } from '../main/bridge.js';
+
+import { BAR_CONTROL } from './TitleBar.js';
 
 export function updatesBridge(): UpdatesBridge | undefined {
   return (window as { bolusi?: { updates?: UpdatesBridge } }).bolusi?.updates;
@@ -31,40 +33,45 @@ function useUpdateState(updates: UpdatesBridge | undefined): UpdateState {
 }
 
 export function UpdateNotice({
-  compact,
   updates = updatesBridge(),
 }: {
-  readonly compact: boolean;
   readonly updates?: UpdatesBridge | undefined;
 }): React.JSX.Element | null {
   const state = useUpdateState(updates);
   if (updates === undefined || state.kind !== 'ready') return null;
-  const install = (): void => void updates.install();
-  if (compact) {
-    return (
-      <div className="flex justify-center">
-        <IconButton
-          icon={CircleArrowUp}
-          label={`${t('core.update.ready')}: ${t('core.update.install')}`}
-          tooltipSide="right"
-          onClick={install}
-          className="text-primary"
-          data-testid="desktop.update"
-        />
-      </div>
-    );
-  }
+  // Installing restarts the app, so it is a choice in a menu, never a click on the notice itself.
   return (
-    <div className="flex flex-col gap-2 rounded-sm bg-info-bg p-3" data-testid="desktop.update">
-      <div className="flex items-start gap-2">
-        <CircleArrowUp size={18} aria-hidden className="mt-0.5 shrink-0 text-primary" />
-        <div className="min-w-0">
-          <p className="text-body font-semibold text-text">{t('core.update.ready')}</p>
-          <p className="text-small text-text-muted">{t('core.update.later')}</p>
-        </div>
-      </div>
-      <Button label={t('core.update.install')} size="sm" variant="secondary" onClick={install} />
-    </div>
+    <Menu
+      align="end"
+      tooltip={{ label: t('core.update.ready'), side: 'bottom' }}
+      header={
+        <span className="flex max-w-64 flex-col gap-1">
+          <span className="text-body font-semibold text-text">{t('core.update.ready')}</span>
+          <span className="text-small font-normal text-text-muted">{t('core.update.later')}</span>
+        </span>
+      }
+      items={[
+        {
+          key: 'install',
+          label: t('core.update.install'),
+          icon: RotateCw,
+          onSelect: () => void updates.install(),
+        },
+      ]}
+      trigger={
+        <button
+          type="button"
+          aria-label={t('core.update.ready')}
+          data-testid="desktop.update"
+          className={BAR_CONTROL}
+        >
+          <CircleArrowUp size={16} aria-hidden className="shrink-0 text-chrome-success" />
+          <span className="hidden whitespace-nowrap @min-[56rem]:inline">
+            {t('core.update.ready')}
+          </span>
+        </button>
+      }
+    />
   );
 }
 

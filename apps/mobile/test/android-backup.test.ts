@@ -29,7 +29,7 @@
 // proves the exclusion is present in the shipped manifest and that the rules say what they must.
 // The on-device behaviour is unverified. No assertion here may be read as a device-verified restore.
 import { createRequire } from 'node:module';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -105,7 +105,9 @@ async function compileAndroidManifest(): Promise<string> {
       'package com.bolusi.app\nclass MainApplication\n',
     // The font scale sync (withActivityConfigChanges) also adds code inside the activity class.
     'android/app/src/main/java/com/bolusi/app/MainActivity.kt':
-      'package com.bolusi.app\nclass MainActivity : ReactActivity() {\n}\n',
+      'package com.bolusi.app\nclass MainActivity : ReactActivity() {\n' +
+      // The splash screen mod hooks in just before this call, as in the real template.
+      '  override fun onCreate(savedInstanceState: Bundle?) {\n    super.onCreate(null)\n  }\n}\n',
     'android/app/proguard-rules.pro': '# template\n',
     'android/gradle.properties': 'android.useAndroidX=true\n',
     'android/build.gradle': 'buildscript { ext { minSdkVersion = 24 } }\n',
@@ -122,6 +124,9 @@ async function compileAndroidManifest(): Promise<string> {
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, body);
   }
+  // The icon and splash mods read the app's images by their config path, which the real prebuild
+  // resolves from apps/mobile as its working directory.
+  cpSync(join(MOBILE_ROOT, 'assets'), join(projectRoot, 'assets'), { recursive: true });
 
   const { exp } = await getPrebuildConfigAsync(MOBILE_ROOT, { platforms: ['android'] });
 
@@ -135,11 +140,17 @@ async function compileAndroidManifest(): Promise<string> {
     'expo-secure-store',
   );
 
-  await compileModsAsync(exp, {
-    projectRoot,
-    platforms: ['android'],
-    assertMissingModProviders: false,
-  });
+  const cwd = process.cwd();
+  process.chdir(projectRoot);
+  try {
+    await compileModsAsync(exp, {
+      projectRoot,
+      platforms: ['android'],
+      assertMissingModProviders: false,
+    });
+  } finally {
+    process.chdir(cwd);
+  }
   return readFileSync(manifestPath, 'utf8');
 }
 
