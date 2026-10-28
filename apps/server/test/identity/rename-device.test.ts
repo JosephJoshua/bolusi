@@ -30,20 +30,20 @@ async function setup() {
   return { p, storeId, device };
 }
 
-function rename(token: string, body: unknown, actingUser?: string): Promise<Response> {
+async function rename(token: string, body: unknown, actingUser?: string): Promise<Response> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
   if (actingUser !== undefined) headers['X-Acting-User'] = actingUser;
-  return h.app.request('http://srv.test/v1/devices/me', {
+  return await h.app.request('http://srv.test/v1/devices/me', {
     method: 'PATCH',
     headers,
     body: JSON.stringify(body),
   });
 }
 
-async function nameOf(deviceId: string): Promise<string> {
+async function nameOf(deviceId: string): Promise<string | null> {
   const row = await h.idb.db
     .selectFrom('devices')
     .select('name')
