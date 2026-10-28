@@ -275,14 +275,17 @@ function buildSync(
  * The `bdt_` token is read PER CALL from SecureStore, never cached, so a revoked device stops
  * authenticating at once (api/02-auth §7.3) — the same rule the sync legs follow.
  */
-function createMedia(app: Bootstrapped): MediaClient | null {
-  return buildMedia(app, { background: true });
+function createMedia(
+  app: Bootstrapped,
+  hooks: { readonly onQueueChanged: () => void },
+): MediaClient | null {
+  return buildMedia(app, { background: true, onQueueChanged: hooks.onQueueChanged });
 }
 
 /** `background: false` builds a client for one headless pass: the host drives it directly. */
 function buildMedia(
   app: Bootstrapped,
-  options: { readonly background: boolean },
+  options: { readonly background: boolean; readonly onQueueChanged?: () => void },
 ): MediaClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
@@ -308,6 +311,7 @@ function buildMedia(
       randomBytes: (n) => quickCryptoPort.randomBytes(n),
     }),
     location: expoLocationPort,
+    ...(options.onQueueChanged === undefined ? {} : { onQueueChanged: options.onQueueChanged }),
     // 06 §8: silent failure is unacceptable. The client buffers per-item surfacings for the
     // sync-status screen; THIS sink is only for the rejections that escape a trigger (a drain that
     // could not even read the queue). It routes through the app's ONE client diagnostics channel

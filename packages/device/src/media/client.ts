@@ -118,6 +118,8 @@ export interface MediaClientDeps {
    */
   readonly background: BackgroundBinding | null;
   readonly surface?: MediaSurfacePort;
+  /** A photo finished uploading or failed: re-read the queue for the sync status now. */
+  readonly onQueueChanged?: () => void;
   /** Where an un-awaited background rejection goes. Never swallowed (06 §8). */
   readonly onError: (error: unknown) => void;
 }
@@ -203,6 +205,7 @@ class MediaClientImpl implements MediaClient {
       files: deps.files,
       clock: deps.clock,
       surface,
+      ...(deps.onQueueChanged === undefined ? {} : { onItemSettled: deps.onQueueChanged }),
     });
 
     this.pruning = createPruningPass<ClientDatabase>({
