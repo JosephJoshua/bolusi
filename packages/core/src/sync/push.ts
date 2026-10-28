@@ -149,6 +149,7 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
 
     const byId = new Map(ops.map((op) => [op.id, op]));
     let halted = false;
+    let chainHalted = false;
     let gapped = false;
     const syncedBefore = synced;
     const rejectedBefore = rejected;
@@ -162,7 +163,14 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
         rejected += 1;
         halted = true;
       }
+      if (outcome === 'chain_halted') chainHalted = true;
       if (outcome === 'gap') gapped = true;
+    }
+    // A CHAIN_HALTED answer means the chain broke before it, even when this device could not mark
+    // the CHAIN_BROKEN op (already marked, or gone): halt anyway, or every cycle re-sends this batch.
+    if (chainHalted && !halted) {
+      await deps.onChainBroken();
+      halted = true;
     }
     if (synced > syncedBefore || rejected > rejectedBefore) {
       deps.onBatchSettled?.({ synced: synced - syncedBefore, rejected: rejected - rejectedBefore });
@@ -194,7 +202,7 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
   }
 }
 
-type PushOutcome = 'synced' | 'rejected' | 'chain_broken' | 'gap' | 'ignored';
+type PushOutcome = 'synced' | 'rejected' | 'chain_broken' | 'chain_halted' | 'gap' | 'ignored';
 
 /**
  * Mark ONE op by its result and surface it (03 §3 + 05 §8).
@@ -232,9 +240,9 @@ async function applyPushResult<DB>(
     // The server never examined this op: an earlier op in the batch broke the chain, and the server
     // records no verdict for the rest (apps/server oplog/pipeline.ts). It is not refused, so it
     // stays `local` and in this device's records, and is carried over when the phone is enrolled
-    // again (auth/carry-over.ts takes `local` ops only). The CHAIN_BROKEN op already halted push
-    // and told the user, so nothing more is surfaced for it.
-    return 'ignored';
+    // again (auth/carry-over.ts takes `local` ops only). The CHAIN_BROKEN op told the user, so
+    // nothing more is surfaced for it; it still means push is halted (`runPushPhase`).
+    return 'chain_halted';
   }
 
   // A rejected op is not in the server's log and never will be, so it comes out of this device's

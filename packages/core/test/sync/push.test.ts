@@ -451,6 +451,28 @@ describe('CHAIN_BROKEN halts push (03 §3 / §10)', () => {
     expect(chainBrokenCalls).toBe(1);
     expect(harness.surface.ofKind('push_halted')).toHaveLength(1);
   });
+
+  it('CHAIN_HALTED halts push even when the CHAIN_BROKEN op could not be marked here', async () => {
+    // The broken op's result marks nothing on this device (it is already marked, or gone), so only
+    // the CHAIN_HALTED answers say the chain is broken. Without halting, every cycle re-sent them.
+    const a = await seedLocalOp(1);
+    const b = await seedLocalOp(2);
+    harness.transport.scriptPush({
+      results: [
+        { id: a.id, status: 'rejected', code: 'CHAIN_HALTED', reason: 'earlier op broke' },
+        { id: b.id, status: 'rejected', code: 'CHAIN_HALTED', reason: 'earlier op broke' },
+      ],
+      serverTime: clockAt,
+    });
+
+    const result = await runPushPhase(deps());
+
+    expect(result.halted).toBe(true);
+    expect(chainBrokenCalls).toBe(1);
+    expect(await statusOf(a.id)).toEqual({ status: 'local', code: null });
+    expect(await statusOf(b.id)).toEqual({ status: 'local', code: null });
+    expect(harness.transport.pushes).toHaveLength(1);
+  });
 });
 
 describe('batching (api/01 §3: ascending seq, ≤ 500 per batch)', () => {
