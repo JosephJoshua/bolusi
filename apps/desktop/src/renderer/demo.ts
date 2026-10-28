@@ -1,5 +1,7 @@
 // Demo data for the desktop build, which runs the counter screens over the in-memory repair demo
 // before the offline core is wired in. Names here are seeded data, not interface copy.
+import type { StaffDirectory } from '@bolusi/core';
+import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { demoRepairRuntime, type DemoRepairRole } from '@bolusi/modules/repair/demo';
 import type { RepairRuntime } from '@bolusi/modules/repair/desktop';
 
@@ -24,34 +26,46 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
   { role: 'owner', userId: 'u-andi', name: 'Andi Pratama', roleKey: 'main_owner' },
   { role: 'storeOwner', userId: 'u-yosua', name: 'Yosua Wonda', roleKey: 'store_owner' },
   { role: 'technician', userId: 'u-budi', name: 'Budi Santoso', roleKey: 'technician' },
+  { role: 'manager', userId: 'u-maria', name: 'Maria Kogoya', roleKey: 'manager' },
 ];
 
 // Captures live only in this window's memory: the demo has no media store. The real build hands
 // them to the offline core instead.
 const captured = new Map<string, string>();
+/** Recorded clips, kept as blobs: each playing gets its own url, which the player lets go. */
+const clips = new Map<string, Blob>();
+
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function demoRef<M extends string, T extends string>(
+  bytes: Uint8Array<ArrayBuffer>,
+  mime: M,
+  type: T,
+) {
+  return {
+    mediaId: crypto.randomUUID(),
+    sha256: await sha256Hex(bytes),
+    mime,
+    type,
+    sizeBytes: bytes.length,
+    capturedAt: Date.now(),
+    location: null,
+    userId: 'u-siti',
+    deviceId: 'd-demo',
+  };
+}
 
 async function keepDemo(
   bytes: Uint8Array<ArrayBuffer>,
   mime: 'image/jpeg' | 'image/png',
   type: 'image' | 'signature',
 ): Promise<CapturedMedia> {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-  const sha256 = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  const mediaId = crypto.randomUUID();
-  captured.set(mediaId, URL.createObjectURL(new Blob([bytes], { type: mime })));
-  return {
-    mediaRef: {
-      mediaId,
-      sha256,
-      mime,
-      type,
-      sizeBytes: bytes.length,
-      capturedAt: Date.now(),
-      location: null,
-      userId: 'u-siti',
-      deviceId: 'd-demo',
-    },
-  };
+  const mediaRef = await demoRef(bytes, mime, type);
+  captured.set(mediaRef.mediaId, URL.createObjectURL(new Blob([bytes], { type: mime })));
+  return { mediaRef };
 }
 
 /** The strokes drawn on a white pad, as a PNG; the real build renders them with the phone's code. */
@@ -97,6 +111,23 @@ export function demoRuntimeFor(person: DemoPerson, capture: PcCapture): RepairRu
         ? null
         : keepDemo(await signaturePng(signature), 'image/png', 'signature');
     },
+    recordVideo: async (request) => {
+      const video = await capture.video(request);
+      if (video === null) return null;
+      const videoRef = await demoRef(video.bytes, video.mime, 'video' as const);
+      clips.set(videoRef.mediaId, new Blob([video.bytes], { type: video.mime }));
+      return { videoRef };
+    },
+    // A clip recorded here plays; the seeded ones have none to show.
+    playVideo: (ref, request) =>
+      capture.play(request, () => {
+        const clip = clips.get(ref.mediaId);
+        return Promise.resolve(
+          clip === undefined
+            ? { kind: 'unavailable' }
+            : { kind: 'ready', url: URL.createObjectURL(clip) },
+        );
+      }),
     // A photo taken here shows itself; the seeded ones show the demo's placeholders.
     loadThumbnail: (ref) => {
       const url = captured.get(ref.mediaId);
@@ -108,5 +139,98 @@ export function demoRuntimeFor(person: DemoPerson, capture: PcCapture): RepairRu
       runtime.printing === undefined
         ? undefined
         : desktopPrinting(runtime.printing, DEMO_STORE_NAME),
+  };
+}
+
+const DEMO_ROLES: StaffDirectory['roles'] = [
+  { id: 'r-cashier', key: 'cashier', ownerRole: false, limits: null },
+  { id: 'r-technician', key: 'technician', ownerRole: false, limits: null },
+  {
+    id: 'r-manager',
+    key: 'manager',
+    ownerRole: false,
+    limits: { priceDrop: 50_000, refund: 30_000, credit: 100_000 },
+  },
+  { id: 'r-store_owner', key: 'store_owner', ownerRole: true, limits: null },
+];
+
+/** The demo store's people over an in-memory server, for an owner's "Karyawan" and limits. */
+let demoDirectory: StaffDirectory = {
+  roles: DEMO_ROLES,
+  members: DEMO_PEOPLE.map((person) => ({
+    id: person.userId,
+    name: person.name,
+    active: true,
+    roleKeys: [person.roleKey],
+    roleIds: [`r-${person.roleKey}`],
+    owner: person.roleKey.endsWith('owner'),
+    hasPin: true,
+  })),
+};
+
+/** Staff controls for the demo's owners; others manage no one. Changes last until reload. */
+export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
+  if (person.role !== 'owner' && person.role !== 'storeOwner') return undefined;
+  const server = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 400));
+  return {
+    tenantAdmin: person.role === 'owner',
+    load: () => Promise.resolve(demoDirectory),
+    onCreate: async (draft) => {
+      await server();
+      const id = `u-demo-${String(demoDirectory.members.length)}`;
+      demoDirectory = {
+        ...demoDirectory,
+        members: [
+          ...demoDirectory.members,
+          {
+            id,
+            name: draft.name,
+            active: true,
+            roleKeys: draft.roleIds.map((roleId) => roleId.slice(2)),
+            roleIds: draft.roleIds,
+            owner: false,
+            hasPin: false,
+          },
+        ],
+      };
+      return { userId: id };
+    },
+    onUpdate: async (userId, change) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        members: demoDirectory.members.map((member) =>
+          member.id === userId
+            ? {
+                ...member,
+                ...(change.name === undefined ? {} : { name: change.name }),
+                ...(change.roleIds === undefined
+                  ? {}
+                  : {
+                      roleIds: change.roleIds,
+                      roleKeys: change.roleIds.map((roleId) => roleId.slice(2)),
+                    }),
+              }
+            : member,
+        ),
+      };
+    },
+    onSetActive: async (userId, active) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        members: demoDirectory.members.map((member) =>
+          member.id === userId ? { ...member, active } : member,
+        ),
+      };
+    },
+    canSetLimits: true,
+    onSetLimits: async (roleId, limits) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        roles: demoDirectory.roles.map((role) => (role.id === roleId ? { ...role, limits } : role)),
+      };
+    },
   };
 }

@@ -14,6 +14,7 @@
 //
 // Platform-free: imports only sibling authz types (08 §3.3).
 import type { DirectoryGrant, DirectoryRole, DirectorySnapshot } from './directory.js';
+import { NO_LIMIT_AMOUNTS, type PermissionAllowance } from './limits.js';
 import type { PermissionRegistry } from './registry.js';
 
 /**
@@ -108,8 +109,13 @@ export function parsePermissionIds(json: string): readonly string[] {
  * `storeId` is `string` (never `null`) — asking for a null one is a compile error.
  */
 type ScopedGrant =
-  | { readonly scope: 'tenant'; readonly permissionIdsJson: string }
-  | { readonly scope: 'store'; readonly storeId: string; readonly permissionIdsJson: string };
+  | { readonly scope: 'tenant'; readonly permissionIdsJson: string; readonly role: DirectoryRole }
+  | {
+      readonly scope: 'store';
+      readonly storeId: string;
+      readonly permissionIdsJson: string;
+      readonly role: DirectoryRole;
+    };
 
 /**
  * Parse (don't validate) one raw `DirectoryGrant` against its role into a `ScopedGrant`, or `null`
@@ -130,9 +136,14 @@ function classifyGrant(role: DirectoryRole | undefined, grant: DirectoryGrant): 
   if (role === undefined) return null;
   if (grant.storeId === null) {
     if (role.scopeType === 'store') return null;
-    return { scope: 'tenant', permissionIdsJson: role.permissionIdsJson };
+    return { scope: 'tenant', permissionIdsJson: role.permissionIdsJson, role };
   }
-  return { scope: 'store', storeId: grant.storeId, permissionIdsJson: role.permissionIdsJson };
+  return {
+    scope: 'store',
+    storeId: grant.storeId,
+    permissionIdsJson: role.permissionIdsJson,
+    role,
+  };
 }
 
 /**
@@ -229,5 +240,42 @@ export function evaluatePermission(
     // Step 7. Fail closed is unconditional: a bug denies, it never throws past the control and it
     // never allows.
     return deny('evaluation_error');
+  }
+}
+
+/**
+ * How far `query.userId` may use `query.permissionId` in the evaluation store (limits.ts). Holding
+ * it is decided by `evaluatePermission` exactly; the limit is then the highest any of the user's
+ * roles holding it gives at this store, and no limit as soon as one of them is free of limits. A
+ * permission with no limit kind is never limited.
+ *
+ * Fail closed like the rest: anything that throws means not allowed, never "no limit".
+ */
+export function evaluateAllowance(
+  registry: PermissionRegistry,
+  snapshot: DirectorySnapshot,
+  query: PermissionQuery,
+  effectiveSetFor?: EffectiveSetLookup,
+): PermissionAllowance {
+  const decision = evaluatePermission(registry, snapshot, query, effectiveSetFor);
+  if (!decision.allowed) return { allowed: false };
+  try {
+    const kind = registry.get(query.permissionId)?.limit;
+    if (kind === undefined) return { allowed: true, limit: null };
+    let limit = 0;
+    for (const grant of snapshot.grantsByUser.get(query.userId) ?? []) {
+      const scoped = classifyGrant(snapshot.roles.get(grant.roleId), grant);
+      if (scoped === null) continue;
+      // The grants that count are the ones `computeEffectiveSet` counts for this store.
+      if (scoped.scope === 'store' && scoped.storeId !== query.storeId) continue;
+      if (!parsePermissionIds(scoped.permissionIdsJson).includes(query.permissionId)) continue;
+      const limits = scoped.role.limits;
+      if (limits === null || limits === undefined) return { allowed: true, limit: null };
+      const here = query.storeId === null ? undefined : limits.get(query.storeId);
+      limit = Math.max(limit, (here ?? NO_LIMIT_AMOUNTS)[kind]);
+    }
+    return { allowed: true, limit };
+  } catch {
+    return { allowed: false };
   }
 }

@@ -42,6 +42,7 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'tenderedTooLow',
   'paymentNotFound',
   'alreadyVoided',
+  'replacementNotFound',
   'refundAboveCredit',
   'notCharged',
   'refundAbovePaid',
@@ -51,8 +52,26 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'countSettled',
   'countSuperseded',
   'differenceChanged',
+  'overLimit',
 ] as const);
 const { refuse } = MONEY_REFUSALS;
+
+/**
+ * A limited role (a manager) uses an owner's decision only as far as its store's limit goes
+ * (core authz/limits.ts); owners have no limit.
+ */
+async function requireWithinLimit(
+  op: SignedOperation,
+  ctx: Pick<Parameters<Rule>[1], 'withinLimit'>,
+  permissionId: string,
+  amount: number,
+): Promise<void> {
+  if (await ctx.withinLimit(op.userId, permissionId, amount)) return;
+  throw refuse('overLimit', {
+    code: 'PERMISSION_DENIED',
+    details: { permissionId, issue: `above the limit for ${amount}` },
+  });
+}
 
 function payloadOf<T>(op: SignedOperation): T {
   return op.payload as unknown as T;
@@ -126,7 +145,7 @@ export async function documentTotal(
   db: Db,
   storeId: string,
   document: { kind: string; id: string },
-  kind: 'charge_recorded' | 'charge_reduced',
+  kind: 'charge_recorded' | 'charge_reduced' | 'refund_paid',
 ): Promise<number> {
   const row = await db
     .selectFrom('moneyEntries')
@@ -270,8 +289,12 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     }
   };
 
-  /** An owner takes something off a document's charges, never more than was charged. */
-  const chargeReducedRule: Rule = async (op, { db }) => {
+  /**
+   * An owner takes something off a document's charges, never more than was charged; a limited role
+   * (a manager) only while everything taken off it stays within its store's limit.
+   */
+  const chargeReducedRule: Rule = async (op, ctx) => {
+    const { db } = ctx;
     const { document, amount } = payloadOf<{ document: MoneyDocument; amount: number }>(op);
     await requireFreshEntry(db, op);
     await requireDocument(db, op, document);
@@ -284,15 +307,17 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         details: { field: 'amount', issue: `at most ${charged - reduced}` },
       });
     }
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, reduced + amount);
   };
 
   const paymentReceivedRule: Rule = async (op, { db }) => {
-    const { document, account, amount, reference, tendered } = payloadOf<{
+    const { document, account, amount, reference, tendered, replaces } = payloadOf<{
       document: MoneyDocument;
       account: string;
       amount: number;
       reference: string | null;
       tendered: number | null;
+      replaces?: string;
     }>(op);
     await requireFreshEntry(db, op);
     await requireDocument(db, op, document);
@@ -309,13 +334,19 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         details: { field: 'tendered', issue: 'cash handed over is less than the payment' },
       });
     }
+    if (replaces !== undefined) await requireReplaceable(db, op, document, account, replaces);
   };
 
-  /** An owner cancels a payment of this store that still counts. */
-  const paymentVoidedRule: Rule = async (op, { db }) => {
+  /**
+   * An owner cancels a payment of this store that still counts. A limited role (a manager) may
+   * only while the money voids took off its document stays within its store's refund limit: a void
+   * takes money off the book like a refund does.
+   */
+  const paymentVoidedRule: Rule = async (op, ctx) => {
+    const { db } = ctx;
     const entry = await db
       .selectFrom('moneyEntries')
-      .select(['kind', 'voidedBy'])
+      .select(['id', 'kind', 'voidedBy', 'amount', 'documentKind', 'documentId'])
       .where('id', '=', op.entityId)
       .where('storeId', '=', storeOf(op))
       .executeTakeFirst();
@@ -328,6 +359,15 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (entry.voidedBy !== null) {
       throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
     }
+    const takenOff =
+      entry.documentKind === null || entry.documentId === null
+        ? Number(entry.amount)
+        : await voidedOffDocument(db, storeOf(op), {
+            kind: entry.documentKind,
+            id: entry.documentId,
+            voiding: { id: entry.id, amount: Number(entry.amount) },
+          });
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
   };
 
   /**
@@ -336,7 +376,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
    * less its fee), and only once the document is charged in full, so a DP on an unfinished
    * repair is not handed back by the counter. Anything else is an owner's refund.
    */
-  const refundPaidRule: Rule = async (op, { db, holdsPermission }) => {
+  const refundPaidRule: Rule = async (op, ctx) => {
+    const { db, holdsPermission } = ctx;
     const { document, account, amount } = payloadOf<{
       document: MoneyDocument;
       account: string;
@@ -346,28 +387,35 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     const { source, lookup } = await requireDocument(db, op, document);
     // A since deactivated account may still give back what was paid through it.
     await requireAccount(db, op, account, { includeInactive: true });
-    if (await holdsPermission(op.userId, MONEY_PERMISSION.refund)) return;
     const store = storeOf(op);
-    // Charged at least what the document costs: a later price drop only shrinks the credit.
-    const expected = await source.charge(db as unknown as Kysely<never>, lookup);
-    const charged = await documentTotal(db, store, document, 'charge_recorded');
-    if (expected === null || charged < expected.amount) {
-      throw refuse('notCharged', {
-        code: 'PERMISSION_DENIED',
-        details: { permissionId: MONEY_PERMISSION.refund, issue: 'the document is not charged' },
-      });
-    }
-    const credit = -(await documentBalance(db, store, document));
-    const paidThrough = await netPaidThrough(db, store, document, account);
-    if (amount > credit || amount > paidThrough) {
-      throw refuse('refundAboveCredit', {
-        code: 'PERMISSION_DENIED',
-        details: {
-          permissionId: MONEY_PERMISSION.refund,
-          issue: `at most ${Math.min(credit, paidThrough)}`,
-        },
-      });
-    }
+    const counterRefusal = await (async () => {
+      // Charged at least what the document costs: a later price drop only shrinks the credit.
+      const expected = await source.charge(db as unknown as Kysely<never>, lookup);
+      const charged = await documentTotal(db, store, document, 'charge_recorded');
+      if (expected === null || charged < expected.amount) {
+        return refuse('notCharged', {
+          code: 'PERMISSION_DENIED',
+          details: { permissionId: MONEY_PERMISSION.refund, issue: 'the document is not charged' },
+        });
+      }
+      const credit = -(await documentBalance(db, store, document));
+      const paidThrough = await netPaidThrough(db, store, document, account);
+      if (amount > credit || amount > paidThrough) {
+        return refuse('refundAboveCredit', {
+          code: 'PERMISSION_DENIED',
+          details: {
+            permissionId: MONEY_PERMISSION.refund,
+            issue: `at most ${Math.min(credit, paidThrough)}`,
+          },
+        });
+      }
+      return null;
+    })();
+    if (counterRefusal === null) return;
+    if (!(await holdsPermission(op.userId, MONEY_PERMISSION.refund))) throw counterRefusal;
+    // A limited role (a manager): every refund on the document, this one with them, within limit.
+    const earlier = await documentTotal(db, store, document, 'refund_paid');
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, earlier + amount);
   };
 
   /** A deposit goes into one of the store's accounts; other moves touch only the drawer. */
@@ -463,6 +511,86 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     cashCountedRule,
     cashAdjustedRule,
   };
+}
+
+/**
+ * A payment recorded in place of another (a corrected DP) names a live payment of the same
+ * document, through the same account, that nothing else replaces yet, while the document is not
+ * charged: before the bill, what the customer paid is still just the DP.
+ */
+async function requireReplaceable(
+  db: Db,
+  op: SignedOperation,
+  document: MoneyDocument,
+  account: string,
+  replaces: string,
+): Promise<void> {
+  const store = storeOf(op);
+  const target = await db
+    .selectFrom('moneyEntries')
+    .select(['kind', 'voidedBy', 'account', 'documentKind', 'documentId'])
+    .where('id', '=', replaces)
+    .where('storeId', '=', store)
+    .executeTakeFirst();
+  const replacedAlready = await db
+    .selectFrom('moneyEntries')
+    .select('id')
+    .where('storeId', '=', store)
+    .where('kind', '=', 'payment_received')
+    .where('relatedEntryId', '=', replaces)
+    .executeTakeFirst();
+  const fits =
+    target !== undefined &&
+    target.kind === 'payment_received' &&
+    target.voidedBy === null &&
+    target.documentKind === document.kind &&
+    target.documentId === document.id &&
+    target.account === account &&
+    replacedAlready === undefined &&
+    (await documentTotal(db, store, document, 'charge_recorded')) === 0;
+  if (!fits) {
+    throw refuse('replacementNotFound', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'replaces', entityId: replaces },
+    });
+  }
+}
+
+/**
+ * The money voids took off a document, the void being judged included. A payment voided after one
+ * was recorded in its place counts only beyond what that one holds, and only while the document is
+ * not charged: once billed, every void counts in full.
+ */
+async function voidedOffDocument(
+  db: Db,
+  storeId: string,
+  document: {
+    readonly kind: string;
+    readonly id: string;
+    readonly voiding: { readonly id: string; readonly amount: number };
+  },
+): Promise<number> {
+  const payments = await db
+    .selectFrom('moneyEntries')
+    .select(['id', 'amount', 'voidedBy', 'relatedEntryId'])
+    .where('storeId', '=', storeId)
+    .where('kind', '=', 'payment_received')
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .execute();
+  const voided = [
+    ...payments
+      .filter((row) => row.voidedBy !== null)
+      .map((row) => ({ id: row.id, amount: Number(row.amount) })),
+    document.voiding,
+  ];
+  const total = voided.reduce((sum, { amount }) => sum + amount, 0);
+  if ((await documentTotal(db, storeId, document, 'charge_recorded')) > 0) return total;
+  const credit = voided.reduce((sum, { id, amount }) => {
+    const replacement = payments.find((row) => row.relatedEntryId === id);
+    return sum + (replacement === undefined ? 0 : Math.min(amount, Number(replacement.amount)));
+  }, 0);
+  return total - credit;
 }
 
 /** An account stays with the store that made it (or central), and keeps its kind. */

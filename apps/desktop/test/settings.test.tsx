@@ -46,9 +46,9 @@ const CASHIER_GRANTS = [
 
 const DIRECTORY: StaffDirectory = {
   roles: [
-    { id: 'r-cashier', key: 'cashier', ownerRole: false },
-    { id: 'r-tech', key: 'technician', ownerRole: false },
-    { id: 'r-owner', key: 'store_owner', ownerRole: true },
+    { id: 'r-cashier', key: 'cashier', ownerRole: false, limits: null },
+    { id: 'r-tech', key: 'technician', ownerRole: false, limits: null },
+    { id: 'r-owner', key: 'store_owner', ownerRole: true, limits: null },
   ],
   members: [
     {
@@ -119,6 +119,7 @@ describe('Settings on the PC', () => {
       'account',
       'staff',
       'staffPins',
+      'limits',
       'fees',
       'uncollected',
       'slip',
@@ -137,6 +138,7 @@ describe('Settings on the PC', () => {
           canUnlock: false,
           canReset: false,
           canManageStaff: false,
+          canSetLimits: false,
           tenantAdmin: false,
         }),
       }),
@@ -287,6 +289,58 @@ describe('Settings on the PC', () => {
     ]);
     fireEvent.click(byTestId('desktop.staff.added.makePin'));
     expect((await screen.findByTestId('desktop.resetPin')).textContent).toContain('Maria Kambu');
+  });
+
+  it('sets a manager’s limits as the owner signed in, and says when the PC is offline', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    let directory: StaffDirectory = {
+      ...DIRECTORY,
+      roles: [
+        ...DIRECTORY.roles,
+        {
+          id: 'r-manager',
+          key: 'manager',
+          ownerRole: false,
+          limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+        },
+      ],
+    };
+    core.answers['staff.list'] = () => directory;
+    let online = false;
+    core.answers['staff.setLimits'] = (_userId, roleId, limits) => {
+      if (!online) return Promise.reject(new StaffAdminError('offline'));
+      directory = {
+        ...directory,
+        roles: directory.roles.map((role) =>
+          role.id === roleId ? { ...role, limits: limits as typeof role.limits } : role,
+        ),
+      };
+      return undefined;
+    };
+    renderApp();
+    await openSettings('limits');
+    const refund = await screen.findByTestId('desktop.settings.limits.manager.refund');
+    fireEvent.change(refund, { target: { value: '25.000' } });
+
+    // An emptied amount is not Rp 0: nothing is sent.
+    const credit = byTestId('desktop.settings.limits.manager.credit');
+    fireEvent.change(credit, { target: { value: '' } });
+    fireEvent.click(byTestId('desktop.settings.limits.save'));
+    expect(byTestId('desktop.settings.limits').textContent).toContain('Isi ketiga batas');
+    expect(callsTo('staff.setLimits')).toEqual([]);
+
+    fireEvent.change(credit, { target: { value: '100.000' } });
+    fireEvent.click(byTestId('desktop.settings.limits.save'));
+    await screen.findByText(/belum terhubung internet/);
+
+    online = true;
+    fireEvent.click(byTestId('desktop.settings.limits.save'));
+    await screen.findByTestId('desktop.settings.limits.saved');
+    expect(callsTo('staff.setLimits').at(-1)).toEqual([
+      OWNER.id,
+      'r-manager',
+      { priceDrop: 50_000, refund: 25_000, credit: 100_000 },
+    ]);
   });
 
   it('does not let a store owner open another owner', async () => {

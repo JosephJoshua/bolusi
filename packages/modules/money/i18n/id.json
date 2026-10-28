@@ -22,6 +22,7 @@
     "tenderedTooLow": "Uang yang diterima kurang dari jumlah bayar.",
     "paymentNotFound": "Pembayaran ini tidak ditemukan.",
     "alreadyVoided": "Pembayaran ini sudah dibatalkan.",
+    "replacementNotFound": "Pembayaran penggantinya tidak ditemukan.",
     "refundAboveCredit": "Uang yang dikembalikan lebih dari kelebihan bayar. Minta pemilik.",
     "notCharged": "Tagihannya belum dicatat. Minta pemilik untuk mengembalikan uang.",
     "refundAbovePaid": "Uang yang dikembalikan lebih dari yang dibayar pelanggan.",
@@ -30,7 +31,8 @@
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
-    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan."
+    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
+    "overLimit": "Melebihi batasmu. Minta pemilik toko."
   },
   "method": {
     "cash": "Tunai"

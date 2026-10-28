@@ -52,6 +52,7 @@ import { MEDIA_DRAIN_TASK } from '@bolusi/device/media/background-task';
 import type { MediaClient } from '@bolusi/device/media/client';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform, createExpoScanPlatform } from './src/media/native-capture.js';
+import { createExpoVideoPlatform } from './src/media/native-video.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from '@bolusi/device/media/transport';
@@ -438,7 +439,10 @@ function createRepair(
   runtime: AppRuntime,
   identity: CommandIdentity,
   media: MediaClient | null,
-  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'> & {
+  capture: Pick<
+    RepairMediaSeams,
+    'capturePhoto' | 'captureSignature' | 'recordVideo' | 'playVideo'
+  > & {
     readonly scanCode: (() => Promise<string | null>) | undefined;
   },
 ): RepairRuntime {
@@ -607,6 +611,7 @@ function buildRootProps(): RootProps {
     // what gives 06 §7's storage banners their first production render.
     capturePlatform: createExpoCapturePlatform(),
     scanPlatform: createExpoScanPlatform(),
+    videoPlatform: createExpoVideoPlatform(),
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process

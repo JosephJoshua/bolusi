@@ -67,6 +67,8 @@ export const paymentReceivedPayload = z
     reference: zReference,
     /** Cash handed over, when typed, so the slip can show the change. */
     tendered: zMoneyIdr.min(1).max(MAX_AMOUNT).nullable(),
+    /** The payment this one is recorded in place of (a corrected DP), voided right after it. */
+    replaces: zUuid.optional(),
   })
   .strict();
 

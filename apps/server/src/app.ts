@@ -29,6 +29,7 @@ import { createPushRouter } from './routes/push.js';
 import { createQrisRouter, createXenditCallbackRouter } from './routes/qris.js';
 import { createRealtimeRouter } from './routes/realtime.js';
 import { createSyncRouter } from './routes/sync.js';
+import { createRoleLimitsRouter } from './routes/role-limits.js';
 import { createTenantRouter } from './routes/tenant.js';
 import { createUsersRouter } from './routes/users.js';
 
@@ -186,6 +187,7 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
       .route('/v1/devices', createDevicesRouter(deps))
       .route('/v1/users', createUsersRouter(deps))
       .route('/v1/tenant', createTenantRouter(deps))
+      .route('/v1/role-limits', createRoleLimitsRouter(deps))
       .route('/v1/sync', createSyncRouter(deps))
       .route('/v1/media', createMediaRouter(deps))
       .route('/v1/push', createPushRouter(deps))

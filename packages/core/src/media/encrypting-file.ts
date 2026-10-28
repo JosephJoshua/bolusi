@@ -15,7 +15,7 @@
 // PEAK MEMORY is one frame on the CHUNK and HASH paths (`readChunk` opens one frame; `hashFile` decrypts
 // frame-by-frame into an incremental digest). `decryptToBuffer` — used only by the render path to write
 // a transient plaintext temp `<Image>` can decode — returns the WHOLE plaintext; that is bounded by the
-// ≤ 300 KiB v0 photo cap, and a v1 video render must stream to the temp instead of buffering (06 §7).
+// photo cap. A video render streams to its temp with `decryptToFile` instead (one frame at a time).
 import {
   frameCountFor,
   MEDIA_FILE_FRAME_BYTES,
@@ -192,11 +192,31 @@ export class EncryptingMediaFile {
   }
 
   /**
+   * Decrypt the file into a PLAINTEXT file at `destPath`, one frame at a time — the video render path,
+   * where the player reads a transient temp and the clip is too big to hold in memory. A failed frame
+   * deletes the partial temp, so no half-decrypted file is ever left for a player to read.
+   */
+  async decryptToFile(path: string, destPath: string): Promise<void> {
+    const writer = await this.#io.openWrite(destPath);
+    try {
+      await this.#eachFrame(path, (chunk) => writer.write(chunk));
+    } catch (error) {
+      await writer.close();
+      await this.#io.delete(destPath);
+      throw error;
+    }
+    await writer.close();
+  }
+
+  /**
    * Open every frame in order, applying `onPlaintext` to each decrypted chunk. Reads the header base
    * once, drives the frame index + final-flag, and opens each on-disk frame under its derived nonce —
    * so a reordered / truncated / duplicated / cross-file-spliced frame throws here.
    */
-  async #eachFrame(path: string, onPlaintext: (chunk: Uint8Array) => void): Promise<void> {
+  async #eachFrame(
+    path: string,
+    onPlaintext: (chunk: Uint8Array) => void | Promise<void>,
+  ): Promise<void> {
     const onDiskSize = await this.#io.size(path);
     const plaintextSize = plaintextSizeFromOnDisk(onDiskSize);
     const totalFrames = frameCountFor(plaintextSize);
@@ -207,7 +227,7 @@ export class EncryptingMediaFile {
         const start = i * MEDIA_FILE_FRAME_BYTES;
         const length = Math.min(MEDIA_FILE_FRAME_BYTES, plaintextSize - start);
         const frame = await handle.read(onDiskFrameOffset(i), onDiskFrameLength(length));
-        onPlaintext(this.#cipher.openFrame(base, i, i === totalFrames - 1, frame));
+        await onPlaintext(this.#cipher.openFrame(base, i, i === totalFrames - 1, frame));
       }
     } finally {
       await handle.close();

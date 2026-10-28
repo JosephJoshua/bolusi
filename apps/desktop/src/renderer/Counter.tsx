@@ -1,6 +1,7 @@
-// The counter app's frame once someone is signed in: the sidebar, and the servisan board, the
-// intake page, Kas or Settings beside it. The same frame runs over the offline core and over the
-// seeded demo; what differs (who is here, the person menu, the sync line) comes in as props.
+// The counter app's frame once someone is signed in: the title bar (store, update, sync, who is
+// here), the sidebar's sections, and the servisan board, the intake page, Kas or Settings beside
+// them. The same frame runs over the offline core and over the seeded demo; what differs (who is
+// here, the person menu, the sync status) comes in as props.
 import { t } from '@bolusi/i18n';
 import { KasPage, MONEY_PERMISSION, MoneyRuntimeProvider, tm } from '@bolusi/modules/money/desktop';
 import {
@@ -12,12 +13,15 @@ import {
   type BoardFilters,
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
-import { AppShell, Avatar, Menu, Sidebar, Tooltip, type MenuItem } from '@bolusi/ui-web';
-import { Banknote, ChevronsUpDown, Settings, Wrench } from 'lucide-react';
+import { AppShell, Avatar, Menu, Sidebar, SidebarToggle, type MenuItem } from '@bolusi/ui-web';
+import { Banknote, ChevronDown, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { SettingsAccess } from './settings/access.js';
 import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
+import { DeviceSetupPage } from './setup/DeviceSetupPage.js';
+import { PrinterReminder } from './setup/PrinterReminder.js';
+import { BAR_CONTROL, TitleBar } from './TitleBar.js';
 import { UpdateNotice } from './updates.js';
 
 type Page =
@@ -25,7 +29,9 @@ type Page =
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
   | { readonly kind: 'kas' }
-  | { readonly kind: 'settings' };
+  | { readonly kind: 'settings'; readonly section?: 'computer' }
+  // The first-run setup of this PC (setup/DeviceSetupPage.tsx).
+  | { readonly kind: 'setup' };
 
 const SIDEBAR_KEY = 'bolusi.sidebar';
 const NARROW_PX = 1280;
@@ -82,6 +88,8 @@ export function Counter({
   settings = {},
   restoredDraft,
   onDraftChange,
+  setupPending = false,
+  onSetupDone,
 }: {
   readonly storeName: string;
   readonly person: CounterPerson;
@@ -90,19 +98,27 @@ export function Counter({
   readonly menuHeader?: ReactNode;
   /** What the person menu offers: switching to someone else, locking the screen. */
   readonly menuItems: readonly MenuItem[];
-  /** The sync line at the foot of the sidebar; absent in the demo, which has nothing to send. */
-  readonly sync?: ((compact: boolean) => ReactNode) | undefined;
+  /** The sync status in the title bar; absent in the demo, which has nothing to send. */
+  readonly sync?: ReactNode;
   /** Opens the sync panel, from a servisan the server refused a change on. */
   readonly onOpenSyncStatus?: (() => void) | undefined;
-  /** What Settings may do for this person besides the repair settings; the demo has none. */
+  /** What Settings may do for this person besides the repair settings; the demo has only staff. */
   readonly settings?: SettingsAccess | undefined;
   /** This person's unfinished intake, kept across a lock or a switch to someone else. */
   readonly restoredDraft: IntakeDraft | null;
   readonly onDraftChange: (draft: IntakeDraft | null) => void;
+  /** This PC's first-run setup waits for this person: it opens first. */
+  readonly setupPending?: boolean;
+  /** The setup was finished or put off; absent where there is none to record (the demo). */
+  readonly onSetupDone?: (() => void) | undefined;
 }): React.JSX.Element {
   // Someone who left an intake half done comes back to it, as on the phone.
   const [page, setPage] = useState<Page>(() =>
-    restoredDraft === null ? { kind: 'board' } : { kind: 'intake' },
+    setupPending
+      ? { kind: 'setup' }
+      : restoredDraft === null
+        ? { kind: 'board' }
+        : { kind: 'intake' },
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   // The queue and search the person was on are still there when they come back from an intake.
@@ -121,8 +137,26 @@ export function Counter({
     if (guard === null) proceed();
     else guard(proceed);
   };
+  // Each opening of Settings at a section is a fresh Settings, so it lands there again even when
+  // the person had moved to another section since.
+  const [settingsVisit, setSettingsVisit] = useState(0);
   const go = (next: Page): void => {
-    if (next.kind !== page.kind) leave(() => setPage(next));
+    // Settings opened at a section (the printer reminder) goes there even from Settings.
+    const toSection = next.kind === 'settings' && next.section !== undefined;
+    if (next.kind !== page.kind || toSection) {
+      leave(() => {
+        if (toSection) setSettingsVisit((n) => n + 1);
+        setPage(next);
+      });
+    }
+  };
+  // The core reads whom the setup waits for just after the session opens; it may land after this.
+  useEffect(() => {
+    if (setupPending) setPage({ kind: 'setup' });
+  }, [setupPending]);
+  const finishSetup = (): void => {
+    onSetupDone?.();
+    setPage(restoredDraft === null ? { kind: 'board' } : { kind: 'intake' });
   };
   // Settings opens from the person menu too, as on the phone. Switching person leaves Settings
   // as well; locking keeps everything as it is.
@@ -146,37 +180,44 @@ export function Counter({
     <AppShell
       testId="desktop.shell"
       collapsed={collapsed}
+      titleBar={
+        <TitleBar
+          storeName={storeName}
+          leading={
+            <SidebarToggle
+              collapsed={collapsed}
+              onToggle={toggleSidebar}
+              labels={{ collapse: t('core.nav.collapse'), expand: t('core.nav.expand') }}
+              tooltipSide="bottom"
+              tone="inverse"
+            />
+          }
+        >
+          <UpdateNotice />
+          {page.kind === 'setup' ? null : (
+            <PrinterReminder
+              recheck={page.kind}
+              onChoose={() => go({ kind: 'settings', section: 'computer' })}
+            />
+          )}
+          {sync}
+          <PersonMenu person={person} header={menuHeader} items={personMenu} />
+        </TitleBar>
+      }
       sidebar={
         <Sidebar
           label={t('core.nav.main')}
           collapsed={collapsed}
           onToggle={toggleSidebar}
-          toggleLabels={{ collapse: t('core.nav.collapse'), expand: t('core.nav.expand') }}
-          header={(compact) =>
-            compact ? (
-              <Tooltip label={storeName} side="right">
-                <span
-                  className="flex size-9 items-center justify-center rounded-sm bg-primary text-heading font-bold text-white"
-                  data-testid="desktop.store"
-                >
-                  {storeName.trim().charAt(0).toUpperCase()}
-                </span>
-              </Tooltip>
-            ) : (
-              <span
-                className="block break-words text-heading font-bold leading-tight text-text"
-                data-testid="desktop.store"
-              >
-                {storeName}
-              </span>
-            )
-          }
           nav={[
             {
               key: 'repair',
               label: tn('repair.board.title'),
               icon: Wrench,
-              active: page.kind !== 'settings' && !(page.kind === 'kas' && showsKas),
+              active:
+                page.kind === 'board' ||
+                page.kind === 'intake' ||
+                (page.kind === 'kas' && !showsKas),
               onSelect: () => go({ kind: 'board' }),
             },
             ...(showsKas
@@ -198,23 +239,20 @@ export function Counter({
               onSelect: () => go({ kind: 'settings' }),
             },
           ]}
-          footer={(compact) => (
-            <div className="flex flex-col gap-3">
-              <UpdateNotice compact={compact} />
-              {sync?.(compact)}
-              <PersonMenu
-                person={person}
-                compact={compact}
-                header={menuHeader}
-                items={personMenu}
-              />
-            </div>
-          )}
         />
       }
     >
-      {page.kind === 'settings' ? (
-        <SettingsPage person={person} access={settings} onRegisterLeaveGuard={registerLeaveGuard} />
+      {page.kind === 'setup' ? (
+        <DeviceSetupPage onDone={finishSetup} />
+      ) : page.kind === 'settings' ? (
+        <SettingsPage
+          key={`${page.section ?? 'settings'}.${settingsVisit}`}
+          person={person}
+          access={settings}
+          initialPage={page.section}
+          onOpenSetup={() => setPage({ kind: 'setup' })}
+          onRegisterLeaveGuard={registerLeaveGuard}
+        />
       ) : page.kind === 'kas' && showsKas ? (
         <KasPage now={Date.now} />
       ) : page.kind === 'intake' ? (
@@ -249,49 +287,45 @@ export function Counter({
 
 function PersonMenu({
   person,
-  compact,
   header,
   items,
 }: {
   readonly person: CounterPerson;
-  /** Only the face, in the collapsed sidebar; the tooltip names who it is. */
-  readonly compact: boolean;
   readonly header?: ReactNode;
   readonly items: readonly MenuItem[];
 }): React.JSX.Element {
+  // The bar gives the face and, when there is room, the name; the menu says who in full, with roles.
   return (
     <Menu
-      align="start"
-      tooltip={compact ? { label: person.name, side: 'right' } : undefined}
-      header={header}
+      align="end"
+      tooltip={{ label: person.name, side: 'bottom' }}
+      header={
+        <span className="flex max-w-64 flex-col gap-2">
+          <span className="flex flex-col">
+            <span className="break-words text-body font-semibold text-text">{person.name}</span>
+            {person.role === '' ? null : (
+              <span className="break-words text-small font-normal text-text-muted">
+                {person.role}
+              </span>
+            )}
+          </span>
+          {header}
+        </span>
+      }
       items={items}
       trigger={
-        compact ? (
-          <button
-            type="button"
-            aria-label={t('core.account.menu')}
-            data-testid="desktop.person"
-            className="flex w-full cursor-pointer justify-center rounded-sm p-1 hover:bg-black/5"
-          >
-            <Avatar userId={person.userId} name={person.name} size={32} />
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label={t('core.account.menu')}
-            data-testid="desktop.person"
-            className="flex w-full cursor-pointer items-center gap-3 rounded-sm p-2 text-left hover:bg-black/5"
-          >
-            <Avatar userId={person.userId} name={person.name} size={32} />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="break-words text-body font-semibold text-text">{person.name}</span>
-              {person.role === '' ? null : (
-                <span className="break-words text-small text-text-muted">{person.role}</span>
-              )}
-            </span>
-            <ChevronsUpDown size={16} aria-hidden className="shrink-0 text-text-muted" />
-          </button>
-        )
+        <button
+          type="button"
+          aria-label={t('core.account.menu')}
+          data-testid="desktop.person"
+          className={`${BAR_CONTROL} pl-1`}
+        >
+          <Avatar userId={person.userId} name={person.name} size={28} />
+          <span className="hidden max-w-40 truncate font-semibold text-chrome-text @min-[56rem]:inline">
+            {person.name}
+          </span>
+          <ChevronDown size={14} aria-hidden className="shrink-0" />
+        </button>
       }
     />
   );

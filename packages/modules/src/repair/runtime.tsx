@@ -27,6 +27,9 @@ import {
   type ThumbnailLoader,
   type ThumbnailRef,
   type ThumbnailState,
+  type VideoCapture,
+  type VideoMediaRef,
+  type VideoPlayback,
 } from '../screen-kit/index.js';
 
 /**
@@ -132,6 +135,12 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
    * web). Absent ⇒ this build cannot, and the photo viewer shows no share button.
    */
   readonly sharePhoto?: ((ref: ThumbnailRef) => Promise<'done' | 'failed'>) | undefined;
+  /** Record the customer's ownership video. Absent ⇒ this device cannot (a PC with no webcam). */
+  readonly recordVideo?: VideoCapture | undefined;
+  /** Play a stored clip. Absent ⇒ this build cannot, and the clip shows without a play button. */
+  readonly playVideo?: VideoPlayback | undefined;
+  /** Whether a clip taken here is still kept: a restored intake draft can outlive its video. */
+  readonly videoKept?: ((ref: VideoMediaRef) => Promise<boolean>) | undefined;
   /** Pick a picture from the device's gallery (the store logo). Absent ⇒ this build cannot. */
   readonly pickPhoto?: PhotoCapture | undefined;
   /** Absent ⇒ this build cannot print, and no print action shows. */

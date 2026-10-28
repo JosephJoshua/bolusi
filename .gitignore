@@ -41,3 +41,6 @@ secrets.*
 
 # Private Claude-to-Codex transcript and memory archive (may contain secrets)
 .codex/claude-migration/
+
+# The Windows installer's icon is source, not build output.
+!/apps/desktop/build/

@@ -42,7 +42,7 @@ export interface MoneyEntriesTable {
   reason: string | null;
   /** What the customer handed over in cash, when the counter typed it, for the change. */
   tendered: number | null;
-  /** The count an owner's adjustment settles. */
+  /** The count an owner's adjustment settles; the payment a payment is recorded in place of. */
   relatedEntryId: string | null;
   createdBy: string;
   createdAt: number;

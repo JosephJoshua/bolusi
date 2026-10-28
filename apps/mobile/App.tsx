@@ -63,6 +63,7 @@ import type { EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
+import { LimitsScreen } from './src/screens/staff/LimitsScreen.js';
 import { StaffScreen } from './src/screens/staff/StaffScreen.js';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
@@ -88,6 +89,8 @@ import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
 import type { SignatureSurface } from './src/media/SignatureHost.js';
 import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
+import type { VideoSurface } from './src/media/VideoHost.js';
+import { VideoScreen } from './src/media/VideoScreen.js';
 import type { ScanSurface } from './src/media/ScanHost.js';
 import { ScanScreen } from './src/media/ScanScreen.js';
 import type { DeviceInfo, MutablePushCategory } from '@bolusi/device/models/settings/model';
@@ -162,6 +165,8 @@ export interface AppProps {
   readonly signature?: SignatureSurface | null;
   /** The code scanner while it looks for a barcode or QR code, from `useScanHost`; like `capture`. */
   readonly scan?: ScanSurface | null;
+  /** The video recorder or player while one is open, from `useVideoHost`; like `capture`. */
+  readonly video?: VideoSurface | null;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -593,6 +598,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const captureSurface = props.capture ?? null;
   const signatureSurface = props.signature ?? null;
   const scanSurface = props.scan ?? null;
+  const videoSurface = props.video ?? null;
   const goBack = useCallback((): boolean => {
     if (accountMenu) {
       setAccountMenu(false);
@@ -612,6 +618,10 @@ export default function App(props: AppProps): React.JSX.Element {
     }
     if (scanSurface !== null) {
       scanSurface.onBack();
+      return true;
+    }
+    if (videoSurface !== null) {
+      videoSurface.onBack();
       return true;
     }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
@@ -662,7 +672,16 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, scanSurface, syncReturn]);
+  }, [
+    accountMenu,
+    zone,
+    enrollment,
+    captureSurface,
+    signatureSurface,
+    scanSurface,
+    videoSurface,
+    syncReturn,
+  ]);
 
   // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
   useEffect(() => {
@@ -914,6 +933,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const capture = zone.kind === 'shell' ? captureSurface : null;
   const signing = zone.kind === 'shell' ? signatureSurface : null;
   const scanning = zone.kind === 'shell' ? scanSurface : null;
+  const filming = zone.kind === 'shell' ? videoSurface : null;
   const modal =
     capture !== null ? (
       <CaptureScreen
@@ -954,11 +974,28 @@ export default function App(props: AppProps): React.JSX.Element {
         avatar={<View testID="scan-no-avatar" />}
         onBack={scanning.onBack}
       />
+    ) : filming !== null ? (
+      <VideoScreen
+        title={filming.title}
+        hint={filming.hint}
+        state={filming.state}
+        view={filming.view}
+        maxMs={filming.maxMs}
+        syncChip={modalSyncChip}
+        avatar={<View testID="video-no-avatar" />}
+        onStart={filming.onStart}
+        onStop={filming.onStop}
+        onRetake={filming.onRetake}
+        onUse={filming.onUse}
+        onRetry={filming.onRetry}
+        onBack={filming.onBack}
+      />
     ) : null;
 
   return (
     <View testID="bolusi-app-shell" style={shellStyle}>
-      <StatusBar style="auto" />
+      {/* Dark icons: the app is light-only (app.config.ts), even when the phone is in dark mode. */}
+      <StatusBar style="dark" />
       <View
         // A new system font size remounts the screens. Re-measuring in place does not hold on
         // Android: the next React commit brings back its own text nodes, measured at the old size,
@@ -1179,6 +1216,9 @@ export default function App(props: AppProps): React.JSX.Element {
                     props.canUnlock || props.canReset ? () => setRoute('staffPins') : undefined
                   }
                   onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
+                  onOpenLimits={
+                    props.staff?.canSetLimits === true ? () => setRoute('limits') : undefined
+                  }
                   lockedStaffCount={
                     [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
                       (id) => id !== currentUser.id,
@@ -1364,6 +1404,19 @@ export default function App(props: AppProps): React.JSX.Element {
                         }
                       : undefined
                   }
+                  onClose={() => setRoute('settings')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'limits' && props.staff !== undefined && currentUser !== null) {
+              // The store owner's "Batas wewenang": a limited role's amounts here, online.
+              const staff = props.staff;
+              return (
+                <LimitsScreen
+                  actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
+                  load={staff.load}
+                  onSave={staff.onSetLimits}
                   onClose={() => setRoute('settings')}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1636,6 +1689,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'uncollectedDays',
   'staff',
   'staffPins',
+  'limits',
   'printSettings',
   'printPaper',
   'parts',
@@ -1696,7 +1750,8 @@ const styles = StyleSheet.create({
    * 48 dp figure. It moved because surfaces mounted OUTSIDE this shell — the ConfirmSheet overlay —
    * need the same measurement and were silently missing it (task 205).
    */
-  shell: { flex: 1, paddingBottom: NAV_BAR_INSET },
+  // Painted, so the bands under the status and navigation bars match the screens.
+  shell: { flex: 1, paddingBottom: NAV_BAR_INSET, backgroundColor: color.surface },
   zone: { flex: 1 },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
   // The menu's rows run edge to edge, like every list.

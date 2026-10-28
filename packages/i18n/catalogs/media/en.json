@@ -15,7 +15,9 @@
   "permission": {
     "camera": "Allow the app to use the camera to take photos.",
     "cameraDeniedTitle": "Camera is not allowed",
-    "cameraDeniedBody": "Open your phone Settings, find this app, then turn on the Camera permission."
+    "cameraDeniedBody": "Open your phone Settings, find this app, then turn on the Camera permission.",
+    "videoDeniedTitle": "Camera or microphone not allowed",
+    "videoDeniedBody": "Open the phone’s Settings, find this app, then turn on Camera and Microphone."
   },
   "storage": {
     "lowWarning": "Storage is getting low. Old photos that have already been sent will be cleaned up.",
@@ -31,5 +33,16 @@
   "scan": {
     "title": "Scan code",
     "hint": "Point the camera at a barcode or QR code."
+  },
+  "video": {
+    "start": "Start recording",
+    "stop": "Stop recording",
+    "retake": "Record again",
+    "use": "Use this video",
+    "time": "{elapsed} / {max}",
+    "refusedBody": "Can’t record because storage is almost full. Free up space, then try again.",
+    "unavailableTitle": "The video isn’t on this phone yet",
+    "unavailableBody": "It hasn’t been sent from the phone that recorded it. Try again later.",
+    "tooLarge": "The video is too big. Record a shorter one."
   }
 }

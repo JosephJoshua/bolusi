@@ -21,8 +21,17 @@
 // projection engine takes for its schema-independent reads.
 import { sql, type Kysely } from 'kysely';
 
+import { parseLimitAmounts, type LimitAmounts } from './limits.js';
+
 /** `meta_kv` key holding the device's tenant id (10-db §9.1). */
 export const TENANT_ID_META_KEY = 'tenantId';
+
+/**
+ * `meta_kv` key holding the device's bound store id (10-db §9.1 names it). Written once by
+ * enrollment from the ENROLL RESPONSE, never by `applyBundle`: §7.4's store binding is irreversible,
+ * and a bundle refresh must not be able to silently re-bind the device's store (bundle-apply.ts).
+ */
+export const STORE_ID_META_KEY = 'storeId';
 
 /** A `users_directory` row, authz-relevant columns only (10-db §9.5). */
 export interface DirectoryUser {
@@ -44,6 +53,11 @@ export interface DirectoryRole {
    * exactly the evaluations that actually read it (§5.2 step 7).
    */
   readonly permissionIdsJson: string;
+  /**
+   * A limited role's amounts by store (limits.ts); a store with none set is Rp 0 there. Null or
+   * absent: the role is free of limits (the owners).
+   */
+  readonly limits?: ReadonlyMap<string, LimitAmounts> | null | undefined;
 }
 
 /** A `user_roles_directory` row — the `UserRoleGrant` tuple (§5.1, 01-domain-model §4.3). */
@@ -96,12 +110,28 @@ export async function loadDirectorySnapshot<DB>(db: Kysely<DB>): Promise<Directo
     users.set(row.id, { status: row.status });
   }
 
-  const roleRows = await sql<{ id: string; scopeType: string; permissionIds: string }>`
-    SELECT id, scope_type AS "scopeType", permission_ids AS "permissionIds" FROM roles_directory
+  // The bundle carries a limited role's amounts at this device's store only (the mirror's
+  // `limits`, NULL for a role free of limits).
+  const storeRows = await sql<{ value: string }>`
+    SELECT value FROM meta_kv WHERE key = ${STORE_ID_META_KEY}
+  `.execute(db);
+  const storeId = storeRows.rows[0]?.value ?? null;
+  const roleRows = await sql<{
+    id: string;
+    scopeType: string;
+    permissionIds: string;
+    limits: string | null;
+  }>`
+    SELECT id, scope_type AS "scopeType", permission_ids AS "permissionIds", limits
+    FROM roles_directory
   `.execute(db);
   const roles = new Map<string, DirectoryRole>();
   for (const row of roleRows.rows) {
-    roles.set(row.id, { scopeType: row.scopeType, permissionIdsJson: row.permissionIds });
+    roles.set(row.id, {
+      scopeType: row.scopeType,
+      permissionIdsJson: row.permissionIds,
+      limits: limitsAtStore(row.limits, storeId),
+    });
   }
 
   const grantRows = await sql<{ userId: string; roleId: string; storeId: string | null }>`
@@ -118,6 +148,25 @@ export async function loadDirectorySnapshot<DB>(db: Kysely<DB>): Promise<Directo
   }
 
   return { tenantId, users, roles, grantsByUser };
+}
+
+/**
+ * A mirror row's `limits` as the evaluator reads it. A limited role whose stored amounts cannot be
+ * read is still limited, at Rp 0: a corrupt row must never lift the limit.
+ */
+function limitsAtStore(
+  json: string | null,
+  storeId: string | null,
+): ReadonlyMap<string, LimitAmounts> | null {
+  if (json === null) return null;
+  if (storeId === null) return new Map();
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    parsed = null;
+  }
+  return new Map([[storeId, parseLimitAmounts(parsed)]]);
 }
 
 /** A `DirectorySource` over a Kysely handle to the client DB (10-db §9.5). */

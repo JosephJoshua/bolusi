@@ -79,19 +79,22 @@ test('provisions tenant + stores + owner (argon2id verifier, no PIN) + system ac
     .executeTakeFirst();
   expect(chain?.deviceId).toBe(result.systemDeviceId);
 
-  // Default roles seeded (incl. the repair cashier/technician presets); the owner holds main_owner tenant-wide; a tenant_op_counter exists.
+  // Default roles seeded (incl. the repair cashier/technician/manager presets, only the manager
+  // limited); the owner holds main_owner tenant-wide; a tenant_op_counter exists.
   const roles = await h.idb.db
     .selectFrom('roles')
-    .select('name')
+    .select(['name', 'limited'])
     .where('tenantId', '=', result.tenantId)
     .execute();
   expect(roles.map((r) => r.name).sort()).toEqual([
     'cashier',
     'main_owner',
+    'manager',
     'staff',
     'store_owner',
     'technician',
   ]);
+  expect(roles.filter((r) => r.limited).map((r) => r.name)).toEqual(['manager']);
   const counter = await h.idb.db
     .selectFrom('tenantOpCounters')
     .select('tenantId')

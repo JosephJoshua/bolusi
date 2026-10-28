@@ -19,6 +19,7 @@
 // has the documented consequence that revocations are EVENTUALLY effective — physical repossession
 // is the urgent-revocation control, not software.
 import {
+  evaluateAllowance,
   evaluatePermission,
   computeEffectiveSet,
   type EffectiveSet,
@@ -30,6 +31,7 @@ import {
   type DirectorySnapshot,
   type DirectorySource,
 } from './directory.js';
+import type { PermissionAllowance } from './limits.js';
 import type { PermissionRegistry } from './registry.js';
 
 /** Memo key. A NUL separator cannot occur in a UUIDv7, so no `(userId, storeId)` pair can collide. */
@@ -121,6 +123,17 @@ export class PermissionEvaluator {
   hasPermission(query: PermissionQuery): PermissionResult {
     if (!this.primed) return { allowed: false, reason: 'evaluation_error' };
     return evaluatePermission(this.registry, this.snapshot, query, (userId, storeId) =>
+      this.effectiveSetFor(userId, storeId),
+    );
+  }
+
+  /**
+   * How far the user may use a permission (limits.ts): `hasPermission`'s answer plus the limit a
+   * limited role's store set on it. Same snapshot, same fail-closed rule.
+   */
+  allowance(query: PermissionQuery): PermissionAllowance {
+    if (!this.primed) return { allowed: false };
+    return evaluateAllowance(this.registry, this.snapshot, query, (userId, storeId) =>
       this.effectiveSetFor(userId, storeId),
     );
   }

@@ -5,3 +5,11 @@
    module's desktop screens (repair, money, the shared screen kit). */
 @source '../../../../packages/ui-web/src';
 @source '../../../../packages/modules/src/*/desktop/*.tsx';
+
+/* Dialogs, menus and tooltips can open over the title bar's drag area; a click on them must stay a
+ * click, not start moving the window. */
+[role='dialog'],
+[role='alertdialog'],
+[data-radix-popper-content-wrapper] {
+  -webkit-app-region: no-drag;
+}

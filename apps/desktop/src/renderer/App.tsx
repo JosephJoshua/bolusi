@@ -33,7 +33,13 @@ import type { PcCapture } from './capture.js';
 import { createCoreRepairRuntime } from './core-runtime.js';
 import type { SettingsAccess } from './settings/access.js';
 import { Counter } from './Counter.js';
-import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from './demo.js';
+import {
+  DEMO_PEOPLE,
+  DEMO_STORE_NAME,
+  demoRuntimeFor,
+  demoStaffFor,
+  type DemoPerson,
+} from './demo.js';
 import { SyncStatusButton } from './SyncStatus.js';
 import { useCore } from './use-core.js';
 
@@ -298,12 +304,16 @@ function LiveCounter({
   const grants = JSON.stringify({
     permissions: session.permissions,
     colleaguePermissions: session.colleaguePermissions,
+    limits: session.limits,
   });
   const runtime = useMemo(
     () =>
       createCoreRepairRuntime({
         client,
-        session: JSON.parse(grants) as Pick<SessionView, 'permissions' | 'colleaguePermissions'>,
+        session: JSON.parse(grants) as Pick<
+          SessionView,
+          'permissions' | 'colleaguePermissions' | 'limits'
+        >,
         userId,
         storeName,
         capture,
@@ -355,11 +365,10 @@ function LiveCounter({
             onSelect: () => void client.call('session.lock').catch(() => undefined),
           },
         ]}
-        sync={(compact) =>
+        sync={
           state.sync === null ? null : (
             <SyncStatusButton
               input={state.sync}
-              compact={compact}
               open={syncOpen}
               onOpenChange={setSyncOpen}
               onSyncNow={() => void client.call('sync.requestManual').catch(() => undefined)}
@@ -371,6 +380,8 @@ function LiveCounter({
         settings={settings}
         restoredDraft={restoredDraft}
         onDraftChange={onDraftChange}
+        setupPending={state.setupFor === userId}
+        onSetupDone={() => void client.call('device.finishSetup').catch(() => undefined)}
       />
     </RepairRuntimeProvider>
   );
@@ -387,7 +398,7 @@ function useSettingsAccess(
   session: SessionView,
   userId: string,
 ): SettingsAccess {
-  const { canUnlock, canReset, canManageStaff, tenantAdmin, pinRows } = session;
+  const { canUnlock, canReset, canManageStaff, canSetLimits, tenantAdmin, pinRows } = session;
   // Colleagues whose PIN is locked here, from the same lockout machine as the PIN pad.
   const lockedCount = Object.entries(pinRows).filter(
     ([id, row]) => id !== userId && derivePinAuthState(row) === 'locked_out',
@@ -403,6 +414,8 @@ function useSettingsAccess(
           onCreate: (draft) => call<{ readonly userId: string }>('staff.create', draft),
           onUpdate: (memberId, change) => call<void>('staff.update', memberId, change),
           onSetActive: (memberId, active) => call<void>('staff.setActive', memberId, active),
+          canSetLimits,
+          onSetLimits: (roleId, limits) => call<void>('staff.setLimits', roleId, limits),
         }
       : undefined;
     return {
@@ -422,7 +435,17 @@ function useSettingsAccess(
       staff,
       device,
     };
-  }, [client, userId, canUnlock, canReset, canManageStaff, tenantAdmin, lockedCount, device]);
+  }, [
+    client,
+    userId,
+    canUnlock,
+    canReset,
+    canManageStaff,
+    canSetLimits,
+    tenantAdmin,
+    lockedCount,
+    device,
+  ]);
 }
 
 function demoNameOf(userId: string): string | null {
@@ -435,6 +458,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
   // Each person's intake waits for them, as the core's workspaces do.
   const [drafts, setDrafts] = useState<Readonly<Record<string, IntakeDraft | null>>>({});
   const runtime = useMemo(() => demoRuntimeFor(person, capture), [person, capture]);
+  const settings = useMemo((): SettingsAccess => ({ staff: demoStaffFor(person) }), [person]);
   const onDraftChange = useCallback(
     (draft: IntakeDraft | null) => setDrafts((all) => ({ ...all, [person.userId]: draft })),
     [person.userId],
@@ -462,6 +486,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
         }))}
         restoredDraft={drafts[person.userId] ?? null}
         onDraftChange={onDraftChange}
+        settings={settings}
       />
     </RepairRuntimeProvider>
   );

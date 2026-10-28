@@ -177,6 +177,29 @@ describe('SEC-MEDIA-09 captured media files are ciphertext at rest and decrypt t
   });
 });
 
+describe('decryptToFile streams a video to a plaintext render temp', () => {
+  it('a multi-frame file decrypts to the exact plaintext at the destination', async () => {
+    const clip = jpeg(3 * MEDIA_FILE_FRAME_BYTES + 123);
+    await enc.encryptToFile('doc/v.mp4', clip);
+    await enc.decryptToFile('doc/v.mp4', 'render/v.mp4');
+    expect([...io.files.get('render/v.mp4')!]).toEqual([...clip]);
+    // The source stays sealed.
+    expect(await enc.hashFile('doc/v.mp4')).toBe(sha256Hex(clip));
+  });
+
+  it('a tampered LAST frame throws and leaves no partial temp — with a positive control', async () => {
+    const clip = jpeg(2 * MEDIA_FILE_FRAME_BYTES + 50);
+    await enc.encryptToFile('doc/v.mp4', clip);
+    const onDisk = io.files.get('doc/v.mp4')!;
+    onDisk[onDisk.byteLength - 1] = (onDisk[onDisk.byteLength - 1] ?? 0) ^ 0x01;
+    await expect(enc.decryptToFile('doc/v.mp4', 'render/v.mp4')).rejects.toThrow();
+    expect(io.files.has('render/v.mp4')).toBe(false);
+    await enc.encryptToFile('doc/w.mp4', clip);
+    await enc.decryptToFile('doc/w.mp4', 'render/w.mp4');
+    expect(io.files.get('render/w.mp4')?.byteLength).toBe(clip.byteLength);
+  });
+});
+
 describe('SEC-MEDIA-09 STRUCTURAL tamper of a multi-frame file fails LOUD (STREAM binding)', () => {
   // Two full frames + a partial third, so frame boundaries are exact and a swap/dup/truncate is clean.
   const PHOTO = jpeg(2 * MEDIA_FILE_FRAME_BYTES + 4096);

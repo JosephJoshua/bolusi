@@ -35,7 +35,10 @@ export type { RepairMediaSeams };
  */
 export function repairMediaSeamsFor(
   media: MediaClient | null,
-  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature' | 'loadModelPhoto'>,
+  capture: Pick<
+    RepairMediaSeams,
+    'capturePhoto' | 'captureSignature' | 'loadModelPhoto' | 'recordVideo' | 'playVideo'
+  >,
   share?: SharePlatform,
   pickPhoto?: PhotoCapture,
 ): RepairMediaSeams {
@@ -43,6 +46,7 @@ export function repairMediaSeamsFor(
   return {
     ...capture,
     loadThumbnail,
+    videoKept: (ref) => (media === null ? Promise.resolve(false) : media.hasLocal(ref.mediaId)),
     ...(pickPhoto === undefined ? {} : { pickPhoto }),
     ...(media === null || share === undefined
       ? {}

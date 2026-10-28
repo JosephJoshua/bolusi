@@ -32,6 +32,9 @@ import { respondError } from '../errors.js';
 /** 10 MiB cap (api/03-media §3.1) — v0 headroom over the ≤ 300 KiB photo contract. */
 export const MEDIA_MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10,485,760
 
+/** A video clip's cap, shared with the devices so they refuse a clip the server would. */
+export { VIDEO_MAX_SIZE_BYTES } from '@bolusi/schemas';
+
 /** Server-dictated chunk size, pinned (api/03-media §4). */
 export const MEDIA_CHUNK_SIZE = 262_144; // 256 KiB
 

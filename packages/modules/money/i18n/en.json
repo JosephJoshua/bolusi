@@ -22,6 +22,7 @@
     "tenderedTooLow": "The cash received is less than the payment.",
     "paymentNotFound": "This payment wasn’t found.",
     "alreadyVoided": "This payment is already cancelled.",
+    "replacementNotFound": "Its replacement payment wasn’t found.",
     "refundAboveCredit": "That’s more than the customer overpaid. Ask an owner.",
     "notCharged": "The bill isn’t recorded yet. Ask an owner to give the money back.",
     "refundAbovePaid": "That’s more than the customer paid.",
@@ -30,7 +31,8 @@
     "countNotFound": "This cash count wasn’t found.",
     "countSettled": "This cash count is already settled.",
     "countSuperseded": "There is a newer cash count. Settle the latest difference.",
-    "differenceChanged": "The difference has changed. Check it again before settling."
+    "differenceChanged": "The difference has changed. Check it again before settling.",
+    "overLimit": "Over your limit. Ask a store owner."
   },
   "method": {
     "cash": "Cash"

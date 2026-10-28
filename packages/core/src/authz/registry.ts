@@ -12,7 +12,8 @@
 // unresolvable id forever — DENY `unknown_permission` on every call, a permanent silent outage
 // dressed as an authorization decision. Failing the boot is the loud version of the same fact.
 //
-// Platform-free: this file imports nothing (08-stack-and-repo §3.3).
+// Platform-free: this file imports only its sibling authz types (08-stack-and-repo §3.3).
+import type { LimitKind } from './limits.js';
 
 /** Which scope a permission's check evaluates in (§3.1). Bound to the PERMISSION, not the command. */
 export type PermissionScope = 'tenant' | 'store';
@@ -53,6 +54,11 @@ export interface PermissionEntry {
    * fall back to it when a catalog key is missing.
    */
   readonly description: string;
+  /**
+   * The kind of limit a limited role's store sets on this permission (limits.ts): an amount the
+   * customer pays less, gets back or owes. Absent: holding it is all or nothing.
+   */
+  readonly limit?: LimitKind | undefined;
 }
 
 /** What a module manifest declares per permission (§3.2). The id is the map KEY. */
@@ -250,6 +256,7 @@ export function assemblePermissionRegistry(
         scope: declaration.scope,
         isDangerous: declaration.isDangerous,
         description: declaration.description,
+        ...(declaration.limit === undefined ? {} : { limit: declaration.limit }),
       });
     }
   }

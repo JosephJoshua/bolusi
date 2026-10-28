@@ -84,6 +84,9 @@ export type DevicePrintersState =
       readonly chosen: string | null;
     };
 
+/** Every screen showing a PC's printers, so a choice made in one is read again by the others. */
+const printerReaders = new WeakMap<DevicePrinters, Set<() => void>>();
+
 /**
  * The device's printers for its settings screen: the list as the system has it now, the one chosen,
  * a pick that saves at once, and a reload for a printer plugged in after the screen opened.
@@ -111,6 +114,7 @@ export function useDevicePrinters(printers: DevicePrinters | undefined): {
       live = false;
     };
   }, [printers, attempt]);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const choose = useCallback(
     async (name: string): Promise<void> => {
       if (printers === undefined || state.kind !== 'ready') return;
@@ -121,10 +125,20 @@ export function useDevicePrinters(printers: DevicePrinters | undefined): {
       } catch {
         // Not saved: show the printer prints will still use.
         setState(before);
+        return;
       }
+      for (const read of printerReaders.get(printers) ?? []) if (read !== reload) read();
     },
-    [printers, state],
+    [printers, state, reload],
   );
-  const reload = useCallback(() => setAttempt((n) => n + 1), []);
+  useEffect(() => {
+    if (printers === undefined) return;
+    const readers = printerReaders.get(printers) ?? new Set();
+    printerReaders.set(printers, readers);
+    readers.add(reload);
+    return () => {
+      readers.delete(reload);
+    };
+  }, [printers, reload]);
   return { state, choose, reload };
 }

@@ -570,6 +570,16 @@ export interface RepairTickets {
   updatedAt: Int8;
 }
 
+export interface RoleLimits {
+  amount: Int8;
+  kind: string;
+  roleId: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface RolePermissions {
   permissionId: string;
   roleId: string;
@@ -580,6 +590,7 @@ export interface Roles {
   createdAt: Int8;
   id: string;
   isSystemDefault: Generated<boolean>;
+  limited: Generated<boolean>;
   name: string;
   scopeType: string;
   tenantId: string;
@@ -699,6 +710,7 @@ export interface DB {
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;
+  roleLimits: RoleLimits;
   rolePermissions: RolePermissions;
   roles: Roles;
   stores: Stores;

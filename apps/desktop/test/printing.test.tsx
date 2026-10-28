@@ -213,26 +213,62 @@ describe('printing on the counter PC', () => {
   });
 });
 
+describe('the printer reminder', () => {
+  it('says no printer is chosen until one is, and leads to where it is chosen', async () => {
+    setBridge(fakePrinters());
+    renderApp();
+    const reminder = await screen.findByTestId('desktop.printerReminder');
+    expect(reminder.getAttribute('aria-label')).toBe('Printer belum dipilih');
+    fireEvent.click(reminder);
+    await screen.findByTestId('desktop.settings.computer');
+    // Gone as soon as the choice is saved, still in Settings.
+    fireEvent.click(await screen.findByText('EPSON LX-310'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.printerReminder')).toBeNull());
+  });
+
+  it("opens this computer's settings again after the person moved to another section", async () => {
+    setBridge(fakePrinters());
+    renderApp();
+    fireEvent.click(await screen.findByTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
+    fireEvent.click(byTestId('desktop.settings.nav.account'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.settings.computer')).toBeNull());
+    fireEvent.click(byTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
+  });
+
+  it('says when the chosen printer is gone', async () => {
+    setBridge(fakePrinters({ chosen: 'EPSON LX-300', installed: ['EPSON LX-310'] }));
+    renderApp();
+    expect((await screen.findByTestId('desktop.printerReminder')).getAttribute('aria-label')).toBe(
+      'Printer tidak ditemukan',
+    );
+  });
+
+  it('stays out of the way once a printer is ready', async () => {
+    setBridge(fakePrinters({ chosen: 'EPSON LX-310' }));
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('desktop.printerReminder')).toBeNull();
+  });
+});
+
 describe('updates', () => {
-  it('offers a downloaded version in the sidebar and shows the installed one in Settings', async () => {
-    window.innerWidth = 1440;
+  it('offers a downloaded version in the title bar and shows the installed one in Settings', async () => {
     const updates = fakeUpdates({ kind: 'ready', version: '0.2.0' });
     setBridge(fakePrinters(), updates);
     renderApp();
     const notice = await screen.findByTestId('desktop.update');
-    expect(notice.textContent).toContain('Versi baru siap');
-    fireEvent.click(screen.getByRole('button', { name: 'Pasang sekarang' }));
+    expect(notice.getAttribute('aria-label')).toBe('Versi baru siap');
+    // Installing restarts the app, so the notice opens a menu rather than installing on a click.
+    fireEvent.pointerDown(notice, { button: 0, pointerType: 'mouse' });
+    expect(updates.install).not.toHaveBeenCalled();
+    expect(screen.getByText('Terpasang sendiri saat aplikasi ditutup.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pasang sekarang' }));
     expect(updates.install).toHaveBeenCalledTimes(1);
     await openSettings();
     expect((await screen.findByTestId('desktop.version')).textContent).toBe('0.1.0');
-  });
-
-  it('keeps the offer as one labelled icon in the narrow sidebar', async () => {
-    window.innerWidth = 1100;
-    setBridge(fakePrinters(), fakeUpdates({ kind: 'ready', version: '0.2.0' }));
-    renderApp();
-    const icon = await screen.findByTestId('desktop.update');
-    expect(icon.getAttribute('aria-label')).toBe('Versi baru siap: Pasang sekarang');
   });
 
   it('shows nothing while there is nothing to install', async () => {

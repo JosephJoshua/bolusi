@@ -36,6 +36,9 @@ export type RepairMediaSeams = Pick<
   | 'sharePhoto'
   | 'loadModelPhoto'
   | 'pickPhoto'
+  | 'recordVideo'
+  | 'playVideo'
+  | 'videoKept'
 >;
 
 export interface RepairRuntimeDeps {

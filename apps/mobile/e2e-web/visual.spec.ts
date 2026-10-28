@@ -76,13 +76,13 @@ const MATRIX: readonly Row[] = [
   // Sync-status — healthy / saved-here / photos-pending / offline / actively-syncing / needs-attention.
   { screen: 'sync-status', state: 'allSent', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'savedHere', testId: 'sync-counter-ops' },
-  // task 147: ops sent, 3 photos queued. The headline reads "Foto belum terkirim" (Photos not sent
+  // task 147: ops sent, 3 photos queued. The headline reads "Foto & video belum terkirim" (Photos and videos not sent
   // yet), NOT "Semua sudah terkirim" — the exact string the browser lane now witnesses over the counter.
   {
     screen: 'sync-status',
     state: 'photosPending',
     testId: 'sync-counter-media',
-    text: 'Foto belum terkirim',
+    text: 'Foto & video belum terkirim',
   },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
   // task 144 item 5: the loop actively pushing — the fifth chip state, previously never screenshotted.

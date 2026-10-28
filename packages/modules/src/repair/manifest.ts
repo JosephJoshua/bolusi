@@ -138,6 +138,7 @@ export const repairModuleManifest = {
       isDangerous: true,
       description:
         'Can cancel a repair and set what the customer pays for it. The device stays in the store until it is handed back.',
+      limit: 'priceDrop',
     },
     [REPAIR_PERMISSION.handover]: {
       scope: 'store',
@@ -160,6 +161,7 @@ export const repairModuleManifest = {
       scope: 'store',
       isDangerous: true,
       description: "Can lower a repair's price with a discount, at intake or later.",
+      limit: 'priceDrop',
     },
     [REPAIR_PERMISSION.setCancelFees]: {
       scope: 'store',
@@ -171,6 +173,7 @@ export const repairModuleManifest = {
       // Recording less than the customer paid is how a down payment would go missing.
       isDangerous: true,
       description: 'Can change or remove a down payment already recorded on a repair.',
+      limit: 'priceDrop',
     },
     [REPAIR_PERMISSION.setPrintSettings]: {
       scope: 'store',

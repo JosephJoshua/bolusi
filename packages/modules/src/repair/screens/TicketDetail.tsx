@@ -95,6 +95,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
+import { TicketVideoSection } from './video.js';
 import {
   useRepairQuery,
   useRepairRuntime,
@@ -337,7 +338,7 @@ export function TicketDetail({
           current={ticket?.repairTypes ?? []}
           onDone={() => {
             closeStep();
-            setDone('repair.done.repairTypes');
+            setDone(tn('repair.done.repairTypes'));
           }}
         />
       );
@@ -792,6 +793,7 @@ export function TicketDetail({
           </InventoryRuntimeProvider>
         )}
         {photos.section}
+        <TicketVideoSection ticket={row} runner={runner} testID={`${testID}.video`} />
         {renderCondition(row)}
         <DeviceSpecs
           brand={row.deviceBrand}

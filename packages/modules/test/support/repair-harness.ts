@@ -4,7 +4,7 @@
 import { CamelCasePlugin, Kysely } from 'kysely';
 
 import { createClientDialect, runClientMigrations, type ClientDatabase } from '@bolusi/db-client';
-import type { MediaRef, SignedOperation } from '@bolusi/schemas';
+import type { MediaRef, SignedOperation, VideoRef } from '@bolusi/schemas';
 import { mulberry32, noblePort, randomBytes as prngBytes, opRowOf } from '@bolusi/test-support';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
@@ -37,6 +37,11 @@ const CASHIER_ROLE = 'role-cashier';
 const TECHNICIAN_ROLE = 'role-technician';
 const OWNER_ROLE = 'role-owner';
 const STORE_OWNER_ROLE = 'role-store-owner';
+const MANAGER_ROLE = 'role-manager';
+/** The manager's limits at the harness store (core authz/limits.ts). */
+export const MANAGER_LIMITS = { priceDrop: 50_000, refund: 30_000, credit: 100_000 } as const;
+// A fixed id, not one from the seeded generator: drawing another would shift every id after it.
+const MANAGER_ID = '0191e000-0000-7000-8000-00000000a11a';
 const P = REPAIR_PERMISSION;
 const M = MONEY_PERMISSION;
 const I = INVENTORY_PERMISSION;
@@ -54,8 +59,12 @@ export interface RepairHarness {
   readonly runtime: ModuleRuntime<ClientDatabase>;
   readonly db: Kysely<ClientDatabase>;
   readonly engine: ReturnType<typeof createProjectionEngine<ClientDatabase>>;
-  /** Judges an op by its type's rule against this device's records, as push ingestion would. */
-  readonly checkRule: (op: SignedOperation) => Promise<void>;
+  /** Judges an op by its type's rule against this device's records, as push ingestion would.
+   *  Everyone holds every permission with no limit, unless `withinLimit` says otherwise. */
+  readonly checkRule: (
+    op: SignedOperation,
+    withinLimit?: (userId: string, permissionId: string, amount: number) => Promise<boolean>,
+  ) => Promise<void>;
   readonly tenantId: string;
   readonly storeId: string;
   readonly deviceId: string;
@@ -72,6 +81,9 @@ export interface RepairHarness {
    * set the store's cancellation fees.
    */
   readonly storeOwnerId: string;
+  /** A Manajer: the counter's and the technician's work plus owners' decisions, within
+   *  {@link MANAGER_LIMITS}. */
+  readonly managerId: string;
   /** Run a repair command as `userId`. */
   run<K extends keyof typeof repairModule.commands>(
     command: K,
@@ -112,6 +124,8 @@ export interface RepairHarness {
   ownOps(): Promise<SignedOperation[]>;
   deliverPulled(op: SignedOperation, arrivalSeq: number): Promise<void>;
   photo(n: number): MediaRef;
+  /** An ownership video clip, signed like a photo. */
+  video(n: number): VideoRef;
   /** Moves the device's clock on, so changes after it are signed that much later. */
   advance(ms: number): void;
   close(): Promise<void>;
@@ -163,9 +177,15 @@ export async function openRepairHarness(
         Promise.resolve({
           tenantId,
           users: new Map(
-            [cashierId!, technicianId!, technician2Id!, zeroUserId!, ownerId!, storeOwnerId!].map(
-              (id) => [id, { status: 'active' as const }],
-            ),
+            [
+              cashierId!,
+              technicianId!,
+              technician2Id!,
+              zeroUserId!,
+              ownerId!,
+              storeOwnerId!,
+              MANAGER_ID,
+            ].map((id) => [id, { status: 'active' as const }]),
           ),
           roles: new Map<string, DirectoryRole>([
             [
@@ -208,6 +228,33 @@ export async function openRepairHarness(
                 ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
               ]),
             ],
+            [
+              MANAGER_ROLE,
+              {
+                ...role([
+                  P.read,
+                  P.intake,
+                  P.work,
+                  P.assign,
+                  P.quoteChange,
+                  P.handover,
+                  P.cancel,
+                  P.discount,
+                  P.correctDownPayment,
+                  P.warrantyException,
+                  M.read,
+                  M.receive,
+                  M.moveCash,
+                  M.countCash,
+                  M.refund,
+                  M.voidPayment,
+                  M.extendCredit,
+                  I.read,
+                  I.useParts,
+                ]),
+                limits: new Map([[storeId, MANAGER_LIMITS]]),
+              },
+            ],
           ]),
           grantsByUser: new Map<string, readonly DirectoryGrant[]>([
             [cashierId!, [{ roleId: CASHIER_ROLE, storeId }]],
@@ -216,6 +263,7 @@ export async function openRepairHarness(
             [zeroUserId!, []],
             [ownerId!, [{ roleId: OWNER_ROLE, storeId: null }]],
             [storeOwnerId!, [{ roleId: STORE_OWNER_ROLE, storeId }]],
+            [MANAGER_ID, [{ roleId: MANAGER_ROLE, storeId }]],
           ]),
         }),
     },
@@ -246,13 +294,33 @@ export async function openRepairHarness(
   });
 
   let photoCounter = 0;
+  const photo = (n: number): MediaRef => {
+    photoCounter += 1;
+    const hex = (n * 1000 + photoCounter).toString(16).padStart(12, '0');
+    return {
+      mediaId: `01920000-0000-7000-8000-${hex}`,
+      // Digest-shaped (random hex), so size and compression measurements see a real hash.
+      sha256: bytesToHex(prngBytes(mulberry32(n * 1000 + photoCounter), 32)),
+      mime: 'image/jpeg',
+      type: 'image',
+      sizeBytes: 120_000,
+      capturedAt: clock.value,
+      location: null,
+      userId: cashierId!,
+      deviceId,
+    };
+  };
 
   return {
     runtime,
     db,
     engine,
-    checkRule: (op) =>
-      registry.checkOpRule(op, { db: db as never, holdsPermission: () => Promise.resolve(true) }),
+    checkRule: (op, withinLimit = () => Promise.resolve(true)) =>
+      registry.checkOpRule(op, {
+        db: db as never,
+        holdsPermission: () => Promise.resolve(true),
+        withinLimit,
+      }),
     tenantId,
     storeId,
     deviceId,
@@ -263,6 +331,7 @@ export async function openRepairHarness(
     zeroUserId: zeroUserId!,
     ownerId: ownerId!,
     storeOwnerId: storeOwnerId!,
+    managerId: MANAGER_ID,
     run: async (command, input, userId) => {
       const outcome = await runtime.commands.execute(
         repairModule.commands[command] as never,
@@ -337,22 +406,13 @@ export async function openRepairHarness(
     advance: (ms: number): void => {
       clock.value += ms;
     },
-    photo: (n: number): MediaRef => {
-      photoCounter += 1;
-      const hex = (n * 1000 + photoCounter).toString(16).padStart(12, '0');
-      return {
-        mediaId: `01920000-0000-7000-8000-${hex}`,
-        // Digest-shaped (random hex), so size and compression measurements see a real hash.
-        sha256: bytesToHex(prngBytes(mulberry32(n * 1000 + photoCounter), 32)),
-        mime: 'image/jpeg',
-        type: 'image',
-        sizeBytes: 120_000,
-        capturedAt: clock.value,
-        location: null,
-        userId: cashierId!,
-        deviceId,
-      };
-    },
+    photo,
+    video: (n: number): VideoRef => ({
+      ...photo(n),
+      mime: 'video/mp4',
+      type: 'video',
+      sizeBytes: 9_000_000,
+    }),
     close: async () => {
       await db.destroy();
       await driver.close();

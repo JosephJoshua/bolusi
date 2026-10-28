@@ -132,7 +132,7 @@ function useFollowSaved<T>(saved: T, onChange: (next: T) => void): void {
  * The bar at the bottom of a settings form: what the last save did, a way to drop the changes and
  * the save itself (Ctrl+S as well), which waits until something changed.
  */
-function SaveBar({
+export function SaveBar({
   dirty,
   busy,
   saved,
@@ -578,7 +578,7 @@ function SwitchOnly({
 }
 
 /** The save bar, pinned to the bottom of the settings view while the form scrolls. */
-function FormFooter({ children }: { readonly children: ReactNode }): React.JSX.Element {
+export function FormFooter({ children }: { readonly children: ReactNode }): React.JSX.Element {
   return (
     <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-auto flex flex-wrap items-center justify-end gap-3 border-t border-border bg-surface px-6 py-3">
       {children}
