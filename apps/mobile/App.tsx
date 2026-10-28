@@ -109,6 +109,11 @@ export interface AppProps {
   readonly usersError: string | null;
   readonly pinRow: (userId: string) => PinAttemptRow | null;
   readonly now: number;
+  /**
+   * The clock the repair screens count from (an intake's ready-by, how long a phone has waited).
+   * The system clock unless a preview pins its demo time.
+   */
+  readonly clock?: (() => number) | undefined;
   readonly session: { readonly userId: string } | null;
   readonly locked: boolean;
   /** Live operation-sync state. */
@@ -682,6 +687,8 @@ export default function App(props: AppProps): React.JSX.Element {
       props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
   const canSetCancelFees =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setCancelFees);
+  const canSetUncollectedDays =
+    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setUncollectedDays);
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
@@ -1021,6 +1028,17 @@ export default function App(props: AppProps): React.JSX.Element {
                             },
                           ]
                         : []),
+                      ...(canSetUncollectedDays
+                        ? [
+                            {
+                              icon: 'clock' as const,
+                              title: tn('repair.uncollected.title'),
+                              summary: tn('repair.uncollected.summary'),
+                              onOpen: () => setRoute('uncollectedDays'),
+                              testID: 'settings-uncollected-days',
+                            },
+                          ]
+                        : []),
                       ...(canSetPrintSettings
                         ? [
                             {
@@ -1055,6 +1073,7 @@ export default function App(props: AppProps): React.JSX.Element {
             if (
               (shellZone.route === 'intakeOptions' ||
                 shellZone.route === 'cancelFees' ||
+                shellZone.route === 'uncollectedDays' ||
                 shellZone.route === 'printSettings' ||
                 shellZone.route === 'printPaper') &&
               props.repair !== undefined
@@ -1194,7 +1213,7 @@ export default function App(props: AppProps): React.JSX.Element {
                 <RepairHome
                   runtime={props.repair}
                   // The clock itself, not this render's reading: an intake can sit open for hours.
-                  now={systemClock.now}
+                  now={props.clock ?? systemClock.now}
                   onRegisterSurfaceNav={registerSurfaceNav}
                   restoredDraft={restoredIntakeDraft}
                   onDraftChange={publishIntakeDraft}
@@ -1339,6 +1358,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
   'intakeOptions',
   'cancelFees',
+  'uncollectedDays',
   'staff',
   'staffPins',
   'printSettings',

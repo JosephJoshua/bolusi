@@ -24,6 +24,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  MessageCircle,
   Phone,
   Plus,
   Printer,
@@ -35,6 +36,12 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { hasRejectedOp, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import {
+  MESSAGE_ACTION_KEY,
+  customerMessageKind,
+  customerMessageUrl,
+  type CustomerMessageKind,
+} from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import {
   amountOwed,
@@ -47,6 +54,8 @@ import {
   staleStep,
   ticketActions,
   ticketStatus,
+  flagsUncollected,
+  uncollectedDays,
   workPhotos,
   type TicketAction,
   type StaleStep,
@@ -55,7 +64,12 @@ import {
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import {
+  useRepairQuery,
+  useRepairRuntime,
+  useStoreDisplayName,
+  useUncollectedLimit,
+} from '../runtime.js';
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
 import {
@@ -122,6 +136,8 @@ interface LoadedTicket {
 
 export interface TicketPaneProps {
   readonly ticketId: string;
+  /** The clock a phone's wait is counted against (phones not collected). */
+  readonly now: () => number;
   readonly onClose: () => void;
   /** Where a refused change is explained; without it the banner only says so. */
   readonly onOpenSyncStatus?: (() => void) | undefined;
@@ -129,6 +145,7 @@ export interface TicketPaneProps {
 
 export function TicketPane({
   ticketId,
+  now,
   onClose,
   onOpenSyncStatus,
 }: TicketPaneProps): React.JSX.Element {
@@ -207,6 +224,17 @@ export function TicketPane({
         setStep({ kind: action });
         return;
     }
+  };
+
+  const storeName = useStoreDisplayName();
+  const uncollectedLimit = useUncollectedLimit();
+  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
+  const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
+    const url = customerMessageUrl(kind, row, storeName);
+    if (url === null) return;
+    setDone(null);
+    window.open(url, '_blank', 'noopener');
   };
 
   const label = (action: TicketAction): string =>
@@ -311,21 +339,35 @@ export function TicketPane({
 
   function renderHeader(row: TicketDetailRow): React.JSX.Element {
     const pending = statuses.includes('local');
+    // The counter and owners call the customer about a phone left too long; technicians need not.
+    const waited =
+      flagsUncollected(can) && uncollectedLimit.status === 'ready'
+        ? uncollectedDays(row, uncollectedLimit.data.days, now())
+        : null;
     return (
       <header className="flex flex-col gap-4 border-b border-border px-6 pb-4 pt-4">
-        <div className="flex items-center gap-2">
-          <span
-            className="tabular text-small font-semibold text-text-muted"
-            data-testid="repair.desk.ticket.number"
-          >
-            {row.ticketNumber}
-          </span>
-          <StatusChip status={ticketStatus(row)} />
-          {pending ? <Chip label={t('sync.chip.pending')} icon={CloudOff} /> : null}
+        <div className="flex items-start gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span
+              className="tabular whitespace-nowrap text-small font-semibold text-text-muted"
+              data-testid="repair.desk.ticket.number"
+            >
+              {row.ticketNumber}
+            </span>
+            <StatusChip status={ticketStatus(row)} />
+            {waited === null ? null : (
+              <Chip
+                label={tn('repair.board.waited', { days: waited })}
+                icon={TriangleAlert}
+                tone="warning"
+              />
+            )}
+            {pending ? <Chip label={t('sync.chip.pending')} icon={CloudOff} /> : null}
+          </div>
           <IconButton
             icon={X}
             label={tn('repair.desk.closeTicket')}
-            className="-mr-2 ml-auto"
+            className="-mr-2 ml-auto shrink-0"
             onClick={onClose}
             data-testid="repair.desk.ticket.close"
           />
@@ -344,7 +386,10 @@ export function TicketPane({
             </span>
           </div>
         </div>
-        {primary === undefined && rowActions.length === 0 && printing === undefined ? null : (
+        {primary === undefined &&
+        rowActions.length === 0 &&
+        printing === undefined &&
+        messageKind === null ? null : (
           <div className="flex flex-wrap gap-2">
             {primary === undefined ? null : (
               <Button
@@ -364,11 +409,21 @@ export function TicketPane({
                 data-testid={`repair.desk.ticket.action.${action}`}
               />
             ))}
-            {printing === undefined ? null : (
+            {messageKind === null ? null : (
               <Button
-                label={tn('repair.print.title')}
+                label={tn(MESSAGE_ACTION_KEY[messageKind])}
+                icon={MessageCircle}
+                onClick={() => sendMessage(messageKind, row)}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.action.message"
+              />
+            )}
+            {/* An icon with its name on hover, so the steps that move the servisan keep one line. */}
+            {printing === undefined ? null : (
+              <IconButton
                 icon={Printer}
-                className={primary === undefined && rowActions.length === 0 ? undefined : 'ml-auto'}
+                label={tn('repair.print.title')}
+                className="ml-auto"
                 onClick={() => {
                   setDone(null);
                   setStep({ kind: 'print' });

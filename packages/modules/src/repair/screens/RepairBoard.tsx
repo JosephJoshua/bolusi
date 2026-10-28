@@ -26,7 +26,12 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { TicketSummaryRow } from '../queries.js';
-import { statusesFor, useSettledValue, type EntitySyncStatuses } from '../../screen-kit/index.js';
+import {
+  statusesFor,
+  useSettledValue,
+  useTick,
+  type EntitySyncStatuses,
+} from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import {
@@ -36,6 +41,10 @@ import {
   defaultBoardView,
   repairAbilities,
   ticketStatus,
+  UNCOLLECTED_REFRESH_MS,
+  flagsUncollected,
+  uncollectedBefore,
+  uncollectedDays,
   type BoardView,
 } from '../flows.js';
 import { statusLabel } from '../labels.js';
@@ -51,6 +60,7 @@ const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
   mine: 'repair.board.view.mine',
   unassigned: 'repair.board.view.unassigned',
   pickup: 'repair.board.view.pickup',
+  uncollected: 'repair.board.view.uncollected',
   returned: 'repair.board.view.returned',
   cancelled: 'repair.board.view.cancelled',
 };
@@ -58,6 +68,8 @@ const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
 export interface RepairBoardProps {
   readonly syncChip: ReactNode;
   readonly avatar: ReactNode;
+  /** The clock a phone's wait is counted against (phones not collected). */
+  readonly now: () => number;
   readonly onOpenTicket: (ticketId: string) => void;
   readonly onNewIntake: () => void;
   readonly onOpenSyncStatus: () => void;
@@ -68,11 +80,15 @@ interface LoadedBoard {
   readonly rows: readonly TicketSummaryRow[];
   readonly statuses: EntitySyncStatuses;
   readonly hasMore: boolean;
+  /** The store's not-collected limit in days, and the time the board was read against it. */
+  readonly uncollectedLimit: number;
+  readonly readAt: number;
 }
 
 export function RepairBoard({
   syncChip,
   avatar,
+  now,
   onOpenTicket,
   onNewIntake,
   onOpenSyncStatus,
@@ -89,11 +105,15 @@ export function RepairBoard({
   const settledText = useSettledValue(typed);
   const searchText = typed === '' ? '' : settledText;
   const searching = searchText !== '';
+  // Re-read now and then, so a phone passes into "not collected" on a board nobody touches.
+  const hour = useTick(UNCOLLECTED_REFRESH_MS);
 
   const query = useRepairQuery<LoadedBoard>(
     async (rt) => {
       let rows: TicketSummaryRow[] = [];
       let hasMore = false;
+      const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
+      const readAt = now();
       if (searching) {
         rows = [
           ...(await rt.query('searchTickets', { text: searchText, limit: SEARCH_LIMIT })).rows,
@@ -106,7 +126,7 @@ export function RepairBoard({
             readonly rows: readonly TicketSummaryRow[];
             readonly nextCursor: string | null;
           } = await rt.query('listTickets', {
-            filter: boardFilter(view, rt.userId),
+            filter: boardFilter(view, rt.userId, uncollectedBefore(uncollectedLimit, readAt)),
             sort: boardSort(view),
             limit: PAGE,
             ...(cursor === null ? {} : { cursor }),
@@ -118,9 +138,9 @@ export function RepairBoard({
         hasMore = cursor !== null;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
-      return { rows, statuses, hasMore };
+      return { rows, statuses, hasMore, uncollectedLimit, readAt };
     },
-    `board:${searching ? `q:${searchText}` : view}:${String(pages)}:${String(reloadNonce)}`,
+    `board:${searching ? `q:${searchText}` : view}:${String(pages)}:${String(reloadNonce)}:${String(hour)}`,
   );
 
   // Recomputed only when the read settles, so typing re-renders the search box, not the list.
@@ -166,6 +186,8 @@ export function RepairBoard({
   const loaded = query.status === 'ready' ? query.data : null;
   const statuses = loaded?.statuses;
   const showCancel = !searching && view === 'cancelled';
+  // The counter and owners call the customer about a phone left too long; technicians need not.
+  const flagUncollected = flagsUncollected(can);
   // The parent may pass new callbacks each render; rows keep one stable handler that calls the latest.
   const handlers = useRef({ onOpenTicket, onOpenSyncStatus });
   handlers.current = { onOpenTicket, onOpenSyncStatus };
@@ -176,6 +198,11 @@ export function RepairBoard({
       <TicketRow
         row={row}
         showCancel={showCancel}
+        waitedDays={
+          flagUncollected && loaded !== null
+            ? uncollectedDays(row, loaded.uncollectedLimit, loaded.readAt)
+            : null
+        }
         syncStatuses={statusesFor(statuses ?? {}, row.id)}
         onOpen={openTicket}
         onOpenSyncStatus={openSyncStatus}
@@ -183,7 +210,7 @@ export function RepairBoard({
         syncTestID={`${testID}.sync.${row.id}`}
       />
     ),
-    [showCancel, statuses, openTicket, openSyncStatus, testID],
+    [showCancel, flagUncollected, loaded, statuses, openTicket, openSyncStatus, testID],
   );
 
   return (
@@ -252,6 +279,8 @@ interface TicketRowProps {
   readonly row: TicketSummaryRow;
   /** The owners' cancelled view: who cancelled, why, and a fee that differs from the store's. */
   readonly showCancel: boolean;
+  /** Days a finished phone has waited past the store's limit; null when it is not flagged. */
+  readonly waitedDays: number | null;
   readonly syncStatuses: readonly OperationSyncStatus[];
   readonly onOpen: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
@@ -267,6 +296,7 @@ function sameRow(prev: TicketRowProps, next: TicketRowProps): boolean {
   const keys = Object.keys(next.row) as (keyof TicketSummaryRow)[];
   return (
     prev.showCancel === next.showCancel &&
+    prev.waitedDays === next.waitedDays &&
     prev.onOpen === next.onOpen &&
     prev.onOpenSyncStatus === next.onOpenSyncStatus &&
     prev.testID === next.testID &&
@@ -286,6 +316,7 @@ function sameRow(prev: TicketRowProps, next: TicketRowProps): boolean {
 const TicketRow = memo(function TicketRow({
   row,
   showCancel,
+  waitedDays,
   syncStatuses,
   onOpen,
   onOpenSyncStatus,
@@ -318,6 +349,7 @@ const TicketRow = memo(function TicketRow({
     feeChanged ? tn('repair.board.feeChanged') : '',
     row.cancelledAt !== null && showCancel ? formatDateTime(row.cancelledAt) : '',
     row.pendingProposals > 0 ? tn('repair.board.priceChangeWaiting') : '',
+    waitedDays === null ? '' : tn('repair.board.waited', { days: waitedDays }),
   ]
     .filter((s) => s !== '')
     .join(', ');
@@ -368,6 +400,14 @@ const TicketRow = memo(function TicketRow({
               testID={`${testID}.priceWaiting`}
             />
           ) : null}
+          {waitedDays === null ? null : (
+            <Chip
+              label={tn('repair.board.waited', { days: waitedDays })}
+              icon="warning"
+              tone="warning"
+              testID={`${testID}.uncollected`}
+            />
+          )}
           <SyncStatusChip
             syncStatuses={syncStatuses}
             pendingLabel={t('sync.chip.pending')}

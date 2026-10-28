@@ -97,6 +97,7 @@ export function RepairHome({
         <RepairBoard
           syncChip={syncChip}
           avatar={avatar}
+          now={now}
           onOpenTicket={(ticketId) => setView({ kind: 'ticket', ticketId })}
           onNewIntake={() => setView({ kind: 'intake' })}
           onOpenSyncStatus={onOpenSyncStatus}
@@ -120,6 +121,7 @@ export function RepairHome({
         <TicketDetail
           ticketId={view.ticketId}
           chrome={chrome}
+          now={now}
           onBack={() => setView({ kind: 'board' })}
           onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
           onOpenSyncStatus={onOpenSyncStatus}

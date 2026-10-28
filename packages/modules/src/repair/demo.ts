@@ -10,7 +10,12 @@
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 
-import { IN_PROGRESS_OUTCOMES, REPAIR_PERMISSION, type RepairOutcome } from './constants.js';
+import {
+  DEFAULT_UNCOLLECTED_DAYS,
+  IN_PROGRESS_OUTCOMES,
+  REPAIR_PERMISSION,
+  type RepairOutcome,
+} from './constants.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
@@ -65,6 +70,7 @@ export const DEMO_REPAIR_ROLES = {
       P.setCancelFees,
       P.correctDownPayment,
       P.setPrintSettings,
+      P.setUncollectedDays,
     ],
   },
 } as const;
@@ -151,6 +157,8 @@ function ticket(spec: {
   cancel?: { fee: number; standardFee: number; by: string; reason: string; hoursAgo: number };
   downPayment?: number;
   returnedBy?: string;
+  /** Hours since it was marked repaired; a cancel is ready to collect when it was cancelled. */
+  readyHoursAgo?: number;
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -178,6 +186,12 @@ function ticket(spec: {
     cancelledBy: spec.cancel?.by ?? null,
     cancelledByName: spec.cancel === undefined ? null : (NAMES.get(spec.cancel.by) ?? null),
     cancelledAt: spec.cancel === undefined ? null : HARNESS_NOW - spec.cancel.hoursAgo * HOUR,
+    readyAt:
+      spec.cancel !== undefined
+        ? HARNESS_NOW - spec.cancel.hoursAgo * HOUR
+        : spec.outcome === 'repaired'
+          ? HARNESS_NOW - (spec.readyHoursAgo ?? Math.min(spec.hoursAgo, 20)) * HOUR
+          : null,
     // Every seeded ticket past "received" has had work started on it.
     workStarted: spec.outcome !== 'received' && (spec.extraPhotos ?? []).length > 0,
     devicePasscode: null,
@@ -335,6 +349,23 @@ function seedTickets(): TicketDetailRow[] {
         reason: 'Sparepart tidak tersedia. Biaya dibebaskan karena kami yang tidak bisa servis.',
         hoursAgo: 100,
       },
+    }),
+    // Repaired more than two months ago and never collected: flagged on the board.
+    ticket({
+      id: 't-7',
+      number: 'K7Q-0006',
+      customer: 'Markus Yikwa',
+      phone: '0813-4455-6677',
+      brand: 'Oppo',
+      model: 'A57',
+      color: 'Hitam',
+      complaint: 'Baterai cepat habis',
+      outcome: 'repaired',
+      technicianId: 'u-budi',
+      lines: [line('part', 'Baterai A57', 180_000), line('labour', 'Ganti baterai', 50_000)],
+      hoursAgo: 75 * 24,
+      readyHoursAgo: 72 * 24,
+      extraPhotos: [photoRow('before:m8'), photoRow('after:m9')],
     }),
   ].map(withTotals);
 }
@@ -572,6 +603,7 @@ export function demoRepairRuntime(
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
   let optionIds = 0;
   let cancelFees = { beforeWork: 0, afterWork: 50_000 };
+  let uncollectedLimit = DEFAULT_UNCOLLECTED_DAYS;
   let printSettings: PrintSettings = {
     name: null,
     address: 'Jl. Trikora No. 12, Wamena',
@@ -669,6 +701,7 @@ export function demoRepairRuntime(
     const brands = (f['brands'] as string[] | undefined)?.map((b) => b.trim().toLowerCase());
     const from = f['receivedFrom'] as number | undefined;
     const before = f['receivedBefore'] as number | undefined;
+    const readyBefore = f['readyBefore'] as number | undefined;
     return tickets.filter(
       (t) =>
         (outcomes === undefined || outcomes.includes(t.outcome)) &&
@@ -681,6 +714,7 @@ export function demoRepairRuntime(
         (f['hasPendingProposals'] !== true || t.pendingProposals > 0) &&
         (from === undefined || t.createdAt >= from) &&
         (before === undefined || t.createdAt < before) &&
+        (readyBefore === undefined || (t.readyAt !== null && t.readyAt < readyBefore)) &&
         (brands === undefined || brands.includes(t.deviceBrand.trim().toLowerCase())) &&
         (!cancelledOnly || t.cancelledAt !== null),
     );
@@ -698,7 +732,9 @@ export function demoRepairRuntime(
             ? (t.estimatedReadyAt ?? 0)
             : key === 'cancelledAt'
               ? (t.cancelledAt ?? 0)
-              : t.createdAt;
+              : key === 'readyAt'
+                ? (t.readyAt ?? 0)
+                : t.createdAt;
     const sign = direction === 'asc' ? 1 : -1;
     return (a: TicketDetailRow, b: TicketDetailRow): number => {
       const x = value(a);
@@ -781,6 +817,7 @@ export function demoRepairRuntime(
     intakeOptionSettings: () => page([options]),
     cancelFees: () => page([cancelFees]),
     printSettings: () => page([printSettings]),
+    uncollectedDays: () => page([{ days: uncollectedLimit }]),
   };
 
   const commands: Record<string, (input: Input) => unknown> = {
@@ -866,6 +903,7 @@ export function demoRepairRuntime(
       const t = find(String(input['ticketId']));
       return update(t.id, 'repair.work_started', {
         outcome: 'in_repair',
+        readyAt: null,
         workStarted: true,
         technicianId: t.technicianId ?? actor.userId,
         technicianName: t.technicianName ?? actor.name,
@@ -881,6 +919,7 @@ export function demoRepairRuntime(
       const t = find(String(input['ticketId']));
       return update(t.id, 'repair.marked_repaired', {
         outcome: 'repaired',
+        readyAt: HARNESS_NOW,
         outcomeNote: String(input['note'] ?? ''),
         photos: addPhotos(t, 'after', input['afterPhotos'] as MediaRef[]),
       });
@@ -895,7 +934,13 @@ export function demoRepairRuntime(
         cancelledBy: actor.userId,
         cancelledByName: actor.name,
         cancelledAt: HARNESS_NOW,
+        readyAt: HARNESS_NOW,
       });
+    },
+    setUncollectedDays: (input) => {
+      uncollectedLimit = Number(input['days']);
+      notify();
+      return { days: uncollectedLimit };
     },
     setCancelFees: (input) => {
       cancelFees = {

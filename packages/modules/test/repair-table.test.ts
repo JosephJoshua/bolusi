@@ -65,7 +65,7 @@ describe('servisan table rules', () => {
       brands: ['Oppo'],
       priceWaiting: true,
     };
-    expect(tableFilter('active', 'me', facets)).toEqual({
+    expect(tableFilter('active', 'me', 0, facets)).toEqual({
       outcomes: ['waiting_for_parts'],
       location: 'in_store',
       technicianIds: ['tech-1'],
@@ -74,8 +74,8 @@ describe('servisan table rules', () => {
       hasPendingProposals: true,
     });
     // "Mine" already says whose tickets they are; the technician facet does not widen it.
-    expect(tableFilter('mine', 'me', facets)).toMatchObject({ technicianId: 'me' });
-    expect(tableFilter('mine', 'me', facets)).not.toHaveProperty('technicianIds');
+    expect(tableFilter('mine', 'me', 0, facets)).toMatchObject({ technicianId: 'me' });
+    expect(tableFilter('mine', 'me', 0, facets)).not.toHaveProperty('technicianIds');
   });
 
   test('search results narrow by the same facets', () => {

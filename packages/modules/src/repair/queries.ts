@@ -15,6 +15,7 @@ import {
 } from '@bolusi/core';
 
 import {
+  DEFAULT_UNCOLLECTED_DAYS,
   DEVICE_LOCATIONS,
   IN_PROGRESS_OUTCOMES,
   REPAIR_CUSTOMER_ENTITY,
@@ -85,6 +86,8 @@ export interface TicketSummaryRow {
   readonly cancelledAt: number | null;
   /** Integer IDR the customer paid up front; null when nothing was. */
   readonly downPayment: number | null;
+  /** When the phone was last ready to collect (repaired or cancelled); null while worked on. */
+  readonly readyAt: number | null;
 }
 
 export interface QuoteLineRow {
@@ -206,6 +209,7 @@ function summaryQuery(qctx: Qctx) {
       't.cancelledBy',
       't.cancelledAt',
       't.downPayment',
+      't.readyAt',
       eb
         .selectFrom('repairQuoteLines as l')
         .select(eb.fn.countAll<number>().as('n'))
@@ -247,6 +251,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     cancelledByName: row.cancelledBy === null ? null : (names.get(row.cancelledBy) ?? null),
     cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
     downPayment: row.downPayment === null ? null : Number(row.downPayment),
+    readyAt: row.readyAt === null ? null : Number(row.readyAt),
   };
 }
 
@@ -276,6 +281,8 @@ const ticketFilter = z
     receivedBefore: z.number().int().nonnegative().optional(),
     /** Any of these brands, as the board's brand list offers them (case does not matter). */
     brands: z.array(z.string().min(1).max(100)).min(1).max(100).optional(),
+    /** Ready to collect before this time (epoch ms): with the outcomes and location, not collected. */
+    readyBefore: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -283,7 +290,12 @@ const ticketFilter = z
  * Sorts a cursor can page through; the column sorts page by offset (a table's page numbers). No
  * sort by customer name: names are encrypted at rest, so SQL would order the ciphertext.
  */
-const CURSOR_SORTS = ['createdAt.desc', 'createdAt.asc', 'cancelledAt.desc'] as const;
+const CURSOR_SORTS = [
+  'createdAt.desc',
+  'createdAt.asc',
+  'cancelledAt.desc',
+  'readyAt.asc',
+] as const;
 const COLUMN_SORTS = [
   'number.asc',
   'number.desc',
@@ -296,7 +308,10 @@ const COLUMN_SORTS = [
 export const listTicketsInput = z
   .object({
     filter: ticketFilter.optional(),
-    /** `cancelledAt.desc` lists only cancelled tickets, latest cancel first (the owner's view). */
+    /**
+     * `cancelledAt.desc` lists only cancelled tickets, latest cancel first (the owner's view);
+     * `readyAt.asc` the longest waiting first (phones not collected), with `filter.readyBefore`.
+     */
     sort: z.enum([...CURSOR_SORTS, ...COLUMN_SORTS]).default('createdAt.desc'),
     cursor: z.string().optional(),
     /** Rows to skip, for a table that jumps to a page number. Not with a cursor. */
@@ -311,7 +326,11 @@ export const listTicketsInput = z
     (input) =>
       input.cursor === undefined || (CURSOR_SORTS as readonly string[]).includes(input.sort),
     { message: 'this sort pages by offset, not by cursor' },
-  );
+  )
+  // The cut-off is what leaves out tickets never finished, so the count with the same filter agrees.
+  .refine((input) => input.sort !== 'readyAt.asc' || input.filter?.readyBefore !== undefined, {
+    message: 'readyAt.asc needs filter.readyBefore',
+  });
 
 export type ListTicketsInput = z.infer<typeof listTicketsInput>;
 export type TicketFilter = z.infer<typeof ticketFilter>;
@@ -354,6 +373,9 @@ function filteredSummaries(qctx: Qctx, filter: TicketFilter, cancelledOnly: bool
   if (filter.receivedBefore !== undefined) {
     query = query.where('t.createdAt', '<', filter.receivedBefore);
   }
+  if (filter.readyBefore !== undefined) {
+    query = query.where('t.readyAt', '<', filter.readyBefore);
+  }
   if (filter.brands !== undefined) {
     // The brands come from `ticketBrands`, so this picks recorded values rather than matching
     // typed text; case is folded so "samsung" and "Samsung" are one brand.
@@ -371,6 +393,7 @@ const SORT_COLUMN = {
   readyBy: sql.ref('t.estimatedReadyAt'),
   createdAt: sql.ref('t.createdAt'),
   cancelledAt: sql.ref('t.cancelledAt'),
+  readyAt: sql.ref('t.readyAt'),
 } as const;
 
 export async function listTicketsHandler(
@@ -379,6 +402,7 @@ export async function listTicketsHandler(
 ): Promise<QueryPage<TicketSummaryRow>> {
   const filter = input.filter ?? {};
   const byCancel = input.sort === 'cancelledAt.desc';
+  const byReady = input.sort === 'readyAt.asc';
   const query = filteredSummaries(qctx, filter, byCancel);
 
   if (!(CURSOR_SORTS as readonly string[]).includes(input.sort) || input.offset !== undefined) {
@@ -394,8 +418,8 @@ export async function listTicketsHandler(
     return { rows: await toSummaries(qctx, rows), nextCursor: null };
   }
 
-  const descending = input.sort !== 'createdAt.asc';
-  const column = byCancel ? 't.cancelledAt' : 't.createdAt';
+  const descending = input.sort !== 'createdAt.asc' && !byReady;
+  const column = byCancel ? 't.cancelledAt' : byReady ? 't.readyAt' : 't.createdAt';
   let paged = query
     .orderBy(column, descending ? 'desc' : 'asc')
     .orderBy('t.id', descending ? 'desc' : 'asc');
@@ -410,7 +434,10 @@ export async function listTicketsHandler(
     fetch: (limitPlusOne) => paged.limit(limitPlusOne).execute(),
     limit: input.limit,
     sort: input.sort,
-    cursorValues: (last) => [Number(byCancel ? last.cancelledAt : last.createdAt), last.id],
+    cursorValues: (last) => [
+      Number(byCancel ? last.cancelledAt : byReady ? last.readyAt : last.createdAt),
+      last.id,
+    ],
   });
   return { rows: await toSummaries(qctx, rows), nextCursor };
 }
@@ -889,6 +916,34 @@ export const cancelFeesQuery = {
   permission: REPAIR_PERMISSION.read,
   input: cancelFeesInput,
   handler: cancelFeesHandler,
+} as const;
+
+// ── uncollectedDays (when a phone nobody collected is flagged) ───────────────────────────────
+
+export const uncollectedDaysInput = z.object({}).strict();
+
+/** After how many days this store flags a ready phone still in the store; 60 until it sets one. */
+export async function uncollectedDaysHandler(
+  _input: z.infer<typeof uncollectedDaysInput>,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly days: number }>> {
+  const row = await qctx.db
+    .selectFrom('repairStoreUncollected')
+    .select('days')
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .executeTakeFirst();
+  return {
+    rows: [{ days: row === undefined ? DEFAULT_UNCOLLECTED_DAYS : Number(row.days) }],
+    nextCursor: null,
+  };
+}
+
+export const uncollectedDaysQuery = {
+  name: 'uncollectedDays',
+  permission: REPAIR_PERMISSION.read,
+  input: uncollectedDaysInput,
+  handler: uncollectedDaysHandler,
 } as const;
 
 // ── printSettings (what this store's slips print besides the servisan) ──────────────────────

@@ -272,6 +272,14 @@ export interface RepairStorePrintSettings {
   updatedBy: string;
 }
 
+export interface RepairStoreUncollected {
+  days: number;
+  storeId: string | null;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export interface RepairTicketEvents {
   actorId: string;
   at: number;
@@ -323,6 +331,7 @@ export interface RepairTickets {
   outcomeNote: string | null;
   peripheralsJson: string;
   quoteTotal: number;
+  readyAt: number | null;
   returnedAt: number | null;
   returnedBy: string | null;
   storeId: string;
@@ -415,6 +424,7 @@ export interface DB {
   repairStoreCancelFees: RepairStoreCancelFees;
   repairStoreIntakeOptions: RepairStoreIntakeOptions;
   repairStorePrintSettings: RepairStorePrintSettings;
+  repairStoreUncollected: RepairStoreUncollected;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;

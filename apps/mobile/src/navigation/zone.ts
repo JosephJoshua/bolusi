@@ -34,6 +34,7 @@ export const SHELL_ROUTES = [
   'staffPins',
   'intakeOptions',
   'cancelFees',
+  'uncollectedDays',
   'printSettings',
   'printPaper',
 ] as const;
@@ -173,6 +174,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       if (zone.route === 'staffPins') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'intakeOptions') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'cancelFees') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'uncollectedDays') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'printSettings') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'printPaper') return { kind: 'shellRoute', route: 'settings' };
       return { kind: 'shellRoute', route: 'home' };
