@@ -289,14 +289,16 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
   parts for their own servisan, and the counter (who assigns work) can take for
   any servisan. There is no storekeeper.
 - **No cheating the shelf:** parts move only for a servisan being worked on
-  (Dikerjakan, in the store); every take records who and when; only what a
+  (Dikerjakan or Tunggu sparepart, in the store); every take records who and when; only what a
   servisan took can go back; once it is repaired, cancelled or handed back only
   an owner corrects its parts. A cancelled servisan shows parts not yet back.
 - **Customers never see part prices:** parts are not bill lines, and taking a
   part never changes the price.
 - **Offline first:** two phones may take the last part; stock goes below zero
   and the owner sees it under "Stok minus" instead of the repair being blocked.
-  A count keeps what the phone showed, so a take synced later still comes off.
+  A count is the shelf at the moment it was made (by the phone's clock): a take
+  made after it still comes off when it syncs, one made before is already in the
+  count, and of two counts the later one stands.
 - **Next, in order:** supplier orders and receiving, supplier invoices and
   payments (on the shared money ledger), transfers between stores, supplier
   returns, stock counts across many parts (a fast table on the PC). Part costs

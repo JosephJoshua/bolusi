@@ -13,6 +13,7 @@ import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { IN_PROGRESS_OUTCOMES, REPAIR_PERMISSION, type RepairOutcome } from './constants.js';
+import { partsInWork } from './flows.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
@@ -1087,10 +1088,9 @@ export function demoRepairRuntime(
     actor: () => actor,
     checkUse: (ticketId, who) => {
       const t = find(ticketId);
+      if (t.outcome === 'received') throw REPAIR_REFUSALS.refuse('partsNotInWork');
       if (who.permissions.includes(I.correctUse)) return t.ticketNumber;
-      if (t.outcome !== 'in_repair' || t.location !== 'in_store') {
-        throw REPAIR_REFUSALS.refuse('partsNotInWork');
-      }
+      if (!partsInWork(t)) throw REPAIR_REFUSALS.refuse('partsNotInWork');
       if (t.technicianId !== who.userId && !who.permissions.includes(P.assign)) {
         throw REPAIR_REFUSALS.refuse('partsNotYours', { code: 'PERMISSION_DENIED' });
       }

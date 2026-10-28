@@ -18,7 +18,6 @@ export interface PartsRouteProps {
   readonly runtime: InventoryRuntime;
   readonly syncChip: ReactNode;
   readonly onClose: () => void;
-  readonly onOpenSyncStatus: () => void;
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
 }
 
@@ -26,7 +25,6 @@ export function PartsRoute({
   runtime,
   syncChip,
   onClose,
-  onOpenSyncStatus,
   onRegisterSurfaceNav,
 }: PartsRouteProps): React.JSX.Element {
   const discardGuardRef = useRef<DiscardGuard | null>(null);
@@ -60,7 +58,6 @@ export function PartsRoute({
       <PartsSurface
         chrome={{ syncChip, avatar: null }}
         onClose={onClose}
-        onOpenSyncStatus={onOpenSyncStatus}
         onRegisterStepBack={registerStepBack}
         onRegisterDiscardGuard={registerDiscardGuard}
       />

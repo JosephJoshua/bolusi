@@ -48,7 +48,6 @@ export interface PartListProps {
   readonly onBack: () => void;
   readonly onOpenPart: (partId: string) => void;
   readonly onAddPart: () => void;
-  readonly onOpenSyncStatus: () => void;
   readonly testID?: string | undefined;
 }
 
@@ -63,7 +62,6 @@ export function PartList({
   onBack,
   onOpenPart,
   onAddPart,
-  onOpenSyncStatus,
   testID = 'inventory.list',
 }: PartListProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
@@ -110,7 +108,7 @@ export function PartList({
             title: t('core.errors.PERMISSION_DENIED'),
             hint: t('core.unauthorized.askOwner'),
             backLabel: t('core.action.back'),
-            onBack: onOpenSyncStatus,
+            onBack,
           },
         };
       case 'error':
@@ -136,7 +134,7 @@ export function PartList({
         }
         return { kind: 'ready', items: query.data.rows };
     }
-  }, [query, searching, filter, onOpenSyncStatus]);
+  }, [query, searching, filter, onBack]);
 
   const loaded = query.status === 'ready' ? query.data : null;
   const belowZero = loaded?.belowZero ?? 0;

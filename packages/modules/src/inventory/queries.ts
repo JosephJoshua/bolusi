@@ -69,24 +69,61 @@ export interface PartsForUseRow {
 
 export const MOVEMENTS_SHOWN = 100;
 
+/** The most fuzzy hits one search reads, however many the filter drops. */
+const MAX_SEARCH_WINDOW = 2000;
+
 // ── shared pieces ──────────────────────────────────────────────────────────────────────────────
 
-/** This store's stock per part, as a subquery to join. */
-function stockByPart(qctx: Qctx) {
+/** Each part's latest count in this store (latest by when it was counted), as `rn = 1`. */
+function latestCounts(qctx: Qctx) {
   return qctx.db
     .selectFrom('inventoryMovements')
-    .select((eb) => ['partId', eb.fn.sum<number | string>('qty').as('onHand')])
+    .select([
+      'partId',
+      'counted',
+      'at',
+      'id',
+      sql<number>`row_number() over (partition by part_id order by at desc, id desc)`.as('rn'),
+    ])
     .where('tenantId', '=', qctx.tenantId)
     .where('storeId', '=', qctx.storeId)
-    .groupBy('partId');
+    .where('kind', '=', 'counted');
 }
 
-function partsWithStock(qctx: Qctx) {
-  return qctx.db
+/**
+ * This store's stock per part, as a subquery to join: the latest count, plus every take and
+ * put-back made after it. Made after, by when it happened on the phone, not when it synced: a
+ * take made before the count is already in what was counted, one made after still comes off, and
+ * of two counts the later one stands. Without a count it is the takes and put-backs alone.
+ */
+function stockByPart(qctx: Qctx, partIds?: readonly string[]) {
+  let query = qctx.db
+    .selectFrom('inventoryMovements as m')
+    .leftJoin(latestCounts(qctx).as('l'), (join) =>
+      join.onRef('l.partId', '=', 'm.partId').on('l.rn', '=', 1),
+    )
+    .select([
+      'm.partId',
+      sql<number | string>`coalesce(max(l.counted), 0) + coalesce(sum(case
+        when m.kind <> 'counted' and (l.at is null or m.at > l.at or (m.at = l.at and m.id > l.id))
+        then m.qty else 0 end), 0)`.as('onHand'),
+    ])
+    .where('m.tenantId', '=', qctx.tenantId)
+    .where('m.storeId', '=', qctx.storeId)
+    .groupBy('m.partId');
+  if (partIds !== undefined) query = query.where('m.partId', 'in', partIds);
+  return query;
+}
+
+/** Parts with this store's stock; `partIds` narrows the stock sum to those parts. */
+function partsWithStock(qctx: Qctx, partIds?: readonly string[]) {
+  let query = qctx.db
     .selectFrom('inventoryParts as p')
-    .leftJoin(stockByPart(qctx).as('s'), 's.partId', 'p.id')
+    .leftJoin(stockByPart(qctx, partIds).as('s'), 's.partId', 'p.id')
     .select(['p.id', 'p.name', 'p.code', 'p.fits', 'p.archived', 's.onHand'])
     .where('p.tenantId', '=', qctx.tenantId);
+  if (partIds !== undefined) query = query.where('p.id', 'in', partIds);
+  return query;
 }
 
 type RawPart = Awaited<ReturnType<ReturnType<typeof partsWithStock>['execute']>>[number];
@@ -167,14 +204,23 @@ export async function listPartsHandler(
   if (input.filter === 'belowZero') query = query.where('s.onHand', '<', 0);
 
   if (input.text !== '') {
-    // Ranked by the shared fuzzy index; the filter then narrows the hits it ranked.
+    // Ranked by the shared fuzzy index; the filter then narrows the hits it ranked. Hits the filter
+    // drops (archived, or in stock when only below zero is shown) leave gaps, so the window widens
+    // until it holds the page and one more.
     const index = await searchIndexFor(qctx, partSearchSource);
-    const ids = index.search(input.text, input.offset + input.limit + 1).map((hit) => hit.id);
-    if (ids.length === 0) return { rows: [], nextCursor: null };
-    const found = new Map(
-      (await query.where('p.id', 'in', ids).execute()).map((row) => [row.id, toPart(row)]),
-    );
-    const ranked = ids.map((id) => found.get(id)).filter((row) => row !== undefined);
+    const wanted = input.offset + input.limit + 1;
+    let window = wanted;
+    let ranked: PartRow[] = [];
+    for (;;) {
+      const ids = index.search(input.text, window).map((hit) => hit.id);
+      if (ids.length === 0) return { rows: [], nextCursor: null };
+      const found = new Map(
+        (await query.where('p.id', 'in', ids).execute()).map((row) => [row.id, toPart(row)]),
+      );
+      ranked = ids.map((id) => found.get(id)).filter((row) => row !== undefined);
+      if (ranked.length >= wanted || ids.length < window || window >= MAX_SEARCH_WINDOW) break;
+      window = Math.min(window * 4, MAX_SEARCH_WINDOW);
+    }
     const page = ranked.slice(input.offset, input.offset + input.limit);
     const more = ranked.length > input.offset + input.limit;
     return { rows: page, nextCursor: more ? String(input.offset + input.limit) : null };
@@ -235,7 +281,7 @@ export async function getPartHandler(
   input: z.output<typeof getPartInput>,
   qctx: Qctx,
 ): Promise<QueryPage<PartDetailRow>> {
-  const row = await partsWithStock(qctx).where('p.id', '=', input.partId).executeTakeFirst();
+  const row = await partsWithStock(qctx, [input.partId]).executeTakeFirst();
   if (row === undefined) return { rows: [], nextCursor: null };
   const movements = await storeMovements(qctx)
     .where('partId', '=', input.partId)
@@ -277,9 +323,7 @@ export async function partsForUseHandler(
   const movements = await toMovements(qctx, raw);
   const partIds = [...new Set(movements.map((movement) => movement.partId))];
   const parts =
-    partIds.length === 0
-      ? []
-      : (await partsWithStock(qctx).where('p.id', 'in', partIds).execute()).map(toPart);
+    partIds.length === 0 ? [] : (await partsWithStock(qctx, partIds).execute()).map(toPart);
   const out = new Map<string, number>();
   for (const movement of movements) {
     out.set(movement.partId, (out.get(movement.partId) ?? 0) - movement.qty);

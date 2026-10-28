@@ -66,9 +66,10 @@ export function UsedPartsSection({
   onPutBack,
   testID = 'inventory.used',
 }: UsedPartsSectionProps): React.JSX.Element | null {
+  const [reloadNonce, setReloadNonce] = useState(0);
   const query = useInventoryQuery(
     async (rt) => (await rt.query('partsForUse', { useKind: use.kind, useId: use.id })).rows[0],
-    `used:${use.kind}:${use.id}`,
+    `used:${use.kind}:${use.id}:${String(reloadNonce)}`,
   );
   // A put-back to zero leaves the part's history, not a row reading "0 dipakai".
   const parts = query.status === 'ready' ? (query.data?.parts ?? []).filter((p) => p.out > 0) : [];
@@ -88,7 +89,12 @@ export function UsedPartsSection({
       }
       testID={testID}
     >
-      <QueryView query={query} onBack={() => undefined} onRetry={() => undefined} testID={testID}>
+      <QueryView
+        query={query}
+        onBack={() => undefined}
+        onRetry={() => setReloadNonce((n) => n + 1)}
+        testID={testID}
+      >
         {() =>
           parts.length === 0 ? (
             <Text style={styles.muted}>{ti('inventory.use.none')}</Text>
@@ -149,13 +155,14 @@ export function TakePartStep({
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<PartRow | null>(null);
   const [qty, setQty] = useState(1);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const typed = text.trim();
   const settled = useSettledValue(typed);
   const searchText = typed === '' ? '' : settled;
   const query = useInventoryQuery(
     async (rt) =>
       (await rt.query('listParts', { text: searchText, filter: 'active', limit: PICK_LIMIT })).rows,
-    `take:${searchText}`,
+    `take:${searchText}:${String(reloadNonce)}`,
   );
 
   const take = (): void => {
@@ -205,7 +212,12 @@ export function TakePartStep({
         onChangeText={setText}
         testID={`${testID}.search`}
       />
-      <QueryView query={query} onBack={onCancel} onRetry={() => setText((s) => s)} testID={testID}>
+      <QueryView
+        query={query}
+        onBack={onCancel}
+        onRetry={() => setReloadNonce((n) => n + 1)}
+        testID={testID}
+      >
         {(rows) =>
           rows.length === 0 ? (
             <Text style={[styles.muted, styles.empty]}>

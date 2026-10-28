@@ -144,6 +144,17 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
   };
 }
 
+/** A servisan parts are drawn for: being worked on or waiting for a part, and still in the store. */
+export function partsInWork(ticket: {
+  readonly outcome: string;
+  readonly location: string;
+}): boolean {
+  return (
+    (ticket.outcome === 'in_repair' || ticket.outcome === 'waiting_for_parts') &&
+    ticket.location === 'in_store'
+  );
+}
+
 /**
  * Whether this user may take or put back parts on the ticket now: the client side of repair's
  * part-use rule (part-use.ts), for showing the actions. The rule decides again on save. Owners may
@@ -154,9 +165,9 @@ export function canUseParts(
   userId: string,
   hasPermission: (id: string) => boolean,
 ): boolean {
-  if (!hasPermission(INVENTORY_PERMISSION.useParts)) return false;
-  if (hasPermission(INVENTORY_PERMISSION.correctUse)) return ticket.outcome !== 'received';
-  if (ticket.outcome !== 'in_repair' || ticket.location !== 'in_store') return false;
+  if (!hasPermission(INVENTORY_PERMISSION.useParts) || ticket.outcome === 'received') return false;
+  if (hasPermission(INVENTORY_PERMISSION.correctUse)) return true;
+  if (!partsInWork(ticket)) return false;
   return ticket.technicianId === userId || hasPermission(REPAIR_PERMISSION.assign);
 }
 

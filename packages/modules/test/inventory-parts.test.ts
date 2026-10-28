@@ -286,39 +286,137 @@ describe('the parts list and counts', () => {
     expect(part.movements[0]).toMatchObject({ kind: 'counted', counted: 3, qty: -1 });
   });
 
-  test('a take another phone had not synced still comes off a count', async () => {
-    const a = await harness(6303);
-    const lcd = await addPart(a, 'LCD', 5);
-    const s = await inWork(a);
-    const b = await openRepairHarness(6304, {
-      tenantId: a.tenantId,
-      storeId: a.storeId,
+  /**
+   * Two phones in one store that synced once, then went offline. The harness clocks put every
+   * change on `early` before every change on `late`, as when one happened first in the shop.
+   */
+  async function twoPhones(seed: number) {
+    const early = await harness(seed);
+    const lcd = await addPart(early, 'LCD', 5);
+    const s = await inWork(early);
+    const late = await openRepairHarness(seed + 1, {
+      tenantId: early.tenantId,
+      storeId: early.storeId,
       users: [
-        a.cashierId,
-        a.technicianId,
-        a.technician2Id,
-        a.zeroUserId,
-        a.ownerId,
-        a.storeOwnerId,
+        early.cashierId,
+        early.technicianId,
+        early.technician2Id,
+        early.zeroUserId,
+        early.ownerId,
+        early.storeOwnerId,
       ],
     });
-    open.push(b);
+    open.push(late);
     let arrival = 1;
-    for (const op of await a.ownOps()) await b.deliverPulled(op, arrival++);
-    const synced = new Set((await a.ownOps()).map((op) => op.id));
+    for (const op of await early.ownOps()) await late.deliverPulled(op, arrival++);
+    const synced = new Set((await early.ownOps()).map((op) => op.id));
+    /** Both phones come back online and exchange what they did offline. */
+    const sync = async () => {
+      for (const op of await early.ownOps()) {
+        if (!synced.has(op.id)) await late.deliverPulled(op, arrival++);
+      }
+      for (const op of await late.ownOps()) {
+        if (!synced.has(op.id)) await early.deliverPulled(op, 1000 + arrival++);
+      }
+    };
+    const both = async () => [await onHand(early, lcd), await onHand(late, lcd)];
+    return { early, late, lcd, s, sync, both };
+  }
 
-    // Offline: the technician takes one on A while the owner counts 5 on B.
-    await a.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, a.technicianId);
-    await b.runInventory('countStock', { counts: [{ partId: lcd, counted: 5 }] }, b.storeOwnerId);
+  test('a take made after a count, synced after it, still comes off', async () => {
+    const { early, late, lcd, s, sync, both } = await twoPhones(6303);
+    await early.runInventory(
+      'countStock',
+      { counts: [{ partId: lcd, counted: 5 }] },
+      early.storeOwnerId,
+    );
+    await late.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, late.technicianId);
+    await sync();
+    expect(await both()).toStrictEqual([4, 4]);
+  });
 
-    for (const op of (await a.ownOps()).filter((op) => !synced.has(op.id))) {
-      await b.deliverPulled(op, arrival++);
+  test('a take made before a count is already in what was counted', async () => {
+    const { early, late, lcd, s, sync, both } = await twoPhones(6305);
+    await early.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, early.technicianId);
+    // The owner counts the shelf after the part left it, on a phone that has not heard of the take.
+    await late.runInventory(
+      'countStock',
+      { counts: [{ partId: lcd, counted: 4 }] },
+      late.storeOwnerId,
+    );
+    await sync();
+    expect(await both()).toStrictEqual([4, 4]);
+  });
+
+  test('of two counts made offline, the later one stands', async () => {
+    const { early, late, lcd, sync, both } = await twoPhones(6307);
+    await early.runInventory(
+      'countStock',
+      { counts: [{ partId: lcd, counted: 3 }] },
+      early.storeOwnerId,
+    );
+    await late.runInventory(
+      'countStock',
+      { counts: [{ partId: lcd, counted: 2 }] },
+      late.storeOwnerId,
+    );
+    await sync();
+    expect(await both()).toStrictEqual([2, 2]);
+  });
+});
+
+describe('when parts may move', () => {
+  test('a servisan waiting for a part is still in work: the wrong part can go back', async () => {
+    const h = await harness(6401);
+    const lcd = await addPart(h, 'LCD', 2);
+    const s = await inWork(h);
+    await h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
+    await h.run('markWaitingForParts', { ticketId: s.ticketId, note: 'LCD salah' }, h.technicianId);
+    await h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
+    expect(await onHand(h, lcd)).toBe(2);
+  });
+
+  test('nobody, not even an owner, draws parts for a servisan before work starts', async () => {
+    const h = await harness(6402);
+    const lcd = await addPart(h, 'LCD', 2);
+    const waiting = await servisan(h);
+    for (const userId of [h.ownerId, h.storeOwnerId]) {
+      await expectRefused(
+        h.runInventory('takePart', { partId: lcd, qty: 1, use: waiting.use }, userId),
+        'INVALID_TRANSITION',
+        'repair.refusal.partsNotInWork',
+      );
     }
-    let arrivalA = 1000;
-    for (const op of await b.ownOps()) {
-      if (!synced.has(op.id)) await a.deliverPulled(op, arrivalA++);
+  });
+});
+
+describe('searching the parts list', () => {
+  // Regression: a search read only as many hits as the page, then dropped those the filter did
+  // not want, so pages came back short and paging stopped early.
+  test('a filtered search still fills its pages and pages to the end', async () => {
+    const h = await harness(6501);
+    const s = await inWork(h);
+    const below: string[] = [];
+    for (let n = 1; n <= 24; n += 1) {
+      const partId = await addPart(h, `LCD tipe ${String(n)}`, 1);
+      if (n % 8 === 0) {
+        await h.runInventory('takePart', { partId, qty: 2, use: s.use }, h.technicianId);
+        below.push(partId);
+      }
     }
-    expect(await onHand(a, lcd)).toBe(4);
-    expect(await onHand(b, lcd)).toBe(4);
+    const seen: string[] = [];
+    let offset = 0;
+    for (;;) {
+      const page = await h.queryInventory(
+        'listParts',
+        { text: 'lcd', filter: 'belowZero', limit: 2, offset },
+        h.ownerId,
+      );
+      seen.push(...page.rows.map((row) => row.id as string));
+      if (page.nextCursor === null) break;
+      expect(page.rows).toHaveLength(2);
+      offset = Number(page.nextCursor);
+    }
+    expect(seen.sort()).toStrictEqual([...below].sort());
   });
 });

@@ -24,7 +24,6 @@ type View =
 export interface PartsSurfaceProps {
   readonly chrome: ScreenChrome;
   readonly onClose: () => void;
-  readonly onOpenSyncStatus: () => void;
   readonly onRegisterStepBack?: ((back: StepBack | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
 }
@@ -32,7 +31,6 @@ export interface PartsSurfaceProps {
 export function PartsSurface({
   chrome,
   onClose,
-  onOpenSyncStatus,
   onRegisterStepBack,
   onRegisterDiscardGuard,
 }: PartsSurfaceProps): React.JSX.Element {
@@ -85,7 +83,6 @@ export function PartsSurface({
           onBack={onClose}
           onOpenPart={(partId) => openPart(partId)}
           onAddPart={() => setView({ kind: 'add' })}
-          onOpenSyncStatus={onOpenSyncStatus}
         />
       );
     case 'part':

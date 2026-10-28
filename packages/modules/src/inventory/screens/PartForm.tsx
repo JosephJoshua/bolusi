@@ -4,7 +4,7 @@
  * part arrives with its stock in one go.
  */
 import { QuantityStepper, TextInput, space } from '@bolusi/ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
@@ -60,6 +60,7 @@ export function PartForm({
     testID,
   });
   const nameMissing = name.trim() === '';
+  const addedRef = useRef<string | null>(null);
 
   const save = (): void => {
     setTried(true);
@@ -70,11 +71,11 @@ export function PartForm({
         if (part !== undefined) {
           return runtime.run('editPart', { partId: part.id, archived: part.archived, ...details });
         }
-        const added = await runtime.run('addPart', details);
-        if (stock > 0) {
-          await runtime.run('countStock', { counts: [{ partId: added.partId, counted: stock }] });
-        }
-        return added;
+        // Kept, so a retry after the count failed saves the count, not a second copy of the part.
+        addedRef.current ??= (await runtime.run('addPart', details)).partId;
+        const partId = addedRef.current;
+        if (stock > 0) await runtime.run('countStock', { counts: [{ partId, counted: stock }] });
+        return { partId };
       })
       .then((result) => {
         if (result !== undefined) onDone(result.partId);

@@ -93,8 +93,15 @@ export function QuantityStepper({
           value={text}
           onChangeText={(typed) => {
             const digits = typed.replace(/[^0-9]/g, '');
-            setText(digits);
-            if (digits !== '') onChange(clamp(Number(digits)));
+            if (digits === '') {
+              setText('');
+              return;
+            }
+            // Out of range shows the nearest allowed number at once, so the box never reads
+            // "0" while the value is 1.
+            const next = clamp(Number(digits));
+            setText(String(next));
+            onChange(next);
           }}
           // An empty field on leaving is the smallest allowed, said back in the box.
           onBlur={() => {
