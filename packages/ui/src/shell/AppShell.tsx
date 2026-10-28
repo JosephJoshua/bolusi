@@ -138,6 +138,13 @@ const styles = StyleSheet.create({
     borderTopWidth: border.hairline,
     borderTopColor: color.border,
   },
+  /**
+   * Content and the bottom action are one centred column no wider than `size.contentMax`. On a phone
+   * that is the whole width; on a tablet lines and buttons stop at a readable width instead of
+   * running edge to edge. The header and banner still span the screen, as app bars do.
+   */
+  column: { width: '100%', maxWidth: size.contentMax, alignSelf: 'center' },
+  columnFill: { flex: 1 },
 });
 
 export function AppShell({
@@ -240,7 +247,7 @@ export function AppShell({
             <View
               ref={reveal.contentRef}
               collapsable={false}
-              style={styles.contentInner}
+              style={[styles.contentInner, styles.column]}
               testID={`${testID}.contentInner`}
             >
               <RevealProvider port={reveal.port}>{children}</RevealProvider>
@@ -248,13 +255,13 @@ export function AppShell({
           </ScrollView>
         ) : (
           <View testID={`${testID}.content`} style={styles.contentFixed}>
-            {children}
+            <View style={[styles.column, styles.columnFill]}>{children}</View>
           </View>
         )}
 
         {bottomAction === undefined ? null : (
           <View testID={`${testID}.actionBar`} style={styles.actionBar}>
-            {bottomAction}
+            <View style={styles.column}>{bottomAction}</View>
           </View>
         )}
 
