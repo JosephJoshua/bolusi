@@ -312,6 +312,7 @@ function LiveCounter({
   );
 
   const settings = useSettingsAccess(client, state, session, userId);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   // The intake in progress lives in this person's workspace in the core, so it survives a lock, a
   // switch to a colleague and a restart, and only this person's PIN brings it back.
@@ -353,11 +354,14 @@ function LiveCounter({
             <SyncStatusButton
               input={state.sync}
               compact={compact}
+              open={syncOpen}
+              onOpenChange={setSyncOpen}
               onSyncNow={() => void client.call('sync.requestManual').catch(() => undefined)}
               onReenrol={onReenrol}
             />
           )
         }
+        onOpenSyncStatus={() => setSyncOpen(true)}
         settings={settings}
         restoredDraft={restoredDraft}
         onDraftChange={onDraftChange}

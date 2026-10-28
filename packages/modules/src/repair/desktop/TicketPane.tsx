@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { hasRejectedOp, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
+import { rejectedCount, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import {
   MESSAGE_ACTION_KEY,
@@ -280,10 +280,10 @@ export function TicketPane({
   const banner =
     runner.errorCode !== null ? (
       <ActionError errorCode={runner.errorCode} onDismiss={runner.clearError} />
-    ) : hasRejectedOp(statuses) ? (
+    ) : rejectedCount(statuses) > 0 ? (
       <Banner
         tone="danger"
-        message={t('sync.rejected.banner', { count: 1 })}
+        message={t('sync.pc.rejectedBanner', { count: rejectedCount(statuses) })}
         action={
           onOpenSyncStatus === undefined ? undefined : (
             <Button
