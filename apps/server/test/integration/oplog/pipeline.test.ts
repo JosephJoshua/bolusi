@@ -607,7 +607,7 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
   });
 
   test('auth.pin_reset targeting a main_owner by a non-main_owner actor is SCOPE_VIOLATION', async () => {
-    const { world, builder } = await setupWorld(1066);
+    const { world, builder } = await setupWorld(1066, { grants: 'none' });
     const genesis = builder.genesis();
     const mainOwnerId = testId(128);
     await seedUser(testDb.db, world.tenantId, mainOwnerId);
@@ -642,6 +642,43 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
     // Blocks store_owner → main_owner impersonation (api/02-auth §6.6).
     expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
   });
+
+  test.each([
+    { type: 'auth.pin_reset', seed: 1090 },
+    { type: 'auth.pin_lockout_cleared', seed: 1091 },
+  ])(
+    '$type targeting a peer store owner by a store owner is SCOPE_VIOLATION',
+    async ({ type, seed }) => {
+      const { world, builder } = await setupWorld(seed, { grants: 'none' });
+      const genesis = builder.genesis();
+      const peerId = testId(seed * 10);
+      await seedUser(testDb.db, world.tenantId, peerId);
+      // Both hold the same store_owner role: power over accounts, but not the main owner.
+      for (const userId of [peerId, world.userId]) {
+        await grantRole(testDb.db, {
+          tenantId: world.tenantId,
+          userId,
+          roleId: testId(seed * 10 + 1),
+          roleName: 'store_owner',
+          permissionIds: ['auth.user_reset_pin', 'auth.pin_unlock'],
+        });
+      }
+      const op = builder.append({
+        type,
+        entityType: 'user_credential',
+        entityId: peerId,
+        payload: type === 'auth.pin_reset' ? { targetUserId: peerId, verifierRef: peerId } : {},
+      });
+
+      const result = await processPushBatch(
+        makeDeps({ forTenant: testDb.appForTenant }),
+        identityOf(world),
+        [genesis, op],
+      );
+
+      expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+    },
+  );
 
   test('auth.pin_reset targeting a main_owner by a main_owner actor is ACCEPTED', async () => {
     const { world, builder } = await setupWorld(1067);

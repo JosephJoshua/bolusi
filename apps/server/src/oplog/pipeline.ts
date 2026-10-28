@@ -233,7 +233,7 @@ export async function processPushBatch(
       reject(op, code, reason);
     };
     const authors = createAuthorLookup(db, identity.tenantId);
-    const scopeLookup = createScopeLookup(db);
+    const scopeLookup = createScopeLookup(db, identity.tenantId);
     const anomaly = async (
       op: SignedOperation,
       kind: AnomalyKind,

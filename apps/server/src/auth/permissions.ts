@@ -9,6 +9,7 @@ import {
   computeEffectiveSet,
   evaluateAllowance,
   evaluatePermission,
+  OWNER_POWER_PERMISSIONS,
   parseLimitAmounts,
   type DirectoryGrant,
   type DirectoryRole,
@@ -252,4 +253,56 @@ export async function isTenantAdmin(
     storeId: null,
     permissionId: TENANT_ADMIN_PERMISSION,
   });
+}
+
+/**
+ * Owner powers (owner decision 2026-10-27): only a tenant admin, the main owner, may make someone an
+ * owner, or rename, re-role, deactivate or reactivate an owner, or reset or unlock an owner's PIN.
+ * An owner role is one that is
+ * tenant-wide or holds power over other accounts (core `OWNER_POWER_PERMISSIONS`, which the device
+ * uses to decide what to offer). A store owner manages the cashiers and technicians of their own
+ * store, never a peer owner, so two store owners cannot remove each other.
+ */
+export async function rolesConferOwnerPowers(
+  db: TenantDb,
+  roles: readonly { readonly id: string; readonly scopeType: string }[],
+): Promise<boolean> {
+  if (roles.some((r) => r.scopeType === 'tenant')) return true;
+  if (roles.length === 0) return false;
+  const row = await db
+    .selectFrom('rolePermissions')
+    .select('roleId')
+    .where(
+      'roleId',
+      'in',
+      roles.map((r) => r.id),
+    )
+    .where('permissionId', 'in', OWNER_POWER_PERMISSIONS)
+    .executeTakeFirst();
+  return row !== undefined;
+}
+
+/** Whether `userId` holds an owner role (see {@link rolesConferOwnerPowers}). */
+export async function holdsOwnerPowers(db: TenantDb, userId: string): Promise<boolean> {
+  const roles = await db
+    .selectFrom('userRoles')
+    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
+    .select(['roles.id', 'roles.scopeType'])
+    .where('userRoles.userId', '=', userId)
+    .execute();
+  return rolesConferOwnerPowers(db, roles);
+}
+
+/**
+ * May `actorUserId` reset or unlock `targetUserId`'s PIN as far as owner powers go? An owner's PIN is
+ * the main owner's to manage: handing it over is handing over the account. The permission itself
+ * is checked separately.
+ */
+export async function mayManageOwnerPin(
+  db: TenantDb,
+  tenantId: string,
+  actorUserId: string,
+  targetUserId: string,
+): Promise<boolean> {
+  return !(await holdsOwnerPowers(db, targetUserId)) || isTenantAdmin(db, tenantId, actorUserId);
 }

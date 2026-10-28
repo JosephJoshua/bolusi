@@ -306,6 +306,31 @@ describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §
     expect(resets[0]!.userId, 'attributed to the acting main owner').toBe(s.h.ownerId);
     expect(resets[0]!.entityId).toBe(s.h.ownerId);
   });
+
+  it('a store owner cannot reset a peer store owner’s PIN; the main owner can', async () => {
+    const s = await setup(7);
+    // Make Budi a second store owner of this store.
+    await sql`
+      INSERT INTO user_roles_directory (user_id, role_id, store_id)
+      SELECT ${s.h.staffId}, id, ${s.h.storeId} FROM roles_directory WHERE name = 'store_owner'
+    `.execute(s.h.db);
+    await expectDomain(
+      resetPin(s.flowDeps(), {
+        actorUserId: s.h.storeOwnerId,
+        targetUserId: s.h.staffId,
+        newPin: '222222',
+      }),
+      'PERMISSION_DENIED',
+      'restriction_violated',
+    );
+    await resetPin(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+      newPin: '222222',
+    });
+    const resets = (await s.pinOps()).filter((o) => o.type === 'auth.pin_reset');
+    expect(resets.map((o) => o.userId)).toEqual([s.h.ownerId]);
+  });
 });
 
 describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh salt', () => {

@@ -1,6 +1,6 @@
 // Users sub-router (api/02-auth §5.4). Bearer-guarded; the §4.5 matrix + the §5.4 anti-escalation
 // rules are enforced here against the server directory.
-import { compareCanonicalOrder, isAheadOfServer, OWNER_POWER_PERMISSIONS } from '@bolusi/core';
+import { compareCanonicalOrder, isAheadOfServer } from '@bolusi/core';
 import { buildPinVerifierRow, type TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
@@ -8,9 +8,12 @@ import { resolveActingUser } from '../auth/acting-user.js';
 import {
   countActiveTenantAdmins,
   hasPermission,
+  holdsOwnerPowers,
   isTenantAdmin,
+  mayManageOwnerPin,
   requirePermission,
   requirePermissionInStores,
+  rolesConferOwnerPowers,
 } from '../auth/permissions.js';
 import { TENANT_ADMIN_PERMISSION } from '../identity/permissions.js';
 import { isUniqueViolation } from '../db-errors.js';
@@ -87,42 +90,6 @@ async function targetStoreIds(db: TenantDb, userId: string): Promise<string[]> {
     .where('userId', '=', userId)
     .execute();
   return rows.map((r) => r.storeId);
-}
-
-/**
- * Owner powers (owner decision 2026-10-27): only a tenant admin, the main owner, may make someone an
- * owner, or rename, re-role, deactivate or reactivate an owner. An owner role is one that is
- * tenant-wide or holds power over other accounts (core `OWNER_POWER_PERMISSIONS`, which the device
- * uses to decide what to offer). A store owner manages the cashiers and technicians of their own
- * store, never a peer owner, so two store owners cannot remove each other.
- */
-async function rolesConferOwnerPowers(
-  db: TenantDb,
-  roles: readonly { readonly id: string; readonly scopeType: string }[],
-): Promise<boolean> {
-  if (roles.some((r) => r.scopeType === 'tenant')) return true;
-  if (roles.length === 0) return false;
-  const row = await db
-    .selectFrom('rolePermissions')
-    .select('roleId')
-    .where(
-      'roleId',
-      'in',
-      roles.map((r) => r.id),
-    )
-    .where('permissionId', 'in', OWNER_POWER_PERMISSIONS)
-    .executeTakeFirst();
-  return row !== undefined;
-}
-
-async function holdsOwnerPowers(db: TenantDb, userId: string): Promise<boolean> {
-  const roles = await db
-    .selectFrom('userRoles')
-    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
-    .select(['roles.id', 'roles.scopeType'])
-    .where('userRoles.userId', '=', userId)
-    .execute();
-  return rolesConferOwnerPowers(db, roles);
 }
 
 /** Throw the owner-powers restriction unless the acting user is a tenant admin. */
@@ -553,8 +520,8 @@ export function createUsersRouter(deps: ServerDeps) {
 
             // Own change → auth.pin_change, the same permission its pushed op declares (so a
             // deactivated user cannot set one either); reset of another user → auth.user_reset_pin
-            // (+ the main_owner-target rule, §6.6, enforced here as defense-in-depth in addition to
-            // the op-push validation task 07 owns).
+            // (+ the owner-target rule, enforced here as defense-in-depth in addition to the op-push
+            // validation in oplog/steps/scope.ts).
             if (targetUserId === acting.userId) {
               await requirePermission(db, {
                 userId: acting.userId,
@@ -586,17 +553,16 @@ export function createUsersRouter(deps: ServerDeps) {
                   });
                 }
               }
-              if (await holdsMainOwner(db, targetUserId)) {
-                if (!(await holdsMainOwner(db, acting.userId)))
-                  // Privileged-target restriction (§6.6) — the online endpoint mirror of the
-                  // op-push rule task 07 owns (that path audits via device_anomalies). Declared
-                  // here so the endpoint denial also lands in the FR-1045 trail (§7).
-                  throw new PermissionDeniedError({
-                    actorUserId: acting.userId,
-                    permissionId: PERM.userResetPin,
-                    scopeStoreId: acting.deviceStoreId,
-                    reason: 'restriction_violated',
-                  });
+              // Owner powers: an owner's PIN is the main owner's to reset (§6.6, widened from
+              // main_owner targets 2026-10-28). The online mirror of the op-push rule (that path
+              // audits via device_anomalies); declared here so the denial lands in the FR-1045 trail.
+              if (!(await mayManageOwnerPin(db, tenantId, acting.userId, targetUserId))) {
+                throw new PermissionDeniedError({
+                  actorUserId: acting.userId,
+                  permissionId: PERM.userResetPin,
+                  scopeStoreId: acting.deviceStoreId,
+                  reason: 'restriction_violated',
+                });
               }
             }
             assertPlausibleAsOf(body.verifier.asOf, t, ['verifier'], device.deviceId);
@@ -661,16 +627,4 @@ async function writeVerifier(
       }),
     )
     .execute();
-}
-
-/** Whether `userId` holds a role named `main_owner`. */
-async function holdsMainOwner(db: TenantDb, userId: string): Promise<boolean> {
-  const row = await db
-    .selectFrom('userRoles')
-    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
-    .where('userRoles.userId', '=', userId)
-    .where('roles.name', '=', 'main_owner')
-    .select('userRoles.userId')
-    .executeTakeFirst();
-  return row !== undefined;
 }

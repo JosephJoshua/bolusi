@@ -56,6 +56,7 @@ import {
   DomainError,
   errorCodeOrUnexpected,
   listSwitcherUsers,
+  mayManageOwnerPin,
   resolveDisplayRoleKeys,
   readIdleLockSeconds,
   readPinAttempt,
@@ -552,7 +553,18 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       ) {
         throw new DomainError('PERMISSION_DENIED');
       }
-      const directory = await listSwitcherUsers(db);
+      // An owner's PIN is the main owner's to manage (core `mayManageOwnerPin`, which the PIN
+      // commands and the server also apply): a store owner is not offered a peer owner at all.
+      const actorUserId = manager.current?.userId;
+      const directory = (
+        await Promise.all(
+          (await listSwitcherUsers(db)).map(async (user) =>
+            actorUserId !== undefined && (await mayManageOwnerPin(db, actorUserId, user.id))
+              ? [user]
+              : [],
+          ),
+        )
+      ).flat();
       return Promise.all(
         directory.map(async (user) => {
           const [roleKeys, attempt, verifier] = await Promise.all([

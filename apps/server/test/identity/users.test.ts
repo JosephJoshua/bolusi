@@ -759,3 +759,30 @@ test('a grant left at a store the person no longer belongs to grants nothing the
   const token = await seedControlSession(h, { tenantId: s.tenantId, userId: s.storeOwner });
   expect((await s.addCashierAt(token, s.storeA)).status).toBe(403);
 });
+
+test("a store owner cannot reset a peer owner's PIN; they can reset a cashier's, and the main owner a store owner's", async () => {
+  const s = await storeWithOwners();
+  const peer = await seedUser(h, {
+    tenantId: s.tenantId,
+    name: 'Peer Owner',
+    storeIds: [s.s1],
+    roleKeys: ['store_owner'],
+  });
+  const cashier = await seedUser(h, {
+    tenantId: s.tenantId,
+    name: 'Cashier',
+    storeIds: [s.s1],
+    roleKeys: ['cashier'],
+  });
+  const reset = (actor: string, target: string) =>
+    h.app.request(`http://srv.test/v1/users/${target}/pin-verifier`, {
+      method: 'POST',
+      headers: s.as(actor),
+      body: verifierBody(),
+    });
+
+  expect((await reset(s.storeOwner, peer)).status).toBe(403);
+  expect((await reset(s.storeOwner, s.ownerId)).status).toBe(403);
+  expect((await reset(s.storeOwner, cashier)).status).toBe(200);
+  expect((await reset(s.ownerId, peer)).status).toBe(200);
+});

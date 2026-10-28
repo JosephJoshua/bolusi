@@ -41,7 +41,6 @@ import type { PinVerifierUploadPort, PinVerifierUploadResult } from './ports.js'
 import {
   deleteMeta,
   FIRST_PIN_USER_META_KEY,
-  holdsMainOwnerRole,
   readMeta,
   readPinAttempt,
   readVerifier,
@@ -53,6 +52,7 @@ import {
   writeVerifier,
   type StoredVerifierRow,
 } from './repo.js';
+import { mayManageOwnerPin } from './staff.js';
 import {
   chooseEffectiveVerifier,
   hashNewPin,
@@ -376,8 +376,8 @@ export async function changePin<DB>(
 
 /**
  * Owner PIN reset (api/02-auth §6.6). Applies the §5.4.6 targeting restrictions (target present in
- * the directory) and the §6.6 privileged-target rule (resetting a main_owner-role holder requires
- * the actor to hold main_owner) BEFORE the command runs, then emits `auth.pin_reset`. Clears the
+ * the directory) and the §6.6 privileged-target rule (resetting an owner's PIN requires the main
+ * owner, {@link mayManageOwnerPin}) BEFORE the command runs, then emits `auth.pin_reset`. Clears the
  * target's lockout. Works offline; the POST rides the next online contact.
  *
  * @throws {DomainError} `PERMISSION_DENIED` `restriction_violated` on a targeting/privileged-target
@@ -397,13 +397,12 @@ export async function resetPin<DB>(
       'target is not in this device’s directory (§5.4.6)',
     );
   }
-  const targetIsMainOwner = await holdsMainOwnerRole(deps.db, input.targetUserId);
-  if (targetIsMainOwner && !(await holdsMainOwnerRole(deps.db, input.actorUserId))) {
+  if (!(await mayManageOwnerPin(deps.db, input.actorUserId, input.targetUserId))) {
     return deps.runtime.denyRestriction(
       input.actorUserId,
       resetPinCommand.permission,
       resetPinCommand.name,
-      'resetting a main_owner-role holder requires the actor to hold main_owner (§6.6)',
+      'resetting an owner’s PIN requires the main owner (§6.6, owner powers)',
     );
   }
   return emitVerifierChange(deps, {

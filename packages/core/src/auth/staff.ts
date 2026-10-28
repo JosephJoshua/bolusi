@@ -14,6 +14,7 @@ import { sql, type Kysely } from 'kysely';
 
 import { parseLimitAmounts, type LimitAmounts } from '../authz/limits.js';
 import { AUTH_PERMISSION } from './operations.js';
+import { holdsMainOwnerRole } from './repo.js';
 
 /** The roles an owner picks from, in the order they are offered. Custom roles come later. */
 export const STAFF_ROLE_KEYS = ['cashier', 'technician', 'manager', 'store_owner'] as const;
@@ -72,13 +73,38 @@ export const OWNER_POWER_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.roleManage,
 ];
 
-function isOwnerRole(role: RoleRow): boolean {
+function isOwnerRole(role: Pick<RoleRow, 'scopeType' | 'permissionIds'>): boolean {
   if (role.scopeType === 'tenant') return true;
   const parsed: unknown =
     typeof role.permissionIds === 'string' ? JSON.parse(role.permissionIds) : role.permissionIds;
   return (
     Array.isArray(parsed) && parsed.some((id) => OWNER_POWER_PERMISSIONS.includes(id as string))
   );
+}
+
+/** Whether this person holds an owner role in this device's directory. */
+export async function holdsOwnerRole<DB>(db: Kysely<DB>, userId: string): Promise<boolean> {
+  const held = await sql<Pick<RoleRow, 'scopeType' | 'permissionIds'>>`
+    SELECT rd.scope_type AS "scopeType", rd.permission_ids AS "permissionIds"
+    FROM user_roles_directory urd JOIN roles_directory rd ON rd.id = urd.role_id
+    WHERE urd.user_id = ${userId}
+  `.execute(db);
+  return held.rows.some(isOwnerRole);
+}
+
+/**
+ * May this actor reset or unlock this person's PIN as far as owner powers go? An owner's PIN is the
+ * main owner's to manage: handing it over hands over the account, so a store owner manages the
+ * PINs of cashiers, technicians and managers, never a peer owner's or the main owner's. The PIN
+ * commands check it before they run, the screens use it to decide what to offer, and the server
+ * applies the same rule (apps/server auth/permissions.ts `mayManageOwnerPin`).
+ */
+export async function mayManageOwnerPin<DB>(
+  db: Kysely<DB>,
+  actorUserId: string,
+  targetUserId: string,
+): Promise<boolean> {
+  return !(await holdsOwnerRole(db, targetUserId)) || holdsMainOwnerRole(db, actorUserId);
 }
 
 function isStaffRoleKey(name: string): name is StaffRoleKey {
