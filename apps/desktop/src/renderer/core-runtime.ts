@@ -62,7 +62,6 @@ export function createCoreRepairRuntime(deps: {
   const printing: RepairPrinting = desktopPrinting(
     {
       storeName: () => call('repair.print.storeName'),
-      userName: () => call('repair.print.userName'),
       readPaper: () => call('repair.print.readPaper'),
       writePaper: (paper) => call('repair.print.writePaper', paper),
       // Replaced by the PC's printers below; the window prints, never the core.

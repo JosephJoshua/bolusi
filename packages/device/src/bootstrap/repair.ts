@@ -93,7 +93,6 @@ export function createSessionRepairRuntime(deps: {
       ? undefined
       : createRepairPrinting({
           db: app.db.db,
-          userId: identity.userId,
           loadThumbnail: deps.media.loadThumbnail,
           platform: deps.print,
         });

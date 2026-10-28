@@ -884,7 +884,6 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       photo: Parameters<RepairRuntime['loadModelPhoto']>[0],
     ) => repairFor(userId).loadModelPhoto(photo),
     'repair.print.storeName': (userId: string) => repairFor(userId).printing!.storeName(),
-    'repair.print.userName': (userId: string) => repairFor(userId).printing!.userName(),
     'repair.print.readPaper': (userId: string) => repairFor(userId).printing!.readPaper(),
     'repair.print.writePaper': (
       userId: string,

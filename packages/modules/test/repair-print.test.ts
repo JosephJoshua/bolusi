@@ -24,8 +24,6 @@ import { AT, line, sampleTicket } from './support/repair-rows.js';
 const ctx: SlipContext = {
   header: { name: 'Bolusi Cell Sorong', lines: ['Jl. Basuki Rahmat 12, Sorong'], logo: null },
   terms: null,
-  printedAt: AT + 60_000,
-  printedByName: 'Maria Kasir',
   link: null,
 };
 
@@ -132,7 +130,7 @@ describe('handover slip', () => {
     expect(text).not.toContain('Ganti kamera');
     expect(text).toMatch(/Total\s+Rp 1\.150\.000/);
     expect(text).toMatch(/Status\s+: Selesai/);
-    expect(text).toContain('Pelanggan, HP sudah diterima');
+    expect(text).toContain('Diterima pelanggan');
     expect(text).toContain('KETENTUAN');
   });
 
@@ -285,6 +283,35 @@ describe('slip layout', () => {
     }
   });
 
+  it('gives up the blank lines under titles before the ones between sections', () => {
+    const ticket = sampleTicket();
+    const linked = { ...ctx, link: slipLink(ticket, 'https://bolusi.id') };
+    const rows = (
+      layoutGrid(intakeSlip(ticket, linked), PAPER_PRESETS.continuous_half).pages[0] ?? []
+    ).map(rowText);
+    const at = rows.findIndex((r) => r.startsWith('KELUHAN'));
+    expect(rows[at - 1]?.trim()).toBe('');
+    expect(rows[at + 1]).toMatch(/^Layar retak/);
+    // A shorter handover slip has room for both.
+    const handover = handoverSlip(ticket, {
+      ...linked,
+      handedOverByName: 'Maria Kasir',
+      signature: null,
+    });
+    const hrows = (layoutGrid(handover, PAPER_PRESETS.continuous_half).pages[0] ?? []).map(rowText);
+    const terms = hrows.findIndex((r) => r.startsWith('KETENTUAN'));
+    expect(hrows[terms + 1]?.trim()).toBe('');
+  });
+
+  it('prints no note of who printed it or which ply goes where', () => {
+    const rows = layoutGrid(intakeSlip(sampleTicket(), ctx), PAPER_PRESETS.continuous_half)
+      .pages.flat()
+      .map(rowText)
+      .join('\n');
+    expect(rows).not.toContain('Dicetak');
+    expect(rows).not.toMatch(/merah muda/i);
+  });
+
   /** Distinct short words up to `max` characters, so a cut or a dropped word shows up. */
   function filler(prefix: string, max: number): string {
     let out = '';
@@ -334,8 +361,6 @@ describe('slip layout', () => {
       logo: null,
     },
     terms: filler('t', 2000),
-    printedAt: AT,
-    printedByName: filler('pb', 200),
     link: null,
   };
   const slips = (): [PrintDocument, PrintDocument] => {
@@ -354,7 +379,6 @@ describe('slip layout', () => {
     [
       longCtx.header.name,
       ...longCtx.header.lines,
-      longCtx.printedByName ?? '',
       longest.customerName,
       longest.customerPhone ?? '',
       longest.deviceColor,

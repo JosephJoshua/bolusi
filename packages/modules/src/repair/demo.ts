@@ -1510,7 +1510,6 @@ export function demoRepairRuntime(
   // reviewer sees the very page a phone would print. "Share" downloads the same page.
   const printing: RepairPrinting = {
     storeName: () => Promise.resolve('Bolusi Wamena'),
-    userName: () => Promise.resolve(actor.name),
     readPaper: () => Promise.resolve(paper),
     writePaper: (next) => {
       paper = next;

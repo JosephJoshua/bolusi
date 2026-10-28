@@ -37,8 +37,6 @@ export interface SlipContext {
   readonly header: PrintHeader;
   /** The store's terms for this slip, one per line; null prints the app's default terms. */
   readonly terms: string | null;
-  readonly printedAt: number;
-  readonly printedByName: string | null;
   /** The customer's status page, printed beside the signatures; null leaves it off. */
   readonly link: PrintLink | null;
 }
@@ -83,13 +81,6 @@ function common(
   meta: readonly string[],
   parts: Pick<PrintDocument, 'blocks' | 'aside' | 'closing'>,
 ): PrintDocument {
-  const printed =
-    ctx.printedByName === null
-      ? tn('repair.slip.printed', { date: formatDateTime(ctx.printedAt) })
-      : tn('repair.slip.printedBy', {
-          date: formatDateTime(ctx.printedAt),
-          name: ctx.printedByName,
-        });
   return {
     jobName,
     header: ctx.header,
@@ -99,8 +90,6 @@ function common(
     meta: [...meta, ...reprintLabel(ticket.slipPrints[slip])],
     ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
-    plyNote: tn('repair.slip.plyNote'),
-    footer: printed,
     link: ctx.link,
   };
 }
@@ -416,8 +405,6 @@ export interface SlipSources {
   /** The logo and signature (`logoRef`, `slipSignature`), loaded; null leaves one out. */
   readonly logo: PrintImage | null;
   readonly signature: PrintImage | null;
-  readonly printedAt: number;
-  readonly printedByName: string | null;
   /** The site that serves the customer's status page (`RepairRuntime.statusSite`). */
   readonly statusSite: string | null;
 }
@@ -432,8 +419,6 @@ export function slipDocument(
   const ctx: SlipContext = {
     header: storeHeader(settings, sources.storeName, sources.logo),
     terms: slip === 'intake' ? settings.intakeTerms : settings.handoverTerms,
-    printedAt: sources.printedAt,
-    printedByName: sources.printedByName,
     link: slipLink(ticket, sources.statusSite),
   };
   return slip === 'intake'
@@ -468,7 +453,5 @@ export function testPageDocument(
     aside: [],
     closing: [],
     copies: [],
-    plyNote: null,
-    footer: null,
   };
 }

@@ -69,8 +69,6 @@ function sampleDoc(overrides: Partial<PrintDocument> = {}): PrintDocument {
       },
     ],
     copies: ['Untuk toko', 'Untuk pelanggan'],
-    plyNote: 'Lembar merah muda untuk toko, lembar kuning untuk pelanggan.',
-    footer: 'Dicetak 26/10/2026 14.31 oleh Maria',
     ...overrides,
   };
 }
@@ -133,10 +131,10 @@ describe('text-mode layout', () => {
     },
   );
 
-  it('prints once with the ply note on carbonless paper, and a labelled copy each on plain paper', () => {
-    const carbon = textRows(PAPER_PRESETS.continuous_full).flat().join('\n');
-    expect(carbon).toContain('Lembar merah muda untuk toko');
-    expect(carbon).not.toContain('Untuk pelanggan');
+  it('prints once without copy labels on carbonless paper, and a labelled copy each on plain paper', () => {
+    const carbon = textRows(PAPER_PRESETS.continuous_full);
+    expect(carbon).toHaveLength(1);
+    expect(carbon.flat().join('\n')).not.toMatch(/Untuk (toko|pelanggan)/);
 
     const plain = layoutGrid(sampleDoc(), { ...PAPER_PRESETS.continuous_full, carbonless: false });
     const all = plain.pages
@@ -191,6 +189,14 @@ describe('text-mode layout', () => {
     expect(bytes).toMatch(/Pelanggan[^\x1b\r]* {3,}\x1bEBIAYA\x1bF\r\n/);
   });
 
+  it('leaves a blank line between sections and under each title when there is room', () => {
+    const rows = textRows(PAPER_PRESETS.continuous_full)[0] ?? [];
+    const at = rows.findIndex((r) => r.startsWith('KELUHAN'));
+    expect(rows[at - 1]).toBe('');
+    expect(rows[at + 1]).toBe('');
+    expect(rows[at + 2]).toMatch(/^Layar retak/);
+  });
+
   it('tightens the line spacing before spilling onto a second form', () => {
     const paper = PAPER_PRESETS.continuous_half;
     expect(layoutGrid(sampleDoc(), paper).geometry.linesPerInch).toBe(6);
@@ -208,8 +214,9 @@ describe('text-mode layout', () => {
     expect(pages).toHaveLength(1);
     expect(geometry.linesPerInch).toBe(8);
     const rows = (pages[0] ?? []).flatMap((r) => (r.kind === 'text' ? [r.text] : []));
-    expect(rows).toContain('Catatan 0');
-    expect(rows).toContain('Catatan 21');
+    // The notes run down the body column, beside the aside where it reaches.
+    expect(rows.some((r) => r.startsWith('Catatan 0 '))).toBe(true);
+    expect(rows.some((r) => r.startsWith('Catatan 21'))).toBe(true);
     const bytes = [...renderEscp(longer, paper)];
     // ESC 0 (1/8") set before ESC C 44, the form length in those lines.
     const at = bytes.indexOf(0x43, 5);
@@ -237,7 +244,7 @@ describe('text-mode layout', () => {
   });
 
   it('starts each form a line down and gives spare lines to the signatures', () => {
-    const { geometry, pages } = layoutGrid(sampleDoc(), PAPER_PRESETS.continuous_half);
+    const { pages } = layoutGrid(sampleDoc(), PAPER_PRESETS.continuous_half);
     const rows = (pages[0] ?? []).flatMap((r) => (r.kind === 'text' ? [r.text] : []));
     expect(rows[0]).toBe('');
     expect(rows[1]?.trim()).toBe('Bolusi Cell Sorong');
@@ -246,15 +253,8 @@ describe('text-mode layout', () => {
       .slice(0, roles)
       .reverse()
       .findIndex((r) => r !== '');
-    // The blank line every closing gets, plus what the form had spare, so the footer ends at the
-    // last line above the perforation.
+    // The blank line every closing gets, plus what the form had spare.
     expect(above).toBeGreaterThan(1);
-    expect(rows).toHaveLength(geometry.pageLines - 1);
-    // The note of who printed and the ply note share the last line when they fit.
-    const short = sampleDoc({ plyNote: 'Merah muda: toko, kuning: pelanggan.' });
-    expect((textRows(PAPER_PRESETS.continuous_half, short)[0] ?? []).at(-1)).toMatch(
-      /^Dicetak .* {3}Merah muda: toko, kuning: pelanggan\.$/,
-    );
   });
 
   it('puts the title and the reference on one line', () => {

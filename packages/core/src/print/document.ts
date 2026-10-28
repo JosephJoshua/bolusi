@@ -98,10 +98,7 @@ export interface PrintDocument {
   readonly link?: PrintLink | null;
   /**
    * One label per copy, e.g. ["Untuk toko", "Untuk pelanggan"]. On carbonless paper the printer
-   * makes every copy in one pass, so `plyNote` is printed instead of separate labelled copies.
+   * makes every copy in one pass, so the labels are left off.
    */
   readonly copies: readonly string[];
-  /** e.g. "Merah muda untuk toko, kuning untuk pelanggan". */
-  readonly plyNote: string | null;
-  readonly footer: string | null;
 }

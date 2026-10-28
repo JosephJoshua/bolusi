@@ -95,8 +95,6 @@ export interface DecodedImage {
 export interface RepairPrinting {
   /** The store's name as enrolled, printed when the owner has not set another. */
   storeName(): Promise<string>;
-  /** Who is signed in, printed as who printed the slip. */
-  userName(): Promise<string | null>;
   /** The paper this device last printed on; null before the first print. */
   readPaper(): Promise<PaperSettings | null>;
   writePaper(paper: PaperSettings): Promise<void>;

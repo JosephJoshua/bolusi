@@ -86,6 +86,13 @@ function text(value: string, bold = false): TextRow {
 
 const blank = (): TextRow => text('');
 
+/**
+ * Blank lines in a layout, roomiest first: under each heading and between sections; between
+ * sections only; or none, with less signing room.
+ */
+const SPACINGS = ['roomy', 'normal', 'compact'] as const;
+type Spacing = (typeof SPACINGS)[number];
+
 /** Text rows laid next to each other, each cell padded to its width. Bold stays per cell. */
 function joinCells(cells: readonly { row: TextRow | undefined; width: number }[]): TextRow {
   const spans: GridSpan[] = [];
@@ -304,10 +311,10 @@ function signatureParts(
   };
 }
 
-function signatureRows(block: SignaturesBlock, width: number, compact: boolean): TextRow[] {
+function signatureRows(block: SignaturesBlock, width: number, spacing: Spacing): TextRow[] {
   const { roles, rule, names } = signatureParts(block, width);
   // Room to sign: three lines (half an inch), two when squeezing onto one form.
-  const space = Array.from({ length: compact ? 2 : 3 }, blank);
+  const space = Array.from({ length: spacing === 'compact' ? 2 : 3 }, blank);
   return [...roles, ...space, rule, ...(names.length === 0 ? [blank()] : names)];
 }
 
@@ -385,7 +392,7 @@ function linkGroup(
   });
   const above =
     signatures !== null && !besideSignatures
-      ? [...signatureRows(signatures, width, false), blank()]
+      ? [...signatureRows(signatures, width, 'normal'), blank()]
       : [];
   return { rows: [...above, ...rows], keepTogether: true, keepWithNext: false };
 }
@@ -406,7 +413,7 @@ function rulerRows(caption: string, width: number): TextRow[] {
   ];
 }
 
-function blockGroup(block: PrintBlock, width: number, compact: boolean): Group {
+function blockGroup(block: PrintBlock, width: number, spacing: Spacing): Group {
   const flowing = (rows: GridRow[]): Group => ({ rows, keepTogether: false, keepWithNext: false });
   switch (block.kind) {
     case 'heading':
@@ -427,7 +434,7 @@ function blockGroup(block: PrintBlock, width: number, compact: boolean): Group {
       return flowing(amountRows(block, width));
     case 'signatures':
       return {
-        rows: signatureRows(block, width, compact),
+        rows: signatureRows(block, width, spacing),
         keepTogether: true,
         keepWithNext: false,
       };
@@ -436,19 +443,19 @@ function blockGroup(block: PrintBlock, width: number, compact: boolean): Group {
   }
 }
 
-/** A run of blocks, with a blank line between them except right after a heading. */
-function blockGroups(blocks: readonly PrintBlock[], width: number, compact: boolean): Group[] {
+/** A run of blocks, with a blank line between them, and under a heading when roomy. */
+function blockGroups(blocks: readonly PrintBlock[], width: number, spacing: Spacing): Group[] {
   return blocks.map((block, i) => {
-    const group = blockGroup(block, width, compact);
-    const prev = blocks[i - 1];
-    const gap = !compact && i > 0 && prev?.kind !== 'heading';
+    const group = blockGroup(block, width, spacing);
+    const underHeading = blocks[i - 1]?.kind === 'heading';
+    const gap = i > 0 && (underHeading ? spacing === 'roomy' : spacing !== 'compact');
     return gap ? { ...group, rows: [blank(), ...group.rows] } : group;
   });
 }
 
 /** A column's rows; the blocks never lay out to images, so every row is text. */
-function columnRows(blocks: readonly PrintBlock[], width: number, compact: boolean): TextRow[] {
-  return blockGroups(blocks, width, compact).flatMap((group) =>
+function columnRows(blocks: readonly PrintBlock[], width: number, spacing: Spacing): TextRow[] {
+  return blockGroups(blocks, width, spacing).flatMap((group) =>
     group.rows.filter((row): row is TextRow => row.kind === 'text'),
   );
 }
@@ -499,8 +506,6 @@ function asciiDocument(doc: PrintDocument): PrintDocument {
     reference: a(doc.reference),
     meta: doc.meta.map(a),
     copies: doc.copies.map(a),
-    plyNote: doc.plyNote === null ? null : a(doc.plyNote),
-    footer: doc.footer === null ? null : a(doc.footer),
     blocks: doc.blocks.map(asciiBlock),
     aside: doc.aside.map(asciiBlock),
     closing: doc.closing.map(asciiBlock),
@@ -536,27 +541,6 @@ function headerGroup(doc: PrintDocument, copy: string | null, geometry: TextGeom
   rows.push(...sideBySide(doc.meta.join('  |  '), copy ?? '', width));
   rows.push(text('-'.repeat(width)));
   return { rows, keepTogether: true, keepWithNext: true };
-}
-
-function footerGroup(
-  doc: PrintDocument,
-  carbonless: boolean,
-  width: number,
-  compact: boolean,
-): Group | null {
-  const [left = '', right = ''] = [doc.footer, carbonless ? doc.plyNote : null].filter(
-    (line): line is string => line !== null && line !== '',
-  );
-  if (left === '') return null;
-  return {
-    rows: [
-      blank(),
-      ...(compact ? [] : [text('-'.repeat(width))]),
-      ...sideBySide(left, right, width),
-    ],
-    keepTogether: true,
-    keepWithNext: false,
-  };
 }
 
 /** Room on one form for rows, in 1/216 inch. */
@@ -609,14 +593,13 @@ interface Variant {
    * paper one form: on a longer document they belong at its end.
    */
   readonly closingBeside: boolean;
-  /** No blank lines between sections and less signing room. */
-  readonly compact: boolean;
+  readonly spacing: Spacing;
 }
 
 /** The groups that make up a copy: what reads top down, then what sits at its foot. */
 interface CopyGroups {
   readonly content: Group[];
-  /** The signatures (when not beside the aside) and the footer: spare lines go above these. */
+  /** The signatures, when not beside the aside: spare lines go above these. */
   readonly foot: Group[];
 }
 
@@ -624,11 +607,11 @@ interface CopyGroups {
  * The closing blocks full width, a blank line above them even when compact: room to sign. A link
  * goes beside the first signatures, or after the closing when there are none.
  */
-function closingGroups(doc: PrintDocument, geometry: TextGeometry, compact: boolean): Group[] {
+function closingGroups(doc: PrintDocument, geometry: TextGeometry, spacing: Spacing): Group[] {
   const width = geometry.columns;
   const link = doc.link ?? null;
   const signatureAt = doc.closing.findIndex((block) => block.kind === 'signatures');
-  const groups = blockGroups(doc.closing, width, compact);
+  const groups = blockGroups(doc.closing, width, spacing);
   if (link !== null) {
     const signatures = (doc.closing[signatureAt] as SignaturesBlock | undefined) ?? null;
     const group = linkGroup(link, signatures, geometry);
@@ -648,7 +631,7 @@ function closingGroups(doc: PrintDocument, geometry: TextGeometry, compact: bool
 function columnGroups(
   doc: PrintDocument,
   geometry: TextGeometry,
-  compact: boolean,
+  spacing: Spacing,
   closingBeside: boolean,
 ): CopyGroups {
   const width = geometry.columns;
@@ -658,18 +641,18 @@ function columnGroups(
   for (let cut = doc.aside.length; cut > 0; cut -= 1) {
     // A heading stays with the section it names.
     if (cut < doc.aside.length && doc.aside[cut - 1]?.kind === 'heading') continue;
-    const body = columnRows([...doc.blocks, ...doc.aside.slice(cut)], bodyWidth, compact);
-    const aside = columnRows(doc.aside.slice(0, cut), asideWidth, compact);
+    const body = columnRows([...doc.blocks, ...doc.aside.slice(cut)], bodyWidth, spacing);
+    const aside = columnRows(doc.aside.slice(0, cut), asideWidth, spacing);
     const height = Math.max(body.length, aside.length);
     if (best === null || height < Math.max(best.body.length, best.aside.length)) {
       best = { body, aside };
     }
   }
   const { body, aside } = best ?? {
-    body: columnRows(doc.blocks, bodyWidth, compact),
+    body: columnRows(doc.blocks, bodyWidth, spacing),
     aside: [],
   };
-  const beside = [blank(), ...columnRows(doc.closing, asideWidth, compact)];
+  const beside = [blank(), ...columnRows(doc.closing, asideWidth, spacing)];
   // A link's QR code needs the full width beside the signatures.
   const fitsBeside =
     closingBeside &&
@@ -682,7 +665,7 @@ function columnGroups(
     keepWithNext: false,
   };
   if (fitsBeside) return { content: [columns], foot: [] };
-  return { content: [columns], foot: closingGroups(doc, geometry, compact) };
+  return { content: [columns], foot: closingGroups(doc, geometry, spacing) };
 }
 
 /** Up to `MAX_STRETCH_LINES` blank lines above the foot, from what a one-form copy leaves spare. */
@@ -709,20 +692,16 @@ function layoutCopy(
 ): GridPage[] {
   const geometry = textGeometry(paper, variant.linesPerInch);
   const width = geometry.columns;
-  const { compact } = variant;
+  const { spacing } = variant;
   const header = headerGroup(doc, copy, geometry);
   // Stacked: the aside continues the body as more blocks, the closing under it.
   const body: CopyGroups = variant.sideBySide
-    ? columnGroups(doc, geometry, compact, variant.closingBeside)
+    ? columnGroups(doc, geometry, spacing, variant.closingBeside)
     : {
-        content: blockGroups([...doc.blocks, ...doc.aside], width, compact),
-        foot: closingGroups(doc, geometry, compact),
+        content: blockGroups([...doc.blocks, ...doc.aside], width, spacing),
+        foot: closingGroups(doc, geometry, spacing),
       };
-  const footer = footerGroup(doc, paper.carbonless, width, compact);
-  const groups: CopyGroups = {
-    content: [header, ...body.content],
-    foot: footer === null ? body.foot : [...body.foot, footer],
-  };
+  const groups: CopyGroups = { content: [header, ...body.content], foot: body.foot };
   const pages = paginate([...groups.content, ...groups.foot], geometry, doc.reference);
   const stretched = stretchFoot(groups, geometry, pages);
   return stretched === null ? pages : paginate(stretched, geometry, doc.reference);
@@ -733,7 +712,7 @@ function layoutCopy(
  *
  * Paper the customer carries home should be one sheet, so layouts are tried roomiest first and the
  * first that needs the fewest forms wins. On landscape paper wide enough, the aside goes beside the
- * body, else everything is stacked; each first with blank lines between sections, then without;
+ * body, else everything is stacked; each spaced roomiest first (`SPACINGS`), then tighter;
  * then the same with the signatures under the aside; all at 6 lines per inch, then at 8. Spare
  * lines on a one-form slip go above the signatures.
  */
@@ -755,10 +734,10 @@ export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLay
   // Signatures squeezed beside the aside get short lines, so tighter spacing is tried first.
   const variants: Variant[] = ([6, 8] as const).flatMap((linesPerInch) =>
     [false, true].flatMap((beside) =>
-      [false, true].flatMap((compact) =>
+      SPACINGS.flatMap((spacing) =>
         arrangements
           .filter((arrangement) => arrangement.closingBeside === beside)
-          .map((arrangement) => ({ ...arrangement, linesPerInch, compact })),
+          .map((arrangement) => ({ ...arrangement, linesPerInch, spacing })),
       ),
     ),
   );

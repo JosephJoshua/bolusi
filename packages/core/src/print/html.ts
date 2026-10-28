@@ -118,7 +118,6 @@ function closing(doc: PrintDocument): string {
 }
 
 function copy(doc: PrintDocument, label: string | null, paper: PaperSettings): string {
-  const carbonless = paper.carbonless;
   const header = `<header class="store">${img(doc.header.logo, 'logo')}<div><div class="store-name">${esc(
     doc.header.name,
   )}</div>${doc.header.lines.map((l) => `<div class="store-line">${esc(l)}</div>`).join('')}</div></header>`;
@@ -127,15 +126,9 @@ function copy(doc: PrintDocument, label: string | null, paper: PaperSettings): s
     .join('')}</div><div class="doc-right">${
     label === null ? '' : `<div class="copy-label">${esc(label)}</div>`
   }<div class="ref">${esc(doc.reference)}</div></div></div>`;
-  const notes = [doc.footer, carbonless ? doc.plyNote : null].filter(
-    (n): n is string => n !== null && n !== '',
-  );
-  const footer =
-    notes.length === 0 ? '' : `<footer>${notes.map((n) => `<p>${esc(n)}</p>`).join('')}</footer>`;
-  // The signatures and the footer move to a new sheet together, never the footer alone.
   return `<section class="copy">${header}${title}${main(doc, paper)}<div class="end">${closing(
     doc,
-  )}${footer}</div></section>`;
+  )}</div></section>`;
 }
 
 function styles(paper: PaperSettings): string {
@@ -168,7 +161,7 @@ body { font: 9pt/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #11
 .ref { font-size: 17pt; font-weight: 700; line-height: 1.1; white-space: nowrap; }
 main.columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 9mm; }
 h2 { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #555;
-  margin: ${v(5.5)} 0 ${v(1.8)}; break-after: avoid; page-break-after: avoid; overflow-wrap: anywhere; }
+  margin: ${v(5.5)} 0 ${v(3)}; break-after: avoid; page-break-after: avoid; overflow-wrap: anywhere; }
 main.columns h2:first-child, aside > h2:first-child { margin-top: ${v(4)}; }
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(58mm, 1fr)); gap: ${v(1.6)} 7mm; }
 .body > .fields:first-child, main > .fields:first-child { margin-top: ${v(4.5)}; }
@@ -206,8 +199,6 @@ main.columns h2:first-child, aside > h2:first-child { margin-top: ${v(4)}; }
 .sig-space { height: ${v(20)}; display: flex; align-items: flex-end; justify-content: center; }
 .sig-img { max-height: 19mm; max-width: 100%; object-fit: contain; }
 .sig-line { border-top: 0.8pt solid #111; padding-top: 1.2mm; min-height: 5mm; font-weight: 500; overflow-wrap: anywhere; }
-footer { margin-top: ${v(6)}; padding-top: ${v(2.5)}; border-top: 0.5pt solid #bbb; font-size: 7.5pt; color: #555; }
-footer p + p { margin-top: 0.6mm; }
 .ruler { border: 0.8pt solid #111; padding: 3mm; margin: 4mm 0 3mm; }
 .ruler-scale { display: flex; height: 4mm; overflow: hidden; border-right: 0.3mm solid #111; }
 .ruler-scale span { flex: 0 0 10mm; border-left: 0.3mm solid #111; }
