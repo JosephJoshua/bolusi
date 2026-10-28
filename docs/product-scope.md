@@ -268,7 +268,9 @@ Agreed with the owner after reviewing what the repair release still lacks.
   counter starts it from the servisan that went home ("Klaim garansi"), with the same
   customer and phone. A claim always names the first servisan, never another claim,
   and has no repair types of its own, so its warranty is that servisan's and a claim
-  never extends it. A later price rise on a claim also needs an owner.
+  never extends it. A later price rise on a claim also needs an owner. The server
+  judges whether the warranty still runs by when it receives the claim, not the
+  phone's clock, so a free claim taken offline that syncs after the end needs an owner.
 - **Ownership video:** taken by the counter at intake when a chosen type needs it. It
   shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
   720p (about 2 Mbit/s: MP4, or WebM from a PC whose browser engine cannot record MP4); it uploads in the

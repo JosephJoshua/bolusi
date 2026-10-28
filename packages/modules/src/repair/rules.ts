@@ -653,6 +653,8 @@ export interface ClaimRequest {
   readonly total: number;
   /** When it was signed. */
   readonly at: number;
+  /** When the server received it; absent on a device, which goes by `at`. */
+  readonly receivedAt?: number | undefined;
 }
 
 /**
@@ -697,12 +699,15 @@ export function claimProblem(
   if (claim.total > 0) return { reason: 'claimChargeOwnerOnly', owner: true };
   const until = warrantyUntil(original.repairTypes, original.returnedAt);
   // Signed between pickup and the warranty's end: a phone clock set back before pickup proves
-  // nothing about when the claim was made.
+  // nothing about when the claim was made. The server also holds the end to when it received the
+  // claim, so a phone set back cannot open a free claim after the warranty ended; a claim taken
+  // offline that reaches it late is then an owner's call too.
+  const latest = Math.max(claim.at, claim.receivedAt ?? claim.at);
   const covered =
     until !== null &&
     original.returnedAt !== null &&
     claim.at >= original.returnedAt &&
-    claim.at <= until;
+    latest <= until;
   return covered ? null : { reason: 'warrantyEnded', owner: true };
 }
 
@@ -710,8 +715,8 @@ async function requireClaimable(
   db: Db,
   op: SignedOperation,
   claimOf: string,
-  claim: Omit<ClaimRequest, 'at'>,
-  holdsPermission: Parameters<Rule>[1]['holdsPermission'],
+  claim: Omit<ClaimRequest, 'at' | 'receivedAt'>,
+  { holdsPermission, receivedAt }: Pick<Parameters<Rule>[1], 'holdsPermission' | 'receivedAt'>,
 ): Promise<void> {
   const original = await db
     .selectFrom('repairTickets')
@@ -737,7 +742,7 @@ async function requireClaimable(
       returnedAt: original.returnedAt === null ? null : Number(original.returnedAt),
       repairTypes: JSON.parse(original.repairTypesJson) as RecordedRepairType[],
     },
-    { ...claim, at: op.timestamp },
+    { ...claim, at: op.timestamp, receivedAt },
   );
   if (problem === null) return;
   if (!problem.owner) {
@@ -761,7 +766,7 @@ async function requireClaimable(
  * but never another device's to reuse.
  */
 export const ticketOpenedRule: Rule = async (op, ctx) => {
-  const { db, holdsPermission } = ctx;
+  const { db } = ctx;
   const payload = payloadOf<Payload<typeof ticketOpenedPayload>>(op);
   if (await idTaken(db, 'repairTickets', op.entityId)) {
     throw alreadyRecorded('ticketId', op.entityId);
@@ -800,7 +805,7 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
         repairTypes: payload.repairTypes,
         total,
       },
-      holdsPermission,
+      ctx,
     );
   }
   for (const line of payload.quoteLines) {
