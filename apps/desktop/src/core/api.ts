@@ -45,6 +45,7 @@ export interface CoreState {
 export const CORE_EVENTS = {
   state: 'state',
   repairChanged: 'repair.changed',
+  handoff: 'handoff',
 } as const;
 
 /** What a photo or signature handed to the core became. */
@@ -52,3 +53,27 @@ export type CoreCaptureOutcome =
   | { readonly kind: 'captured'; readonly mediaRef: MediaRef }
   | { readonly kind: 'refused_low_storage' }
   | { readonly kind: 'refused_empty' };
+
+/** The phone handoff (core/handoff.ts): a new pairing's id and the page the phone opens. */
+export type HandoffOpened =
+  | { readonly ok: true; readonly id: string; readonly urls: readonly string[] }
+  /** The PC cannot reach the server, or the server would not pair. */
+  | { readonly ok: false; readonly problem: 'offline' | 'failed' };
+
+/** What the core passes on from the paired phone, by the pairing's id. */
+export type HandoffEvent =
+  /** The phone opened the page; or the pairing ended (expired, or replaced elsewhere). */
+  | { readonly id: string; readonly type: 'paired' | 'expired' }
+  | {
+      readonly id: string;
+      readonly type: 'photo';
+      readonly seq: number;
+      readonly bytes: Uint8Array;
+    }
+  | {
+      readonly id: string;
+      readonly type: 'signature';
+      readonly seq: number;
+      readonly strokes: readonly (readonly { readonly x: number; readonly y: number }[])[];
+      readonly pad: { readonly width: number; readonly height: number };
+    };

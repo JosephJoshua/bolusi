@@ -21,7 +21,7 @@ import {
   Tooltip,
   controlClass,
 } from '@bolusi/ui-web';
-import { ArrowLeft, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
+import { ArrowLeft, Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
@@ -269,6 +269,21 @@ export function IntakePage({
       });
   };
 
+  /** Every angle still missing, one after another; backing out of one stops there. */
+  const takeMissing = (): void => {
+    const missing = options.photoAngles.filter((angle) => draft.photos[angle.id] === undefined);
+    void runner.run(async () => {
+      for (const angle of missing) {
+        const captured = await runtime.capturePhoto({ title: optionLabel('photoAngles', angle) });
+        if (captured === null) return;
+        setDraft((current) => ({
+          ...current,
+          photos: { ...current.photos, [angle.id]: captured.mediaRef },
+        }));
+      }
+    });
+  };
+
   return (
     <div ref={pageRef} className="flex min-h-0 flex-1 flex-col" data-testid="repair.desk.intake">
       <PageHeader
@@ -345,6 +360,7 @@ export function IntakePage({
                   draft={draft}
                   angles={options.photoAngles}
                   onTake={takePhoto}
+                  onTakeMissing={takeMissing}
                   showMissing={showProblems}
                 />
               </IntakeSection>
@@ -984,16 +1000,31 @@ function PhotoFields({
   draft,
   angles,
   onTake,
+  onTakeMissing,
   showMissing,
 }: {
   readonly draft: IntakeDraft;
   readonly angles: readonly IntakeOption[];
   readonly onTake: (angle: IntakeOption) => void;
+  /** Takes every missing angle in a row. */
+  readonly onTakeMissing: () => void;
   readonly showMissing: boolean;
 }): React.JSX.Element {
+  const missing = angles.filter((angle) => draft.photos[angle.id] === undefined).length;
   return (
     <div data-testid="repair.desk.intake.photos" tabIndex={-1} className="focus:outline-none">
-      <p className="mb-4 text-body text-text-muted">{tn('repair.photo.intakeHint')}</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-body text-text-muted">{tn('repair.photo.intakeHint')}</p>
+        {missing > 1 ? (
+          <Button
+            label={tn('repair.photo.takeAll')}
+            icon={Camera}
+            size="sm"
+            onClick={onTakeMissing}
+            data-testid="repair.desk.intake.photo.all"
+          />
+        ) : null}
+      </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3">
         {angles.map((angle) => (
           <AngleTile

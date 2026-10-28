@@ -36,16 +36,26 @@ function PhotoFace({
   state,
   labels,
   alt,
+  whole = false,
 }: {
   readonly state: PhotoState;
   readonly labels: PhotoLabels;
   readonly alt: string;
+  /** Shows all of it rather than filling the frame, as a signature needs. */
+  readonly whole?: boolean;
 }): React.JSX.Element {
   switch (state.kind) {
     case 'loading':
       return <Skeleton className="size-full rounded-none" />;
     case 'ready':
-      return <img src={state.uri} alt={alt} draggable={false} className="size-full object-cover" />;
+      return (
+        <img
+          src={state.uri}
+          alt={alt}
+          draggable={false}
+          className={clsx('size-full', whole ? 'bg-white object-contain' : 'object-cover')}
+        />
+      );
     case 'unavailable':
     case 'mismatch': {
       const Icon: LucideIcon = state.kind === 'mismatch' ? ShieldAlert : ImageOff;
@@ -110,6 +120,7 @@ export function CaptureTile({
   labels,
   onCapture,
   icon: Icon = Camera,
+  whole = false,
   invalid = false,
   testId,
 }: {
@@ -117,6 +128,8 @@ export function CaptureTile({
   readonly actionLabel: string;
   /** What capturing means: a camera by default, a pen for a signature. */
   readonly icon?: LucideIcon;
+  /** Shows the whole capture uncropped, for a signature. */
+  readonly whole?: boolean;
   /** The photo taken, if any. */
   readonly state: PhotoState | null;
   readonly labels: PhotoLabels;
@@ -148,7 +161,7 @@ export function CaptureTile({
           </span>
         ) : (
           <>
-            <PhotoFace state={state} labels={labels} alt={label} />
+            <PhotoFace state={state} labels={labels} alt={label} whole={whole} />
             <span className="absolute inset-x-0 bottom-0 flex h-8 items-center justify-center gap-1 bg-black/55 text-small font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
               <Icon size={14} aria-hidden />
               {actionLabel}

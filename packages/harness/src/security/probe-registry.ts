@@ -45,6 +45,8 @@ const RULE_LIST_SCOPE =
 const RULE_MEDIA_EXCEPTION =
   'security-guide §2.2 documented exception + SEC-MEDIA-03 — every out-of-scope media id is one indistinguishable 404';
 const RULE_UNAUTH = 'api/00 §3/§7 — no credentials reaches no handler';
+const RULE_HANDOFF_OWNER =
+  'a phone handoff pairing belongs to the PC that made it; any other device gets the cross-tenant 404';
 
 /** Device bearer + the acting-user claim the control-plane routes need (api/02-auth §4.5). */
 const actingHeaders = (ctx: ProbeContext, userId: string): Record<string, string> => ({
@@ -114,6 +116,49 @@ function mediaProbes(
   };
 }
 
+/**
+ * The PC's handoff legs: another device's pairing is the same `404` as one that never existed,
+ * whichever tenant or store that device is in.
+ */
+function handoffProbes(method: string, suffix: string, body?: string): EndpointProbes {
+  const build = (ctx: ProbeContext, id: string) => ({
+    path: `/v1/handoff/${id}${suffix}`,
+    init: {
+      method,
+      headers: deviceHeaders(ctx),
+      ...(body === undefined ? {} : { body }),
+    },
+    foreignId: id,
+  });
+  return {
+    crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => build(ctx, ctx.tenantBHandoffId),
+    unassignedStore: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_HANDOFF_OWNER },
+    unassignedStoreRequest: (ctx) => build(ctx, ctx.tenantAStore2HandoffId),
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg(
+      method,
+      (ctx) => `/v1/handoff/${ctx.tenantBHandoffId}${suffix}`,
+    ),
+  };
+}
+
+/** The phone page routes take no bearer: the pairing's 24-byte random key in the path is the credential. */
+const PHONE_PAGE: EndpointProbes = {
+  crossTenant: {
+    kind: 'absent',
+    reason:
+      'no tenant-scoped id: the key alone names one live pairing, and a wrong or ended key is one bare 410 (apps/server handoff.test.ts)',
+  },
+  unassignedStore: { kind: 'absent', reason: 'same — the key carries no store scope' },
+  unauthenticated: {
+    kind: 'absent',
+    reason:
+      'bearer-exempt by design: the store phone has no device token, so the unguessable key is its only credential',
+  },
+  unauthenticatedRequest: unauthLeg('GET', () => `/h/${'A'.repeat(32)}`),
+};
+
 export const PROBE_REGISTRY: ProbeRegistry = {
   // ── auth ──────────────────────────────────────────────────────────────────────────────────────
   'POST /v1/auth/login': {
@@ -140,7 +185,7 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: {
       kind: 'absent',
       reason:
-        'the ONLY bearer-exempt route (api/00 §1/§3) — the cross-tenant leg above already issues it with no credentials',
+        'the only bearer-exempt /v1 route (api/00 §1/§3) — the cross-tenant leg above already issues it with no credentials',
     },
     unauthenticatedRequest: unauthLeg('POST', () => '/v1/auth/login'),
   },
@@ -519,6 +564,28 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('POST', () => '/v1/push/tokens'),
   },
+
+  // ── phone handoff ─────────────────────────────────────────────────────────────────────────────
+  'POST /v1/handoff': {
+    crossTenant: {
+      kind: 'absent',
+      reason: 'a new pairing binds to the bearer device; the body carries no id',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the scope is the bearer device’s' },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', () => '/v1/handoff'),
+  },
+  'POST /v1/handoff/:id/ask': handoffProbes(
+    'POST',
+    '/ask',
+    JSON.stringify({ kind: 'photo', title: 'Depan' }),
+  ),
+  'POST /v1/handoff/:id/withdraw': handoffProbes('POST', '/withdraw', JSON.stringify({ seq: 1 })),
+  'GET /v1/handoff/:id/events': handoffProbes('GET', '/events?after=0'),
+  'DELETE /v1/handoff/:id': handoffProbes('DELETE', ''),
+  'GET /h/:key': PHONE_PAGE,
+  'GET /h/:key/next': PHONE_PAGE,
+  'POST /h/:key/send': PHONE_PAGE,
 
   // ── realtime ──────────────────────────────────────────────────────────────────────────────────
   'GET /v1/realtime': {

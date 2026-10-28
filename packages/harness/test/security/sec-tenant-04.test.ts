@@ -103,7 +103,14 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
       // future edit turns probes into `absent` rows to quiet a red leg, the count drops and fails.
       expect(census.crossTenantProbes).toBeGreaterThanOrEqual(15);
       expect(census.unassignedStoreProbes).toBeGreaterThanOrEqual(12);
-      expect(census.unauthenticatedProbes).toBe(endpoints.length - 1); // login is bearer-exempt
+      // Bearer-exempt: login, and the phone handoff page whose path key is the credential.
+      expect(
+        Object.entries(PROBE_REGISTRY)
+          .filter(([, row]) => row.unauthenticated.kind === 'absent')
+          .map(([key]) => key)
+          .sort(),
+      ).toEqual(['GET /h/:key', 'GET /h/:key/next', 'POST /h/:key/send', 'POST /v1/auth/login']);
+      expect(census.unauthenticatedProbes).toBe(endpoints.length - 4);
     } finally {
       await fixture.close();
     }

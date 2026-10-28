@@ -136,6 +136,8 @@ export interface ProbeContext {
   readonly tenantAStore2MediaId: string;
   /** A `receiving` media id in tenant A owned by ANOTHER device (in-flight leg). */
   readonly tenantAOtherDeviceMediaId: string;
+  /** A live phone handoff pairing of tenant A's store-2 PC (another device's, another store's). */
+  readonly tenantAStore2HandoffId: string;
 
   readonly tenantBTenantId: string;
   readonly tenantBUserId: string;
@@ -151,6 +153,8 @@ export interface ProbeContext {
    * why the token's entropy is not a citable fact).
    */
   readonly tenantBHeldPushToken: string;
+  /** A live phone handoff pairing of tenant B's PC. */
+  readonly tenantBHandoffId: string;
 
   /** A syntactically valid id that exists nowhere (the "nonexistent" media leg). */
   readonly nonexistentId: string;
