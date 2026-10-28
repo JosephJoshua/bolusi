@@ -67,6 +67,18 @@ export function createCoreRepairRuntime(deps: {
     colleagueHasPermission: (colleague, permission) =>
       deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
     newId,
+    // The ledger's port: the same person, permissions and change feed as the repair screens.
+    money: {
+      userId,
+      query: ((name: string, input: unknown) =>
+        call('money.query', name, input)) as RepairRuntime['money']['query'],
+      run: ((name: string, input: unknown) =>
+        call('money.run', name, input)) as RepairRuntime['money']['run'],
+      hasPermission: (permission) => granted.has(permission),
+      colleagueHasPermission: (colleague, permission) =>
+        deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+      newId,
+    },
     subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
     ticketSyncStatuses: (ticketIds) => call('repair.ticketSyncStatuses', ticketIds),
     technicians: () => call('repair.technicians'),

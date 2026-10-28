@@ -58,6 +58,9 @@ class FakeCore {
         return this.demo.query(args[1] as never, args[2] as never) as Promise<T>;
       }
       if (method === 'repair.technicians') return this.demo.technicians() as Promise<T>;
+      if (method === 'money.query') {
+        return this.demo.money.query(args[1] as never, args[2] as never) as Promise<T>;
+      }
       if (method === 'repair.ticketSyncStatuses') {
         return this.demo.ticketSyncStatuses(args[1] as string[]) as Promise<T>;
       }
@@ -312,6 +315,27 @@ describe('the PC over the offline core', () => {
     // Every repair call names who it is for; the core refuses it for anyone else.
     const query = core.calls.find((call) => call.method === 'repair.query');
     expect(query?.args[0]).toBe('u-owner');
+  });
+
+  it('takes the store’s payment methods from the core, for the person signed in', async () => {
+    core = new FakeCore(ready());
+    core.answers['session.submitPin'] = (userId) => {
+      core.session(signedIn(OWNER, ALL));
+      return { kind: 'opened', session: { sessionId: 's', userId } };
+    };
+    renderApp();
+    await waitFor(() => expect(core.methods()).toContain('session.refresh'));
+    fireEvent.click(screen.getByText('Andi Pratama'));
+    for (const key of '314159') fireEvent.keyDown(window, { key });
+    fireEvent.click(await screen.findByTestId('repair.desk.board.newIntake'));
+    await screen.findByTestId('repair.desk.intake');
+    await waitFor(() =>
+      expect(core.calls.find((call) => call.method === 'money.query')?.args).toEqual([
+        'u-owner',
+        'paymentAccounts',
+        {},
+      ]),
+    );
   });
 
   it('hides a new intake from a technician without the grant', async () => {

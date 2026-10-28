@@ -13,7 +13,7 @@ import { App } from '../src/renderer/App.js';
 import type * as CaptureDialogs from '../src/renderer/capture-dialogs.js';
 import type * as Capture from '../src/renderer/capture.js';
 
-// jsdom has no webcam: a photo asked for is taken at once. The dialogs have their own tests.
+// jsdom has no webcam: a photo or signature asked for is taken at once. The dialogs have their own tests.
 vi.mock('../src/renderer/capture-dialogs.js', async (importOriginal) => {
   const real = await importOriginal<typeof CaptureDialogs>();
   return {
@@ -25,6 +25,16 @@ vi.mock('../src/renderer/capture-dialogs.js', async (importOriginal) => {
         capture: {
           ...dialogs.capture,
           photo: () => Promise.resolve({ bytes: new Uint8Array([0xff, 0xd8]), mime: 'image/jpeg' }),
+          signature: () =>
+            Promise.resolve({
+              strokes: [
+                [
+                  { x: 10, y: 10 },
+                  { x: 60, y: 30 },
+                ],
+              ],
+              pad: { width: 100, height: 50 },
+            }),
         },
       };
     },
@@ -38,9 +48,20 @@ vi.mock('../src/renderer/capture.js', async (importOriginal) => ({
     Promise.resolve({ bytes: photo.bytes, mime: 'image/jpeg' }),
 }));
 
+// Nor draw: the demo's signature renders on a canvas that only needs to say it drew.
+function stubCanvas(): void {
+  const context = new Proxy({}, { get: () => () => undefined, set: () => true });
+  HTMLCanvasElement.prototype.getContext = (() =>
+    context) as unknown as HTMLCanvasElement['getContext'];
+  HTMLCanvasElement.prototype.toBlob = function toBlob(callback: BlobCallback) {
+    callback(new Blob([new Uint8Array([0x89, 0x50])], { type: 'image/png' }));
+  };
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   URL.createObjectURL = () => 'blob:photo';
+  stubCanvas();
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
@@ -72,10 +93,15 @@ async function showView(view: string): Promise<void> {
 /** The handover photo and signature, one after the other as the counter takes them. */
 async function captureHandover(): Promise<void> {
   for (const tile of ['photo', 'signature']) {
+    const before = byTestId(`repair.desk.handover.${tile}`).textContent;
     await act(async () => {
       fireEvent.click(byTestId(`repair.desk.handover.${tile}`));
       await Promise.resolve();
     });
+    // The tile offers a retake once the capture has landed.
+    await waitFor(() =>
+      expect(byTestId(`repair.desk.handover.${tile}`).textContent).not.toBe(before),
+    );
   }
 }
 
@@ -105,6 +131,7 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.board.views.pickup').getAttribute('aria-selected')).toBe('true');
   });
 
+  // The whole intake on one page, end to end: slow when the full suite shares the machine.
   it('takes in a phone on one page and opens its servisan beside the board', async () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
@@ -173,7 +200,7 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.passcode').textContent).not.toContain('1-5-9-6');
     fireEvent.click(screen.getByRole('button', { name: 'Tampilkan' }));
     expect(byTestId('repair.desk.ticket.passcode').textContent).toContain('1-5-9-6');
-  });
+  }, 20_000);
 
   it('closes only the dialog on Escape, keeping the servisan open', async () => {
     renderApp();

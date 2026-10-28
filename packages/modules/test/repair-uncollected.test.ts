@@ -10,7 +10,12 @@ import { boardFilter, uncollectedBefore, uncollectedDays } from '../src/repair/f
 import { listTicketsInput } from '../src/repair/queries.js';
 import { repairOperations, storeUncollectedDaysChangedPayload } from '../src/repair/operations.js';
 
-import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import {
+  intake,
+  openRepairHarness,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 const DAY = 86_400_000;
 
@@ -85,11 +90,7 @@ describe('the not-collected view', () => {
     await repair(h, second, 1);
     await repair(h, first, 3);
     await repair(h, returned, 5);
-    await h.run(
-      'returnDevice',
-      { ticketId: returned, handoverPhoto: h.photo(7), signature: h.photo(8) },
-      h.cashierId,
-    );
+    await h.run('returnDevice', await paidHandover(h, returned), h.cashierId);
     await h.run('startWork', { ticketId: working, beforePhotos: [h.photo(9)] }, h.technicianId);
 
     const latest = (await ticket(h, first)).readyAt as number;
