@@ -250,6 +250,19 @@
     "startup": {
       "label": "Buka saat Windows menyala",
       "caption": "Bolusi langsung terbuka begitu komputer dinyalakan."
+    },
+    "media": {
+      "title": "Kamera dan mikrofon",
+      "caption": "Dipakai untuk foto dan video kepemilikan di komputer ini.",
+      "camera": "Kamera",
+      "microphone": "Mikrofon",
+      "unnamedCamera": "Kamera {number}",
+      "unnamedMicrophone": "Mikrofon {number}",
+      "level": "Suara mikrofon",
+      "hint": "Coba bicara, garisnya ikut bergerak.",
+      "micNone": "Mikrofon tidak ditemukan. Video kepemilikan butuh suara pelanggan.",
+      "micDenied": "Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.",
+      "micFailed": "Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon."
     }
   },
   "limits": {

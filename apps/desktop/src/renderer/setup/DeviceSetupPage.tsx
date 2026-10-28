@@ -18,7 +18,6 @@ import {
 import {
   Button,
   Card,
-  CameraPreview,
   Fact,
   FactGrid,
   PageHeader,
@@ -29,6 +28,7 @@ import { ChevronRight, CircleCheck, PenLine, Smartphone } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { hasTouch, hasWebcam } from '../capture-dialogs.js';
+import { CameraAndMicrophone } from '../media-choice.js';
 import { StartWithWindows } from '../startup.js';
 
 const STEPS = ['printer', 'capture'] as const;
@@ -133,17 +133,7 @@ function CaptureCheck({
         {webcam === null ? null : source === 'webcam' ? (
           <div className="flex flex-col gap-3">
             <p className="text-body text-text">{t('auth.pc.setup.cameraWebcam')}</p>
-            <CameraPreview
-              labels={{
-                retry: t('core.action.retry'),
-                starting: t('core.camera.starting'),
-                none: t('core.camera.none'),
-                denied: t('core.camera.denied'),
-                failed: t('core.camera.failed'),
-              }}
-              onState={setPreview}
-              testId="desktop.setup.camera"
-            />
+            <CameraAndMicrophone onState={setPreview} testId="desktop.setup.camera" />
           </div>
         ) : (
           <Line icon={<Smartphone size={20} aria-hidden />} testId="desktop.setup.phone">

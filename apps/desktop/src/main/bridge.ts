@@ -64,8 +64,27 @@ export interface StartupBridge {
   set(open: boolean): Promise<void>;
 }
 
+/** A camera or microphone as Chromium lists it; the label finds it again under a new id. */
+export interface MediaInputChoice {
+  readonly deviceId: string;
+  readonly label: string;
+}
+
+export interface MediaChoices {
+  /** Null: the first one Windows lists. */
+  readonly camera: MediaInputChoice | null;
+  readonly microphone: MediaInputChoice | null;
+}
+
+/** The camera and microphone this PC's photos and videos use. */
+export interface MediaBridge {
+  choices(): Promise<MediaChoices>;
+  choose(kind: 'camera' | 'microphone', choice: MediaInputChoice | null): Promise<void>;
+}
+
 export interface DesktopBridge {
   readonly printers: PrintersBridge;
+  readonly media: MediaBridge;
   readonly updates: UpdatesBridge;
   readonly window: WindowBridge;
   readonly startup: StartupBridge;

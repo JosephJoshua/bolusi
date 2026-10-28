@@ -429,6 +429,20 @@ const source = {
           label: 'Buka saat Windows menyala',
           caption: 'Bolusi langsung terbuka begitu komputer dinyalakan.',
         },
+        media: {
+          title: 'Kamera dan mikrofon',
+          caption: 'Dipakai untuk foto dan video kepemilikan di komputer ini.',
+          camera: 'Kamera',
+          microphone: 'Mikrofon',
+          unnamedCamera: 'Kamera {number}',
+          unnamedMicrophone: 'Mikrofon {number}',
+          level: 'Suara mikrofon',
+          hint: 'Coba bicara, garisnya ikut bergerak.',
+          micNone: 'Mikrofon tidak ditemukan. Video kepemilikan butuh suara pelanggan.',
+          micDenied:
+            'Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.',
+          micFailed: 'Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon.',
+        },
       },
       limits: {
         title: 'Batas wewenang',
@@ -1090,6 +1104,20 @@ export const resources = {
           startup: {
             label: 'Open when Windows starts',
             caption: 'Bolusi opens as soon as the computer is switched on.',
+          },
+          media: {
+            title: 'Camera and microphone',
+            caption: 'Used for photos and ownership videos on this computer.',
+            camera: 'Camera',
+            microphone: 'Microphone',
+            unnamedCamera: 'Camera {number}',
+            unnamedMicrophone: 'Microphone {number}',
+            level: 'Microphone level',
+            hint: 'Say something, the bar should move.',
+            micNone: 'No microphone found. Ownership videos need the customer’s voice.',
+            micDenied:
+              'The microphone isn’t allowed yet. Allow it in Windows Settings › Privacy › Microphone.',
+            micFailed: 'The microphone won’t start. Close other apps that use it.',
           },
         },
         limits: {

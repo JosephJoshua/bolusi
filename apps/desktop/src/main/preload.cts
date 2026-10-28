@@ -26,6 +26,10 @@ const bridge: DesktopBridge = {
     printRaw: (bytes, jobName) => electron.ipcRenderer.invoke('printers:raw', bytes, jobName),
     printPage: (html, paper) => electron.ipcRenderer.invoke('printers:page', html, paper),
   },
+  media: {
+    choices: () => electron.ipcRenderer.invoke('media:choices'),
+    choose: (kind, choice) => electron.ipcRenderer.invoke('media:choose', kind, choice),
+  },
   updates: {
     version: () => electron.ipcRenderer.invoke('updates:version'),
     state: () => electron.ipcRenderer.invoke('updates:state'),

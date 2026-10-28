@@ -250,6 +250,19 @@
     "startup": {
       "label": "Open when Windows starts",
       "caption": "Bolusi opens as soon as the computer is switched on."
+    },
+    "media": {
+      "title": "Camera and microphone",
+      "caption": "Used for photos and ownership videos on this computer.",
+      "camera": "Camera",
+      "microphone": "Microphone",
+      "unnamedCamera": "Camera {number}",
+      "unnamedMicrophone": "Microphone {number}",
+      "level": "Microphone level",
+      "hint": "Say something, the bar should move.",
+      "micNone": "No microphone found. Ownership videos need the customer’s voice.",
+      "micDenied": "The microphone isn’t allowed yet. Allow it in Windows Settings › Privacy › Microphone.",
+      "micFailed": "The microphone won’t start. Close other apps that use it."
     }
   },
   "limits": {
