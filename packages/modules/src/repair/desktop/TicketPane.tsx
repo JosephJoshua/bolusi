@@ -74,7 +74,14 @@ import {
 } from '../flows.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { actionKey, LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel, warrantyLine } from '../labels.js';
+import {
+  actionKey,
+  eventNote,
+  LOCK_KIND_KEY,
+  PRICE_KIND_KEY,
+  optionLabel,
+  warrantyLine,
+} from '../labels.js';
 import {
   useRepairQuery,
   useRepairRuntime,
@@ -891,6 +898,7 @@ export function TicketPane({
         return (
           <HandoverDialog
             {...common}
+            ticket={row}
             customerName={row.customerName}
             cancelled={row.outcome === 'cancelled'}
             amount={amountOwed(row)}
@@ -1149,15 +1157,6 @@ function lineCaption(line: QuoteLineRow): string {
           : 'repair.price.status.notAgreed',
   );
   return line.reason === null || line.reason === '' ? status : `${status} · ${line.reason}`;
-}
-
-/** The note or reason a person typed with an event (a cancel reason, a parts note), if any. */
-function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
-  for (const field of ['note', 'reason'] as const) {
-    const value = detail[field];
-    if (typeof value === 'string' && value.trim() !== '') return value;
-  }
-  return null;
 }
 
 /**

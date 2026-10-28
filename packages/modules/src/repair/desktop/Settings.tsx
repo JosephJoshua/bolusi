@@ -34,7 +34,7 @@ import {
   type IntakeOptionList,
   type IntakeOptionSettings,
 } from '../intake-options.js';
-import { builtInLabel, optionLabel } from '../labels.js';
+import { INTAKE_HINT_KEY, INTAKE_LIST_KEY, builtInLabel, optionLabel } from '../labels.js';
 import {
   addRow,
   changedHidden,
@@ -76,24 +76,6 @@ export interface RepairSettingsProps {
   /** Says whether the page holds unsaved changes, so Settings asks before leaving it. */
   readonly onDirtyChange?: ((dirty: boolean) => void) | undefined;
 }
-
-export const INTAKE_LIST_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
-  checks: 'repair.options.list.checks',
-  accessories: 'repair.options.list.accessories',
-  photoAngles: 'repair.options.list.photoAngles',
-  brands: 'repair.options.list.brands',
-  readyBy: 'repair.options.list.readyBy',
-  repairTypes: 'repair.options.list.repairTypes',
-};
-
-const HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
-  checks: 'repair.options.hint.checks',
-  accessories: 'repair.options.hint.accessories',
-  photoAngles: 'repair.options.hint.photoAngles',
-  brands: 'repair.options.hint.brands',
-  readyBy: 'repair.options.hint.readyBy',
-  repairTypes: 'repair.options.hint.repairTypes',
-};
 
 const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
   emptyLabel: 'repair.options.problem.emptyLabel',
@@ -230,7 +212,7 @@ export function IntakeListSettings({
   return (
     <SettingsPanel
       title={tn(INTAKE_LIST_KEY[list])}
-      lead={`${tn(HINT_KEY[list])} ${tn(
+      lead={`${tn(INTAKE_HINT_KEY[list])} ${tn(
         can.manageIntakeOptions ? 'repair.options.intro' : 'repair.options.introStore',
       )}`}
       testId={testId}

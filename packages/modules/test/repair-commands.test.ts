@@ -8,6 +8,7 @@ import { DomainError, refusalKeyOf } from '@bolusi/core';
 import { maxTicketCounter } from '../src/repair/queries.js';
 
 import {
+  accessoriesBack,
   openRepairHarness,
   intake,
   paidHandover,
@@ -635,7 +636,12 @@ describe('cancel and handover', () => {
     const { ticketId } = await open(h);
     await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
 
-    const handover = { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8) };
+    const handover = {
+      ticketId,
+      handoverPhoto: h.photo(7),
+      signature: h.photo(8),
+      checklist: accessoriesBack(),
+    };
     await expectCode(h.run('returnDevice', handover, h.cashierId), 'INVALID_TRANSITION');
 
     await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
@@ -699,7 +705,13 @@ describe('cancel and handover', () => {
 
     await h.run(
       'returnDevice',
-      { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8), note: 'Diambil tanpa servis' },
+      {
+        ticketId,
+        handoverPhoto: h.photo(7),
+        signature: h.photo(8),
+        note: 'Diambil tanpa servis',
+        checklist: accessoriesBack(),
+      },
       h.cashierId,
     );
     expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', location: 'returned' });
@@ -729,7 +741,7 @@ describe('cancel and handover', () => {
 
     await h.run(
       'returnDevice',
-      { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8) },
+      { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8), checklist: accessoriesBack() },
       h.cashierId,
     );
     expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', location: 'returned' });
