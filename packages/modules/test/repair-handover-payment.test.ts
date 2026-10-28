@@ -7,7 +7,12 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
 import { downPaymentAction, paidLabelKey, repairAbilities } from '../src/repair/flows.js';
-import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
+import {
+  accessoriesBack,
+  openRepairHarness,
+  intake,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
 afterEach(async () => {
@@ -52,7 +57,13 @@ async function repaired(harness: RepairHarness, overrides: Record<string, unknow
 }
 
 function handover(harness: RepairHarness, ticketId: string, extra: Record<string, unknown> = {}) {
-  return { ticketId, handoverPhoto: harness.photo(7), signature: harness.photo(8), ...extra };
+  return {
+    ticketId,
+    handoverPhoto: harness.photo(7),
+    signature: harness.photo(8),
+    checklist: accessoriesBack(),
+    ...extra,
+  };
 }
 
 async function ledger(harness: RepairHarness, ticketId: string) {

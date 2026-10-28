@@ -312,6 +312,11 @@ function LiveCounter({
   );
 
   const settings = useSettingsAccess(client, state, session, userId);
+  const users = session.users;
+  const nameOf = useCallback(
+    (id: string) => users?.find((other) => other.id === id)?.name ?? null,
+    [users],
+  );
   const [syncOpen, setSyncOpen] = useState(false);
 
   // The intake in progress lives in this person's workspace in the core, so it survives a lock, a
@@ -340,6 +345,7 @@ function LiveCounter({
       <Counter
         storeName={storeName}
         person={{ userId, name: user?.name ?? '', role: roleOf(user) }}
+        nameOf={nameOf}
         menuItems={[
           { key: 'switch', label: t('core.account.switchUser'), icon: Users, onSelect: onSwitch },
           {
@@ -419,6 +425,10 @@ function useSettingsAccess(
   }, [client, userId, canUnlock, canReset, canManageStaff, tenantAdmin, lockedCount, device]);
 }
 
+function demoNameOf(userId: string): string | null {
+  return DEMO_PEOPLE.find((person) => person.userId === userId)?.name ?? null;
+}
+
 /** The seeded demo (the dev server in a browser, and the demo build): four people, no core. */
 function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Element {
   const [person, setPerson] = useState<DemoPerson>(DEMO_PEOPLE[0]!);
@@ -439,6 +449,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
           name: person.name,
           role: translateRoleKey(person.roleKey) ?? '',
         }}
+        nameOf={demoNameOf}
         menuHeader={
           <span className="text-small font-semibold text-text-muted">
             {t('core.account.switchUser')}

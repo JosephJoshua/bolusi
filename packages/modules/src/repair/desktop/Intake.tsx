@@ -79,14 +79,8 @@ import type { PaymentAccountRow } from '../../money/queries.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import type { MediaRef } from '@bolusi/schemas';
 
-import {
-  ActionError,
-  ModelPhoto,
-  MoneyField,
-  photoLabels,
-  rupiahText,
-  usePhotoState,
-} from './parts.js';
+import { ActionError } from '../../screen-kit/desktop/index.js';
+import { ModelPhoto, MoneyField, photoLabels, rupiahText, usePhotoState } from './parts.js';
 
 /** The sections in page order; the phone's review step is the summary column here. */
 const SECTIONS = [

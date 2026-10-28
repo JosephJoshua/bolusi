@@ -117,6 +117,30 @@ describe('a brand listing page', () => {
   });
 });
 
+test.each([
+  ['Samsung', 'Galaxy A6 (2018)', 'samsung_galaxy_a6_(2018)-9155.php', 9155],
+  ['AT&T', 'Quickfire', 'at&amp;t_quickfire-2598.php', 2598],
+  ['Samsung', 'Ch@t 527', 'samsung_ch@t_527-4096.php', 4096],
+  ['Samsung', 'M715 T*OMNIA II', 'samsung_m715_t*omnia_ii-3350.php', 3350],
+] as const)('keeps punctuated model names for %s %s', (brand, name, path, id) => {
+  const html = `<div class="makers"><ul><li><a href="${path}"><strong><span>${name}</span></strong></a></li></ul></div>`;
+  const page = parseBrandPage(html, brand);
+  expect(page.models).toHaveLength(1);
+  expect(page.models[0]).toMatchObject({ id, brand, name, pagePath: path.replace('&amp;', '&') });
+  expect(isCrawlablePath(page.models[0]!.pagePath)).toBe(true);
+});
+
+test.each([
+  '//evil.example/a-1.php',
+  'a_(2025)-1.php?redirect=https://evil.example',
+  'a_(2025)-1.php#fragment',
+  'a_../b-1.php',
+  'a_%2f_b-1.php',
+  'a-pictures-1.php',
+])('rejects non-model path %s', (path) => {
+  expect(isCrawlablePath(path)).toBe(false);
+});
+
 test('a model page gives its unique maker codes and year', () => {
   expect(parseModelPage(MODEL_PAGE)).toEqual({
     modelCodes: ['SM-A566B', 'SM-A566B/DS', 'SM-A566E'],

@@ -12,6 +12,8 @@ import type { ScreenLockKind } from './screen-lock.js';
 import {
   READY_UNKNOWN,
   readyDays,
+  type HandoverCheck,
+  type HandoverCheckId,
   type IntakeCheck,
   type IntakeOption,
   type IntakeOptionList,
@@ -99,6 +101,33 @@ export function readyLabel(id: string): string {
   return days === null ? id : tn('repair.ready.inDays', { count: days });
 }
 
+/** Each list's name in the owner's editor, on the phone and the PC. */
+export const INTAKE_LIST_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
+  checks: 'repair.options.list.checks',
+  accessories: 'repair.options.list.accessories',
+  photoAngles: 'repair.options.list.photoAngles',
+  brands: 'repair.options.list.brands',
+  readyBy: 'repair.options.list.readyBy',
+  repairTypes: 'repair.options.list.repairTypes',
+  handoverChecks: 'repair.options.list.handoverChecks',
+};
+
+/** What each list is for, under its name in the owner's editor. */
+export const INTAKE_HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
+  checks: 'repair.options.hint.checks',
+  accessories: 'repair.options.hint.accessories',
+  photoAngles: 'repair.options.hint.photoAngles',
+  brands: 'repair.options.hint.brands',
+  readyBy: 'repair.options.hint.readyBy',
+  repairTypes: 'repair.options.hint.repairTypes',
+  handoverChecks: 'repair.options.hint.handoverChecks',
+};
+
+const HANDOVER_CHECK_KEY: Readonly<Record<HandoverCheckId, RepairKey>> = {
+  customerTried: 'repair.handoverCheck.customerTried',
+  repairWorks: 'repair.handoverCheck.repairWorks',
+};
+
 const BUILT_IN_KEYS: Readonly<Record<IntakeOptionList, Readonly<Record<string, RepairKey>>>> = {
   checks: CHECK_KEY,
   accessories: PERIPHERAL_KEY,
@@ -106,6 +135,7 @@ const BUILT_IN_KEYS: Readonly<Record<IntakeOptionList, Readonly<Record<string, R
   brands: {},
   readyBy: {},
   repairTypes: REPAIR_TYPE_KEY,
+  handoverChecks: HANDOVER_CHECK_KEY,
 };
 
 /** The app's own name for a built-in intake list item, in the current language, or null. */
@@ -233,4 +263,34 @@ export function actionKey(action: TicketAction, technicianId: string | null): Re
   if (technicianId !== null && action === 'assign') return 'repair.action.reassign';
   if (technicianId !== null && action === 'claim') return 'repair.action.takeOver';
   return ACTION_KEY[action];
+}
+
+/**
+ * What a history entry says under its title: at a handover, what was and was not checked with the
+ * customer; then its note or reason.
+ */
+export function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
+  const lines: string[] = [];
+  const checklist = detail['checklist'];
+  if (Array.isArray(checklist)) {
+    const lineName = (line: HandoverCheck): string =>
+      optionLabel(line.kind === 'accessory' ? 'accessories' : 'handoverChecks', {
+        id: line.item,
+        label: line.label,
+      });
+    const recorded = checklist as readonly HandoverCheck[];
+    const done = recorded.filter((line) => line.done).map(lineName);
+    const notDone = recorded.filter((line) => !line.done).map(lineName);
+    if (done.length > 0) lines.push(tn('repair.handover.checked', { items: done.join(', ') }));
+    if (notDone.length > 0)
+      lines.push(tn('repair.handover.unchecked', { items: notDone.join(', ') }));
+  }
+  for (const field of ['note', 'reason'] as const) {
+    const value = detail[field];
+    if (typeof value === 'string' && value.trim() !== '') {
+      lines.push(value);
+      break;
+    }
+  }
+  return lines.length === 0 ? null : lines.join('\n');
 }

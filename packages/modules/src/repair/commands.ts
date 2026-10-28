@@ -43,6 +43,7 @@ import {
   MAX_TERMS,
   MAX_TICKET_REPAIR_TYPES,
   zChecklistItemV2,
+  zHandoverCheck,
   zDevice,
   zIntakePhotosV2,
   zOptionId,
@@ -748,6 +749,11 @@ export const returnDeviceInput = z
       .transform((reason) => (reason === null || reason === '' ? null : reason)),
     /** Shown in the history next to money handed back (a cancelled servisan's DP less its fee). */
     refundReason: zText(200).default(''),
+    /** What the counter went through with the customer (`handoverChecklist`), ticked or not. */
+    checklist: z
+      .array(zHandoverCheck)
+      .max(MAX_OPTIONS + 50)
+      .default([]),
   })
   .strict();
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
@@ -827,6 +833,7 @@ export async function returnDeviceHandler(
       signature: input.signature,
       note: input.note,
       unpaidReason: balance > 0 ? input.unpaidReason : null,
+      checklist: input.checklist,
     }),
   );
   return { ops, result: { ticketId: ticket.id } };

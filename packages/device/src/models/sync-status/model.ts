@@ -293,8 +293,10 @@ export type SyncChipState = 'synced' | 'pending' | 'syncing' | 'offline' | 'atte
  */
 export function syncChipState(input: SyncStatusInput): SyncChipState {
   if (syncProblems(input).length > 0) return 'attention';
-  if (input.loopState === 'pushing' || input.loopState === 'pulling') return 'syncing';
+  // A new change still starts a push while offline, which fails at once. Saying "sending" for
+  // that moment would claim something that cannot happen, so offline wins over syncing.
   if (input.isOffline) return 'offline';
+  if (input.loopState === 'pushing' || input.loopState === 'pulling') return 'syncing';
   if (input.pendingOperationCount > 0) return 'pending';
   return 'synced';
 }

@@ -158,7 +158,7 @@ test('the business owner gives a method to some stores only, and can give it to 
     await h.moneyQuery('paymentAccounts', { includeInactive: true, everyStore: true }, h.ownerId)
   ).rows as { id: string; storeIds: string[] }[];
   expect(shared!.storeIds).toEqual([sorong]);
-  expect(text(owner, `money.methods.row.${shared!.id}`)).toContain('1 toko');
+  expect(text(owner, `money.methods.row.${shared!.id}`)).toContain('QRIS · Toko Sorong');
 
   await press(owner, `money.methods.row.${shared!.id}`);
   await press(owner, 'money.methodForm.scope.all');

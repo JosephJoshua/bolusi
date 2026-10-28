@@ -23,7 +23,10 @@ export interface SessionView {
   readonly canReset: boolean;
   readonly canManageStaff: boolean;
   readonly tenantAdmin: boolean;
-  /** The repair permissions the signed-in person holds, for showing actions (the core enforces). */
+  /**
+   * Every module's permissions the signed-in person holds (repair's, money's, ...), for showing
+   * actions; the core enforces.
+   */
   readonly permissions: readonly string[];
   /** The same for each colleague, for pickers. */
   readonly colleaguePermissions: Readonly<Record<string, readonly string[]>>;
