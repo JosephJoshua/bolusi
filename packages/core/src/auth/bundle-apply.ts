@@ -27,6 +27,7 @@ import {
   replaceUserRolesDirectory,
   replaceUsersDirectory,
   STORE_NAME_META_KEY,
+  STORES_META_KEY,
   TENANT_NAME_META_KEY,
   verifierUserIds,
   writeMeta,
@@ -61,6 +62,12 @@ export async function applyBundle<DB>(db: Kysely<DB>, bundle: DeviceBundle): Pro
   // `storeId` (never rewritten — the §7.4 store binding is irreversible), only the display names refresh.
   await writeMeta(db, STORE_NAME_META_KEY, bundle.store.name);
   await writeMeta(db, TENANT_NAME_META_KEY, bundle.tenant.name);
+  // An older server sends no list: this store is the one the device knows.
+  await writeMeta(
+    db,
+    STORES_META_KEY,
+    JSON.stringify(bundle.stores ?? [{ id: bundle.store.id, name: bundle.store.name }]),
+  );
 
   // The tenant's idle-lock timeout (api/02-auth §6.4) rides every bundle exactly as the display
   // names do, and lands here for the same reason: it is server-owned, re-delivered on refresh, and

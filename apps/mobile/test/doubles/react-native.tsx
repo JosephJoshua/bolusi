@@ -34,6 +34,7 @@ export {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   Vibration,

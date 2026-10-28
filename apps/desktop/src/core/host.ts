@@ -763,6 +763,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       untyped(repairFor(userId).money.query)(knownName(moneyModule.queries, name), input),
     'money.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).money.run)(knownName(moneyModule.commands, name), input),
+    'money.stores': (userId: string) => repairFor(userId).money.stores(),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),

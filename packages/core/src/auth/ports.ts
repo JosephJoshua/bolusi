@@ -58,6 +58,8 @@ export interface EnrollResponse {
 export interface DeviceBundle {
   readonly tenant: { readonly id: string; readonly name: string };
   readonly store: { readonly id: string; readonly name: string };
+  /** Every store of the business; absent from an older server. */
+  readonly stores?: readonly { readonly id: string; readonly name: string }[] | undefined;
   readonly settings: { readonly idleLockSeconds: number };
   readonly users: readonly BundleUser[];
   readonly rolesSnapshot: readonly BundleRole[];

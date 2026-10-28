@@ -1,5 +1,7 @@
 // The store's Kas, platform-free so the phone and the PC read it the same: what came in today by
 // method, the drawer's moves, a count's difference and what customers still owe.
+import { formatMoney } from '@bolusi/i18n';
+
 import { CASH_ACCOUNT, type CashMoveKind } from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -132,4 +134,56 @@ export function splitOpenBalances<T extends OpenBalanceRow>(rows: readonly T[]):
     owed: rows.filter((row) => row.balance > 0),
     owedBack: rows.filter((row) => row.balance < 0),
   };
+}
+
+/** How each kind of record reads in the day's history. */
+const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
+  charge_recorded: 'money.opType.chargeRecorded',
+  charge_reduced: 'money.opType.chargeReduced',
+  payment_received: 'money.opType.paymentReceived',
+  refund_paid: 'money.opType.refundPaid',
+  cash_counted: 'money.opType.cashCounted',
+};
+
+export interface HistoryLine {
+  readonly label: MoneyKey;
+  /** The servisan, the method and the reason, as far as the record has them. */
+  readonly details: readonly string[];
+  /** Signed for the drawer's moves and refunds, as the amount reads. */
+  readonly amount: string;
+  readonly voided: boolean;
+}
+
+/** One record as the history lists it. */
+export function historyLine(
+  entry: MoneyEntryRow,
+  accounts: readonly PaymentAccountRow[],
+): HistoryLine {
+  // The drawer's own moves read as the board lists them.
+  const move = drawerMoves([entry])[0];
+  const label = move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived';
+  const method =
+    entry.account === null ||
+    !['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind)
+      ? null
+      : accountLabel(entry.account, accounts);
+  const signed =
+    move !== undefined
+      ? move.delta
+      : entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
+        ? -entry.amount
+        : entry.amount;
+  return {
+    label,
+    details: [entry.documentLabel, method, entry.reason].filter(
+      (part): part is string => part !== null && part !== '',
+    ),
+    amount: `${signed < 0 ? '−' : ''}${formatMoney(Math.abs(signed))}`,
+    voided: entry.voidedAt !== null,
+  };
+}
+
+/** Whether an owner may still cancel this record: a payment not cancelled yet. */
+export function voidable(entry: MoneyEntryRow): boolean {
+  return entry.kind === 'payment_received' && entry.voidedAt === null;
 }

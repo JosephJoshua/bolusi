@@ -36,7 +36,9 @@ interface Stored extends MoneyEntryRow {
 }
 
 export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): DemoMoneyLedger {
-  const { now, accounts } = options;
+  const { now } = options;
+  // Settings adds, renames and switches off methods; the payment step offers the ones in use.
+  const accounts: PaymentAccountRow[] = [...options.accounts];
   let ids = 0;
   const entry = (fields: Partial<Stored> & { kind: EntryKind; amount: number }): Stored => ({
     id: `m-${String((ids += 1))}`,
@@ -184,7 +186,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     query: (name, input) => {
       switch (name) {
         case 'paymentAccounts':
-          return page([...accounts]);
+          return page(accounts.filter((row) => input['includeInactive'] === true || row.active));
         case 'cashDrawer':
           return page([drawer()]);
         case 'openBalances':
@@ -242,6 +244,38 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
               documentId: doc.id,
               documentLabel: doc.label,
             });
+          }
+          return Promise.resolve(null);
+        }
+        case 'saveAccount':
+        case 'saveCentralAccount': {
+          const accountId = (input['accountId'] as string | undefined) ?? `a-${String((ids += 1))}`;
+          const saved: PaymentAccountRow = {
+            id: accountId,
+            kind: input['kind'] as PaymentAccountRow['kind'],
+            name: String(input['name']),
+            active: input['active'] !== false,
+            central: name === 'saveCentralAccount',
+            storeIds: (input['storeIds'] as string[] | undefined) ?? [],
+          };
+          const at = accounts.findIndex((row) => row.id === accountId);
+          if (at === -1) accounts.push(saved);
+          else accounts[at] = saved;
+          accounts.sort((a, b) => a.name.localeCompare(b.name));
+          notify();
+          return Promise.resolve({ accountId });
+        }
+        case 'voidPayment': {
+          const at = entries.findIndex((e) => e.id === input['entryId']);
+          if (at !== -1) {
+            entries[at] = {
+              ...entries[at]!,
+              voidedBy: options.actor(),
+              voidedAt: now + ids,
+              voidReason: String(input['reason']),
+            };
+            ids += 1;
+            notify();
           }
           return Promise.resolve(null);
         }
