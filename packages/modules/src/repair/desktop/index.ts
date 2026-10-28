@@ -7,6 +7,12 @@ export { PrintSettings } from './PrintSettings.js';
 export { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
 export { MoneyField } from './parts.js';
 export {
+  STORE_BASIC_KEY,
+  STORE_BASIC_SETTING,
+  useMissingStoreBasics,
+  type StoreBasic,
+} from '../store-basics.js';
+export {
   CancelFeesSettings,
   DiscardChangesDialog,
   FormFooter,

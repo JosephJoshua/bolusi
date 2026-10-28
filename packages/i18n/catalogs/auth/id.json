@@ -232,7 +232,7 @@
       "cameraPhone": "Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.",
       "signatureScreen": "Pelanggan tanda tangan langsung di layar sentuh ini.",
       "signaturePhone": "Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.",
-      "doneTitle": "Komputer siap dipakai",
+      "doneTitle": "Komputer ini siap",
       "donePrinter": "Printer",
       "donePaper": "Kertas",
       "donePhotos": "Foto",
@@ -271,5 +271,26 @@
       "rateLimited": "Sudah terlalu banyak perubahan hari ini. Coba lagi besok.",
       "unexpected": "Batasnya belum tersimpan. Coba lagi sebentar lagi."
     }
+  },
+  "setup": {
+    "title": "Siapkan HP ini",
+    "step": "Langkah {step} dari {total}",
+    "permissionsTitle": "Izin HP",
+    "camera": "Kamera",
+    "cameraWhy": "Untuk foto HP pelanggan dan scan kode QR.",
+    "notifications": "Notifikasi",
+    "notificationsWhy": "Kabar kalau ada servisan yang perlu dicek.",
+    "allow": "Izinkan",
+    "allowed": "Diizinkan",
+    "notAllowed": "Belum diizinkan",
+    "openSettings": "Buka pengaturan",
+    "blockedHint": "Izinnya ditolak. Nyalakan lewat pengaturan HP.",
+    "paperTitle": "Kertas nota",
+    "next": "Lanjut",
+    "later": "Nanti saja",
+    "doneTitle": "HP ini siap",
+    "start": "Mulai",
+    "reopen": "Panduan persiapan",
+    "reopenSummary": "Izin HP, kertas nota, dan halaman uji"
   }
 }

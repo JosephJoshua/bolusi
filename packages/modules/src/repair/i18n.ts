@@ -8,6 +8,15 @@ import {
 } from '../screen-kit/i18n.js';
 
 export const REPAIR_KEYS = [
+  'repair.basics.title',
+  'repair.basics.slipHeader',
+  'repair.basics.slipHeaderSummary',
+  'repair.basics.logo',
+  'repair.basics.logoSummary',
+  'repair.basics.terms',
+  'repair.basics.termsSummary',
+  'repair.basics.paymentMethods',
+  'repair.basics.paymentMethodsSummary',
   'repair.action.agreeApply',
   'repair.action.applyPrice',
   'repair.action.agreedYes',

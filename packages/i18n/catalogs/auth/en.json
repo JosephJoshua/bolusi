@@ -271,5 +271,26 @@
       "rateLimited": "Too many changes today. Try again tomorrow.",
       "unexpected": "The limits weren’t saved. Try again in a moment."
     }
+  },
+  "setup": {
+    "title": "Set up this phone",
+    "step": "Step {step} of {total}",
+    "permissionsTitle": "Phone permissions",
+    "camera": "Camera",
+    "cameraWhy": "For photos of customers’ phones and scanning QR codes.",
+    "notifications": "Notifications",
+    "notificationsWhy": "Word when a repair needs checking.",
+    "allow": "Allow",
+    "allowed": "Allowed",
+    "notAllowed": "Not allowed",
+    "openSettings": "Open settings",
+    "blockedHint": "Permission was refused. Turn it on in the phone’s settings.",
+    "paperTitle": "Slip paper",
+    "next": "Next",
+    "later": "Later",
+    "doneTitle": "This phone is ready",
+    "start": "Start",
+    "reopen": "Setup guide",
+    "reopenSummary": "Phone permissions, slip paper and a test page"
   }
 }

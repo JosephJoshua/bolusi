@@ -260,6 +260,50 @@ test('the running shell opens Settings from its header — the language escape h
   await shoot(page, 'app-settings');
 });
 
+test('a new phone opens on its setup: permissions, paper with a test page, then what is ready', async ({
+  page,
+}) => {
+  await open(page, 'app', 'setup');
+  await expect(page.getByTestId('setup.permissions')).toBeVisible();
+  // The camera can still be asked; notifications were refused, so only the OS settings help.
+  await expect(page.getByTestId('setup.notifications.settings')).toBeVisible();
+  await shoot(page, 'app-setup-permissions');
+  await page.getByTestId('setup.camera.allow').click();
+  await expect(page.getByTestId('setup.camera.allowed')).toBeVisible();
+  await shoot(page, 'app-setup-permissions-allowed');
+
+  await page.getByTestId('setup.next').click();
+  await expect(page.getByTestId('setup.paper')).toBeVisible();
+  await page.getByTestId('setup.paper.choice.a5').click();
+  await shoot(page, 'app-setup-paper');
+
+  await page.getByTestId('setup.next').click();
+  await expect(page.getByTestId('setup.done')).toBeVisible();
+  await expect(page.getByTestId('setup.done.paper')).toContainText('A5');
+  await expect(page.getByTestId('setup.basics')).toBeVisible();
+  await shoot(page, 'app-setup-done');
+
+  // Starting leaves the setup for the home screen, and it does not come back by itself.
+  await page.getByTestId('setup.start').click();
+  await expect(page.getByTestId('setup.done')).toHaveCount(0);
+  await expect(page.getByTestId('setup.permissions')).toHaveCount(0);
+
+  // Settings opens it again.
+  await page.getByTestId('ui.avatarButton').click();
+  await page.getByTestId('shell-open-settings').click();
+  await page.getByTestId('settings-setup').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('settings-setup')).toBeVisible();
+  await shoot(page, 'app-setup-settings');
+  await page.getByTestId('settings-setup').click();
+  await expect(page.getByTestId('setup.permissions')).toBeVisible();
+
+  // What the store still lacks leads to the setting that fills it.
+  await page.getByTestId('setup.next').click();
+  await page.getByTestId('setup.next').click();
+  await page.getByTestId('setup.basics.logo').click();
+  await expect(page.getByTestId('repair.printSettings')).toBeVisible();
+});
+
 // ── INTERACTION 5: the note BODY wraps instead of clipping (task 128) ─────────────────────────────
 //
 // THE ONLY LANE THAT CAN SEE THIS. The unit lanes read declared props and styles; nothing there

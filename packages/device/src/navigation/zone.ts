@@ -44,6 +44,8 @@ export const SHELL_ROUTES = [
   'printPaper',
   'parts',
   'paymentMethods',
+  // The first-run setup of a newly registered phone (apps/mobile screens/setup).
+  'deviceSetup',
 ] as const;
 export type ShellRoute = (typeof SHELL_ROUTES)[number];
 

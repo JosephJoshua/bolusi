@@ -58,6 +58,7 @@ import {
   answerNotificationAsk,
   shouldAskForNotifications,
   type NotificationPermissionPort,
+  type PermissionPort,
 } from '../push/permission.js';
 import {
   registerPushTokenOnAppStart,
@@ -91,7 +92,9 @@ import { createIdleTicker } from '@bolusi/device/session/idle-ticker';
 import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { MediaClient } from '@bolusi/device/media/client';
 import {
+  finishDeviceSetup,
   readDeviceId,
+  readDeviceSetupFor,
   readSyncState,
   type CommandIdentity,
   type PinVerifierUploadPort,
@@ -304,6 +307,8 @@ export interface RootProps {
    * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
    */
   readonly notificationPermission?: NotificationPermissionPort | undefined;
+  /** The camera permission, asked up front by the new-phone setup. `undefined` ⇒ not asked there. */
+  readonly cameraPermission?: PermissionPort | undefined;
 }
 
 export function Root({
@@ -326,6 +331,7 @@ export function Root({
   scanPlatform,
   videoPlatform,
   notificationPermission,
+  cameraPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
   // function that changes the language the catalog resolves in is `@bolusi/i18n`'s `setLocale`,
@@ -338,6 +344,8 @@ export function Root({
   const [locale, setLocaleState] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  /** The owner this phone's first-run setup waits for (core device-setup.ts), or null. */
+  const [setupFor, setSetupFor] = useState<string | null>(null);
   const [enrollment, setEnrollment] = useState<AppEnrollment | null>(null);
   const [sync, setSync] = useState<SyncClient | null>(null);
   /**
@@ -624,7 +632,11 @@ export function Root({
       }
       try {
         const info = await readDeviceInfoStable(booted);
-        if (!disposed) setDeviceInfo(info);
+        const waitsFor = await readDeviceSetupFor(booted.db.db);
+        if (!disposed) {
+          setDeviceInfo(info);
+          setSetupFor(waitsFor);
+        }
       } catch (error) {
         consoleDiagnostics.warn('enrolled-services start failed after session open', {
           via,
@@ -804,7 +816,9 @@ export function Root({
   const [notificationAsk, setNotificationAsk] = useState(false);
   const enrolled = app !== null && app.deviceId !== null;
   useEffect(() => {
-    if (notificationPermission === undefined || !enrolled || !unlocked) return;
+    // The new-phone setup asks with its own reasons; the sheet waits until it is over.
+    const inSetup = setupFor !== null && setupFor === sessionUserId;
+    if (notificationPermission === undefined || !enrolled || !unlocked || inSetup) return;
     let live = true;
     void shouldAskForNotifications(notificationPermission).then((ask) => {
       if (live && ask) setNotificationAsk(true);
@@ -812,7 +826,20 @@ export function Root({
     return () => {
       live = false;
     };
-  }, [notificationPermission, enrolled, unlocked]);
+  }, [notificationPermission, enrolled, unlocked, setupFor, sessionUserId]);
+  const finishSetup = useCallback(() => {
+    // The setup showed the notification row with its reason, so the sheet does not ask again after.
+    void (notificationPermission?.writeAsked() ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => setSetupFor(null));
+    if (app !== null) {
+      void finishDeviceSetup(app.db.db).catch((error: unknown) =>
+        consoleDiagnostics.warn('device setup could not be marked done', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  }, [app, notificationPermission]);
   const answerNotifications = useCallback(
     (allow: boolean) => {
       setNotificationAsk(false);
@@ -1265,6 +1292,10 @@ export function Root({
         // route. `App` applies it via `setRoute`; the gate still decides what actually shows.
         pushRoute={pushRoute}
         onAnswerNotifications={notificationAsk ? answerNotifications : null}
+        setupPending={setupFor !== null && setupFor === sessionUserId}
+        onSetupDone={finishSetup}
+        cameraPermission={cameraPermission}
+        notificationPermission={notificationPermission}
       />
     </View>
   );

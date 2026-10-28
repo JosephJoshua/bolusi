@@ -126,3 +126,42 @@ export function __emitHardwareBack(): boolean {
 export function __resetHardwareBack(): void {
   backListeners.length = 0;
 }
+
+/**
+ * `AppState` double: the new-phone setup reads permissions again when the app comes back from the OS
+ * settings. Recorded listeners, driven by `__emitAppState`; nothing fires on its own.
+ */
+type AppStateListener = (state: string) => void;
+const appStateListeners: AppStateListener[] = [];
+
+export const AppState = {
+  currentState: 'active',
+  addEventListener(event: string, listener: AppStateListener): { remove: () => void } {
+    if (event !== 'change') return { remove: () => undefined };
+    appStateListeners.push(listener);
+    return {
+      remove: () => {
+        const index = appStateListeners.indexOf(listener);
+        if (index >= 0) appStateListeners.splice(index, 1);
+      },
+    };
+  },
+};
+
+export function __emitAppState(state: string): void {
+  for (const listener of [...appStateListeners]) listener(state);
+}
+
+/** `Linking` double: what the app asked the OS to open, recorded. */
+export const __linkingCalls: string[] = [];
+export const Linking = {
+  openSettings: async (): Promise<void> => {
+    __linkingCalls.push('openSettings');
+  },
+  openURL: async (url: string): Promise<void> => {
+    __linkingCalls.push(url);
+  },
+  sendIntent: async (action: string): Promise<void> => {
+    __linkingCalls.push(action);
+  },
+};

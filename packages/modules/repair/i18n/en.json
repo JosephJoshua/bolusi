@@ -763,5 +763,16 @@
     "noCamera": "Record it on a store phone: open this servisan there.",
     "label": "Video",
     "expired": "The ownership video was deleted. Record it again."
+  },
+  "basics": {
+    "title": "Finish the store details",
+    "slipHeader": "Store address and phone",
+    "slipHeaderSummary": "Not on the slips yet",
+    "logo": "Store logo",
+    "logoSummary": "Not on the slips yet",
+    "terms": "Slip terms",
+    "termsSummary": "Still the default terms",
+    "paymentMethods": "Payment methods",
+    "paymentMethodsSummary": "Cash only so far"
   }
 }

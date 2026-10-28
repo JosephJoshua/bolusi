@@ -44,6 +44,7 @@ import { SettingsScreen } from '../screens/settings/SettingsScreen.js';
 import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
 import type { AppProps } from '../../App.js';
+import type { PermissionPort } from '../push/permission.js';
 
 import {
   DEMO_REPAIR_ROLES,
@@ -324,10 +325,13 @@ const PREVIEW_USERS: readonly SwitcherUser[] = DEMO_USERS.map((user) => ({
 function AppMode({
   session,
   repairRole,
+  setup = false,
 }: {
   readonly session: AppProps['session'];
   /** Puts the repair module on the home surface, signed in as this demo role. */
   readonly repairRole?: DemoRepairRole;
+  /** Opens on the new-phone setup, as for the owner who just registered the phone. */
+  readonly setup?: boolean;
 }): React.JSX.Element {
   const [, force] = useReducer((n: number) => n + 1, 0);
   // One runtime per mount, so a create/edit interaction accumulates instead of resetting each render.
@@ -341,6 +345,9 @@ function AppMode({
   );
   // "Switch user" works: any PIN opens the chosen person, who acts on the same demo tickets.
   const [current, setCurrent] = useState(session);
+  const [setupPending, setSetupPending] = useState(setup);
+  const [camera] = useState(() => previewPermission(false));
+  const [notifications] = useState(() => previewPermission(true));
   const onSubmitPin = (userId: string): Promise<boolean> => {
     const role = demoRoleOf(userId);
     if (role !== undefined) repair?.actAs(role);
@@ -378,8 +385,24 @@ function AppMode({
       locale={getLocale()}
       deviceInfo={DEMO_DEVICE_INFO}
       enrollment={fakeEnrollmentController()}
+      setupPending={setupPending}
+      onSetupDone={() => setSetupPending(false)}
+      cameraPermission={camera}
+      notificationPermission={notifications}
     />
   );
+}
+
+/** A permission the browser preview grants on the first ask; `refused` starts it blocked for good. */
+function previewPermission(refused: boolean): PermissionPort {
+  let granted = false;
+  return {
+    status: () => Promise.resolve({ granted, canAskAgain: !refused }),
+    request: () => {
+      if (!refused) granted = true;
+      return Promise.resolve();
+    },
+  };
 }
 
 // ── The registry ─────────────────────────────────────────────────────────────────────────────────
@@ -1020,6 +1043,18 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => (
       <ApproxFrame screen="app" state="shell">
         <AppMode session={{ userId: 'u-andi' }} />
+      </ApproxFrame>
+    ),
+  },
+
+  // New-phone setup — what the owner who registered the phone sees first: the camera still to allow,
+  // notifications refused for good, then the slip paper and its test page.
+  {
+    screen: 'app',
+    state: 'setup',
+    render: () => (
+      <ApproxFrame screen="app" state="setup">
+        <AppMode session={{ userId: 'u-andi' }} repairRole="owner" setup />
       </ApproxFrame>
     ),
   },

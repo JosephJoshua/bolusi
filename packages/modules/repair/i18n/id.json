@@ -763,5 +763,16 @@
     "noCamera": "Rekam lewat HP toko: buka servisan ini di HP.",
     "label": "Video",
     "expired": "Video kepemilikan sudah terhapus. Rekam ulang, ya."
+  },
+  "basics": {
+    "title": "Lengkapi data toko",
+    "slipHeader": "Alamat dan nomor toko",
+    "slipHeaderSummary": "Belum ada di nota",
+    "logo": "Logo toko",
+    "logoSummary": "Belum ada di nota",
+    "terms": "Ketentuan di nota",
+    "termsSummary": "Masih ketentuan bawaan",
+    "paymentMethods": "Metode pembayaran",
+    "paymentMethodsSummary": "Baru tunai"
   }
 }

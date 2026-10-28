@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import {
+  Linking,
   Platform,
   StatusBar as RNStatusBar,
   StyleSheet,
@@ -70,6 +71,8 @@ import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
 import { pinView } from '@bolusi/device/models/pin/model';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
+import { DeviceSetupRoute } from './src/screens/setup/DeviceSetupRoute.js';
+import type { PermissionPort } from './src/push/permission.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
 import { roleLabel } from './src/screens/switcher/UserRow.js';
 import {
@@ -278,6 +281,13 @@ export interface AppProps {
    * `true` is "Nyalakan" (the OS prompt follows), `false` is "Nanti saja". Null when not asking.
    */
   readonly onAnswerNotifications?: ((allow: boolean) => void) | null | undefined;
+  /** This phone's first-run setup waits for the signed-in person: it opens on their first unlock. */
+  readonly setupPending?: boolean | undefined;
+  /** The setup was finished or put off, so it does not open by itself again. */
+  readonly onSetupDone?: (() => void) | undefined;
+  /** The permissions the setup asks up front, with their reason; absent where none are bound. */
+  readonly cameraPermission?: PermissionPort | undefined;
+  readonly notificationPermission?: PermissionPort | undefined;
 }
 
 export default function App(props: AppProps): React.JSX.Element {
@@ -550,6 +560,21 @@ export default function App(props: AppProps): React.JSX.Element {
   // screen shows a spurious failure over a real success. The stable wrapper keeps each submit single-shot.
   const clearLockout = useLatestCallback(props.onClearLockout);
   const resetPin = useLatestCallback(props.onResetPin);
+
+  /**
+   * The new-phone setup opens for the owner who registered the phone, on their unlock (after the
+   * route they left is restored above). Leaving it any way, "Mulai", "Nanti saja" or back, ends it.
+   */
+  const setupPending = props.setupPending === true;
+  useEffect(() => {
+    if (setupPending && sessionUserId !== null) setRoute('deviceSetup');
+  }, [setupPending, sessionUserId]);
+  const onSetupDone = useLatestCallback(() => props.onSetupDone?.());
+  const lastRoute = useRef(route);
+  useEffect(() => {
+    if (lastRoute.current === 'deviceSetup' && route !== 'deviceSetup') onSetupDone();
+    lastRoute.current = route;
+  }, [route, onSetupDone]);
 
   const zone = resolveZone({
     device: props.device,
@@ -1210,6 +1235,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   onBack={() => setRoute('home')}
                   onOpenSwitcher={() => setSwitching(true)}
                   onOpenChangePin={() => setRoute('changePin')}
+                  onOpenSetup={() => setRoute('deviceSetup')}
                   // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
                   // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
                   onOpenStaffPins={
@@ -1346,6 +1372,19 @@ export default function App(props: AppProps): React.JSX.Element {
                   syncChip={routeSyncChip}
                   onClose={closeParts}
                   onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'deviceSetup') {
+              return (
+                <DeviceSetupRoute
+                  repair={props.repair}
+                  syncChip={routeSyncChip}
+                  camera={props.cameraPermission}
+                  notifications={props.notificationPermission}
+                  onOpenSystemSettings={() => void Linking.openSettings()}
+                  onOpenSetting={setRoute}
+                  onDone={() => setRoute('home')}
                 />
               );
             }
@@ -1607,6 +1646,7 @@ export default function App(props: AppProps): React.JSX.Element {
       ) : null}
       {props.onAnswerNotifications != null &&
       zone.kind === 'shell' &&
+      zone.route !== 'deviceSetup' &&
       !accountMenu &&
       modal === null ? (
         // On the work screen, after unlock, with the reason before the OS asks (never at boot).
