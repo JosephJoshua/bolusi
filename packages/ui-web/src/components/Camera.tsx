@@ -8,6 +8,7 @@ import { Banner } from './Banner.js';
 import { Button } from './Button.js';
 import { Dialog } from './Dialog.js';
 import { IconButton } from './IconButton.js';
+import { useWebcam, type WebcamState } from './webcam.js';
 
 export interface CameraLabels {
   readonly close: string;
@@ -28,16 +29,10 @@ export interface CameraLabels {
 }
 
 type Shot = { readonly blob: Blob; readonly url: string };
-type CameraState = WebcamState | ({ readonly kind: 'shot' } & Shot);
 
 // Webcams give 720p or 1080p; the photo is taken at what the camera gives, within these.
 const IDEAL = { width: 1600, height: 1200 };
 export const CAMERA_JPEG_QUALITY = 0.7;
-
-async function videoInputs(): Promise<MediaDeviceInfo[]> {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  return devices.filter((device) => device.kind === 'videoinput');
-}
 
 function shoot(video: HTMLVideoElement): Promise<Blob | null> {
   const canvas = document.createElement('canvas');
@@ -47,88 +42,6 @@ function shoot(video: HTMLVideoElement): Promise<Blob | null> {
   if (context === null || canvas.width === 0) return Promise.resolve(null);
   context.drawImage(video, 0, 0);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', CAMERA_JPEG_QUALITY));
-}
-
-/** The webcam's stream on a `<video>`: starting, live, or why there is no picture. */
-export type WebcamState =
-  { readonly kind: 'starting' | 'live' } | { readonly kind: 'none' | 'denied' | 'failed' };
-
-/**
- * Runs the webcam on `video` while `active`: the chosen camera of those connected (`cameraIndex`
- * wraps around), started again when `attempt` changes. Stops the camera when inactive or unmounted.
- */
-export function useWebcam(
-  video: React.RefObject<HTMLVideoElement | null>,
-  active: boolean,
-  cameraIndex: number,
-  attempt: number,
-): { readonly state: WebcamState; readonly cameras: readonly MediaDeviceInfo[] } {
-  const [state, setState] = useState<WebcamState>({ kind: 'starting' });
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
-  useEffect(() => {
-    if (!active) return;
-    let live = true;
-    let media: MediaStream | null = null;
-    setState({ kind: 'starting' });
-    void (async () => {
-      try {
-        const inputs = await videoInputs();
-        if (!live) return;
-        setCameras(inputs);
-        if (inputs.length === 0) {
-          setState({ kind: 'none' });
-          return;
-        }
-        const chosen = inputs[cameraIndex % inputs.length];
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            ...(chosen?.deviceId ? { deviceId: { exact: chosen.deviceId } } : {}),
-            width: { ideal: IDEAL.width },
-            height: { ideal: IDEAL.height },
-          },
-        });
-        media = stream;
-        if (!live) {
-          for (const track of stream.getTracks()) track.stop();
-          return;
-        }
-        const preview = video.current;
-        if (preview === null) {
-          setState({ kind: 'failed' });
-          return;
-        }
-        preview.srcObject = stream;
-        await preview.play().catch(() => undefined);
-        // Shooting needs a frame; a slow USB webcam takes a moment to give the first one.
-        if (preview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-          await new Promise((resolve) =>
-            preview.addEventListener('loadeddata', resolve, { once: true }),
-          );
-        }
-        if (!live) return;
-        // Before the first grant Windows may list the cameras without ids; read them again.
-        setCameras(await videoInputs());
-        setState({ kind: 'live' });
-      } catch (error) {
-        if (!live) return;
-        const name = error instanceof DOMException ? error.name : '';
-        setState({
-          kind:
-            name === 'NotAllowedError' || name === 'SecurityError'
-              ? 'denied'
-              : name === 'NotFoundError' || name === 'OverconstrainedError'
-                ? 'none'
-                : 'failed',
-        });
-      }
-    })();
-    return () => {
-      live = false;
-      for (const track of media?.getTracks() ?? []) track.stop();
-    };
-  }, [video, active, cameraIndex, attempt]);
-  return { state, cameras };
 }
 
 export function CameraDialog({
@@ -150,21 +63,18 @@ export function CameraDialog({
   readonly fallback?: React.ReactNode;
   readonly testId?: string;
 }): React.JSX.Element {
-  const video = useRef<HTMLVideoElement>(null);
-  const [cameraIndex, setCameraIndex] = useState(0);
-  const [attempt, setAttempt] = useState(0);
-  const webcam = useWebcam(video, open, cameraIndex, attempt);
-  const cameras = webcam.cameras;
+  const webcam = useWebcam({ open, ideal: IDEAL });
+  const { video } = webcam;
   const [shot, setShot] = useState<Shot | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
-  // Each opening starts on the live picture.
+
+  // Each opening starts from the live camera.
   useEffect(() => {
     if (!open) return;
     setShot(null);
     setSaveFailed(false);
-  }, [open, cameraIndex, attempt]);
-  const state: CameraState = shot !== null ? { kind: 'shot', ...shot } : webcam.state;
+  }, [open]);
 
   // A kept or dropped shot frees its preview.
   useEffect(() => {
@@ -183,16 +93,16 @@ export function CameraDialog({
     setShot(null);
   };
   const use = (): void => {
-    if (state.kind !== 'shot') return;
+    if (shot === null) return;
     setSaving(true);
     setSaveFailed(false);
-    void onUse(state.blob)
+    void onUse(shot.blob)
       .catch(() => setSaveFailed(true))
       .finally(() => setSaving(false));
   };
 
-  const problem =
-    state.kind === 'none' || state.kind === 'denied' || state.kind === 'failed' ? state.kind : null;
+  const state = webcam.state;
+  const problem = state.kind === 'starting' || state.kind === 'live' ? null : state.kind;
 
   return (
     <Dialog
@@ -204,7 +114,7 @@ export function CameraDialog({
       testId={testId}
       banner={saveFailed ? <Banner tone="danger" message={labels.saveFailed} /> : undefined}
       footer={
-        problem !== null ? undefined : state.kind === 'shot' ? (
+        problem !== null ? undefined : shot !== null ? (
           <>
             <Button
               label={labels.retake}
@@ -223,11 +133,11 @@ export function CameraDialog({
           </>
         ) : (
           <>
-            {cameras.length > 1 ? (
+            {webcam.canSwitch ? (
               <IconButton
                 icon={SwitchCamera}
                 label={labels.switchCamera}
-                onClick={() => setCameraIndex((n) => n + 1)}
+                onClick={webcam.switchCamera}
                 className="mr-auto"
                 data-testid={`${testId}.switch`}
               />
@@ -252,11 +162,14 @@ export function CameraDialog({
           muted
           playsInline
           aria-hidden
-          className={clsx('size-full object-contain', state.kind === 'live' ? 'block' : 'hidden')}
+          className={clsx(
+            'size-full object-contain',
+            state.kind === 'live' && shot === null ? 'block' : 'hidden',
+          )}
         />
-        {state.kind === 'shot' ? (
+        {shot !== null ? (
           <img
-            src={state.url}
+            src={shot.url}
             alt={title}
             className="size-full object-contain"
             data-testid={`${testId}.shot`}
@@ -269,9 +182,9 @@ export function CameraDialog({
         ) : null}
         {problem !== null ? (
           <CameraProblem
-            message={labels[problem]}
+            message={labels[problem === 'noMicrophone' ? 'none' : problem]}
             retryLabel={labels.retry}
-            onRetry={() => setAttempt((n) => n + 1)}
+            onRetry={webcam.retry}
             testId={testId}
           >
             {fallback}
@@ -282,7 +195,6 @@ export function CameraDialog({
   );
 }
 
-/** Why there is no picture, over the camera's frame, with a retry and the caller's way around it. */
 function CameraProblem({
   message,
   retryLabel,
@@ -330,9 +242,8 @@ export function CameraPreview({
   readonly onState?: ((state: WebcamState['kind']) => void) | undefined;
   readonly testId?: string;
 }): React.JSX.Element {
-  const video = useRef<HTMLVideoElement>(null);
-  const [attempt, setAttempt] = useState(0);
-  const { state } = useWebcam(video, true, 0, attempt);
+  const webcam = useWebcam({ open: true, ideal: IDEAL });
+  const { state } = webcam;
   const latest = useRef(onState);
   latest.current = onState;
   useEffect(() => latest.current?.(state.kind), [state.kind]);
@@ -345,7 +256,7 @@ export function CameraPreview({
       data-state={state.kind}
     >
       <video
-        ref={video}
+        ref={webcam.video}
         muted
         playsInline
         aria-hidden
@@ -360,7 +271,7 @@ export function CameraPreview({
         <CameraProblem
           message={labels[problem]}
           retryLabel={labels.retry}
-          onRetry={() => setAttempt((n) => n + 1)}
+          onRetry={webcam.retry}
           testId={testId}
         />
       ) : null}

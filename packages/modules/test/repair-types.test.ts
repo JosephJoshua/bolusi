@@ -64,9 +64,12 @@ async function expectCode(p: Promise<unknown>, code: string): Promise<DomainErro
 }
 
 async function openTicket(h: RepairHarness, repairTypes: string[]): Promise<string> {
-  const { ticketId } = (await h.run('openTicket', intake(h, { repairTypes }), h.cashierId)) as {
-    ticketId: string;
-  };
+  const ownershipVideo = repairTypes.includes('unlock') ? h.video(9) : null;
+  const { ticketId } = (await h.run(
+    'openTicket',
+    intake(h, { repairTypes, ownershipVideo }),
+    h.cashierId,
+  )) as { ticketId: string };
   return ticketId;
 }
 
@@ -238,7 +241,7 @@ describe('a servisan’s repair types', () => {
 describe('older signed changes', () => {
   test('an intake signed before repair types opens a servisan with none', () => {
     const op = repairOperations[REPAIR_OP.ticketOpened]!;
-    expect(op.schemaVersion).toBe(3);
+    expect(op.schemaVersion).toBe(4);
     expect(op.payload).toBe(ticketOpenedPayload);
     expect(op.payloadByVersion?.[2]).toBe(ticketOpenedPayloadV2);
     expect(ticketOpenedPayloadV2.shape).not.toHaveProperty('repairTypes');

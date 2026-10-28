@@ -1,15 +1,33 @@
-// The counter PC's webcam dialog and signature pad, mounted once in the app. `capture` answers the
-// screens' photo and signature asks like the phone's camera and pad do: a JPEG from the webcam, or
-// the drawn strokes, and null when the person backs out. A PC without a webcam, or without a touch
+// The counter PC's webcam dialog, signature pad and video recorder and player, mounted once in the
+// app. `capture` answers the screens' photo, signature and video asks like the phone's camera, pad
+// and recorder do: a JPEG from the webcam, the drawn strokes, or the recorded clip, and null when
+// the person backs out. A PC without a webcam, or without a touch
 // screen for signing, hands the step to a paired store phone instead (`phone-handoff.tsx`), which
 // answers the same way; one scan covers every step after it. Storing and signing what was taken
 // is the runtime's job.
 import { t } from '@bolusi/i18n';
-import { Button, CameraDialog, SignatureDialog, type DrawnSignature } from '@bolusi/ui-web';
+import {
+  Button,
+  CameraDialog,
+  SignatureDialog,
+  VideoPlayerDialog,
+  VideoRecorderDialog,
+  type DrawnSignature,
+  type RecordedClip,
+  type VideoPlayerSource,
+} from '@bolusi/ui-web';
+import { VIDEO_MAX_SIZE_BYTES } from '@bolusi/schemas';
 import { FileImage, Smartphone } from 'lucide-react';
 import { useEffect, useSyncExternalStore } from 'react';
 
-import { pickPhotoFile, type PcCapture, type PcPhoto } from './capture.js';
+import {
+  pickPhotoFile,
+  type PcCapture,
+  type PcPhoto,
+  type PcVideo,
+  type PcVideoRequest,
+  type PcVideoSource,
+} from './capture.js';
 import {
   PhoneHandoffDialog,
   PhoneLinkStore,
@@ -25,6 +43,12 @@ type Pending = (
   | {
       readonly kind: 'signature';
       readonly resolve: (signature: DrawnSignature | null) => void;
+    }
+  | {
+      // The phone handoff takes photos and signatures only, so a clip is always the webcam's.
+      readonly kind: 'video';
+      readonly request: PcVideoRequest;
+      readonly resolve: (video: PcVideo | null) => void;
     }
 ) & {
   readonly title: string;
@@ -73,19 +97,56 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
   };
 
   /** Ends the open capture with `value`, and closes its dialog. */
-  const settle = (value: PcPhoto | DrawnSignature | null): void => {
+  const settle = (value: PcPhoto | DrawnSignature | PcVideo | null): void => {
     const current = pending;
     if (current === null) return;
     pending = null;
     phone?.withdraw();
-    (current.resolve as (value: PcPhoto | DrawnSignature | null) => void)(value);
+    (current.resolve as (value: PcPhoto | DrawnSignature | PcVideo | null) => void)(value);
     emit();
   };
   const close = (): void => settle(null);
 
+  /** The clip being watched: one at a time, closed by the person. */
+  let playing: {
+    readonly title: string;
+    readonly source: VideoPlayerSource;
+    readonly load: () => Promise<PcVideoSource>;
+    readonly done: () => void;
+  } | null = null;
+  const loadPlaying = (current: NonNullable<typeof playing>): void => {
+    playing = { ...current, source: { kind: 'loading' } };
+    emit();
+    const asked = playing;
+    void current.load().then(
+      (source) => {
+        if (playing !== asked) {
+          // Closed or replaced while it loaded: the clip's url goes with it.
+          if (source.kind === 'ready') URL.revokeObjectURL(source.url);
+          return;
+        }
+        playing = { ...asked, source };
+        emit();
+      },
+      () => {
+        if (playing !== asked) return;
+        playing = { ...asked, source: { kind: 'failed' } };
+        emit();
+      },
+    );
+  };
+  const closePlayer = (): void => {
+    const current = playing;
+    if (current === null) return;
+    playing = null;
+    if (current.source.kind === 'ready') URL.revokeObjectURL(current.source.url);
+    current.done();
+    emit();
+  };
+
   /** Hands the open capture to the phone; what it sends ends the capture. */
   const onPhone = (current: Pending): void => {
-    if (phone === null) return;
+    if (phone === null || current.kind === 'video') return;
     void phone.take(current.kind, current.title).then((result: HandoffResult | null) => {
       if (pending !== current || result === null) return;
       settle(
@@ -125,6 +186,12 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
   const keepPicture = (photo: PcPhoto | null): void => {
     if (pending?.kind === 'photo' && photo !== null) settle(photo);
   };
+  const keepVideo = async (clip: RecordedClip): Promise<void> => {
+    const current = pending;
+    if (current?.kind !== 'video') return;
+    const bytes = new Uint8Array(await clip.blob.arrayBuffer());
+    if (pending === current) settle({ bytes, mime: clip.mime });
+  };
   const keepSignature = (signature: DrawnSignature): Promise<void> => {
     if (pending?.kind === 'signature') settle(signature);
     return Promise.resolve();
@@ -159,6 +226,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
 
   function Host(): React.JSX.Element {
     const current = useSyncExternalStore(subscribe, () => pending);
+    const watching = useSyncExternalStore(subscribe, () => playing);
     // Re-render when the phone becomes available.
     useSyncExternalStore(subscribe, () => offerPhone);
     const link = useSyncExternalStore(phone?.subscribe ?? noSubscribe, () =>
@@ -168,6 +236,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
     useEffect(
       () => () => {
         close();
+        closePlayer();
         phone?.close();
       },
       [],
@@ -177,7 +246,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
         <PhoneHandoffDialog
           open={current?.via === 'phone'}
           link={link}
-          kind={current?.kind ?? 'photo'}
+          kind={current?.kind === 'signature' ? 'signature' : 'photo'}
           title={current?.title ?? ''}
           backLabel={t(
             current?.kind === 'signature' ? 'core.handoff.useScreen' : 'core.handoff.useWebcam',
@@ -205,6 +274,50 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
             denied: t('core.camera.denied'),
             failed: t('core.camera.failed'),
             saveFailed: t('core.camera.saveFailed'),
+          }}
+        />
+        <VideoRecorderDialog
+          open={current?.kind === 'video'}
+          title={current?.title ?? ''}
+          hint={current?.kind === 'video' ? current.request.hint : ''}
+          maxMs={current?.kind === 'video' ? current.request.maxMs : 0}
+          maxBytes={VIDEO_MAX_SIZE_BYTES}
+          onUse={keepVideo}
+          onClose={close}
+          testId="desktop.video"
+          labels={{
+            close: t('core.action.close'),
+            start: t('media.video.start'),
+            stop: t('media.video.stop'),
+            retake: t('media.video.retake'),
+            use: t('media.video.use'),
+            switchCamera: t('core.camera.switchCamera'),
+            retry: t('core.action.retry'),
+            starting: t('core.camera.starting'),
+            none: t('core.camera.none'),
+            denied: t('core.video.denied'),
+            failed: t('core.camera.failed'),
+            saveFailed: t('core.video.saveFailed'),
+            noMicrophone: t('core.video.noMicrophone'),
+            tooLarge: t('media.video.tooLarge'),
+            time: (elapsed: string, max: string) => t('media.video.time', { elapsed, max }),
+          }}
+        />
+        <VideoPlayerDialog
+          open={watching !== null}
+          title={watching?.title ?? ''}
+          source={watching?.source ?? { kind: 'loading' }}
+          onRetry={() => {
+            if (playing !== null) loadPlaying(playing);
+          }}
+          onClose={closePlayer}
+          testId="desktop.videoPlayer"
+          labels={{
+            close: t('core.action.close'),
+            loading: t('core.video.loading'),
+            retry: t('core.action.retry'),
+            unavailable: t('media.video.unavailableBody'),
+            failed: t('core.video.failed'),
           }}
         />
         <SignatureDialog
@@ -240,6 +353,15 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
           start({ kind: 'signature', title: request?.title ?? '', via, resolve }),
         );
       },
+      video: (request) =>
+        new Promise((resolve) =>
+          start({ kind: 'video', title: request.title, request, via: 'pc', resolve }),
+        ),
+      play: (request, load) =>
+        new Promise((resolve) => {
+          closePlayer();
+          loadPlaying({ title: request.title, source: { kind: 'loading' }, load, done: resolve });
+        }),
     },
     Host,
   };
