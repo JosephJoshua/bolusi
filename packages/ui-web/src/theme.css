@@ -26,6 +26,11 @@
   --color-text-muted: var(--b-text-muted);
   --color-text-disabled: var(--b-text-disabled);
   --color-overlay: var(--b-overlay);
+  --color-chrome: var(--b-chrome-bar);
+  --color-chrome-text: var(--b-chrome-text);
+  --color-chrome-muted: var(--b-chrome-muted);
+  --color-chrome-success: var(--b-chrome-success);
+  --color-chrome-warning: var(--b-chrome-warning);
 
   --radius-xs: var(--b-radius-xs);
   --radius-sm: var(--b-radius-sm);

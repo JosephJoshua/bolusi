@@ -49,9 +49,18 @@ export interface UpdatesBridge {
   install(): Promise<void>;
 }
 
+/** The window around the page, as far as the title bar needs it. */
+export interface WindowBridge {
+  /** F11 hides Windows' caption buttons, so the bar stops leaving room for them. */
+  fullscreen(): Promise<boolean>;
+  /** Calls back on every change; returns the unsubscribe. */
+  onFullscreenChange(listener: (fullscreen: boolean) => void): () => void;
+}
+
 export interface DesktopBridge {
   readonly printers: PrintersBridge;
   readonly updates: UpdatesBridge;
+  readonly window: WindowBridge;
   readonly core: CoreBridge;
 }
 
