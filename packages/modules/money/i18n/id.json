@@ -33,7 +33,8 @@
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
     "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
-    "overLimit": "Melebihi batasmu. Minta pemilik toko."
+    "overLimit": "Melebihi batasmu. Minta pemilik toko.",
+    "moveAboveDrawer": "Uang di laci tidak cukup."
   },
   "method": {
     "cash": "Tunai"
@@ -101,7 +102,8 @@
     "save": "Simpan",
     "hintAmount": "Isi jumlahnya.",
     "hintReason": "Isi keterangannya.",
-    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya."
+    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya.",
+    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu."
   },
   "settle": {
     "title": "Selesaikan selisih",

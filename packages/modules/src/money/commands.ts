@@ -17,12 +17,13 @@ import {
   MONEY_OP,
   MONEY_PERMISSION,
   PAYMENT_ACCOUNT_KINDS,
+  movesOut,
   type CashMoveKind,
   type RevenueAccount,
 } from './constants.js';
 import { zDocument, type MoneyDocument } from './documents.js';
 import { zAccountRef, zAmount, zReason } from './operations.js';
-import { documentMoneyQuery } from './queries.js';
+import { documentMoneyQuery, drawerForMoveQuery } from './queries.js';
 import { MONEY_REFUSALS } from './rules.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
@@ -266,11 +267,24 @@ export const moveCashInput = z
   .strict();
 export type MoveCashInput = z.input<typeof moveCashInput>;
 
-export function moveCashHandler(
+/**
+ * Cash out of or into the drawer. Nobody takes out more than the book says is in it: the server
+ * records cash as it really moved (an offline device's moves may cross), so it is stopped here.
+ */
+export async function moveCashHandler(
   input: z.output<typeof moveCashInput>,
   ctx: CommandContext,
-): CommandHandlerResult<{ entryId: string }> {
+): Promise<CommandHandlerResult<{ entryId: string }>> {
   const kind: CashMoveKind = input.kind;
+  if (movesOut(kind)) {
+    const drawer = (await ctx.query(drawerForMoveQuery, { counts: 0 })).rows[0]!.expected;
+    if (input.amount > drawer) {
+      throw MONEY_REFUSALS.refuse('moveAboveDrawer', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'amount', issue: `at most ${Math.max(0, drawer)}` },
+      });
+    }
+  }
   const op = entryOp(ctx, MONEY_OP.cashMoved, {
     kind,
     amount: input.amount,

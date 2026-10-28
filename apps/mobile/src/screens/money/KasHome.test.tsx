@@ -154,8 +154,27 @@ describe('the drawer', () => {
     expect(text(screen, 'money.kas.moves')).toContain('−Rp 20.000');
   });
 
+  test('cash out stops at what the drawer holds', async () => {
+    h = await openRepairScreenHarness(5409);
+    await float(h, 700_000);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'money.kas.move');
+    type(screen, 'money.move.amount', '900000');
+    type(screen, 'money.move.reason', 'Setor ke pemilik');
+    await settle();
+    expect(screen.all('money.move.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(screen, 'money.move.primaryHint')).toBe(
+      'Di laci cuma ada Rp 700.000. Kurangi jumlahnya dulu.',
+    );
+    type(screen, 'money.move.amount', '700000');
+    await settle();
+    await press(screen, 'money.move.primary');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp 0');
+  });
+
   test('a bank deposit asks for an account the store does not have yet', async () => {
     h = await openRepairScreenHarness(5404);
+    await float(h, 100_000);
     const screen = await mount(h, h.cashierId);
     await press(screen, 'money.kas.move');
     await press(screen, 'money.move.kind.deposit');

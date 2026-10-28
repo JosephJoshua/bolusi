@@ -136,17 +136,19 @@ export function MoveCashDialog({ onDone, onClose }: TaskProps): React.JSX.Elemen
     async (rt) => (await rt.query('paymentAccounts', {})).rows,
     'accounts',
   );
+  const drawer = useDrawer();
   const [kind, setKind] = useState<CashMoveKind>('withdrawal');
   const [account, setAccount] = useState<string | null>(null);
   const [digits, setDigits] = useState('');
   const [reason, setReason] = useState('');
   const amount = rupiah(digits);
-  const { banks, depositAccount, missing } = cashMoveCheck({
+  const { banks, depositAccount, missing, missingValues } = cashMoveCheck({
     kind,
     account,
     amount,
     reason,
     accounts: accounts.status === 'ready' ? accounts.data : [],
+    drawer: drawer.status === 'ready' ? drawer.data.expected : null,
   });
   const testId = 'money.desk.move';
 
@@ -175,7 +177,7 @@ export function MoveCashDialog({ onDone, onClose }: TaskProps): React.JSX.Elemen
       submitLabel={tm('money.move.save')}
       onSubmit={submit}
       submitDisabled={missing !== null}
-      hint={missing === null ? null : tm(missing)}
+      hint={missing === null ? null : tm(missing, missingValues)}
       size="md"
       testId={testId}
     >

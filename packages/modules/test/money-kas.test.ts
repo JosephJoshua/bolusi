@@ -10,6 +10,7 @@ import { methodStores, methodSummary } from '../src/money/methods.js';
 import { shiftDay } from '../src/money/day-records.js';
 
 import {
+  cashMoveCheck,
   countToday,
   dayStart,
   moneyInByMethod,
@@ -133,6 +134,21 @@ test('open balances split into what customers owe and what the store owes back',
   const { owed, owedBack } = splitOpenBalances([row('a', 250_000), row('b', -100_000)]);
   expect(owed.map((r) => r.documentId)).toEqual(['a']);
   expect(owedBack.map((r) => r.documentId)).toEqual(['b']);
+});
+
+test('nobody takes more cash out of the drawer than the book says is in it', () => {
+  const move = (kind: 'withdrawal' | 'float', amount: number, drawer: number | null) =>
+    cashMoveCheck({ kind, account: null, amount, reason: 'Setor', accounts: [], drawer });
+  expect(move('withdrawal', 700_000, 700_000).missing).toBeNull();
+  expect(move('withdrawal', 900_000, 700_000)).toMatchObject({
+    missing: 'money.move.aboveDrawer',
+    missingValues: { amount: formatMoney(700_000) },
+  });
+  // A drawer the book already has short reads as empty, never as a minus amount.
+  expect(move('withdrawal', 1, -5_000).missingValues).toEqual({ amount: formatMoney(0) });
+  // Change money put in is never limited, and nothing is judged before the drawer has loaded.
+  expect(move('float', 900_000, 0).missing).toBeNull();
+  expect(move('withdrawal', 900_000, null).missing).toBeNull();
 });
 
 test("the drawer's moves include an owner's correction, signed as it changed the drawer", () => {

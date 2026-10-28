@@ -304,6 +304,13 @@ export const cashDrawerQuery = {
   handler: cashDrawerHandler,
 } as const;
 
+/** The same drawer, read by a cash move's command to stop taking out more than is there. */
+export const drawerForMoveQuery = {
+  ...cashDrawerQuery,
+  name: 'drawerForMove',
+  permission: MONEY_PERMISSION.moveCash,
+} as const;
+
 // ── moneyEntries (the store's records over a period) ───────────────────────────────────────────
 
 export const moneyEntriesInput = z

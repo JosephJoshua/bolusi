@@ -56,6 +56,7 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'countSuperseded',
   'differenceChanged',
   'overLimit',
+  'moveAboveDrawer',
 ] as const);
 const { refuse } = MONEY_REFUSALS;
 

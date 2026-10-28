@@ -2,7 +2,7 @@
 // method, the drawer's moves, a count's difference and what customers still owe.
 import { formatMoney } from '@bolusi/i18n';
 
-import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, type CashMoveKind } from './constants.js';
+import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, movesOut, type CashMoveKind } from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -49,11 +49,6 @@ export function moneyInByMethod(entries: readonly MoneyEntryRow[]): MethodTotal[
         b.amount - a.amount ||
         a.account.localeCompare(b.account),
     );
-}
-
-/** Whether a move takes cash out of the drawer (everything but change money put in). */
-export function movesOut(kind: CashMoveKind): boolean {
-  return kind !== 'float';
 }
 
 /** How each move reads, in the order the counter is offered them. */
@@ -245,11 +240,15 @@ export interface CashMoveCheck {
   readonly depositAccount: PaymentAccountRow | null;
   /** What is still missing before it can be saved, in words; null when nothing is. */
   readonly missing: MoneyKey | null;
+  /** The values `missing` reads with. */
+  readonly missingValues?: { readonly amount: string };
 }
 
 /**
  * Cash out of or into the drawer: what it needs before it is saved. Cash is deposited into a bank
- * account; QRIS and card machines settle there on their own.
+ * account; QRIS and card machines settle there on their own. Nobody takes out more than the book
+ * says is in the drawer (`drawer`, null while it loads; the command checks again on save): the
+ * server records real cash as it comes, so the device is where an over-withdrawal is stopped.
  */
 export function cashMoveCheck(move: {
   readonly kind: CashMoveKind;
@@ -257,12 +256,26 @@ export function cashMoveCheck(move: {
   readonly amount: number | null;
   readonly reason: string;
   readonly accounts: readonly PaymentAccountRow[];
+  readonly drawer: number | null;
 }): CashMoveCheck {
   const banks = move.accounts.filter((row) => row.kind === 'transfer');
   const depositAccount =
     move.kind === 'deposit'
       ? (banks.find((row) => `account:${row.id}` === move.account) ?? banks[0] ?? null)
       : null;
+  const aboveDrawer =
+    move.amount !== null &&
+    movesOut(move.kind) &&
+    move.drawer !== null &&
+    move.amount > move.drawer;
+  if (aboveDrawer) {
+    return {
+      banks,
+      depositAccount,
+      missing: 'money.move.aboveDrawer',
+      missingValues: { amount: formatMoney(Math.max(0, move.drawer ?? 0)) },
+    };
+  }
   const missing: MoneyKey | null =
     move.amount === null || move.amount <= 0
       ? 'money.move.hintAmount'

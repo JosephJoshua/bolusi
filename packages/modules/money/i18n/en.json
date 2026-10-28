@@ -33,7 +33,8 @@
     "countSettled": "This cash count is already settled.",
     "countSuperseded": "There is a newer cash count. Settle the latest difference.",
     "differenceChanged": "The difference has changed. Check it again before settling.",
-    "overLimit": "Over your limit. Ask a store owner."
+    "overLimit": "Over your limit. Ask a store owner.",
+    "moveAboveDrawer": "Not enough cash in the drawer."
   },
   "method": {
     "cash": "Cash"
@@ -101,7 +102,8 @@
     "save": "Save",
     "hintAmount": "Enter the amount.",
     "hintReason": "Enter a description.",
-    "noAccount": "The store has no bank account yet. Ask an owner to add one."
+    "noAccount": "The store has no bank account yet. Ask an owner to add one.",
+    "aboveDrawer": "The drawer only has {amount}. Lower the amount first."
   },
   "settle": {
     "title": "Settle difference",

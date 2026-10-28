@@ -127,6 +127,11 @@ export function referenceRequired(kind: PaymentAccountKind | 'cash'): boolean {
 export const CASH_MOVE_KINDS = ['withdrawal', 'expense', 'deposit', 'float'] as const;
 export type CashMoveKind = (typeof CASH_MOVE_KINDS)[number];
 
+/** Whether a move takes cash out of the drawer (everything but change money put in). */
+export function movesOut(kind: CashMoveKind): boolean {
+  return kind !== 'float';
+}
+
 /** The largest rupiah amount one money record may carry. */
 export const MAX_AMOUNT = 1_000_000_000_000;
 export const MAX_REASON = 500;

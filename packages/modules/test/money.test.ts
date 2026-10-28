@@ -789,6 +789,7 @@ describe('the drawer', () => {
       { kind: 'transfer', name: 'BRI toko' },
       h.storeOwnerId,
     )) as { accountId: string };
+    await h.money('moveCash', { kind: 'float', amount: 10_000, reason: 'Modal' }, h.cashierId);
     await expectRefused(
       h.money('moveCash', { kind: 'deposit', amount: 10_000, reason: 'Setor bank' }, h.cashierId),
       'VALIDATION_FAILED',
@@ -808,8 +809,23 @@ describe('the drawer', () => {
     `.execute(h.db);
     expect(rows.map((r) => [r.account, Number(r.net)])).toEqual([
       [`account:${accountId}`, 10_000],
-      ['cash', -10_000],
+      ['cash', 0],
+      ['owner_capital', -10_000],
     ]);
+  });
+
+  test('cash out above what the drawer holds is stopped on the device', async () => {
+    h = await openRepairHarness(514);
+    await h.money('moveCash', { kind: 'float', amount: 700_000, reason: 'Modal' }, h.cashierId);
+    const out = (kind: string, amount: number) =>
+      h!.money('moveCash', { kind, amount, reason: 'Setor ke pemilik' }, h!.cashierId);
+    await expectRefused(out('withdrawal', 900_000), 'VALIDATION_FAILED', 'moveAboveDrawer');
+    await expectRefused(out('expense', 700_001), 'VALIDATION_FAILED', 'moveAboveDrawer');
+    await out('withdrawal', 700_000);
+    expect((await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0].expected).toBe(0);
+    // Putting change money in is never limited.
+    await out('float', 50_000);
+    await expectBalancedBooks(h);
   });
 
   test("the store's records page through a period, newest first", async () => {

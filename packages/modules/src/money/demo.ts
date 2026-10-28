@@ -2,8 +2,7 @@
 // drawer with today's payments and moves, a count an owner still has to settle and one customer
 // who took their phone before paying. Commands do what the real ones do to the figures the Kas
 // screens read; rules and postings are the real module's job and are tested there.
-import { CASH_ACCOUNT, type CashMoveKind, type EntryKind } from './constants.js';
-import { movesOut } from './kas.js';
+import { CASH_ACCOUNT, movesOut, type CashMoveKind, type EntryKind } from './constants.js';
 import type {
   CashCountRow,
   CashDrawer,

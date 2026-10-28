@@ -211,6 +211,7 @@ export function MoveCashStep({
     async (rt) => (await rt.query('paymentAccounts', {})).rows,
     'accounts',
   );
+  const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
   const [kind, setKind] = useState<CashMoveKind>('withdrawal');
   const [account, setAccount] = useState<string | null>(null);
   const [digits, setDigits] = useState('');
@@ -221,12 +222,13 @@ export function MoveCashStep({
     testID,
   );
   const amount = rupiah(digits);
-  const { banks, depositAccount, missing } = cashMoveCheck({
+  const { banks, depositAccount, missing, missingValues } = cashMoveCheck({
     kind,
     account,
     amount,
     reason,
     accounts: accounts.status === 'ready' ? accounts.data : [],
+    drawer: drawer.status === 'ready' ? drawer.data.expected : null,
   });
 
   const submit = (): void => {
@@ -254,7 +256,7 @@ export function MoveCashStep({
       primaryLabel={tm('money.move.save')}
       onPrimary={submit}
       primaryDisabled={missing !== null}
-      primaryHint={missing === null ? undefined : tm(missing)}
+      primaryHint={missing === null ? undefined : tm(missing, missingValues)}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
