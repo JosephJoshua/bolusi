@@ -7,6 +7,7 @@ import { servisanCustomers } from '@bolusi/modules/repair/screens';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
+  accessoriesBack,
   ensureRepairCatalog,
   intake,
   openRepairScreenHarness,
@@ -287,6 +288,7 @@ describe('what customers owe', () => {
         signature: h.photo(8),
         payments: [],
         unpaidReason: 'Bayar Jumat',
+        checklist: accessoriesBack(),
       },
       h.ownerId,
     );
@@ -324,6 +326,7 @@ describe('what customers owe', () => {
         signature: h.photo(8),
         payments: [],
         unpaidReason: 'Bayar Jumat',
+        checklist: accessoriesBack(),
       },
       h.ownerId,
     );

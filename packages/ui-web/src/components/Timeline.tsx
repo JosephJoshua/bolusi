@@ -32,7 +32,9 @@ export function Timeline({
             <p className="text-body font-semibold text-text">{entry.title}</p>
             <p className="text-small text-text-muted">{entry.meta}</p>
             {entry.detail === undefined ? null : (
-              <p className="mt-1 text-body text-text">{entry.detail}</p>
+              <p className="mt-1 whitespace-pre-line break-words text-body text-text">
+                {entry.detail}
+              </p>
             )}
           </div>
         </li>

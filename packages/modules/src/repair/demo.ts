@@ -25,8 +25,10 @@ import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
+  handoverProblem,
   recordRepairTypes,
   storeIntakeOptions,
+  type HandoverCheck,
   type IntakeOption,
   type IntakeOptionSettings,
 } from './intake-options.js';
@@ -784,7 +786,12 @@ export function demoRepairRuntime(
         .reverse(),
     };
   };
-  const update = (ticketId: string, kind: string, patch: Partial<TicketDetailRow>) => {
+  const update = (
+    ticketId: string,
+    kind: string,
+    patch: Partial<TicketDetailRow>,
+    detail: Readonly<Record<string, unknown>> = {},
+  ) => {
     // The one rule every step but the handover shares (repair rules.ts): a change that raced a
     // cancel or a handover on another device is refused with its own reason, as on a phone.
     const current = find(ticketId);
@@ -806,7 +813,7 @@ export function demoRepairRuntime(
                 actorId: actor.userId,
                 actorName: actor.name,
                 at: HARNESS_NOW,
-                detail: {},
+                detail,
               },
             ],
           })
@@ -1204,18 +1211,27 @@ export function demoRepairRuntime(
         0,
       );
       const paid = Math.min((t.downPayment ?? 0) + paidNow, amountOwed(t));
-      return update(t.id, 'repair.device_returned', {
-        downPayment: paid === 0 ? null : paid,
-        location: 'returned',
-        returnedBy: actor.userId,
-        returnedByName: actor.name,
-        returnedAt: HARNESS_NOW,
-        photos: [
-          ...t.photos,
-          photoRow('handover', input['handoverPhoto'] as MediaRef),
-          photoRow('signature', input['signature'] as MediaRef),
-        ],
-      });
+      const checklist = (input['checklist'] as HandoverCheck[] | undefined) ?? [];
+      const note = String(input['note'] ?? '');
+      const problem = handoverProblem(checklist, t.peripherals, note);
+      if (problem !== null) throw REPAIR_REFUSALS.refuse(problem);
+      return update(
+        t.id,
+        'repair.device_returned',
+        {
+          downPayment: paid === 0 ? null : paid,
+          location: 'returned',
+          returnedBy: actor.userId,
+          returnedByName: actor.name,
+          returnedAt: HARNESS_NOW,
+          photos: [
+            ...t.photos,
+            photoRow('handover', input['handoverPhoto'] as MediaRef),
+            photoRow('signature', input['signature'] as MediaRef),
+          ],
+        },
+        { note, checklist },
+      );
     },
   };
 
