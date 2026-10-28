@@ -37,6 +37,7 @@ import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
 import { amountOwed } from './flows.js';
 import { REPAIR_REFUSALS, claimProblem } from './rules.js';
+import { STATUS_CODE_BYTES, statusCodeFrom } from './status-link.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -286,6 +287,10 @@ function ticket(spec: {
     claimOfTicketId: null,
     claimOf: null,
     claims: [],
+    // A fixed code per demo servisan, so a preview's QR and link stay the same between reloads.
+    statusCode: statusCodeFrom(
+      Uint8Array.from(spec.id.padEnd(STATUS_CODE_BYTES, '0'), (c) => c.charCodeAt(0)),
+    ),
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',

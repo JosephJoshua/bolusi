@@ -957,3 +957,18 @@ export const slipPrintedRule: Rule = async (op, { db }) => {
     throw invalidTransition(ticket, op.type, 'notFinished', 'not ready to hand over');
   }
 };
+
+/** One status link per servisan, made with it: a second would leave a printed link dead. */
+export const statusLinkMadeRule: Rule = async (op, { db }) => {
+  await loadTicket(db, op);
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('statusCode')
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  if ((row?.statusCode ?? null) !== null) {
+    throw alreadyRecorded('statusLink', op.entityId);
+  }
+};

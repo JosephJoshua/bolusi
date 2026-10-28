@@ -85,6 +85,18 @@ To click through the screens in a browser without a server or device, run
 Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 `http://10.0.2.2:3000` on Android emulator; a phone needs a reachable LAN address).
 
+### Web app
+
+`apps/web` is the web app the server serves (React DOM on `packages/ui-web`). Its
+first page is the customer's repair status page at `/c/<code>`, with a page to
+type the code at `/`. The production build goes to `apps/web/dist`; set
+`WEB_DIR` to that folder and the server serves it next to the API.
+
+```sh
+pnpm --filter @bolusi/web dev     # localhost:5184, API calls proxied to BOLUSI_API_URL (default :3000)
+pnpm --filter @bolusi/web build
+```
+
 ### Counter PC app
 
 The Windows counter app (`apps/desktop`) is Electron with its own React DOM screens

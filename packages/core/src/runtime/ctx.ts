@@ -1,8 +1,8 @@
 // The command context (04-module-contract §5.2) — the ENTIRE surface a handler may touch.
 //
 // §5.2 lists it exhaustively: `tenantId, storeId, userId, deviceId`, `op()`, `newId()`,
-// `requirePermission()`, `query()`, plus `colleagueHasPermission()` for handlers whose input names
-// another user (assign to a technician). This file builds exactly that and nothing more, and the suite
+// `randomBytes()`, `requirePermission()`, `query()`, plus `colleagueHasPermission()` for handlers
+// whose input names another user (assign to a technician). This file builds exactly that and nothing more, and the suite
 // pins the key set — because the interesting property of `ctx` is what is ABSENT from it:
 //
 //   NO clock      — the runtime stamps `timestamp` once per command (§5.2). A handler that could
@@ -152,6 +152,12 @@ export interface CommandContext extends CommandIdentity {
   /** A fresh UUIDv7 from the injected IdSource (05 §2.1; T-6). */
   newId(): string;
   /**
+   * Fresh CSPRNG bytes from the runtime's crypto port, for a value someone outside the business
+   * must not guess (a customer's status link). Not `newId()`: ids minted in the same millisecond
+   * differ by a small step, so one id's bits would give away the next.
+   */
+  randomBytes(length: number): Uint8Array;
+  /**
    * An ADDITIONAL permission check, beyond the command's declared one (04 §5.2).
    *
    * This is not the enforcement point. `execute` checks `command.permission` itself, through its
@@ -242,6 +248,7 @@ export interface CommandContextBinding {
 export interface CommandContextInternals {
   readonly identity: CommandIdentity;
   readonly newId: IdSource;
+  readonly randomBytes: (length: number) => Uint8Array;
   /**
    * Resolve an op type's declared `schemaVersion` (04 §3) — the operation registry's answer, not
    * the handler's. See `OpDraftInput` for why the handler has no say.
@@ -336,6 +343,7 @@ export function createCommandContext(
     },
 
     newId: internals.newId,
+    randomBytes: internals.randomBytes,
 
     requirePermission(permissionId: string): Promise<void> {
       return internals.requirePermission(identity, permissionId, target, 'command');

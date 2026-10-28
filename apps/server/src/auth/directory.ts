@@ -9,12 +9,14 @@ import {
   findControlSessionByTokenHash,
   findDeviceByTokenHash,
   findLoginCredential,
+  findStatusLink,
   type ControlSessionAuthRecord,
   type DeviceAuthRecord,
   type LoginCredentialRecord,
+  type StatusLinkRecord,
 } from '@bolusi/db-server';
 
-export type { DeviceAuthRecord, ControlSessionAuthRecord, LoginCredentialRecord };
+export type { DeviceAuthRecord, ControlSessionAuthRecord, LoginCredentialRecord, StatusLinkRecord };
 
 export interface AuthDirectory {
   findDeviceByTokenHash(tokenHashHex: string): Promise<DeviceAuthRecord | undefined>;
@@ -22,6 +24,8 @@ export interface AuthDirectory {
     tokenHashHex: string,
   ): Promise<ControlSessionAuthRecord | undefined>;
   findLoginCredential(loginIdentifier: string): Promise<LoginCredentialRecord | undefined>;
+  /** A customer's status link code → its servisan (routes/public-status.ts). */
+  findStatusLink(code: string): Promise<StatusLinkRecord | undefined>;
 }
 
 /** Production binding — the db-server D14 exports (getDb → bolusi_app → definer functions). */
@@ -29,4 +33,5 @@ export const dbAuthDirectory: AuthDirectory = {
   findDeviceByTokenHash,
   findControlSessionByTokenHash,
   findLoginCredential,
+  findStatusLink,
 };

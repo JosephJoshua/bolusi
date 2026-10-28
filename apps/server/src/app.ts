@@ -27,11 +27,20 @@ import { createHandoffPageRouter, createHandoffRouter } from './routes/handoff.j
 import { createMediaRouter } from './routes/media.js';
 import { createPushRouter } from './routes/push.js';
 import { createRealtimeRouter } from './routes/realtime.js';
+import { createPublicStatusRouter } from './routes/public-status.js';
 import { createSyncRouter } from './routes/sync.js';
 import { createTenantRouter } from './routes/tenant.js';
 import { createUsersRouter } from './routes/users.js';
+import { webSite } from './web.js';
 
 const LOGIN_PATH = '/v1/auth/login';
+
+/** Routes a customer reaches with a link code instead of a token (routes/public-status.ts). */
+const PUBLIC_PREFIX = '/v1/public/';
+
+function isTokenless(path: string): boolean {
+  return path === LOGIN_PATH || path.startsWith(PUBLIC_PREFIX);
+}
 
 /** Realtime routes carry the reduced chain (§13 last line): no compress, no body middleware. */
 function isRealtime(path: string): boolean {
@@ -127,6 +136,9 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
     isRealtime(c.req.path) || isMedia(c.req.path) ? next() : compressor(c, next),
   );
 
+  // The web app at the site root (web.ts): every GET outside /v1 and /h, when a build is configured.
+  if (deps.webDir !== undefined) app.use('*', webSite(deps.webDir));
+
   // §13 step 5: per-IP limit, pre-auth, login only.
   app.use(
     LOGIN_PATH,
@@ -138,9 +150,9 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
     }),
   );
 
-  // §13 step 6: bearerAuth on all /v1 routes except the exempt login (§3).
+  // §13 step 6: bearerAuth on all /v1 routes except the exempt login (§3) and the public routes.
   const auth = bearerAuth({ verifyToken: deps.verifyToken });
-  app.use('/v1/*', async (c, next) => (c.req.path === LOGIN_PATH ? next() : auth(c, next)));
+  app.use('/v1/*', async (c, next) => (isTokenless(c.req.path) ? next() : auth(c, next)));
 
   // §13 step 7: per-device limit (keyed by the device from step 6; realtime bucket for realtime).
   // Media is excluded — it owns per-endpoint device buckets (chunk 600/min, others 120/min —
@@ -191,6 +203,7 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
       .route('/v1/realtime', createRealtimeRouter(deps))
       .route('/v1/catalog', createCatalogRouter(deps))
       .route('/v1/handoff', createHandoffRouter(deps))
+      .route('/v1/public/status', createPublicStatusRouter(deps))
       // The store phone's page: no device token (the pairing key is its credential), so outside /v1.
       .route('/h', createHandoffPageRouter(deps))
   );

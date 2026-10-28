@@ -75,6 +75,7 @@ import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
+import { STATUS_CODE_BYTES, statusCodeFrom } from './status-link.js';
 import { formatTicketNumber } from './ticket-number.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
@@ -318,6 +319,9 @@ export async function openTicketHandler(
       claimOf: input.claimOf,
       quoteLines: input.quoteLines.map((line) => ({ lineId: ctx.newId(), ...line })),
       photos: input.photos,
+    }),
+    ticketOp(ctx, ticketId, REPAIR_OP.statusLinkMade, {
+      code: statusCodeFrom(ctx.randomBytes(STATUS_CODE_BYTES)),
     }),
   );
   if (input.downPayment > 0) {

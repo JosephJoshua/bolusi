@@ -1,6 +1,8 @@
 // Boot entry (08 §5.1 `pnpm dev`). Reads config once (security-guide §10), builds the app with
 // the production per-IP key source (node-server's getConnInfo — a real socket address, not the
 // testable X-Forwarded-For fallback), and serves via @hono/node-server.
+import { resolve } from 'node:path';
+
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
@@ -45,6 +47,7 @@ function productionClientIp(c: Context<AppEnv>): string {
 const app = createApp({
   clientIp: productionClientIp,
   pushPort,
+  ...(config.webDir === undefined ? {} : { webDir: resolve(config.webDir) }),
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
 });
 

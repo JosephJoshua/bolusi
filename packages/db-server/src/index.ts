@@ -23,12 +23,15 @@ export {
 // D14 (10-db-schema §6.4) — the auth-entry cross-tenant lookups. These are the ONLY exported
 // paths that read across tenants; each is a fixed, keyed, definer-gated lookup (never a raw
 // handle, never an arbitrary query). Token verification and login need them because they resolve
-// the tenant FROM an opaque credential before the tenant is known (api/02-auth §4.2/§8).
+// the tenant FROM an opaque credential before the tenant is known (api/02-auth §4.2/§8); the
+// customer's status page does for the same reason (its link code is its credential).
 export {
   findDeviceByTokenHash,
   findControlSessionByTokenHash,
   findLoginCredential,
+  findStatusLink,
   type DeviceAuthRecord,
+  type StatusLinkRecord,
   type ControlSessionAuthRecord,
   type LoginCredentialRecord,
 } from './auth-entry.js';

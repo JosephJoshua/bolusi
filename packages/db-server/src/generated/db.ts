@@ -532,6 +532,7 @@ export interface RepairTickets {
   repairTypesJson: Generated<string>;
   returnedAt: Int8 | null;
   returnedBy: string | null;
+  statusCode: string | null;
   storeId: string;
   technicianId: string | null;
   tenantId: string;

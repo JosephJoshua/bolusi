@@ -305,6 +305,8 @@ export interface ServerDeps {
   readonly phoneCatalog: PhoneCatalogReader;
   /** The counter PC ↔ store phone handoff (handoff/relay.ts); in memory, like the realtime hub. */
   readonly handoffRelay: HandoffRelay;
+  /** The web app's build, served at the site root (web.ts); absent ⇒ the API only. */
+  readonly webDir?: string;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -438,6 +440,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
+    ...(overrides.webDir !== undefined ? { webDir: overrides.webDir } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };
 }

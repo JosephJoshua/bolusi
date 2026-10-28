@@ -99,6 +99,7 @@ export const repairTicketsTable: ProjectionTableManifest = {
     ready_at: 'integer',
     repair_types_json: 'text',
     claim_of_ticket_id: 'text',
+    status_code: 'text',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
@@ -818,6 +819,21 @@ export const downPaymentChangedApplier: ProjectionApplier<RepairDatabase> = asyn
 export const slipPrintedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { slip } = payloadOf<{ slip: string }>(op);
   await recordEvent(db, op, { slip });
+};
+
+/**
+ * The customer's status link. The rule allows one per servisan; should two ever fold, the first
+ * stays, as it is the one printed first.
+ */
+export const statusLinkMadeApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { code } = payloadOf<{ code: string }>(op);
+  await db
+    .updateTable('repairTickets')
+    .set({ statusCode: code })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('statusCode', 'is', null)
+    .execute();
 };
 
 // ── intake options ─────────────────────────────────────────────────────────────────────────────
