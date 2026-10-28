@@ -83,17 +83,30 @@ export class ShellSession {
    */
   async tick(): Promise<boolean> {
     if (this.#locked || this.#deps.session.current === null) return false;
-    const ops = await this.#deps.session.checkIdle();
+    let ops: readonly unknown[];
+    try {
+      ops = await this.#deps.session.checkIdle();
+    } catch (error: unknown) {
+      // The deadline passed and the session ended, but `session_ended` was not recorded. Fail
+      // closed: the screen locks anyway, and the caller (the idle ticker) reports the lost record.
+      if (this.#deps.session.current === null) this.#applyLock('idle_lock');
+      throw error;
+    }
     if (ops.length === 0) return false;
     this.#applyLock('idle_lock');
     return true;
   }
 
-  /** Manual lock (§6.4) — identical handling to idle, only the reason differs. */
+  /**
+   * Manual lock (§6.4) — identical handling to idle, only the reason differs. Fails closed: the
+   * session ends and the screen locks before `session_ended` is appended, so a failed append rejects
+   * (for the caller to report) with the lock already in place.
+   */
   async lockNow(): Promise<void> {
     if (this.#locked || this.#deps.session.current === null) return;
-    await this.#deps.session.manualLock();
+    const recording = this.#deps.session.manualLock();
     this.#applyLock('manual_lock');
+    await recording;
   }
 
   /**

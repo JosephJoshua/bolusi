@@ -2,7 +2,7 @@
 // session state machine against the real command runtime + real op log: the emission order, the
 // envelope attribution, the unbroken device chain, the permission-memo invalidation, switcher
 // usability, and per-user work retention.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { sql } from 'kysely';
 
@@ -169,6 +169,26 @@ describe('SEC-AUTH-08 — idle lock preserves work', () => {
     const ended = (await s.h.ops()).filter((o) => o.type === 'auth.session_ended').at(-1)!;
     expect(JSON.parse(ended.payload)).toEqual({ reason: 'manual_lock' });
     expect(ended.source).toBe('ui');
+  });
+
+  it('a lock whose session_ended append fails still ends the session (fails closed)', async () => {
+    const s = await setup(61, 60);
+    await s.sm.switchTo(s.h.ownerId);
+    const append = vi.spyOn(s.h.runtime, 'emitRuntimeOp').mockRejectedValue(new Error('disk full'));
+
+    const manual = s.sm.manualLock();
+    // Cleared on the call, before the append settles: nothing can act as the user in between.
+    expect(s.sm.current).toBeNull();
+    await expect(manual).rejects.toThrow('disk full');
+    expect(s.sm.current).toBeNull();
+
+    // The idle path too.
+    append.mockRestore();
+    await s.sm.switchTo(s.h.ownerId);
+    vi.spyOn(s.h.runtime, 'emitRuntimeOp').mockRejectedValue(new Error('disk full'));
+    s.h.clock.advance(61_000);
+    await expect(s.sm.checkIdle()).rejects.toThrow('disk full');
+    expect(s.sm.current).toBeNull();
   });
 
   it('per-user work survives the lock and is restored to the SAME user, never a different one', async () => {

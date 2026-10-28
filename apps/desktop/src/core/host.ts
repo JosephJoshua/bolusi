@@ -766,7 +766,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       sessionFor(userId).clearLockout(targetUserId),
     'session.resetPin': (userId: string, targetUserId: string, newPin: string) =>
       sessionFor(userId).resetPin(targetUserId, newPin),
-    'session.lock': () => requireSession().lockNow(),
+    // The screen locks even when `session_ended` cannot be written; the lost record is logged.
+    'session.lock': () =>
+      requireSession()
+        .lockNow()
+        .catch((error: unknown) => warn('manual lock was not recorded', error)),
     'session.recordActivity'() {
       session?.recordActivity();
     },
