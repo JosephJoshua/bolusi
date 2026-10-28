@@ -212,7 +212,7 @@ describe('what a cancel charges', () => {
     });
   });
 
-  test('a cancel naming another standard fee than the store’s now is refused by its rule', async () => {
+  test('a cancel naming a standard fee the store never had is refused by its rule', async () => {
     const a = await harness(5130);
     const server = await peer(a, 5131);
     await a.run('setCancelFees', { beforeWork: 25_000, afterWork: 50_000 }, a.storeOwnerId);
@@ -225,11 +225,31 @@ describe('what a cancel charges', () => {
     for (const op of ops.slice(0, -1)) await server.deliverPulled(op, (arrival += 1));
 
     await server.checkRule(cancel);
-    // Waived as if the store charged nothing, so no limit would apply to the drop.
-    const waived = { ...cancel, payload: { ...cancel.payload, standardFee: 0 } } as typeof cancel;
-    const err = await expectCode(server.checkRule(waived), 'VALIDATION_FAILED');
+    // A fee the store never had.
+    const forged = {
+      ...cancel,
+      payload: { ...cancel.payload, standardFee: 12_345 },
+    } as typeof cancel;
+    const err = await expectCode(server.checkRule(forged), 'VALIDATION_FAILED');
     expect(err.message).toContain('cancellation fee');
     expect(JSON.stringify(err)).toContain('repair.refusal.cancelFeeChanged');
+  });
+
+  test('a cancel made offline before the owner changed the fees still counts', async () => {
+    const a = await harness(5132);
+    const server = await peer(a, 5133);
+    await a.run('setCancelFees', { beforeWork: 25_000, afterWork: 50_000 }, a.storeOwnerId);
+    const ticketId = await openTicket(a);
+    await a.run('cancelTicket', { ticketId, reason: 'Batal' }, a.storeOwnerId);
+    const cancel = (await a.ownOps()).at(-1)!;
+    // The owner raised the fees before the cancel reached the server.
+    await a.run('setCancelFees', { beforeWork: 40_000, afterWork: 60_000 }, a.storeOwnerId);
+    let arrival = 0;
+    for (const op of await a.ownOps()) {
+      if (op.id !== cancel.id) await server.deliverPulled(op, (arrival += 1));
+    }
+
+    await server.checkRule(cancel);
   });
 });
 

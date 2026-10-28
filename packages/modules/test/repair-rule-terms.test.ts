@@ -85,28 +85,34 @@ describe('repair types carry the owner’s terms, not the device’s', () => {
     expect(await verdict(unknown)).toBe('repair.refusal.repairTypeTerms');
   });
 
-  test('a list changed while the intake was offline: stricter terms stand, more generous ones do not', async () => {
+  test('a list changed while the intake was offline: terms some version gave stand', async () => {
     const { h, sync, verdict, last } = await devices(7102);
     await h.run('openTicket', intake(h, { repairTypes: ['screen'] }), h.cashierId);
     const opened = await last(REPAIR_OP.ticketOpened);
 
-    // The owner cut the screen warranty to 7 days before the 30-day intake reached the server.
+    // The owner cut the screen warranty to 7 days, then removed unlocking, before the 30-day intake
+    // reached the server: the counter promised what the list said then, and the phone is in.
     await h.run(
       'changeIntakeOptions',
       { list: 'repairTypes', items: repairTypesList(7) },
       h.ownerId,
     );
-    await sync(opened);
-    expect(await verdict(opened)).toBe('repair.refusal.repairTypeTerms');
-
-    // Raised to 60 instead: the customer was promised 30, which the owner allows anyway.
     await h.run(
       'changeIntakeOptions',
-      { list: 'repairTypes', items: repairTypesList(60) },
+      { list: 'repairTypes', items: repairTypesList(7).filter((type) => type.id !== 'unlock') },
       h.ownerId,
     );
     await sync(opened);
     expect(await verdict(opened)).toBeNull();
+    // Terms no version gave are still refused: more days than ever, or an unlock without video.
+    const longer = tampered(opened, {
+      repairTypes: [{ item: 'screen', label: null, warrantyDays: 31, needsVideo: false }],
+    });
+    expect(await verdict(longer)).toBe('repair.refusal.repairTypeTerms');
+    const noVideo = tampered(opened, {
+      repairTypes: [{ item: 'unlock', label: null, warrantyDays: 0, needsVideo: false }],
+    });
+    expect(await verdict(noVideo)).toBe('repair.refusal.repairTypeTerms');
   });
 
   test('a change keeps the terms a type already had, and a new one takes the list’s', async () => {
@@ -147,4 +153,19 @@ test('an intake without a photo the store asks for is refused', async () => {
   const photos = (opened.payload as { photos: { slot: string }[] }).photos;
   const short = tampered(opened, { photos: photos.filter((photo) => photo.slot !== 'back') });
   expect(await verdict(short)).toBe('repair.refusal.intakePhotoMissing');
+});
+
+test('an intake taken before the owner asked for another angle still counts', async () => {
+  const { h, sync, verdict, last } = await devices(7105);
+  await h.run('openTicket', intake(h), h.cashierId);
+  const opened = await last(REPAIR_OP.ticketOpened);
+  const angles = DEFAULT_INTAKE_OPTIONS.photoAngles.map(({ id, label }) => ({ id, label }));
+  await h.run(
+    'changeIntakeOptions',
+    { list: 'photoAngles', items: [...angles, { id: null, label: 'Layar menyala' }] },
+    h.ownerId,
+  );
+  await sync(opened);
+
+  expect(await verdict(opened)).toBeNull();
 });
