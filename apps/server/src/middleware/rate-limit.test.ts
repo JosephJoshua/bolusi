@@ -1,9 +1,12 @@
 // The in-memory token-bucket store stays bounded: client addresses and device ids are its keys, so
 // a bucket kept for every address ever seen would let a client that rotates addresses (an IPv6 /64
 // holds 2^64) grow server memory without limit.
+import { Hono } from 'hono';
 import { describe, expect, test } from 'vitest';
 
-import { InMemoryRateLimitStore, ipRateKey } from './rate-limit.js';
+import type { AppEnv } from '../env.js';
+import { ApiError } from '../errors.js';
+import { InMemoryRateLimitStore, ipRateKey, perDeviceRateLimit } from './rate-limit.js';
 
 const T0 = 1_700_000_000_000;
 
@@ -76,5 +79,37 @@ describe('ipRateKey', () => {
     expect(ipRateKey('198.51.100.7')).toBe('198.51.100.7');
     expect(ipRateKey('::ffff:198.51.100.7')).toBe('198.51.100.7');
     expect(ipRateKey('unknown')).toBe('unknown');
+  });
+});
+
+describe('perDeviceRateLimit for a control session', () => {
+  test('holds the owner’s password session to the route cap per user, before authorization', async () => {
+    const store = new InMemoryRateLimitStore();
+    const app = new Hono<AppEnv>();
+    app.onError((err, c) => c.text(err instanceof ApiError ? err.code : 'error', 429));
+    app.use('*', async (c, next) => {
+      c.set('controlSession', { tenantId: 't-1', userId: c.req.header('x-user') ?? 'u-1' });
+      await next();
+    });
+    app.use(
+      '*',
+      perDeviceRateLimit({
+        store,
+        limits: { perRoutePerMinute: 2, realtimePerMinute: 1, aggregatePerMinute: 10 },
+        now: () => T0,
+        isRealtime: () => false,
+      }),
+    );
+    // The handler stands in for a call its authorization denies: it still costs a request.
+    app.get('/v1/users', (c) => c.text('forbidden', 403));
+
+    const call = (user = 'u-1') => app.request('/v1/users', { headers: { 'x-user': user } });
+    expect((await call()).status).toBe(403);
+    expect((await call()).status).toBe(403);
+    const limited = await call();
+    expect(limited.status).toBe(429);
+    expect(await limited.text()).toBe('RATE_LIMITED');
+    // Another owner has their own bucket.
+    expect((await call('u-2')).status).toBe(403);
   });
 });

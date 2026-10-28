@@ -197,6 +197,10 @@ export interface DeviceRateLimits {
  * Per-device limiter, keyed by the device from bearerAuth (§13 step 7). Realtime routes use the
  * realtime bucket; everything else the default bucket. Both the route bucket and the aggregate
  * bucket must admit the request — whichever denies first wins its Retry-After.
+ *
+ * A control session (the owner's password login) has no device; it is held to the default route
+ * cap per user, before authorization, so calls it is denied are bounded too. The api/02-auth §9
+ * budgets the identity routes charge after authorization still apply on top.
  */
 export function perDeviceRateLimit(options: {
   store: RateLimitStore;
@@ -206,13 +210,20 @@ export function perDeviceRateLimit(options: {
 }): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const device = c.get('device');
-    // No device context (e.g. control-session identity routes): the aggregate/route device
-    // buckets do not apply. Control-session limits are api/02-auth's (task 13); skip here.
+    const now = options.now();
     if (device === undefined) {
+      const control = c.get('controlSession');
+      if (control !== undefined) {
+        enforceBucket(
+          options.store,
+          `ctl:${control.tenantId}:${control.userId}`,
+          options.limits.perRoutePerMinute,
+          now,
+        );
+      }
       await next();
       return;
     }
-    const now = options.now();
     const realtime = options.isRealtime(c.req.path);
     const routeCap = realtime ? options.limits.realtimePerMinute : options.limits.perRoutePerMinute;
     const bucketName = realtime ? 'realtime' : 'route';
