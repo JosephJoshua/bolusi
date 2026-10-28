@@ -14,6 +14,7 @@ import { IdentityError, withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import { LoginReq, PasswordChangeReq, type LoginRes } from '@bolusi/schemas';
+import { ipRateKey } from '../middleware/rate-limit.js';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant } from '../tenant.js';
 
@@ -29,7 +30,7 @@ export function createAuthRouter(deps: ServerDeps) {
         // §9: 30 requests / IP / hour (pre-auth, per source IP).
         enforce(
           deps.identityRateStore.hit(
-            `login-ip:${deps.clientIp(c)}`,
+            `login-ip:${ipRateKey(deps.clientIp(c))}`,
             IDENTITY_LIMITS.loginRequestsPerIp.limit,
             IDENTITY_LIMITS.loginRequestsPerIp.windowMs,
             t,
