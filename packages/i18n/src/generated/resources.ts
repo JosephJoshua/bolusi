@@ -583,6 +583,7 @@ const source = {
       refusal: {
         conflictNotFound: 'Data bentrok ini tidak ditemukan.',
         notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
+        idTaken: 'Data ini belum bisa disimpan. Buat ulang, ya.',
       },
     },
     push: {
@@ -1224,6 +1225,7 @@ export const resources = {
         refusal: {
           conflictNotFound: 'This conflict wasn’t found.',
           notYourPreference: 'Only the account’s owner can change its language.',
+          idTaken: 'This couldn’t be saved. Create it again.',
         },
       },
       push: {
