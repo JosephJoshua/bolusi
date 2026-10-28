@@ -383,6 +383,49 @@ describe('refunds and voids are guarded', () => {
     await expectBalancedBooks(h);
   });
 
+  test('a voided payment does not open an account the store no longer uses for a refund', async () => {
+    h = await openRepairHarness(519);
+    const document = await openTicket(h);
+    const { accountId } = (await h.money(
+      'saveCentralAccount',
+      { kind: 'transfer', name: 'BCA pusat', storeIds: [] },
+      h.ownerId,
+    )) as { accountId: string };
+    const account = `account:${accountId}`;
+    const { entryIds } = (await h.money(
+      'receivePayments',
+      { document, payments: [{ account, amount: 100_000 }] },
+      h.cashierId,
+    )) as { entryIds: string[] };
+    await h.money('voidPayment', { entryId: entryIds[0]!, reason: 'Salah metode' }, h.storeOwnerId);
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 100_000 }] },
+      h.cashierId,
+    );
+    // The main owner gives the account to another store only.
+    await h.money(
+      'saveCentralAccount',
+      {
+        accountId,
+        kind: 'transfer',
+        name: 'BCA pusat',
+        storeIds: ['01920000-0000-7000-8000-0000000000bb'],
+      },
+      h.ownerId,
+    );
+    // The customer paid in cash: the voided transfer took no money that still counts.
+    await expectRefused(
+      h.money(
+        'refund',
+        { document, account, amount: 100_000, reason: 'Batal servis' },
+        h.storeOwnerId,
+      ),
+      'VALIDATION_FAILED',
+      'accountNotUsable',
+    );
+  });
+
   test('money goes back through a central account the customer paid with, even once unshared', async () => {
     h = await openRepairHarness(518);
     const document = await openTicket(h);

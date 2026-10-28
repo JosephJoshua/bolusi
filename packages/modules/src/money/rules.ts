@@ -295,7 +295,7 @@ async function documentPaidIn(
   return Number(row?.total ?? 0);
 }
 
-/** Whether this store took a payment for the document through the account. */
+/** Whether this store took a payment that still counts for the document through the account. */
 async function paidThroughOnDocument(
   db: Db,
   storeId: string,
@@ -308,6 +308,7 @@ async function paidThroughOnDocument(
     .where('storeId', '=', storeId)
     .where('kind', '=', 'payment_received')
     .where('account', '=', account)
+    .where('voidedBy', 'is', null)
     .where('documentKind', '=', document.kind)
     .where('documentId', '=', document.id)
     .executeTakeFirst();
