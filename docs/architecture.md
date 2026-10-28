@@ -227,6 +227,10 @@ DB; `MEDIA_STORAGE_DIR` needs durable, backed-up production storage.
 `EXPO_ACCESS_TOKEN` is required by the production push transport at boot. Tests
 inject their transport and need no production push credentials.
 
+`PUBLIC_URL` is the origin clients reach the server at. Cookies are marked `Secure`
+unless it is a plain-http origin, so leave it unset or https in production and set it
+to `http://<lan-ip>:3000` only for a local server phones reach over plain HTTP.
+
 `SYSTEM_KEY_DIR` enables server conflict detection. It contains one mode-0600
 `system-device-<tenantId>.key` per tenant: a base64 Ed25519 private key created by
 tenant provisioning. Unset means detection is off. When enabled, missing/invalid

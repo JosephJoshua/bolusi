@@ -148,7 +148,8 @@ export function createHandoffPageRouter(deps: ServerDeps) {
           path: `/h/${unbound.key}`,
           httpOnly: true,
           sameSite: 'Lax',
-          secure: new URL(c.req.url).protocol === 'https:',
+          // From config: behind the TLS-terminating proxy the request URL is always http.
+          secure: deps.secureCookies,
         });
         session = unbound;
       }

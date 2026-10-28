@@ -70,9 +70,9 @@ const OTHER_PC = {
   token: 'bdt_handoff0002',
 };
 
-function harness() {
+function harness(secureCookies = false) {
   const time = new FakeTime();
-  const h = makeTestApp({ handoffRelay: new HandoffRelay(time.scheduler) });
+  const h = makeTestApp({ handoffRelay: new HandoffRelay(time.scheduler), secureCookies });
   const auth = enrollDevice(h, PC);
   const call = (path: string, init: RequestInit = {}, as = auth) =>
     h.app.request(`${API}${path}`, {
@@ -212,6 +212,21 @@ describe('only the phone that opened the page', () => {
     expect((await open(page)).status).toBe(200);
     expect((await send(page, sign, strokes)).status).toBe(204);
     expect((await events(id, 1)).events.map((event) => event.type)).toEqual(['signature']);
+  });
+});
+
+describe('the phone cookie', () => {
+  test('is Secure from config, though the proxy hands the server a plain-http request', async () => {
+    const { pair, phone } = harness(true);
+    const { page } = await pair();
+    expect(page.startsWith('http:')).toBe(true);
+    await phone(page);
+    expect((await phone(`${page}/next?v=-1`)).headers.get('set-cookie')).toMatch(/; Secure/);
+    const plain = harness(false);
+    const other = await plain.pair();
+    await plain.phone(other.page);
+    const cookie = (await plain.phone(`${other.page}/next?v=-1`)).headers.get('set-cookie');
+    expect(cookie).not.toMatch(/Secure/);
   });
 });
 

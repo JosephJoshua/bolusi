@@ -51,6 +51,7 @@ function productionClientIp(c: Context<AppEnv>): string {
 
 const app = createApp({
   clientIp: productionClientIp,
+  secureCookies: config.secureCookies,
   pushPort,
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
 });

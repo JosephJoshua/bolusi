@@ -21,6 +21,9 @@ const zConfig = z.object({
   // `pushPortFromConfig` FAILS CLOSED and LOUD when it is missing. Set it, or the server refuses to
   // boot.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  // OPTIONAL. The origin phones and PCs reach this server at. TLS ends at the proxy, so the request
+  // URL the server sees is http either way; cookies are marked Secure unless this says http.
+  PUBLIC_URL: z.string().url().optional(),
 });
 
 export type ServerConfig = {
@@ -31,6 +34,8 @@ export type ServerConfig = {
   /** Expo push bearer token (api/04-push §7). Absent ⇒ `pushPortFromConfig` fails closed at boot —
    *  push has no silent no-op (task 134). */
   readonly expoAccessToken?: string;
+  /** Whether cookies are marked Secure: true unless PUBLIC_URL is a plain-http origin. */
+  readonly secureCookies: boolean;
 };
 
 /** Validate and normalize the environment. Throws a readable error if a required var is missing. */
@@ -43,6 +48,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
     databaseUrl: parsed.data.DATABASE_URL,
     port: parsed.data.PORT,
+    secureCookies:
+      parsed.data.PUBLIC_URL === undefined || new URL(parsed.data.PUBLIC_URL).protocol !== 'http:',
     ...(parsed.data.SYSTEM_KEY_DIR === undefined
       ? {}
       : { systemKeyDir: parsed.data.SYSTEM_KEY_DIR }),
