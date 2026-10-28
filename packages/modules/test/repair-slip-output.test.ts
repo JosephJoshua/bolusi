@@ -75,10 +75,17 @@ describe('outputSlip', () => {
     vi.spyOn(runtime, 'run').mockImplementation((name, input) =>
       name === 'recordSlipPrinted' ? Promise.reject(new Error('disk full')) : run(name, input),
     );
+    const warn = vi.spyOn(runtime.diagnostics, 'warn');
     const before = detail.slipPrints.intake;
     expect(await outputSlip(runtime, printing, detail, 'intake', DESK_PAPERS, 'print')).toBe(
       'done',
     );
+    // Not silent: the lost log is written down where a support person can find it.
+    expect(warn).toHaveBeenCalledWith('printed slip could not be logged', {
+      ticketId: detail.id,
+      slip: 'intake',
+      error: 'disk full',
+    });
     await outputSlip(runtime, printing, detail, 'intake', DESK_PAPERS, 'print');
     const second = output.mock.calls[1]![0].document;
     expect(second.meta).toContain(`Cetak ulang ke-${before + 2}`);

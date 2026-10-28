@@ -67,7 +67,8 @@ export type SlipOutcome = 'done' | 'cancelled' | 'unconfirmed';
 
 /**
  * Prints that landed but could not be logged (a refused or failed save), per ticket and slip, so the
- * next slip from this app still says "Cetak ulang" until the log catches up.
+ * next slip from this app still says "Cetak ulang". Nothing retries the log: these count until the
+ * app restarts.
  */
 const unlogged = new Map<string, number>();
 
@@ -76,8 +77,9 @@ function unloggedKey(ticketId: string, slip: SlipKind): string {
 }
 
 /**
- * Log a slip that landed. The paper is out either way, so a failed save is remembered here instead
- * of failing the print and having the counter print it again as if it were the first.
+ * Log a slip that landed. The paper is out either way, so a failed save is counted here and written
+ * to the diagnostics log instead of failing the print and having the counter print it again as if
+ * it were the first.
  */
 export async function logSlipPrinted(
   runtime: RepairRuntime,
@@ -86,9 +88,14 @@ export async function logSlipPrinted(
 ): Promise<'done'> {
   try {
     await runtime.run('recordSlipPrinted', { ticketId, slip });
-  } catch {
+  } catch (error) {
     const key = unloggedKey(ticketId, slip);
     unlogged.set(key, (unlogged.get(key) ?? 0) + 1);
+    runtime.diagnostics.warn('printed slip could not be logged', {
+      ticketId,
+      slip,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
   return 'done';
 }

@@ -26,6 +26,7 @@ import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { Kysely } from 'kysely';
 
 import { readEntitySyncStatuses } from '../../bootstrap/entity-sync-statuses.js';
+import { consoleDiagnostics } from '../../ports/diagnostics.js';
 
 /** The native half: capture, signing, verified thumbnails and sharing a photo. */
 export type RepairMediaSeams = Pick<
@@ -79,6 +80,7 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
         .filter((user) => port.colleagueHasPermission(user.id, REPAIR_PERMISSION.work))
         .map(({ id, name }) => ({ id, name })),
     ...deps.media,
+    diagnostics: consoleDiagnostics,
     ...(deps.printing === undefined ? {} : { printing: deps.printing }),
     ...(deps.inventory === undefined ? {} : { inventory: deps.inventory }),
   };

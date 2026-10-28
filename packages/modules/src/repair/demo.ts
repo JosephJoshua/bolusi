@@ -1470,6 +1470,8 @@ export function demoRepairRuntime(
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
     inventory,
+    // The demo keeps no log; the apps wire their diagnostics channel.
+    diagnostics: { warn: () => {} },
     get userId() {
       return actor.userId;
     },

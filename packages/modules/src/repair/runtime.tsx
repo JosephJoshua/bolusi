@@ -146,6 +146,13 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
   readonly printing?: RepairPrinting | undefined;
   /** The parts a servisan draws on. Absent ⇒ this build has no stock, and no parts section shows. */
   readonly inventory?: InventoryRuntime | undefined;
+  /** The app's client diagnostics log (`@bolusi/device` `consoleDiagnostics`), for what fails quietly. */
+  readonly diagnostics: RepairDiagnostics;
+}
+
+/** Where a failure that the screen carries on past is written down. */
+export interface RepairDiagnostics {
+  warn(message: string, meta?: Record<string, unknown>): void;
 }
 
 const RepairRuntimeContext = createRuntimeContext<RepairRuntime>('repair');
