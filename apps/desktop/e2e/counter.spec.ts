@@ -88,6 +88,9 @@ for (const [width, height] of [
           .map((name) => name!.textContent);
       });
       expect(cutNames).toEqual([]);
+      // Every filter shows whole: none runs under the toolbar's faded edge.
+      const filters = page.getByTestId('repair.desk.board.filters').locator('> div').first();
+      expect(await filters.evaluate((row) => row.scrollWidth <= row.clientWidth + 1)).toBe(true);
       await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({ ratio: 1 });
       // Only the table and the pane scroll; the window never does, so paging stays in reach.
       expect(
