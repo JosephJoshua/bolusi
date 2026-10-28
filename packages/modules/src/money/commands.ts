@@ -21,13 +21,12 @@ import {
   type RevenueAccount,
 } from './constants.js';
 import { zDocument, type MoneyDocument } from './documents.js';
-import { zAccountRef } from './operations.js';
+import { zAccountRef, zAmount, zReason } from './operations.js';
 import { documentMoneyQuery } from './queries.js';
+import { MONEY_REFUSALS } from './rules.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
 
-const zAmount = z.number().int().min(1).max(MAX_AMOUNT);
-const zReason = z.string().trim().min(1).max(MAX_REASON);
 const zReference = z
   .string()
   .trim()
@@ -195,6 +194,7 @@ export type RefundInput = z.input<typeof refundInput>;
 /**
  * Give money back. What the customer paid beyond their charges goes back as it is; an owner giving
  * back more first takes the difference off the charges, so the customer does not end up owing it.
+ * Nobody gives back more than the customer paid.
  */
 export async function refundHandler(
   input: z.output<typeof refundInput>,
@@ -205,6 +205,12 @@ export async function refundHandler(
   const credit = Math.max(0, -money.balance);
   const ops: OpDraft[] = [];
   if (input.amount > credit && ctx.colleagueHasPermission(ctx.userId, MONEY_PERMISSION.refund)) {
+    if (input.amount > credit + money.charged - money.reduced) {
+      throw MONEY_REFUSALS.refuse('refundAbovePaid', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'amount', issue: `at most ${credit + money.charged - money.reduced}` },
+      });
+    }
     ops.push(
       entryOp(ctx, MONEY_OP.chargeReduced, {
         document: input.document,

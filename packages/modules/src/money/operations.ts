@@ -26,8 +26,8 @@ import { zDocument, type MoneyDocumentSources } from './documents.js';
 import { accountSavedRule, centralAccountSavedRule, createMoneyRules } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
 
-const zAmount = zMoneyIdr.min(1).max(MAX_AMOUNT);
-const zReason = z.string().trim().min(1).max(MAX_REASON);
+export const zAmount = zMoneyIdr.min(1).max(MAX_AMOUNT);
+export const zReason = z.string().trim().min(1).max(MAX_REASON);
 const zNote = z.string().trim().max(MAX_REASON);
 const zReference = z.string().trim().min(1).max(MAX_REFERENCE).nullable();
 /** `cash` (the store's drawer) or `account:<uuid>`. */

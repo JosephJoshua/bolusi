@@ -514,7 +514,7 @@ describe('owner-only prices and settings', () => {
 });
 
 describe('money: the counter cannot take cash out through the ledger', () => {
-  test('a charge must match the servisan, a refund the overpayment, and lowering a bill is owners`', async () => {
+  test('a charge must match the servisan, a DP goes back only through an owner, and lowering a bill is owners`', async () => {
     const { world, builder } = await setupWorld(3360, 'none');
     await grantRole(db, {
       tenantId: world.tenantId,
@@ -562,19 +562,21 @@ describe('money: the counter cannot take cash out through the ledger', () => {
 
     const result = await push(world, [charge, dp, tooMuch, back, lower]);
 
+    // A DP on an unfinished servisan is not handed back by the counter, whole or in part.
     expect(result.results.map((r) => r.status)).toEqual([
       'rejected',
       'accepted',
       'rejected',
-      'accepted',
+      'rejected',
       'rejected',
     ]);
     expect(result.results[0]).toMatchObject({ reason: 'money.refusal.notChargeable' });
-    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.refundAboveCredit' });
+    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.notCharged' });
+    expect(result.results[3]).toMatchObject({ reason: 'money.refusal.notCharged' });
     const cash = await sql<{ net: string }>`
       SELECT COALESCE(SUM(debit - credit), 0) AS net FROM money_lines WHERE account = 'cash'
     `.execute(db);
-    expect(Number(cash.rows[0]!.net)).toBe(0);
+    expect(Number(cash.rows[0]!.net)).toBe(100_000);
   });
 });
 

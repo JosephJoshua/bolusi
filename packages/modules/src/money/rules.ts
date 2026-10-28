@@ -43,9 +43,12 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'paymentNotFound',
   'alreadyVoided',
   'refundAboveCredit',
+  'notCharged',
+  'refundAbovePaid',
   'notThisStore',
   'accountKindChanged',
   'countNotFound',
+  'countSettled',
 ] as const);
 const { refuse } = MONEY_REFUSALS;
 
@@ -60,28 +63,40 @@ function storeOf(op: SignedOperation): string {
 
 // ── reads shared with the queries ──────────────────────────────────────────────────────────────
 
+/** The stores a central account names; empty for every store. */
+export function centralStoreIds(storeIdsJson: string | null): string[] {
+  return JSON.parse(storeIdsJson ?? '[]') as string[];
+}
+
+/** Whether this store sees an account: its own, or a central one shared with every store or it. */
+export function accountVisibleTo(
+  account: { storeId: string | null; storeIds: readonly string[] },
+  storeId: string,
+): boolean {
+  if (account.storeId !== null) return account.storeId === storeId;
+  return account.storeIds.length === 0 || account.storeIds.includes(storeId);
+}
+
 /**
- * The configured account with this id, if this store may take money through it: its own active
- * account, or an active central one shared with every store or with this one.
+ * The configured account with this id, if this store may take money through it: an active account
+ * it sees. Refunds may also go back through a since deactivated one the customer paid with.
  */
 export async function usableAccount(
   db: Db,
   tenantId: string,
   storeId: string,
   accountId: string,
+  options: { includeInactive?: boolean } = {},
 ): Promise<{ kind: PaymentAccountKind } | null> {
-  const row = await db
+  let query = db
     .selectFrom('moneyAccounts')
     .select(['kind', 'storeId', 'storeIdsJson'])
     .where('id', '=', accountId)
-    .where('tenantId', '=', tenantId)
-    .where('active', '=', 1)
-    .executeTakeFirst();
+    .where('tenantId', '=', tenantId);
+  if (options.includeInactive !== true) query = query.where('active', '=', 1);
+  const row = await query.executeTakeFirst();
   if (row === undefined) return null;
-  if (row.storeId === null) {
-    const stores = JSON.parse(row.storeIdsJson ?? '[]') as string[];
-    if (stores.length > 0 && !stores.includes(storeId)) return null;
-  } else if (row.storeId !== storeId) {
+  if (!accountVisibleTo({ ...row, storeIds: centralStoreIds(row.storeIdsJson) }, storeId)) {
     return null;
   }
   return { kind: row.kind as PaymentAccountKind };
@@ -167,10 +182,12 @@ async function requireAccount(
   db: Db,
   op: SignedOperation,
   account: string,
+  options: { includeInactive?: boolean } = {},
 ): Promise<PaymentAccountKind | 'cash'> {
   if (account === CASH_ACCOUNT) return 'cash';
   const id = paymentAccountIdOf(account);
-  const usable = id === null ? null : await usableAccount(db, op.tenantId, storeOf(op), id);
+  const usable =
+    id === null ? null : await usableAccount(db, op.tenantId, storeOf(op), id, options);
   if (usable === null) {
     throw refuse('accountNotUsable', {
       code: 'VALIDATION_FAILED',
@@ -280,7 +297,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
   /**
    * Money back to a customer. The counter may return what the customer paid beyond their charges,
    * through the account they paid with (the change of an overpayment, or a cancelled servisan's DP
-   * less its fee). Anything more is an owner's refund.
+   * less its fee), and only once the document is charged in full, so a DP on an unfinished
+   * repair is not handed back by the counter. Anything else is an owner's refund.
    */
   const refundPaidRule: Rule = async (op, { db, holdsPermission }) => {
     const { document, account, amount } = payloadOf<{
@@ -289,10 +307,20 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
       amount: number;
     }>(op);
     await requireFreshEntry(db, op);
-    await requireDocument(db, op, document);
-    await requireAccount(db, op, account);
+    const { source, lookup } = await requireDocument(db, op, document);
+    // A since deactivated account may still give back what was paid through it.
+    await requireAccount(db, op, account, { includeInactive: true });
     if (await holdsPermission(op.userId, MONEY_PERMISSION.refund)) return;
     const store = storeOf(op);
+    // Charged at least what the document costs: a later price drop only shrinks the credit.
+    const expected = await source.charge(db as unknown as Kysely<never>, lookup);
+    const charged = await documentTotal(db, store, document, 'charge_recorded');
+    if (expected === null || charged < expected.amount) {
+      throw refuse('notCharged', {
+        code: 'PERMISSION_DENIED',
+        details: { permissionId: MONEY_PERMISSION.refund, issue: 'the document is not charged' },
+      });
+    }
     const credit = -(await documentBalance(db, store, document));
     const paidThrough = await netPaidThrough(db, store, document, account);
     if (amount > credit || amount > paidThrough) {
@@ -330,7 +358,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     await requireFreshEntry(db, op);
   };
 
-  /** An owner's adjustment settles a count of this store, when it names one. */
+  /** An owner's adjustment settles a count of this store once, when it names one. */
   const cashAdjustedRule: Rule = async (op, { db }) => {
     const { countId } = payloadOf<{ countId: string | null }>(op);
     await requireFreshEntry(db, op);
@@ -347,6 +375,16 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         code: 'ENTITY_NOT_FOUND',
         details: { entityType: MONEY_ENTRY_ENTITY, entityId: countId },
       });
+    }
+    const settled = await db
+      .selectFrom('moneyEntries')
+      .select('id')
+      .where('storeId', '=', storeOf(op))
+      .where('kind', '=', 'cash_adjusted')
+      .where('relatedEntryId', '=', countId)
+      .executeTakeFirst();
+    if (settled !== undefined) {
+      throw refuse('countSettled', { details: { entityId: countId } });
     }
   };
 

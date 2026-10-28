@@ -24,12 +24,15 @@ export const MONEY_KEYS = [
   'money.refusal.alreadyVoided',
   'money.refusal.chargeMismatch',
   'money.refusal.countNotFound',
+  'money.refusal.countSettled',
   'money.refusal.documentNotFound',
   'money.refusal.notChargeable',
   'money.refusal.notThisStore',
   'money.refusal.paymentNotFound',
   'money.refusal.referenceRequired',
   'money.refusal.refundAboveCredit',
+  'money.refusal.notCharged',
+  'money.refusal.refundAbovePaid',
   'money.refusal.tenderedTooLow',
 ] as const;
 

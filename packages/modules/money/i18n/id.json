@@ -23,8 +23,11 @@
     "paymentNotFound": "Pembayaran ini tidak ditemukan.",
     "alreadyVoided": "Pembayaran ini sudah dibatalkan.",
     "refundAboveCredit": "Uang yang dikembalikan lebih dari kelebihan bayar. Minta pemilik.",
+    "notCharged": "Tagihannya belum dicatat. Minta pemilik untuk mengembalikan uang.",
+    "refundAbovePaid": "Uang yang dikembalikan lebih dari yang dibayar pelanggan.",
     "notThisStore": "Ini milik toko lain.",
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
-    "countNotFound": "Hitungan kas ini tidak ditemukan."
+    "countNotFound": "Hitungan kas ini tidak ditemukan.",
+    "countSettled": "Selisih hitungan kas ini sudah diselesaikan."
   }
 }

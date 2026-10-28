@@ -3,7 +3,13 @@
 import { sql } from 'kysely';
 import { z } from 'zod';
 
-import type { QueryContext, QueryPage } from '@bolusi/core';
+import {
+  decodeCursor,
+  fetchKeysetPage,
+  keysetPredicate,
+  type QueryContext,
+  type QueryPage,
+} from '@bolusi/core';
 import { zMsEpoch, zUuid } from '@bolusi/schemas';
 
 import {
@@ -14,7 +20,7 @@ import {
   type EntryKind,
   type PaymentAccountKind,
 } from './constants.js';
-import { documentBalance, documentTotal } from './rules.js';
+import { accountVisibleTo, centralStoreIds, documentBalance } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
 
 type Qctx = QueryContext<MoneyDatabase>;
@@ -38,7 +44,7 @@ export interface PaymentAccountRow {
 
 export const paymentAccountsInput = z
   .object({
-    /** Settings list inactive accounts too, and every central one; the payment step does not. */
+    /** Settings list inactive accounts too; the payment step does not. */
     includeInactive: z.boolean().default(false),
   })
   .strict();
@@ -62,14 +68,11 @@ async function paymentAccountsHandler(
       name: row.name,
       active: Number(row.active) === 1,
       central: row.storeId === null,
-      storeIds: row.storeId === null ? (JSON.parse(row.storeIdsJson ?? '[]') as string[]) : [],
+      storeIds: row.storeId === null ? centralStoreIds(row.storeIdsJson) : [],
     }))
+    // Own accounts are this store's by the query; central ones only where they are shared.
     .filter(
-      (account) =>
-        !account.central ||
-        input.includeInactive ||
-        account.storeIds.length === 0 ||
-        account.storeIds.includes(store),
+      (account) => !account.central || accountVisibleTo({ ...account, storeId: null }, store),
     );
   return { rows: accounts, nextCursor: null };
 }
@@ -152,8 +155,11 @@ async function documentMoneyHandler(
     .orderBy('id')
     .execute();
   const entries = rows.map((row) => entryRow(row as unknown as Record<string, unknown>));
-  const charged = await documentTotal(qctx.db, store, input, 'charge_recorded');
-  const reduced = await documentTotal(qctx.db, store, input, 'charge_reduced');
+  // The balance is the receivable's lines, as the rules read it; the totals come off the records.
+  const total = (kind: EntryKind) =>
+    entries.filter((entry) => entry.kind === kind).reduce((sum, entry) => sum + entry.amount, 0);
+  const charged = total('charge_recorded');
+  const reduced = total('charge_reduced');
   const balance = await documentBalance(qctx.db, store, input);
   return {
     rows: [{ balance, charged, reduced, paid: charged - reduced - balance, entries }],
@@ -222,12 +228,20 @@ async function cashDrawerHandler(
           .orderBy('id', 'desc')
           .limit(input.counts)
           .execute();
-  const adjustments = await qctx.db
-    .selectFrom('moneyEntries')
-    .select(['amount', 'relatedEntryId'])
-    .where('storeId', '=', store)
-    .where('kind', '=', 'cash_adjusted')
-    .execute();
+  const adjustments =
+    counts.length === 0
+      ? []
+      : await qctx.db
+          .selectFrom('moneyEntries')
+          .select(['amount', 'relatedEntryId'])
+          .where('storeId', '=', store)
+          .where('kind', '=', 'cash_adjusted')
+          .where(
+            'relatedEntryId',
+            'in',
+            counts.map((count) => count.id),
+          )
+          .execute();
   const rows: CashCountRow[] = [];
   for (const count of counts) {
     const counted = Number(count.amount);
@@ -266,26 +280,39 @@ export const moneyEntriesInput = z
     from: zMsEpoch,
     to: zMsEpoch,
     limit: z.number().int().min(1).max(500).default(200),
+    cursor: z.string().optional(),
   })
   .strict();
+
+const ENTRIES_SORT = 'createdAt.desc';
 
 async function moneyEntriesHandler(
   input: z.output<typeof moneyEntriesInput>,
   qctx: Qctx,
 ): Promise<QueryPage<MoneyEntryRow>> {
-  const rows = await qctx.db
+  let query = qctx.db
     .selectFrom('moneyEntries')
     .selectAll()
     .where('storeId', '=', storeOf(qctx))
     .where('createdAt', '>=', input.from)
     .where('createdAt', '<', input.to)
     .orderBy('createdAt', 'desc')
-    .orderBy('id', 'desc')
-    .limit(input.limit)
-    .execute();
+    .orderBy('id', 'desc');
+  if (input.cursor !== undefined) {
+    const position = decodeCursor(input.cursor, ENTRIES_SORT);
+    query = query.where((eb) =>
+      keysetPredicate(eb, { column: 'createdAt', idColumn: 'id', position, descending: true }),
+    );
+  }
+  const { rows, nextCursor } = await fetchKeysetPage({
+    fetch: (limitPlusOne) => query.limit(limitPlusOne).execute(),
+    limit: input.limit,
+    sort: ENTRIES_SORT,
+    cursorValues: (last) => [Number(last.createdAt), last.id],
+  });
   return {
     rows: rows.map((row) => entryRow(row as unknown as Record<string, unknown>)),
-    nextCursor: null,
+    nextCursor,
   };
 }
 

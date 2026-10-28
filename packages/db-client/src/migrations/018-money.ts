@@ -41,7 +41,9 @@ export const moneyMigration: ClientMigration = {
   voided_at        INTEGER,
   void_reason      TEXT
 )`,
-    `CREATE INDEX idx_money_entries_store_created ON money_entries (tenant_id, store_id, created_at)`,
+    `CREATE INDEX idx_money_entries_store_created ON money_entries (store_id, created_at)`,
+    `CREATE INDEX idx_money_entries_store_kind ON money_entries (store_id, kind, created_at)`,
+    `CREATE INDEX idx_money_entries_related ON money_entries (related_entry_id)`,
     `CREATE INDEX idx_money_entries_document ON money_entries (document_id)`,
     `CREATE TABLE money_lines (
   id            TEXT PRIMARY KEY,

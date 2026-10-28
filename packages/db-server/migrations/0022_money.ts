@@ -126,9 +126,13 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       void_reason      text
     )
   `.execute(db);
-  await sql`CREATE INDEX idx_money_entries_store_created ON money_entries (tenant_id, store_id, created_at)`.execute(
+  await sql`CREATE INDEX idx_money_entries_store_created ON money_entries (store_id, created_at)`.execute(
     db,
   );
+  await sql`CREATE INDEX idx_money_entries_store_kind ON money_entries (store_id, kind, created_at)`.execute(
+    db,
+  );
+  await sql`CREATE INDEX idx_money_entries_related ON money_entries (related_entry_id)`.execute(db);
   await sql`CREATE INDEX idx_money_entries_document ON money_entries (document_id)`.execute(db);
   await secureTenantTable(db, 'money_entries');
 

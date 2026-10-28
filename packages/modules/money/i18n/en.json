@@ -23,8 +23,11 @@
     "paymentNotFound": "This payment wasn’t found.",
     "alreadyVoided": "This payment is already cancelled.",
     "refundAboveCredit": "That’s more than the customer overpaid. Ask an owner.",
+    "notCharged": "The bill isn’t recorded yet. Ask an owner to give the money back.",
+    "refundAbovePaid": "That’s more than the customer paid.",
     "notThisStore": "This belongs to another store.",
     "accountKindChanged": "A payment method’s type can’t be changed.",
-    "countNotFound": "This cash count wasn’t found."
+    "countNotFound": "This cash count wasn’t found.",
+    "countSettled": "This cash count is already settled."
   }
 }

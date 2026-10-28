@@ -1,8 +1,9 @@
 // A servisan as a money document: what the money module may charge for it (money/documents.ts).
 //
-// A servisan is charged once its outcome is settled and the phone is still in the store: the agreed
-// price of a repaired phone, or the fee of a cancelled one. Its price only counts what the customer
-// agreed to, and lowering either needs an owner, so the charge inherits those rules.
+// A servisan is charged once its outcome is settled: the agreed price of a repaired phone, or the
+// fee of a cancelled one. Its price only counts what the customer agreed to, and lowering either
+// needs an owner, so the charge inherits those rules. The charge stays readable after the phone
+// went home, so a debt paid later can still have its overpayment handed back.
 import type { Kysely } from 'kysely';
 
 import type { MoneyDocumentSource } from '../money/documents.js';
@@ -18,7 +19,7 @@ function ticketQuery(
 ) {
   return (db as unknown as Kysely<RepairDatabase>)
     .selectFrom('repairTickets')
-    .select(['outcome', 'location', 'quoteTotal', 'cancelFee'])
+    .select(['outcome', 'quoteTotal', 'cancelFee'])
     .where('id', '=', lookup.documentId)
     .where('tenantId', '=', lookup.tenantId)
     .where('storeId', '=', lookup.storeId)
@@ -32,7 +33,7 @@ export const repairMoneyDocument: MoneyDocumentSource = {
 
   async charge(db, lookup) {
     const ticket = await ticketQuery(db, lookup);
-    if (ticket === undefined || ticket.location !== 'in_store') return null;
+    if (ticket === undefined) return null;
     if (ticket.outcome === 'repaired') {
       return { amount: Number(ticket.quoteTotal), account: SYSTEM_ACCOUNT.serviceRevenue };
     }

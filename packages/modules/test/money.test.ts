@@ -282,7 +282,7 @@ describe('payments', () => {
 describe('refunds and voids are guarded', () => {
   test('the counter gives back only an overpayment, through the account it came in by', async () => {
     h = await openRepairHarness(506);
-    const document = await openTicket(h);
+    const document = await repaired(h);
     const { accountId } = (await h.money(
       'saveAccount',
       { kind: 'transfer', name: 'BRI toko' },
@@ -291,11 +291,14 @@ describe('refunds and voids are guarded', () => {
     // A transfer nobody can see yet: it must not come back out of the drawer as cash.
     await h.money(
       'receivePayments',
-      { document, payments: [{ account: `account:${accountId}`, amount: 300_000 }] },
+      { document, payments: [{ account: `account:${accountId}`, amount: TOTAL + 300_000 }] },
       h.cashierId,
     );
     const refund = (account: string, amount: number, userId = h!.cashierId) =>
-      h!.money('refund', { document, account, amount, reason: 'Batal servis' }, userId);
+      h!.money('refund', { document, account, amount, reason: 'Kelebihan bayar' }, userId);
+    // Before the charge, everything paid is still a DP: only an owner hands it back.
+    await expectRefused(refund(`account:${accountId}`, 300_000), 'PERMISSION_DENIED', 'notCharged');
+    await charge(h, document, TOTAL, h.cashierId);
     await expectRefused(refund('cash', 300_000), 'PERMISSION_DENIED', 'refundAboveCredit');
     await expectRefused(
       refund(`account:${accountId}`, 300_001),
@@ -304,6 +307,32 @@ describe('refunds and voids are guarded', () => {
     );
     await refund(`account:${accountId}`, 300_000);
     expect(await documentMoney(h, document)).toMatchObject({ balance: 0 });
+    await expectBalancedBooks(h);
+  });
+
+  test('an owner gives back a DP, even through an account the store no longer uses', async () => {
+    h = await openRepairHarness(511);
+    const document = await openTicket(h);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS lama' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const account = `account:${accountId}`;
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account, amount: 100_000 }] },
+      h.cashierId,
+    );
+    await h.money(
+      'saveAccount',
+      { accountId, kind: 'qris', name: 'QRIS lama', active: false },
+      h.storeOwnerId,
+    );
+    const refund = { document, account, amount: 100_000, reason: 'Batal servis' };
+    await expectRefused(h.money('refund', refund, h.cashierId), 'PERMISSION_DENIED');
+    await h.money('refund', refund, h.storeOwnerId);
+    expect(await documentMoney(h, document)).toMatchObject({ balance: 0, paid: 0 });
     await expectBalancedBooks(h);
   });
 
@@ -341,6 +370,16 @@ describe('refunds and voids are guarded', () => {
       h.money('reduceCharge', { document, amount: TOTAL, reason: 'x' }, h.storeOwnerId),
       'VALIDATION_FAILED',
       'aboveCharged',
+    );
+    // Not even an owner gives back more than the customer paid.
+    await expectRefused(
+      h.money(
+        'refund',
+        { document, account: 'cash', amount: TOTAL - 100_000 + 1, reason: 'x' },
+        h.storeOwnerId,
+      ),
+      'VALIDATION_FAILED',
+      'refundAbovePaid',
     );
     await expectBalancedBooks(h);
   });
@@ -404,6 +443,12 @@ describe('the drawer', () => {
     const after = await drawer();
     expect(after.expected).toBe(120_000);
     expect(after.counts[0]).toMatchObject({ difference: -10_000, settled: -10_000 });
+    // Settling the same count twice would move the book away from the drawer again.
+    await expectRefused(
+      h.money('adjustCash', { ...settle, reason: 'Lagi' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'countSettled',
+    );
     await expectBalancedBooks(h);
   });
 
@@ -435,5 +480,26 @@ describe('the drawer', () => {
       [`account:${accountId}`, 10_000],
       ['cash', -10_000],
     ]);
+  });
+
+  test("the store's records page through a period, newest first", async () => {
+    h = await openRepairHarness(512);
+    for (const amount of [1_000, 2_000, 3_000]) {
+      await h.money('moveCash', { kind: 'float', amount, reason: 'Modal' }, h.cashierId);
+    }
+    const page = (cursor?: string) =>
+      h!.moneyQuery(
+        'moneyEntries',
+        { from: 0, to: Date.now() + 60_000, limit: 2, ...(cursor === undefined ? {} : { cursor }) },
+        h!.cashierId,
+      );
+    const first = await page();
+    expect(first.rows).toHaveLength(2);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await page(first.nextCursor!);
+    expect(second.nextCursor).toBeNull();
+    const seen = [...first.rows, ...second.rows] as { amount: number; createdAt: number }[];
+    expect(seen.map((row) => row.amount).sort()).toEqual([1_000, 2_000, 3_000]);
+    expect(new Set(seen.map((row) => JSON.stringify(row))).size).toBe(3);
   });
 });
