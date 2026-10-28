@@ -377,6 +377,17 @@ describe('repair settings on the PC', () => {
     });
   });
 
+  it('opens from the person menu, as on the phone', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(TECH, [])) }));
+    renderApp();
+    fireEvent.pointerDown(await screen.findByTestId('desktop.person'), {
+      button: 0,
+      pointerType: 'mouse',
+    });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pengaturan' }));
+    await screen.findByTestId('desktop.settings.account');
+  });
+
   it('asks before switching person with unsaved changes, and not on a second Settings click', async () => {
     core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
     renderApp();
