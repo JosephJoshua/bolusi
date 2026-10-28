@@ -19,6 +19,7 @@ import {
   createDirectorySource,
   loadDirectorySnapshot,
   PermissionEvaluator,
+  STORE_ID_META_KEY,
   TENANT_ID_META_KEY,
 } from '../../src/index.js';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
@@ -169,6 +170,53 @@ describe('loadDirectorySnapshot (10-db §9.5)', () => {
     const snapshot = await loadDirectorySnapshot(db);
     expect(snapshot.tenantId).toBeNull();
     expect(snapshot.users.size).toBe(0);
+  });
+});
+
+describe('a limited role’s amounts (the mirror’s `limits`)', () => {
+  async function setLimits(value: string | null, store: string | null = STORE_A) {
+    if (store !== null) {
+      await db
+        .insertInto('metaKv')
+        .values({ key: STORE_ID_META_KEY, value: store })
+        .onConflict((oc) => oc.column('key').doUpdateSet({ value: store }))
+        .execute();
+    }
+    await db
+      .updateTable('rolesDirectory')
+      .set({ limits: value })
+      .where('id', '=', ROLE_STAFF)
+      .execute();
+  }
+
+  test('NULL means free of limits; amounts load at this device’s store', async () => {
+    await setLimits(null);
+    let snapshot = await loadDirectorySnapshot(db);
+    expect(snapshot.roles.get(ROLE_STAFF)?.limits).toBeNull();
+
+    await setLimits(JSON.stringify({ priceDrop: 50_000, refund: 20_000, credit: 0 }));
+    snapshot = await loadDirectorySnapshot(db);
+    expect(snapshot.roles.get(ROLE_STAFF)?.limits?.get(STORE_A)).toEqual({
+      priceDrop: 50_000,
+      refund: 20_000,
+      credit: 0,
+    });
+    expect(snapshot.roles.get(ROLE_STAFF)?.limits?.get(STORE_B)).toBeUndefined();
+  });
+
+  test('a corrupt or negative row stays limited, at Rp 0', async () => {
+    for (const bad of [
+      '{"priceDrop":',
+      JSON.stringify({ priceDrop: -5, refund: 1.5, credit: 'x' }),
+    ]) {
+      await setLimits(bad);
+      const snapshot = await loadDirectorySnapshot(db);
+      expect(snapshot.roles.get(ROLE_STAFF)?.limits?.get(STORE_A)).toEqual({
+        priceDrop: 0,
+        refund: 0,
+        credit: 0,
+      });
+    }
   });
 });
 

@@ -102,7 +102,7 @@ export function Counter({
   readonly sync?: ReactNode;
   /** Opens the sync panel, from a servisan the server refused a change on. */
   readonly onOpenSyncStatus?: (() => void) | undefined;
-  /** What Settings may do for this person besides the repair settings; the demo has none. */
+  /** What Settings may do for this person besides the repair settings; the demo has only staff. */
   readonly settings?: SettingsAccess | undefined;
   /** This person's unfinished intake, kept across a lock or a switch to someone else. */
   readonly restoredDraft: IntakeDraft | null;

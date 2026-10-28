@@ -7,11 +7,11 @@
 // refusal key (`<module>.refusal.<reason>`), which the device shows as the problem's copy. Any other
 // throw is a fault and propagates (the batch rolls back as a 500), so a broken rule cannot pass an
 // op by accident.
-import { DomainError, refusalKeyOf } from '@bolusi/core';
+import { allowanceCovers, DomainError, refusalKeyOf } from '@bolusi/core';
 import type { TenantDb } from '@bolusi/db-server';
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { evaluateWithDirectory } from '../../auth/permissions.js';
+import { allowanceWithDirectory, evaluateWithDirectory } from '../../auth/permissions.js';
 import type { DeviceRecord, OpRegistry } from '../types.js';
 import type { AuthorLookup } from './permission.js';
 
@@ -39,6 +39,22 @@ export async function checkRules(
           storeId: device.storeId,
           permissionId,
         }).allowed;
+      },
+      // The limit a limited role has at this store by the server's current directory: an owner who
+      // lowered it since the device acted is the one who counts.
+      withinLimit: async (userId, permissionId, amount) => {
+        if (device.storeId === null || !(await lookup.stores(userId)).includes(device.storeId)) {
+          return false;
+        }
+        return allowanceCovers(
+          allowanceWithDirectory(await lookup.directory(userId), {
+            userId,
+            tenantId: op.tenantId,
+            storeId: device.storeId,
+            permissionId,
+          }),
+          amount,
+        );
       },
     });
     return null;

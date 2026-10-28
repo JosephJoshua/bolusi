@@ -7,10 +7,14 @@
 // Used by the identity endpoints before they mutate and by the push pipeline for every synced op.
 import {
   computeEffectiveSet,
+  evaluateAllowance,
   evaluatePermission,
+  parseLimitAmounts,
   type DirectoryGrant,
   type DirectoryRole,
   type DirectorySnapshot,
+  type LimitAmounts,
+  type PermissionAllowance,
   type PermissionQuery,
   type PermissionResult,
 } from '@bolusi/core';
@@ -45,8 +49,16 @@ export async function loadUserDirectory(
       ? []
       : await db
           .selectFrom('roles')
-          .select(['id', 'scopeType'])
+          .select(['id', 'scopeType', 'limited'])
           .where('id', 'in', roleIds)
+          .execute();
+  const limitRows =
+    roleIds.length === 0
+      ? []
+      : await db
+          .selectFrom('roleLimits')
+          .select(['roleId', 'storeId', 'kind', 'amount'])
+          .where('roleId', 'in', roleIds)
           .execute();
   const permissionRows =
     roleIds.length === 0
@@ -60,7 +72,11 @@ export async function loadUserDirectory(
   const roles = new Map<string, DirectoryRole>();
   for (const role of roleRows) {
     const ids = permissionRows.filter((p) => p.roleId === role.id).map((p) => p.permissionId);
-    roles.set(role.id, { scopeType: role.scopeType, permissionIdsJson: JSON.stringify(ids) });
+    roles.set(role.id, {
+      scopeType: role.scopeType,
+      permissionIdsJson: JSON.stringify(ids),
+      limits: role.limited ? limitsByStore(limitRows.filter((l) => l.roleId === role.id)) : null,
+    });
   }
   const grants: DirectoryGrant[] = grantRows.map((g) => ({ roleId: g.roleId, storeId: g.storeId }));
 
@@ -70,6 +86,27 @@ export async function loadUserDirectory(
     roles,
     grantsByUser: new Map([[userId, grants]]),
   };
+}
+
+/** A limited role's `role_limits` rows as amounts per store; an unset kind is Rp 0. */
+export function limitsByStore(
+  rows: readonly { storeId: string; kind: string; amount: string | number | bigint }[],
+): ReadonlyMap<string, LimitAmounts> {
+  const raw = new Map<string, Record<string, number>>();
+  for (const row of rows) {
+    const store = raw.get(row.storeId) ?? {};
+    store[row.kind] = Number(row.amount);
+    raw.set(row.storeId, store);
+  }
+  return new Map([...raw].map(([storeId, amounts]) => [storeId, parseLimitAmounts(amounts)]));
+}
+
+/** How far the user may use a permission (core authz/limits.ts), by a loaded directory. */
+export function allowanceWithDirectory(
+  directory: DirectorySnapshot,
+  query: PermissionQuery,
+): PermissionAllowance {
+  return evaluateAllowance(permissionRegistry, directory, query);
 }
 
 /** Evaluate one query against a loaded directory, with the server's permission registry. */

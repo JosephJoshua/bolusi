@@ -459,6 +459,7 @@ export interface RepairTickets {
 export interface RolesDirectory {
   id: string | null;
   isSystemDefault: Generated<number>;
+  limits: string | null;
   name: string;
   permissionIds: string;
   scopeType: string;

@@ -252,6 +252,29 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.action.cancel')).toBeTruthy();
   });
 
+  it('shows a manager their discount limit, and the refusal in words above it', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Maria Kogoya' }));
+    await openTicket('Yohanis Wenda');
+    fireEvent.click(byTestId('repair.desk.ticket.action.changePrice'));
+    const dialog = await screen.findByTestId('repair.desk.price.change');
+    fireEvent.click(within(dialog).getByTestId('repair.desk.price.change.kind.discount'));
+    expect(byTestId('repair.desk.price.change.discountLimit').textContent).toBe(
+      'Batas diskonmu Rp 50.000 per servisan.',
+    );
+    fireEvent.change(byTestId('repair.desk.price.change.description'), {
+      target: { value: 'Diskon langganan' },
+    });
+    fireEvent.change(byTestId('repair.desk.price.change.amount'), { target: { value: '60.000' } });
+    fireEvent.change(byTestId('repair.desk.price.change.reason'), {
+      target: { value: 'Pelanggan tetap' },
+    });
+    fireEvent.click(byTestId('repair.desk.price.change.agreed'));
+    // The rule's own copy, not a generic failure.
+    await within(dialog).findByText('Melebihi batasmu. Minta pemilik toko.');
+  });
+
   it('suggests catalog models as the model is typed and fills in the brand', async () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');

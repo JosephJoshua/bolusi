@@ -137,6 +137,7 @@
     "roleHint": {
       "cashier": "Terima HP, atur harga, dan serahkan HP ke pelanggan",
       "technician": "Kerjakan servisan, termasuk foto sebelum dan sesudah",
+      "manager": "Tugas kasir dan teknisi, plus diskon dan refund terbatas",
       "storeOwner": "Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan"
     },
     "save": "Simpan",
@@ -245,6 +246,30 @@
       "printerReminder": "Printer belum dipilih",
       "printerGone": "Printer tidak ditemukan",
       "printerReminderHint": "Nota belum bisa dicetak dari komputer ini."
+    }
+  },
+  "limits": {
+    "title": "Batas wewenang",
+    "settingsSummary": "Diskon, refund, dan bayar nanti",
+    "formTitle": "Batas {role}",
+    "intro": "Berlaku per servisan. Lebih dari batas ini harus pemilik toko.",
+    "priceDrop": "Diskon",
+    "priceDropHint": "Termasuk turun harga dan potongan biaya batal",
+    "refund": "Refund",
+    "refundHint": "Termasuk membatalkan pembayaran dan DP",
+    "credit": "Bayar nanti",
+    "creditHint": "Sisa tagihan saat HP dibawa pulang",
+    "save": "Simpan",
+    "saved": "Batas {role} tersimpan.",
+    "missing": "Isi ketiga batas. Tulis 0 kalau harus pemilik toko.",
+    "empty": "Belum ada tugas dengan batas",
+    "emptyBody": "Batas berlaku untuk tugas seperti Manajer. Batas untuk tugasmu sendiri diatur pemilik lain.",
+    "failure": {
+      "offline": "Butuh internet untuk mengubah batas. Sambungkan HP, lalu ulangi.",
+      "denied": "Kamu tidak bisa mengubah batas ini. Minta pemilik utama.",
+      "lastOwner": "Harus tetap ada satu pemilik utama.",
+      "rateLimited": "Sudah terlalu banyak perubahan hari ini. Coba lagi besok.",
+      "unexpected": "Batasnya belum tersimpan. Coba lagi sebentar lagi."
     }
   }
 }

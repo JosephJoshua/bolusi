@@ -468,6 +468,82 @@ describe('owner-only prices and settings', () => {
     }
   });
 
+  test('a limited role discounts within its store limit, judged by the server’s current limit', async () => {
+    const { world, builder } = await setupWorld(3343, 'none');
+    const roleId = testId(3344);
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId,
+      roleName: 'manager',
+      permissionIds: ['repair.quote_change', 'repair.discount'],
+    });
+    await db.updateTable('roles').set({ limited: true }).where('id', '=', roleId).execute();
+    const setLimit = (amount: number) =>
+      db
+        .insertInto('roleLimits')
+        .values({
+          tenantId: world.tenantId,
+          roleId,
+          storeId: world.storeId,
+          kind: 'priceDrop',
+          amount: BigInt(amount),
+          updatedBy: world.userId,
+          updatedAt: 1n,
+        })
+        .onConflict((oc) =>
+          oc.columns(['roleId', 'storeId', 'kind']).doUpdateSet({ amount: BigInt(amount) }),
+        )
+        .execute();
+    await setLimit(10_000);
+    const line = (n: number, kind: string, amount: number) =>
+      ticketOp(
+        builder,
+        'repair.quote_changed',
+        {
+          lineId: `01920000-0000-7000-8000-0000000e0d0${n}`,
+          kind,
+          description: kind === 'part' ? 'LCD' : 'Diskon',
+          amount,
+          reason: 'Langganan',
+          customerAgreed: true,
+          fromProposal: false,
+          waitsForCustomer: false,
+        },
+        { schemaVersion: 2 },
+      );
+    const discount = (n: number, amount: number) => line(n, 'discount', -amount);
+
+    // 6.000 and 4.000 make the 10.000 limit on this servisan; one rupiah more is over it.
+    const first = await push(world, [
+      line(0, 'part', 80_000),
+      discount(1, 6_000),
+      discount(2, 4_000),
+      discount(3, 1),
+    ]);
+    expect(first.results.map((r) => r.status)).toEqual([
+      'accepted',
+      'accepted',
+      'accepted',
+      'rejected',
+    ]);
+    expect(first.results[3]).toMatchObject({
+      code: 'RULE_VIOLATED',
+      reason: 'repair.refusal.overLimit',
+    });
+
+    // The owner raises it, then lowers it again before the next push: the server's limit counts.
+    await setLimit(20_000);
+    const raised = await push(world, [discount(4, 5_000)]);
+    expect(raised.results[0]?.status).toBe('accepted');
+    await setLimit(0);
+    const lowered = await push(world, [discount(5, 1_000)]);
+    expect(lowered.results[0]).toMatchObject({
+      status: 'rejected',
+      reason: 'repair.refusal.overLimit',
+    });
+  });
+
   test('a price change waits exactly when the customer has not agreed yet', async () => {
     const { world, builder } = await setupWorld(3342);
     const change = (n: number, customerAgreed: boolean, waitsForCustomer: boolean) =>

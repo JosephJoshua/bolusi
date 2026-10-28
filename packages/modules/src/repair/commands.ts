@@ -915,21 +915,32 @@ export async function correctDownPaymentHandler(
   const live = money.entries.filter(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
   );
-  const ops: OpDraft[] = live.map((entry) => voidOp(ctx, entry.id, input.reason));
+  const ops: OpDraft[] = [];
   if (input.amount > 0) {
     const first = live[0];
     const method =
       input.account === undefined
         ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
         : { account: input.account, reference: input.reference };
+    // Recorded first, in place of the largest payment through the same account, so a limited
+    // role's refund limit counts only what the DP went down by there.
+    const replaced = live
+      .filter((entry) => entry.account === method.account)
+      .reduce<(typeof live)[number] | undefined>(
+        (largest, entry) =>
+          largest === undefined || entry.amount > largest.amount ? entry : largest,
+        undefined,
+      );
     ops.push(
       paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
         ...method,
         amount: input.amount,
         tendered: null,
+        ...(replaced === undefined ? {} : { replaces: replaced.id }),
       }),
     );
   }
+  for (const entry of live) ops.push(voidOp(ctx, entry.id, input.reason));
   return { ops, result: { ticketId: ticket.id } };
 }
 

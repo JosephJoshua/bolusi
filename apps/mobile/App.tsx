@@ -63,6 +63,7 @@ import type { EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
+import { LimitsScreen } from './src/screens/staff/LimitsScreen.js';
 import { StaffScreen } from './src/screens/staff/StaffScreen.js';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
@@ -1180,6 +1181,9 @@ export default function App(props: AppProps): React.JSX.Element {
                     props.canUnlock || props.canReset ? () => setRoute('staffPins') : undefined
                   }
                   onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
+                  onOpenLimits={
+                    props.staff?.canSetLimits === true ? () => setRoute('limits') : undefined
+                  }
                   lockedStaffCount={
                     [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
                       (id) => id !== currentUser.id,
@@ -1365,6 +1369,19 @@ export default function App(props: AppProps): React.JSX.Element {
                         }
                       : undefined
                   }
+                  onClose={() => setRoute('settings')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'limits' && props.staff !== undefined && currentUser !== null) {
+              // The store owner's "Batas wewenang": a limited role's amounts here, online.
+              const staff = props.staff;
+              return (
+                <LimitsScreen
+                  actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
+                  load={staff.load}
+                  onSave={staff.onSetLimits}
                   onClose={() => setRoute('settings')}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1637,6 +1654,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'uncollectedDays',
   'staff',
   'staffPins',
+  'limits',
   'printSettings',
   'printPaper',
   'parts',

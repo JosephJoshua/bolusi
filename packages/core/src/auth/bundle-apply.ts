@@ -99,6 +99,7 @@ export async function applyBundle<DB>(db: Kysely<DB>, bundle: DeviceBundle): Pro
       scopeType: r.scopeType,
       isSystemDefault: r.isSystemDefault,
       permissionIds: r.permissionIds,
+      limits: r.limits ?? null,
     })),
   );
 

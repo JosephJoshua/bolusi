@@ -78,6 +78,7 @@ const COPY = {
       storeOwner: 'Pemilik toko',
       counter: 'Kasir',
       technician: 'Teknisi',
+      manager: 'Manajer',
     },
   },
   en: {
@@ -92,11 +93,18 @@ const COPY = {
       storeOwner: 'Store owner',
       counter: 'Counter',
       technician: 'Technician',
+      manager: 'Manager',
     },
   },
 } as const;
 
-const ROLE_ORDER: readonly DemoRepairRole[] = ['counter', 'technician', 'storeOwner', 'owner'];
+const ROLE_ORDER: readonly DemoRepairRole[] = [
+  'counter',
+  'technician',
+  'manager',
+  'storeOwner',
+  'owner',
+];
 
 function initials(name: string): string {
   return name

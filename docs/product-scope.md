@@ -397,9 +397,47 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
   will be seen only by owners and whoever records purchases; a sell price per
   store waits for the shop POS.
 
+## Managers, limits, approvals and roles (2026-10-28)
+
+Agreed with the owner. This replaces the October 14-16 manager, limit and role
+governance notes in "Decision" where they differ.
+
+- **Manajer:** a store role with everything a Kasir and a Teknisi do, plus the
+  owners' decisions (cancel, discount or other price drop, lower a DP, refund,
+  void a payment, hand over unpaid with "Bayar nanti", warranty exceptions)
+  within limits. Settings, employees, payment methods and part costs stay with
+  owners unless the main owner changes the role.
+- **Every role is editable:** only the main owner edits roles. Each permission
+  is a plain-language switch in groups (risky ones marked), and a new role
+  starts as a copy of another ("Kasir senior"). Store owners give the roles to
+  their own staff.
+- **Limits belong to a role in a store:** a role is either free of limits (the
+  owners) or limited. For a limited role, each store owner sets three amounts
+  for their store in "Batas wewenang": price drops (discounts and a smaller
+  cancel fee), refunds (including voided payments; a corrected DP counts only
+  what it went down by, unless it moves to another payment method) and Bayar
+  nanti. Each one counts everything of its kind on one
+  servisan together. A new limit is Rp 0, so a limited role does none of these
+  until the owner sets one. Someone holding two roles gets the higher limit, and
+  nobody sets the limits of a role they hold.
+- **Approval requests:** anyone who can start one of these actions may ask for
+  approval with a reason; a limited role asks only above its limit. The store's
+  owner, the main owner, or another person whose limit covers it approves or
+  rejects it with a note, never the person who asked (not even through a second
+  role), and without changing the amount. An approved request applies itself
+  and never expires. A waiting request closes if the servisan changes so it no
+  longer fits (paid, picked up, repriced), and the asker can withdraw it. An
+  approved price drop still waits for the customer's yes; a refund request names
+  how the money goes back and is recorded when approved.
+- **Offline:** a request reaches the approver when both phones sync. With no
+  signal, an owner or manager at the counter can approve on the same phone with
+  their PIN. Role and limit changes are online only and reach phones with the
+  next sync; the server judges each synced action by the current roles and
+  limits and refuses one over them, which the owner sees.
+
 ## Open product choices
 
-- Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, the user-facing v1 permission/grant matrix and server/offline enforcement of high-risk approvals, manager refund/price-override caps and per-store limits, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
+- Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
 - Choose and verify a QRIS integration provider, onboarding and merchant-account model, fees/settlement and verification/reconciliation semantics; test both central and per-store account needs. No provider (including Midtrans) is selected here.
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
 

@@ -316,6 +316,10 @@ export const authModuleManifest = {
       true,
       'Can create, rename, edit, and delete roles, and give them to employees or take them away.',
     ),
+    [AUTH_PERMISSION.limitManage]: store(
+      true,
+      'Can set how much a limited role, such as a manager, may discount, refund or let a customer owe at the store.',
+    ),
     [AUTH_PERMISSION.deviceEnroll]: store(
       true,
       'Can approve a new device for the store. An approved device can record and sign business actions.',
