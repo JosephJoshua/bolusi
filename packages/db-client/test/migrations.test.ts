@@ -177,6 +177,22 @@ describe('runner is idempotent', () => {
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);
   });
+
+  test('a device that already ran every later migration still gets 007 (ticket counter index)', async () => {
+    // 007 merged after 008-015 shipped, so updated devices meet it out of order.
+    await runClientMigrations(driver, {
+      now: () => 1,
+      migrations: CLIENT_MIGRATIONS.filter((m) => m.version !== 7),
+    });
+
+    const result = await runClientMigrations(driver, { now: () => 2 });
+
+    expect(result.applied).toEqual([7]);
+    const index = await driver.execute(
+      `SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_repair_tickets_device_counter'`,
+    );
+    expect(index.rows).toHaveLength(1);
+  });
 });
 
 // The first version number NOT taken by a shipped migration. Derived, never hardcoded: these tests
@@ -272,7 +288,7 @@ describe('migration 6 keeps one copy of each op', () => {
 
     const result = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(result.applied).toEqual([6, 8, 9, 11, 13, 14, 15]);
+    expect(result.applied).toEqual([6, 7, 8, 9, 11, 13, 14, 15]);
     const columns = await driver.execute(`SELECT name FROM pragma_table_info('operations')`);
     const names = columns.rows.map((row) => String(row['name']));
     expect(names).not.toContain('payload');
