@@ -1,10 +1,12 @@
 // The phone catalog as a search other modules take (the parts list's "fits" picker), and the caption
 // a catalog model shows under its name. Plain functions, so the device core binds them without a
 // screen.
+import type { ModulePort } from '@bolusi/core';
+
+import type { PhoneModelOption } from '../inventory/model-option.js';
 import type { DeviceModelRow } from './device-models.js';
 import { tn } from './i18n.js';
-import type { PhoneModelOption } from '../inventory/runtime.js';
-import type { RepairRuntime } from './runtime.js';
+import type { repairModule } from './manifest.js';
 
 /** "Samsung · 2024", "Samsung · Tablet · 2024", or "Evercoss · Serviced here before". */
 export function modelCaption(row: DeviceModelRow): string {
@@ -21,7 +23,7 @@ export function modelCaption(row: DeviceModelRow): string {
  * models, spellings and captions the intake offers.
  */
 export function catalogModelSearch(
-  runtime: Pick<RepairRuntime, 'query'>,
+  runtime: Pick<ModulePort<typeof repairModule>, 'query'>,
 ): (text: string, limit: number) => Promise<readonly PhoneModelOption[]> {
   return async (text, limit) =>
     (await runtime.query('searchDeviceModels', { text, limit })).rows.map((row) => ({

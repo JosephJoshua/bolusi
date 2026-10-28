@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import type { ModulePort } from '@bolusi/core';
 
 import type { InventoryModule } from './manifest.js';
+import type { PhoneModelOption } from './model-option.js';
 import {
   createRuntimeContext,
   useLiveQuery,
@@ -12,14 +13,7 @@ import {
   type QueryState,
 } from '../screen-kit/index.js';
 
-/** A phone model from the phone catalog, offered when choosing what a part fits. */
-export interface PhoneModelOption {
-  readonly key: string;
-  readonly brand: string;
-  readonly model: string;
-  /** Already-localized: "Samsung · 2024". */
-  readonly caption: string;
-}
+export type { PhoneModelOption };
 
 export type InventoryRuntime = ModulePort<InventoryModule> &
   LiveSource & {
