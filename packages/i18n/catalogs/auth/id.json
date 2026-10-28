@@ -195,6 +195,12 @@
     "backTo": "Kembali ke {name}",
     "otherPerson": "Bukan kamu?",
     "showPassword": "Lihat kata sandi",
-    "hidePassword": "Sembunyikan kata sandi"
+    "hidePassword": "Sembunyikan kata sandi",
+    "unrecognised": {
+      "title": "Komputer ini perlu didaftarkan ulang",
+      "body": "Server tidak mengenali komputer ini lagi. Semua perubahan tetap aman di sini sampai pemilik mendaftarkannya ulang.",
+      "action": "Daftarkan ulang komputer ini"
+    },
+    "unsyncedBody": "Dikirim setelah komputer ini terdaftar, tetap atas nama yang membuatnya."
   }
 }

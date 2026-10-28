@@ -1,6 +1,7 @@
 // What the window shows: opening the data, registering the PC, choosing who is here and their PIN,
 // then the counter. Which one is a pure function of the core's state (the phone's `resolveZone`), so
 // a lock or a blocked PC can never leave someone's work on screen.
+import type { HeldPhone } from '@bolusi/core';
 import type { PinOutcome } from '@bolusi/device/bootstrap/session';
 import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { tapTarget, type SwitcherUser } from '@bolusi/device/models/switcher/model';
@@ -150,6 +151,7 @@ function LiveApp({
           calls={{
             login: (request) => client.call<LoginResult>('enrollment.login', request),
             enroll: (request) => client.call<void>('enrollment.enroll', request),
+            heldPhone: () => client.call<HeldPhone | null>('enrollment.heldPhone'),
             finish() {
               setReenrolling(false);
               client.call('enrollment.finish').catch(() => undefined);
@@ -199,6 +201,7 @@ function LiveApp({
           user={users?.find((user) => user.id === active.userId)}
           capture={capture}
           onSwitch={() => setSwitching(true)}
+          onReenrol={() => setReenrolling(true)}
         />
       );
   }
@@ -276,6 +279,7 @@ function LiveCounter({
   user,
   capture,
   onSwitch,
+  onReenrol,
 }: {
   readonly client: Client;
   readonly state: CoreState;
@@ -284,6 +288,7 @@ function LiveCounter({
   readonly user: SwitcherUser | undefined;
   readonly capture: PcCapture;
   readonly onSwitch: () => void;
+  readonly onReenrol: () => void;
 }): React.JSX.Element {
   const storeName = state.deviceInfo?.storeName ?? '';
   // A new runtime when the person's grants change, so every screen re-derives what it offers.
@@ -344,6 +349,7 @@ function LiveCounter({
               input={state.sync}
               compact={compact}
               onSyncNow={() => void client.call('sync.requestManual').catch(() => undefined)}
+              onReenrol={onReenrol}
             />
           )
         }

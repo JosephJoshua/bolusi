@@ -61,6 +61,7 @@
   },
   "pc": {
     "savedHere": "{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.",
-    "offline": "Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi."
+    "offline": "Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.",
+    "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini."
   }
 }

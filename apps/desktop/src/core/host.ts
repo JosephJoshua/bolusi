@@ -9,6 +9,8 @@ import { extname, join } from 'node:path';
 import {
   createUuidV7Generator,
   DomainError,
+  readDeviceId,
+  readSyncState,
   type ClockPort,
   type CommandIdentity,
   type LocationPort,
@@ -192,6 +194,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     readonly runtime: RepairRuntime;
   } | null = null;
   const cleanups: (() => void)[] = [];
+  /** What the session and the loops subscribed; a re-enrolment drops them with the services. */
+  const serviceCleanups: (() => void)[] = [];
 
   const stateListeners = new Set<(state: CoreState) => void>();
   const repairListeners = new Set<() => void>();
@@ -421,7 +425,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     });
     if (controller === null || stopped) return;
     session = controller;
-    cleanups.push(
+    serviceCleanups.push(
       controller.subscribe(() => {
         // A switch or a lock changes who the repair runtime is for.
         void bindRepair();
@@ -468,7 +472,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       return;
     }
     sync = client;
-    cleanups.push(
+    serviceCleanups.push(
       client.subscribe(() => {
         void rereadSyncStatus();
         emit();
@@ -510,6 +514,42 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     repair = null;
     void bindRepair();
     await client.start();
+  }
+
+  /**
+   * Stop everything bound to this PC's registration: the loops would send under a token being
+   * replaced, and an open session would keep signing under the old device id, which the server
+   * refuses once the PC pushes as the new one. The session ends without a record, like the phone's.
+   */
+  function stopServices(): void {
+    ticker?.stop();
+    ticker = null;
+    for (const cleanup of serviceCleanups.splice(0)) cleanup();
+    enrollment?.runtime.bindSyncScheduler(null);
+    enrollment?.runtime.bindMediaAttached(null);
+    sync?.stop();
+    sync = null;
+    media?.stop();
+    media = null;
+    session = null;
+    repair = null;
+    emit();
+  }
+
+  /** Run the services under `deviceId`, the registration enrolment just made; a no-op when they do. */
+  async function adopt(deviceId: string): Promise<void> {
+    if (app === null || enrollment === null || app.deviceId === deviceId) return;
+    const reenrolled = app.deviceId !== null;
+    if (reenrolled) stopServices();
+    // Enrolment reset the sync state for the new registration; the boot-time copy is the old one's.
+    app = {
+      ...app,
+      deviceId,
+      syncState: reenrolled ? await readSyncState(app.db.db) : app.syncState,
+    };
+    heldLogin = null;
+    emit();
+    void startEnrolledServices(app, enrollment);
   }
 
   /** Session first, so the switcher lists people even if a loop stalls (the phone's order). */
@@ -569,12 +609,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         platform: PLATFORM,
         appVersion: deps.appVersion,
       },
-      (deviceId) => {
-        app = { ...booting, deviceId };
-        heldLogin = null;
-        void startEnrolledServices(app, enroll);
-        emit();
-      },
+      (deviceId) => void adopt(deviceId),
     );
     enrollment = enroll;
     cleanups.push(
@@ -592,12 +627,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
   async function stop(): Promise<void> {
     stopped = true;
-    ticker?.stop();
+    stopServices();
     for (const cleanup of cleanups.splice(0)) cleanup();
-    enrollment?.runtime.bindSyncScheduler(null);
-    enrollment?.runtime.bindMediaAttached(null);
-    sync?.stop();
-    media?.stop();
     handoff.stop();
     await app?.close();
   }
@@ -612,8 +643,30 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     },
     async 'enrollment.enroll'(request: { storeId: string; deviceName: string }) {
       if (heldLogin === null) throw new DomainError('NOT_AUTHENTICATED');
-      await requireEnrollment().controller.enroll({ login: heldLogin, ...request });
+      const enroll = requireEnrollment();
+      const booted = app;
+      if (booted === null || booted.deviceId === null) {
+        await enroll.controller.enroll({ login: heldLogin, ...request });
+        return;
+      }
+      // Re-enrolling replaces this PC's registration (and carries its unsent work over), so
+      // nothing may keep running under the old one meanwhile.
+      stopServices();
+      try {
+        await enroll.controller.enroll({ login: heldLogin, ...request });
+      } catch (error) {
+        // Nothing was replaced: pick up where the PC was.
+        if (!stopped) void startEnrolledServices(booted, enroll);
+        throw error;
+      }
+      // The new registration runs at once: the PC has work to send, and the owner leaving the
+      // success step some other way must not strand it.
+      const deviceId = await readDeviceId(booted.db.db);
+      if (deviceId !== null) await adopt(deviceId);
     },
+    // What a PC enrolled before holds: its store (the only one it may join again) and the unsent
+    // changes the owner sees before they are carried over.
+    'enrollment.heldPhone': () => requireEnrollment().controller.heldPhone(),
     'enrollment.finish'() {
       requireEnrollment().controller.finish();
     },

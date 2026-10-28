@@ -61,6 +61,7 @@
   },
   "pc": {
     "savedHere": "{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}",
-    "offline": "Changes are saved on this computer and sent when it is online."
+    "offline": "Changes are saved on this computer and sent when it is online.",
+    "mediaFailed": "{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}"
   }
 }

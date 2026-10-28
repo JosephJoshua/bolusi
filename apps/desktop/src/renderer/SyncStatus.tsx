@@ -9,6 +9,7 @@ import {
   reassuranceMessage,
   relativeLabel,
   SYNC_TITLE_KEY,
+  syncProblems,
   syncTitleState,
   type SyncStatusInput,
   type SyncTitleState,
@@ -51,11 +52,14 @@ export function SyncStatusButton({
   input,
   compact,
   onSyncNow,
+  onReenrol,
 }: {
   readonly input: SyncStatusInput;
   /** The collapsed sidebar: the icon only, named by its tooltip. */
   readonly compact: boolean;
   readonly onSyncNow: () => void;
+  /** Opens registration again, for when the server no longer knows this PC. */
+  readonly onReenrol: () => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const state = syncTitleState(input);
@@ -95,6 +99,10 @@ export function SyncStatusButton({
         input={input}
         onClose={() => setOpen(false)}
         onSyncNow={onSyncNow}
+        onReenrol={() => {
+          setOpen(false);
+          onReenrol();
+        }}
       />
     </>
   );
@@ -105,11 +113,13 @@ function SyncStatusDialog({
   input,
   onClose,
   onSyncNow,
+  onReenrol,
 }: {
   readonly open: boolean;
   readonly input: SyncStatusInput;
   readonly onClose: () => void;
   readonly onSyncNow: () => void;
+  readonly onReenrol: () => void;
 }): React.JSX.Element {
   const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
   const manual = manualSync(input);
@@ -125,17 +135,29 @@ function SyncStatusDialog({
       size="md"
       testId="desktop.sync.dialog"
       footer={
-        <Button
-          label={t('sync.action.syncNow')}
-          variant="primary"
-          icon={RefreshCw}
-          busy={
-            manual.kind === 'busy' || input.loopState === 'pushing' || input.loopState === 'pulling'
-          }
-          disabled={manual.kind === 'disabled'}
-          onClick={onSyncNow}
-          data-testid="desktop.sync.now"
-        />
+        // Sending cannot help a PC the server forgot: registering it again is the one way on.
+        manual.kind === 'reenroll' ? (
+          <Button
+            label={t('auth.pc.unrecognised.action')}
+            variant="primary"
+            onClick={onReenrol}
+            data-testid="desktop.sync.reenrol"
+          />
+        ) : (
+          <Button
+            label={t('sync.action.syncNow')}
+            variant="primary"
+            icon={RefreshCw}
+            busy={
+              manual.kind === 'busy' ||
+              input.loopState === 'pushing' ||
+              input.loopState === 'pulling'
+            }
+            disabled={manual.kind === 'disabled'}
+            onClick={onSyncNow}
+            data-testid="desktop.sync.now"
+          />
+        )
       }
     >
       <div className="flex flex-col gap-6">
@@ -158,8 +180,11 @@ function SyncStatusDialog({
             message={t('sync.firstSync.banner', { percent: firstSyncPercent(input.firstSync) })}
           />
         )}
+        {syncProblems(input).some((problem) => problem.kind === 'deviceUnrecognised') ? (
+          <Banner tone="warning" message={t('auth.pc.unrecognised.body')} />
+        ) : null}
         {failedPhotos === 0 ? null : (
-          <Banner tone="warning" message={t('sync.media.failedBody', { count: failedPhotos })} />
+          <Banner tone="warning" message={t('sync.pc.mediaFailed', { count: failedPhotos })} />
         )}
         {input.quarantined.length === 0 ? null : (
           <Banner tone="warning" message={t('sync.quarantine.body')} />
