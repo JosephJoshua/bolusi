@@ -17,6 +17,7 @@ import {
   Icon,
   ListRow,
   SyncChip,
+  TextButton,
   border,
   color,
   radius,
@@ -74,6 +75,8 @@ export interface SettingsScreenProps {
   readonly onOpenSwitcher: () => void;
   /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
   readonly onOpenChangePin: () => void;
+  /** Rename this phone, for someone who may register devices here; absent for everyone else. */
+  readonly onRenameDevice?: (() => void) | undefined;
   /** Open this phone's setup guide again (permissions, paper); absent where there is none. */
   readonly onOpenSetup?: (() => void) | undefined;
   /**
@@ -112,6 +115,7 @@ export function SettingsScreen({
   onBack,
   onOpenSwitcher,
   onOpenChangePin,
+  onRenameDevice,
   onOpenSetup,
   onOpenStaffPins,
   lockedStaffCount = 0,
@@ -283,6 +287,18 @@ export function SettingsScreen({
             <Fact
               label={t('core.settings.deviceName')}
               value={device.deviceName}
+              // With the action, the name takes the row, so "Ubah" sits at the end of its label.
+              wide={onRenameDevice !== undefined}
+              action={
+                onRenameDevice === undefined ? undefined : (
+                  <TextButton
+                    label={t('core.action.edit')}
+                    accessibilityLabel={t('auth.rename.titlePhone')}
+                    onPress={onRenameDevice}
+                    testID="settings-device-rename"
+                  />
+                )
+              }
               testID="settings-device-name"
             />
             <Fact

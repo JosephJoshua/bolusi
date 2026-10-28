@@ -270,4 +270,6 @@ export interface StaffAdminPort {
     readonly roleId: string;
     readonly limits: LimitAmounts;
   }): Promise<void>;
+  /** Rename the device this runs on (an owner who may register devices here). */
+  renameDevice(input: { readonly actingUserId: string; readonly name: string }): Promise<void>;
 }

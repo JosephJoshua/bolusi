@@ -260,6 +260,23 @@ test('the running shell opens Settings from its header — the language escape h
   await shoot(page, 'app-settings');
 });
 
+test('an owner renames this phone from Settings', async ({ page }) => {
+  await open(page, 'app', 'shell');
+  await page.getByTestId('ui.avatarButton').click();
+  await page.getByTestId('shell-open-settings').click();
+  await page.getByTestId('settings-device-rename').scrollIntoViewIfNeeded();
+  await shoot(page, 'app-settings-device');
+  await page.getByTestId('settings-device-rename').click();
+  const field = page.getByTestId('rename-device-name.field');
+  await expect(field).toBeFocused();
+  await field.fill('HP Kasir depan');
+  await shoot(page, 'app-rename-device');
+  await page.getByTestId('rename-device-save').click();
+  await expect(page.getByTestId('settings-device-name')).toHaveText('HP Kasir depan');
+  await page.getByTestId('settings-device-name').scrollIntoViewIfNeeded();
+  await shoot(page, 'app-settings-renamed');
+});
+
 test('a new phone opens on its setup: permissions, paper with a test page, then what is ready', async ({
   page,
 }) => {

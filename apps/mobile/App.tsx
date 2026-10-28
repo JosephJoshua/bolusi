@@ -70,6 +70,7 @@ import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
 import { pinView } from '@bolusi/device/models/pin/model';
+import { RenameDeviceScreen } from './src/screens/settings/RenameDeviceScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { DeviceSetupRoute } from './src/screens/setup/DeviceSetupRoute.js';
 import type { PermissionPort } from './src/push/permission.js';
@@ -260,6 +261,11 @@ export interface AppProps {
    * who may not add staff here, and on a build with no server wire; then the row is absent too.
    */
   readonly staff?: StaffControls | undefined;
+  /**
+   * Rename this phone (Settings › device), for someone who may register devices here. Online only;
+   * REJECTS with a `StaffAdminError`. Absent for everyone else, and then the action is absent too.
+   */
+  readonly onRenameDevice?: ((name: string) => Promise<void>) | undefined;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -1235,6 +1241,9 @@ export default function App(props: AppProps): React.JSX.Element {
                   onBack={() => setRoute('home')}
                   onOpenSwitcher={() => setSwitching(true)}
                   onOpenChangePin={() => setRoute('changePin')}
+                  onRenameDevice={
+                    props.onRenameDevice === undefined ? undefined : () => setRoute('renameDevice')
+                  }
                   onOpenSetup={() => setRoute('deviceSetup')}
                   // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
                   // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
@@ -1385,6 +1394,15 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenSystemSettings={() => void Linking.openSettings()}
                   onOpenSetting={setRoute}
                   onDone={() => setRoute('home')}
+                />
+              );
+            }
+            if (shellZone.route === 'renameDevice' && props.onRenameDevice !== undefined) {
+              return (
+                <RenameDeviceScreen
+                  current={props.deviceInfo.deviceName}
+                  onRename={props.onRenameDevice}
+                  onClose={() => setRoute('settings')}
                 />
               );
             }

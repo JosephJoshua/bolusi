@@ -1,9 +1,9 @@
 // The fetch adapter for the owner's staff changes (api/02-auth §5.4; owner decision 2026-10-27):
-// `POST /v1/users`, `PATCH /v1/users/:id`, `POST /v1/users/:id/deactivate|reactivate`, and a store's
-// limits for a limited role (`PUT /v1/role-limits`), each made as
-// the signed-in owner (`X-Acting-User`) on this device's bearer — the same shape as
-// `pin-verifier-transport.ts`. The server is the authority; this only translates its answer into the
-// closed `StaffAdminFailure` set the screens explain.
+// `POST /v1/users`, `PATCH /v1/users/:id`, `POST /v1/users/:id/deactivate|reactivate`, a store's
+// limits for a limited role (`PUT /v1/role-limits`) and this device's name (`PATCH /v1/devices/me`),
+// each made as the signed-in owner (`X-Acting-User`) on this device's bearer, the same shape as
+// `pin-verifier-transport.ts`. The server is the authority; this only translates its answer into
+// the closed `StaffAdminFailure` set the screens explain.
 //
 // No queue: staff changes are online only, so a network fault is `offline` right away and the owner
 // tries again, rather than a change that lands hours later on a device they no longer watch.
@@ -81,6 +81,10 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
 
     async setLimits({ actingUserId, storeId, roleId, limits }) {
       await call(actingUserId, 'PUT', '/v1/role-limits', { storeId, roleId, ...limits });
+    },
+
+    async renameDevice({ actingUserId, name }) {
+      await call(actingUserId, 'PATCH', '/v1/devices/me', { deviceName: name });
     },
   };
 }

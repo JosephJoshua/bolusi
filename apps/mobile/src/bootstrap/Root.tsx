@@ -75,6 +75,7 @@ import { REPAIR_REJECTED_SUBJECTS } from '@bolusi/device/bootstrap/repair';
 import type { AppRuntime } from '@bolusi/device/bootstrap/runtime';
 import type { AppSessionController as AppSession } from '@bolusi/device/bootstrap/session';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
+import { renameDevice } from '@bolusi/device/bootstrap/device-info';
 import { createStaffControls } from '@bolusi/device/bootstrap/staff';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import {
@@ -1258,6 +1259,18 @@ export function Root({
                   await client.settle();
                 },
               })
+        }
+        // Settings › rename this phone, for someone who may register devices here: the server takes
+        // the name first, then this phone's Settings reads it back.
+        onRenameDevice={
+          staffAdmin === undefined ||
+          sessionUserId === null ||
+          sessionSnapshot?.canRenameDevice !== true
+            ? undefined
+            : async (name) => {
+                await renameDevice(app, staffAdmin, { actingUserId: sessionUserId, name });
+                setDeviceInfo(await readDeviceInfoStable(app));
+              }
         }
         onResetPin={(targetUserId, newPin) =>
           session === null

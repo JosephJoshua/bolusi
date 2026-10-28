@@ -296,5 +296,20 @@
     "start": "Start",
     "reopen": "Setup guide",
     "reopenSummary": "Phone permissions, slip paper and a test page"
+  },
+  "rename": {
+    "titlePhone": "Rename this phone",
+    "titlePc": "Rename this computer",
+    "hint": "Use a name people in the store will recognise.",
+    "problem": {
+      "nameMissing": "Enter a name first.",
+      "nameTooLong": "64 characters at most."
+    },
+    "failure": {
+      "offline": "Renaming needs internet. Connect this phone, then try again.",
+      "denied": "Only a store owner can rename a device.",
+      "rateLimited": "Too many tries. Try again later.",
+      "unexpected": "The name wasn’t saved. Try again in a moment."
+    }
   }
 }

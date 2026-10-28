@@ -296,5 +296,20 @@
     "start": "Mulai",
     "reopen": "Panduan persiapan",
     "reopenSummary": "Izin HP, kertas nota, dan halaman uji"
+  },
+  "rename": {
+    "titlePhone": "Ganti nama HP",
+    "titlePc": "Ganti nama komputer",
+    "hint": "Pakai nama yang mudah dikenali di toko.",
+    "problem": {
+      "nameMissing": "Isi namanya dulu.",
+      "nameTooLong": "Maksimal 64 karakter."
+    },
+    "failure": {
+      "offline": "Butuh internet untuk ganti nama. Sambungkan HP, lalu ulangi.",
+      "denied": "Hanya pemilik toko yang bisa ganti nama perangkat.",
+      "rateLimited": "Terlalu banyak percobaan. Coba lagi nanti.",
+      "unexpected": "Namanya belum tersimpan. Coba lagi sebentar lagi."
+    }
   }
 }

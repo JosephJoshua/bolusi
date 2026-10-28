@@ -476,6 +476,18 @@ const source = {
         reopen: 'Panduan persiapan',
         reopenSummary: 'Izin HP, kertas nota, dan halaman uji',
       },
+      rename: {
+        titlePhone: 'Ganti nama HP',
+        titlePc: 'Ganti nama komputer',
+        hint: 'Pakai nama yang mudah dikenali di toko.',
+        problem: { nameMissing: 'Isi namanya dulu.', nameTooLong: 'Maksimal 64 karakter.' },
+        failure: {
+          offline: 'Butuh internet untuk ganti nama. Sambungkan HP, lalu ulangi.',
+          denied: 'Hanya pemilik toko yang bisa ganti nama perangkat.',
+          rateLimited: 'Terlalu banyak percobaan. Coba lagi nanti.',
+          unexpected: 'Namanya belum tersimpan. Coba lagi sebentar lagi.',
+        },
+      },
     },
     sync: {
       chip: { pending: 'Belum terkirim', rejected: 'Ditolak' },
@@ -1125,6 +1137,18 @@ export const resources = {
           start: 'Start',
           reopen: 'Setup guide',
           reopenSummary: 'Phone permissions, slip paper and a test page',
+        },
+        rename: {
+          titlePhone: 'Rename this phone',
+          titlePc: 'Rename this computer',
+          hint: 'Use a name people in the store will recognise.',
+          problem: { nameMissing: 'Enter a name first.', nameTooLong: '64 characters at most.' },
+          failure: {
+            offline: 'Renaming needs internet. Connect this phone, then try again.',
+            denied: 'Only a store owner can rename a device.',
+            rateLimited: 'Too many tries. Try again later.',
+            unexpected: 'The name wasn’t saved. Try again in a moment.',
+          },
         },
       },
       sync: {

@@ -312,6 +312,18 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('GET', () => '/v1/devices/me'),
   },
+  'PATCH /v1/devices/me': {
+    crossTenant: {
+      kind: 'absent',
+      reason: 'renames the bearer device itself; no client-supplied device or store id exists',
+    },
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'same — the store is the bearer device’s, checked against the acting user’s grants',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('PATCH', () => '/v1/devices/me'),
+  },
   'POST /v1/devices/:deviceId/revoke': {
     crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
     crossTenantRequest: (ctx) => ({

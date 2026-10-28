@@ -346,6 +346,7 @@ function AppMode({
   // "Switch user" works: any PIN opens the chosen person, who acts on the same demo tickets.
   const [current, setCurrent] = useState(session);
   const [setupPending, setSetupPending] = useState(setup);
+  const [deviceInfo, setDeviceInfo] = useState(DEMO_DEVICE_INFO);
   const [camera] = useState(() => previewPermission(false));
   const [notifications] = useState(() => previewPermission(true));
   const onSubmitPin = (userId: string): Promise<boolean> => {
@@ -383,7 +384,11 @@ function AppMode({
         force();
       }}
       locale={getLocale()}
-      deviceInfo={DEMO_DEVICE_INFO}
+      deviceInfo={deviceInfo}
+      onRenameDevice={(deviceName) => {
+        setDeviceInfo((current) => ({ ...current, deviceName }));
+        return Promise.resolve();
+      }}
       enrollment={fakeEnrollmentController()}
       setupPending={setupPending}
       onSetupDone={() => setSetupPending(false)}

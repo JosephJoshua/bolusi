@@ -139,6 +139,7 @@ describe('Settings on the PC', () => {
           canReset: false,
           canManageStaff: false,
           canSetLimits: false,
+          canRenameDevice: false,
           tenantAdmin: false,
         }),
       }),
@@ -341,6 +342,48 @@ describe('Settings on the PC', () => {
       'r-manager',
       { priceDrop: 50_000, refund: 25_000, credit: 100_000 },
     ]);
+  });
+
+  it('renames this PC as the owner signed in, and keeps the dialog open while offline', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    let online = false;
+    core.answers['device.rename'] = (_userId, name) => {
+      if (!online) return Promise.reject(new StaffAdminError('offline'));
+      core.set({ deviceInfo: { ...core.state.deviceInfo!, deviceName: name as string } });
+      return undefined;
+    };
+    renderApp();
+    await openSettings('computer');
+    fireEvent.click(byTestId('desktop.device.rename'));
+    const field = (await screen.findByTestId('desktop.rename.name')) as HTMLInputElement;
+    expect(field.value).toBe('PC Kasir');
+
+    // A blank name is not sent.
+    fireEvent.change(field, { target: { value: '   ' } });
+    fireEvent.click(byTestId('desktop.rename.save'));
+    expect(byTestId('desktop.rename').textContent).toContain('Isi namanya dulu');
+    expect(callsTo('device.rename')).toEqual([]);
+
+    fireEvent.change(field, { target: { value: ' Kasir depan ' } });
+    fireEvent.click(byTestId('desktop.rename.save'));
+    await screen.findByText(/belum terhubung internet/);
+    expect(byTestId('desktop.device.name').textContent).toBe('PC Kasir');
+
+    online = true;
+    fireEvent.click(byTestId('desktop.rename.save'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.rename')).toBeNull());
+    expect(callsTo('device.rename').at(-1)).toEqual([OWNER.id, 'Kasir depan']);
+    expect(byTestId('desktop.device.name').textContent).toBe('Kasir depan');
+  });
+
+  it('offers no rename to someone who may not register devices', async () => {
+    core = new FakeCore(
+      ready({ session: session({ ...signedIn(TECH, ALL), canRenameDevice: false }) }),
+    );
+    renderApp();
+    await openSettings('computer');
+    expect(byTestId('desktop.device.name').textContent).toBe('PC Kasir');
+    expect(screen.queryByTestId('desktop.device.rename')).toBeNull();
   });
 
   it('does not let a store owner open another owner', async () => {
