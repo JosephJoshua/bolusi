@@ -718,6 +718,7 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   ),
   'POST /v1/handoff/:id/withdraw': handoffProbes('POST', '/withdraw', JSON.stringify({ seq: 1 })),
   'GET /v1/handoff/:id/events': handoffProbes('GET', '/events?after=0'),
+  'GET /v1/handoff/:id/clip/:seq': handoffProbes('GET', '/clip/1'),
   'DELETE /v1/handoff/:id': handoffProbes('DELETE', ''),
   'GET /h/:key': PHONE_PAGE,
   'GET /h/:key/next': PHONE_PAGE,

@@ -3,19 +3,23 @@
 // a time; the phone reaches it only through the pairing's secret key. Everything lives in memory
 // on this one server process (like the realtime hub): a restart ends every pairing, and the PC
 // shows a new code. Nothing here is stored or synced; the PC keeps what it receives as its own
-// capture, which then syncs like any other.
+// capture, which then syncs like any other. A clip is held here, one per pairing, until the PC
+// has collected past it (so a fetch cut short can be tried again), backs out, or asks again.
 import { randomBytes } from 'node:crypto';
 
 import {
   HANDOFF_LIMITS,
   HANDOFF_PAD,
-  type HandoffKind,
+  VIDEO_MIMES,
+  type HandoffAsk,
   type HandoffPageLabels,
   type HandoffPoint,
   type HandoffWireEvent,
+  type VideoMime,
 } from '@bolusi/schemas';
 
 import type { DevicePrincipal } from '../env.js';
+import { magicBytesMatch } from '../media/assemble.js';
 import { nodeHubScheduler, type HubScheduler, type HubTimerHandle } from '../realtime/hub.js';
 import { uuidv7 } from '../uuidv7.js';
 
@@ -26,10 +30,15 @@ export const HANDOFF_POLL_MS = 20_000;
 /** What the PC has not collected yet; a step at a time, so a handful at most. */
 const MAX_PENDING_EVENTS = 8;
 
-interface Ask {
+type Ask = HandoffAsk & { readonly seq: number };
+
+/** A clip the phone sent, waiting for the PC to fetch it. */
+export interface HandoffClip {
   readonly seq: number;
-  readonly kind: HandoffKind;
-  readonly title: string;
+  /** Its event's number: once the PC collects past it, it has fetched the clip. */
+  readonly n: number;
+  readonly mime: VideoMime;
+  readonly bytes: Uint8Array;
 }
 
 export interface HandoffSession {
@@ -48,6 +57,9 @@ export interface HandoffSession {
   /** What the PC has not collected yet, numbered from `n`. */
   events: HandoffWireEvent[];
   n: number;
+  clip: HandoffClip | null;
+  /** A send is being read; a second one waits its turn (409) instead of filling memory. */
+  receiving: boolean;
   readonly phoneWaiters: Set<() => void>;
   readonly pcWaiters: Set<() => void>;
 }
@@ -83,8 +95,17 @@ export function strokesOf(value: unknown): HandoffPoint[][] | null {
   return kept.length > 0 ? kept : null;
 }
 
-export const isJpeg = (bytes: Uint8Array): boolean =>
-  bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+export const isJpeg = (bytes: Uint8Array): boolean => magicBytesMatch(bytes, 'image/jpeg');
+
+/** What a clip's header says it is, or null when it is neither MP4 nor WebM. */
+export const videoMimeOf = (bytes: Uint8Array): VideoMime | null =>
+  VIDEO_MIMES.find((mime) => magicBytesMatch(bytes, mime)) ?? null;
+
+/** The most a send for this step may carry. */
+export function sendLimit(ask: Ask | null): number {
+  if (ask?.kind === 'video') return HANDOFF_LIMITS.videoBytes;
+  return ask?.kind === 'signature' ? HANDOFF_LIMITS.signatureBytes : HANDOFF_LIMITS.photoBytes;
+}
 
 export class HandoffRelay {
   private readonly byId = new Map<string, HandoffSession>();
@@ -114,6 +135,8 @@ export class HandoffRelay {
       version: 0,
       events: [],
       n: 0,
+      clip: null,
+      receiving: false,
       phoneWaiters: new Set(),
       pcWaiters: new Set(),
     };
@@ -138,15 +161,22 @@ export class HandoffRelay {
     return this.byKey.get(key) ?? null;
   }
 
-  /** Puts one photo or signature in front of the phone. */
-  ask(session: HandoffSession, kind: HandoffKind, title: string): number {
+  /** Puts one photo, signature or clip in front of the phone; a clip not fetched yet goes. */
+  ask(session: HandoffSession, ask: HandoffAsk): number {
     session.seq += 1;
-    this.change(session, { seq: session.seq, kind, title });
+    session.clip = null;
+    this.change(session, { ...ask, seq: session.seq });
     return session.seq;
+  }
+
+  /** The clip the phone sent for step `seq`, while it is still held. */
+  clip(session: HandoffSession, seq: number): HandoffClip | null {
+    return session.clip?.seq === seq ? session.clip : null;
   }
 
   /** The PC backed out of this step; the phone goes back to waiting. */
   withdraw(session: HandoffSession, seq: number): void {
+    if (session.clip?.seq === seq) session.clip = null;
     if (session.ask?.seq === seq) this.change(session, null);
   }
 
@@ -159,6 +189,7 @@ export class HandoffRelay {
     this.byKey.delete(session.key);
     if (this.byDevice.get(session.deviceId) === session) this.byDevice.delete(session.deviceId);
     session.events = [];
+    session.clip = null;
     wakeAll(session.phoneWaiters);
     wakeAll(session.pcWaiters);
   }
@@ -187,6 +218,8 @@ export class HandoffRelay {
     signal?: AbortSignal,
   ): Promise<readonly HandoffWireEvent[]> {
     session.events = session.events.filter((event) => event.n > after);
+    // Collecting past a clip's event means the PC has it.
+    if (session.clip !== null && session.clip.n <= after) session.clip = null;
     if (session.events.length === 0 && !session.ended) {
       await this.wait(session.pcWaiters, signal);
     }
@@ -198,14 +231,21 @@ export class HandoffRelay {
     const ask = session.ask;
     // Sent for a step the PC has since backed out of or replaced.
     if (ask?.seq !== seq) return 409;
+    if (body.length > sendLimit(ask)) return 413;
+    if (ask.kind === 'video') {
+      const mime = videoMimeOf(body);
+      if (mime === null) return 415;
+      this.change(session, null);
+      this.emit(session, { type: 'video', seq, mime, sizeBytes: body.length });
+      session.clip = { seq, n: session.n, mime, bytes: body };
+      return null;
+    }
     if (ask.kind === 'photo') {
-      if (body.length > HANDOFF_LIMITS.photoBytes) return 413;
       if (!isJpeg(body)) return 415;
       this.change(session, null);
       this.emit(session, { type: 'photo', seq, jpeg: Buffer.from(body).toString('base64') });
       return null;
     }
-    if (body.length > HANDOFF_LIMITS.signatureBytes) return 413;
     let parsed: unknown;
     try {
       parsed = JSON.parse(Buffer.from(body).toString('utf8'));
@@ -224,7 +264,8 @@ export class HandoffRelay {
     event:
       | { type: 'paired' }
       | { type: 'photo'; seq: number; jpeg: string }
-      | { type: 'signature'; seq: number; strokes: HandoffPoint[][] },
+      | { type: 'signature'; seq: number; strokes: HandoffPoint[][] }
+      | { type: 'video'; seq: number; mime: VideoMime; sizeBytes: number },
   ): void {
     session.n += 1;
     session.events.push({ ...event, n: session.n });

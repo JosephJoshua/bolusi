@@ -75,7 +75,7 @@ import {
   MEDIA_EXTENSION,
   VIDEO_MAX_SIZE_BYTES,
   isVideoMime,
-  type HandoffKind,
+  type HandoffAsk,
   type HandoffPageLabels,
   type MediaRef,
   type QrisChargeBody,
@@ -911,7 +911,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
     // ── Phone handoff: a store phone takes the photo or signature for this PC ───────────────────
     'handoff.pair': (labels: HandoffPageLabels) => handoff.pair(labels),
-    'handoff.ask': (id: string, kind: HandoffKind, title: string) => handoff.ask(id, kind, title),
+    'handoff.ask': (id: string, ask: HandoffAsk) => handoff.ask(id, ask),
     'handoff.withdraw': (id: string, seq: number) => handoff.withdraw(id, seq),
     'handoff.unpair': (id: string) => handoff.unpair(id),
   } satisfies Handlers;

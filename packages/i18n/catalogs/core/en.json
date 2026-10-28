@@ -158,12 +158,15 @@
       "waiting": "Phone connected. The next step will show up here.",
       "rotate": "Turn the phone on its side.",
       "rotateNow": "Turn the screen",
-      "withdrawn": "Cancelled on the computer."
+      "withdrawn": "Cancelled on the computer.",
+      "videoDenied": "The camera or microphone isn’t allowed. Allow them for this site in the browser, then try again.",
+      "videoUnsupported": "This browser can’t record video. Open the code in Chrome or Safari."
     },
     "newCode": "Use another phone",
     "photoOnPhone": "Take the photo on the phone",
     "signOnPhone": "Ask the customer to sign on the phone",
-    "waitingSend": "Waiting for the phone to send…"
+    "waitingSend": "Waiting for the phone to send…",
+    "videoOnPhone": "Record the video on the phone"
   },
   "video": {
     "denied": "The camera or microphone isn’t allowed. Allow them in Windows Settings › Privacy, then try again.",

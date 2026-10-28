@@ -156,11 +156,16 @@ const source = {
           rotate: 'Putar HP ke posisi mendatar.',
           rotateNow: 'Putar layar',
           withdrawn: 'Dibatalkan di komputer.',
+          videoDenied:
+            'Kamera atau mikrofon belum diizinkan. Izinkan untuk situs ini di browser, lalu coba lagi.',
+          videoUnsupported:
+            'Browser ini belum bisa merekam video. Buka kodenya di Chrome atau Safari.',
         },
         newCode: 'Ganti HP',
         photoOnPhone: 'Ambil fotonya di HP',
         signOnPhone: 'Minta pelanggan tanda tangan di HP',
         waitingSend: 'Menunggu kiriman dari HP…',
+        videoOnPhone: 'Rekam videonya di HP',
       },
       video: {
         denied:
@@ -663,7 +668,7 @@ const source = {
           'Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
         unavailableTitle: 'Video belum ada di HP ini',
         unavailableBody: 'Videonya belum terkirim dari HP yang merekam. Coba lagi nanti.',
-        tooLarge: 'Videonya terlalu besar. Rekam ulang lebih singkat.',
+        tooLarge: 'Videonya terlalu besar. Rekam lebih singkat.',
       },
     },
     platform: {
@@ -867,11 +872,15 @@ export const resources = {
             rotate: 'Turn the phone on its side.',
             rotateNow: 'Turn the screen',
             withdrawn: 'Cancelled on the computer.',
+            videoDenied:
+              'The camera or microphone isn’t allowed. Allow them for this site in the browser, then try again.',
+            videoUnsupported: 'This browser can’t record video. Open the code in Chrome or Safari.',
           },
           newCode: 'Use another phone',
           photoOnPhone: 'Take the photo on the phone',
           signOnPhone: 'Ask the customer to sign on the phone',
           waitingSend: 'Waiting for the phone to send…',
+          videoOnPhone: 'Record the video on the phone',
         },
         video: {
           denied:

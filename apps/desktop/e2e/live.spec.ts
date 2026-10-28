@@ -300,6 +300,66 @@ test('the same phone takes the work photos, and the customer signs on it turned 
   });
 });
 
+/**
+ * The phone window has no camera of its own (the PC was started without the fake webcam), so its
+ * browser is handed a drawn picture and a tone, as a phone's camera and microphone would give.
+ */
+async function cameraOn(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    navigator.mediaDevices.getUserMedia = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      const context = canvas.getContext('2d')!;
+      let frame = 0;
+      setInterval(() => {
+        frame += 1;
+        context.fillStyle = `hsl(${String((frame * 4) % 360)} 55% 45%)`;
+        context.fillRect(0, 0, 1280, 720);
+      }, 33);
+      const stream = canvas.captureStream(30);
+      const audio = new AudioContext();
+      const tone = audio.createOscillator();
+      const out = audio.createMediaStreamDestination();
+      tone.connect(out);
+      tone.start();
+      for (const track of out.stream.getAudioTracks()) stream.addTrack(track);
+      return Promise.resolve(stream);
+    };
+  });
+}
+
+test('the same phone records the ownership video for a PC without a webcam', async () => {
+  await phone.setViewportSize({ width: 390, height: 844 });
+  await cameraOn(phone);
+  await pc.keyboard.press('F2');
+  await pc.getByTestId('repair.desk.intake.repairTypes').getByText('Buka kunci / akun').click();
+  const section = pc.getByTestId('repair.desk.intake.video');
+  await section.getByTestId('repair.desk.intake.video.clip.record').click();
+  // Still paired: the step goes to the phone, with what the clip must say.
+  await expect(pc.getByTestId('desktop.handoff.onPhone')).toContainText('Rekam videonya di HP');
+  await expect(phone.locator('#clip-hint')).toContainText('bahwa HP ini miliknya');
+  await phone.locator('#rec-start').click();
+  await expect(phone.locator('#clock-text')).toContainText('/ 1:00');
+  await phone.waitForTimeout(1500);
+  await phone.screenshot({ path: test.info().outputPath('phone-video-recording.png') });
+  await phone.locator('#rec-stop').click();
+  await expect(phone.locator('#clip-send')).toBeVisible();
+  await expect(phone.locator('#rec-retake')).toBeVisible();
+  await phone.screenshot({ path: test.info().outputPath('phone-video-review.png') });
+  await phone.locator('#clip-send').click();
+  await expect(pc.getByTestId('desktop.handoff')).toBeHidden();
+  await expect(phone.locator('#waiting')).toBeVisible();
+  await expect(section.getByTestId('repair.desk.intake.video.clip.recorded')).toBeVisible();
+  // The clip from the phone is this PC's own now, and plays here.
+  await section.getByTestId('repair.desk.intake.video.clip.play').click();
+  const player = pc.getByTestId('desktop.videoPlayer');
+  await expect(player.getByTestId('desktop.videoPlayer.video')).toHaveAttribute('src', /^blob:/);
+  await pc.screenshot({ path: test.info().outputPath('pc-video-from-phone.png') });
+  await player.getByTestId('desktop.videoPlayer.close').click();
+  await expect(player).toBeHidden();
+});
+
 test('the owner adds a cashier with a first PIN, and changes their own PIN, on the PC alone', async () => {
   await counter.getByTestId('nav.settings').click();
   await counter.getByTestId('desktop.settings.nav.staff').click();

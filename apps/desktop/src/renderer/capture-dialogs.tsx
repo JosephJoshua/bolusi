@@ -1,9 +1,9 @@
 // The counter PC's webcam dialog, signature pad and video recorder and player, mounted once in the
 // app. `capture` answers the screens' photo, signature and video asks like the phone's camera, pad
 // and recorder do: a JPEG from the webcam, the drawn strokes, or the recorded clip, and null when
-// the person backs out. A PC without a webcam, or without a touch
-// screen for signing, hands the step to a paired store phone instead (`phone-handoff.tsx`), which
-// answers the same way; one scan covers every step after it. Storing and signing what was taken
+// the person backs out. A PC without a webcam, or without a touch screen for signing, hands the
+// step to a paired store phone instead (`phone-handoff.tsx`), which answers the same way; one scan
+// covers every step after it. Storing and signing what was taken
 // is the runtime's job.
 import { t } from '@bolusi/i18n';
 import {
@@ -45,7 +45,6 @@ type Pending = (
       readonly resolve: (signature: DrawnSignature | null) => void;
     }
   | {
-      // The phone handoff takes photos and signatures only, so a clip is always the webcam's.
       readonly kind: 'video';
       readonly request: PcVideoRequest;
       readonly resolve: (video: PcVideo | null) => void;
@@ -146,12 +145,21 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
 
   /** Hands the open capture to the phone; what it sends ends the capture. */
   const onPhone = (current: Pending): void => {
-    if (phone === null || current.kind === 'video') return;
-    void phone.take(current.kind, current.title).then((result: HandoffResult | null) => {
+    if (phone === null) return;
+    const ask =
+      current.kind === 'video'
+        ? {
+            kind: current.kind,
+            title: current.title,
+            hint: current.request.hint,
+            maxMs: current.request.maxMs,
+          }
+        : { kind: current.kind, title: current.title };
+    void phone.take(ask).then((result: HandoffResult | null) => {
       if (pending !== current || result === null) return;
-      settle(
-        result.kind === 'photo' ? { bytes: result.bytes, mime: 'image/jpeg' } : result.signature,
-      );
+      if (result.kind === 'signature') settle(result.signature);
+      else
+        settle({ bytes: result.bytes, mime: result.kind === 'photo' ? 'image/jpeg' : result.mime });
     });
   };
 
@@ -174,7 +182,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
   const startVia = async (kind: Pending['kind']): Promise<Pending['via']> => {
     if (phone === null || !(await phoneAvailable)) return 'pc';
     if (phone.paired) return 'phone';
-    return (kind === 'photo' ? await hasWebcam() : hasTouch()) ? 'pc' : 'phone';
+    return (kind === 'signature' ? hasTouch() : await hasWebcam()) ? 'pc' : 'phone';
   };
 
   const keepPhoto = async (blob: Blob): Promise<void> => {
@@ -246,7 +254,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
         <PhoneHandoffDialog
           open={current?.via === 'phone'}
           link={link}
-          kind={current?.kind === 'signature' ? 'signature' : 'photo'}
+          kind={current?.kind ?? 'photo'}
           title={current?.title ?? ''}
           backLabel={t(
             current?.kind === 'signature' ? 'core.handoff.useScreen' : 'core.handoff.useWebcam',
@@ -277,7 +285,8 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
           }}
         />
         <VideoRecorderDialog
-          open={current?.kind === 'video'}
+          open={current?.via === 'pc' && current.kind === 'video'}
+          fallback={usePhone() ?? undefined}
           title={current?.title ?? ''}
           hint={current?.kind === 'video' ? current.request.hint : ''}
           maxMs={current?.kind === 'video' ? current.request.maxMs : 0}
@@ -353,10 +362,12 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
           start({ kind: 'signature', title: request?.title ?? '', via, resolve }),
         );
       },
-      video: (request) =>
-        new Promise((resolve) =>
-          start({ kind: 'video', title: request.title, request, via: 'pc', resolve }),
-        ),
+      video: async (request) => {
+        const via = await startVia('video');
+        return new Promise((resolve) =>
+          start({ kind: 'video', title: request.title, request, via, resolve }),
+        );
+      },
       play: (request, load) =>
         new Promise((resolve) => {
           closePlayer();

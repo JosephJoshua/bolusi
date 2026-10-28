@@ -853,6 +853,9 @@ importers:
 
   packages/ui-web:
     dependencies:
+      '@bolusi/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       '@bolusi/ui':
         specifier: workspace:*
         version: link:../ui

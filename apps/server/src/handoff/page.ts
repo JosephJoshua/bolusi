@@ -3,8 +3,10 @@
 // goes back to the PC through this server. Plain HTML with one inline script, so it works in any
 // phone browser without installing anything. The phone's own camera app takes the photo (a file
 // input with `capture`); the page scales it down to the phone pipeline's 1600 px before sending. A
-// signature takes the whole screen on its side, as wide as the phone allows.
-import type { HandoffPageLabels } from '@bolusi/schemas';
+// signature takes the whole screen on its side, as wide as the phone allows. A clip is recorded in
+// the page itself (camera and microphone through the browser), so it keeps to the step's time
+// limit and the same 720p as the PC's webcam, then plays back to send or record again.
+import { VIDEO_RECORDING, type HandoffPageLabels } from '@bolusi/schemas';
 
 const escapeHtml = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => `&#${String(c.charCodeAt(0))};`);
@@ -21,9 +23,12 @@ p{margin:0}
 .muted{color:#5b6170}
 .frame{background:#fff;border:1px solid #d9dce3;border-radius:10px;overflow:hidden}
 .frame img{display:block;width:100%;height:auto}
+.frame video{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#16181d}
+.clock{display:flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;font-weight:600}
+.dot{width:10px;height:10px;border-radius:50%;background:#c81e1e}
 canvas{display:block;width:100%;height:100%;touch-action:none;background:#fff}
 .row{display:flex;flex-direction:column;gap:12px}
-#photo-send{order:-1}
+#photo-send,#clip-send{order:-1}
 section{display:flex;flex-direction:column;gap:16px}
 header{display:flex;flex-direction:column;gap:4px}
 button,label.button{flex:1;display:flex;align-items:center;justify-content:center;min-height:52px;padding:0 16px;border-radius:10px;border:1px solid #c9ccd4;background:#fff;color:#16181d;font-family:inherit;font-size:17px;font-weight:600;line-height:1.2;cursor:pointer;text-align:center}
@@ -66,7 +71,8 @@ let sentSeq = 0;
 let ended = false;
 
 function view(name) {
-  for (const id of ['waiting', 'photo', 'sign-view']) $(id).hidden = id !== name;
+  for (const id of ['waiting', 'photo', 'clip', 'sign-view']) $(id).hidden = id !== name;
+  if (name !== 'clip') stopCamera();
   document.body.classList.toggle('sign', name === 'sign-view');
 }
 
@@ -92,6 +98,11 @@ function setAsk(next) {
     $('photo-title').textContent = next.title;
     resetPhoto();
     view('photo');
+  } else if (next.kind === 'video') {
+    $('clip-title').textContent = next.title;
+    $('clip-hint').textContent = next.hint || '';
+    view('clip');
+    openCamera();
   } else {
     note.hidden = true;
     $('sign-title').textContent = next.title;
@@ -125,6 +136,8 @@ async function send(button, body, type) {
   const seq = ask.seq;
   button.disabled = true;
   button.textContent = L.sending;
+  // A new take while the last one uploads would be dropped when that one lands.
+  $('rec-retake').disabled = true;
   note.hidden = true;
   try {
     const res = await fetch(BASE + '/send?seq=' + seq, { method: 'POST', headers: { 'Content-Type': type }, body });
@@ -142,6 +155,7 @@ async function send(button, body, type) {
   } catch { show(L.failed, false); }
   button.disabled = false;
   button.textContent = L.send;
+  $('rec-retake').disabled = false;
 }
 
 // ── photo ──
@@ -239,6 +253,111 @@ $('rotate-now').addEventListener('click', async () => {
   } catch {}
 });
 
+// ── video ──
+const REC = JSON.parse(document.getElementById('recording').textContent);
+const MAX_BYTES = Number(document.body.dataset.videoBytes);
+let stream = null;
+let recorder = null;
+let clip = null;
+let clipUrl = null;
+let tick = null;
+const live = $('live');
+const clipTime = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+function stopCamera() {
+  if (recorder && recorder.state !== 'inactive') { recorder.onstop = null; recorder.stop(); }
+  recorder = null;
+  clearInterval(tick);
+  if (stream) for (const track of stream.getTracks()) track.stop();
+  stream = null;
+  if (live) { live.srcObject = null; live.removeAttribute('src'); }
+  if (clipUrl) URL.revokeObjectURL(clipUrl);
+  clip = null; clipUrl = null;
+}
+function clipButtons(state) {
+  // ready: start; recording: stop; review: send + retake; off: retry only.
+  $('rec-start').hidden = state !== 'ready';
+  $('rec-stop').hidden = state !== 'recording';
+  $('clip-send').hidden = state !== 'review';
+  $('rec-retake').hidden = state !== 'review';
+  $('rec-retry').hidden = state !== 'off';
+  // The player shows a take's own length; the clock is only for recording.
+  $('clock').hidden = state !== 'recording';
+}
+async function openCamera() {
+  stopCamera();
+  note.hidden = true;
+  $('clip-frame').hidden = false;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    $('clip-frame').hidden = true;
+    clipButtons('none');
+    show(L.videoUnsupported, false);
+    return;
+  }
+  clipButtons('none');
+  const asked = ask;
+  try {
+    const got = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: REC.width }, height: { ideal: REC.height } },
+      audio: true,
+    });
+    if (ask !== asked || $('clip').hidden) { for (const track of got.getTracks()) track.stop(); return; }
+    stream = got;
+    live.muted = true;
+    live.controls = false;
+    live.srcObject = stream;
+    await live.play().catch(() => {});
+    clipButtons('ready');
+  } catch (error) {
+    if (ask !== asked) return;
+    $('clip-frame').hidden = true;
+    clipButtons('off');
+    show(error && error.name === 'NotAllowedError' ? L.videoDenied : L.videoFailed, false);
+  }
+}
+function startRecording() {
+  if (!stream || !ask) return;
+  const limit = ask.maxMs || 60000;
+  const option = REC.types.find((o) => MediaRecorder.isTypeSupported(o.type)) || REC.types[REC.types.length - 1];
+  const chunks = [];
+  try {
+    recorder = new MediaRecorder(stream, { mimeType: option.type, videoBitsPerSecond: REC.videoBitsPerSecond, audioBitsPerSecond: REC.audioBitsPerSecond });
+  } catch {
+    try { recorder = new MediaRecorder(stream); } catch { show(L.videoUnsupported, false); return; }
+  }
+  const type = (recorder.mimeType || option.type).split(';')[0];
+  const started = Date.now();
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    clearInterval(tick);
+    clip = new Blob(chunks, { type });
+    recorder = null;
+    for (const track of stream.getTracks()) track.stop();
+    stream = null;
+    live.srcObject = null;
+    clipUrl = URL.createObjectURL(clip);
+    live.src = clipUrl;
+    live.muted = false;
+    live.controls = true;
+    clipButtons('review');
+    if (clip.size > MAX_BYTES) { $('clip-send').hidden = true; show(L.videoTooLarge, false); }
+  };
+  recorder.start(1000);
+  note.hidden = true;
+  const update = () => {
+    const elapsed = Date.now() - started;
+    $('clock-text').textContent = clipTime(elapsed) + ' / ' + clipTime(limit);
+    if (elapsed >= limit && recorder && recorder.state === 'recording') recorder.stop();
+  };
+  update();
+  tick = setInterval(update, 250);
+  clipButtons('recording');
+}
+$('rec-start').addEventListener('click', startRecording);
+$('rec-stop').addEventListener('click', () => { if (recorder && recorder.state === 'recording') recorder.stop(); });
+$('rec-retake').addEventListener('click', openCamera);
+$('rec-retry').addEventListener('click', openCamera);
+$('clip-send').addEventListener('click', () => { if (clip) send($('clip-send'), clip, clip.type); });
+
 resetPad();
 view('waiting');
 poll();
@@ -250,7 +369,7 @@ export function handoffPage(
   labels: HandoffPageLabels,
   nonce: string,
   pad: { readonly width: number; readonly height: number },
-  limits: { readonly strokes: number; readonly points: number },
+  limits: { readonly strokes: number; readonly points: number; readonly videoBytes: number },
 ): string {
   const text = (key: keyof HandoffPageLabels): string => escapeHtml(labels[key]);
   return `<!doctype html>
@@ -262,7 +381,7 @@ export function handoffPage(
 <title>Bolusi</title>
 <style nonce="${nonce}">${STYLE}</style>
 </head>
-<body data-w="${String(pad.width)}" data-h="${String(pad.height)}" data-strokes="${String(limits.strokes)}" data-points="${String(limits.points)}">
+<body data-w="${String(pad.width)}" data-h="${String(pad.height)}" data-strokes="${String(limits.strokes)}" data-points="${String(limits.points)}" data-video-bytes="${String(limits.videoBytes)}">
 <main>
 <p class="note" id="note" role="status" hidden></p>
 <div id="waiting" class="center"><p class="muted" id="waiting-text">${text('waiting')}</p></div>
@@ -272,6 +391,18 @@ export function handoffPage(
 <div class="row">
 <label class="button primary" id="take"><input type="file" id="file" accept="image/*" capture="environment"><span id="take-label">${text('take')}</span></label>
 <button type="button" class="primary" id="photo-send" hidden>${text('send')}</button>
+</div>
+</section>
+<section id="clip" hidden>
+<header><h1 id="clip-title"></h1><p class="muted" id="clip-hint"></p></header>
+<div class="frame" id="clip-frame"><video id="live" playsinline autoplay muted></video></div>
+<p class="clock" id="clock" hidden><span class="dot" id="rec-dot"></span><span id="clock-text"></span></p>
+<div class="row">
+<button type="button" class="primary" id="rec-start" hidden>${text('videoStart')}</button>
+<button type="button" class="primary" id="rec-stop" hidden>${text('videoStop')}</button>
+<button type="button" class="primary" id="clip-send" hidden>${text('send')}</button>
+<button type="button" id="rec-retake" hidden>${text('videoRetake')}</button>
+<button type="button" id="rec-retry" hidden>${text('retry')}</button>
 </div>
 </section>
 <section id="sign-view" hidden>
@@ -287,6 +418,7 @@ export function handoffPage(
 </section>
 </main>
 <script type="application/json" id="labels" nonce="${nonce}">${scriptJson(labels)}</script>
+<script type="application/json" id="recording" nonce="${nonce}">${scriptJson(VIDEO_RECORDING)}</script>
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>
 </html>`;
