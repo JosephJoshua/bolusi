@@ -10,7 +10,8 @@ export {
   type ButtonSize,
   type ButtonVariant,
 } from './components/Button.js';
-export { CameraDialog, type CameraLabels } from './components/Camera.js';
+export { CameraDialog, CameraPreview, type CameraLabels } from './components/Camera.js';
+export type { WebcamState } from './components/webcam.js';
 export {
   VideoPlayerDialog,
   VideoRecorderDialog,

@@ -11,8 +11,9 @@
  * tree would fight that.
  */
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text } from 'react-native';
 
+import { useEntrance } from '../motion.js';
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon, type IconName } from './Icon.js';
 
@@ -72,14 +73,16 @@ export function Toast({
     return () => clearTimeout(timer);
   }, [onHide]);
 
+  const entrance = useEntrance();
+
   return (
-    <View
+    <Animated.View
       testID={testID}
       accessibilityRole="alert"
       // §3.7: toasts never block touch. `box-none` lets presses through the container while the
       // action inside stays tappable.
       pointerEvents="box-none"
-      style={styles.base}
+      style={[styles.base, entrance]}
     >
       <Icon name={icon} size={size.iconInline} color={fg} />
       <Text testID={`${testID}.message`} numberOfLines={2} style={styles.message}>
@@ -97,6 +100,6 @@ export function Toast({
           <Text style={styles.actionLabel}>{actionLabel}</Text>
         </Pressable>
       )}
-    </View>
+    </Animated.View>
   );
 }

@@ -12,7 +12,7 @@ import {
 } from '../src/index.js';
 
 describe('HTTP error-code registry (api/00 §7)', () => {
-  test('the code set is exactly the registry union — api/00 §7 transport + api/02-auth §10 identity surface', () => {
+  test('the code set is exactly the registry union — api/00 §7 transport + api/02-auth §10 identity surface + integrated QRIS', () => {
     expect([...HTTP_ERROR_CODES].sort()).toEqual(
       [
         // api/00 §7 transport
@@ -36,6 +36,12 @@ describe('HTTP error-code registry (api/00 §7)', () => {
         'ENROLL_KEY_REUSED',
         'LAST_ADMIN_PROTECTED',
         'LOGIN_IDENTIFIER_TAKEN',
+        // Integrated QRIS.
+        'QRIS_UNAVAILABLE',
+        'QRIS_NOT_CONNECTED',
+        'QRIS_KEY_REFUSED',
+        'QRIS_AMOUNT_REFUSED',
+        'CHANGE_REFUSED',
       ].sort(),
     );
   });

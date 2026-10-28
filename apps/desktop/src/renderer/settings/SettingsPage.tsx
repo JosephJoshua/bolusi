@@ -26,6 +26,7 @@ import {
   type IntakeOptionList,
 } from '@bolusi/modules/repair/desktop';
 import {
+  Button,
   Card,
   Fact,
   FactGrid,
@@ -34,6 +35,7 @@ import {
   SettingsPanel,
   type SectionNavGroup,
 } from '@bolusi/ui-web';
+import { Compass } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CounterPerson } from '../Counter.js';
@@ -62,10 +64,16 @@ export type LeaveGuard = (proceed: () => void) => void;
 export function SettingsPage({
   person,
   access,
+  initialPage = 'account',
+  onOpenSetup,
   onRegisterLeaveGuard,
 }: {
   readonly person: CounterPerson;
   readonly access: SettingsAccess;
+  /** The page to open on, such as "Komputer ini" from the printer reminder. */
+  readonly initialPage?: SettingsPageKey | undefined;
+  /** Opens this PC's setup guide again. */
+  readonly onOpenSetup?: (() => void) | undefined;
   /** Lets the app's own navigation ask before leaving Settings with unsaved changes. */
   readonly onRegisterLeaveGuard?: ((guard: LeaveGuard | null) => void) | undefined;
 }): React.JSX.Element {
@@ -148,7 +156,7 @@ export function SettingsPage({
     ];
   }, [staff, staffPins, repair, methods]);
 
-  const [page, setPage] = useState<SettingsPageKey>('account');
+  const [page, setPage] = useState<SettingsPageKey>(initialPage);
   const [pending, setPending] = useState<(() => void) | null>(null);
   const dirty = useRef(false);
   const onDirtyChange = (next: boolean): void => {
@@ -190,7 +198,13 @@ export function SettingsPage({
           data-testid="desktop.settings.page"
         >
           <div key={current} className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-            <Page page={current} person={person} access={access} onDirtyChange={onDirtyChange} />
+            <Page
+              page={current}
+              person={person}
+              access={access}
+              onDirtyChange={onDirtyChange}
+              onOpenSetup={onOpenSetup}
+            />
           </div>
         </div>
       </div>
@@ -213,11 +227,13 @@ function Page({
   person,
   access,
   onDirtyChange,
+  onOpenSetup,
 }: {
   readonly page: SettingsPageKey;
   readonly person: CounterPerson;
   readonly access: SettingsAccess;
   readonly onDirtyChange: (dirty: boolean) => void;
+  readonly onOpenSetup: (() => void) | undefined;
 }): React.JSX.Element {
   switch (page) {
     case 'account':
@@ -249,7 +265,7 @@ function Page({
     case 'paymentMethods':
       return <PaymentMethodsSettings />;
     case 'computer':
-      return <ComputerPanel device={access.device ?? null} />;
+      return <ComputerPanel device={access.device ?? null} onOpenSetup={onOpenSetup} />;
     default:
       return (
         <IntakeListSettings
@@ -263,12 +279,28 @@ function Page({
 /** This PC: the printer and paper its slips use, and what it is registered as. */
 function ComputerPanel({
   device,
+  onOpenSetup,
 }: {
   readonly device: SettingsAccess['device'];
+  readonly onOpenSetup: (() => void) | undefined;
 }): React.JSX.Element {
   const version = useAppVersion();
   return (
-    <SettingsPanel title={t('auth.pc.settings.thisPc')} testId="desktop.settings.computer">
+    <SettingsPanel
+      title={t('auth.pc.settings.thisPc')}
+      actions={
+        onOpenSetup === undefined ? undefined : (
+          <Button
+            label={t('auth.pc.setup.reopen')}
+            icon={Compass}
+            size="sm"
+            onClick={onOpenSetup}
+            data-testid="desktop.settings.setup"
+          />
+        )
+      }
+      testId="desktop.settings.computer"
+    >
       <PrintSettings />
       <Card testId="desktop.settings.device">
         <FactGrid>

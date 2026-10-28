@@ -2,13 +2,13 @@
 // to keep or retake. The camera runs only while the dialog is open. Copy comes from the caller.
 import { clsx } from 'clsx';
 import { Camera, CameraOff, RefreshCw, SwitchCamera } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Banner } from './Banner.js';
 import { Button } from './Button.js';
 import { Dialog } from './Dialog.js';
 import { IconButton } from './IconButton.js';
-import { useWebcam } from './webcam.js';
+import { useWebcam, type WebcamState } from './webcam.js';
 
 export interface CameraLabels {
   readonly close: string;
@@ -181,27 +181,100 @@ export function CameraDialog({
           </p>
         ) : null}
         {problem !== null ? (
-          <div
-            role="alert"
-            data-testid={`${testId}.problem`}
-            className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface-alt px-8 text-center"
+          <CameraProblem
+            message={labels[problem === 'noMicrophone' ? 'none' : problem]}
+            retryLabel={labels.retry}
+            onRetry={webcam.retry}
+            testId={testId}
           >
-            <CameraOff size={32} aria-hidden className="text-text-muted" />
-            <p className="max-w-md text-body text-text">
-              {labels[problem === 'noMicrophone' ? 'none' : problem]}
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button
-                label={labels.retry}
-                icon={RefreshCw}
-                onClick={webcam.retry}
-                data-testid={`${testId}.retry`}
-              />
-              {fallback}
-            </div>
-          </div>
+            {fallback}
+          </CameraProblem>
         ) : null}
       </div>
     </Dialog>
+  );
+}
+
+function CameraProblem({
+  message,
+  retryLabel,
+  onRetry,
+  testId,
+  children,
+}: {
+  readonly message: string;
+  readonly retryLabel: string;
+  readonly onRetry: () => void;
+  readonly testId: string;
+  readonly children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      role="alert"
+      data-testid={`${testId}.problem`}
+      className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface-alt px-8 text-center"
+    >
+      <CameraOff size={32} aria-hidden className="text-text-muted" />
+      <p className="max-w-md text-body text-text">{message}</p>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Button
+          label={retryLabel}
+          icon={RefreshCw}
+          onClick={onRetry}
+          data-testid={`${testId}.retry`}
+        />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The webcam's live picture on a page, to check it works: no shooting. Reports what it found, so
+ * the page can say whether photos will come from here or from a phone.
+ */
+export function CameraPreview({
+  labels,
+  onState,
+  testId = 'camera.preview',
+}: {
+  readonly labels: Pick<CameraLabels, 'retry' | 'starting' | 'none' | 'denied' | 'failed'>;
+  readonly onState?: ((state: WebcamState['kind']) => void) | undefined;
+  readonly testId?: string;
+}): React.JSX.Element {
+  const webcam = useWebcam({ open: true, ideal: IDEAL });
+  const { state } = webcam;
+  const latest = useRef(onState);
+  latest.current = onState;
+  useEffect(() => latest.current?.(state.kind), [state.kind]);
+  const problem =
+    state.kind === 'none' || state.kind === 'denied' || state.kind === 'failed' ? state.kind : null;
+  return (
+    <div
+      className="relative aspect-[4/3] w-full max-w-md overflow-hidden rounded-sm bg-black"
+      data-testid={testId}
+      data-state={state.kind}
+    >
+      <video
+        ref={webcam.video}
+        muted
+        playsInline
+        aria-hidden
+        className={clsx('size-full object-contain', state.kind === 'live' ? 'block' : 'hidden')}
+      />
+      {state.kind === 'starting' ? (
+        <p className="absolute inset-0 flex items-center justify-center text-body text-white/80">
+          {labels.starting}
+        </p>
+      ) : null}
+      {problem !== null ? (
+        <CameraProblem
+          message={labels[problem]}
+          retryLabel={labels.retry}
+          onRetry={webcam.retry}
+          testId={testId}
+        />
+      ) : null}
+    </div>
   );
 }

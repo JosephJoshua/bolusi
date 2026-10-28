@@ -219,6 +219,33 @@
       "colStatus": "Status",
       "lockedCount": "{count} terkunci",
       "pinFor": "PIN baru untuk {name}"
+    },
+    "setup": {
+      "title": "Siapkan komputer ini",
+      "step": "Langkah {step} dari {total}",
+      "next": "Lanjut",
+      "back": "Kembali",
+      "later": "Nanti saja",
+      "laterHint": "Bisa dibuka lagi di Pengaturan > Komputer ini.",
+      "cameraTitle": "Foto dan tanda tangan",
+      "cameraWebcam": "Foto HP pelanggan diambil dengan webcam ini.",
+      "cameraPhone": "Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.",
+      "signatureScreen": "Pelanggan tanda tangan langsung di layar sentuh ini.",
+      "signaturePhone": "Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.",
+      "doneTitle": "Komputer siap dipakai",
+      "donePrinter": "Printer",
+      "donePaper": "Kertas",
+      "donePhotos": "Foto",
+      "doneSignature": "Tanda tangan",
+      "noPrinter": "Belum dipilih",
+      "viaWebcam": "Webcam",
+      "viaScreen": "Layar sentuh",
+      "viaPhone": "HP toko",
+      "start": "Mulai",
+      "reopen": "Buka panduan persiapan",
+      "printerReminder": "Printer belum dipilih",
+      "printerGone": "Printer tidak ditemukan",
+      "printerReminderHint": "Nota belum bisa dicetak dari komputer ini."
     }
   },
   "limits": {

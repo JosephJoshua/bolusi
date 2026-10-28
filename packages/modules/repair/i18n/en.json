@@ -316,7 +316,8 @@
     "handoverFree": "This servisan is free. Ask an owner to hand it over.",
     "handoverPayment": "Complete the payment first.",
     "discountLimit": "Your discount limit is {amount} per servisan.",
-    "handoverChecks": "Tick everything, or write why not."
+    "handoverChecks": "Tick everything, or write why not.",
+    "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
   },
   "discardPhotos": {
     "title": "Leave without saving?",

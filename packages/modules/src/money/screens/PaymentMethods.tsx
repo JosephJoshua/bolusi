@@ -5,6 +5,7 @@
  * their name, and its kind never changes once payments may have gone through it.
  */
 import {
+  ConfirmSheet,
   EmptyState,
   Icon,
   ListRow,
@@ -33,8 +34,11 @@ import {
   useMoneyStores,
   usePaymentMethodForm,
 } from '../methods.js';
+import { useQrisConnection } from '../qris-hooks.js';
 import type { PaymentAccountRow } from '../queries.js';
-import { useMoneyQuery } from '../runtime.js';
+import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
+
+import { QrisConnectSection } from './QrisConnect.js';
 
 type MethodsView =
   { readonly kind: 'list' } | { readonly kind: 'form'; readonly account?: PaymentAccountRow };
@@ -216,6 +220,11 @@ export function PaymentMethodForm({
 }: PaymentMethodFormProps): React.JSX.Element {
   const form = usePaymentMethodForm(account);
   const { runner, kind, name, active, central, everyStore, picked, stores: storeList } = form;
+  // Xendit, for a QRIS method that exists (the server must know it before it can be connected).
+  const runtime = useMoneyRuntime();
+  const qrisPort = account?.kind === 'qris' ? runtime.qris : undefined;
+  const xendit = useQrisConnection(qrisPort, account?.id ?? '');
+  const [askDisconnect, setAskDisconnect] = useState(false);
   const discard = useDiscardConfirm({
     dirty: form.dirty,
     copy: {
@@ -232,7 +241,24 @@ export function PaymentMethodForm({
       chrome={chrome}
       title={tm(account === undefined ? 'money.methods.addTitle' : 'money.methods.editTitle')}
       onBack={() => discard.requestLeave(onCancel)}
-      overlay={discard.overlay}
+      overlay={
+        askDisconnect ? (
+          <ConfirmSheet
+            title={tm('money.qris.disconnectTitle')}
+            message={tm('money.qris.disconnectMessage')}
+            confirmLabel={tm('money.qris.disconnect')}
+            cancelLabel={tm('money.qris.cancel')}
+            onConfirm={() => {
+              setAskDisconnect(false);
+              void xendit.disconnect();
+            }}
+            onCancel={() => setAskDisconnect(false)}
+            testID={`${testID}.qris.confirm`}
+          />
+        ) : (
+          discard.overlay
+        )
+      }
       primaryLabel={tm('money.methods.save')}
       onPrimary={() => form.save(onDone, onCancel)}
       busy={runner.busy}
@@ -322,6 +348,13 @@ export function PaymentMethodForm({
             value={active}
             onValueChange={form.setActive}
             testID={`${testID}.active`}
+          />
+        )}
+        {qrisPort === undefined ? null : (
+          <QrisConnectSection
+            control={xendit}
+            onDisconnect={() => setAskDisconnect(true)}
+            testID={`${testID}.qris`}
           />
         )}
       </View>
