@@ -13,7 +13,7 @@ import { StepScreen, type ScreenChrome } from '../../screen-kit/screens/index.js
 
 import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
 import { tm } from '../i18n.js';
-import { CASH_MOVE_LABEL, differenceToSettle } from '../kas.js';
+import { CASH_MOVE_LABEL, differenceToSettle, type NamedBalance } from '../kas.js';
 import {
   digitsOf,
   digitsText,
@@ -22,7 +22,7 @@ import {
   rupiah,
   type PaymentLine,
 } from '../payment-entry.js';
-import type { CashCountRow, OpenBalanceRow, PaymentAccountRow } from '../queries.js';
+import type { CashCountRow, PaymentAccountRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { differenceText } from './Kas.js';
@@ -366,7 +366,7 @@ export function ReceiveDebtStep({
   onCancel,
   testID = 'money.receive',
 }: StepProps & {
-  readonly balance: OpenBalanceRow;
+  readonly balance: NamedBalance;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
@@ -427,7 +427,8 @@ export function ReceiveDebtStep({
       onClearError={runner.clearError}
       testID={testID}
     >
-      <Text style={styles.heading}>{balance.documentLabel}</Text>
+      <Text style={styles.heading}>{balance.customer ?? balance.documentLabel}</Text>
+      {balance.customer === null ? null : <Text style={styles.muted}>{balance.documentLabel}</Text>}
       <View style={styles.sum}>
         <Line
           label={tm('money.receive.owed')}

@@ -126,10 +126,19 @@ export function Section({
   );
 }
 
+/** A step that can no longer finish, because its record changed elsewhere. */
+export interface StepStale {
+  /** Already-localized: what changed. */
+  readonly message: string;
+  /** Already-localized: the bottom action that takes the user back. */
+  readonly backLabel: string;
+}
+
 /**
- * One full-screen task (design-system §3.10: flows, not modals): a back arrow, the body, the
- * refused-action banner and one primary action at the bottom, with a hint above it while it waits
- * for something.
+ * One full-screen step of a flow (design-system §3.10: flows, not modals): a back arrow, the body,
+ * the refused-action banner and one primary action at the bottom, with a hint above it while it
+ * waits for something. A step whose choices are its rows has no primary action. A step that asks a
+ * yes/no question puts the question over both answers, the "no" beside the primary as its equal.
  */
 export function StepScreen({
   chrome,
@@ -139,31 +148,64 @@ export function StepScreen({
   onPrimary,
   primaryDisabled,
   primaryHint,
+  primaryVariant,
+  secondary,
+  question,
   busy,
   errorCode,
   onClearError,
+  notice,
+  onClearNotice,
   overlay,
+  stale,
+  scrollKey,
   testID,
   children,
 }: {
   readonly chrome: ScreenChrome;
   readonly title: string;
   readonly onBack: () => void;
-  readonly primaryLabel: string;
-  readonly onPrimary: () => void;
+  readonly primaryLabel?: string | undefined;
+  readonly onPrimary?: (() => void) | undefined;
   readonly primaryDisabled?: boolean | undefined;
   /** Said above a disabled primary, so the user knows what it is waiting for. */
   readonly primaryHint?: string | undefined;
+  readonly primaryVariant?: 'primary' | 'destructive' | undefined;
+  /** The other answer to `question`, drawn beside the primary. */
+  readonly secondary?:
+    | {
+        readonly label: string;
+        readonly onPress: () => void;
+        readonly disabled?: boolean | undefined;
+        readonly testID: string;
+      }
+    | undefined;
+  /** Already-localized question the bottom answers reply to. */
+  readonly question?: string | undefined;
   readonly busy: boolean;
   readonly errorCode: string | null;
   readonly onClearError: () => void;
+  /** Already-localized word on what the last action did, shown when nothing was refused. */
+  readonly notice?: string | null | undefined;
+  readonly onClearNotice?: (() => void) | undefined;
   readonly overlay?: ReactNode;
+  /**
+   * The record changed elsewhere and this step can no longer finish: said in the banner slot, and
+   * the bottom action becomes the way back. Held back while the step's own command runs, since
+   * that command changes the record too and the step closes as it lands: the runner clears `busy`
+   * and the step's `onDone` closes it in the same batched update, so the notice never shows.
+   */
+  readonly stale?: StepStale | null | undefined;
+  /** A multi-step flow's step: each step opens scrolled to the top (AppShell `scrollKey`). */
+  readonly scrollKey?: string | number | undefined;
   readonly testID: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
+  const staleNow = busy || stale === undefined ? null : stale;
   return (
     <AppShell
       scrollable
+      scrollKey={scrollKey}
       title={title}
       titleVariant="detail"
       onBack={onBack}
@@ -171,32 +213,78 @@ export function StepScreen({
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       overlay={overlay}
+      // In the fixed banner slot, not the scrolling content: a refusal must be seen wherever the
+      // user had scrolled to when they pressed the bottom action. The stale notice outranks a
+      // refusal, since it says why the refusal happened.
       banner={
-        <ActionErrorBanner
-          errorCode={errorCode}
-          onDismiss={onClearError}
-          testID={`${testID}.error`}
-        />
+        staleNow !== null ? (
+          <Banner variant="warning" message={staleNow.message} testID={`${testID}.stale`} />
+        ) : errorCode !== null ? (
+          <ActionErrorBanner
+            errorCode={errorCode}
+            onDismiss={onClearError}
+            testID={`${testID}.error`}
+          />
+        ) : notice !== null && notice !== undefined ? (
+          <Banner
+            variant="info"
+            message={notice}
+            onPress={onClearNotice}
+            testID={`${testID}.notice`}
+          />
+        ) : undefined
       }
       bottomAction={
-        <View>
-          {primaryDisabled === true && primaryHint !== undefined ? (
-            <Text style={styles.hint} testID={`${testID}.primaryHint`}>
-              {primaryHint}
-            </Text>
-          ) : null}
-          <Button
-            label={primaryLabel}
-            onPress={onPrimary}
-            disabled={primaryDisabled === true || busy}
-            busy={busy}
-            testID={`${testID}.primary`}
-          />
-        </View>
+        staleNow !== null ? (
+          <Button label={staleNow.backLabel} onPress={onBack} testID={`${testID}.staleBack`} />
+        ) : primaryLabel === undefined || onPrimary === undefined ? undefined : (
+          <View>
+            {primaryDisabled === true && primaryHint !== undefined ? (
+              <Text style={styles.hint} testID={`${testID}.primaryHint`}>
+                {primaryHint}
+              </Text>
+            ) : null}
+            {question === undefined ? null : (
+              <Text style={styles.question} testID={`${testID}.question`}>
+                {question}
+              </Text>
+            )}
+            <View style={styles.answers}>
+              {secondary === undefined ? null : (
+                <View style={styles.answer}>
+                  <Button
+                    label={secondary.label}
+                    onPress={secondary.onPress}
+                    variant="secondary"
+                    disabled={secondary.disabled === true || busy}
+                    testID={secondary.testID}
+                  />
+                </View>
+              )}
+              <View style={styles.answer}>
+                <Button
+                  label={primaryLabel}
+                  onPress={onPrimary}
+                  variant={primaryVariant ?? 'primary'}
+                  disabled={primaryDisabled === true || busy}
+                  busy={busy}
+                  testID={`${testID}.primary`}
+                />
+              </View>
+            </View>
+          </View>
+        )
       }
       testID={testID}
     >
-      {children}
+      {/* Once stale, kept in view so the user sees what they had filled in, but not workable. */}
+      <View
+        pointerEvents={staleNow === null ? 'auto' : 'none'}
+        style={staleNow === null ? undefined : styles.inert}
+        testID={`${testID}.body`}
+      >
+        {children}
+      </View>
     </AppShell>
   );
 }
@@ -213,4 +301,8 @@ const styles = StyleSheet.create({
   sectionAction: { marginRight: -space.sm },
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
   hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
+  inert: { opacity: 0.45 },
+  question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },
+  answers: { flexDirection: 'row', gap: space.md },
+  answer: { flex: 1 },
 });

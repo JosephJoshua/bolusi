@@ -21,7 +21,8 @@ export interface DemoMoneyOptions {
   /** Who records the next entry. */
   readonly actor: () => string;
   /** A finished servisan the customer took home unpaid. */
-  readonly debt?: { readonly id: string; readonly label: string; readonly amount: number };
+  readonly debt?:
+    { readonly id: string; readonly label: string; readonly amount: number } | undefined;
 }
 
 export interface DemoMoneyLedger {

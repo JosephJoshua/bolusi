@@ -78,14 +78,27 @@ export function countToday(counts: readonly CashCountRow[], now: number): CashCo
   return counts.find((count) => count.countedAt >= start) ?? null;
 }
 
-export interface OpenBalances {
-  /** Customers who took their phone before paying it all, longest waiting first. */
-  readonly owed: readonly OpenBalanceRow[];
-  /** More was recorded than was due: the store owes it back. */
-  readonly owedBack: readonly OpenBalanceRow[];
+/** An open balance with the customer it is for, when the document's module can name them. */
+export interface NamedBalance extends OpenBalanceRow {
+  readonly customer: string | null;
 }
 
-export function splitOpenBalances(rows: readonly OpenBalanceRow[]): OpenBalances {
+/** The open balances, each with its customer's name. */
+export function nameBalances(
+  rows: readonly OpenBalanceRow[],
+  customers: ReadonlyMap<string, string>,
+): NamedBalance[] {
+  return rows.map((row) => ({ ...row, customer: customers.get(row.documentId) ?? null }));
+}
+
+export interface OpenBalances<T extends OpenBalanceRow = OpenBalanceRow> {
+  /** Customers who took their phone before paying it all, longest waiting first. */
+  readonly owed: readonly T[];
+  /** More was recorded than was due: the store owes it back. */
+  readonly owedBack: readonly T[];
+}
+
+export function splitOpenBalances<T extends OpenBalanceRow>(rows: readonly T[]): OpenBalances<T> {
   return {
     owed: rows.filter((row) => row.balance > 0),
     owedBack: rows.filter((row) => row.balance < 0),

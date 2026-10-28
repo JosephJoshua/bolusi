@@ -278,6 +278,8 @@ const ticketFilter = z
     technicianIds: z.array(z.string().min(1)).min(1).max(100).optional(),
     unassigned: z.boolean().optional(),
     customerId: z.string().min(1).optional(),
+    /** Only these servisan (the Kas unpaid list naming its customers). */
+    ids: z.array(z.string().min(1)).min(1).max(100).optional(),
     hasPendingProposals: z.boolean().optional(),
     /** Received at or after this time (epoch ms). */
     receivedFrom: z.number().int().nonnegative().optional(),
@@ -360,6 +362,7 @@ function filteredSummaries(qctx: Qctx, filter: TicketFilter, cancelledOnly: bool
     query = query.where('t.technicianId', 'is', null);
   }
   if (filter.customerId !== undefined) query = query.where('t.customerId', '=', filter.customerId);
+  if (filter.ids !== undefined) query = query.where('t.id', 'in', filter.ids);
   if (filter.hasPendingProposals === true) {
     query = query.where((eb) =>
       eb.exists(

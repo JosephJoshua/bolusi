@@ -33,9 +33,11 @@ import {
   dayStart,
   moneyInByMethod,
   movesOut,
+  nameBalances,
   splitOpenBalances,
+  type NamedBalance,
 } from '../kas.js';
-import type { CashCountRow, MoneyEntryRow, OpenBalanceRow } from '../queries.js';
+import type { CashCountRow, MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -46,7 +48,7 @@ export interface KasBoardProps {
   readonly onCount: () => void;
   readonly onMove: () => void;
   readonly onSettle: (count: CashCountRow) => void;
-  readonly onReceive: (balance: OpenBalanceRow) => void;
+  readonly onReceive: (balance: NamedBalance) => void;
   /** A tablet beside another pane shows no header of its own; absent on a phone. */
   readonly testID?: string | undefined;
 }
@@ -93,7 +95,13 @@ export function KasBoard({
     async (rt) => (await rt.query('paymentAccounts', { includeInactive: true })).rows,
     'accounts',
   );
-  const balances = useMoneyQuery(async (rt) => (await rt.query('openBalances', {})).rows, 'open');
+  const balances = useMoneyQuery(async (rt) => {
+    const { rows } = await rt.query('openBalances', {});
+    return nameBalances(
+      rows,
+      await rt.customersOf(rows.map((row) => ({ kind: row.documentKind, id: row.documentId }))),
+    );
+  }, 'open');
 
   const drawerData = readyOr(drawer);
   const todayEntries = readyOr(entries) ?? [];
@@ -211,8 +219,13 @@ export function KasBoard({
           {open.owed.map((row) => (
             <Row
               key={row.documentId}
-              label={row.documentLabel}
-              detail={tm('money.kas.since', { date: formatDateTime(row.since) })}
+              label={row.customer ?? row.documentLabel}
+              detail={[
+                row.customer === null ? null : row.documentLabel,
+                tm('money.kas.since', { date: formatDateTime(row.since) }),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
               value={formatMoney(row.balance)}
               onPress={mayReceive ? () => onReceive(row) : undefined}
               testID={`${testID}.owed.${row.documentId}`}
@@ -227,7 +240,8 @@ export function KasBoard({
           {open.owedBack.map((row) => (
             <Row
               key={row.documentId}
-              label={row.documentLabel}
+              label={row.customer ?? row.documentLabel}
+              detail={row.customer === null ? undefined : row.documentLabel}
               value={formatMoney(-row.balance)}
               testID={`${testID}.owedBack.${row.documentId}`}
             />

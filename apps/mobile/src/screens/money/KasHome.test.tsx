@@ -3,6 +3,7 @@
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog, type MoneyRuntime } from '@bolusi/modules/money/screens';
+import { servisanCustomers } from '@bolusi/modules/repair/screens';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
@@ -35,6 +36,7 @@ function moneyRuntimeFor(harness: RepairHarness, userId: string): MoneyRuntime {
     ...repair.money,
     subscribe: repair.subscribe,
     nameOf: (id) => (id === harness.cashierId ? USER_NAMES.cashier : null),
+    customersOf: (documents) => servisanCustomers(repair, documents),
   };
 }
 
@@ -241,9 +243,12 @@ describe('what customers owe', () => {
     const screen = await mount(h, h.cashierId);
     const owed = text(screen, `money.kas.owed.${ticketId}.value`);
     expect(owed).toBe('Rp 750.000');
+    // The customer, not only the servisan number, is who the counter looks for.
+    expect(text(screen, `money.kas.owed.${ticketId}`)).toMatch(/^Yohanis Wenda.*-\d{4}/);
 
     await press(screen, `money.kas.owed.${ticketId}`);
     expect(text(screen, 'money.receive.owed')).toBe('Rp 750.000');
+    expect(text(screen, 'money.receive')).toContain('Yohanis Wenda');
     // Part of it today.
     type(screen, 'money.receive.pay.line0.amount', '500000');
     await settle();

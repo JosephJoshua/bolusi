@@ -273,6 +273,30 @@ export function useDownPaymentMethod(
 }
 
 /** A model photo's uri once loaded; null while loading or when there is none to show. */
+/**
+ * Who each servisan is for, by id: the Kas lists name the customer, not only the servisan number
+ * money records carry (their labels never hold a name). Someone who cannot read repairs gets none.
+ */
+export async function servisanCustomers(
+  port: ModulePort<typeof repairModule>,
+  documents: readonly { readonly kind: string; readonly id: string }[],
+): Promise<ReadonlyMap<string, string>> {
+  const ids = [
+    ...new Set(documents.filter((d) => d.kind === REPAIR_DOCUMENT_KIND).map((d) => d.id)),
+  ];
+  const names = new Map<string, string>();
+  for (let start = 0; start < ids.length; start += SERVISAN_PAGE) {
+    const page = ids.slice(start, start + SERVISAN_PAGE);
+    const result = await port
+      .query('listTickets', { filter: { ids: page }, limit: page.length })
+      .catch(() => null);
+    if (result === null) return names;
+    for (const row of result.rows) names.set(row.id, row.customerName);
+  }
+  return names;
+}
+const SERVISAN_PAGE = 100;
+
 export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
   const load = useRepairRuntime().loadModelPhoto;
   const loadRef = useRef(load);

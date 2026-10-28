@@ -412,6 +412,25 @@ function seedTickets(): TicketDetailRow[] {
       readyHoursAgo: 72 * 24,
       extraPhotos: [photoRow('before:m8'), photoRow('after:m9')],
     }),
+    // Taken home last week before it was paid: on the Kas unpaid list.
+    ticket({
+      id: 't-8',
+      number: 'K7Q-0005',
+      customer: 'Yulianus Wenda',
+      phone: '0812-9988-7766',
+      brand: 'Xiaomi',
+      model: 'Redmi Note 12',
+      color: 'Biru',
+      complaint: 'Port cas longgar',
+      outcome: 'repaired',
+      technicianId: 'u-budi',
+      lines: [line('part', 'Konektor cas', 350_000), line('labour', 'Ganti konektor', 100_000)],
+      hoursAgo: 9 * 24,
+      readyHoursAgo: 7 * 24,
+      location: 'returned',
+      returnedBy: 'u-siti',
+      extraPhotos: [photoRow('before:m10'), photoRow('after:m11')],
+    }),
   ].map(withTotals);
 }
 
@@ -747,10 +766,12 @@ export function demoRepairRuntime(
     const from = f['receivedFrom'] as number | undefined;
     const before = f['receivedBefore'] as number | undefined;
     const readyBefore = f['readyBefore'] as number | undefined;
+    const ids = f['ids'] as string[] | undefined;
     return tickets.filter(
       (t) =>
         (outcomes === undefined || outcomes.includes(t.outcome)) &&
         (f['location'] === undefined || t.location === f['location']) &&
+        (ids === undefined || ids.includes(t.id)) &&
         (f['technicianId'] === undefined || t.technicianId === f['technicianId']) &&
         (technicianIds === undefined
           ? f['unassigned'] !== true || t.technicianId === null
@@ -1156,12 +1177,17 @@ export function demoRepairRuntime(
     imageDataUri: (ref) => Promise.resolve(placeholderUri(ref.mediaId)),
   };
 
+  // A repaired phone that went home unpaid: the Kas unpaid list names its customer.
+  const unpaid = tickets.find((t) => t.location === 'returned' && t.outcome === 'repaired');
   const ledger = demoMoneyLedger(
     {
       now,
       accounts: DEMO_ACCOUNTS,
       actor: () => actor.userId,
-      debt: { id: 't-debt', label: 'K7Q-0098', amount: 450_000 },
+      debt:
+        unpaid === undefined
+          ? undefined
+          : { id: unpaid.id, label: unpaid.ticketNumber, amount: unpaid.quoteTotal },
     },
     notify,
   );

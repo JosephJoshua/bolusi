@@ -16,6 +16,13 @@ import type { MoneyModule } from './manifest.js';
 export interface MoneyRuntime extends ModulePort<MoneyModule>, LiveSource {
   /** A colleague's name for "counted by"; null for someone this device does not know. */
   nameOf(userId: string): string | null;
+  /**
+   * The customer each document is for, by document id, from the module that owns it (a servisan's
+   * customer). Documents it cannot name are left out, and the lists show only their label.
+   */
+  customersOf(
+    documents: readonly { readonly kind: string; readonly id: string }[],
+  ): Promise<ReadonlyMap<string, string>>;
 }
 
 const MoneyRuntimeContext = createRuntimeContext<MoneyRuntime>('money');

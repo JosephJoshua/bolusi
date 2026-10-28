@@ -5,3 +5,4 @@ export { MoneyRuntimeProvider, type MoneyRuntime } from '../runtime.js';
 export { KasBoard, type KasBoardProps } from './Kas.js';
 export { CountCashStep, MoveCashStep, ReceiveDebtStep, SettleCountStep } from './KasSteps.js';
 export type { CashCountRow, OpenBalanceRow } from '../queries.js';
+export type { NamedBalance } from '../kas.js';

@@ -12,7 +12,7 @@ import {
   SettleCountStep,
   type CashCountRow,
   type MoneyRuntime,
-  type OpenBalanceRow,
+  type NamedBalance,
 } from '@bolusi/modules/money/screens';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -24,7 +24,7 @@ type KasView =
   | { readonly kind: 'count' }
   | { readonly kind: 'move' }
   | { readonly kind: 'settle'; readonly count: CashCountRow }
-  | { readonly kind: 'receive'; readonly balance: OpenBalanceRow };
+  | { readonly kind: 'receive'; readonly balance: NamedBalance };
 
 export interface KasHomeProps {
   readonly runtime: MoneyRuntime;
