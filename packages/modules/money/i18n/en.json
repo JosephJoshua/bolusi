@@ -49,5 +49,62 @@
     },
     "method": "Payment method",
     "currency": "Rp"
+  },
+  "kas": {
+    "title": "Cash",
+    "expected": "Should be in the drawer",
+    "notCounted": "Drawer not counted today",
+    "counted": "Drawer counted at {time}",
+    "count": "Count drawer",
+    "move": "Cash out/in",
+    "differences": "Cash differences",
+    "waitingOwner": "Waiting for an owner",
+    "inToday": "In today",
+    "nothingIn": "No money in yet today.",
+    "total": "Total",
+    "movesToday": "Drawer moves today",
+    "owed": "Unpaid",
+    "since": "Since {date}",
+    "owedBack": "Overpaid",
+    "owedBackHint": "This money needs to go back to the customer.",
+    "exact": "Exact",
+    "short": "Short {amount}",
+    "over": "Over {amount}"
+  },
+  "moveKind": {
+    "withdrawal": "To the owner",
+    "expense": "Store expense",
+    "deposit": "Bank deposit",
+    "float": "Add change money"
+  },
+  "count": {
+    "counted": "Cash in the drawer",
+    "difference": "Difference",
+    "note": "Note (optional)",
+    "save": "Save count",
+    "hint": "Count the drawer, then enter the amount."
+  },
+  "move": {
+    "kind": "Type",
+    "account": "Into account",
+    "reason": "Description",
+    "save": "Save",
+    "hintAmount": "Enter the amount.",
+    "hintReason": "Enter a description.",
+    "noAccount": "The store has no bank account yet. Ask an owner to add one."
+  },
+  "settle": {
+    "title": "Settle difference",
+    "countedBy": "Counted by {name}",
+    "reason": "Reason",
+    "save": "Settle difference",
+    "hint": "Enter the reason."
+  },
+  "receive": {
+    "title": "Take payment",
+    "owed": "Unpaid",
+    "save": "Take {amount}",
+    "saveEmpty": "Take payment",
+    "hint": "Enter what was paid, up to what is left."
   }
 }

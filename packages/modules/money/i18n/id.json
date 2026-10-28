@@ -49,5 +49,62 @@
     },
     "method": "Metode pembayaran",
     "currency": "Rp"
+  },
+  "kas": {
+    "title": "Kas",
+    "expected": "Seharusnya di laci",
+    "notCounted": "Belum tutup kas hari ini",
+    "counted": "Sudah tutup kas pukul {time}",
+    "count": "Tutup kas",
+    "move": "Uang keluar/masuk",
+    "differences": "Selisih kas",
+    "waitingOwner": "Menunggu pemilik",
+    "inToday": "Masuk hari ini",
+    "nothingIn": "Belum ada uang masuk hari ini.",
+    "total": "Total",
+    "movesToday": "Keluar/masuk laci hari ini",
+    "owed": "Belum lunas",
+    "since": "Sejak {date}",
+    "owedBack": "Lebih bayar",
+    "owedBackHint": "Uang ini perlu dikembalikan ke pelanggan.",
+    "exact": "Pas",
+    "short": "Kurang {amount}",
+    "over": "Lebih {amount}"
+  },
+  "moveKind": {
+    "withdrawal": "Setor ke pemilik",
+    "expense": "Biaya toko",
+    "deposit": "Setor ke bank",
+    "float": "Tambah uang kembalian"
+  },
+  "count": {
+    "counted": "Uang di laci",
+    "difference": "Selisih",
+    "note": "Catatan (opsional)",
+    "save": "Simpan hitungan",
+    "hint": "Hitung uang di laci, lalu isi jumlahnya."
+  },
+  "move": {
+    "kind": "Jenis",
+    "account": "Ke rekening",
+    "reason": "Keterangan",
+    "save": "Simpan",
+    "hintAmount": "Isi jumlahnya.",
+    "hintReason": "Isi keterangannya.",
+    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya."
+  },
+  "settle": {
+    "title": "Selesaikan selisih",
+    "countedBy": "Dihitung oleh {name}",
+    "reason": "Alasan",
+    "save": "Selesaikan selisih",
+    "hint": "Isi alasannya."
+  },
+  "receive": {
+    "title": "Terima pembayaran",
+    "owed": "Belum dibayar",
+    "save": "Terima {amount}",
+    "saveEmpty": "Terima pembayaran",
+    "hint": "Isi jumlah yang dibayar, paling banyak sisa tagihannya."
   }
 }

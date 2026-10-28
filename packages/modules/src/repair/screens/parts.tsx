@@ -1,18 +1,16 @@
-// Small pieces every repair screen shares: the four read states around a query, a verified photo
-// thumbnail, the ticket status chip and the banner for a refused action.
-import { formatMoney, t, translateErrorCode, translateFailure } from '@bolusi/i18n';
+// Small pieces every repair screen shares: a verified photo thumbnail, the ticket status chip, the
+// flow step screen and the price rows. The read states and sections every module shares are in
+// screen-kit/screens.
+import { formatMoney, t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
   Button,
   Chip,
-  EmptyState,
-  ErrorState,
   Fact,
   FactGrid,
   Icon,
   LoadingState,
-  UnauthorizedState,
   color,
   radius,
   size,
@@ -25,7 +23,8 @@ import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
+import type { ThumbnailRef } from '../../screen-kit/index.js';
+import { ActionErrorBanner, Section } from '../../screen-kit/screens/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
@@ -40,79 +39,8 @@ import { specFacts } from '../device-specs.js';
 import { useCatalogModel } from '../model-picker.js';
 import { useModelPhoto, useRepairThumbnail } from '../runtime.js';
 
-/**
- * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
- * entity is the Empty state (the thing asked for is not here), never an error (design-system §5).
- */
-export function QueryView<TData>({
-  query,
-  onBack,
-  onRetry,
-  testID,
-  children,
-}: {
-  readonly query: QueryState<TData>;
-  readonly onBack: () => void;
-  readonly onRetry: () => void;
-  readonly testID: string;
-  readonly children: (data: TData) => ReactNode;
-}): React.JSX.Element {
-  switch (query.status) {
-    case 'loading':
-      return (
-        <View testID={`${testID}.loading`}>
-          <LoadingState variant="spinner" />
-        </View>
-      );
-    case 'unauthorized':
-      return (
-        <UnauthorizedState
-          title={t('core.errors.PERMISSION_DENIED')}
-          hint={t('core.unauthorized.askOwner')}
-          backLabel={t('core.action.back')}
-          onBack={onBack}
-          testID={`${testID}.unauthorized`}
-        />
-      );
-    case 'error':
-      if (query.code === 'ENTITY_NOT_FOUND') {
-        return <EmptyState title={t('core.errors.ENTITY_NOT_FOUND')} testID={`${testID}.empty`} />;
-      }
-      return (
-        <ErrorState
-          title={translateErrorCode(query.code)}
-          errorCode={query.code}
-          retryLabel={t('core.action.retry')}
-          onRetry={onRetry}
-          testID={`${testID}.error`}
-        />
-      );
-    case 'ready':
-      return <>{children(query.data)}</>;
-  }
-}
-
-/** A refused command, shown where the user tried it. Danger banners cannot be dismissed (§3.6), so a
- * tap clears it instead. */
-export function ActionErrorBanner({
-  errorCode,
-  onDismiss,
-  testID,
-}: {
-  readonly errorCode: string | null;
-  readonly onDismiss: () => void;
-  readonly testID: string;
-}): React.JSX.Element | null {
-  if (errorCode === null) return null;
-  return (
-    <Banner
-      variant="danger"
-      message={translateFailure(errorCode)}
-      onPress={onDismiss}
-      testID={testID}
-    />
-  );
-}
+// Shared with every module's phone screens.
+export { ActionErrorBanner, QueryView, Section } from '../../screen-kit/screens/index.js';
 
 const STATUS_ICON: Readonly<Record<TicketStatus, IconName>> = {
   received: 'pending',
@@ -439,33 +367,6 @@ export function FlowScreen({
   );
 }
 
-/** A captioned group on a detail or review screen, with an optional compact action beside the title. */
-export function Section({
-  title,
-  action,
-  first = false,
-  children,
-  testID,
-}: {
-  readonly title: string;
-  readonly action?: ReactNode;
-  /** The screen's first section: the screen's own top padding is room enough above it. */
-  readonly first?: boolean | undefined;
-  readonly children: ReactNode;
-  readonly testID?: string | undefined;
-}): React.JSX.Element {
-  return (
-    <View style={first ? undefined : styles.section} testID={testID}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}
-        {action === undefined ? null : <View style={styles.sectionAction}>{action}</View>}
-      </View>
-      {children}
-    </View>
-  );
-}
-
 /** A label and its value on one line, e.g. "IMEI  356789…". */
 export function Field({
   label,
@@ -598,16 +499,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  section: { marginTop: space.xl },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: size.control,
-    marginBottom: space.sm,
-  },
-  sectionAction: { marginRight: -space.sm },
-  sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
   field: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
   fieldLabel: { ...type.bodySm, color: color.textMuted, marginRight: space.md },
   fieldValue: { ...type.bodySm, color: color.text, flexShrink: 1, textAlign: 'right' },
