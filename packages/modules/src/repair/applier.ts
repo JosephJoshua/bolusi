@@ -11,6 +11,12 @@
 // returning a device, a proposal approved and declined at once). Commands refuse those locally;
 // the fold must still accept whatever the server accepted, and the declared conflict keys surface
 // the collision for review.
+//
+// Fold order is not the order the server judged: canonical order sorts by each phone's clock, and the
+// server judges ops as they arrive. So appliers must land on what the server judged in either order:
+// a cancel is final (no work step folded after it reopens the servisan), a phone handed back stays
+// repaired or cancelled, a change folded before its ticket was opened is replayed from its history
+// entry when the ticket arrives, and a decision folded before its price change settles it on arrival.
 import { sql, type RawBuilder } from 'kysely';
 
 import {
@@ -25,6 +31,7 @@ import type { AnyMediaRef, MediaRef, VideoRef } from '@bolusi/schemas';
 import {
   INTAKE_PHOTO_SLOTS,
   REPAIR_CUSTOMER_ENTITY,
+  REPAIR_OP,
   REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
@@ -107,7 +114,8 @@ export const repairTicketsTable: ProjectionTableManifest = {
   entityIdColumn: 'id',
   // 2: a re-fold fills who cancelled and when for tickets cancelled before the columns existed.
   // 3: it fills when each finished phone was ready to collect.
-  projectionVersion: 3,
+  // 4: it settles tickets whose ops folded in another order than the server judged them.
+  projectionVersion: 4,
 };
 
 export const repairQuoteLinesTable: ProjectionTableManifest = {
@@ -131,7 +139,8 @@ export const repairQuoteLinesTable: ProjectionTableManifest = {
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
   entityIdColumn: 'ticket_id',
-  projectionVersion: 1,
+  // 2: a re-fold settles price changes whose decision folded before them.
+  projectionVersion: 2,
 };
 
 export const repairTicketPhotosTable: ProjectionTableManifest = {
@@ -347,32 +356,211 @@ async function recordEvent(db: Db, op: ProjectionOperation, detail: object): Pro
     .execute();
 }
 
-async function updateTicket(
+/** What one op writes on its ticket row. */
+type TicketChange = Partial<{
+  outcome: RepairOutcome | RawBuilder<string>;
+  outcomeNote: string | null;
+  location: DeviceLocation;
+  technicianId: string;
+  returnedAt: number | RawBuilder<number>;
+  cancelFee: number | null;
+  cancelStandardFee: number | null;
+  cancelledBy: string;
+  cancelledAt: number;
+  downPayment: number | null;
+  downPaymentBy: string;
+  downPaymentAt: number;
+  readyAt: number | null;
+  repairTypesJson: string;
+}>;
+
+/** An op's history entry: all a ticket change needs, so it can be replayed later. */
+interface TicketEvent {
+  readonly actorId: string;
+  readonly at: number;
+  readonly detail: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A phone handed back was repaired or cancelled when the server let it go, and nothing changes that
+ * afterwards (every work step and cancel needs it in the store), whatever order the ops fold in.
+ */
+const HANDED_BACK_OUTCOME = sql<string>`CASE WHEN outcome = 'cancelled' THEN 'cancelled' ELSE 'repaired' END`;
+
+/**
+ * A down payment received or corrected: either way the ticket now records this amount (0 removes
+ * it). Two devices writing one concurrently both stand in the history; the later canonical op wins
+ * here, and the shared conflict key puts the clash in front of an owner.
+ */
+function downPaymentChange({ detail, actorId, at }: TicketEvent): TicketChange {
+  const amount = detail['amount'] as number;
+  return { downPayment: amount === 0 ? null : amount, downPaymentBy: actorId, downPaymentAt: at };
+}
+
+/**
+ * What each op that changes the ticket row writes there, from its history entry alone, so a ticket
+ * can replay an op that folded before it was opened (signed on a phone whose clock ran behind).
+ */
+const TICKET_CHANGES: Readonly<Record<string, (event: TicketEvent) => TicketChange>> = {
+  [REPAIR_OP.ticketClaimed]: ({ actorId }) => ({ technicianId: actorId }),
+  [REPAIR_OP.technicianAssigned]: ({ detail }) => ({
+    technicianId: detail['technicianId'] as string,
+  }),
+  [REPAIR_OP.ticketRepairTypesChanged]: ({ detail }) => ({
+    repairTypesJson: canonicalJson(detail['repairTypes']),
+  }),
+  // Starting again on a repaired phone (a reopen) means it is no longer waiting to be collected.
+  [REPAIR_OP.workStarted]: () => ({ outcome: 'in_repair', outcomeNote: null, readyAt: null }),
+  [REPAIR_OP.workPaused]: ({ detail }) => ({
+    outcome: 'waiting_for_parts',
+    outcomeNote: detail['note'] as string,
+  }),
+  [REPAIR_OP.markedRepaired]: ({ detail, at }) => ({
+    outcome: 'repaired',
+    outcomeNote: detail['note'] as string,
+    readyAt: at,
+  }),
+  // v1 cancels predate fees (nothing was charged), so they record no fee.
+  [REPAIR_OP.ticketCancelled]: ({ detail, actorId, at }) => ({
+    outcome: 'cancelled',
+    outcomeNote: detail['reason'] as string,
+    cancelFee: (detail['fee'] as number | undefined) ?? null,
+    cancelStandardFee: (detail['standardFee'] as number | undefined) ?? null,
+    cancelledBy: actorId,
+    cancelledAt: at,
+    readyAt: at,
+  }),
+  // Where the phone is, and who handed it over, follow from every handover and undo together
+  // (`settleHandover`). The warranty and the undo window count from the earliest handover.
+  [REPAIR_OP.deviceReturned]: ({ at }) => ({
+    outcome: HANDED_BACK_OUTCOME,
+    returnedAt: sql<number>`CASE WHEN returned_at IS NULL OR returned_at > ${at} THEN ${at} ELSE returned_at END`,
+  }),
+  [REPAIR_OP.downPaymentReceived]: downPaymentChange,
+  [REPAIR_OP.downPaymentCorrected]: downPaymentChange,
+};
+
+/**
+ * Write `change` on the ticket. A cancel is final: the server refuses every work step on a cancelled
+ * servisan, so one that folds after the cancel was judged before it and must not reopen it. A phone
+ * handed back is not put back to work either.
+ */
+async function writeTicketChange(
   db: Db,
-  op: ProjectionOperation,
-  values: Partial<{
-    outcome: RepairOutcome;
-    outcomeNote: string | null;
-    location: DeviceLocation;
-    technicianId: string;
-    returnedBy: string;
-    returnedAt: number | RawBuilder<number>;
-    cancelFee: number | null;
-    cancelStandardFee: number | null;
-    cancelledBy: string;
-    cancelledAt: number;
-    downPayment: number | null;
-    downPaymentBy: string;
-    downPaymentAt: number;
-    readyAt: number | null;
-  }>,
+  ticketId: string,
+  storeId: string,
+  change: TicketChange,
+  updatedAt: number,
 ): Promise<void> {
+  let update = db
+    .updateTable('repairTickets')
+    .set({ ...change, updatedAt })
+    .where('id', '=', ticketId)
+    .where('storeId', '=', storeId);
+  if (change.outcome === 'in_repair' || change.outcome === 'waiting_for_parts') {
+    update = update.where('outcome', '!=', 'cancelled').where('location', '!=', 'returned');
+  } else if (change.outcome === 'repaired') {
+    update = update.where('outcome', '!=', 'cancelled');
+  }
+  await update.execute();
+}
+
+const HANDOVER_KINDS = [REPAIR_OP.deviceReturned, REPAIR_OP.handoverReversed];
+
+/**
+ * Where the phone is after its handovers and undos, whatever order they fold in: each undo takes
+ * back exactly one handover (the server allows it only on a phone handed over), so the phone is out
+ * while there are more handovers than undos. Who handed it over is the latest handover's. Returns
+ * whether the phone is out, and the latest handover's id.
+ */
+async function settleHandover(
+  db: Db,
+  ticketId: string,
+  storeId: string,
+  updatedAt: number,
+): Promise<{ readonly returned: boolean; readonly latest: string | null }> {
+  const events = await db
+    .selectFrom('repairTicketEvents')
+    .select(['id', 'kind', 'actorId'])
+    .where('ticketId', '=', ticketId)
+    .where('storeId', '=', storeId)
+    .where('kind', 'in', HANDOVER_KINDS)
+    .orderBy('at')
+    .orderBy('id')
+    .execute();
+  const handovers = events.filter((event) => event.kind === REPAIR_OP.deviceReturned);
+  const latest = handovers.at(-1) ?? null;
+  const returned = handovers.length > events.length - handovers.length;
+  // A phone never handed over keeps where intake and work put it.
+  if (events.length === 0) return { returned, latest: null };
   await db
     .updateTable('repairTickets')
-    .set({ ...values, updatedAt: op.timestamp })
-    .where('id', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
+    .set({
+      location: returned ? 'returned' : 'in_store',
+      returnedBy: returned ? (latest?.actorId ?? null) : null,
+      updatedAt,
+    })
+    .where('id', '=', ticketId)
+    .where('storeId', '=', storeId)
     .execute();
+  return { returned, latest: latest?.id ?? null };
+}
+
+/** The handover photo and signature belong to a phone that is out, from its latest handover. */
+async function clearHandoverPhotos(db: Db, ticketId: string, storeId: string): Promise<void> {
+  await db
+    .deleteFrom('repairTicketPhotos')
+    .where('ticketId', '=', ticketId)
+    .where('storeId', '=', storeId)
+    .where('slot', 'in', ['handover', 'signature'])
+    .execute();
+}
+
+/** Write the change `op` makes on its ticket, and record its history entry. */
+async function changeTicket(db: Db, op: ProjectionOperation, detail: object): Promise<void> {
+  const change = TICKET_CHANGES[op.type]!({
+    actorId: op.userId,
+    at: op.timestamp,
+    detail: detail as Record<string, unknown>,
+  });
+  await writeTicketChange(db, op.entityId, storeIdOf(op), change, op.timestamp);
+  await recordEvent(db, op, detail);
+}
+
+/**
+ * Replay, on a ticket just opened, the changes of ops that folded before it: judged after the intake
+ * but signed on a phone whose clock ran behind. Their history entries hold all they changed. Returns
+ * whether there were any, since their price changes then count in the total too.
+ */
+async function replayEarlierChanges(db: Db, op: ProjectionOperation): Promise<boolean> {
+  const storeId = storeIdOf(op);
+  const earlier = await db
+    .selectFrom('repairTicketEvents')
+    .select(['id', 'kind', 'actorId', 'at', 'detailJson'])
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeId)
+    .where('id', '!=', op.id)
+    .orderBy('at')
+    .orderBy('id')
+    .execute();
+  for (const event of earlier) {
+    const detail = JSON.parse(event.detailJson) as Record<string, unknown>;
+    if (event.kind === REPAIR_OP.ticketDetailsCorrected && detail['pending'] !== undefined) {
+      await correctPending(db, op, event.id, detail);
+      continue;
+    }
+    const change = TICKET_CHANGES[event.kind];
+    if (change === undefined) continue;
+    await writeTicketChange(
+      db,
+      op.entityId,
+      storeId,
+      change({ actorId: event.actorId, at: Number(event.at), detail }),
+      op.timestamp,
+    );
+  }
+  await settleHandover(db, op.entityId, storeId, op.timestamp);
+  return earlier.length > 0;
 }
 
 /** Recompute the total from the lines, so a repeated or concurrent approval never double-counts. */
@@ -396,6 +584,8 @@ async function insertPhotos(
   db: Db,
   op: ProjectionOperation,
   photos: readonly (readonly [slot: string, ref: AnyMediaRef])[],
+  /** Take the place of a photo already in the slot, instead of keeping it. */
+  replace = false,
 ): Promise<void> {
   const storeId = storeIdOf(op);
   await db
@@ -414,8 +604,19 @@ async function insertPhotos(
         addedAt: op.timestamp,
       })),
     )
-    // Two devices recording the same handover keep the first (canonical) evidence.
-    .onConflict((oc) => oc.columns(['ticketId', 'slot']).doNothing())
+    // Work photos are only ever added; a slot already filled keeps its first (canonical) photo.
+    .onConflict((oc) =>
+      replace
+        ? oc.columns(['ticketId', 'slot']).doUpdateSet((eb) => ({
+            mediaId: eb.ref('excluded.mediaId'),
+            mediaSha256: eb.ref('excluded.mediaSha256'),
+            mediaMime: eb.ref('excluded.mediaMime'),
+            capturedAt: eb.ref('excluded.capturedAt'),
+            addedBy: eb.ref('excluded.addedBy'),
+            addedAt: eb.ref('excluded.addedAt'),
+          }))
+        : oc.columns(['ticketId', 'slot']).doNothing(),
+    )
     .execute();
 }
 
@@ -600,32 +801,23 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       ? []
       : [[ownershipVideoSlot(ownershipVideo.mediaId), ownershipVideo] as const]),
   ]);
+  // Ops judged after the intake but signed earlier have folded already; their changes and their
+  // price lines (inserted then, with no ticket to total) count now.
+  if (await replayEarlierChanges(db, op)) await refreshQuoteTotal(db, op);
   await recordEvent(db, op, {});
 };
 
-export const ticketClaimedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  await updateTicket(db, op, { technicianId: op.userId });
-  await recordEvent(db, op, { technicianId: op.userId });
-};
+export const ticketClaimedApplier: ProjectionApplier<RepairDatabase> = (db, op) =>
+  changeTicket(db, op, { technicianId: op.userId });
 
-export const ticketRepairTypesChangedApplier: ProjectionApplier<RepairDatabase> = async (
-  db,
-  op,
-) => {
+export const ticketRepairTypesChangedApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
   const { repairTypes } = payloadOf<{ repairTypes: readonly object[] }>(op);
-  await db
-    .updateTable('repairTickets')
-    .set({ repairTypesJson: canonicalJson(repairTypes), updatedAt: op.timestamp })
-    .where('id', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
-    .execute();
-  await recordEvent(db, op, { repairTypes });
+  return changeTicket(db, op, { repairTypes });
 };
 
-export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
   const { technicianId } = payloadOf<{ technicianId: string }>(op);
-  await updateTicket(db, op, { technicianId });
-  await recordEvent(db, op, { technicianId });
+  return changeTicket(db, op, { technicianId });
 };
 
 export const workPhotosAddedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
@@ -640,46 +832,137 @@ export const workPhotosAddedApplier: ProjectionApplier<RepairDatabase> = async (
   await recordEvent(db, op, { stage, count: photos.length });
 };
 
-export const workStartedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  // Starting again on a repaired phone (a reopen) means it is no longer waiting to be collected.
-  await updateTicket(db, op, { outcome: 'in_repair', outcomeNote: null, readyAt: null });
-  await recordEvent(db, op, {});
+export const workStartedApplier: ProjectionApplier<RepairDatabase> = (db, op) =>
+  changeTicket(db, op, {});
+
+export const workPausedApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
+  const { note } = payloadOf<{ note: string }>(op);
+  return changeTicket(db, op, { note });
 };
 
-export const workPausedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+export const markedRepairedApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
   const { note } = payloadOf<{ note: string }>(op);
-  await updateTicket(db, op, { outcome: 'waiting_for_parts', outcomeNote: note });
-  await recordEvent(db, op, { note });
-};
-
-export const markedRepairedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { note } = payloadOf<{ note: string }>(op);
-  await updateTicket(db, op, { outcome: 'repaired', outcomeNote: note, readyAt: op.timestamp });
-  await recordEvent(db, op, { note });
+  return changeTicket(db, op, { note });
 };
 
 /** v1 cancels predate fees (nothing was charged), so they record no fee. */
-export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const {
-    reason,
-    fee = null,
-    standardFee = null,
-  } = payloadOf<{
+export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
+  const { reason, fee, standardFee } = payloadOf<{
     reason: string;
     fee?: number;
     standardFee?: number;
   }>(op);
-  await updateTicket(db, op, {
-    outcome: 'cancelled',
-    outcomeNote: reason,
-    cancelFee: fee,
-    cancelStandardFee: standardFee,
-    cancelledBy: op.userId,
-    cancelledAt: op.timestamp,
-    readyAt: op.timestamp,
-  });
-  await recordEvent(db, op, fee === null ? { reason } : { reason, fee, standardFee });
+  return changeTicket(
+    db,
+    op,
+    fee === undefined ? { reason } : { reason, fee, standardFee: standardFee ?? null },
+  );
 };
+
+/** How a waiting price change was decided, and by whom. */
+interface LineDecision {
+  readonly by: string;
+  readonly at: number;
+  readonly note: string;
+}
+
+/**
+ * The customer agreed to a waiting price change. Approval wins over a concurrent decline: money the
+ * cashier agreed with the customer is not silently dropped because another device declined the same
+ * proposal offline. `kind` is left as proposed when not given (the rule holds it equal).
+ */
+async function approveLine(
+  db: Db,
+  op: ProjectionOperation,
+  lineId: string,
+  terms: {
+    readonly kind?: string;
+    readonly description: string;
+    readonly amount: number;
+    readonly customerAgreed: boolean;
+  },
+  decision: LineDecision,
+): Promise<void> {
+  await db
+    .updateTable('repairQuoteLines')
+    .set({
+      ...(terms.kind === undefined ? {} : { kind: terms.kind }),
+      description: terms.description,
+      amount: terms.amount,
+      status: 'applied',
+      customerAgreed: terms.customerAgreed ? 1 : 0,
+      decidedBy: decision.by,
+      decidedAt: decision.at,
+      decisionNote: decision.note,
+    })
+    .where('id', '=', lineId)
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('status', 'in', ['proposed', 'declined'])
+    .execute();
+}
+
+async function declineLine(
+  db: Db,
+  op: ProjectionOperation,
+  lineId: string,
+  decision: LineDecision,
+): Promise<void> {
+  await db
+    .updateTable('repairQuoteLines')
+    .set({
+      status: 'declined',
+      decidedBy: decision.by,
+      decidedAt: decision.at,
+      decisionNote: decision.note,
+    })
+    .where('id', '=', lineId)
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('status', '=', 'proposed')
+    .execute();
+}
+
+/**
+ * Settle a price change just recorded as waiting with any decision on it that folded first: judged
+ * after the change but signed on a phone whose clock ran behind. Returns whether one did.
+ */
+async function settleEarlierDecisions(
+  db: Db,
+  op: ProjectionOperation,
+  lineId: string,
+): Promise<boolean> {
+  const decisions = await db
+    .selectFrom('repairTicketEvents')
+    .select(['kind', 'actorId', 'at', 'detailJson'])
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('kind', 'in', [REPAIR_OP.quoteChanged, REPAIR_OP.quoteProposalDeclined])
+    .where('id', '!=', op.id)
+    .orderBy('at')
+    .orderBy('id')
+    .execute();
+  let settled = false;
+  for (const event of decisions) {
+    const detail = JSON.parse(event.detailJson) as Record<string, unknown>;
+    if (detail['lineId'] !== lineId) continue;
+    const decision = { by: event.actorId, at: Number(event.at) };
+    if (event.kind === REPAIR_OP.quoteProposalDeclined) {
+      await declineLine(db, op, lineId, { ...decision, note: detail['note'] as string });
+    } else if (detail['fromProposal'] === true) {
+      const terms = {
+        description: detail['description'] as string,
+        amount: detail['amount'] as number,
+        customerAgreed: detail['customerAgreed'] as boolean,
+      };
+      await approveLine(db, op, lineId, terms, { ...decision, note: detail['reason'] as string });
+    } else {
+      continue;
+    }
+    settled = true;
+  }
+  return settled;
+}
 
 export const quoteChangeProposedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const payload = payloadOf<QuoteLineDraft & { reason: string }>(op);
@@ -703,6 +986,7 @@ export const quoteChangeProposedApplier: ProjectionApplier<RepairDatabase> = asy
       decisionNote: null,
     })
     .execute();
+  if (await settleEarlierDecisions(db, op, payload.lineId)) await refreshQuoteTotal(db, op);
   await recordEvent(db, op, {
     lineId: payload.lineId,
     description: payload.description,
@@ -713,27 +997,12 @@ export const quoteChangeProposedApplier: ProjectionApplier<RepairDatabase> = asy
 
 export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const payload = payloadOf<QuoteChangedPayload>(op);
-  const customerAgreed = payload.customerAgreed ? 1 : 0;
   if (payload.fromProposal) {
-    // Approval wins over a concurrent decline: money the cashier agreed with the customer is not
-    // silently dropped because another device declined the same proposal offline.
-    await db
-      .updateTable('repairQuoteLines')
-      .set({
-        kind: payload.kind,
-        description: payload.description,
-        amount: payload.amount,
-        status: 'applied',
-        customerAgreed,
-        decidedBy: op.userId,
-        decidedAt: op.timestamp,
-        decisionNote: payload.reason,
-      })
-      .where('id', '=', payload.lineId)
-      .where('ticketId', '=', op.entityId)
-      .where('storeId', '=', storeIdOf(op))
-      .where('status', 'in', ['proposed', 'declined'])
-      .execute();
+    await approveLine(db, op, payload.lineId, payload, {
+      by: op.userId,
+      at: op.timestamp,
+      note: payload.reason,
+    });
   } else {
     // A change still waiting on the customer is decided later, exactly like a proposal.
     const waits = payload.waitsForCustomer === true;
@@ -749,7 +1018,7 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
         amount: payload.amount,
         status: waits ? 'proposed' : 'applied',
         reason: payload.reason,
-        customerAgreed: waits ? null : customerAgreed,
+        customerAgreed: waits ? null : payload.customerAgreed ? 1 : 0,
         createdBy: op.userId,
         createdAt: op.timestamp,
         decidedBy: waits ? null : op.userId,
@@ -757,6 +1026,7 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
         decisionNote: null,
       })
       .execute();
+    if (waits) await settleEarlierDecisions(db, op, payload.lineId);
   }
   await refreshQuoteTotal(db, op);
   await recordEvent(db, op, {
@@ -774,14 +1044,7 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
 
 export const quoteProposalDeclinedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { lineId, note } = payloadOf<{ lineId: string; note: string }>(op);
-  await db
-    .updateTable('repairQuoteLines')
-    .set({ status: 'declined', decidedBy: op.userId, decidedAt: op.timestamp, decisionNote: note })
-    .where('id', '=', lineId)
-    .where('ticketId', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
-    .where('status', '=', 'proposed')
-    .execute();
+  await declineLine(db, op, lineId, { by: op.userId, at: op.timestamp, note });
   await recordEvent(db, op, { lineId, note });
 };
 
@@ -796,46 +1059,44 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
     note: string;
     checklist?: readonly object[];
   }>(op);
-  await updateTicket(db, op, {
-    location: 'returned',
-    returnedBy: op.userId,
-    // A handover taken back and made again keeps the first one's time (handover_reversed).
-    returnedAt: sql<number>`coalesce(returned_at, ${op.timestamp})`,
-  });
-  await insertPhotos(db, op, [
-    ['handover', payload.handoverPhoto],
-    ['signature', payload.signature],
-  ]);
-  await recordEvent(
+  await changeTicket(
     db,
     op,
     payload.checklist === undefined
       ? { note: payload.note }
       : { note: payload.note, checklist: payload.checklist },
   );
+  const storeId = storeIdOf(op);
+  const { returned, latest } = await settleHandover(db, op.entityId, storeId, op.timestamp);
+  // The photo and signature are the latest handover's; one taken back has none.
+  if (!returned) await clearHandoverPhotos(db, op.entityId, storeId);
+  else if (latest === op.id) {
+    await insertPhotos(
+      db,
+      op,
+      [
+        ['handover', payload.handoverPhoto],
+        ['signature', payload.signature],
+      ],
+      true,
+    );
+  }
 };
 
 /**
  * A handover taken back by an owner: the phone never left. It is in the store again, the handover
  * photo and signature are no longer this servisan's (the next handover takes its own), and the
- * warranty has not started. What was paid stays paid; the history keeps both entries.
+ * warranty has not started. What was paid stays paid; the history keeps both entries. An undo
+ * signed on a phone whose clock ran behind folds before its handover and still takes it back
+ * (`settleHandover`).
  */
 export const handoverReversedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { reason } = payloadOf<{ reason: string }>(op);
   // `returnedAt` stays: the warranty counts from the first handover, and so does the undo window.
-  await db
-    .updateTable('repairTickets')
-    .set({ location: 'in_store', returnedBy: null, updatedAt: op.timestamp })
-    .where('id', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
-    .execute();
-  await db
-    .deleteFrom('repairTicketPhotos')
-    .where('ticketId', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
-    .where('slot', 'in', ['handover', 'signature'])
-    .execute();
   await recordEvent(db, op, { reason });
+  const storeId = storeIdOf(op);
+  const { returned } = await settleHandover(db, op.entityId, storeId, op.timestamp);
+  if (!returned) await clearHandoverPhotos(db, op.entityId, storeId);
 };
 
 /** One corrected fact, as the history shows it: what intake wrote and what it is now. */
@@ -846,109 +1107,157 @@ export interface DetailChange {
   readonly to?: string | null;
 }
 
+/** What a correction of intake's record sets, as its op carries it. */
+interface DetailsCorrection {
+  readonly customer?: { name: string; phone: string | null };
+  readonly customerId?: string;
+  readonly device?: { brand: string; model: string; color: string; imei: string | null };
+  readonly passcode?: string | null;
+  readonly complaint?: string;
+  readonly peripherals?: readonly { item: string; label: string | null }[];
+}
+
 /**
- * Intake's record corrected. The history entry lists each fact that changed with its old and new
- * value, read from the ticket as it stood, so it cannot claim a "before" that was never there.
+ * Apply a correction to the ticket and say what changed, read from the ticket as it stood, so the
+ * history cannot claim a "before" that was never there. Null when the ticket is not here yet.
  */
-export const ticketDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const payload = payloadOf<{
-    customer?: { name: string; phone: string | null };
-    customerId?: string;
-    device?: { brand: string; model: string; color: string; imei: string | null };
-    passcode?: string | null;
-    complaint?: string;
-    peripherals?: readonly { item: string; label: string | null }[];
-    reason: string;
-  }>(op);
+async function correctDetails(
+  db: Db,
+  ticketId: string,
+  storeId: string,
+  actorId: string,
+  at: number,
+  correction: DetailsCorrection,
+): Promise<DetailChange[] | null> {
   const ticket = await db
     .selectFrom('repairTickets')
     .selectAll()
-    .where('id', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
+    .where('id', '=', ticketId)
+    .where('storeId', '=', storeId)
     .executeTakeFirst();
-  if (ticket === undefined) return;
+  if (ticket === undefined) return null;
   const changes: DetailChange[] = [];
   const note = (field: string, from: string | null, to: string | null): void => {
     if (from !== to) changes.push({ field, from, to });
   };
-  if (payload.customer !== undefined) {
+  if (correction.customer !== undefined) {
     const customer = await db
       .selectFrom('repairCustomers')
       .select(['name', 'phone'])
       .where('id', '=', ticket.customerId)
-      .where('storeId', '=', storeIdOf(op))
+      .where('storeId', '=', storeId)
       .executeTakeFirst();
-    note('customerName', customer?.name ?? null, payload.customer.name);
-    note('customerPhone', customer?.phone ?? null, payload.customer.phone);
+    note('customerName', customer?.name ?? null, correction.customer.name);
+    note('customerPhone', customer?.phone ?? null, correction.customer.phone);
   }
-  if (payload.device !== undefined) {
-    note('brand', ticket.deviceBrand, payload.device.brand);
-    note('model', ticket.deviceModel, payload.device.model);
-    note('color', ticket.deviceColor, payload.device.color);
-    note('imei', ticket.deviceImei, payload.device.imei);
+  if (correction.device !== undefined) {
+    note('brand', ticket.deviceBrand, correction.device.brand);
+    note('model', ticket.deviceModel, correction.device.model);
+    note('color', ticket.deviceColor, correction.device.color);
+    note('imei', ticket.deviceImei, correction.device.imei);
   }
-  if (payload.passcode !== undefined && payload.passcode !== ticket.devicePasscode) {
+  if (correction.passcode !== undefined && correction.passcode !== ticket.devicePasscode) {
     changes.push({ field: 'passcode' });
   }
-  if (payload.complaint !== undefined) note('complaint', ticket.complaint, payload.complaint);
+  if (correction.complaint !== undefined) note('complaint', ticket.complaint, correction.complaint);
   const peripherals =
-    payload.peripherals === undefined ? undefined : canonicalJson(payload.peripherals);
+    correction.peripherals === undefined ? undefined : canonicalJson(correction.peripherals);
   if (peripherals !== undefined && peripherals !== ticket.peripheralsJson) {
     changes.push({ field: 'peripherals' });
   }
   // Without a move, the servisan's own customer is renamed: the rule allowed it only for a
   // customer this servisan alone names.
-  if (payload.customer !== undefined && payload.customerId === undefined) {
+  if (correction.customer !== undefined && correction.customerId === undefined) {
     await db
       .updateTable('repairCustomers')
       .set({
-        name: payload.customer.name,
-        phone: payload.customer.phone,
-        updatedBy: op.userId,
-        updatedAt: op.timestamp,
+        name: correction.customer.name,
+        phone: correction.customer.phone,
+        updatedBy: actorId,
+        updatedAt: at,
       })
       .where('id', '=', ticket.customerId)
-      .where('storeId', '=', storeIdOf(op))
+      .where('storeId', '=', storeId)
       .execute();
   }
   await db
     .updateTable('repairTickets')
     .set({
-      ...(payload.customerId === undefined ? {} : { customerId: payload.customerId }),
-      ...(payload.device === undefined
+      ...(correction.customerId === undefined ? {} : { customerId: correction.customerId }),
+      ...(correction.device === undefined
         ? {}
         : {
-            deviceBrand: payload.device.brand,
-            deviceModel: payload.device.model,
-            deviceColor: payload.device.color,
-            deviceImei: payload.device.imei,
+            deviceBrand: correction.device.brand,
+            deviceModel: correction.device.model,
+            deviceColor: correction.device.color,
+            deviceImei: correction.device.imei,
           }),
-      ...(payload.passcode === undefined ? {} : { devicePasscode: payload.passcode }),
-      ...(payload.complaint === undefined ? {} : { complaint: payload.complaint }),
+      ...(correction.passcode === undefined ? {} : { devicePasscode: correction.passcode }),
+      ...(correction.complaint === undefined ? {} : { complaint: correction.complaint }),
       ...(peripherals === undefined ? {} : { peripheralsJson: peripherals }),
-      updatedAt: op.timestamp,
+      updatedAt: at,
     })
-    .where('id', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
+    .where('id', '=', ticketId)
+    .where('storeId', '=', storeId)
     .execute();
-  await recordEvent(db, op, { changes, reason: payload.reason });
+  return changes;
+}
+
+/**
+ * Intake's record corrected. Signed on a phone whose clock ran behind, it can fold before its
+ * ticket was opened: it then waits in its history entry (`pending`) until the ticket arrives, which
+ * applies it and writes what changed in its place, so the screen lock never stays there.
+ */
+export const ticketDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { reason, ...correction } = payloadOf<DetailsCorrection & { reason: string }>(op);
+  const changes = await correctDetails(
+    db,
+    op.entityId,
+    storeIdOf(op),
+    op.userId,
+    op.timestamp,
+    correction,
+  );
+  await recordEvent(
+    db,
+    op,
+    changes === null ? { changes: [], reason, pending: correction } : { changes, reason },
+  );
 };
+
+/** A correction that folded before its ticket, applied as the ticket is opened. */
+async function correctPending(
+  db: Db,
+  op: ProjectionOperation,
+  eventId: string,
+  detail: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  const event = await db
+    .selectFrom('repairTicketEvents')
+    .select(['actorId', 'at'])
+    .where('id', '=', eventId)
+    .executeTakeFirstOrThrow();
+  const changes = await correctDetails(
+    db,
+    op.entityId,
+    storeIdOf(op),
+    event.actorId,
+    Number(event.at),
+    detail['pending'] as DetailsCorrection,
+  );
+  await db
+    .updateTable('repairTicketEvents')
+    .set({ detailJson: canonicalJson({ changes: changes ?? [], reason: detail['reason'] }) })
+    .where('id', '=', eventId)
+    .execute();
+}
 
 // ── down payment and printing ─────────────────────────────────────────────────────────────────
 
-/**
- * A down payment received or corrected: either way the ticket now records this amount (0 removes
- * it). Two devices writing one concurrently both stand in the history; the later canonical op wins
- * here, and the shared conflict key puts the clash in front of an owner.
- */
-export const downPaymentChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+/** A down payment received or corrected (see `downPaymentChange`). */
+export const downPaymentChangedApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
   const { amount, reason } = payloadOf<{ amount: number; reason?: string }>(op);
-  await updateTicket(db, op, {
-    downPayment: amount === 0 ? null : amount,
-    downPaymentBy: op.userId,
-    downPaymentAt: op.timestamp,
-  });
-  await recordEvent(db, op, reason === undefined ? { amount } : { amount, reason });
+  return changeTicket(db, op, reason === undefined ? { amount } : { amount, reason });
 };
 
 /** A slip printed or shared: only the ticket's history records it, which is what counts reprints. */
