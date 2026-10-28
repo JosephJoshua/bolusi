@@ -27,3 +27,24 @@ export const zDecimalString = z.string().regex(/^-?(0|[1-9]\d*)(\.\d+)?$/);
 
 /** Payload numbers: integers or decimal strings — float literals never (05 §3). */
 export const zPayloadNumber = z.union([z.number().int(), zDecimalString]);
+
+/**
+ * Whether any string in a JSON value, object keys included, holds U+0000. Postgres refuses NUL in
+ * `text` and `jsonb`, so an op carrying one can never be stored: the device refuses it before
+ * signing, and the server refuses it per op instead of failing the whole push batch.
+ */
+export function containsNulCharacter(value: unknown): boolean {
+  const pending: unknown[] = [value];
+  while (pending.length > 0) {
+    const next = pending.pop();
+    if (typeof next === 'string') {
+      if (next.includes('\u0000')) return true;
+    } else if (typeof next === 'object' && next !== null) {
+      for (const [key, child] of Object.entries(next)) {
+        if (key.includes('\u0000')) return true;
+        pending.push(child);
+      }
+    }
+  }
+  return false;
+}

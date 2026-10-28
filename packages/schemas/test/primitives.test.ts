@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { zMoneyIdr, zPayloadNumber } from '../src/index.js';
+import { containsNulCharacter, zMoneyIdr, zPayloadNumber } from '../src/index.js';
 
 describe('zMoneyIdr — money is integer IDR, never floats (05 §3)', () => {
   test('accepts an integer amount', () => {
@@ -55,5 +55,18 @@ describe('zPayloadNumber — payload numbers are integers or decimal strings (05
 
   test('rejects a bare decimal point string', () => {
     expect(zPayloadNumber.safeParse('.5').success).toBe(false);
+  });
+});
+
+describe('containsNulCharacter — Postgres cannot store U+0000 in text or jsonb', () => {
+  test('finds a NUL in a nested string or an object key', () => {
+    expect(containsNulCharacter({ a: [{ b: 'x\u0000y' }] })).toBe(true);
+    expect(containsNulCharacter({ ['k\u0000']: 1 })).toBe(true);
+    expect(containsNulCharacter('\u0000')).toBe(true);
+  });
+
+  test('passes ordinary JSON values', () => {
+    expect(containsNulCharacter({ a: ['x', 1, null, true, { b: 'Rp 50.000' }] })).toBe(false);
+    expect(containsNulCharacter('\\u0000')).toBe(false);
   });
 });
