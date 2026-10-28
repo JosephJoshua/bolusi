@@ -46,6 +46,7 @@ import {
   pendingOperationCount,
   readSyncState,
   writeSyncState,
+  type SyncStatePatch,
 } from './state.js';
 
 /** The api/01-sync §5 trigger set. Platform wiring (NetInfo, debounce, interval, …) is task 24. */
@@ -256,6 +257,15 @@ export class SyncLoop<DB> {
     this.loopState = runTransition(SYNC_LOOP_MACHINE, this.loopState, event).to;
   }
 
+  /**
+   * Write sync state in its own transaction. A bare write on the one connection runs at once, and
+   * if a command's transaction is open it lands inside it and is lost when that command rolls back.
+   * Never call this from inside a transaction: the queue does not nest.
+   */
+  private persist(patch: SyncStatePatch): Promise<void> {
+    return this.options.transaction(() => writeSyncState(this.options.db, patch));
+  }
+
   private clearBackoffTimer(): void {
     this.cancelBackoff?.();
     this.cancelBackoff = null;
@@ -283,14 +293,14 @@ export class SyncLoop<DB> {
           refoldRefused: this.options.refoldRefused,
           onChainBroken: async () => {
             this.pushHalted = true;
-            await writeSyncState(this.options.db, { pushHalted: true });
+            await this.persist({ pushHalted: true });
           },
           ...(this.options.pushBatchSize === undefined
             ? {}
             : { batchSize: this.options.pushBatchSize }),
         });
         this.stats = { ...this.stats, pushed: this.stats.pushed + push.synced };
-        await writeSyncState(this.options.db, { lastPushAt: this.options.clock.now() });
+        await this.persist({ lastPushAt: this.options.clock.now() });
       }
       this.transition('push_drained');
 
@@ -352,7 +362,7 @@ export class SyncLoop<DB> {
       this.tokenRejectedSince = null;
       this.tokenRejectedCount = 0;
       const now = this.options.clock.now();
-      await writeSyncState(this.options.db, {
+      await this.persist({
         lastSuccessfulSyncAt: now,
         lastSyncError: null,
         backoffUntil: null,
@@ -397,7 +407,7 @@ export class SyncLoop<DB> {
       const now = this.options.clock.now();
       this.tokenRejectedSince ??= now;
       this.tokenRejectedCount += 1;
-      await writeSyncState(this.options.db, {
+      await this.persist({
         tokenRejectedSince: this.tokenRejectedSince,
         tokenRejectedCount: this.tokenRejectedCount,
       });
@@ -422,7 +432,7 @@ export class SyncLoop<DB> {
     this.failureCount += 1;
     const delay = syncBackoffDelayMs(this.failureCount);
     const until = this.options.clock.now() + delay;
-    await writeSyncState(this.options.db, {
+    await this.persist({
       lastSyncError: errorCode(error),
       backoffUntil: until,
     });
@@ -447,7 +457,7 @@ export class SyncLoop<DB> {
     this.syncDisabled = true;
     this.rerun = false;
     this.clearBackoffTimer();
-    await writeSyncState(this.options.db, {
+    await this.persist({
       syncDisabled: true,
       syncDisabledReason: reason,
       lastSyncError: errorCode,

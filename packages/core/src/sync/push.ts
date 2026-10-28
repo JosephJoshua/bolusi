@@ -23,7 +23,11 @@ import {
 import { sql, type Kysely } from 'kysely';
 
 import { operationFromSignedCoreJcs } from '../crypto/signed-core.js';
-import { markSyncResult, type OpBookkeepingDatabase } from '../oplog/bookkeeping.js';
+import {
+  markSyncResult,
+  type OpBookkeepingDatabase,
+  type SyncResultEvent,
+} from '../oplog/bookkeeping.js';
 import type { OpSyncStatus } from '../state-machines/op-sync-status.js';
 import type { SyncSurfacePort, SyncTransportPort } from './ports.js';
 
@@ -132,7 +136,11 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
   let batches = 0;
 
   for (;;) {
-    const ops = await readPushBatch(deps.db, batchSize);
+    // Read inside a transaction so it waits for any open one (a command mid-append) to end. The one
+    // connection runs a bare statement immediately, and it would see that command's uncommitted op:
+    // pushed, then rolled back, the server would hold an op this device no longer has, and the next
+    // command would re-sign the same seq (CHAIN_BROKEN, then a pull that can never insert it).
+    const ops = await deps.transaction(() => readPushBatch(deps.db, batchSize));
     if (ops.length === 0) return { synced, rejected, halted: false, gapped: false, batches };
 
     batches += 1;
@@ -204,18 +212,14 @@ async function applyPushResult<DB>(
   op: SignedOperation,
   state: { chainBrokenSeen: boolean },
 ): Promise<PushOutcome> {
-  const current = await readSyncStatus(deps.db, result.id);
-  if (current === null) return 'ignored';
-
   if (result.status === 'accepted' || result.status === 'duplicate') {
     // Idempotent for an already-`synced` op: `resolveSyncTransition` returns a no-op rather than a
     // transition (03 §3 — a repeated ack from a retried batch is not INVALID_TRANSITION).
-    await markSyncResult(bookkeepingHandle(deps.db), {
-      id: result.id,
-      currentStatus: current,
-      event: { kind: result.status, syncedAt: deps.clock.now() },
+    const marked = await markOp(deps, result.id, {
+      kind: result.status,
+      syncedAt: deps.clock.now(),
     });
-    return 'synced';
+    return marked ? 'synced' : 'ignored';
   }
 
   const code = result.code ?? 'UNKNOWN';
@@ -225,24 +229,19 @@ async function applyPushResult<DB>(
     // No transition, no rejection, no `failureCount` (03 §3 / 05 §8) — the op stays `local`.
     // Routed through the machine anyway so the "no transition" claim is the TABLE's, not this
     // branch's: a future table change lands here automatically instead of silently disagreeing.
-    await markSyncResult(bookkeepingHandle(deps.db), {
-      id: result.id,
-      currentStatus: current,
-      event: { kind: 'chain_gap' },
-    });
-    return 'gap';
+    const marked = await markOp(deps, result.id, { kind: 'chain_gap' });
+    return marked ? 'gap' : 'ignored';
   }
 
   // A rejected op is not in the server's log and never will be, so it comes out of this device's
   // records too, atomically with the verdict: the op stays in the log as a chain link only.
-  await deps.transaction(async () => {
-    await markSyncResult(bookkeepingHandle(deps.db), {
-      id: result.id,
-      currentStatus: current,
-      event: { kind: 'rejected', rejectionCode: code, rejectionReason: reason },
-    });
-    await deps.refoldRefused(op);
-  });
+  const marked = await markOp(
+    deps,
+    result.id,
+    { kind: 'rejected', rejectionCode: code, rejectionReason: reason },
+    () => deps.refoldRefused(op),
+  );
+  if (!marked) return 'ignored';
 
   if (code === 'CHAIN_BROKEN') {
     // The op is `rejected` AND push halts (03 §3 / §10). Surfaced as its own loud event, on top of
@@ -284,6 +283,26 @@ function emit<DB>(deps: PushPhaseDeps<DB>, event: Parameters<SyncSurfacePort['em
   } catch {
     // A UI sink that throws must not convert "we told the user" into "sync failed".
   }
+}
+
+/**
+ * Read the op's status and apply one push result to it, in one transaction: a write made while a
+ * command's transaction is open would land inside it and be discarded by that command's rollback.
+ * `after` runs in the same transaction once the mark is written. False when the op is unknown here.
+ */
+async function markOp<DB>(
+  deps: PushPhaseDeps<DB>,
+  id: string,
+  event: SyncResultEvent,
+  after?: () => Promise<unknown>,
+): Promise<boolean> {
+  return deps.transaction(async () => {
+    const current = await readSyncStatus(deps.db, id);
+    if (current === null) return false;
+    await markSyncResult(bookkeepingHandle(deps.db), { id, currentStatus: current, event });
+    await after?.();
+    return true;
+  });
 }
 
 async function readSyncStatus<DB>(db: Kysely<DB>, id: string): Promise<OpSyncStatus | null> {
