@@ -12,6 +12,7 @@ import {
   searchIndexFor,
   type QueryContext,
   type QueryPage,
+  type ReadonlyProjectionDb,
 } from '@bolusi/core';
 
 import {
@@ -40,7 +41,7 @@ import {
 } from './intake-options.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
-import { deviceCode, ticketCounter } from './ticket-number.js';
+import { deviceCode } from './ticket-number.js';
 
 type Qctx = QueryContext<RepairDatabase>;
 
@@ -800,24 +801,43 @@ export const nextTicketCounterInput = z.object({ deviceId: z.string().min(1) }).
 export type NextTicketCounterInput = z.infer<typeof nextTicketCounterInput>;
 
 /**
- * The next per-device counter for this device's ticket-number code. Counts every visible ticket
- * that shares the code, so a code collision with another synced device also avoids a duplicate.
+ * The next per-device counter for this device's ticket-number code. Takes the highest counter among
+ * every visible ticket that shares the code, so a code collision with another synced device also
+ * avoids a duplicate.
+ *
+ * One index seek, not a scan: these expressions match the client index
+ * `idx_repair_tickets_device_counter` (db-client migration 7) exactly, so SQLite answers the MAX from
+ * the index end. The counter is compared as an integer because `XXX-10000` sorts before `XXX-9999`
+ * as text.
  */
 export async function nextTicketCounterHandler(
   input: NextTicketCounterInput,
   qctx: Qctx,
 ): Promise<QueryPage<{ readonly counter: number }>> {
-  const code = deviceCode(input.deviceId);
-  const rows = await qctx.db
+  const row = await maxTicketCounter(qctx.db, qctx, deviceCode(input.deviceId)).executeTakeFirst();
+  return { rows: [{ counter: Number(row?.counter ?? 0) + 1 }], nextCursor: null };
+}
+
+/** The highest counter for a device code in one store. Exported so a test can check its plan. */
+export function maxTicketCounter(
+  db: ReadonlyProjectionDb<RepairDatabase>,
+  scope: { readonly tenantId: string; readonly storeId: string | null },
+  code: string,
+) {
+  return db
     .selectFrom('repairTickets')
-    .select('ticketNumber')
-    .where('tenantId', '=', qctx.tenantId)
-    .where('storeId', '=', qctx.storeId)
-    .where('ticketNumber', 'like', `${code}-%`)
-    .execute();
-  let max = 0;
-  for (const row of rows) max = Math.max(max, ticketCounter(row.ticketNumber) ?? 0);
-  return { rows: [{ counter: max + 1 }], nextCursor: null };
+    .select(
+      // Only well-formed numbers count (4 to 9 digits after the code): a malformed number synced
+      // from another device is NULL here instead of casting to 0 or saturating at INT64 max.
+      sql<
+        number | null
+      >`MAX(CASE WHEN length(ticket_number) BETWEEN 8 AND 13 AND substr(ticket_number, 5) NOT GLOB '*[^0-9]*' THEN CAST(substr(ticket_number, 5) AS INTEGER) END)`.as(
+        'counter',
+      ),
+    )
+    .where('tenantId', '=', scope.tenantId)
+    .where('storeId', '=', scope.storeId)
+    .where(sql<string>`substr(ticket_number, 1, 4)`, '=', `${code}-`);
 }
 
 export const nextTicketCounterQuery = {

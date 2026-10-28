@@ -83,7 +83,20 @@ describe('the phone printing binding', () => {
 
   test('print goes to the dialog and share to the PDF, each with its own outcome', async () => {
     const { port, platform } = printing();
-    const slip = { html: '<p>x</p>', jobName: 'Nota SV-1', paper: PAPER_PRESETS.a4 };
+    const document = {
+      jobName: 'Nota SV-1',
+      header: { name: 'Toko', lines: [], logo: null },
+      title: 'NOTA',
+      reference: 'SV-1',
+      meta: [],
+      blocks: [],
+      aside: [],
+      closing: [],
+      copies: [],
+      plyNote: null,
+      footer: null,
+    };
+    const slip = { html: '<p>x</p>', document, jobName: 'Nota SV-1', paper: PAPER_PRESETS.a4 };
     expect(await port.output(slip, 'print')).toBe('cancelled');
     expect(await port.output(slip, 'share')).toBe('done');
     expect(platform.print).toHaveBeenCalledWith(slip);

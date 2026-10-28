@@ -2,7 +2,7 @@
 import { t, translateRoleKey } from '@bolusi/i18n';
 import {
   IntakePage,
-  PaperSettings,
+  PrintSettings,
   RepairBoardPage,
   RepairRuntimeProvider,
   tn,
@@ -13,7 +13,9 @@ import { AppShell, Avatar, Menu, PageHeader, Sidebar, Tooltip } from '@bolusi/ui
 import { ChevronsUpDown, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { createCaptureDialogs } from './capture-dialogs.js';
 import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from './demo.js';
+import { UpdateNotice, useAppVersion } from './updates.js';
 
 type Page =
   { readonly kind: 'board' } | { readonly kind: 'intake' } | { readonly kind: 'settings' };
@@ -56,10 +58,12 @@ function useSidebarCollapsed(): readonly [boolean, () => void] {
 
 export function App(): React.JSX.Element {
   const [person, setPerson] = useState<DemoPerson>(DEMO_PEOPLE[0]!);
-  const runtime = useMemo(() => demoRuntimeFor(person), [person]);
+  const [dialogs] = useState(createCaptureDialogs);
+  const runtime = useMemo(() => demoRuntimeFor(person, dialogs.capture), [person, dialogs]);
   return (
     <RepairRuntimeProvider runtime={runtime}>
       <Counter key={person.userId} person={person} onSwitchPerson={setPerson} />
+      <dialogs.Host />
     </RepairRuntimeProvider>
   );
 }
@@ -125,7 +129,10 @@ function Counter({
             },
           ]}
           footer={(compact) => (
-            <PersonMenu person={person} compact={compact} onSwitchPerson={onSwitchPerson} />
+            <div className="flex flex-col gap-3">
+              <UpdateNotice compact={compact} />
+              <PersonMenu person={person} compact={compact} onSwitchPerson={onSwitchPerson} />
+            </div>
           )}
         />
       }
@@ -159,12 +166,18 @@ function Counter({
 
 /** This PC's own settings; the store's (slip header, intake lists) come with the owner screens. */
 function SettingsPage(): React.JSX.Element {
+  const version = useAppVersion();
   return (
     <>
       <PageHeader title={t('core.settings.title')} />
       <div className="min-h-0 flex-1 overflow-auto px-6 pb-6" data-testid="desktop.settings">
         <div className="flex max-w-2xl flex-col gap-4">
-          <PaperSettings />
+          <PrintSettings />
+          {version === null ? null : (
+            <p className="text-small text-text-muted" data-testid="desktop.version">
+              {t('core.settings.appVersion')} {version}
+            </p>
+          )}
         </div>
       </div>
     </>

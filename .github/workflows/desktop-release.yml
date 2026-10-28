@@ -1,0 +1,36 @@
+name: desktop-release
+
+# Publishes the counter PC app: push a tag like desktop-v0.2.0 and the installer, its blockmap and
+# latest.yml go to a GitHub Release of that tag. Installed apps check the latest release and update
+# themselves. The tag's version must match apps/desktop/package.json.
+on:
+  push:
+    tags: ['desktop-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches the app version
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
+          if ("desktop-v$version" -ne $env:GITHUB_REF_NAME) {
+            throw "Tag $env:GITHUB_REF_NAME does not match apps/desktop/package.json version $version"
+          }
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b packages/ui-web/tsconfig.build.json packages/modules/tsconfig.desktop.json
+      - run: pnpm --filter @bolusi/desktop run build
+      - run: pnpm --filter @bolusi/desktop exec electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

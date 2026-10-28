@@ -23,6 +23,8 @@ function img(image: PrintImage | null, className: string): string {
 
 /** A value longer than this gets a field row of its own rather than half of one. */
 const WIDE_FIELD_CHARS = 24;
+// Centimetre ticks across the widest paper (420 mm); the frame cuts them at the printable edge.
+const RULER_TICKS = 42;
 
 function fields(list: readonly PrintField[]): string {
   const items = list
@@ -61,7 +63,10 @@ function block(b: PrintBlock): string {
         )
         .join('')}</div>`;
     case 'ruler':
-      return `<div class="ruler"><div class="ruler-scale"></div><p>${esc(b.caption)}</p></div>`;
+      // A tick every centimetre, drawn as borders: printers drop thin background gradients.
+      return `<div class="ruler"><div class="ruler-scale">${'<span></span>'.repeat(
+        RULER_TICKS,
+      )}</div><p>${esc(b.caption)}</p></div>`;
   }
 }
 
@@ -165,8 +170,9 @@ main.columns h2:first-child, aside > h2:first-child { margin-top: ${v(4)}; }
 .sig-line { border-top: 0.8pt solid #111; padding-top: 1.2mm; min-height: 5mm; font-weight: 500; overflow-wrap: anywhere; }
 footer { margin-top: ${v(6)}; padding-top: ${v(2.5)}; border-top: 0.5pt solid #bbb; font-size: 7.5pt; color: #555; }
 footer p + p { margin-top: 0.6mm; }
-.ruler { border: 0.8pt solid #111; padding: 3mm; margin-top: 4mm; }
-.ruler-scale { height: 4mm; background: repeating-linear-gradient(90deg, #111 0 0.3mm, transparent 0.3mm 10mm); }
+.ruler { border: 0.8pt solid #111; padding: 3mm; margin: 4mm 0 3mm; }
+.ruler-scale { display: flex; height: 4mm; overflow: hidden; border-right: 0.3mm solid #111; }
+.ruler-scale span { flex: 0 0 10mm; border-left: 0.3mm solid #111; }
 .ruler p { margin-top: 2mm; }
 @media screen { body { background: #e5e5e5; } .copy { width: ${paper.widthMm}mm; min-height: ${paper.heightMm}mm;
   padding: ${pad}mm; background: #fff; margin: 6mm auto; box-shadow: 0 1px 4px rgba(0,0,0,.2); } }

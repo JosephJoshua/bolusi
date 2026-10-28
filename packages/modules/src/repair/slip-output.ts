@@ -1,14 +1,67 @@
 // Printing or sending one slip, the same on every client: read the ticket as it is now, build the
 // page with this store's header and terms, hand it to the platform, and log a print that landed so
 // the next one says "Cetak ulang". Only the screen around it (and the platform's output) differs.
-import { renderHtml } from '@bolusi/core';
+import {
+  PAPER_PRESETS,
+  renderHtml,
+  toMonoBitmap,
+  type PaperSettings,
+  type PrintDocument,
+  type PrintImage,
+} from '@bolusi/core';
 
 import type { SlipKind } from './constants.js';
 import { printableSlips } from './flows.js';
-import { readDevicePaper, type PaperChoice } from './paper.js';
-import { slipDocument, slipPictures } from './print.js';
-import type { TicketDetailRow } from './queries.js';
+import { tn } from './i18n.js';
+import { PAPER_KEY, paperFor, readDevicePaper, type PaperChoice } from './paper.js';
+import { logoRef, slipDocument, slipSignature, storeHeader, testPageDocument } from './print.js';
+import type { PrintSettings, TicketDetailRow } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+
+// A logo on a dot-matrix form takes the top three lines at most, centred, so a slip still fits.
+const DOT_MATRIX_LOGO_IN = { width: 2.5, height: 0.5 } as const;
+
+/**
+ * The store's logo for this paper: as a picture, plus as dots when the store asked for it on
+ * dot-matrix and this device can decode it. Null when there is none or it is not here yet.
+ */
+async function loadLogo(
+  printing: RepairPrinting,
+  settings: PrintSettings,
+  paper: PaperSettings,
+): Promise<PrintImage | null> {
+  const ref = logoRef(settings);
+  const dataUri = ref === null ? null : await printing.imageDataUri(ref);
+  if (dataUri === null) return null;
+  const onDotMatrix = paper.continuous && settings.logoOnDotMatrix;
+  const pixels =
+    onDotMatrix && printing.decodeImage !== undefined ? await printing.decodeImage(dataUri) : null;
+  return {
+    dataUri,
+    mono:
+      pixels === null
+        ? null
+        : toMonoBitmap(
+            pixels.rgba,
+            pixels.width,
+            pixels.height,
+            DOT_MATRIX_LOGO_IN.width,
+            DOT_MATRIX_LOGO_IN.height,
+          ),
+  };
+}
+
+function send(
+  printing: RepairPrinting,
+  doc: PrintDocument,
+  paper: PaperSettings,
+  how: 'print' | 'share',
+): Promise<SlipOutcome> {
+  return printing.output(
+    { html: renderHtml(doc, paper), document: doc, jobName: doc.jobName, paper },
+    how,
+  );
+}
 
 export type SlipOutcome = 'done' | 'cancelled' | 'unconfirmed';
 
@@ -33,25 +86,46 @@ export async function outputSlip(
   // Reopened since the screen opened: there is no bill to print yet, so print nothing.
   if (!printableSlips(row).includes(slip)) return 'cancelled';
   const sources = settings.rows[0]!;
-  const pictures = slipPictures(row, slip, sources);
-  const [logo, signature] = await Promise.all(
-    [pictures.logo, pictures.signature].map(async (ref) => {
-      const dataUri = ref === null ? null : await printing.imageDataUri(ref);
-      return dataUri === null ? null : { dataUri, mono: null };
-    }),
-  );
+  const signatureRef = slipSignature(row, slip);
+  const [logo, signatureUri] = await Promise.all([
+    loadLogo(printing, sources, sheet),
+    signatureRef === null ? null : printing.imageDataUri(signatureRef),
+  ]);
   const doc = slipDocument(row, slip, {
     settings: sources,
     storeName,
-    logo: logo ?? null,
-    signature: signature ?? null,
+    logo,
+    signature: signatureUri === null ? null : { dataUri: signatureUri, mono: null },
     printedAt: Date.now(),
     printedByName: userName,
   });
-  const outcome = await printing.output(
-    { html: renderHtml(doc, sheet), jobName: doc.jobName, paper: sheet },
-    how,
-  );
+  const outcome = await send(printing, doc, sheet, how);
   if (outcome === 'done') await runtime.run('recordSlipPrinted', { ticketId: row.id, slip });
   return outcome;
+}
+
+/**
+ * A test page on this device's printer and paper, with the store's header as slips print it. Not
+ * logged: it is about the printer, not a servisan.
+ */
+export async function outputTestPage(
+  runtime: RepairRuntime,
+  printing: RepairPrinting,
+  papers: readonly PaperChoice[],
+): Promise<SlipOutcome> {
+  const [settings, storeName, saved] = await Promise.all([
+    runtime.query('printSettings', {}),
+    printing.storeName(),
+    printing.readPaper(),
+  ]);
+  const sources = settings.rows[0]!;
+  const choice = paperFor(saved, papers);
+  const sheet = PAPER_PRESETS[choice];
+  const logo = await loadLogo(printing, sources, sheet);
+  const doc = testPageDocument(
+    storeHeader(sources, storeName, logo),
+    tn(PAPER_KEY[choice]),
+    Date.now(),
+  );
+  return send(printing, doc, sheet, 'print');
 }

@@ -55,6 +55,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 // The native modules `Root`'s import graph reaches — doubled exactly as `live-shell-notes.test.tsx`
 // does, and for the same reason: they are boot side-effects incidental to what this file measures.
 vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),

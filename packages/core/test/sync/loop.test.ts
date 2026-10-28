@@ -256,6 +256,61 @@ describe('a full cycle walks idle → pushing → pulling → idle (03 §10)', (
     expect(loop.state).toBe('idle');
   });
 
+  it('stop() retires a loop in backoff: no retry fires and later triggers are ignored', async () => {
+    // A loop whose owner went away (a headless background pass that ended offline) must not keep
+    // syncing from its backoff timer behind the next owner's back.
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(netFail);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(loop.state).toBe('backoff');
+    expect(harness.timer.pending()).toBe(1);
+
+    loop.stop();
+    expect(harness.timer.pending()).toBe(0);
+    loop.requestSync('manual');
+    await harness.timer.advance(600_000);
+    await loop.settle();
+    expect(harness.transport.pulls).toHaveLength(1);
+  });
+
+  it('stop() during a cycle ends it at the batch boundary with no backoff armed after a failure', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(() => {
+      loop.stop();
+      throw new Error('network down');
+    });
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(harness.timer.pending()).toBe(0);
+  });
+
+  it('pause() during push stops between push batches; the rest stay local for the next trigger', async () => {
+    const ops = [await seedLocalOp(1), await seedLocalOp(2), await seedLocalOp(3)];
+    const loop = await harness.makeLoop({ deviceId: device.id, pushBatchSize: 1 });
+    harness.transport.scriptPush(() => {
+      loop.pause(); // the open app claims the database while a backlog is pushing
+      return { results: [{ id: ops[0]!.id, status: 'accepted' } as PushResult], serverTime: 1 };
+    });
+    loop.requestSync('background');
+    await loop.settle();
+
+    expect(harness.transport.pushes).toHaveLength(1);
+
+    // The unpushed ops were left `local`, so the next trigger carries on from op 2.
+    harness.transport.scriptPush(
+      { results: [{ id: ops[1]!.id, status: 'accepted' } as PushResult], serverTime: 1 },
+      { results: [{ id: ops[2]!.id, status: 'accepted' } as PushResult], serverTime: 1 },
+    );
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(harness.transport.pushes.map((p) => p.ops.map((op) => op.id))).toEqual([
+      [ops[0]!.id],
+      [ops[1]!.id],
+      [ops[2]!.id],
+    ]);
+  });
+
   it('pause() on an idle loop is a no-op', async () => {
     const loop = await harness.makeLoop({ deviceId: device.id });
     loop.pause();
