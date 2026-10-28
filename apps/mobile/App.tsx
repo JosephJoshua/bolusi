@@ -958,7 +958,8 @@ export default function App(props: AppProps): React.JSX.Element {
 
   return (
     <View testID="bolusi-app-shell" style={shellStyle}>
-      <StatusBar style="auto" />
+      {/* Dark icons: the app is light-only (app.config.ts), even when the phone is in dark mode. */}
+      <StatusBar style="dark" />
       <View
         // A new system font size remounts the screens. Re-measuring in place does not hold on
         // Android: the next React commit brings back its own text nodes, measured at the old size,
@@ -1696,7 +1697,8 @@ const styles = StyleSheet.create({
    * 48 dp figure. It moved because surfaces mounted OUTSIDE this shell — the ConfirmSheet overlay —
    * need the same measurement and were silently missing it (task 205).
    */
-  shell: { flex: 1, paddingBottom: NAV_BAR_INSET },
+  // Painted, so the bands under the status and navigation bars match the screens.
+  shell: { flex: 1, paddingBottom: NAV_BAR_INSET, backgroundColor: color.surface },
   zone: { flex: 1 },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
   // The menu's rows run edge to edge, like every list.

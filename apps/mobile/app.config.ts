@@ -179,6 +179,8 @@ const config: ExpoConfig = {
     './plugins/withActivityConfigChanges',
     // Android 15+ TextViews must lay text out the way React Native measured it, or a label sized to
     // fit drops its last word. See withTextViewBoundsForWidth.ts.
+    // The app is light-only; keep the Android window and system bars light in dark mode too.
+    './plugins/withLightTheme',
     './plugins/withTextViewBoundsForWidth',
   ],
 };
