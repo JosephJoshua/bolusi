@@ -158,6 +158,17 @@ A cash count records what was counted; the difference is computed against the
 book at the count's time, so late-synced cash shows up correctly. Stock and
 purchasing post through the same module (reserved accounts in `constants.ts`).
 
+QRIS through Xendit (`apps/server/src/qris`) is online only. An owner connects a
+QRIS account with its Xendit secret key; the server points that Xendit account's
+QR webhook at `/xendit/qr/<tenant>` and keeps the key sealed and the callback
+token hashed. The counter asks the server for a dynamic QR (checked by the same
+rule as a device's own payment); each QR keeps the key and token it was made
+under. A callback or a device's status check makes the server read the payment
+back from Xendit, then record it as a `money.payment_received` signed by the
+tenant's system device, with the charge id as its entry id, so one QR records at
+most one payment. Devices pull it like any other payment. Test-mode payments
+carry a `test:` reference.
+
 ## Limits to carry into repair work
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
@@ -231,3 +242,7 @@ tenant provisioning. Unset means detection is off. When enabled, missing/invalid
 keys can fail colliding pushes; provision every served tenant before enabling it.
 Signers are cached, so restart after changing keys. See
 `apps/server/src/sync/system-key-store.ts` and the provisioning CLI.
+
+`PAYMENT_SECRETS_KEY` (32 bytes, base64) and `PUBLIC_URL` together turn on QRIS
+through Xendit; it also needs `SYSTEM_KEY_DIR`. Losing the secrets key means
+reconnecting every Xendit account.
