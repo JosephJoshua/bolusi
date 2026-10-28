@@ -340,7 +340,7 @@ function seedTickets(): TicketDetailRow[] {
 }
 
 const CUSTOMERS = [
-  'Agustina Rumbiak',
+  'Yakobus Mandowen',
   'Benny Kambu',
   'Corneles Waromi',
   'Debora Yoku',

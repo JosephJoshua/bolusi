@@ -47,7 +47,9 @@ for (const [width, height] of [
   [1024, 640],
   [1280, 720],
   [1366, 768],
+  [1536, 864],
   [1920, 1080],
+  [2560, 1440],
 ] as const) {
   test(`the board fits a ${String(width)}×${String(height)} screen, with and without a servisan open`, async () => {
     await page.setViewportSize({ width, height });
@@ -59,6 +61,17 @@ for (const [width, height] of [
         ),
       );
       expect(overflow).toBe(false);
+      // Customer names show in full; only free text such as a complaint may be cut.
+      const cutNames = await table.evaluate((grid) => {
+        const headers = [...grid.querySelectorAll('[role="columnheader"]')];
+        const column = headers.findIndex((header) => header.textContent?.trim() === 'Pelanggan');
+        return [...grid.querySelectorAll('[role="row"]')]
+          .slice(1)
+          .map((row) => row.children[column]?.querySelector('.truncate'))
+          .filter((name) => name != null && name.scrollWidth > name.clientWidth)
+          .map((name) => name!.textContent);
+      });
+      expect(cutNames).toEqual([]);
       await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({ ratio: 1 });
       // Only the table and the pane scroll; the window never does, so paging stays in reach.
       expect(
