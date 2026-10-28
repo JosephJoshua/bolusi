@@ -283,8 +283,10 @@ The owner chose an actual repair business outcome rather than stock control alon
 Agreed with the owner, as the first part of parts, purchasing and stock.
 
 - **One parts list for the business** (the inventory module), built for
-  thousands of parts. Stock is per store. Owners add parts and count stock;
-  starting stock comes from a count.
+  thousands of parts. Stock is per store. Owners add parts and correct stock
+  ("Koreksi stok", owners only); starting stock comes from a correction. The
+  phones a part fits are picked from the phone catalog, as at intake, and the
+  take step offers the parts that fit the servisan's phone first.
 - **Taking a part drops stock; putting it back returns it.** Technicians take
   parts for their own servisan, and the counter (who assigns work) can take for
   any servisan. There is no storekeeper.

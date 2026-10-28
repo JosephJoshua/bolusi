@@ -106,14 +106,26 @@ function journey(world: ChainWorld): OpSpec[] {
         entityType: 'inventory_part',
         entityId: part,
         storeId: null,
-        payload: { name: 'LCD Samsung A14', code: null, fits: 'Galaxy A14' },
+        payload: {
+          name: 'LCD Samsung A14',
+          code: null,
+          fits: [{ brand: 'Samsung', model: 'Galaxy A14' }],
+        },
       },
       {
         type: 'inventory.part_edited',
         entityType: 'inventory_part',
         entityId: part,
         storeId: null,
-        payload: { name: 'LCD Samsung A14', code: 'LCD-A14', fits: 'Galaxy A14', archived: false },
+        payload: {
+          name: 'LCD Samsung A14',
+          code: 'LCD-A14',
+          fits: [
+            { brand: 'Samsung', model: 'Galaxy A14' },
+            { brand: '', model: 'A14 5G' },
+          ],
+          archived: false,
+        },
       },
       movement(1, 'inventory.stock_counted', { partId: part, counted: 3, expected: 0, note: null }),
       movement(2, 'inventory.part_taken', { partId: part, qty: 2, use }),

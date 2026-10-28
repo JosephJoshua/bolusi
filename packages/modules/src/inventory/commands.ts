@@ -10,10 +10,12 @@ import {
   INVENTORY_PART_ENTITY,
   MAX_COUNTED_QTY,
   MAX_MOVEMENT_QTY,
+  MAX_PART_FITS,
   PART_USE_KINDS,
 } from './constants.js';
-import { MAX_NOTE, MAX_PART_CODE, MAX_PART_FITS, MAX_PART_NAME } from './operations.js';
-import { getPartQuery, type PartRow } from './queries.js';
+import { MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME, zPartFit } from './operations.js';
+import { compactModel } from '../shared/model-key.js';
+import { getPartQuery, type PartDetailRow } from './queries.js';
 
 /** Blank optional text is no text. */
 const zOptionalText = (max: number) =>
@@ -29,11 +31,24 @@ const zPartDetails = z
   .object({
     name: z.string().trim().min(1).max(MAX_PART_NAME),
     code: zOptionalText(MAX_PART_CODE),
-    fits: zOptionalText(MAX_PART_FITS),
+    // The same model picked twice is listed once.
+    fits: z
+      .array(zPartFit)
+      .max(MAX_PART_FITS)
+      .default([])
+      .transform((fits) =>
+        fits.filter(
+          (fit, i) =>
+            fits.findIndex(
+              (other) =>
+                compactModel(other.brand, other.model) === compactModel(fit.brand, fit.model),
+            ) === i,
+        ),
+      ),
   })
   .strict();
 
-async function loadPart(ctx: CommandContext, partId: string): Promise<PartRow> {
+async function loadPart(ctx: CommandContext, partId: string): Promise<PartDetailRow> {
   const part = (await ctx.query(getPartQuery, { partId })).rows[0];
   if (part === undefined) {
     throw new DomainError('ENTITY_NOT_FOUND', {
@@ -42,6 +57,16 @@ async function loadPart(ctx: CommandContext, partId: string): Promise<PartRow> {
     });
   }
   return part;
+}
+
+function sameFits(
+  a: readonly { brand: string; model: string }[],
+  b: readonly { brand: string; model: string }[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((fit, i) => fit.brand === b[i]!.brand && fit.model === b[i]!.model)
+  );
 }
 
 function nothingChanged(field: string): DomainError {
@@ -84,7 +109,7 @@ export async function editPartHandler(
   if (
     part.name === input.name &&
     part.code === input.code &&
-    part.fits === input.fits &&
+    sameFits(part.models, input.fits) &&
     part.archived === input.archived
   ) {
     throw nothingChanged('name');

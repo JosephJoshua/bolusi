@@ -15,6 +15,7 @@ import {
 import {
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_OP,
+  MAX_PART_FITS,
   INVENTORY_PART_ENTITY,
   INVENTORY_PERMISSION,
   MAX_COUNTED_QTY,
@@ -33,14 +34,22 @@ import type { InventoryDatabase } from './schema.js';
 
 export const MAX_PART_NAME = 200;
 export const MAX_PART_CODE = 60;
-export const MAX_PART_FITS = 1000;
 export const MAX_NOTE = 500;
 
 const zName = z.string().trim().min(1).max(MAX_PART_NAME);
 const zOptional = (max: number) => z.string().trim().min(1).max(max).nullable();
 
+/** A phone model a part fits: the catalog's brand and model, or a model typed with no brand. */
+export const zPartFit = z
+  .object({ brand: z.string().trim().max(60), model: z.string().trim().min(1).max(100) })
+  .strict();
+
 export const partDetailsPayload = z
-  .object({ name: zName, code: zOptional(MAX_PART_CODE), fits: zOptional(MAX_PART_FITS) })
+  .object({
+    name: zName,
+    code: zOptional(MAX_PART_CODE),
+    fits: z.array(zPartFit).max(MAX_PART_FITS),
+  })
   .strict();
 
 export const partAddedPayload = partDetailsPayload;
@@ -53,8 +62,8 @@ export const stockCountedPayload = z
   .object({
     partId: zUuidV7,
     counted: z.number().int().min(0).max(MAX_COUNTED_QTY),
-    /** What the counting device showed: the movement is the difference, so takes it had not yet
-     * seen still count once they sync. */
+    /** What the counting device showed, kept so the history can say how far off the record was.
+     * Stock itself is the latest count plus what moved after it (queries.ts). */
     expected: z.number().int().min(-MAX_COUNTED_QTY).max(MAX_COUNTED_QTY),
     note: zOptional(MAX_NOTE),
   })

@@ -10,6 +10,7 @@ export { CancelFeesScreen, type CancelFeesScreenProps } from './CancelFeesScreen
 export { PrintSettingsScreen, type PrintSettingsScreenProps } from './PrintSettingsScreen.js';
 export { PaperScreen, type PaperScreenProps } from './PaperScreen.js';
 export type { RepairChrome } from './parts.js';
+export { catalogModelSearch } from '../model-picker.js';
 export {
   RepairRuntimeProvider,
   useRepairRuntime,

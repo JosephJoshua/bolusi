@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 import type { ScreenChrome } from '../../screen-kit/screens/views.js';
 import type { InventoryKey } from '../i18n.js';
-import type { PartRow } from '../queries.js';
+import type { PartDetailRow, PartRow } from '../queries.js';
 import { CountStep } from './CountStep.js';
 import { PartDetail } from './PartDetail.js';
 import { PartForm } from './PartForm.js';
@@ -18,7 +18,7 @@ type View =
   | { readonly kind: 'list' }
   | { readonly kind: 'part'; readonly partId: string }
   | { readonly kind: 'add' }
-  | { readonly kind: 'edit'; readonly part: PartRow }
+  | { readonly kind: 'edit'; readonly part: PartDetailRow }
   | { readonly kind: 'count'; readonly part: PartRow };
 
 export interface PartsSurfaceProps {

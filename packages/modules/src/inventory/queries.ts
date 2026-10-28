@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { searchIndexFor, type QueryContext, type QueryPage } from '@bolusi/core';
 
+import { compactModel } from '../shared/model-key.js';
 import { userNames } from '../shared/user-names.js';
 import {
   INVENTORY_PERMISSION,
@@ -45,7 +46,15 @@ export interface MovementRow {
   readonly at: number;
 }
 
+/** A phone model a part fits. */
+export interface PartFitRow {
+  readonly brand: string;
+  readonly model: string;
+}
+
 export interface PartDetailRow extends PartRow {
+  /** The phone models it fits, in the order picked. */
+  readonly models: readonly PartFitRow[];
   /** Newest first, at most `MOVEMENTS_SHOWN`. */
   readonly movements: readonly MovementRow[];
 }
@@ -283,6 +292,13 @@ export async function getPartHandler(
 ): Promise<QueryPage<PartDetailRow>> {
   const row = await partsWithStock(qctx, [input.partId]).executeTakeFirst();
   if (row === undefined) return { rows: [], nextCursor: null };
+  const models = await qctx.db
+    .selectFrom('inventoryPartFits')
+    .select(['brand', 'model'])
+    .where('tenantId', '=', qctx.tenantId)
+    .where('partId', '=', input.partId)
+    .orderBy('position')
+    .execute();
   const movements = await storeMovements(qctx)
     .where('partId', '=', input.partId)
     .orderBy('at', 'desc')
@@ -290,7 +306,7 @@ export async function getPartHandler(
     .limit(MOVEMENTS_SHOWN)
     .execute();
   return {
-    rows: [{ ...toPart(row), movements: await toMovements(qctx, movements) }],
+    rows: [{ ...toPart(row), models, movements: await toMovements(qctx, movements) }],
     nextCursor: null,
   };
 }
@@ -352,4 +368,52 @@ export const partsForUseQuery = {
   permission: INVENTORY_PERMISSION.read,
   input: partsForUseInput,
   handler: partsForUseHandler,
+} as const;
+
+// ── partsFitting ───────────────────────────────────────────────────────────────────────────────
+
+export const partsFittingInput = z
+  .object({
+    brand: z.string().trim().max(60),
+    model: z.string().trim().min(1).max(100),
+    limit: z.number().int().min(1).max(50).default(20),
+  })
+  .strict();
+export type PartsFittingInput = z.input<typeof partsFittingInput>;
+
+/**
+ * The parts on the list that fit one phone model, for the take step to offer first: a servisan for
+ * an Oppo A57 shows the A57 parts before anyone types. Matched on the compacted spelling, so
+ * "OPPO A-57" finds parts picked as "Oppo A57"; a part listed by model alone matches on the model.
+ */
+export async function partsFittingHandler(
+  input: z.output<typeof partsFittingInput>,
+  qctx: Qctx,
+): Promise<QueryPage<PartRow>> {
+  const keys = [compactModel(input.brand, input.model), compactModel(input.model)].filter(
+    (key) => key !== '',
+  );
+  const ids = (
+    await qctx.db
+      .selectFrom('inventoryPartFits')
+      .select('partId')
+      .distinct()
+      .where('tenantId', '=', qctx.tenantId)
+      .where('modelKey', 'in', keys)
+      .execute()
+  ).map((row) => row.partId);
+  if (ids.length === 0) return { rows: [], nextCursor: null };
+  const rows = await partsWithStock(qctx, ids)
+    .where('p.archived', '=', 0)
+    .orderBy(sql`lower(p.name)`)
+    .limit(input.limit)
+    .execute();
+  return { rows: rows.map(toPart), nextCursor: null };
+}
+
+export const partsFittingQuery = {
+  name: 'partsFitting',
+  permission: INVENTORY_PERMISSION.read,
+  input: partsFittingInput,
+  handler: partsFittingHandler,
 } as const;

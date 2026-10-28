@@ -88,6 +88,22 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await sql`CREATE INDEX idx_inventory_movements_use ON inventory_movements (use_id)`.execute(db);
   await secureTenantTable(db, 'inventory_movements');
 
+  await sql`
+    CREATE TABLE inventory_part_fits (
+      part_id   uuid NOT NULL,
+      position  integer NOT NULL,
+      tenant_id uuid NOT NULL REFERENCES tenants(id),
+      brand     text NOT NULL,
+      model     text NOT NULL,
+      model_key text NOT NULL,
+      PRIMARY KEY (part_id, position)
+    )
+  `.execute(db);
+  await sql`CREATE INDEX idx_inventory_part_fits_model ON inventory_part_fits (tenant_id, model_key)`.execute(
+    db,
+  );
+  await secureTenantTable(db, 'inventory_part_fits');
+
   for (const permission of PERMISSIONS) {
     await sql`
       INSERT INTO permissions (id, module, action, scope, description, is_dangerous)
@@ -112,6 +128,7 @@ export async function down(db: Kysely<unknown>): Promise<void> {
     await sql`DELETE FROM role_permissions WHERE permission_id = ${permission.id}`.execute(db);
     await sql`DELETE FROM permissions WHERE id = ${permission.id}`.execute(db);
   }
+  await sql`DROP TABLE inventory_part_fits`.execute(db);
   await sql`DROP TABLE inventory_movements`.execute(db);
   await sql`DROP TABLE inventory_parts`.execute(db);
 }

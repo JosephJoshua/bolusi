@@ -12,14 +12,15 @@ import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION, MAX_COUNTED_QTY } from '../constants.js';
 import { ti } from '../i18n.js';
-import { MAX_PART_CODE, MAX_PART_FITS, MAX_PART_NAME } from '../operations.js';
-import type { PartRow } from '../queries.js';
+import { MAX_PART_CODE, MAX_PART_NAME } from '../operations.js';
+import type { PartDetailRow, PartFitRow } from '../queries.js';
 import { useInventoryRuntime } from '../runtime.js';
+import { ModelsField } from './ModelsField.js';
 
 export interface PartFormProps {
   readonly chrome: ScreenChrome;
   /** The part being edited; absent to add one. */
-  readonly part?: PartRow | undefined;
+  readonly part?: PartDetailRow | undefined;
   readonly onDone: (partId: string) => void;
   readonly onCancel: () => void;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
@@ -40,14 +41,13 @@ export function PartForm({
   const canCount = adding && runtime.hasPermission(INVENTORY_PERMISSION.count);
   const [name, setName] = useState(part?.name ?? '');
   const [code, setCode] = useState(part?.code ?? '');
-  const [fits, setFits] = useState(part?.fits ?? '');
+  const [fits, setFits] = useState<readonly PartFitRow[]>(part?.models ?? []);
+  // What the phones were when the form (re)started, so kept phones alone are nothing to discard.
+  const [baseFits, setBaseFits] = useState<readonly PartFitRow[]>(part?.models ?? []);
   const [stock, setStock] = useState(0);
   const [tried, setTried] = useState(false);
   const dirty =
-    name !== (part?.name ?? '') ||
-    code !== (part?.code ?? '') ||
-    fits !== (part?.fits ?? '') ||
-    stock !== 0;
+    name !== (part?.name ?? '') || code !== (part?.code ?? '') || fits !== baseFits || stock !== 0;
   const discard = useDiscardConfirm({
     dirty,
     copy: {
@@ -62,10 +62,14 @@ export function PartForm({
   const nameMissing = name.trim() === '';
   const addedRef = useRef<string | null>(null);
 
-  const save = (): void => {
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
+
+  /** Save; with `another`, stay on a fresh form that keeps the phones it fits, for the next part. */
+  const save = (another = false): void => {
     setTried(true);
+    setSavedNotice(null);
     if (nameMissing) return;
-    const details = { name, code: code === '' ? null : code, fits: fits === '' ? null : fits };
+    const details = { name, code: code === '' ? null : code, fits: [...fits] };
     void runner
       .run(async () => {
         if (part !== undefined) {
@@ -78,7 +82,19 @@ export function PartForm({
         return { partId };
       })
       .then((result) => {
-        if (result !== undefined) onDone(result.partId);
+        if (result === undefined) return;
+        if (!another) {
+          onDone(result.partId);
+          return;
+        }
+        // Parts often come in a run for one phone (its LCD, battery, connector): the phones stay.
+        addedRef.current = null;
+        setSavedNotice(ti('inventory.form.savedAnother', { name: name.trim() }));
+        setName('');
+        setCode('');
+        setStock(0);
+        setTried(false);
+        setBaseFits(fits);
       });
   };
 
@@ -87,8 +103,20 @@ export function PartForm({
       chrome={chrome}
       title={ti(adding ? 'inventory.form.addTitle' : 'inventory.form.editTitle')}
       onBack={() => discard.requestLeave(onCancel)}
-      primaryLabel={ti(adding ? 'inventory.action.add' : 'inventory.action.save')}
-      onPrimary={save}
+      primaryLabel={ti('inventory.action.save')}
+      onPrimary={() => save()}
+      secondary={
+        adding
+          ? {
+              label: ti('inventory.form.addAnother'),
+              onPress: () => save(true),
+              disabled: runner.busy,
+              testID: `${testID}.another`,
+            }
+          : undefined
+      }
+      notice={savedNotice}
+      onClearNotice={() => setSavedNotice(null)}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -115,16 +143,7 @@ export function PartForm({
           autoCapitalize="characters"
           testID={`${testID}.code`}
         />
-        <TextInput
-          label={ti('inventory.form.fits')}
-          placeholder={ti('inventory.form.fitsPlaceholder')}
-          value={fits}
-          onChangeText={setFits}
-          maxLength={MAX_PART_FITS}
-          autoCorrect={false}
-          multiline
-          testID={`${testID}.fits`}
-        />
+        <ModelsField value={fits} onChange={setFits} testID={`${testID}.fits`} />
         {canCount ? (
           <QuantityStepper
             label={ti('inventory.form.stock')}

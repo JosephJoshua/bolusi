@@ -12,7 +12,24 @@ import {
   type QueryState,
 } from '../screen-kit/index.js';
 
-export type InventoryRuntime = ModulePort<InventoryModule> & LiveSource;
+/** A phone model from the phone catalog, offered when choosing what a part fits. */
+export interface PhoneModelOption {
+  readonly key: string;
+  readonly brand: string;
+  readonly model: string;
+  /** Already-localized: "Samsung · 2024". */
+  readonly caption: string;
+}
+
+export type InventoryRuntime = ModulePort<InventoryModule> &
+  LiveSource & {
+    /**
+     * Search the phone catalog (repair's, the same as at intake). Absent where no catalog is
+     * reachable; the screens then take typed models only.
+     */
+    readonly searchModels?:
+      ((text: string, limit: number) => Promise<readonly PhoneModelOption[]>) | undefined;
+  };
 
 const InventoryRuntimeContext = createRuntimeContext<InventoryRuntime>('inventory');
 

@@ -2,7 +2,7 @@
   "opType": {
     "partAdded": "Sparepart ditambahkan",
     "partEdited": "Sparepart diubah",
-    "stockCounted": "Stok dihitung",
+    "stockCounted": "Stok dikoreksi",
     "partTaken": "Sparepart diambil",
     "partPutBack": "Sparepart dikembalikan"
   },
@@ -34,7 +34,7 @@
   "action": {
     "add": "Tambah sparepart",
     "edit": "Ubah",
-    "count": "Hitung stok",
+    "count": "Koreksi stok",
     "archive": "Arsipkan",
     "restore": "Aktifkan lagi",
     "save": "Simpan"
@@ -48,14 +48,20 @@
     "fits": "Cocok untuk HP (opsional)",
     "fitsPlaceholder": "Contoh: Redmi Note 10, Note 10S",
     "stock": "Stok sekarang",
-    "nameRequired": "Tulis nama sparepartnya dulu."
+    "nameRequired": "Tulis nama sparepartnya dulu.",
+    "fitsSearch": "Cari tipe HP",
+    "removeFit": "Hapus",
+    "addTyped": "Tambah “{model}”",
+    "notInCatalog": "Belum ada di daftar HP",
+    "addAnother": "Tambah lagi",
+    "savedAnother": "“{name}” disimpan."
   },
   "count": {
-    "title": "Hitung stok",
+    "title": "Koreksi stok",
     "counted": "Jumlah di rak",
     "recorded": "Tercatat {count}",
     "note": "Catatan (opsional)",
-    "save": "Simpan jumlah",
+    "save": "Simpan koreksi",
     "more": "Lebih {count}",
     "less": "Kurang {count}",
     "same": "Sesuai"
@@ -69,7 +75,7 @@
     "title": "Detail sparepart"
   },
   "movement": {
-    "counted": "Dihitung: {count}",
+    "counted": "Dikoreksi jadi {count}",
     "taken": "Diambil untuk {use}",
     "putBack": "Dikembalikan dari {use}"
   },
@@ -96,12 +102,14 @@
     "none": "Belum ada sparepart.",
     "putBackAction": "Kembalikan ke stok",
     "searchHint": "Cari sparepart",
-    "picked": "Dipilih"
+    "picked": "Dipilih",
+    "fitsDevice": "Cocok untuk {model}",
+    "otherParts": "Sparepart lain"
   },
   "done": {
     "added": "Sparepart ditambahkan.",
     "saved": "Perubahan disimpan.",
-    "counted": "Jumlah stok disimpan.",
+    "counted": "Stok dikoreksi.",
     "archived": "Sparepart diarsipkan.",
     "restored": "Sparepart aktif lagi.",
     "taken": "Sparepart diambil.",

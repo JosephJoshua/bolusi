@@ -5,7 +5,7 @@
 // registers, with repair's check for servisan.
 import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolusi/core';
 
-import { inventoryMovementsTable, inventoryPartsTable } from './applier.js';
+import { inventoryMovementsTable, inventoryPartFitsTable, inventoryPartsTable } from './applier.js';
 import {
   addPartHandler,
   addPartInput,
@@ -20,7 +20,13 @@ import {
 import { INVENTORY_MODULE_ID, INVENTORY_PERMISSION, INVENTORY_TABLE } from './constants.js';
 import { inventoryOperations } from './operations.js';
 import type { PartUseTargets } from './part-use.js';
-import { countBelowZeroQuery, getPartQuery, listPartsQuery, partsForUseQuery } from './queries.js';
+import {
+  countBelowZeroQuery,
+  getPartQuery,
+  listPartsQuery,
+  partsFittingQuery,
+  partsForUseQuery,
+} from './queries.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
 
@@ -66,6 +72,7 @@ export function inventoryModuleManifest(targets: PartUseTargets) {
       tables: {
         [INVENTORY_TABLE.parts]: inventoryPartsTable,
         [INVENTORY_TABLE.movements]: inventoryMovementsTable,
+        [INVENTORY_TABLE.fits]: inventoryPartFitsTable,
       },
     },
 
@@ -104,6 +111,7 @@ export function inventoryModuleManifest(targets: PartUseTargets) {
       countBelowZero: countBelowZeroQuery,
       getPart: getPartQuery,
       partsForUse: partsForUseQuery,
+      partsFitting: partsFittingQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

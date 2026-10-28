@@ -18,6 +18,8 @@ export interface InventoryRuntimeDeps {
   readonly runtime: ModuleRuntime<ClientDatabase>;
   readonly invalidation: InvalidationBus;
   readonly identity: CommandIdentity;
+  /** The phone catalog search for the "fits" picker. */
+  readonly searchModels?: InventoryRuntime['searchModels'];
 }
 
 export function createInventoryRuntime(deps: InventoryRuntimeDeps): InventoryRuntime {
@@ -25,5 +27,6 @@ export function createInventoryRuntime(deps: InventoryRuntimeDeps): InventoryRun
     ...bindModulePort(inventoryModule, deps.runtime, deps.identity),
     subscribe: (listener) =>
       deps.invalidation.subscribeTables(Object.values(INVENTORY_TABLE), listener),
+    searchModels: deps.searchModels,
   };
 }

@@ -16,7 +16,11 @@ export const INVENTORY_MOVEMENT_ENTITY = 'inventory_movement' as const;
 export const INVENTORY_TABLE = {
   parts: 'inventory_parts',
   movements: 'inventory_movements',
+  fits: 'inventory_part_fits',
 } as const;
+
+/** The most phone models one part can list as fitting. */
+export const MAX_PART_FITS = 50;
 
 export const INVENTORY_OP = {
   partAdded: 'inventory.part_added',

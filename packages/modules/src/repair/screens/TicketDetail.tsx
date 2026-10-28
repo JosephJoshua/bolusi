@@ -309,6 +309,7 @@ export function TicketDetail({
             <TakePartStep
               chrome={chrome}
               use={use}
+              device={{ brand: ticket.deviceBrand, model: ticket.deviceModel }}
               onCancel={closeStep}
               onDone={() => {
                 closeStep();

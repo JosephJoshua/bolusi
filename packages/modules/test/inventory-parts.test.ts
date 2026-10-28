@@ -52,7 +52,7 @@ async function inWork(h: RepairHarness): Promise<Servisan> {
 async function addPart(h: RepairHarness, name: string, stock: number): Promise<string> {
   const { partId } = (await h.runInventory(
     'addPart',
-    { name, code: null, fits: null },
+    { name, code: null, fits: [] },
     h.storeOwnerId,
   )) as { partId: string };
   if (stock > 0) {
@@ -177,7 +177,7 @@ describe('taking parts for a servisan', () => {
     await h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
     await h.runInventory(
       'editPart',
-      { partId: lcd, name: 'LCD', code: null, fits: null, archived: true },
+      { partId: lcd, name: 'LCD', code: null, fits: [], archived: true },
       h.storeOwnerId,
     );
 
@@ -266,7 +266,7 @@ describe('the parts list and counts', () => {
     const h = await harness(6301);
     for (const userId of [h.cashierId, h.technicianId]) {
       await expectRefused(
-        h.runInventory('addPart', { name: 'LCD', code: null, fits: null }, userId),
+        h.runInventory('addPart', { name: 'LCD', code: null, fits: [] }, userId),
         'PERMISSION_DENIED',
       );
     }
@@ -418,5 +418,63 @@ describe('searching the parts list', () => {
       offset = Number(page.nextCursor);
     }
     expect(seen.sort()).toStrictEqual([...below].sort());
+  });
+});
+
+describe('the phones a part fits', () => {
+  test('models are kept in order, once each, and an edit replaces them', async () => {
+    const h = await harness(6601);
+    const { partId } = (await h.runInventory(
+      'addPart',
+      {
+        name: 'LCD A14',
+        code: null,
+        fits: [
+          { brand: 'Samsung', model: 'Galaxy A14' },
+          { brand: 'samsung', model: 'galaxy a-14' },
+          { brand: '', model: 'A14 5G' },
+        ],
+      },
+      h.storeOwnerId,
+    )) as { partId: string };
+    let part = (await h.queryInventory('getPart', { partId }, h.ownerId)).rows[0];
+    expect(part.models).toStrictEqual([
+      { brand: 'Samsung', model: 'Galaxy A14' },
+      { brand: '', model: 'A14 5G' },
+    ]);
+    expect(part.fits).toBe('Samsung Galaxy A14, A14 5G');
+
+    await h.runInventory(
+      'editPart',
+      {
+        partId,
+        name: 'LCD A14',
+        code: null,
+        fits: [{ brand: 'Samsung', model: 'Galaxy A15' }],
+        archived: false,
+      },
+      h.storeOwnerId,
+    );
+    part = (await h.queryInventory('getPart', { partId }, h.ownerId)).rows[0];
+    expect(part.models).toStrictEqual([{ brand: 'Samsung', model: 'Galaxy A15' }]);
+  });
+
+  test('a servisan’s phone finds the parts that fit it, however it was written', async () => {
+    const h = await harness(6602);
+    const add = async (name: string, fits: { brand: string; model: string }[]) =>
+      (
+        (await h.runInventory('addPart', { name, code: null, fits }, h.storeOwnerId)) as {
+          partId: string;
+        }
+      ).partId;
+    const lcd = await add('LCD A57', [{ brand: 'Oppo', model: 'A57' }]);
+    const port = await add('Konektor A57', [{ brand: '', model: 'A57' }]);
+    await add('LCD A16', [{ brand: 'Oppo', model: 'A16' }]);
+    const fitting = await h.queryInventory(
+      'partsFitting',
+      { brand: 'OPPO', model: 'A-57' },
+      h.technicianId,
+    );
+    expect(fitting.rows.map((row) => row.id).sort()).toStrictEqual([lcd, port].sort());
   });
 });

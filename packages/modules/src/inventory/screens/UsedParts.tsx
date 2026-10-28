@@ -137,6 +137,8 @@ export function UsedPartsSection({
 export interface TakePartStepProps {
   readonly chrome: ScreenChrome;
   readonly use: PartUse;
+  /** The phone being repaired: parts that fit it are offered first, before anything is typed. */
+  readonly device?: { readonly brand: string; readonly model: string } | undefined;
   readonly onDone: () => void;
   readonly onCancel: () => void;
   readonly testID?: string | undefined;
@@ -146,6 +148,7 @@ export interface TakePartStepProps {
 export function TakePartStep({
   chrome,
   use,
+  device,
   onDone,
   onCancel,
   testID = 'inventory.take',
@@ -159,11 +162,55 @@ export function TakePartStep({
   const typed = text.trim();
   const settled = useSettledValue(typed);
   const searchText = typed === '' ? '' : settled;
+  const fitsDevice = searchText === '' && device !== undefined && device.model.trim() !== '';
   const query = useInventoryQuery(
-    async (rt) =>
-      (await rt.query('listParts', { text: searchText, filter: 'active', limit: PICK_LIMIT })).rows,
-    `take:${searchText}:${String(reloadNonce)}`,
+    async (rt) => {
+      const all = (
+        await rt.query('listParts', { text: searchText, filter: 'active', limit: PICK_LIMIT })
+      ).rows;
+      if (!fitsDevice) return { fitting: [] as readonly PartRow[], rest: all };
+      const fitting = (await rt.query('partsFitting', { brand: device.brand, model: device.model }))
+        .rows;
+      const ids = new Set(fitting.map((row) => row.id));
+      return { fitting, rest: all.filter((row) => !ids.has(row.id)) };
+    },
+    `take:${searchText}:${fitsDevice ? `${device.brand}\u0000${device.model}` : ''}:${String(reloadNonce)}`,
   );
+
+  const choice = (row: PartRow): React.JSX.Element => {
+    const selected = picked?.id === row.id;
+    return (
+      <Pressable
+        key={row.id}
+        accessibilityRole="radio"
+        accessibilityState={{ selected }}
+        accessibilityLabel={`${row.name}, ${ti('inventory.list.stockCount', { count: stockText(row.onHand) })}`}
+        onPress={() => {
+          setPicked(row);
+          setQty(1);
+        }}
+        style={({ pressed }) => [
+          styles.choice,
+          selected ? styles.choiceSelected : null,
+          pressed ? styles.choicePressed : null,
+        ]}
+        testID={`${testID}.choice.${row.id}`}
+      >
+        <View style={styles.usedText}>
+          <Text style={styles.name}>{row.name}</Text>
+          {row.fits === null ? null : (
+            <Text style={styles.muted} numberOfLines={1}>
+              {row.fits}
+            </Text>
+          )}
+        </View>
+        <Text style={[styles.stock, row.onHand < 0 ? styles.stockOut : null]}>
+          {ti('inventory.list.stockCount', { count: stockText(row.onHand) })}
+        </Text>
+        {selected ? <Icon name="check" size={size.iconInline} color={color.primary} /> : null}
+      </Pressable>
+    );
+  };
 
   const take = (): void => {
     if (picked === null) return;
@@ -218,49 +265,27 @@ export function TakePartStep({
         onRetry={() => setReloadNonce((n) => n + 1)}
         testID={testID}
       >
-        {(rows) =>
-          rows.length === 0 ? (
+        {({ fitting, rest }) =>
+          fitting.length === 0 && rest.length === 0 ? (
             <Text style={[styles.muted, styles.empty]}>
               {searchText === '' ? ti('inventory.list.emptyHint') : ti('inventory.list.noMatches')}
             </Text>
           ) : (
-            <View style={styles.choices}>
-              {rows.map((row) => {
-                const selected = picked?.id === row.id;
-                return (
-                  <Pressable
-                    key={row.id}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={`${row.name}, ${ti('inventory.list.stockCount', { count: stockText(row.onHand) })}`}
-                    onPress={() => {
-                      setPicked(row);
-                      setQty(1);
-                    }}
-                    style={({ pressed }) => [
-                      styles.choice,
-                      selected ? styles.choiceSelected : null,
-                      pressed ? styles.choicePressed : null,
-                    ]}
-                    testID={`${testID}.choice.${row.id}`}
-                  >
-                    <View style={styles.usedText}>
-                      <Text style={styles.name}>{row.name}</Text>
-                      {row.fits === null ? null : (
-                        <Text style={styles.muted} numberOfLines={1}>
-                          {row.fits}
-                        </Text>
-                      )}
-                    </View>
-                    <Text style={[styles.stock, row.onHand < 0 ? styles.stockOut : null]}>
-                      {ti('inventory.list.stockCount', { count: stockText(row.onHand) })}
-                    </Text>
-                    {selected ? (
-                      <Icon name="check" size={size.iconInline} color={color.primary} />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+            <View>
+              {fitting.length === 0 || device === undefined ? null : (
+                <>
+                  <Text style={styles.group} testID={`${testID}.fitting`}>
+                    {ti('inventory.use.fitsDevice', {
+                      model: `${device.brand} ${device.model}`.trim(),
+                    })}
+                  </Text>
+                  <View style={styles.choices}>{fitting.map(choice)}</View>
+                  {rest.length === 0 ? null : (
+                    <Text style={styles.group}>{ti('inventory.use.otherParts')}</Text>
+                  )}
+                </>
+              )}
+              <View style={styles.choices}>{rest.map(choice)}</View>
             </View>
           )
         }
@@ -348,6 +373,7 @@ const styles = StyleSheet.create({
   picked: { marginBottom: space.xl, gap: space.md },
   pickedName: { ...type.heading, color: color.text },
   message: { marginTop: space.xs, marginBottom: space.lg },
+  group: { ...type.caption, fontWeight: '600', color: color.textMuted, marginTop: space.md },
   choices: { marginTop: space.md },
   choice: {
     minHeight: touch.rowMin,

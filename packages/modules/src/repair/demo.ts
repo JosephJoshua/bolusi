@@ -14,6 +14,7 @@ import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { IN_PROGRESS_OUTCOMES, REPAIR_PERMISSION, type RepairOutcome } from './constants.js';
 import { partsInWork } from './flows.js';
+import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
@@ -1101,6 +1102,9 @@ export function demoRepairRuntime(
       return () => listeners.delete(listener);
     },
     notify,
+    searchModels: catalogModelSearch({
+      query: (name: string, input: Input) => queries[name]!(input),
+    } as unknown as Pick<RepairRuntime, 'query'>),
   });
 
   let permitted = new Set<string>(actor.permissions);

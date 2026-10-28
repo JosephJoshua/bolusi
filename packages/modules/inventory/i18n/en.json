@@ -2,7 +2,7 @@
   "opType": {
     "partAdded": "Part added",
     "partEdited": "Part changed",
-    "stockCounted": "Stock counted",
+    "stockCounted": "Stock corrected",
     "partTaken": "Part taken",
     "partPutBack": "Part put back"
   },
@@ -34,7 +34,7 @@
   "action": {
     "add": "Add part",
     "edit": "Edit",
-    "count": "Count stock",
+    "count": "Correct stock",
     "archive": "Archive",
     "restore": "Make active again",
     "save": "Save"
@@ -48,14 +48,20 @@
     "fits": "Fits phones (optional)",
     "fitsPlaceholder": "E.g. Redmi Note 10, Note 10S",
     "stock": "Stock now",
-    "nameRequired": "Enter the part name first."
+    "nameRequired": "Enter the part name first.",
+    "fitsSearch": "Search phone model",
+    "removeFit": "Remove",
+    "addTyped": "Add “{model}”",
+    "notInCatalog": "Not in the phone list",
+    "addAnother": "Add another",
+    "savedAnother": "“{name}” saved."
   },
   "count": {
-    "title": "Count stock",
+    "title": "Correct stock",
     "counted": "On the shelf",
     "recorded": "Recorded {count}",
     "note": "Note (optional)",
-    "save": "Save count",
+    "save": "Save correction",
     "more": "{count} more",
     "less": "{count} fewer",
     "same": "Matches"
@@ -69,7 +75,7 @@
     "title": "Part details"
   },
   "movement": {
-    "counted": "Counted: {count}",
+    "counted": "Corrected to {count}",
     "taken": "Taken for {use}",
     "putBack": "Put back from {use}"
   },
@@ -96,12 +102,14 @@
     "none": "No parts yet.",
     "putBackAction": "Put back in stock",
     "searchHint": "Search parts",
-    "picked": "Selected"
+    "picked": "Selected",
+    "fitsDevice": "Fits {model}",
+    "otherParts": "Other parts"
   },
   "done": {
     "added": "Part added.",
     "saved": "Changes saved.",
-    "counted": "Stock count saved.",
+    "counted": "Stock corrected.",
     "archived": "Part archived.",
     "restored": "Part is active again.",
     "taken": "Part taken.",

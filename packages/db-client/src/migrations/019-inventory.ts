@@ -36,6 +36,16 @@ export const inventoryMigration: ClientMigration = {
   user_id   TEXT NOT NULL,
   at        INTEGER NOT NULL
 )`,
+    `CREATE TABLE inventory_part_fits (
+  part_id   TEXT NOT NULL,
+  position  INTEGER NOT NULL,
+  tenant_id TEXT NOT NULL,
+  brand     TEXT NOT NULL,
+  model     TEXT NOT NULL,
+  model_key TEXT NOT NULL,
+  PRIMARY KEY (part_id, position)
+)`,
+    `CREATE INDEX idx_inventory_part_fits_model ON inventory_part_fits (model_key)`,
     `CREATE INDEX idx_inventory_movements_part ON inventory_movements (store_id, part_id, at)`,
     `CREATE INDEX idx_inventory_movements_use ON inventory_movements (use_id)`,
   ],

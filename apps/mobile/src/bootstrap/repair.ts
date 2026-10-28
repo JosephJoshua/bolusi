@@ -8,7 +8,7 @@
 import type { CommandIdentity } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import { REPAIR_TICKET_ENTITY } from '@bolusi/modules/repair';
-import { tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { catalogModelSearch, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { PhotoCapture } from '@bolusi/modules/screen-kit';
 import type { Kysely } from 'kysely';
 
@@ -91,16 +91,25 @@ export function createSessionRepairRuntime(deps: {
     storeId: identity.storeId,
     deviceId: identity.deviceId,
   });
-  return createRepairRuntime({
+  // The parts a servisan draws on, and the parts list the shell opens from the account menu. Its
+  // "fits" picker searches repair's phone catalog, bound once the repair runtime exists.
+  let repair: RepairRuntime | null = null;
+  const inventory = createInventoryRuntime({
+    runtime,
+    invalidation: app.invalidation,
+    identity,
+    searchModels: (text, limit) => catalogModelSearch(repair!)(text, limit),
+  });
+  repair = createRepairRuntime({
     runtime,
     db: app.db.db,
     invalidation: app.invalidation,
     identity,
     media: deps.media,
     printing,
-    // The parts a servisan draws on, and the parts list the shell opens from the account menu.
-    inventory: createInventoryRuntime({ runtime, invalidation: app.invalidation, identity }),
+    inventory,
   });
+  return repair;
 }
 
 /**

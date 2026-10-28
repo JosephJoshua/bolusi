@@ -39,7 +39,7 @@ export interface PartDetailProps {
   readonly partId: string;
   readonly chrome: ScreenChrome;
   readonly onBack: () => void;
-  readonly onEdit: (part: PartRow) => void;
+  readonly onEdit: (part: PartDetailRow) => void;
   readonly onCount: (part: PartRow) => void;
   /** What the last step did ("Jumlah stok disimpan."), shown until dismissed. */
   readonly notice: InventoryKey | null;
@@ -82,7 +82,7 @@ export function PartDetail({
           partId: row.id,
           name: row.name,
           code: row.code,
-          fits: row.fits,
+          fits: [...row.models],
           archived,
         }),
       )

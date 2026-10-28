@@ -7,7 +7,8 @@ import { sameDeviceModel, type DeviceModelRow } from './device-models.js';
 import { colourChoices, memoryVariants } from './device-specs.js';
 import type { IntakeDraft } from './flows.js';
 import { tn } from './i18n.js';
-import { useRepairQuery } from './runtime.js';
+import type { PhoneModelOption } from '../inventory/runtime.js';
+import { useRepairQuery, type RepairRuntime } from './runtime.js';
 
 /** The catalog model a brand and model name are, when the catalog surely has it (findDeviceModel). */
 export function useCatalogModel(brand: string, model: string): DeviceModelRow | null {
@@ -90,4 +91,20 @@ export function useModelPicker(
       set({ brand: matched.brand, model: matched.model });
     },
   };
+}
+
+/**
+ * The phone catalog search as other modules take it (the parts list's "fits" picker): the same
+ * models, spellings and captions the intake offers.
+ */
+export function catalogModelSearch(
+  runtime: Pick<RepairRuntime, 'query'>,
+): (text: string, limit: number) => Promise<readonly PhoneModelOption[]> {
+  return async (text, limit) =>
+    (await runtime.query('searchDeviceModels', { text, limit })).rows.map((row) => ({
+      key: row.key,
+      brand: row.brand,
+      model: row.model,
+      caption: modelCaption(row),
+    }));
 }

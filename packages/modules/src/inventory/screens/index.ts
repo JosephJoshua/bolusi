@@ -13,5 +13,6 @@ export {
   InventoryRuntimeProvider,
   useInventoryRuntime,
   type InventoryRuntime,
+  type PhoneModelOption,
 } from '../runtime.js';
 export { registerInventoryCatalog, ti } from '../i18n.js';

@@ -10,6 +10,7 @@ import {
   INVENTORY_PART_ENTITY,
   type MovementKind,
 } from './constants.js';
+import { compactModel } from '../shared/model-key.js';
 import type { InventoryDatabase } from './schema.js';
 
 type Applier = ProjectionApplier<InventoryDatabase>;
@@ -30,6 +31,22 @@ export const inventoryPartsTable: ProjectionTableManifest = {
   primaryKey: ['id'],
   entityType: INVENTORY_PART_ENTITY,
   entityIdColumn: 'id',
+  projectionVersion: 1,
+};
+
+/** The phone models a part fits: child rows of the part entity, rewritten with each edit. */
+export const inventoryPartFitsTable: ProjectionTableManifest = {
+  columns: {
+    part_id: 'text',
+    position: 'integer',
+    tenant_id: 'text',
+    brand: 'text',
+    model: 'text',
+    model_key: 'text',
+  },
+  primaryKey: ['part_id', 'position'],
+  entityType: INVENTORY_PART_ENTITY,
+  entityIdColumn: 'part_id',
   projectionVersion: 1,
 };
 
@@ -59,10 +76,42 @@ function payloadOf<T>(op: ProjectionOperation): T {
   return op.payload as unknown as T;
 }
 
+interface PartFit {
+  readonly brand: string;
+  readonly model: string;
+}
+
 interface PartDetails {
   readonly name: string;
   readonly code: string | null;
-  readonly fits: string | null;
+  readonly fits: readonly PartFit[];
+}
+
+/** "Xiaomi Redmi Note 10, Poco M5s": the fits as one line, for lists and the search index. */
+export function fitsLine(fits: readonly PartFit[]): string | null {
+  return fits.length === 0 ? null : fits.map((f) => `${f.brand} ${f.model}`.trim()).join(', ');
+}
+
+async function writeFits(
+  db: Parameters<Applier>[0],
+  op: ProjectionOperation,
+  fits: readonly PartFit[],
+) {
+  await db.deleteFrom('inventoryPartFits').where('partId', '=', op.entityId).execute();
+  if (fits.length === 0) return;
+  await db
+    .insertInto('inventoryPartFits')
+    .values(
+      fits.map((fit, position) => ({
+        partId: op.entityId,
+        position,
+        tenantId: op.tenantId,
+        brand: fit.brand,
+        model: fit.model,
+        modelKey: compactModel(fit.brand, fit.model),
+      })),
+    )
+    .execute();
 }
 
 export const partAddedApplier: Applier = async (db, op) => {
@@ -74,7 +123,7 @@ export const partAddedApplier: Applier = async (db, op) => {
       tenantId: op.tenantId,
       name: payload.name,
       code: payload.code,
-      fits: payload.fits,
+      fits: fitsLine(payload.fits),
       archived: 0,
       createdBy: op.userId,
       createdAt: op.timestamp,
@@ -82,6 +131,7 @@ export const partAddedApplier: Applier = async (db, op) => {
       updatedAt: op.timestamp,
     })
     .execute();
+  await writeFits(db, op, payload.fits);
 };
 
 export const partEditedApplier: Applier = async (db, op) => {
@@ -91,7 +141,7 @@ export const partEditedApplier: Applier = async (db, op) => {
     .set({
       name: payload.name,
       code: payload.code,
-      fits: payload.fits,
+      fits: fitsLine(payload.fits),
       archived: payload.archived ? 1 : 0,
       updatedBy: op.userId,
       updatedAt: op.timestamp,
@@ -99,6 +149,7 @@ export const partEditedApplier: Applier = async (db, op) => {
     .where('id', '=', op.entityId)
     .where('tenantId', '=', op.tenantId)
     .execute();
+  await writeFits(db, op, payload.fits);
 };
 
 interface Movement {

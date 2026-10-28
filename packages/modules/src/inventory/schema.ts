@@ -9,7 +9,10 @@ export interface InventoryPartsTable {
   name: string;
   /** The supplier's or shop's code, if it has one. */
   code: string | null;
-  /** Which phones it fits, as typed: `Redmi Note 10, Note 10S, Poco M5s`. */
+  /**
+   * The phones it fits, as one line for lists and search: `Xiaomi Redmi Note 10, Xiaomi Poco M5s`.
+   * The models themselves are rows of `inventory_part_fits`.
+   */
   fits: string | null;
   /** 1 once taken off the list. Its history stays; it can no longer be taken. */
   archived: number;
@@ -40,7 +43,21 @@ export interface InventoryMovementsTable {
   at: number;
 }
 
+/** One phone model a part fits, picked from the phone catalog (or typed when it is not there). */
+export interface InventoryPartFitsTable {
+  partId: string;
+  /** Order as picked. */
+  position: number;
+  tenantId: string;
+  /** Empty when only the model was typed. */
+  brand: string;
+  model: string;
+  /** `compactModel(brand, model)`: how a servisan's phone finds the parts that fit it. */
+  modelKey: string;
+}
+
 export interface InventoryDatabase {
   inventoryParts: InventoryPartsTable;
   inventoryMovements: InventoryMovementsTable;
+  inventoryPartFits: InventoryPartFitsTable;
 }

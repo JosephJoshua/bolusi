@@ -77,6 +77,15 @@ export interface InventoryMovements {
   userId: string;
 }
 
+export interface InventoryPartFits {
+  brand: string;
+  model: string;
+  modelKey: string;
+  partId: string;
+  position: number;
+  tenantId: string;
+}
+
 export interface InventoryParts {
   archived: number;
   code: string | null;
@@ -428,6 +437,7 @@ export interface DB {
   conflicts: Conflicts;
   deviceRegistry: DeviceRegistry;
   inventoryMovements: InventoryMovements;
+  inventoryPartFits: InventoryPartFits;
   inventoryParts: InventoryParts;
   mediaItems: MediaItems;
   metaKv: MetaKv;
