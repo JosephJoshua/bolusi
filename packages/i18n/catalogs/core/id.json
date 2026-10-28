@@ -112,5 +112,10 @@
     "main": "Menu utama",
     "collapse": "Ciutkan menu",
     "expand": "Lebarkan menu"
+  },
+  "update": {
+    "ready": "Versi baru siap",
+    "later": "Terpasang sendiri saat aplikasi ditutup.",
+    "install": "Pasang sekarang"
   }
 }

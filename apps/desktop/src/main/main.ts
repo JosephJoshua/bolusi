@@ -1,13 +1,27 @@
 // The Electron main process: one locked-down window for the counter screens. The renderer gets no
-// Node, no preload API yet and no way to open other pages; the offline core moves into a utility
-// process behind a narrow IPC port in the next step.
-import { app, BrowserWindow, session } from 'electron';
+// Node and no way to open other pages; the preload gives it a few narrow calls (`bridge.ts`):
+// printing and updates for now, the offline core next.
+import { app, BrowserWindow, session, type IpcMainInvokeEvent } from 'electron';
 import { fileURLToPath } from 'node:url';
+
+import { DeviceSettingsFile } from './device-settings.js';
+import { registerPrinting } from './printing.js';
+import { registerUpdates } from './updater.js';
 
 // The dev server is for development only; an installed app never loads a page from elsewhere.
 const DEV_SERVER_URL = app.isPackaged ? undefined : process.env['BOLUSI_DESKTOP_DEV_URL'];
 const ALLOWED_PERMISSIONS: ReadonlySet<string> = new Set(['clipboard-sanitized-write']);
 const RENDERER_INDEX = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
+const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url));
+
+/** The counter windows this process opened; only their own page may call in. */
+const counterWindows = new Set<BrowserWindow>();
+
+function trusted(event: IpcMainInvokeEvent): boolean {
+  const frame = event.senderFrame;
+  if (frame === null || frame !== event.sender.mainFrame) return false;
+  return [...counterWindows].some((window) => window.webContents === event.sender);
+}
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -24,8 +38,11 @@ function createWindow(): void {
       nodeIntegration: false,
       webviewTag: false,
       spellcheck: false,
+      preload: PRELOAD,
     },
   });
+  counterWindows.add(window);
+  window.on('closed', () => counterWindows.delete(window));
   window.once('ready-to-show', () => window.show());
 
   // The app is one page: nothing navigates it or opens another window. Opening a link in the
@@ -60,6 +77,8 @@ void app.whenReady().then(() => {
     callback(allowed(permission)),
   );
   session.defaultSession.setPermissionCheckHandler((_contents, permission) => allowed(permission));
+  registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
+  registerUpdates(trusted, () => [...counterWindows].map((window) => window.webContents));
   createWindow();
 });
 

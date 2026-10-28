@@ -108,6 +108,11 @@ const source = {
       },
       account: { menu: 'Menu akun', switchUser: 'Ganti pengguna' },
       nav: { main: 'Menu utama', collapse: 'Ciutkan menu', expand: 'Lebarkan menu' },
+      update: {
+        ready: 'Versi baru siap',
+        later: 'Terpasang sendiri saat aplikasi ditutup.',
+        install: 'Pasang sekarang',
+      },
     },
     auth: {
       switcher: {
@@ -536,6 +541,11 @@ export const resources = {
         },
         account: { menu: 'Account menu', switchUser: 'Switch user' },
         nav: { main: 'Main menu', collapse: 'Collapse menu', expand: 'Expand menu' },
+        update: {
+          ready: 'New version ready',
+          later: 'Installs by itself when the app closes.',
+          install: 'Install now',
+        },
       },
       auth: {
         switcher: {

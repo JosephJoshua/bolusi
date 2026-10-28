@@ -10,6 +10,7 @@ export {
   type ButtonVariant,
 } from './components/Button.js';
 export { Chip, ToggleChip, type ChipTone } from './components/Chip.js';
+export { ChoiceList, type ChoiceOption } from './components/ChoiceList.js';
 export { ConfirmDialog } from './components/ConfirmDialog.js';
 export {
   DataTable,

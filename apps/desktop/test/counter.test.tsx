@@ -257,11 +257,11 @@ describe('counter app over demo data', () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
     fireEvent.click(byTestId('nav.settings'));
-    const a4 = await screen.findByTestId('repair.desk.paper.choice.a4');
+    const a4 = await screen.findByTestId('repair.desk.printing.paper.a4');
     await waitFor(() =>
-      expect(byTestId('repair.desk.paper.choice.continuous_half').getAttribute('data-state')).toBe(
-        'on',
-      ),
+      expect(
+        byTestId('repair.desk.printing.paper.continuous_half').getAttribute('data-state'),
+      ).toBe('on'),
     );
     fireEvent.click(a4);
     await waitFor(() => expect(a4.getAttribute('data-state')).toBe('on'));

@@ -112,5 +112,10 @@
     "main": "Main menu",
     "collapse": "Collapse menu",
     "expand": "Expand menu"
+  },
+  "update": {
+    "ready": "New version ready",
+    "later": "Installs by itself when the app closes.",
+    "install": "Install now"
   }
 }

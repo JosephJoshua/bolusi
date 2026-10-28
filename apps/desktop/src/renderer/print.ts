@@ -1,7 +1,22 @@
-// Printing in this build: the slip goes to the Windows print dialog through a hidden frame, so a
-// counter prints on whatever printer the PC has. The dialog cannot say whether it printed, so the
-// screen asks before the print counts. Raw ESC/P straight to a dot-matrix printer comes later.
-import type { RepairPrinting } from '@bolusi/modules/repair/desktop';
+// Printing on the counter PC. Slips go to the printer picked in Settings without a dialog: a
+// dot-matrix form as raw ESC/P text, plain paper as the HTML page. The printer and paper are this
+// PC's own settings, kept by the main process. Run outside Electron (the dev server in a browser),
+// there is no bridge, so the page goes to the browser's print dialog and the screen asks whether
+// it printed.
+import { renderEscp, zPaperSettings, type PaperSettings } from '@bolusi/core';
+import {
+  PrinterProblem,
+  type DecodedImage,
+  type RepairPrinting,
+  type SlipOutput,
+} from '@bolusi/modules/repair/desktop';
+
+import type { PrintersBridge } from '../main/bridge.js';
+
+/** The main process's printing calls, when the page runs inside the desktop app. */
+export function printersBridge(): PrintersBridge | undefined {
+  return (window as { bolusi?: { printers?: PrintersBridge } }).bolusi?.printers;
+}
 
 /** Prints one HTML page through the system dialog; resolves once the dialog is up or done. */
 export function printHtml(html: string): Promise<void> {
@@ -31,14 +46,73 @@ export function printHtml(html: string): Promise<void> {
   });
 }
 
-/** The demo's printing, with the PC's store name and output. */
-export function desktopPrinting(base: RepairPrinting, storeName: string): RepairPrinting {
+// A logo bigger than this is scaled down before it is read: the slip needs a couple of inches.
+const DECODE_MAX_PX = 1024;
+
+/** The pixels of a `data:` URI picture, through a canvas; null when it does not decode. */
+export async function decodeImage(dataUri: string): Promise<DecodedImage | null> {
+  try {
+    const image = new Image();
+    image.src = dataUri;
+    await image.decode();
+    const scale = Math.min(1, DECODE_MAX_PX / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (context === null) return null;
+    context.drawImage(image, 0, 0, width, height);
+    return { rgba: context.getImageData(0, 0, width, height).data, width, height };
+  } catch {
+    return null;
+  }
+}
+
+async function sendToPrinter(printers: PrintersBridge, slip: SlipOutput): Promise<'done'> {
+  const result = slip.paper.continuous
+    ? await printers.printRaw(renderEscp(slip.document, slip.paper), slip.jobName)
+    : await printers.printPage(slip.html, slip.paper);
+  if (!result.ok) throw new PrinterProblem(result.problem);
+  return 'done';
+}
+
+/** The demo's printing, with the PC's store name, and its printers when the app has them. */
+export function desktopPrinting(
+  base: RepairPrinting,
+  storeName: string,
+  printers: PrintersBridge | undefined = printersBridge(),
+): RepairPrinting {
+  const named = { ...base, storeName: () => Promise.resolve(storeName) };
+  if (printers === undefined) {
+    return {
+      ...named,
+      output: async (slip) => {
+        await printHtml(slip.html);
+        return 'unconfirmed';
+      },
+    };
+  }
   return {
-    ...base,
-    storeName: () => Promise.resolve(storeName),
-    output: async (slip) => {
-      await printHtml(slip.html);
-      return 'unconfirmed';
+    ...named,
+    readPaper: async (): Promise<PaperSettings | null> => {
+      const parsed = zPaperSettings.safeParse((await printers.settings()).paper);
+      return parsed.success ? parsed.data : null;
     },
+    writePaper: (paper) => printers.setPaper(paper),
+    // A PC prints; sharing a PDF is the phone's.
+    output: (slip, how) =>
+      how === 'share' ? Promise.resolve('cancelled') : sendToPrinter(printers, slip),
+    printers: {
+      list: async () =>
+        (await printers.list()).map((printer) => ({
+          name: printer.name,
+          label: printer.displayName,
+        })),
+      chosen: async () => (await printers.settings()).printer,
+      choose: (name) => printers.choose(name),
+    },
+    decodeImage,
   };
 }

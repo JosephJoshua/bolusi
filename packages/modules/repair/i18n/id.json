@@ -457,7 +457,13 @@
     "paperFull": "Continuous penuh",
     "paperA4": "A4",
     "paperA5": "A5",
-    "onPaper": "Kertas {paper}"
+    "onPaper": "Kertas {paper}",
+    "onPrinter": "Dicetak di {printer}, kertas {paper}",
+    "problem": {
+      "noPrinter": "Pilih printernya dulu di Pengaturan.",
+      "printerMissing": "Printernya tidak ditemukan. Cek kabel dan dayanya, atau pilih printer lain di Pengaturan.",
+      "failed": "Belum bisa mencetak. Cek printernya, lalu coba lagi."
+    }
   },
   "downPayment": {
     "recordTitle": "Catat DP",
@@ -591,7 +597,23 @@
   "paper": {
     "title": "Kertas nota",
     "phoneSummary": "Ukuran kertas di HP ini",
-    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini.",
-    "deskHint": "Semua nota dari komputer ini dicetak di kertas ini."
+    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini."
+  },
+  "testPage": {
+    "job": "Halaman uji",
+    "title": "HALAMAN UJI",
+    "ruler": "Garis ini harus muat utuh dari kiri ke kanan.",
+    "check": "Kalau ada yang terpotong atau miring, atur posisi kertas lalu cetak lagi.",
+    "print": "Cetak halaman uji",
+    "sent": "Halaman uji dikirim ke printer."
+  },
+  "printer": {
+    "title": "Printer dan kertas",
+    "hint": "Berlaku untuk semua nota dari komputer ini.",
+    "printer": "Printer",
+    "refresh": "Cari printer lagi",
+    "none": "Belum ada printer di komputer ini. Pasang printernya di Windows dulu, lalu cari lagi.",
+    "loadFailed": "Daftar printer belum bisa dibuka.",
+    "gone": "{name} tidak terpasang lagi di komputer ini. Pilih printer lain."
   }
 }

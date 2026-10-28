@@ -2,7 +2,7 @@
 import { t, translateRoleKey } from '@bolusi/i18n';
 import {
   IntakePage,
-  PaperSettings,
+  PrintSettings,
   RepairBoardPage,
   RepairRuntimeProvider,
   tn,
@@ -14,6 +14,7 @@ import { ChevronsUpDown, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from './demo.js';
+import { UpdateNotice, useAppVersion } from './updates.js';
 
 type Page =
   { readonly kind: 'board' } | { readonly kind: 'intake' } | { readonly kind: 'settings' };
@@ -125,7 +126,10 @@ function Counter({
             },
           ]}
           footer={(compact) => (
-            <PersonMenu person={person} compact={compact} onSwitchPerson={onSwitchPerson} />
+            <div className="flex flex-col gap-3">
+              <UpdateNotice compact={compact} />
+              <PersonMenu person={person} compact={compact} onSwitchPerson={onSwitchPerson} />
+            </div>
           )}
         />
       }
@@ -159,12 +163,18 @@ function Counter({
 
 /** This PC's own settings; the store's (slip header, intake lists) come with the owner screens. */
 function SettingsPage(): React.JSX.Element {
+  const version = useAppVersion();
   return (
     <>
       <PageHeader title={t('core.settings.title')} />
       <div className="min-h-0 flex-1 overflow-auto px-6 pb-6" data-testid="desktop.settings">
         <div className="flex max-w-2xl flex-col gap-4">
-          <PaperSettings />
+          <PrintSettings />
+          {version === null ? null : (
+            <p className="text-small text-text-muted" data-testid="desktop.version">
+              {t('core.settings.appVersion')} {version}
+            </p>
+          )}
         </div>
       </div>
     </>
