@@ -221,9 +221,20 @@ describe('the printer reminder', () => {
     expect(reminder.getAttribute('aria-label')).toBe('Printer belum dipilih');
     fireEvent.click(reminder);
     await screen.findByTestId('desktop.settings.computer');
+    // Gone as soon as the choice is saved, still in Settings.
     fireEvent.click(await screen.findByText('EPSON LX-310'));
-    fireEvent.click(byTestId('nav.repair'));
     await waitFor(() => expect(screen.queryByTestId('desktop.printerReminder')).toBeNull());
+  });
+
+  it("opens this computer's settings again after the person moved to another section", async () => {
+    setBridge(fakePrinters());
+    renderApp();
+    fireEvent.click(await screen.findByTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
+    fireEvent.click(byTestId('desktop.settings.nav.account'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.settings.computer')).toBeNull());
+    fireEvent.click(byTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
   });
 
   it('says when the chosen printer is gone', async () => {

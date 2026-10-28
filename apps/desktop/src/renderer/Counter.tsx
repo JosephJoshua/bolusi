@@ -137,10 +137,18 @@ export function Counter({
     if (guard === null) proceed();
     else guard(proceed);
   };
+  // Each opening of Settings at a section is a fresh Settings, so it lands there again even when
+  // the person had moved to another section since.
+  const [settingsVisit, setSettingsVisit] = useState(0);
   const go = (next: Page): void => {
     // Settings opened at a section (the printer reminder) goes there even from Settings.
     const toSection = next.kind === 'settings' && next.section !== undefined;
-    if (next.kind !== page.kind || toSection) leave(() => setPage(next));
+    if (next.kind !== page.kind || toSection) {
+      leave(() => {
+        if (toSection) setSettingsVisit((n) => n + 1);
+        setPage(next);
+      });
+    }
   };
   // The core reads whom the setup waits for just after the session opens; it may land after this.
   useEffect(() => {
@@ -238,7 +246,7 @@ export function Counter({
         <DeviceSetupPage onDone={finishSetup} />
       ) : page.kind === 'settings' ? (
         <SettingsPage
-          key={page.section ?? 'settings'}
+          key={`${page.section ?? 'settings'}.${settingsVisit}`}
           person={person}
           access={settings}
           initialPage={page.section}
