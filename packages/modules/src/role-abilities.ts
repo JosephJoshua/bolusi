@@ -89,7 +89,6 @@ export const ROLE_ABILITY_GROUPS = [
         id: 'syncProblems',
         permissionIds: [PLATFORM_PERMISSION.conflictView, PLATFORM_PERMISSION.conflictAcknowledge],
       },
-      { id: 'pinUnlock', permissionIds: [AUTH_PERMISSION.pinUnlock] },
     ],
   },
 ] as const satisfies readonly RoleAbilityGroup[];
@@ -173,6 +172,8 @@ export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.userEdit,
   AUTH_PERMISSION.userDeactivate,
   AUTH_PERMISSION.userResetPin,
+  // Clearing a lockout lets PIN guessing start over on a phone that may be offline.
+  AUTH_PERMISSION.pinUnlock,
   AUTH_PERMISSION.limitManage,
   AUTH_PERMISSION.deviceEnroll,
   AUTH_PERMISSION.deviceRevoke,

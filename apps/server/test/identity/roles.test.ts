@@ -179,6 +179,13 @@ describe('editing a role', () => {
     const mainOwnerRole = await roleIdOf(h, p.tenantId, 'main_owner');
     expect((await call(owner, 'PATCH', `/${mainOwnerRole}`, { limited: true })).status).toBe(403);
     expect((await call(storeOwner, 'PATCH', `/${cashier}`, { limited: true })).status).toBe(403);
+    // Not an id at all is refused like any role that is not there, never a server error.
+    expect((await call(owner, 'PATCH', '/not-a-role', { limited: true })).status).toBe(403);
+    expect((await call(owner, 'DELETE', '/not-a-role')).status).toBe(403);
+    // Clearing a PIN lockout stays the owners': guessing would start over on an offline phone.
+    expect(
+      (await call(owner, 'PATCH', `/${cashier}`, { permissionIds: ['auth.pin_unlock'] })).status,
+    ).toBe(422);
     expect(await roleRow(cashier)).toStrictEqual(before);
   });
 });

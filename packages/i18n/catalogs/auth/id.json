@@ -338,9 +338,7 @@
       "notes": "Catatan",
       "notesHint": "Tulis dan arsipkan catatan toko",
       "syncProblems": "Masalah sinkron",
-      "syncProblemsHint": "Lihat dan tandai perubahan yang bentrok",
-      "pinUnlock": "Buka PIN terkunci",
-      "pinUnlockHint": "Setelah karyawan salah PIN berkali-kali"
+      "syncProblemsHint": "Lihat dan tandai perubahan yang bentrok"
     }
   }
 }

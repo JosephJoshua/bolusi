@@ -338,9 +338,7 @@
       "notes": "Notes",
       "notesHint": "Write and archive store notes",
       "syncProblems": "Sync problems",
-      "syncProblemsHint": "See and settle clashing changes",
-      "pinUnlock": "Unlock PINs",
-      "pinUnlockHint": "After someone enters a wrong PIN too often"
+      "syncProblemsHint": "See and settle clashing changes"
     }
   }
 }

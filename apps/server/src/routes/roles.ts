@@ -24,6 +24,8 @@ import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 import { uuidv7 } from '../uuidv7.js';
 import { rolesConferOwnerPowers } from './users.js';
 
+const LOWERCASE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 /** The preset roles' internal names: a made role never takes one, so its name is always its own. */
 const RESERVED_NAMES = new Set(DEFAULT_ROLES.map((role) => role.key.toLowerCase()));
 
@@ -58,6 +60,8 @@ async function requireMainOwner(
  * never a 404), and not an owner role, so nobody edits their way into or out of owner powers.
  */
 async function loadEditableRole(db: TenantDb, roleId: string): Promise<EditableRole> {
+  // Not an id at all: Postgres would fail on it rather than find nothing.
+  if (!LOWERCASE_UUID.test(roleId)) throw new ApiError('PERMISSION_DENIED');
   const role = await db
     .selectFrom('roles')
     .select(['id', 'name', 'scopeType', 'isSystemDefault', 'limited'])
