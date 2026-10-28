@@ -15,7 +15,7 @@ import {
 } from '../src/components/Banner.js';
 import { FreshnessCell } from '../src/components/FreshnessCell.js';
 import { color } from '../src/tokens.js';
-import { render } from './render.js';
+import { fire, render } from './render.js';
 
 describe('staleness → banner mapping (§3.6; levels from 03-state-machines §8)', () => {
   test('fresh raises no banner — quiet is a feature', () => {
@@ -112,6 +112,36 @@ describe('suppressed affix (§3.6)', () => {
   test('no affix when nothing is suppressed', () => {
     const r = render(<Banner variant="danger" message="x" suppressedCount={0} onPress={vi.fn()} />);
     expect(r.query('ui.banner.affix')).toBeNull();
+  });
+});
+
+describe('tap target (§3.6)', () => {
+  test('the message itself opens Sync Status, not only the chevron', () => {
+    const onPress = vi.fn();
+    const r = render(<Banner variant="danger" message="x" suppressedCount={2} onPress={onPress} />);
+    const target = r.get('ui.banner.open');
+    expect(target.queryAll((n) => n.props['testID'] === 'ui.banner.message')).toHaveLength(1);
+    expect(target.queryAll((n) => n.props['testID'] === 'ui.banner.affix')).toHaveLength(1);
+    fire(target, 'onPress');
+    expect(onPress).toHaveBeenCalledOnce();
+  });
+
+  test('a pressable banner still announces itself as an alert', () => {
+    const r = render(<Banner variant="danger" message="x" onPress={vi.fn()} />);
+    expect(r.get('ui.banner').props['accessibilityRole']).toBe('alert');
+  });
+
+  test('the action button stays its own target beside the message', () => {
+    const onPress = vi.fn();
+    const onAction = vi.fn();
+    const r = render(
+      <Banner variant="danger" message="x" onPress={onPress} actionLabel="y" onAction={onAction} />,
+    );
+    const action = r.get('ui.banner.action');
+    expect(r.get('ui.banner.open').queryAll((n) => n === action)).toHaveLength(0);
+    fire(action, 'onPress');
+    expect(onAction).toHaveBeenCalledOnce();
+    expect(onPress).not.toHaveBeenCalled();
   });
 });
 
