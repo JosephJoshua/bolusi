@@ -15,8 +15,8 @@ import {
   digitsOf,
   digitsText,
   lineKind,
+  methodOffered,
   newPaymentLine,
-  offeredAccount,
   paymentMethods,
   type PaymentEntry,
   type PaymentLine,
@@ -56,14 +56,16 @@ export function PaymentLines({
     <View style={styles.lines} testID={testID}>
       {lines.map((line, index) => {
         const id = `${testID}.line${String(index)}`;
-        const account = offeredAccount(line.account, accounts);
+        const account = line.account;
+        // A method switched off since it was picked: no chip is on, and the line asks again.
+        const offered = methodOffered(account, accounts);
         const kind = lineKind(account, accounts);
         const problem = entry.problems[line.key];
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
         return (
           <View key={line.key} style={[styles.line, index > 0 && styles.nextLine]} testID={id}>
-            {methods.length > 1 ? (
+            {methods.length > 1 || !offered ? (
               <ChipRow testID={`${id}.methods`}>
                 {methods.map((method) => (
                   <ToggleChip
@@ -85,7 +87,11 @@ export function PaymentLines({
               keyboardType="number-pad"
               testID={`${id}.amount`}
             />
-            {kind === 'cash' ? (
+            {!offered ? (
+              <Text style={styles.problem} testID={`${id}.methodGone`}>
+                {tm('money.pay.problem.method')}
+              </Text>
+            ) : kind === 'cash' ? (
               <View style={styles.field}>
                 <TextInput
                   label={tm('money.pay.tendered')}
@@ -188,6 +194,7 @@ const styles = StyleSheet.create({
   remaining: { marginTop: -space.md },
   remainingText: { ...type.bodySm, color: color.textMuted },
   overpaid: { ...type.bodySm, color: color.danger, marginTop: -space.md },
+  problem: { ...type.bodySm, color: color.danger },
   // The text, not the hit box, lines up with the fields above.
   add: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: -space.md },
 });

@@ -20,7 +20,8 @@ export interface PaymentLine {
   readonly reference: string;
 }
 
-export type PaymentLineProblem = 'amount' | 'reference' | 'tendered';
+/** `method`: the store switched the line's method off since it was picked. */
+export type PaymentLineProblem = 'amount' | 'method' | 'reference' | 'tendered';
 
 export interface PaymentEntry {
   /** The payments to record, once every line is complete; empty while one is not. */
@@ -82,8 +83,12 @@ export function paymentEntry(
       continue;
     }
     paid += amount;
-    // A method switched off while the line was open counts as the drawer, as its chips show.
-    const account = offeredAccount(line.account, accounts);
+    // A method switched off while the line was open is picked again, never booked to the drawer.
+    const account = line.account;
+    if (!methodOffered(account, accounts)) {
+      problems[line.key] = 'method';
+      continue;
+    }
     const kind = lineKind(account, accounts);
     const reference = kind === 'cash' ? '' : line.reference.trim();
     if (referenceRequired(kind) && reference === '') {
@@ -130,12 +135,17 @@ export function newPaymentLine(
   };
 }
 
+/** Whether the store still offers a method picked earlier: the drawer always. */
+export function methodOffered(account: string, accounts: readonly PaymentAccountRow[]): boolean {
+  return account === CASH_ACCOUNT || accounts.some((row) => `account:${row.id}` === account);
+}
+
 /**
  * The method a payment goes through, as offered here: the one picked while the store still offers
  * it, the drawer otherwise (an account switched off since a draft picked it).
  */
 export function offeredAccount(account: string, accounts: readonly PaymentAccountRow[]): string {
-  return accounts.some((row) => `account:${row.id}` === account) ? account : CASH_ACCOUNT;
+  return methodOffered(account, accounts) ? account : CASH_ACCOUNT;
 }
 
 /** Whether a single payment (a DP) still needs the reference its method asks for (an EDC code). */

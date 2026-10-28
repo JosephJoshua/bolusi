@@ -50,6 +50,7 @@
     "remaining": "{amount} still to pay",
     "overpaid": "{amount} too much. Lower the amount first.",
     "problem": {
+      "method": "This method is no longer available. Pick another.",
       "tendered": "Cash received is less than the amount."
     },
     "method": "Payment method",

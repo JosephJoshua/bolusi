@@ -50,6 +50,7 @@
     "remaining": "Kurang {amount}",
     "overpaid": "Lebih {amount}. Kurangi jumlahnya dulu.",
     "problem": {
+      "method": "Metode ini sudah tidak tersedia. Pilih metode lain.",
       "tendered": "Uang diterima kurang dari jumlahnya."
     },
     "method": "Metode pembayaran",

@@ -15,6 +15,7 @@ export const MONEY_KEYS = [
   'money.pay.currency',
   'money.pay.method',
   'money.pay.overpaid',
+  'money.pay.problem.method',
   'money.pay.problem.tendered',
   'money.pay.reference',
   'money.pay.remaining',
