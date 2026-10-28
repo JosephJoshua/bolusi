@@ -32,6 +32,7 @@ import { resolveActingUser, type ActingUser } from '../auth/acting-user.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { ApiError } from '../errors.js';
+import { IdentityError } from '../identity/errors.js';
 import { InMemoryRateLimitStore, perIpRateLimit } from '../middleware/rate-limit.js';
 import { zJson } from '../middleware/validator-hook.js';
 import {
@@ -59,8 +60,15 @@ function deviceOf(c: Context<AppEnv>) {
 }
 
 export function createQrisRouter(deps: ServerDeps) {
+  // An acting user who is not of this tenant, or not usable on this device, is the identity
+  // surface's ACTING_USER_INVALID, not a server error.
   const acting = (c: Context<AppEnv>): Promise<ActingUser> =>
-    deps.forTenant(tenantIdFromContext(c), (db) => resolveActingUser(c, db));
+    deps
+      .forTenant(tenantIdFromContext(c), (db) => resolveActingUser(c, db))
+      .catch((error: unknown) => {
+        if (error instanceof IdentityError) throw new ApiError(error.code, error.details);
+        throw error;
+      });
 
   return new Hono<AppEnv>()
     .get('/accounts', async (c) => {

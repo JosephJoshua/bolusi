@@ -325,6 +325,18 @@ describe('connecting a QRIS account', () => {
     expect(other.status).toBe(404);
   });
 
+  test('someone who is not of this tenant is ACTING_USER_INVALID, not a server error', async () => {
+    const stranger = '01920000-0000-7000-8000-00000000dead';
+    for (const [method, path] of [
+      ['GET', '/v1/money/qris/accounts'],
+      ['GET', `/v1/money/qris/charges/${stranger}`],
+    ] as const) {
+      const response = await call(method, path, { as: stranger });
+      expect(response.status).toBe(403);
+      expect(await errorCode(response)).toBe('ACTING_USER_INVALID');
+    }
+  });
+
   test('disconnecting stops new QRs, and a QR already shown is still recorded', async () => {
     await connect();
     const shown = chargeBody();
