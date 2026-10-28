@@ -7,7 +7,6 @@ export { PrintSettings } from './PrintSettings.js';
 export {
   CancelFeesSettings,
   DiscardChangesDialog,
-  INTAKE_LIST_KEY,
   IntakeListSettings,
   repairSettingsAccess,
   SlipSettings,
@@ -15,6 +14,7 @@ export {
   type RepairSettingsProps,
 } from './Settings.js';
 export { repairAbilities } from '../flows.js';
+export { INTAKE_LIST_KEY } from '../labels.js';
 export { INTAKE_OPTION_LISTS, type IntakeOptionList } from '../intake-options.js';
 export {
   PrinterProblem,
