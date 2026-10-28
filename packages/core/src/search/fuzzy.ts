@@ -323,8 +323,10 @@ export interface CompiledQuery {
    * together keeps its typo budget ("galaxia14").
    */
   readonly compactTolerance: number;
-  /** The query as one digit string when it has no letters (phone, IMEI, counter). */
+  /** The query as a phone number (08… form) when it is only digits, for `phones`. */
   readonly digits: string | null;
+  /** The same digits as typed, for `numbers`: an IMEI starting 86… or 62… is no phone. */
+  readonly number: string | null;
   /** The query as a compact code, for ticket numbers. */
   readonly code: string;
 }
@@ -335,6 +337,7 @@ export function compileQuery(query: string): CompiledQuery | null {
   const digitCount = query.replace(/\D/g, '').length;
   const letterCount = normalized.replace(/[^a-z]/g, '').length;
   const parsed = words([query]);
+  const onlyDigits = digitCount >= 3 && letterCount === 0;
   const compact = parsed.folded.join('');
   const compactLength = Math.min(compact.length, parsed.plain.join('').length);
   return {
@@ -343,7 +346,8 @@ export function compileQuery(query: string): CompiledQuery | null {
     compactLength,
     compactTolerance:
       compactLength < 4 ? -1 : parsed.plain.length > 1 ? 0 : wordTolerance(compactLength),
-    digits: digitCount >= 3 && letterCount === 0 ? normalizePhone(query) : null,
+    digits: onlyDigits ? normalizePhone(query) : null,
+    number: onlyDigits ? normalizeNumber(query) : null,
     code: compactCode(query),
   };
 }
@@ -426,13 +430,11 @@ export const SCORE_PART = { text: 1, phones: 2, numbers: 4, codes: 8, all: 15 } 
 /** The best score among the number and code parts listed in `parts` (see SCORE_PART). */
 export function scoreNumbers(query: CompiledQuery, fields: NumberFields, parts: number): number {
   let score = 0;
-  if (query.digits !== null) {
-    if (parts & SCORE_PART.phones) {
-      for (const phone of fields.phones) score = Math.max(score, digitScore(query.digits, phone));
-    }
-    if (parts & SCORE_PART.numbers) {
-      for (const value of fields.numbers) score = Math.max(score, digitScore(query.digits, value));
-    }
+  if (query.digits !== null && parts & SCORE_PART.phones) {
+    for (const phone of fields.phones) score = Math.max(score, digitScore(query.digits, phone));
+  }
+  if (query.number !== null && parts & SCORE_PART.numbers) {
+    for (const value of fields.numbers) score = Math.max(score, digitScore(query.number, value));
   }
   if (parts & SCORE_PART.codes) {
     for (const code of fields.codes) score = Math.max(score, codeScore(query.code, code));

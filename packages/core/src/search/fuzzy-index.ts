@@ -173,7 +173,9 @@ export class FuzzyIndex {
     this.#scoreText(query, text);
     if (query.digits !== null) {
       this.#gramCandidates('p', SCORE_PART.phones, query.digits, candidates);
-      this.#gramCandidates('n', SCORE_PART.numbers, query.digits, candidates);
+    }
+    if (query.number !== null) {
+      this.#gramCandidates('n', SCORE_PART.numbers, query.number, candidates);
     }
     if (query.code.length >= 3) this.#gramCandidates('c', SCORE_PART.codes, query.code, candidates);
 
