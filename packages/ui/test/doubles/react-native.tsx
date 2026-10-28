@@ -220,12 +220,30 @@ class AnimatedValue {
   setValue(next: number): void {
     this.value = next;
   }
+  /** A live, linear mapping of this value; clamps when asked, like the real one. */
+  interpolate(config: {
+    inputRange: number[];
+    outputRange: number[];
+    extrapolate?: 'clamp' | 'extend';
+  }): { readonly value: number } {
+    const [i0 = 0, i1 = 1] = config.inputRange;
+    const [o0 = 0, o1 = 1] = config.outputRange;
+    const read = (): number => this.value;
+    return {
+      get value(): number {
+        let t = (read() - i0) / (i1 - i0);
+        if (config.extrapolate === 'clamp') t = Math.min(1, Math.max(0, t));
+        return o0 + t * (o1 - o0);
+      },
+    };
+  }
 }
 const finished = (target: AnimatedValue, toValue: number) => ({
-  start: (done?: () => void): void => {
+  start: (done?: (result: { finished: boolean }) => void): void => {
     target.setValue(toValue);
-    done?.();
+    done?.({ finished: true });
   },
+  stop: (): void => {},
 });
 export const Animated = {
   View: hostComponent('Animated.View'),
@@ -233,12 +251,65 @@ export const Animated = {
   spring: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),
   timing: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),
   parallel: (animations: readonly { start: (done?: () => void) => void }[]) => ({
-    start: (done?: () => void): void => {
+    start: (done?: (result: { finished: boolean }) => void): void => {
       for (const animation of animations) animation.start();
-      done?.();
+      done?.({ finished: true });
     },
+    stop: (): void => {},
+  }),
+  sequence: (animations: readonly { start: (done?: () => void) => void }[]) => ({
+    start: (done?: (result: { finished: boolean }) => void): void => {
+      for (const animation of animations) animation.start();
+      done?.({ finished: true });
+    },
+    stop: (): void => {},
+  }),
+  delay: (): { start: (done?: () => void) => void; stop: () => void } => ({
+    start: (done) => done?.(),
+    stop: () => {},
   }),
 };
+
+/** Curves are opaque functions to a component; identity is enough to call them. */
+const curve = (value: number): number => value;
+export const Easing = {
+  bezier: () => curve,
+  linear: curve,
+  out: () => curve,
+  in: () => curve,
+  inOut: () => curve,
+};
+
+/** The system "reduce motion" switch, off until a test flips it with `__setReduceMotion`. */
+const reduceMotionListeners = new Set<(enabled: boolean) => void>();
+let reduceMotion = false;
+let heldAnswer: ((enabled: boolean) => void) | null = null;
+let holdAnswer = false;
+export const AccessibilityInfo = {
+  isReduceMotionEnabled: (): Promise<boolean> =>
+    holdAnswer
+      ? new Promise((resolve) => {
+          heldAnswer = resolve;
+        })
+      : Promise.resolve(reduceMotion),
+  addEventListener: (_event: string, listener: (enabled: boolean) => void) => {
+    reduceMotionListeners.add(listener);
+    return { remove: () => reduceMotionListeners.delete(listener) };
+  },
+};
+/** The system takes its time answering the first query until `__answerReduceMotion`. */
+export function __holdReduceMotionAnswer(): void {
+  holdAnswer = true;
+}
+export function __answerReduceMotion(enabled: boolean): void {
+  holdAnswer = false;
+  heldAnswer?.(enabled);
+  heldAnswer = null;
+}
+export function __setReduceMotion(enabled: boolean): void {
+  reduceMotion = enabled;
+  for (const listener of reduceMotionListeners) listener(enabled);
+}
 export const PanResponder = {
   create: (handlers: AnyProps) => ({ panHandlers: {}, handlers }),
 };
