@@ -65,7 +65,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsc -b packages/ui-web/tsconfig.build.json packages/modules/tsconfig.desktop.json
+      - run: pnpm exec tsc -b
       - name: Install a test printer that writes to a file
         shell: pwsh
         run: |
