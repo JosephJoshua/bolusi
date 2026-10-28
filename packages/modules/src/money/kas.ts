@@ -61,9 +61,17 @@ export const CASH_MOVE_LABEL: Readonly<Record<CashMoveKind, MoneyKey>> = {
   float: 'money.moveKind.float',
 };
 
-/** A count whose difference no owner has settled yet. */
-export function unsettledCounts(counts: readonly CashCountRow[]): CashCountRow[] {
-  return counts.filter((count) => count.difference !== 0 && count.settled === 0);
+/**
+ * The difference an owner still has to settle: the latest count's, when it is off and not settled.
+ * Only the latest one: an earlier difference left unsettled is still in the book, so the next count
+ * finds it again, and settling both would correct the drawer twice.
+ */
+export function differenceToSettle(counts: readonly CashCountRow[]): CashCountRow | null {
+  const latest = counts.reduce<CashCountRow | null>(
+    (found, count) => (found === null || count.countedAt > found.countedAt ? count : found),
+    null,
+  );
+  return latest !== null && latest.difference !== 0 && latest.settled === 0 ? latest : null;
 }
 
 /** The latest count made today, if any: whether today's Tutup kas is done. */

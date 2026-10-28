@@ -49,6 +49,7 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'accountKindChanged',
   'countNotFound',
   'countSettled',
+  'countSuperseded',
 ] as const);
 const { refuse } = MONEY_REFUSALS;
 
@@ -358,14 +359,14 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     await requireFreshEntry(db, op);
   };
 
-  /** An owner's adjustment settles a count of this store once, when it names one. */
+  /** An owner's adjustment settles this store's latest count once, when it names one. */
   const cashAdjustedRule: Rule = async (op, { db }) => {
     const { countId } = payloadOf<{ countId: string | null }>(op);
     await requireFreshEntry(db, op);
     if (countId === null) return;
     const count = await db
       .selectFrom('moneyEntries')
-      .select('id')
+      .select(['id', 'createdAt'])
       .where('id', '=', countId)
       .where('storeId', '=', storeOf(op))
       .where('kind', '=', 'cash_counted')
@@ -385,6 +386,18 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
       .executeTakeFirst();
     if (settled !== undefined) {
       throw refuse('countSettled', { details: { entityId: countId } });
+    }
+    // A later count found this difference again, since it was still in the book: only the latest
+    // count is settled, or the drawer would be corrected twice.
+    const later = await db
+      .selectFrom('moneyEntries')
+      .select('id')
+      .where('storeId', '=', storeOf(op))
+      .where('kind', '=', 'cash_counted')
+      .where('createdAt', '>', count.createdAt)
+      .executeTakeFirst();
+    if (later !== undefined) {
+      throw refuse('countSuperseded', { details: { entityId: countId } });
     }
   };
 

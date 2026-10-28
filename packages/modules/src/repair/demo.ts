@@ -11,6 +11,7 @@ import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 
 import { MONEY_PERMISSION } from '../money/constants.js';
+import { demoMoneyLedger } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
@@ -60,7 +61,17 @@ export const DEMO_REPAIR_ROLES = {
     userId: 'u-siti',
     name: 'Siti Rahayu',
     // No cancel or discount: only owners lower what a customer pays (how counter staff kept cash).
-    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover, M.read, M.receive],
+    permissions: [
+      P.read,
+      P.intake,
+      P.assign,
+      P.quoteChange,
+      P.handover,
+      M.read,
+      M.receive,
+      M.moveCash,
+      M.countCash,
+    ],
   },
   technician: { userId: 'u-budi', name: 'Budi Santoso', permissions: [P.read, P.work] },
   /** A store owner: may choose what this store uses, not change the franchise's lists. */
@@ -1145,6 +1156,15 @@ export function demoRepairRuntime(
     imageDataUri: (ref) => Promise.resolve(placeholderUri(ref.mediaId)),
   };
 
+  const ledger = demoMoneyLedger(
+    {
+      now,
+      accounts: DEMO_ACCOUNTS,
+      actor: () => actor.userId,
+      debt: { id: 't-debt', label: 'K7Q-0098', amount: 450_000 },
+    },
+    notify,
+  );
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
     get userId() {
@@ -1172,11 +1192,9 @@ export function demoRepairRuntime(
       return () => listeners.delete(listener);
     },
     ticketSyncStatuses: () => Promise.resolve({ 't-1': ['local'] }),
-    // The ledger as far as the screens read it: the store's methods and a servisan's payments.
+    // The ledger as the screens read it: the store's methods, a servisan's payments and the Kas.
     money: {
       query: (name: string, input: Input) => {
-        if (name === 'paymentAccounts')
-          return Promise.resolve({ rows: DEMO_ACCOUNTS, nextCursor: null });
         if (name === 'documentMoney') {
           const t = find(String(input['id']));
           const paid = t.downPayment ?? 0;
@@ -1185,9 +1203,9 @@ export function demoRepairRuntime(
             nextCursor: null,
           });
         }
-        return Promise.resolve({ rows: [], nextCursor: null });
+        return ledger.query(name, input);
       },
-      run: () => Promise.resolve(null),
+      run: (name: string, input: Input) => ledger.run(name, input),
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,

@@ -28,7 +28,8 @@
     "notThisStore": "This belongs to another store.",
     "accountKindChanged": "A payment method’s type can’t be changed.",
     "countNotFound": "This cash count wasn’t found.",
-    "countSettled": "This cash count is already settled."
+    "countSettled": "This cash count is already settled.",
+    "countSuperseded": "There is a newer cash count. Settle the latest difference."
   },
   "method": {
     "cash": "Cash"
@@ -57,7 +58,6 @@
     "counted": "Drawer counted at {time}",
     "count": "Count drawer",
     "move": "Cash out/in",
-    "differences": "Cash differences",
     "waitingOwner": "Waiting for an owner",
     "inToday": "In today",
     "nothingIn": "No money in yet today.",
@@ -69,7 +69,8 @@
     "owedBackHint": "This money needs to go back to the customer.",
     "exact": "Exact",
     "short": "Short {amount}",
-    "over": "Over {amount}"
+    "over": "Over {amount}",
+    "difference": "Cash difference"
   },
   "moveKind": {
     "withdrawal": "To the owner",
@@ -95,7 +96,7 @@
   },
   "settle": {
     "title": "Settle difference",
-    "countedBy": "Counted by {name}",
+    "countedBy": "Counted by {name}, {time}",
     "reason": "Reason",
     "save": "Settle difference",
     "hint": "Enter the reason."

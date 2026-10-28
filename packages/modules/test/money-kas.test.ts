@@ -6,8 +6,8 @@ import {
   countToday,
   dayStart,
   moneyInByMethod,
+  differenceToSettle,
   splitOpenBalances,
-  unsettledCounts,
 } from '../src/money/kas.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow } from '../src/money/queries.js';
 
@@ -75,13 +75,13 @@ describe('money in by method', () => {
 });
 
 describe('counts', () => {
-  test('only a difference no owner has settled is left', () => {
-    const left = unsettledCounts([
-      count({ id: 'exact' }),
-      count({ id: 'short', difference: -5_000 }),
-      count({ id: 'settled', difference: 2_000, settled: 2_000 }),
-    ]);
-    expect(left.map((row) => row.id)).toEqual(['short']);
+  test('only the latest count is left to settle: it finds an earlier difference again', () => {
+    const short = count({ id: 'short', difference: -10_000, countedAt: 1 });
+    const again = count({ id: 'again', difference: -10_000, countedAt: 2 });
+    expect(differenceToSettle([again, short])?.id).toBe('again');
+    expect(differenceToSettle([count({ id: 'exact', countedAt: 3 }), again])).toBeNull();
+    expect(differenceToSettle([{ ...again, settled: -10_000 }])).toBeNull();
+    expect(differenceToSettle([])).toBeNull();
   });
 
   test("today's count is one made since local midnight", () => {

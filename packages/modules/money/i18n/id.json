@@ -28,7 +28,8 @@
     "notThisStore": "Ini milik toko lain.",
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
-    "countSettled": "Selisih hitungan kas ini sudah diselesaikan."
+    "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
+    "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru."
   },
   "method": {
     "cash": "Tunai"
@@ -57,7 +58,6 @@
     "counted": "Sudah tutup kas pukul {time}",
     "count": "Tutup kas",
     "move": "Uang keluar/masuk",
-    "differences": "Selisih kas",
     "waitingOwner": "Menunggu pemilik",
     "inToday": "Masuk hari ini",
     "nothingIn": "Belum ada uang masuk hari ini.",
@@ -69,7 +69,8 @@
     "owedBackHint": "Uang ini perlu dikembalikan ke pelanggan.",
     "exact": "Pas",
     "short": "Kurang {amount}",
-    "over": "Lebih {amount}"
+    "over": "Lebih {amount}",
+    "difference": "Selisih kas"
   },
   "moveKind": {
     "withdrawal": "Setor ke pemilik",
@@ -95,7 +96,7 @@
   },
   "settle": {
     "title": "Selesaikan selisih",
-    "countedBy": "Dihitung oleh {name}",
+    "countedBy": "Dihitung {name}, {time}",
     "reason": "Alasan",
     "save": "Selesaikan selisih",
     "hint": "Isi alasannya."

@@ -452,6 +452,36 @@ describe('the drawer', () => {
     await expectBalancedBooks(h);
   });
 
+  test('only the latest count is settled: a later count finds the same difference again', async () => {
+    h = await openRepairHarness(511);
+    await h.money('moveCash', { kind: 'float', amount: 100_000, reason: 'Modal' }, h.cashierId);
+    const count = async (counted: number) =>
+      (
+        (await h!.money('countCash', { counted, note: '' }, h!.cashierId)) as {
+          entryId: string;
+        }
+      ).entryId;
+    const first = await count(90_000);
+    const second = await count(90_000);
+    const drawer = (await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0];
+    // The same 10.000, found twice.
+    expect(drawer.counts.map((c: { difference: number }) => c.difference)).toEqual([
+      -10_000, -10_000,
+    ]);
+    await expectRefused(
+      h.money('adjustCash', { amount: -10_000, countId: first, reason: 'Kurang' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'countSuperseded',
+    );
+    await h.money(
+      'adjustCash',
+      { amount: -10_000, countId: second, reason: 'Kurang' },
+      h.storeOwnerId,
+    );
+    expect((await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0].expected).toBe(90_000);
+    await expectBalancedBooks(h);
+  });
+
   test('a deposit goes into a store account; other moves touch only the drawer', async () => {
     h = await openRepairHarness(510);
     const { accountId } = (await h.money(

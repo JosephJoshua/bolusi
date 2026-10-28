@@ -3,7 +3,7 @@
  * of or into the drawer with a reason, an owner settling a counted difference, and a customer
  * paying what they still owe on a phone they already took home.
  */
-import { formatMoney } from '@bolusi/i18n';
+import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import { ChipRow, TextInput, ToggleChip, color, space, type } from '@bolusi/ui';
 import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -180,7 +180,9 @@ export function MoveCashStep({
   const [digits, setDigits] = useState('');
   const [reason, setReason] = useState('');
   const amount = rupiah(digits);
-  const banks: readonly PaymentAccountRow[] = accounts.status === 'ready' ? accounts.data : [];
+  // Cash is deposited into a bank account; QRIS and card machines settle there on their own.
+  const banks: readonly PaymentAccountRow[] =
+    accounts.status === 'ready' ? accounts.data.filter((row) => row.kind === 'transfer') : [];
   const depositAccount =
     kind === 'deposit'
       ? (banks.find((row) => `account:${row.id}` === account) ?? banks[0] ?? null)
@@ -225,7 +227,8 @@ export function MoveCashStep({
       testID={testID}
     >
       <Text style={styles.fieldLabel}>{tm('money.move.kind')}</Text>
-      <ChipRow testID={`${testID}.kinds`}>
+      {/* Four fixed choices: wrapped, so every one stays in view. */}
+      <View style={styles.wrap} testID={`${testID}.kinds`}>
         {CASH_MOVE_KINDS.map((option) => (
           <ToggleChip
             key={option}
@@ -235,7 +238,7 @@ export function MoveCashStep({
             testID={`${testID}.kind.${option}`}
           />
         ))}
-      </ChipRow>
+      </View>
       {kind === 'deposit' && banks.length > 1 ? (
         <View style={styles.gap}>
           <Text style={styles.fieldLabel}>{tm('money.move.account')}</Text>
@@ -315,7 +318,9 @@ export function SettleCountStep({
       testID={testID}
     >
       {counter === null ? null : (
-        <Text style={styles.muted}>{tm('money.settle.countedBy', { name: counter })}</Text>
+        <Text style={styles.muted}>
+          {tm('money.settle.countedBy', { name: counter, time: formatDateTime(count.countedAt) })}
+        </Text>
       )}
       <View style={styles.sum}>
         <Line label={tm('money.kas.expected')} value={formatMoney(count.expected)} />
@@ -448,6 +453,7 @@ const styles = StyleSheet.create({
   lineLabelStrong: { ...type.bodyBold, color: color.text, flexShrink: 1, marginRight: space.md },
   lineValue: { ...type.bodySm, color: color.text, fontVariant: ['tabular-nums'] },
   lineValueStrong: { ...type.heading, color: color.text, fontVariant: ['tabular-nums'] },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   fieldLabel: { ...type.caption, color: color.textMuted, marginBottom: space.sm },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
   heading: { ...type.heading, color: color.text },

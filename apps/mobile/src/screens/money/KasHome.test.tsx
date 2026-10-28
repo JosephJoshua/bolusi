@@ -146,6 +146,34 @@ describe('the drawer', () => {
     );
   });
 
+  test('a bank deposit goes into the store’s bank account, not its QRIS', async () => {
+    h = await openRepairScreenHarness(5408);
+    await float(h, 100_000);
+    await h.money('saveAccount', { kind: 'qris', name: 'QRIS BCA' }, h.storeOwnerId);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BRI toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'money.kas.move');
+    await press(screen, 'money.move.kind.deposit');
+    // One bank account: nothing to choose.
+    expect(screen.query('money.move.accounts')).toBeNull();
+    type(screen, 'money.move.amount', '60000');
+    type(screen, 'money.move.reason', 'Setor BRI');
+    await settle();
+    await press(screen, 'money.move.primary');
+
+    expect(text(screen, 'money.kas.expected')).toBe('Rp 40.000');
+    const deposit = await h.db
+      .selectFrom('moneyEntries')
+      .select(['account', 'amount'])
+      .where('subKind', '=', 'deposit')
+      .executeTakeFirstOrThrow();
+    expect(deposit).toEqual({ account: `account:${accountId}`, amount: 60_000 });
+  });
+
   test('back on the board goes to the first tab, and back in a step closes it', async () => {
     h = await openRepairScreenHarness(5405);
     const backAtRoot = vi.fn();

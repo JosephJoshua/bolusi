@@ -24,11 +24,12 @@ export interface TabBarProps<K extends string> {
 
 const styles = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
     borderTopWidth: border.hairline,
     borderTopColor: color.border,
     backgroundColor: color.surface,
   },
+  // On a tablet the tabs sit under the content's column, not at the far edges of the screen.
+  tabs: { flexDirection: 'row', width: '100%', maxWidth: size.contentMax, alignSelf: 'center' },
   tab: {
     flex: 1,
     minHeight: size.header,
@@ -49,24 +50,26 @@ export function TabBar<K extends string>({
   testID = 'ui.tabBar',
 }: TabBarProps<K>): React.JSX.Element {
   return (
-    <View style={styles.bar} accessibilityRole="tablist" testID={testID}>
-      {tabs.map((tab) => {
-        const chosen = tab.key === selected;
-        return (
-          <Pressable
-            key={tab.key}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: chosen }}
-            accessibilityLabel={tab.label}
-            onPress={() => onSelect(tab.key)}
-            style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
-            testID={`${testID}.${tab.key}`}
-          >
-            <Icon name={tab.icon} size={24} color={chosen ? color.primary : color.textMuted} />
-            <Text style={[styles.label, chosen && styles.labelSelected]}>{tab.label}</Text>
-          </Pressable>
-        );
-      })}
+    <View style={styles.bar} testID={testID}>
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {tabs.map((tab) => {
+          const chosen = tab.key === selected;
+          return (
+            <Pressable
+              key={tab.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: chosen }}
+              accessibilityLabel={tab.label}
+              onPress={() => onSelect(tab.key)}
+              style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
+              testID={`${testID}.${tab.key}`}
+            >
+              <Icon name={tab.icon} size={24} color={chosen ? color.primary : color.textMuted} />
+              <Text style={[styles.label, chosen && styles.labelSelected]}>{tab.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }

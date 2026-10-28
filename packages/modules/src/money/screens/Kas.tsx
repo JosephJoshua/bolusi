@@ -29,11 +29,11 @@ import {
   CASH_MOVE_LABEL,
   accountLabel,
   countToday,
+  differenceToSettle,
   dayStart,
   moneyInByMethod,
   movesOut,
   splitOpenBalances,
-  unsettledCounts,
 } from '../kas.js';
 import type { CashCountRow, OpenBalanceRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
@@ -86,7 +86,7 @@ export function KasBoard({
   const methods = moneyInByMethod(todayEntries);
   const moves = todayEntries.filter((entry) => entry.kind === 'cash_moved');
   const open = splitOpenBalances(readyOr(balances) ?? []);
-  const differences = drawerData === null ? [] : unsettledCounts(drawerData.counts);
+  const difference = drawerData === null ? null : differenceToSettle(drawerData.counts);
   const counted = drawerData === null ? null : countToday(drawerData.counts, now());
   const mayCount = can(MONEY_PERMISSION.countCash);
   const maySettle = can(MONEY_PERMISSION.adjustCash);
@@ -132,23 +132,20 @@ export function KasBoard({
         </View>
       )}
 
-      {differences.length === 0 ? null : (
-        <Section title={tm('money.kas.differences')} testID={`${testID}.differences`}>
-          {differences.map((count) => (
-            <Row
-              key={count.id}
-              label={formatDateTime(count.countedAt)}
-              detail={
-                maySettle
-                  ? (runtime.nameOf(count.countedBy) ?? undefined)
-                  : tm('money.kas.waitingOwner')
-              }
-              value={differenceText(count.difference)}
-              tone={count.difference < 0 ? 'danger' : 'text'}
-              onPress={maySettle ? () => onSettle(count) : undefined}
-              testID={`${testID}.difference.${count.id}`}
-            />
-          ))}
+      {difference === null ? null : (
+        <Section title={tm('money.kas.difference')} testID={`${testID}.differences`}>
+          <Row
+            label={formatDateTime(difference.countedAt)}
+            detail={
+              maySettle
+                ? (runtime.nameOf(difference.countedBy) ?? undefined)
+                : tm('money.kas.waitingOwner')
+            }
+            value={differenceText(difference.difference)}
+            tone={difference.difference < 0 ? 'danger' : 'text'}
+            onPress={maySettle ? () => onSettle(difference) : undefined}
+            testID={`${testID}.difference.${difference.id}`}
+          />
         </Section>
       )}
 
