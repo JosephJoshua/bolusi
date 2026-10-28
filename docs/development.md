@@ -65,6 +65,12 @@ narrow a run. Devices download the catalog after sync and photos when shown.
 GSMArena refuses cloud and datacenter addresses (429s, a Cloudflare check), so
 run it from a home or office connection; the crawler never tries to get past a check.
 
+The full catalog was assembled off-repo (October 2026) and is kept as a private
+`pg_dump` package with its own `restore.sh`, which loads it only into an empty
+catalog as the owner role. The data and photos are not in Git: GSMArena photos
+are copyrighted and parts of the specs carry CC BY-SA 4.0 and GPL-3.0 terms, so
+see the package's `SOURCES.md` before redistributing it beyond our own stores.
+
 To click through the screens in a browser without a server or device, run
 `pnpm dev:web`; hosted previews of main and each PR are in [Previews](previews.md).
 

@@ -17,7 +17,9 @@ export const BRANDS_PATH = 'makers.php3';
 const PHOTO_HOST = /^https:\/\/fdn\d*\.gsmarena\.com\//;
 const BRAND_PATH = /^[a-z0-9_&]+-phones-\d+\.php$/;
 const BRAND_PAGE_PATH = /^[a-z0-9_&]+-phones-f-\d+-\d+-p\d+\.php$/;
-const MODEL_PATH = /^[a-z0-9_+]+-(\d+)\.php$/;
+// Real model slugs include year/region parentheses, AT&T, Ch@t, T*OMNIA and punctuation.
+// Keep this a basename allowlist: no slash, query, fragment or extra hyphen before the ID.
+const MODEL_PATH = /^[a-z0-9_+&()@*!,[\]]+-(\d+)\.php$/;
 
 const ENTITIES: Record<string, string> = {
   amp: '&',
