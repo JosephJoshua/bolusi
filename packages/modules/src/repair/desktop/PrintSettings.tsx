@@ -11,13 +11,23 @@ import {
   Section,
   Segmented,
   Skeleton,
+  Switch,
+  TextField,
 } from '@bolusi/ui-web';
 import { Printer, RefreshCw } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import { tn } from '../i18n.js';
-import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
+import {
+  DESK_PAPERS,
+  PAPER_KEY,
+  paperRangeHint,
+  useCustomPaperForm,
+  useDevicePaper,
+  useDevicePrinters,
+  type DevicePaper,
+} from '../paper.js';
 import { useRepairRuntime } from '../runtime.js';
 import { outputTestPage } from '../slip-output.js';
 import { ActionError } from '../../screen-kit/desktop/index.js';
@@ -26,7 +36,7 @@ import { PrinterProblemBanner, usePrinterProblem } from './parts.js';
 export function PrintSettings(): React.JSX.Element | null {
   const runtime = useRepairRuntime();
   const printing = runtime.printing;
-  const [paper, setPaper] = useDevicePaper(printing, DESK_PAPERS);
+  const paper = useDevicePaper(printing, DESK_PAPERS);
   const { state, choose, reload } = useDevicePrinters(printing?.printers);
   const runner = useActionRunner();
   const [problem, catchProblem, clearProblem] = usePrinterProblem();
@@ -120,14 +130,17 @@ export function PrintSettings(): React.JSX.Element | null {
           <Segmented
             label={tn('repair.print.paper')}
             options={DESK_PAPERS.map((value) => ({ value, label: tn(PAPER_KEY[value]) }))}
-            value={paper}
+            value={paper.choice}
             onChange={(next) => {
               setSent(false);
-              void setPaper(next);
+              void paper.choose(next);
             }}
             testId={`${testId}.paper`}
           />
         </Group>
+        {paper.choice === 'custom' ? (
+          <CustomSize device={paper} testId={`${testId}.size`} onChange={() => setSent(false)} />
+        ) : null}
         <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
           <Button
             label={tn('repair.testPage.print')}
@@ -148,6 +161,70 @@ export function PrintSettings(): React.JSX.Element | null {
         <ActionError errorCode={runner.errorCode} onDismiss={runner.clearError} />
       </Section>
     </Card>
+  );
+}
+
+/** The typed size, saved as each field is left, and whether it is the tractor-feed kind. */
+function CustomSize({
+  device,
+  testId,
+  onChange,
+}: {
+  readonly device: DevicePaper;
+  readonly testId: string;
+  readonly onChange: () => void;
+}): React.JSX.Element {
+  const form = useCustomPaperForm(device);
+  const commit = (): void => {
+    onChange();
+    form.commit();
+  };
+  const enter = (event: React.KeyboardEvent): void => {
+    if (event.key === 'Enter') commit();
+  };
+  return (
+    <div className="flex flex-col gap-3" data-testid={testId}>
+      <div className="flex flex-wrap items-start gap-3">
+        <TextField
+          label={tn('repair.print.paperWidth')}
+          value={form.width}
+          onChange={(event) => form.setWidth(event.target.value)}
+          onBlur={commit}
+          onKeyDown={enter}
+          inputMode="numeric"
+          maxLength={3}
+          className="w-36"
+          data-testid={`${testId}.width`}
+        />
+        <TextField
+          label={tn('repair.print.paperHeight')}
+          value={form.height}
+          onChange={(event) => form.setHeight(event.target.value)}
+          onBlur={commit}
+          onKeyDown={enter}
+          inputMode="numeric"
+          maxLength={3}
+          className="w-36"
+          data-testid={`${testId}.height`}
+        />
+      </div>
+      <p
+        className={form.invalid ? 'text-small text-danger' : 'text-small text-text-muted'}
+        data-testid={`${testId}.range`}
+      >
+        {paperRangeHint()}
+      </p>
+      <Switch
+        label={tn('repair.print.paperContinuous')}
+        caption={tn('repair.print.paperContinuousHint')}
+        checked={form.continuous}
+        onChange={(next) => {
+          onChange();
+          form.setContinuous(next);
+        }}
+        testId={`${testId}.continuous`}
+      />
+    </div>
   );
 }
 

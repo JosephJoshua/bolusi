@@ -274,6 +274,10 @@ test('a new phone opens on its setup: permissions, paper with a test page, then 
 
   await page.getByTestId('setup.next').click();
   await expect(page.getByTestId('setup.paper')).toBeVisible();
+  // A size none of the presets fits is typed in.
+  await page.getByTestId('setup.paper.choice.custom').click();
+  await expect(page.getByTestId('setup.paper.size.range')).toBeVisible();
+  await shoot(page, 'app-setup-paper-custom');
   await page.getByTestId('setup.paper.choice.a5').click();
   await shoot(page, 'app-setup-paper');
 

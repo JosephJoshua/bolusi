@@ -11,7 +11,7 @@ export { PrintSettingsScreen, type PrintSettingsScreenProps } from './PrintSetti
 export { PaperScreen, type PaperScreenProps } from './PaperScreen.js';
 export { PaperChoice } from './PaperChoice.js';
 export { StoreBasicsList } from './StoreBasicsList.js';
-export { PAPER_KEY, PHONE_PAPERS, useDevicePaper } from '../paper.js';
+export { PAPER_KEY, PHONE_PAPERS, paperLabel, useDevicePaper } from '../paper.js';
 export { UncollectedDaysScreen, type UncollectedDaysScreenProps } from './UncollectedDaysScreen.js';
 export type { RepairChrome } from './parts.js';
 export { catalogModelSearch } from '../model-picker.js';

@@ -4,12 +4,11 @@
  * repair there is no paper step and no store basics.
  */
 import {
-  PAPER_KEY,
   PHONE_PAPERS,
   PaperChoice,
   RepairRuntimeProvider,
   StoreBasicsList,
-  tn,
+  paperLabel,
   useDevicePaper,
   type RepairRuntime,
 } from '@bolusi/modules/repair/screens';
@@ -45,13 +44,13 @@ function WithPaper({
 }): React.JSX.Element {
   // One reading for the step and the summary, so a paper picked in the step shows at the end.
   const state = useDevicePaper(repair.printing, PHONE_PAPERS);
-  const paper = state[0];
+  const { paper } = state;
   return (
     <DeviceSetupScreen
       {...props}
       paper={{
         choice: <PaperChoice testID="setup.paper" state={state} />,
-        label: paper === null ? null : tn(PAPER_KEY[paper]),
+        label: paper === null ? null : paperLabel(paper),
       }}
       basics={<StoreBasicsList onOpen={onOpenSetting} testID="setup.basics" />}
     />

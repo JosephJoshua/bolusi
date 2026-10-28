@@ -1,21 +1,32 @@
 // The paper a device prints slips on: a setting of the device, picked once in its settings, not at
 // every print. A phone prints cut sheets through the system dialog; a counter PC also has the
 // store's carbonless dot-matrix forms. A saved size this device cannot print falls back to its first.
-import { PAPER_PRESETS, type PaperSettings } from '@bolusi/core';
+import {
+  MAX_PAPER_HEIGHT_MM,
+  MAX_PAPER_WIDTH_MM,
+  MIN_PAPER_MM,
+  PAPER_PRESETS,
+  zPaperSettings,
+  type PaperSettings,
+} from '@bolusi/core';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { RepairKey } from './i18n.js';
+import { tn, type RepairKey } from './i18n.js';
 import type { DevicePrinter, DevicePrinters, RepairPrinting } from './runtime.js';
 
-/** The sizes a slip prints on; core's landscape and custom sizes wait for a store that needs them. */
-export type PaperChoice = 'continuous_half' | 'continuous_full' | 'a4' | 'a5';
+/**
+ * The sizes a slip prints on, and a size the store types for paper none of them fits. Core's
+ * landscape cut sheets wait for a store that needs them.
+ */
+export type PaperChoice = 'continuous_half' | 'continuous_full' | 'a4' | 'a5' | 'custom';
 
-export const PHONE_PAPERS: readonly PaperChoice[] = ['a4', 'a5'];
+export const PHONE_PAPERS: readonly PaperChoice[] = ['a4', 'a5', 'custom'];
 export const DESK_PAPERS: readonly PaperChoice[] = [
   'continuous_half',
   'continuous_full',
   'a4',
   'a5',
+  'custom',
 ];
 
 export const PAPER_KEY: Readonly<Record<PaperChoice, RepairKey>> = {
@@ -23,7 +34,16 @@ export const PAPER_KEY: Readonly<Record<PaperChoice, RepairKey>> = {
   continuous_full: 'repair.print.paperFull',
   a4: 'repair.print.paperA4',
   a5: 'repair.print.paperA5',
+  custom: 'repair.print.paperCustom',
 };
+
+/** A size the store typed: the paper's own millimetres, and whether it is tractor-feed. */
+export interface CustomPaperSize {
+  readonly widthMm: number;
+  readonly heightMm: number;
+  /** Tractor-feed with punched strips, as the store's carbonless forms; a phone has none. */
+  readonly continuous: boolean;
+}
 
 /** The paper this device prints on: the saved one when it can print it, else its first. */
 export function paperFor(saved: PaperSettings | null, papers: readonly PaperChoice[]): PaperChoice {
@@ -31,39 +51,79 @@ export function paperFor(saved: PaperSettings | null, papers: readonly PaperChoi
   return papers.find((choice) => choice === preset) ?? papers[0]!;
 }
 
+/** The size slips print on: the chosen preset's, or the saved custom size. */
+export function paperSettingsFor(
+  saved: PaperSettings | null,
+  papers: readonly PaperChoice[],
+): PaperSettings {
+  const choice = paperFor(saved, papers);
+  return choice === 'custom' ? saved! : PAPER_PRESETS[choice];
+}
+
+/** A custom size as saved, or null when it is outside what a printer can take. */
+export function customPaper(size: CustomPaperSize): PaperSettings | null {
+  const paper: PaperSettings = {
+    preset: 'custom',
+    widthMm: Math.round(size.widthMm),
+    heightMm: Math.round(size.heightMm),
+    continuous: size.continuous,
+    // The store's tractor-feed forms are its carbonless ones; one print makes every copy.
+    carbonless: size.continuous,
+  };
+  return zPaperSettings.safeParse(paper).success ? paper : null;
+}
+
+/** The paper's name for a caption: the preset's, or "210 × 140 mm" for a typed size. */
+export function paperLabel(paper: PaperSettings): string {
+  return paper.preset === 'custom'
+    ? tn('repair.print.paperSize', { width: paper.widthMm, height: paper.heightMm })
+    : tn(PAPER_KEY[paper.preset as Exclude<PaperChoice, 'custom'>]);
+}
+
 export async function readDevicePaper(
   printing: RepairPrinting,
   papers: readonly PaperChoice[],
 ): Promise<PaperSettings> {
-  return PAPER_PRESETS[paperFor(await printing.readPaper(), papers)];
+  return paperSettingsFor(await printing.readPaper(), papers);
+}
+
+export interface DevicePaper {
+  /** What slips print on; null until read. */
+  readonly paper: PaperSettings | null;
+  /** Which choice that is; null until read. */
+  readonly choice: PaperChoice | null;
+  /** Saves a preset at once; "custom" starts from the paper's current size. */
+  readonly choose: (choice: PaperChoice) => Promise<void>;
+  /** Saves a typed size; false when it is out of range, and nothing is saved. */
+  readonly saveCustom: (size: CustomPaperSize) => Promise<boolean>;
 }
 
 /**
- * The device's paper for a settings screen or a print caption: null until read, and a setter that
- * saves it at once, so there is nothing to forget to save.
+ * The device's paper for a settings screen or a print caption: null until read, and setters that
+ * save at once, so there is nothing to forget to save.
  */
 export function useDevicePaper(
   printing: RepairPrinting | undefined,
   papers: readonly PaperChoice[],
-): readonly [PaperChoice | null, (paper: PaperChoice) => Promise<void>] {
-  const [paper, setPaper] = useState<PaperChoice | null>(null);
+): DevicePaper {
+  const [paper, setPaper] = useState<PaperSettings | null>(null);
   useEffect(() => {
     if (printing === undefined) return;
     let live = true;
     void printing.readPaper().then((saved) => {
-      if (live) setPaper(paperFor(saved, papers));
+      if (live) setPaper(paperSettingsFor(saved, papers));
     });
     return () => {
       live = false;
     };
   }, [printing, papers]);
-  const choose = useCallback(
-    async (next: PaperChoice): Promise<void> => {
+  const save = useCallback(
+    async (next: PaperSettings): Promise<void> => {
       if (printing === undefined) return;
       const before = paper;
       setPaper(next);
       try {
-        await printing.writePaper(PAPER_PRESETS[next]);
+        await printing.writePaper(next);
       } catch {
         // Not saved: show the paper prints will still use.
         setPaper(before);
@@ -71,7 +131,85 @@ export function useDevicePaper(
     },
     [printing, paper],
   );
-  return [paper, choose];
+  const choose = useCallback(
+    async (next: PaperChoice): Promise<void> => {
+      if (next !== 'custom') return save(PAPER_PRESETS[next]);
+      if (paper?.preset === 'custom') return;
+      const from = paper ?? PAPER_PRESETS[papers[0] === 'custom' ? 'a4' : papers[0]!];
+      await save({ ...from, preset: 'custom' });
+    },
+    [save, paper, papers],
+  );
+  const saveCustom = useCallback(
+    async (size: CustomPaperSize): Promise<boolean> => {
+      const next = customPaper(size);
+      if (next === null) return false;
+      await save(next);
+      return true;
+    },
+    [save],
+  );
+  return {
+    paper,
+    choice: paper === null ? null : paperFor(paper, papers),
+    choose,
+    saveCustom,
+  };
+}
+
+/** The sizes a printer can take, as one line under the fields. */
+export function paperRangeHint(): string {
+  return tn('repair.print.paperRange', {
+    minWidth: MIN_PAPER_MM,
+    maxWidth: MAX_PAPER_WIDTH_MM,
+    minHeight: MIN_PAPER_MM,
+    maxHeight: MAX_PAPER_HEIGHT_MM,
+  });
+}
+
+/**
+ * The typed size's fields, shared by the phone and the PC: what is typed, saved as each field is
+ * left, and whether the last try was out of range (then nothing changed).
+ */
+export function useCustomPaperForm(device: DevicePaper): {
+  readonly width: string;
+  readonly height: string;
+  readonly setWidth: (value: string) => void;
+  readonly setHeight: (value: string) => void;
+  readonly continuous: boolean;
+  readonly setContinuous: (continuous: boolean) => void;
+  /** Saves what is typed; called as a field is left. */
+  readonly commit: () => void;
+  readonly invalid: boolean;
+} {
+  const { paper, saveCustom } = device;
+  const custom = paper?.preset === 'custom' ? paper : null;
+  const [width, setWidth] = useState('');
+  const [height, setHeight] = useState('');
+  const [invalid, setInvalid] = useState(false);
+  // What was saved, once read and after each save.
+  const savedWidth = custom?.widthMm;
+  const savedHeight = custom?.heightMm;
+  useEffect(() => {
+    if (savedWidth === undefined || savedHeight === undefined) return;
+    setWidth(String(savedWidth));
+    setHeight(String(savedHeight));
+  }, [savedWidth, savedHeight]);
+  const continuous = custom?.continuous ?? false;
+  const save = (over: Partial<CustomPaperSize>): void => {
+    const size = { widthMm: Number(width), heightMm: Number(height), continuous, ...over };
+    void saveCustom(size).then((saved) => setInvalid(!saved));
+  };
+  return {
+    width,
+    height,
+    setWidth: (value) => setWidth(value.replace(/\D/g, '')),
+    setHeight: (value) => setHeight(value.replace(/\D/g, '')),
+    continuous,
+    setContinuous: (next) => save({ continuous: next }),
+    commit: () => save({}),
+    invalid,
+  };
 }
 
 export type DevicePrintersState =

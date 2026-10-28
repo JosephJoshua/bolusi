@@ -504,7 +504,14 @@
       "noPrinter": "Choose a printer in Settings first.",
       "printerMissing": "Printer not found. Check its cable and power, or choose another printer in Settings.",
       "failed": "Couldn’t print. Check the printer, then try again."
-    }
+    },
+    "paperCustom": "Other size",
+    "paperSize": "{width} × {height} mm",
+    "paperWidth": "Width (mm)",
+    "paperHeight": "Height (mm)",
+    "paperContinuous": "Continuous paper",
+    "paperContinuousHint": "Punched strips on both sides, for a dot-matrix printer.",
+    "paperRange": "Width {minWidth}–{maxWidth} mm, height {minHeight}–{maxHeight} mm."
   },
   "downPayment": {
     "recordTitle": "Record down payment",

@@ -167,6 +167,38 @@ describe('printing on the counter PC', () => {
     expect(printers.printRaw).not.toHaveBeenCalled();
   });
 
+  it('prints on a size the store types, as ESC/P on tractor-feed paper', async () => {
+    const printers = fakePrinters({ chosen: 'EPSON LX-310' });
+    setBridge(printers);
+    renderApp();
+    await openSettings();
+    fireEvent.click(await screen.findByTestId('repair.desk.printing.paper.custom'));
+    const width = await screen.findByTestId('repair.desk.printing.size.width');
+    // Out of range: nothing changes, and the range says why.
+    fireEvent.change(width, { target: { value: '30' } });
+    fireEvent.blur(width);
+    await waitFor(() =>
+      expect(byTestId('repair.desk.printing.size.range').className).toContain('text-danger'),
+    );
+    fireEvent.change(width, { target: { value: '216' } });
+    fireEvent.blur(width);
+    // It starts from the paper it had: the store's half forms, tractor-feed.
+    expect(byTestId('repair.desk.printing.size.continuous').getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    await waitFor(async () =>
+      expect((await printers.settings()).paper).toMatchObject({
+        preset: 'custom',
+        widthMm: 216,
+        continuous: true,
+      }),
+    );
+    await openPrintFor('Ester Mandowen');
+    expect(byTestId('repair.desk.print.paper').textContent).toContain('216 × 140 mm');
+    fireEvent.click(byTestId('repair.desk.print.submit'));
+    await waitFor(() => expect(printers.printRaw).toHaveBeenCalledTimes(1));
+  });
+
   it('says to pick a printer first instead of printing nowhere', async () => {
     setBridge(fakePrinters());
     renderApp();

@@ -1,6 +1,7 @@
 // The phone's slip paper in Settings: picked once and saved at once, with a test page through the
 // phone's print dialog to check it before a customer's slip goes on it.
 import type { PaperSettings } from '@bolusi/core';
+import { color } from '@bolusi/ui';
 import {
   PaperScreen,
   RepairRuntimeProvider,
@@ -10,11 +11,13 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
   ensureRepairCatalog,
+  fire,
   openRepairScreenHarness,
   press,
   render,
   repairRuntimeFor,
   settle,
+  type as typeInto,
   type RepairHarness,
 } from '../../../test/repair-support.js';
 
@@ -64,5 +67,42 @@ describe('the phone slip paper', () => {
     expect(how).toBe('print');
     expect(slip.paper.preset).toBe('a5');
     expect(screen.query('repair.paper.error')).toBeNull();
+  });
+
+  test('takes a size the store types, and keeps the last good one when it is out of range', async () => {
+    h = await openRepairScreenHarness(94);
+    ensureRepairCatalog();
+    const printing = fakePrinting();
+    const runtime = { ...repairRuntimeFor(h, h.storeOwnerId), printing };
+    const screen = render(
+      <RepairRuntimeProvider runtime={runtime}>
+        <PaperScreen chrome={{ syncChip: null, avatar: null }} onClose={vi.fn()} />
+      </RepairRuntimeProvider>,
+    );
+    await settle();
+    // It starts from the paper it had, A4.
+    await press(screen, 'repair.paper.choice.custom');
+    expect(printing.saved.at(-1)).toMatchObject({ preset: 'custom', widthMm: 210, heightMm: 297 });
+
+    typeInto(screen, 'repair.paper.size.width', '216');
+    typeInto(screen, 'repair.paper.size.height', '140');
+    fire(screen.get('repair.paper.size.height.field'), 'onBlur');
+    await settle();
+    expect(printing.saved.at(-1)).toEqual({
+      preset: 'custom',
+      widthMm: 216,
+      heightMm: 140,
+      continuous: false,
+      carbonless: false,
+    });
+
+    const before = printing.saved.length;
+    typeInto(screen, 'repair.paper.size.width', '30');
+    fire(screen.get('repair.paper.size.width.field'), 'onBlur');
+    await settle();
+    expect(printing.saved).toHaveLength(before);
+    expect(screen.get('repair.paper.size.range').props.style).toContainEqual({
+      color: color.danger,
+    });
   });
 });

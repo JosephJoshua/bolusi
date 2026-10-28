@@ -5,7 +5,7 @@
 import { t } from '@bolusi/i18n';
 import {
   DESK_PAPERS,
-  PAPER_KEY,
+  paperLabel,
   PrintSettings,
   STORE_BASIC_KEY,
   STORE_BASIC_SETTING,
@@ -186,7 +186,7 @@ function Ready({
   readonly onOpenSetting: (setting: StoreBasicSetting) => void;
 }): React.JSX.Element {
   const printing = useRepairRuntime().printing;
-  const [paper] = useDevicePaper(printing, DESK_PAPERS);
+  const { paper } = useDevicePaper(printing, DESK_PAPERS);
   const { state } = useDevicePrinters(printing?.printers);
   const chosen =
     state.kind === 'ready' ? (state.printers.find((p) => p.name === state.chosen) ?? null) : null;
@@ -213,7 +213,7 @@ function Ready({
             )}
             <Fact
               label={t('auth.pc.setup.donePaper')}
-              value={paper === null ? '…' : tn(PAPER_KEY[paper])}
+              value={paper === null ? '…' : paperLabel(paper)}
             />
             {photos === null ? null : (
               <Fact
