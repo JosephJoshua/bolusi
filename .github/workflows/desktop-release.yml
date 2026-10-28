@@ -15,7 +15,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
+      # electron-builder publishes through the API with GH_TOKEN; no token is left in the checkout.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Check the tag matches the app version
         shell: pwsh
         run: |
