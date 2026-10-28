@@ -185,6 +185,42 @@ async function writeRoleGrants(
   }
 }
 
+/**
+ * Follow a store move with the user's store-role grants: a grant at a store they left is dropped
+ * (the evaluator reads grants, not memberships, so a kept grant would keep its powers there), and the
+ * store roles they hold are granted in each store they joined, as creation grants them in every store.
+ * Grants at kept stores and tenant-wide grants are untouched.
+ */
+async function moveStoreGrants(
+  db: TenantDb,
+  tenantId: string,
+  userId: string,
+  fromStoreIds: readonly string[],
+  toStoreIds: readonly string[],
+): Promise<void> {
+  const grants = await db
+    .selectFrom('userRoles')
+    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
+    .select(['roles.id', 'roles.scopeType', 'userRoles.storeId'])
+    .where('userRoles.userId', '=', userId)
+    .where('userRoles.storeId', 'is not', null)
+    .execute();
+  const target = new Set(toStoreIds);
+  const removed = [...new Set(grants.map((g) => g.storeId as string))].filter(
+    (s) => !target.has(s),
+  );
+  if (removed.length > 0) {
+    await db
+      .deleteFrom('userRoles')
+      .where('userId', '=', userId)
+      .where('storeId', 'in', removed)
+      .execute();
+  }
+  const added = [...target].filter((s) => !fromStoreIds.includes(s));
+  const storeRoles = [...new Map(grants.map((g) => [g.id, g])).values()];
+  await writeRoleGrants(db, tenantId, userId, storeRoles, added);
+}
+
 export function createUsersRouter(deps: ServerDeps) {
   const withTenant = createWithTenant(deps.forTenant);
 
@@ -348,6 +384,9 @@ export function createUsersRouter(deps: ServerDeps) {
                   .insertInto('userStores')
                   .values({ userId: targetUserId, storeId, tenantId })
                   .execute();
+              }
+              if (roles === null) {
+                await moveStoreGrants(db, tenantId, targetUserId, currentStores, body.storeIds);
               }
             }
             if (roles !== null) {

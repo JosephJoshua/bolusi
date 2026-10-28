@@ -38,11 +38,20 @@ export async function loadUserDirectory(
     .select(['status'])
     .where('id', '=', userId)
     .executeTakeFirst();
-  const grantRows = await db
-    .selectFrom('userRoles')
-    .select(['roleId', 'storeId'])
-    .where('userId', '=', userId)
-    .execute();
+  // A store grant counts only where the user is a member: a grant left behind at a store they were
+  // moved out of must not keep its powers there.
+  const memberOf = new Set(
+    (
+      await db.selectFrom('userStores').select('storeId').where('userId', '=', userId).execute()
+    ).map((m) => m.storeId),
+  );
+  const grantRows = (
+    await db
+      .selectFrom('userRoles')
+      .select(['roleId', 'storeId'])
+      .where('userId', '=', userId)
+      .execute()
+  ).filter((g) => g.storeId === null || memberOf.has(g.storeId));
   const roleIds = [...new Set(grantRows.map((g) => g.roleId))];
   const roleRows =
     roleIds.length === 0

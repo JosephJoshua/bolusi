@@ -681,3 +681,81 @@ test('every staff change pokes the whole tenant so other phones pull it now; a r
   // Refused: a store owner may not make an owner. Nothing changed, so nothing is announced.
   expect(await pokesAfter(patch({ roleIds: [s.storeOwnerRole] }), 403)).toBe(0);
 });
+
+async function twoStores() {
+  const p = await provision(h, {
+    tenantName: 'T',
+    storeNames: ['A', 'B'],
+    ownerName: 'O',
+    ownerLogin: `o-${Math.random()}`,
+  });
+  const [storeA, storeB] = p.storeIds as [string, string];
+  const storeOwner = await seedUser(h, {
+    tenantId: p.tenantId,
+    name: 'SO',
+    storeIds: [storeA],
+    roleKeys: ['store_owner'],
+  });
+  const addCashierAt = async (token: string, storeId: string) =>
+    h.app.request('http://srv.test/v1/users', {
+      method: 'POST',
+      headers: bearer(token),
+      body: JSON.stringify({
+        name: 'Planted',
+        loginIdentifier: null,
+        password: null,
+        pinVerifier: null,
+        storeIds: [storeId],
+        roleIds: [await roleIdOf(h, p.tenantId, 'cashier')],
+      }),
+    });
+  return { ...p, storeA, storeB, storeOwner, addCashierAt };
+}
+
+test('moving a store owner to another store takes their owner powers at the old store away', async () => {
+  const s = await twoStores();
+  const mainOwner = await seedControlSession(h, { tenantId: s.tenantId, userId: s.ownerUserId });
+
+  const moved = await h.app.request(`http://srv.test/v1/users/${s.storeOwner}`, {
+    method: 'PATCH',
+    headers: bearer(mainOwner),
+    body: JSON.stringify({ storeIds: [s.storeB] }),
+  });
+  expect(moved.status).toBe(200);
+  const grants = await h.idb.db
+    .selectFrom('userRoles')
+    .select(['roleId', 'storeId'])
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  expect(grants).toStrictEqual([
+    { roleId: await roleIdOf(h, s.tenantId, 'store_owner'), storeId: s.storeB },
+  ]);
+
+  const token = await seedControlSession(h, { tenantId: s.tenantId, userId: s.storeOwner });
+  const limits = await h.app.request('http://srv.test/v1/role-limits', {
+    method: 'PUT',
+    headers: bearer(token),
+    body: JSON.stringify({
+      storeId: s.storeA,
+      roleId: await roleIdOf(h, s.tenantId, 'manager'),
+      priceDrop: 9_000_000,
+      refund: 9_000_000,
+      credit: 9_000_000,
+    }),
+  });
+  expect(limits.status).toBe(403);
+  expect((await s.addCashierAt(token, s.storeA)).status).toBe(403);
+  expect((await s.addCashierAt(token, s.storeB)).status).toBe(201);
+});
+
+test('a grant left at a store the person no longer belongs to grants nothing there', async () => {
+  const s = await twoStores();
+  // Membership moved without its grant, as PATCH left it before grants followed store moves.
+  await h.idb.db
+    .updateTable('userStores')
+    .set({ storeId: s.storeB })
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  const token = await seedControlSession(h, { tenantId: s.tenantId, userId: s.storeOwner });
+  expect((await s.addCashierAt(token, s.storeA)).status).toBe(403);
+});
