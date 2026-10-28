@@ -567,6 +567,14 @@
       "next": "Next page",
       "page": "Page {page}",
       "pages": "Pages"
+    },
+    "settings": {
+      "discard": "Discard changes",
+      "slipLead": "The store name, logo and terms printed on this store’s slips."
+    },
+    "options": {
+      "dragHandle": "Drag to reorder, or use the up and down arrows",
+      "new": "New"
     }
   },
   "refusal": {

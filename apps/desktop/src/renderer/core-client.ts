@@ -1,7 +1,14 @@
 // The window's line to the offline core. It asks main (through the preload) for a port, and speaks
 // the shared rpc over it. Errors come back as the core's own classes, so `DomainError` and
 // `RuleRefusal` checks in the screens work as they do on the phone, where everything is one process.
-import { DomainError, isDomainErrorCode, RuleRefusal, type DomainErrorDetails } from '@bolusi/core';
+import {
+  DomainError,
+  isDomainErrorCode,
+  RuleRefusal,
+  StaffAdminError,
+  type DomainErrorDetails,
+  type StaffAdminFailure,
+} from '@bolusi/core';
 
 import { CORE_EVENTS, type CoreState } from '../core/api.js';
 import { CORE_PORT_MESSAGE, type CorePortMode, type DesktopBridge } from '../main/bridge.js';
@@ -12,9 +19,25 @@ export type CoreConnection =
   | { readonly mode: 'demo' }
   | { readonly mode: 'unavailable' };
 
-/** Rebuild the error the core threw, as its own class when it is a domain error. */
+const STAFF_FAILURES: readonly StaffAdminFailure[] = [
+  'offline',
+  'denied',
+  'lastOwner',
+  'rateLimited',
+  'unexpected',
+];
+
+/** Rebuild the error the core threw, as its own class when it is a domain or staff error. */
 export function reviveCoreError(wire: WireError): Error {
-  const { code, details, refusal } = wire.fields;
+  const { code, details, refusal, reason } = wire.fields;
+  // A refused staff change says why, so "Karyawan" can tell offline from a refusal.
+  if (wire.name === 'StaffAdminError') {
+    return new StaffAdminError(
+      STAFF_FAILURES.includes(reason as StaffAdminFailure)
+        ? (reason as StaffAdminFailure)
+        : 'unexpected',
+    );
+  }
   if (wire.name !== 'DomainError' || typeof code !== 'string' || !isDomainErrorCode(code)) {
     return new RemoteError(wire);
   }
