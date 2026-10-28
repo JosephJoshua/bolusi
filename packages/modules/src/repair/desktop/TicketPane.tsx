@@ -132,6 +132,8 @@ interface LoadedTicket {
 
 export interface TicketPaneProps {
   readonly ticketId: string;
+  /** An intake opened it just now: the number lands like a stamp. */
+  readonly justOpened?: boolean | undefined;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
   readonly onClose: () => void;
@@ -145,6 +147,7 @@ export interface TicketPaneProps {
 
 export function TicketPane({
   ticketId,
+  justOpened = false,
   now,
   onClose,
   onOpenSyncStatus,
@@ -349,7 +352,9 @@ export function TicketPane({
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
-              className="tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted"
+              className={`tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted${
+                justOpened ? ' animate-stamp' : ''
+              }`}
               data-testid="repair.desk.ticket.number"
             >
               {row.ticketNumber}

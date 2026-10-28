@@ -32,7 +32,8 @@ type RepairView =
   | { readonly kind: 'board' }
   /** A warranty claim's intake starts from a draft made from the servisan it claims on. */
   | { readonly kind: 'intake'; readonly draft?: IntakeDraft }
-  | { readonly kind: 'ticket'; readonly ticketId: string }
+  /** `justOpened`: the intake that made it just finished, so its number is stamped in. */
+  | { readonly kind: 'ticket'; readonly ticketId: string; readonly justOpened?: boolean }
   | { readonly kind: 'handover'; readonly ticketId: string };
 
 /**
@@ -142,6 +143,7 @@ export function RepairHome({
         chrome={chrome}
         now={now}
         hideBack={split}
+        justOpened={view.justOpened === true}
         onBack={() => setView({ kind: 'board' })}
         onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
         onStartClaim={(draft) => setView({ kind: 'intake', draft })}
@@ -198,7 +200,7 @@ export function RepairHome({
             onDraftChange={onDraftChange}
             onRegisterDiscardGuard={registerDiscardGuard}
             onRegisterStepBack={registerStepBack}
-            onOpened={(ticketId) => setView({ kind: 'ticket', ticketId })}
+            onOpened={(ticketId) => setView({ kind: 'ticket', ticketId, justOpened: true })}
             onCancel={() => setView({ kind: 'board' })}
           />
         ) : null}

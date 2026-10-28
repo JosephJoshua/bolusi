@@ -139,6 +139,45 @@ export function usePop(delay = 0): Animated.WithAnimatedValue<object> {
   );
 }
 
+/**
+ * A just-issued number landing like a rubber stamp: it comes down from a little larger and a
+ * little turned, with a firm settle. Plays once on mount.
+ */
+export function useStamp(): Animated.WithAnimatedValue<object> {
+  const still = useReducedMotion();
+  const progress = useRef(new Animated.Value(still ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (still) {
+      progress.setValue(1);
+      return;
+    }
+    const animation = Animated.spring(progress, {
+      toValue: 1,
+      speed: 18,
+      bounciness: 6,
+      useNativeDriver: NATIVE_DRIVER,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [progress, still]);
+
+  return useMemo(
+    () => ({
+      opacity: progress.interpolate({
+        inputRange: [0, 0.3],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      }),
+      transform: [
+        { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1.6, 1] }) },
+        { rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['-8deg', '0deg'] }) },
+      ],
+    }),
+    [progress],
+  );
+}
+
 export interface PressScale {
   readonly style: Animated.WithAnimatedValue<object>;
   readonly onPressIn: () => void;

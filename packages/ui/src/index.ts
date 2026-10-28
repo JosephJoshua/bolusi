@@ -37,8 +37,11 @@ export {
   usePressScale,
   useReducedMotion,
   useSheetEntrance,
+  useStamp,
 } from './motion.js';
 export type { EntranceFrom, EntranceOptions } from './motion.js';
+export { StepTransition, useStepDirection } from './step-transition.js';
+export type { StepDirection, StepTransitionProps } from './step-transition.js';
 
 // ---- Brand ------------------------------------------------------------------------------------
 export { brandMarkWidth } from './components/BrandMark.js';

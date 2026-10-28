@@ -59,6 +59,8 @@
   --animate-pane-in: pane-in var(--b-duration-slow) var(--b-ease-enter);
   --animate-rise-in: rise-in var(--b-duration-base) var(--b-ease-enter);
   --animate-shake: shake 280ms ease-in-out;
+  /* A just-issued servisan number comes down like a rubber stamp. */
+  --animate-stamp: stamp 320ms var(--b-ease-enter);
 
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
 }
@@ -129,6 +131,19 @@
   from {
     opacity: 0;
     transform: translateY(6px);
+  }
+}
+
+@keyframes stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-8deg);
+  }
+  35% {
+    opacity: 1;
+  }
+  70% {
+    transform: scale(0.96) rotate(0deg);
   }
 }
 

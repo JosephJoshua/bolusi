@@ -5,7 +5,15 @@
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
 
-import { ConfirmSheet, StepHeader, color, space, type } from '@bolusi/ui';
+import {
+  ConfirmSheet,
+  StepHeader,
+  StepTransition,
+  color,
+  space,
+  type,
+  useStepDirection,
+} from '@bolusi/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -172,6 +180,7 @@ export function IntakeWizard({
 
   const stepIndex = Math.min(draft.step, INTAKE_STEPS.length - 1);
   const step = INTAKE_STEPS[stepIndex]!;
+  const stepFrom = useStepDirection(stepIndex);
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
@@ -357,32 +366,34 @@ export function IntakeWizard({
         title={tn(INTAKE_STEP_KEY[step])}
         testID={`${testID}.header`}
       />
-      <View style={styles.body} testID={`${testID}.step.${step}`}>
-        {photosExpired && step === 'photos' ? (
-          <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.photosExpired`}>
-            {tn('repair.photo.expired')}
-          </Text>
-        ) : null}
-        {videoExpired && step === 'photos' && draft.ownershipVideo === null ? (
-          <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.videoExpired`}>
-            {tn('repair.video.expired')}
-          </Text>
-        ) : null}
-        {draft.claimOf !== null && (step === 'customer' || step === 'review') ? (
-          // Said where the intake starts and again before it opens, not on every step.
-          <View style={[repairStyles.gap, styles.check]} testID={`${testID}.claim`}>
-            <Text style={repairStyles.caption}>
-              {tn('repair.warrantyClaim.intakeNote', { number: draft.claimOf.ticketNumber })}
+      <StepTransition from={stepFrom}>
+        <View style={styles.body} testID={`${testID}.step.${step}`}>
+          {photosExpired && step === 'photos' ? (
+            <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.photosExpired`}>
+              {tn('repair.photo.expired')}
             </Text>
-            {claimWarrantyEnded(draft.claimOf, now()) ? (
-              <Text style={repairStyles.warning} testID={`${testID}.claim.ended`}>
-                {tn('repair.warrantyClaim.ended')}
+          ) : null}
+          {videoExpired && step === 'photos' && draft.ownershipVideo === null ? (
+            <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.videoExpired`}>
+              {tn('repair.video.expired')}
+            </Text>
+          ) : null}
+          {draft.claimOf !== null && (step === 'customer' || step === 'review') ? (
+            // Said where the intake starts and again before it opens, not on every step.
+            <View style={[repairStyles.gap, styles.check]} testID={`${testID}.claim`}>
+              <Text style={repairStyles.caption}>
+                {tn('repair.warrantyClaim.intakeNote', { number: draft.claimOf.ticketNumber })}
               </Text>
-            ) : null}
-          </View>
-        ) : null}
-        {settings.status === 'loading' ? null : renderStep()}
-      </View>
+              {claimWarrantyEnded(draft.claimOf, now()) ? (
+                <Text style={repairStyles.warning} testID={`${testID}.claim.ended`}>
+                  {tn('repair.warrantyClaim.ended')}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {settings.status === 'loading' ? null : renderStep()}
+        </View>
+      </StepTransition>
       {showProblems && (step === 'photos' || step === 'price' || step === 'review') ? (
         <View style={repairStyles.gap}>
           {/* A line's own problem shows on its field, so only step-wide ones are listed here. */}

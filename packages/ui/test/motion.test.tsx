@@ -12,6 +12,8 @@ import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
 import { OutcomeState } from '../src/components/OutcomeState.js';
 import { Sheet } from '../src/components/Sheet.js';
 import { Toast } from '../src/components/Toast.js';
+import { AppShell } from '../src/shell/AppShell.js';
+import { StepTransition, useStepDirection, type StepDirection } from '../src/step-transition.js';
 import { SyncChip } from '../src/shell/SyncChip.js';
 import { motion, overlayOpacity } from '../src/tokens.js';
 import { __setReduceMotion } from './doubles/react-native.js';
@@ -173,5 +175,65 @@ describe('sync chip motion', () => {
     const style = flat(iconWrap(r, 'synced').props['style']);
     expect(transformOf(style, 'scale')).toBe(1);
     expect((style['transform'] as Record<string, { value: number }>[])[0]!['rotate']).toBeDefined();
+  });
+});
+
+describe('stamped title', () => {
+  const shell = (stampTitle: boolean) => (
+    <AppShell
+      title="SRV-0042"
+      titleVariant="detail"
+      stampTitle={stampTitle}
+      syncChip={null}
+      avatar={null}
+    >
+      {null}
+    </AppShell>
+  );
+
+  test('a just-opened number lands upright at full size', () => {
+    const r = render(shell(true));
+    const style = flat(r.get('ui.appShell.title').props['style']);
+    expect(transformOf(style, 'scale')).toBe(1);
+    expect(valueOf(style['opacity'])).toBe(1);
+    expect(r.styleOf('ui.appShell.title')['flex']).toBeUndefined();
+  });
+
+  test('every other title is the plain one', () => {
+    const r = render(shell(false));
+    expect(r.styleOf('ui.appShell.title')['transform']).toBeUndefined();
+    expect(r.styleOf('ui.appShell.title')['flex']).toBe(1);
+  });
+});
+
+describe('step transitions', () => {
+  function Flow({ step }: { readonly step: number }): React.JSX.Element {
+    const from = useStepDirection(step);
+    return (
+      <StepTransition key={step} from={from} testID="step">
+        {null}
+      </StepTransition>
+    );
+  }
+
+  test('the first step is just there; later steps slide in and land in place', () => {
+    const r = render(<Flow step={0} />);
+    expect(r.styleOf('step')['transform']).toBeUndefined();
+    r.rerender(<Flow step={1} />);
+    expect(transformOf(r.styleOf('step'), 'translateX')).toBe(0);
+    expect(valueOf(r.styleOf('step')['opacity'])).toBe(1);
+  });
+
+  test('going back slides in from the other side', () => {
+    const seen: StepDirection[] = [];
+    function Probe({ step }: { readonly step: number }): null {
+      seen.push(useStepDirection(step));
+      return null;
+    }
+    const r = render(<Probe step={0} />);
+    r.rerender(<Probe step={1} />);
+    r.rerender(<Probe step={1} />);
+    r.rerender(<Probe step={0} />);
+    expect(seen).toEqual([null, 'end', 'end', 'start']);
   });
 });

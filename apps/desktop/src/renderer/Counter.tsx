@@ -121,6 +121,12 @@ export function Counter({
         : { kind: 'intake' },
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // The servisan an intake just opened, so its number is stamped in once; any other pick clears it.
+  const [justOpenedTicketId, setJustOpenedTicketId] = useState<string | null>(null);
+  const selectTicket = useCallback((ticketId: string | null) => {
+    setJustOpenedTicketId(null);
+    setSelectedTicketId(ticketId);
+  }, []);
   // The queue and search the person was on are still there when they come back from an intake.
   const [filters, setFilters] = useState<BoardFilters | null>(null);
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
@@ -266,6 +272,7 @@ export function Counter({
           onOpened={(ticketId) => {
             if (page.claim === undefined) onDraftChange(null);
             setSelectedTicketId(ticketId);
+            setJustOpenedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
           onCancel={() => setPage({ kind: 'board' })}
@@ -273,7 +280,8 @@ export function Counter({
       ) : (
         <RepairBoardPage
           selectedTicketId={selectedTicketId}
-          onSelectTicket={setSelectedTicketId}
+          onSelectTicket={selectTicket}
+          justOpenedTicketId={justOpenedTicketId}
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
