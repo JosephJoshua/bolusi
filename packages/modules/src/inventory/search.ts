@@ -9,7 +9,7 @@ import type {
   SearchSource,
 } from '@bolusi/core';
 
-import { INVENTORY_PART_ENTITY, INVENTORY_TABLE } from './constants.js';
+import { INVENTORY_ITEM_ENTITY, INVENTORY_TABLE } from './constants.js';
 import type { InventoryDatabase } from './schema.js';
 
 type Db = ReadonlyProjectionDb<InventoryDatabase>;
@@ -19,14 +19,17 @@ const CHUNK = 500;
 
 function partRows(db: Db, scope: SearchScope) {
   return db
-    .selectFrom('inventoryParts')
+    .selectFrom('inventoryItems')
     .select(['id', 'name', 'code', 'fits', 'archived', 'updatedAt'])
     .where('tenantId', '=', scope.tenantId);
 }
 
 type PartSearchRow = Awaited<ReturnType<ReturnType<typeof partRows>['execute']>>[number];
 
-function partDocument(row: PartSearchRow): SearchDocument {
+/** One item as the fuzzy search sees it; the browser preview indexes its demo items the same way. */
+export function itemDocument(
+  row: Pick<PartSearchRow, 'id' | 'name' | 'code' | 'fits'> & { readonly archived: unknown },
+): SearchDocument {
   return {
     id: row.id,
     text: [row.name, row.fits],
@@ -36,21 +39,21 @@ function partDocument(row: PartSearchRow): SearchDocument {
   };
 }
 
-export const partSearchSource: SearchSource<InventoryDatabase> = {
-  name: 'inventory.parts',
-  tables: [INVENTORY_TABLE.parts],
-  entityTypes: [INVENTORY_PART_ENTITY],
+export const itemSearchSource: SearchSource<InventoryDatabase> = {
+  name: 'inventory.items',
+  tables: [INVENTORY_TABLE.items],
+  entityTypes: [INVENTORY_ITEM_ENTITY],
   async loadAll(db, scope) {
-    return (await partRows(db, scope).execute()).map(partDocument);
+    return (await partRows(db, scope).execute()).map(itemDocument);
   },
   async loadChanged(db, scope, changed: ChangedEntities) {
-    const ids = changed.get(INVENTORY_PART_ENTITY) ?? [];
+    const ids = changed.get(INVENTORY_ITEM_ENTITY) ?? [];
     const documents: SearchDocument[] = [];
     for (let i = 0; i < ids.length; i += CHUNK) {
       const rows = await partRows(db, scope)
         .where('id', 'in', ids.slice(i, i + CHUNK))
         .execute();
-      documents.push(...rows.map(partDocument));
+      documents.push(...rows.map(itemDocument));
     }
     return { documents, checked: ids };
   },

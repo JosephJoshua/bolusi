@@ -49,40 +49,40 @@ async function inWork(h: RepairHarness): Promise<Servisan> {
   return s;
 }
 
-async function addPart(h: RepairHarness, name: string, stock: number): Promise<string> {
-  const { partId } = (await h.runInventory(
-    'addPart',
+async function addItem(h: RepairHarness, name: string, stock: number): Promise<string> {
+  const { itemId } = (await h.runInventory(
+    'addItem',
     { name, code: null, fits: [] },
     h.storeOwnerId,
-  )) as { partId: string };
+  )) as { itemId: string };
   if (stock > 0) {
-    await h.runInventory('countStock', { counts: [{ partId, counted: stock }] }, h.storeOwnerId);
+    await h.runInventory('countStock', { counts: [{ itemId, counted: stock }] }, h.storeOwnerId);
   }
-  return partId;
+  return itemId;
 }
 
-async function onHand(h: RepairHarness, partId: string): Promise<number> {
-  return (await h.queryInventory('getPart', { partId }, h.ownerId)).rows[0].onHand as number;
+async function onHand(h: RepairHarness, itemId: string): Promise<number> {
+  return (await h.queryInventory('getItem', { itemId }, h.ownerId)).rows[0].onHand as number;
 }
 
-async function out(h: RepairHarness, s: Servisan, partId: string): Promise<number> {
+async function out(h: RepairHarness, s: Servisan, itemId: string): Promise<number> {
   const used = (
     await h.queryInventory(
       'partsForUse',
       { useKind: 'repair_ticket', useId: s.ticketId },
       h.ownerId,
     )
-  ).rows[0] as { parts: readonly { partId: string; out: number }[] };
-  return used.parts.find((p) => p.partId === partId)?.out ?? 0;
+  ).rows[0] as { parts: readonly { itemId: string; out: number }[] };
+  return used.parts.find((p) => p.itemId === itemId)?.out ?? 0;
 }
 
 describe('taking parts for a servisan', () => {
   test('its technician takes a part: stock drops and the servisan shows who took it', async () => {
     const h = await harness(6101);
-    const lcd = await addPart(h, 'LCD Samsung A14', 3);
+    const lcd = await addItem(h, 'LCD Samsung A14', 3);
     const s = await inWork(h);
 
-    await h.runInventory('takePart', { partId: lcd, qty: 2, use: s.use }, h.technicianId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 2, use: s.use }, h.technicianId);
 
     expect(await onHand(h, lcd)).toBe(1);
     expect(await out(h, s, lcd)).toBe(2);
@@ -99,24 +99,24 @@ describe('taking parts for a servisan', () => {
 
   test('another technician cannot take parts for it; the counter can', async () => {
     const h = await harness(6102);
-    const lcd = await addPart(h, 'LCD', 5);
+    const lcd = await addItem(h, 'LCD', 5);
     const s = await inWork(h);
 
     await expectRefused(
-      h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technician2Id),
+      h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.technician2Id),
       'PERMISSION_DENIED',
       'repair.refusal.partsNotYours',
     );
-    await h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.cashierId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.cashierId);
     expect(await onHand(h, lcd)).toBe(4);
   });
 
   test('a servisan not being worked on draws no parts, and nobody without the grant takes any', async () => {
     const h = await harness(6103);
-    const lcd = await addPart(h, 'LCD', 5);
+    const lcd = await addItem(h, 'LCD', 5);
     const waiting = await servisan(h);
     await expectRefused(
-      h.runInventory('takePart', { partId: lcd, qty: 1, use: waiting.use }, h.cashierId),
+      h.runInventory('takePart', { itemId: lcd, qty: 1, use: waiting.use }, h.cashierId),
       'INVALID_TRANSITION',
       'repair.refusal.partsNotInWork',
     );
@@ -128,12 +128,12 @@ describe('taking parts for a servisan', () => {
       h.technicianId,
     );
     await expectRefused(
-      h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technicianId),
+      h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId),
       'INVALID_TRANSITION',
       'repair.refusal.partsNotInWork',
     );
     await expectRefused(
-      h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.zeroUserId),
+      h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.zeroUserId),
       'PERMISSION_DENIED',
     );
     expect(await onHand(h, lcd)).toBe(5);
@@ -141,12 +141,12 @@ describe('taking parts for a servisan', () => {
 
   test('the servisan number on a take must be the servisan’s own', async () => {
     const h = await harness(6104);
-    const lcd = await addPart(h, 'LCD', 5);
+    const lcd = await addItem(h, 'LCD', 5);
     const s = await inWork(h);
     await expectRefused(
       h.runInventory(
         'takePart',
-        { partId: lcd, qty: 1, use: { ...s.use, label: 'XXX-0001' } },
+        { itemId: lcd, qty: 1, use: { ...s.use, label: 'XXX-0001' } },
         h.technicianId,
       ),
       'VALIDATION_FAILED',
@@ -156,37 +156,37 @@ describe('taking parts for a servisan', () => {
 
   test('stock may go below zero, and the owner sees the part flagged', async () => {
     const h = await harness(6105);
-    const lcd = await addPart(h, 'LCD', 1);
-    await addPart(h, 'Baterai', 4);
+    const lcd = await addItem(h, 'LCD', 1);
+    await addItem(h, 'Baterai', 4);
     const s = await inWork(h);
 
-    await h.runInventory('takePart', { partId: lcd, qty: 2, use: s.use }, h.technicianId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 2, use: s.use }, h.technicianId);
 
     expect(await onHand(h, lcd)).toBe(-1);
     expect((await h.queryInventory('countBelowZero', {}, h.ownerId)).rows[0]).toStrictEqual({
       count: 1,
     });
-    const flagged = await h.queryInventory('listParts', { filter: 'belowZero' }, h.ownerId);
+    const flagged = await h.queryInventory('listItems', { filter: 'belowZero' }, h.ownerId);
     expect(flagged.rows.map((row) => row.id)).toStrictEqual([lcd]);
   });
 
   test('an archived part is not taken any more, but one already taken can still go back', async () => {
     const h = await harness(6106);
-    const lcd = await addPart(h, 'LCD', 3);
+    const lcd = await addItem(h, 'LCD', 3);
     const s = await inWork(h);
-    await h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId);
     await h.runInventory(
-      'editPart',
-      { partId: lcd, name: 'LCD', code: null, fits: [], archived: true },
+      'editItem',
+      { itemId: lcd, name: 'LCD', code: null, fits: [], archived: true },
       h.storeOwnerId,
     );
 
     await expectRefused(
-      h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technicianId),
+      h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId),
       'INVALID_TRANSITION',
-      'inventory.refusal.partArchived',
+      'inventory.refusal.itemArchived',
     );
-    await h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
+    await h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId);
     expect(await onHand(h, lcd)).toBe(3);
   });
 });
@@ -194,27 +194,27 @@ describe('taking parts for a servisan', () => {
 describe('putting parts back', () => {
   test('only what the servisan took goes back, never more and never onto another servisan', async () => {
     const h = await harness(6201);
-    const lcd = await addPart(h, 'LCD', 5);
+    const lcd = await addItem(h, 'LCD', 5);
     const s = await inWork(h);
     const other = await inWork(h);
-    await h.runInventory('takePart', { partId: lcd, qty: 2, use: s.use }, h.technicianId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 2, use: s.use }, h.technicianId);
 
     await expectRefused(
-      h.runInventory('putBackPart', { partId: lcd, qty: 3, use: s.use }, h.technicianId),
+      h.runInventory('putBackPart', { itemId: lcd, qty: 3, use: s.use }, h.technicianId),
       'VALIDATION_FAILED',
       'inventory.refusal.moreThanTaken',
     );
     await expectRefused(
-      h.runInventory('putBackPart', { partId: lcd, qty: 1, use: other.use }, h.technicianId),
+      h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: other.use }, h.technicianId),
       'VALIDATION_FAILED',
       'inventory.refusal.moreThanTaken',
     );
 
-    await h.runInventory('putBackPart', { partId: lcd, qty: 2, use: s.use }, h.technicianId);
+    await h.runInventory('putBackPart', { itemId: lcd, qty: 2, use: s.use }, h.technicianId);
     expect(await onHand(h, lcd)).toBe(5);
     expect(await out(h, s, lcd)).toBe(0);
     await expectRefused(
-      h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, h.technicianId),
+      h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId),
       'VALIDATION_FAILED',
       'inventory.refusal.moreThanTaken',
     );
@@ -222,9 +222,9 @@ describe('putting parts back', () => {
 
   test('once the servisan is done, only an owner can correct its parts', async () => {
     const h = await harness(6202);
-    const lcd = await addPart(h, 'LCD', 5);
+    const lcd = await addItem(h, 'LCD', 5);
     const s = await inWork(h);
-    await h.runInventory('takePart', { partId: lcd, qty: 2, use: s.use }, h.technicianId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 2, use: s.use }, h.technicianId);
     await h.run(
       'markRepaired',
       { ticketId: s.ticketId, afterPhotos: [h.photo(2)] },
@@ -233,30 +233,30 @@ describe('putting parts back', () => {
 
     for (const userId of [h.technicianId, h.cashierId]) {
       await expectRefused(
-        h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, userId),
+        h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, userId),
         'INVALID_TRANSITION',
         'repair.refusal.partsNotInWork',
       );
     }
-    await h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, h.storeOwnerId);
+    await h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, h.storeOwnerId);
     expect(await onHand(h, lcd)).toBe(4);
     expect(await out(h, s, lcd)).toBe(1);
   });
 
   test('a cancelled servisan keeps its parts out until an owner puts them back', async () => {
     const h = await harness(6203);
-    const lcd = await addPart(h, 'LCD', 2);
+    const lcd = await addItem(h, 'LCD', 2);
     const s = await inWork(h);
-    await h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId);
     await h.run('cancelTicket', { ticketId: s.ticketId, reason: 'Batal', fee: 0 }, h.storeOwnerId);
 
     await expectRefused(
-      h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, h.technicianId),
+      h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId),
       'INVALID_TRANSITION',
       'repair.refusal.partsNotInWork',
     );
     expect(await out(h, s, lcd)).toBe(1);
-    await h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, h.ownerId);
+    await h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, h.ownerId);
     expect(await onHand(h, lcd)).toBe(2);
   });
 });
@@ -266,22 +266,22 @@ describe('the parts list and counts', () => {
     const h = await harness(6301);
     for (const userId of [h.cashierId, h.technicianId]) {
       await expectRefused(
-        h.runInventory('addPart', { name: 'LCD', code: null, fits: [] }, userId),
+        h.runInventory('addItem', { name: 'LCD', code: null, fits: [] }, userId),
         'PERMISSION_DENIED',
       );
     }
-    const lcd = await addPart(h, 'LCD', 0);
+    const lcd = await addItem(h, 'LCD', 0);
     await expectRefused(
-      h.runInventory('countStock', { counts: [{ partId: lcd, counted: 9 }] }, h.technicianId),
+      h.runInventory('countStock', { counts: [{ itemId: lcd, counted: 9 }] }, h.technicianId),
       'PERMISSION_DENIED',
     );
   });
 
   test('a count sets the stock and records what the phone showed before', async () => {
     const h = await harness(6302);
-    const lcd = await addPart(h, 'LCD', 4);
-    await h.runInventory('countStock', { counts: [{ partId: lcd, counted: 3 }] }, h.storeOwnerId);
-    const part = (await h.queryInventory('getPart', { partId: lcd }, h.ownerId)).rows[0];
+    const lcd = await addItem(h, 'LCD', 4);
+    await h.runInventory('countStock', { counts: [{ itemId: lcd, counted: 3 }] }, h.storeOwnerId);
+    const part = (await h.queryInventory('getItem', { itemId: lcd }, h.ownerId)).rows[0];
     expect(part.onHand).toBe(3);
     expect(part.movements[0]).toMatchObject({ kind: 'counted', counted: 3, qty: -1 });
   });
@@ -292,7 +292,7 @@ describe('the parts list and counts', () => {
    */
   async function twoPhones(seed: number) {
     const early = await harness(seed);
-    const lcd = await addPart(early, 'LCD', 5);
+    const lcd = await addItem(early, 'LCD', 5);
     const s = await inWork(early);
     const late = await openRepairHarness(seed + 1, {
       tenantId: early.tenantId,
@@ -327,21 +327,21 @@ describe('the parts list and counts', () => {
     const { early, late, lcd, s, sync, both } = await twoPhones(6303);
     await early.runInventory(
       'countStock',
-      { counts: [{ partId: lcd, counted: 5 }] },
+      { counts: [{ itemId: lcd, counted: 5 }] },
       early.storeOwnerId,
     );
-    await late.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, late.technicianId);
+    await late.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, late.technicianId);
     await sync();
     expect(await both()).toStrictEqual([4, 4]);
   });
 
   test('a take made before a count is already in what was counted', async () => {
     const { early, late, lcd, s, sync, both } = await twoPhones(6305);
-    await early.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, early.technicianId);
+    await early.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, early.technicianId);
     // The owner counts the shelf after the part left it, on a phone that has not heard of the take.
     await late.runInventory(
       'countStock',
-      { counts: [{ partId: lcd, counted: 4 }] },
+      { counts: [{ itemId: lcd, counted: 4 }] },
       late.storeOwnerId,
     );
     await sync();
@@ -352,12 +352,12 @@ describe('the parts list and counts', () => {
     const { early, late, lcd, sync, both } = await twoPhones(6307);
     await early.runInventory(
       'countStock',
-      { counts: [{ partId: lcd, counted: 3 }] },
+      { counts: [{ itemId: lcd, counted: 3 }] },
       early.storeOwnerId,
     );
     await late.runInventory(
       'countStock',
-      { counts: [{ partId: lcd, counted: 2 }] },
+      { counts: [{ itemId: lcd, counted: 2 }] },
       late.storeOwnerId,
     );
     await sync();
@@ -368,21 +368,21 @@ describe('the parts list and counts', () => {
 describe('when parts may move', () => {
   test('a servisan waiting for a part is still in work: the wrong part can go back', async () => {
     const h = await harness(6401);
-    const lcd = await addPart(h, 'LCD', 2);
+    const lcd = await addItem(h, 'LCD', 2);
     const s = await inWork(h);
-    await h.runInventory('takePart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
+    await h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId);
     await h.run('markWaitingForParts', { ticketId: s.ticketId, note: 'LCD salah' }, h.technicianId);
-    await h.runInventory('putBackPart', { partId: lcd, qty: 1, use: s.use }, h.technicianId);
+    await h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, h.technicianId);
     expect(await onHand(h, lcd)).toBe(2);
   });
 
   test('nobody, not even an owner, draws parts for a servisan before work starts', async () => {
     const h = await harness(6402);
-    const lcd = await addPart(h, 'LCD', 2);
+    const lcd = await addItem(h, 'LCD', 2);
     const waiting = await servisan(h);
     for (const userId of [h.ownerId, h.storeOwnerId]) {
       await expectRefused(
-        h.runInventory('takePart', { partId: lcd, qty: 1, use: waiting.use }, userId),
+        h.runInventory('takePart', { itemId: lcd, qty: 1, use: waiting.use }, userId),
         'INVALID_TRANSITION',
         'repair.refusal.partsNotInWork',
       );
@@ -398,17 +398,17 @@ describe('searching the parts list', () => {
     const s = await inWork(h);
     const below: string[] = [];
     for (let n = 1; n <= 24; n += 1) {
-      const partId = await addPart(h, `LCD tipe ${String(n)}`, 1);
+      const itemId = await addItem(h, `LCD tipe ${String(n)}`, 1);
       if (n % 8 === 0) {
-        await h.runInventory('takePart', { partId, qty: 2, use: s.use }, h.technicianId);
-        below.push(partId);
+        await h.runInventory('takePart', { itemId, qty: 2, use: s.use }, h.technicianId);
+        below.push(itemId);
       }
     }
     const seen: string[] = [];
     let offset = 0;
     for (;;) {
       const page = await h.queryInventory(
-        'listParts',
+        'listItems',
         { text: 'lcd', filter: 'belowZero', limit: 2, offset },
         h.ownerId,
       );
@@ -424,8 +424,8 @@ describe('searching the parts list', () => {
 describe('the phones a part fits', () => {
   test('models are kept in order, once each, and an edit replaces them', async () => {
     const h = await harness(6601);
-    const { partId } = (await h.runInventory(
-      'addPart',
+    const { itemId } = (await h.runInventory(
+      'addItem',
       {
         name: 'LCD A14',
         code: null,
@@ -436,8 +436,8 @@ describe('the phones a part fits', () => {
         ],
       },
       h.storeOwnerId,
-    )) as { partId: string };
-    let part = (await h.queryInventory('getPart', { partId }, h.ownerId)).rows[0];
+    )) as { itemId: string };
+    let part = (await h.queryInventory('getItem', { itemId }, h.ownerId)).rows[0];
     expect(part.models).toStrictEqual([
       { brand: 'Samsung', model: 'Galaxy A14' },
       { brand: '', model: 'A14 5G' },
@@ -445,9 +445,9 @@ describe('the phones a part fits', () => {
     expect(part.fits).toBe('Samsung Galaxy A14, A14 5G');
 
     await h.runInventory(
-      'editPart',
+      'editItem',
       {
-        partId,
+        itemId,
         name: 'LCD A14',
         code: null,
         fits: [{ brand: 'Samsung', model: 'Galaxy A15' }],
@@ -455,7 +455,7 @@ describe('the phones a part fits', () => {
       },
       h.storeOwnerId,
     );
-    part = (await h.queryInventory('getPart', { partId }, h.ownerId)).rows[0];
+    part = (await h.queryInventory('getItem', { itemId }, h.ownerId)).rows[0];
     expect(part.models).toStrictEqual([{ brand: 'Samsung', model: 'Galaxy A15' }]);
   });
 
@@ -463,15 +463,15 @@ describe('the phones a part fits', () => {
     const h = await harness(6602);
     const add = async (name: string, fits: { brand: string; model: string }[]) =>
       (
-        (await h.runInventory('addPart', { name, code: null, fits }, h.storeOwnerId)) as {
-          partId: string;
+        (await h.runInventory('addItem', { name, code: null, fits }, h.storeOwnerId)) as {
+          itemId: string;
         }
-      ).partId;
+      ).itemId;
     const lcd = await add('LCD A57', [{ brand: 'Oppo', model: 'A57' }]);
     const port = await add('Konektor A57', [{ brand: '', model: 'A57' }]);
     await add('LCD A16', [{ brand: 'Oppo', model: 'A16' }]);
     const fitting = await h.queryInventory(
-      'partsFitting',
+      'itemsFitting',
       { brand: 'OPPO', model: 'A-57' },
       h.technicianId,
     );

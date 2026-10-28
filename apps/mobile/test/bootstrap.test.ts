@@ -377,7 +377,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'auth.user_reset_pin',
       'inventory.correct_use',
       'inventory.count',
-      'inventory.manage_parts',
+      'inventory.manage_items',
       'inventory.read',
       'inventory.use_parts',
       'notes.archive',

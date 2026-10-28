@@ -127,32 +127,16 @@ export interface IdentityAudit {
   tenantId: string;
 }
 
-export interface InventoryMovements {
-  at: Int8;
-  counted: number | null;
-  id: string;
-  kind: string;
-  note: string | null;
-  partId: string;
-  qty: number;
-  storeId: string;
-  tenantId: string;
-  useId: string | null;
-  useKind: string | null;
-  useLabel: string | null;
-  userId: string;
-}
-
-export interface InventoryPartFits {
+export interface InventoryItemFits {
   brand: string;
+  itemId: string;
   model: string;
   modelKey: string;
-  partId: string;
   position: number;
   tenantId: string;
 }
 
-export interface InventoryParts {
+export interface InventoryItems {
   archived: number;
   code: string | null;
   createdAt: Int8;
@@ -163,6 +147,22 @@ export interface InventoryParts {
   tenantId: string;
   updatedAt: Int8;
   updatedBy: string;
+}
+
+export interface InventoryMovements {
+  at: Int8;
+  counted: number | null;
+  id: string;
+  itemId: string;
+  kind: string;
+  note: string | null;
+  qty: number;
+  storeId: string;
+  tenantId: string;
+  useId: string | null;
+  useKind: string | null;
+  useLabel: string | null;
+  userId: string;
 }
 
 export interface Media {
@@ -550,9 +550,9 @@ export interface DB {
   devices: Devices;
   idempotencyKeys: IdempotencyKeys;
   identityAudit: IdentityAudit;
+  inventoryItemFits: InventoryItemFits;
+  inventoryItems: InventoryItems;
   inventoryMovements: InventoryMovements;
-  inventoryPartFits: InventoryPartFits;
-  inventoryParts: InventoryParts;
   media: Media;
   mediaChunks: MediaChunks;
   notes: Notes;

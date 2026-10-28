@@ -3,14 +3,15 @@
  * so a part taken on a demo servisan comes off the same shelf the parts list shows. Mirrors the
  * real rules (rules.ts and repair/part-use.ts) closely enough that a reviewer sees the same refusals.
  */
-import { DomainError } from '@bolusi/core';
+import { DomainError, FuzzyIndex } from '@bolusi/core';
 
 import { INVENTORY_PERMISSION, type MovementKind } from './constants.js';
 import { compactModel } from '../shared/model-key.js';
 import { fitsLine } from './applier.js';
-import type { MovementRow, PartDetailRow, PartFitRow, PartRow, UsedPartRow } from './queries.js';
+import type { MovementRow, ItemDetailRow, ItemFitRow, ItemRow, UsedPartRow } from './queries.js';
 import type { InventoryRuntime } from './runtime.js';
 import { INVENTORY_REFUSALS } from './rules.js';
+import { itemDocument } from './search.js';
 
 const I = INVENTORY_PERMISSION;
 
@@ -36,12 +37,12 @@ interface DemoPart {
   id: string;
   name: string;
   code: string | null;
-  models: PartFitRow[];
+  models: ItemFitRow[];
   archived: boolean;
 }
 
 /** "Samsung Galaxy A14; Samsung Galaxy A14 5G": brand, then model, models apart by ";". */
-function models(spec: string | null): PartFitRow[] {
+function models(spec: string | null): ItemFitRow[] {
   if (spec === null) return [];
   return spec.split(';').map((one) => {
     const [brand = '', ...model] = one.trim().split(' ');
@@ -79,7 +80,7 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
   const movements: (MovementRow & { at: number })[] = [];
 
   const record = (
-    partId: string,
+    itemId: string,
     kind: MovementKind,
     qty: number,
     extra: Partial<MovementRow> = {},
@@ -88,7 +89,7 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     const id = newId('mv');
     movements.push({
       id,
-      partId,
+      itemId,
       kind,
       qty,
       counted: null,
@@ -118,22 +119,22 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
   });
 
   // As queries.ts: the latest count, plus what moved after it.
-  const onHand = (partId: string): number => {
-    const own = movements.filter((m) => m.partId === partId);
+  const onHand = (itemId: string): number => {
+    const own = movements.filter((m) => m.itemId === itemId);
     const counts = own.filter((m) => m.kind === 'counted').sort((a, b) => b.at - a.at);
     const last = counts[0];
     const after = own.filter((m) => m.kind !== 'counted' && (last === undefined || m.at > last.at));
     return (last?.counted ?? 0) + after.reduce((sum, m) => sum + m.qty, 0);
   };
-  const row = ({ models: fits, ...part }: DemoPart): PartRow => ({
+  const row = ({ models: fits, ...part }: DemoPart): ItemRow => ({
     ...part,
     fits: fitsLine(fits),
     onHand: onHand(part.id),
   });
-  const find = (partId: string): DemoPart => {
-    const part = parts.find((p) => p.id === partId);
+  const find = (itemId: string): DemoPart => {
+    const part = parts.find((p) => p.id === itemId);
     if (part === undefined)
-      throw INVENTORY_REFUSALS.refuse('partNotFound', { code: 'ENTITY_NOT_FOUND' });
+      throw INVENTORY_REFUSALS.refuse('itemNotFound', { code: 'ENTITY_NOT_FOUND' });
     return part;
   };
   const require = (permission: string): DemoInventoryActor => {
@@ -143,9 +144,9 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     }
     return who;
   };
-  const outOn = (partId: string, useId: string): number =>
+  const outOn = (itemId: string, useId: string): number =>
     -movements
-      .filter((m) => m.partId === partId && m.useId === useId)
+      .filter((m) => m.itemId === itemId && m.useId === useId)
       .reduce((sum, m) => sum + m.qty, 0);
   const newestFirst = (list: readonly MovementRow[]): MovementRow[] =>
     [...list].sort((a, b) => b.at - a.at);
@@ -154,39 +155,38 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
   const page = <T>(rows: readonly T[], nextCursor: string | null = null) => ({ rows, nextCursor });
 
   const queries: Record<string, (input: Input) => unknown> = {
-    listParts: (input) => {
-      const text = String(input['text'] ?? '')
-        .trim()
-        .toLowerCase();
+    listItems: (input) => {
+      const text = String(input['text'] ?? '').trim();
       const filter = (input['filter'] as string | undefined) ?? 'active';
       const limit = Number(input['limit'] ?? 50);
       const offset = Number(input['offset'] ?? 0);
-      const words = text.split(/\s+/).filter((w) => w !== '');
-      const matching = parts
+      const shown = parts
         .map(row)
         .filter((p) => (filter === 'archived' ? p.archived : !p.archived))
-        .filter((p) => filter !== 'belowZero' || p.onHand < 0)
-        .filter((p) => {
-          const haystack = `${p.name} ${p.code ?? ''} ${p.fits ?? ''}`.toLowerCase();
-          return words.every((w) => haystack.includes(w));
-        })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .filter((p) => filter !== 'belowZero' || p.onHand < 0);
+      // The same typo-tolerant search the app runs, best match first.
+      const matching =
+        text === ''
+          ? shown.sort((a, b) => a.name.localeCompare(b.name))
+          : new FuzzyIndex(shown.map(itemDocument))
+              .search(text, shown.length)
+              .map((hit) => shown.find((p) => p.id === hit.id)!);
       const more = matching.length > offset + limit;
       return page(matching.slice(offset, offset + limit), more ? String(offset + limit) : null);
     },
     countBelowZero: () =>
       page([{ count: parts.filter((p) => !p.archived && onHand(p.id) < 0).length }]),
-    getPart: (input) => {
-      const part = parts.find((p) => p.id === input['partId']);
+    getItem: (input) => {
+      const part = parts.find((p) => p.id === input['itemId']);
       if (part === undefined) return page([]);
-      const detail: PartDetailRow = {
+      const detail: ItemDetailRow = {
         ...row(part),
         models: part.models,
-        movements: newestFirst(movements.filter((m) => m.partId === part.id)).slice(0, 100),
+        movements: newestFirst(movements.filter((m) => m.itemId === part.id)).slice(0, 100),
       };
       return page([detail]);
     },
-    partsFitting: (input) => {
+    itemsFitting: (input) => {
       const key = compactModel(String(input['brand'] ?? ''), String(input['model']));
       const modelKey = compactModel(String(input['model']));
       const fitting = parts
@@ -201,15 +201,15 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     partsForUse: (input) => {
       const useId = String(input['useId']);
       const onUse = newestFirst(movements.filter((m) => m.useId === useId));
-      const used: UsedPartRow[] = [...new Set(onUse.map((m) => m.partId))]
-        .map((partId) => {
-          const part = find(partId);
+      const used: UsedPartRow[] = [...new Set(onUse.map((m) => m.itemId))]
+        .map((itemId) => {
+          const part = find(itemId);
           return {
-            partId,
+            itemId,
             name: part.name,
             code: part.code,
-            out: outOn(partId, useId),
-            onHand: onHand(partId),
+            out: outOn(itemId, useId),
+            onHand: onHand(itemId),
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
@@ -220,28 +220,28 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
   const details = (input: Input) => ({
     name: String(input['name']).trim(),
     code: ((input['code'] as string | null | undefined) ?? '').trim() || null,
-    models: [...((input['fits'] as PartFitRow[] | undefined) ?? [])],
+    models: [...((input['fits'] as ItemFitRow[] | undefined) ?? [])],
   });
   const use = (input: Input) => input['use'] as { kind: string; id: string; label: string };
 
   const commands: Record<string, (input: Input) => unknown> = {
-    addPart: (input) => {
-      require(I.manageParts);
+    addItem: (input) => {
+      require(I.manageItems);
       const id = newId('part');
       parts.push({ id, ...details(input), archived: false });
-      return { partId: id };
+      return { itemId: id };
     },
-    editPart: (input) => {
-      require(I.manageParts);
-      const part = find(String(input['partId']));
+    editItem: (input) => {
+      require(I.manageItems);
+      const part = find(String(input['itemId']));
       Object.assign(part, details(input), { archived: input['archived'] === true });
-      return { partId: part.id };
+      return { itemId: part.id };
     },
     countStock: (input) => {
       require(I.count);
-      const counts = input['counts'] as readonly { partId: string; counted: number }[];
-      const movementIds = counts.map(({ partId, counted }) =>
-        record(find(partId).id, 'counted', counted - onHand(partId), {
+      const counts = input['counts'] as readonly { itemId: string; counted: number }[];
+      const movementIds = counts.map(({ itemId, counted }) =>
+        record(find(itemId).id, 'counted', counted - onHand(itemId), {
           counted,
           note: (input['note'] as string | null | undefined) ?? null,
         }),
@@ -250,8 +250,8 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     },
     takePart: (input) => {
       const who = require(I.useParts);
-      const part = find(String(input['partId']));
-      if (part.archived) throw INVENTORY_REFUSALS.refuse('partArchived');
+      const part = find(String(input['itemId']));
+      if (part.archived) throw INVENTORY_REFUSALS.refuse('itemArchived');
       const target = use(input);
       checkUse(target.id, who);
       return {
@@ -264,7 +264,7 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     },
     putBackPart: (input) => {
       const who = require(I.useParts);
-      const part = find(String(input['partId']));
+      const part = find(String(input['itemId']));
       const target = use(input);
       checkUse(target.id, who);
       if (Number(input['qty']) > outOn(part.id, target.id)) {

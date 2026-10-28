@@ -9,7 +9,7 @@ export const inventoryMigration: ClientMigration = {
   version: 19,
   name: 'inventory',
   statements: [
-    `CREATE TABLE inventory_parts (
+    `CREATE TABLE inventory_items (
   id         TEXT PRIMARY KEY,
   tenant_id  TEXT NOT NULL,
   name       TEXT NOT NULL,
@@ -25,7 +25,7 @@ export const inventoryMigration: ClientMigration = {
   id        TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
   store_id  TEXT NOT NULL,
-  part_id   TEXT NOT NULL,
+  item_id   TEXT NOT NULL,
   kind      TEXT NOT NULL,
   qty       INTEGER NOT NULL,
   counted   INTEGER,
@@ -36,17 +36,17 @@ export const inventoryMigration: ClientMigration = {
   user_id   TEXT NOT NULL,
   at        INTEGER NOT NULL
 )`,
-    `CREATE TABLE inventory_part_fits (
-  part_id   TEXT NOT NULL,
+    `CREATE TABLE inventory_item_fits (
+  item_id   TEXT NOT NULL,
   position  INTEGER NOT NULL,
   tenant_id TEXT NOT NULL,
   brand     TEXT NOT NULL,
   model     TEXT NOT NULL,
   model_key TEXT NOT NULL,
-  PRIMARY KEY (part_id, position)
+  PRIMARY KEY (item_id, position)
 )`,
-    `CREATE INDEX idx_inventory_part_fits_model ON inventory_part_fits (model_key)`,
-    `CREATE INDEX idx_inventory_movements_part ON inventory_movements (store_id, part_id, at)`,
+    `CREATE INDEX idx_inventory_item_fits_model ON inventory_item_fits (model_key)`,
+    `CREATE INDEX idx_inventory_movements_part ON inventory_movements (store_id, item_id, at)`,
     `CREATE INDEX idx_inventory_movements_use ON inventory_movements (use_id)`,
   ],
 };

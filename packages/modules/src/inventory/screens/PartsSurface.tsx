@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 import type { ScreenChrome } from '../../screen-kit/screens/views.js';
 import type { InventoryKey } from '../i18n.js';
-import type { PartDetailRow, PartRow } from '../queries.js';
+import type { ItemDetailRow, ItemRow } from '../queries.js';
 import { CountStep } from './CountStep.js';
 import { PartDetail } from './PartDetail.js';
 import { PartForm } from './PartForm.js';
@@ -16,10 +16,10 @@ import { PartList } from './PartList.js';
 
 type View =
   | { readonly kind: 'list' }
-  | { readonly kind: 'part'; readonly partId: string }
+  | { readonly kind: 'part'; readonly itemId: string }
   | { readonly kind: 'add' }
-  | { readonly kind: 'edit'; readonly part: PartDetailRow }
-  | { readonly kind: 'count'; readonly part: PartRow };
+  | { readonly kind: 'edit'; readonly part: ItemDetailRow }
+  | { readonly kind: 'count'; readonly part: ItemRow };
 
 export interface PartsSurfaceProps {
   readonly chrome: ScreenChrome;
@@ -60,7 +60,7 @@ export function PartsSurface({
         return true;
       case 'edit':
       case 'count':
-        leave({ kind: 'part', partId: view.part.id });
+        leave({ kind: 'part', itemId: view.part.id });
         return true;
     }
   }, [view]);
@@ -70,9 +70,9 @@ export function PartsSurface({
     return () => onRegisterStepBack?.(null);
   }, [back, onRegisterStepBack]);
 
-  const openPart = (partId: string, done: InventoryKey | null = null): void => {
+  const openPart = (itemId: string, done: InventoryKey | null = null): void => {
     setNotice(done);
-    setView({ kind: 'part', partId });
+    setView({ kind: 'part', itemId });
   };
 
   switch (view.kind) {
@@ -81,14 +81,14 @@ export function PartsSurface({
         <PartList
           chrome={chrome}
           onBack={onClose}
-          onOpenPart={(partId) => openPart(partId)}
+          onOpenPart={(itemId) => openPart(itemId)}
           onAddPart={() => setView({ kind: 'add' })}
         />
       );
     case 'part':
       return (
         <PartDetail
-          partId={view.partId}
+          itemId={view.itemId}
           chrome={chrome}
           onBack={() => setView({ kind: 'list' })}
           onEdit={(part) => setView({ kind: 'edit', part })}
@@ -101,7 +101,7 @@ export function PartsSurface({
       return (
         <PartForm
           chrome={chrome}
-          onDone={(partId) => openPart(partId, 'inventory.done.added')}
+          onDone={(itemId) => openPart(itemId, 'inventory.done.added')}
           onCancel={() => setView({ kind: 'list' })}
           onRegisterDiscardGuard={registerGuard}
         />
@@ -111,7 +111,7 @@ export function PartsSurface({
         <PartForm
           chrome={chrome}
           part={view.part}
-          onDone={(partId) => openPart(partId, 'inventory.done.saved')}
+          onDone={(itemId) => openPart(itemId, 'inventory.done.saved')}
           onCancel={() => openPart(view.part.id)}
           onRegisterDiscardGuard={registerGuard}
         />

@@ -5,14 +5,14 @@
 // registers, with repair's check for servisan.
 import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolusi/core';
 
-import { inventoryMovementsTable, inventoryPartFitsTable, inventoryPartsTable } from './applier.js';
+import { inventoryMovementsTable, inventoryItemFitsTable, inventoryItemsTable } from './applier.js';
 import {
-  addPartHandler,
-  addPartInput,
+  addItemHandler,
+  addItemInput,
   countStockHandler,
   countStockInput,
-  editPartHandler,
-  editPartInput,
+  editItemHandler,
+  editItemInput,
   putBackPartHandler,
   takePartHandler,
   usePartInput,
@@ -22,9 +22,9 @@ import { inventoryOperations } from './operations.js';
 import type { PartUseTargets } from './part-use.js';
 import {
   countBelowZeroQuery,
-  getPartQuery,
-  listPartsQuery,
-  partsFittingQuery,
+  getItemQuery,
+  listItemsQuery,
+  itemsFittingQuery,
   partsForUseQuery,
 } from './queries.js';
 import { INVENTORY_REFUSALS } from './rules.js';
@@ -36,10 +36,11 @@ export const INVENTORY_PERMISSIONS = {
     isDangerous: false,
     description: 'Can see the parts list and how many of each part the store has.',
   },
-  [INVENTORY_PERMISSION.manageParts]: {
+  [INVENTORY_PERMISSION.manageItems]: {
     scope: 'store',
     isDangerous: false,
-    description: "Can add parts to the business's parts list and edit them.",
+    description:
+      "Can add items (spareparts, and later accessories and other goods) to the business's list and edit them.",
   },
   [INVENTORY_PERMISSION.count]: {
     scope: 'store',
@@ -70,24 +71,24 @@ export function inventoryModuleManifest(targets: PartUseTargets) {
     // DDL lives in the client and server migrations, as for repair.
     projections: {
       tables: {
-        [INVENTORY_TABLE.parts]: inventoryPartsTable,
+        [INVENTORY_TABLE.items]: inventoryItemsTable,
         [INVENTORY_TABLE.movements]: inventoryMovementsTable,
-        [INVENTORY_TABLE.fits]: inventoryPartFitsTable,
+        [INVENTORY_TABLE.fits]: inventoryItemFitsTable,
       },
     },
 
     permissions: INVENTORY_PERMISSIONS,
 
     commands: {
-      addPart: {
-        permission: INVENTORY_PERMISSION.manageParts,
-        input: addPartInput,
-        handler: addPartHandler,
+      addItem: {
+        permission: INVENTORY_PERMISSION.manageItems,
+        input: addItemInput,
+        handler: addItemHandler,
       },
-      editPart: {
-        permission: INVENTORY_PERMISSION.manageParts,
-        input: editPartInput,
-        handler: editPartHandler,
+      editItem: {
+        permission: INVENTORY_PERMISSION.manageItems,
+        input: editItemInput,
+        handler: editItemHandler,
       },
       countStock: {
         permission: INVENTORY_PERMISSION.count,
@@ -107,11 +108,11 @@ export function inventoryModuleManifest(targets: PartUseTargets) {
     },
 
     queries: {
-      listParts: listPartsQuery,
+      listItems: listItemsQuery,
       countBelowZero: countBelowZeroQuery,
-      getPart: getPartQuery,
+      getItem: getItemQuery,
       partsForUse: partsForUseQuery,
-      partsFitting: partsFittingQuery,
+      itemsFitting: itemsFittingQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

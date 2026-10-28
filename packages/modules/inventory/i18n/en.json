@@ -1,15 +1,15 @@
 {
   "opType": {
-    "partAdded": "Part added",
-    "partEdited": "Part changed",
+    "itemAdded": "Part added",
+    "itemEdited": "Part changed",
     "stockCounted": "Stock corrected",
-    "partTaken": "Part taken",
-    "partPutBack": "Part put back"
+    "itemTaken": "Part taken",
+    "itemPutBack": "Part put back"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
-    "partNotFound": "This part is not on the list.",
-    "partArchived": "This part has been archived.",
+    "itemNotFound": "This part is not on the list.",
+    "itemArchived": "This part has been archived.",
     "moreThanTaken": "That is more than this repair took.",
     "wrongUse": "The repair details don’t match. Try again."
   },

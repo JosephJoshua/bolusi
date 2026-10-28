@@ -15,8 +15,9 @@ const SPEC_TABLES = [
   'auth_sessions',
   'conflicts',
   'device_registry',
+  'inventory_item_fits',
+  'inventory_items',
   'inventory_movements',
-  'inventory_parts',
   'media_items',
   'meta_kv',
   'migrations',
@@ -49,6 +50,7 @@ const SPEC_TABLES = [
 // Every index the spec declares (10-db §9.2/§9.4/§9.6, §10 query-pattern table).
 const SPEC_INDEXES = [
   'idx_conflicts_surfaced',
+  'idx_inventory_item_fits_model',
   'idx_inventory_movements_part',
   'idx_inventory_movements_use',
   'idx_media_items_queue',
@@ -273,9 +275,13 @@ describe('migration 6 keeps one copy of each op', () => {
     }
     const pagesBefore = await pragma('page_count');
 
-    const result = await runClientMigrations(driver, { now: () => 2 });
+    // Only migration 6, so tables later migrations add do not count against the shrink.
+    const result = await runClientMigrations(driver, {
+      now: () => 2,
+      migrations: CLIENT_MIGRATIONS.filter((m) => m.version <= 6),
+    });
 
-    expect(result.applied).toEqual([6, 8, 9, 11, 13, 14, 15, 19]);
+    expect(result.applied).toEqual([6]);
     const columns = await driver.execute(`SELECT name FROM pragma_table_info('operations')`);
     const names = columns.rows.map((row) => String(row['name']));
     expect(names).not.toContain('payload');

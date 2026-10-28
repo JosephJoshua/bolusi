@@ -26,7 +26,7 @@ import type { ScreenChrome } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { stockText } from '../labels.js';
 import { ti, type InventoryKey } from '../i18n.js';
-import type { PartFilter, PartRow } from '../queries.js';
+import type { PartFilter, ItemRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 
 const PAGE = 50;
@@ -46,13 +46,13 @@ const EMPTY_KEY: Readonly<Record<PartFilter, InventoryKey>> = {
 export interface PartListProps {
   readonly chrome: ScreenChrome;
   readonly onBack: () => void;
-  readonly onOpenPart: (partId: string) => void;
+  readonly onOpenPart: (itemId: string) => void;
   readonly onAddPart: () => void;
   readonly testID?: string | undefined;
 }
 
 interface LoadedParts {
-  readonly rows: readonly PartRow[];
+  readonly rows: readonly ItemRow[];
   readonly hasMore: boolean;
   readonly belowZero: number;
 }
@@ -65,7 +65,7 @@ export function PartList({
   testID = 'inventory.list',
 }: PartListProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
-  const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageParts);
+  const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const [filter, setFilter] = useState<PartFilter>('active');
   const [text, setText] = useState('');
   const [pages, setPages] = useState(1);
@@ -78,11 +78,11 @@ export function PartList({
   const query = useInventoryQuery<LoadedParts>(
     async (rt) => {
       // Every page scrolled to, re-read on each refresh so the live list stays whole.
-      let rows: PartRow[] = [];
+      let rows: ItemRow[] = [];
       let next: string | null = '0';
       for (let n = 0; n < pages && next !== null; n += 1) {
-        const page: { readonly rows: readonly PartRow[]; readonly nextCursor: string | null } =
-          await rt.query('listParts', {
+        const page: { readonly rows: readonly ItemRow[]; readonly nextCursor: string | null } =
+          await rt.query('listItems', {
             text: searchText,
             filter: searching ? 'active' : filter,
             limit: PAGE,
@@ -97,7 +97,7 @@ export function PartList({
     `parts:${searching ? `q:${searchText}` : filter}:${String(pages)}:${String(reloadNonce)}`,
   );
 
-  const listState = useMemo((): ListState<PartRow> => {
+  const listState = useMemo((): ListState<ItemRow> => {
     switch (query.status) {
       case 'loading':
         return { kind: 'loading' };
@@ -146,7 +146,7 @@ export function PartList({
   openRef.current = onOpenPart;
   const open = useCallback((id: string) => openRef.current(id), []);
   const renderRow = useCallback(
-    (row: PartRow) => <PartListRow row={row} onOpen={open} testID={`${testID}.row.${row.id}`} />,
+    (row: ItemRow) => <PartListRow row={row} onOpen={open} testID={`${testID}.row.${row.id}`} />,
     [open, testID],
   );
 
@@ -209,8 +209,8 @@ export function PartList({
 }
 
 interface PartListRowProps {
-  readonly row: PartRow;
-  readonly onOpen: (partId: string) => void;
+  readonly row: ItemRow;
+  readonly onOpen: (itemId: string) => void;
   readonly testID: string;
 }
 
@@ -262,7 +262,7 @@ const PartListRow = memo(
   (prev, next) =>
     prev.onOpen === next.onOpen &&
     prev.testID === next.testID &&
-    (Object.keys(next.row) as (keyof PartRow)[]).every((key) =>
+    (Object.keys(next.row) as (keyof ItemRow)[]).every((key) =>
       Object.is(prev.row[key], next.row[key]),
     ),
 );

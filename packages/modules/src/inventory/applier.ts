@@ -7,7 +7,7 @@ import type { ProjectionApplier, ProjectionOperation, ProjectionTableManifest } 
 
 import {
   INVENTORY_MOVEMENT_ENTITY,
-  INVENTORY_PART_ENTITY,
+  INVENTORY_ITEM_ENTITY,
   type MovementKind,
 } from './constants.js';
 import { compactModel } from '../shared/model-key.js';
@@ -15,7 +15,7 @@ import type { InventoryDatabase } from './schema.js';
 
 type Applier = ProjectionApplier<InventoryDatabase>;
 
-export const inventoryPartsTable: ProjectionTableManifest = {
+export const inventoryItemsTable: ProjectionTableManifest = {
   columns: {
     id: 'text',
     tenant_id: 'text',
@@ -29,24 +29,24 @@ export const inventoryPartsTable: ProjectionTableManifest = {
     updated_at: 'integer',
   },
   primaryKey: ['id'],
-  entityType: INVENTORY_PART_ENTITY,
+  entityType: INVENTORY_ITEM_ENTITY,
   entityIdColumn: 'id',
   projectionVersion: 1,
 };
 
 /** The phone models a part fits: child rows of the part entity, rewritten with each edit. */
-export const inventoryPartFitsTable: ProjectionTableManifest = {
+export const inventoryItemFitsTable: ProjectionTableManifest = {
   columns: {
-    part_id: 'text',
+    item_id: 'text',
     position: 'integer',
     tenant_id: 'text',
     brand: 'text',
     model: 'text',
     model_key: 'text',
   },
-  primaryKey: ['part_id', 'position'],
-  entityType: INVENTORY_PART_ENTITY,
-  entityIdColumn: 'part_id',
+  primaryKey: ['item_id', 'position'],
+  entityType: INVENTORY_ITEM_ENTITY,
+  entityIdColumn: 'item_id',
   projectionVersion: 1,
 };
 
@@ -55,7 +55,7 @@ export const inventoryMovementsTable: ProjectionTableManifest = {
     id: 'text',
     tenant_id: 'text',
     store_id: 'text',
-    part_id: 'text',
+    item_id: 'text',
     kind: 'text',
     qty: 'integer',
     counted: 'integer',
@@ -97,13 +97,13 @@ async function writeFits(
   op: ProjectionOperation,
   fits: readonly PartFit[],
 ) {
-  await db.deleteFrom('inventoryPartFits').where('partId', '=', op.entityId).execute();
+  await db.deleteFrom('inventoryItemFits').where('itemId', '=', op.entityId).execute();
   if (fits.length === 0) return;
   await db
-    .insertInto('inventoryPartFits')
+    .insertInto('inventoryItemFits')
     .values(
       fits.map((fit, position) => ({
-        partId: op.entityId,
+        itemId: op.entityId,
         position,
         tenantId: op.tenantId,
         brand: fit.brand,
@@ -114,10 +114,10 @@ async function writeFits(
     .execute();
 }
 
-export const partAddedApplier: Applier = async (db, op) => {
+export const itemAddedApplier: Applier = async (db, op) => {
   const payload = payloadOf<PartDetails>(op);
   await db
-    .insertInto('inventoryParts')
+    .insertInto('inventoryItems')
     .values({
       id: op.entityId,
       tenantId: op.tenantId,
@@ -134,10 +134,10 @@ export const partAddedApplier: Applier = async (db, op) => {
   await writeFits(db, op, payload.fits);
 };
 
-export const partEditedApplier: Applier = async (db, op) => {
+export const itemEditedApplier: Applier = async (db, op) => {
   const payload = payloadOf<PartDetails & { readonly archived: boolean }>(op);
   await db
-    .updateTable('inventoryParts')
+    .updateTable('inventoryItems')
     .set({
       name: payload.name,
       code: payload.code,
@@ -153,7 +153,7 @@ export const partEditedApplier: Applier = async (db, op) => {
 };
 
 interface Movement {
-  readonly partId: string;
+  readonly itemId: string;
   readonly kind: MovementKind;
   readonly qty: number;
   readonly counted: number | null;
@@ -173,7 +173,7 @@ async function insertMovement(
       tenantId: op.tenantId,
       // Movement ops are store-scoped, so the store is always stamped.
       storeId: op.storeId ?? '',
-      partId: movement.partId,
+      itemId: movement.itemId,
       kind: movement.kind,
       qty: movement.qty,
       counted: movement.counted,
@@ -189,13 +189,13 @@ async function insertMovement(
 
 export const stockCountedApplier: Applier = async (db, op) => {
   const payload = payloadOf<{
-    partId: string;
+    itemId: string;
     counted: number;
     expected: number;
     note: string | null;
   }>(op);
   await insertMovement(db, op, {
-    partId: payload.partId,
+    itemId: payload.itemId,
     kind: 'counted',
     qty: payload.counted - payload.expected,
     counted: payload.counted,
@@ -205,15 +205,15 @@ export const stockCountedApplier: Applier = async (db, op) => {
 };
 
 interface UsePayload {
-  readonly partId: string;
+  readonly itemId: string;
   readonly qty: number;
   readonly use: { readonly kind: string; readonly id: string; readonly label: string };
 }
 
-export const partTakenApplier: Applier = async (db, op) => {
+export const itemTakenApplier: Applier = async (db, op) => {
   const payload = payloadOf<UsePayload>(op);
   await insertMovement(db, op, {
-    partId: payload.partId,
+    itemId: payload.itemId,
     kind: 'taken',
     qty: -payload.qty,
     counted: null,
@@ -222,10 +222,10 @@ export const partTakenApplier: Applier = async (db, op) => {
   });
 };
 
-export const partPutBackApplier: Applier = async (db, op) => {
+export const itemPutBackApplier: Applier = async (db, op) => {
   const payload = payloadOf<UsePayload>(op);
   await insertMovement(db, op, {
-    partId: payload.partId,
+    itemId: payload.itemId,
     kind: 'put_back',
     qty: payload.qty,
     counted: null,

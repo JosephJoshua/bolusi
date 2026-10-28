@@ -2,7 +2,7 @@
 // schema.ts: no boolean columns (0/1 integers), times are ms epoch integers, quantities integers.
 // Column order is the DDL order in both migrations and the manifest.
 
-export interface InventoryPartsTable {
+export interface InventoryItemsTable {
   id: string;
   tenantId: string;
   /** What the shop calls it: `LCD Redmi Note 10 + frame`. */
@@ -11,7 +11,7 @@ export interface InventoryPartsTable {
   code: string | null;
   /**
    * The phones it fits, as one line for lists and search: `Xiaomi Redmi Note 10, Xiaomi Poco M5s`.
-   * The models themselves are rows of `inventory_part_fits`.
+   * The models themselves are rows of `inventory_item_fits`.
    */
   fits: string | null;
   /** 1 once taken off the list. Its history stays; it can no longer be taken. */
@@ -26,7 +26,7 @@ export interface InventoryMovementsTable {
   id: string;
   tenantId: string;
   storeId: string;
-  partId: string;
+  itemId: string;
   /** `MovementKind`. */
   kind: string;
   /** Signed change to the store's stock: a take is negative, a put-back positive. */
@@ -44,8 +44,8 @@ export interface InventoryMovementsTable {
 }
 
 /** One phone model a part fits, picked from the phone catalog (or typed when it is not there). */
-export interface InventoryPartFitsTable {
-  partId: string;
+export interface InventoryItemFitsTable {
+  itemId: string;
   /** Order as picked. */
   position: number;
   tenantId: string;
@@ -57,7 +57,7 @@ export interface InventoryPartFitsTable {
 }
 
 export interface InventoryDatabase {
-  inventoryParts: InventoryPartsTable;
+  inventoryItems: InventoryItemsTable;
   inventoryMovements: InventoryMovementsTable;
-  inventoryPartFits: InventoryPartFitsTable;
+  inventoryItemFits: InventoryItemFitsTable;
 }

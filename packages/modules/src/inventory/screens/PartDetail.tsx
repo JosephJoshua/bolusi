@@ -32,15 +32,15 @@ import {
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { ti, type InventoryKey } from '../i18n.js';
 import { movementTitle, signedQty, stockText } from '../labels.js';
-import type { PartDetailRow, PartRow } from '../queries.js';
+import type { ItemDetailRow, ItemRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 
 export interface PartDetailProps {
-  readonly partId: string;
+  readonly itemId: string;
   readonly chrome: ScreenChrome;
   readonly onBack: () => void;
-  readonly onEdit: (part: PartDetailRow) => void;
-  readonly onCount: (part: PartRow) => void;
+  readonly onEdit: (part: ItemDetailRow) => void;
+  readonly onCount: (part: ItemRow) => void;
   /** What the last step did ("Jumlah stok disimpan."), shown until dismissed. */
   readonly notice: InventoryKey | null;
   readonly onClearNotice: () => void;
@@ -48,7 +48,7 @@ export interface PartDetailProps {
 }
 
 export function PartDetail({
-  partId,
+  itemId,
   chrome,
   onBack,
   onEdit,
@@ -58,7 +58,7 @@ export function PartDetail({
   testID = 'inventory.part',
 }: PartDetailProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
-  const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageParts);
+  const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const canCount = runtime.hasPermission(INVENTORY_PERMISSION.count);
   const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -66,20 +66,20 @@ export function PartDetail({
   const [done, setDone] = useState<InventoryKey | null>(null);
 
   const query = useInventoryQuery(
-    async (rt) => (await rt.query('getPart', { partId })).rows[0],
-    `part:${partId}:${String(reloadNonce)}`,
+    async (rt) => (await rt.query('getItem', { itemId })).rows[0],
+    `part:${itemId}:${String(reloadNonce)}`,
   );
   const part = query.status === 'ready' ? query.data : undefined;
   const shownNotice = done ?? notice;
 
-  const setArchived = (row: PartDetailRow, archived: boolean): void => {
+  const setArchived = (row: ItemDetailRow, archived: boolean): void => {
     setConfirmArchive(false);
     onClearNotice();
     setDone(null);
     void runner
       .run(() =>
-        runtime.run('editPart', {
-          partId: row.id,
+        runtime.run('editItem', {
+          itemId: row.id,
           name: row.name,
           code: row.code,
           fits: [...row.models],
@@ -155,7 +155,7 @@ export function PartDetail({
     </AppShell>
   );
 
-  function renderPart(row: PartDetailRow): React.JSX.Element {
+  function renderPart(row: ItemDetailRow): React.JSX.Element {
     const below = row.onHand < 0;
     return (
       <View testID={`${testID}.content`}>

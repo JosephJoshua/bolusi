@@ -14,13 +14,13 @@ import {
   type PartUseKind,
 } from './constants.js';
 import type { InventoryDatabase } from './schema.js';
-import { partSearchSource } from './search.js';
+import { itemSearchSource } from './search.js';
 
 type Qctx = QueryContext<InventoryDatabase>;
 
 // ── rows ─────────────────────────────────────────────────────────────────────────────────────
 
-export interface PartRow {
+export interface ItemRow {
   readonly id: string;
   readonly name: string;
   readonly code: string | null;
@@ -32,7 +32,7 @@ export interface PartRow {
 
 export interface MovementRow {
   readonly id: string;
-  readonly partId: string;
+  readonly itemId: string;
   readonly kind: MovementKind;
   /** Signed change to stock. */
   readonly qty: number;
@@ -47,21 +47,21 @@ export interface MovementRow {
 }
 
 /** A phone model a part fits. */
-export interface PartFitRow {
+export interface ItemFitRow {
   readonly brand: string;
   readonly model: string;
 }
 
-export interface PartDetailRow extends PartRow {
+export interface ItemDetailRow extends ItemRow {
   /** The phone models it fits, in the order picked. */
-  readonly models: readonly PartFitRow[];
+  readonly models: readonly ItemFitRow[];
   /** Newest first, at most `MOVEMENTS_SHOWN`. */
   readonly movements: readonly MovementRow[];
 }
 
 /** One part a use has drawn on. */
 export interface UsedPartRow {
-  readonly partId: string;
+  readonly itemId: string;
   readonly name: string;
   readonly code: string | null;
   /** Taken minus put back: what is still on the use. */
@@ -88,11 +88,11 @@ function latestCounts(qctx: Qctx) {
   return qctx.db
     .selectFrom('inventoryMovements')
     .select([
-      'partId',
+      'itemId',
       'counted',
       'at',
       'id',
-      sql<number>`row_number() over (partition by part_id order by at desc, id desc)`.as('rn'),
+      sql<number>`row_number() over (partition by item_id order by at desc, id desc)`.as('rn'),
     ])
     .where('tenantId', '=', qctx.tenantId)
     .where('storeId', '=', qctx.storeId)
@@ -109,26 +109,26 @@ function stockByPart(qctx: Qctx, partIds?: readonly string[]) {
   let query = qctx.db
     .selectFrom('inventoryMovements as m')
     .leftJoin(latestCounts(qctx).as('l'), (join) =>
-      join.onRef('l.partId', '=', 'm.partId').on('l.rn', '=', 1),
+      join.onRef('l.itemId', '=', 'm.itemId').on('l.rn', '=', 1),
     )
     .select([
-      'm.partId',
+      'm.itemId',
       sql<number | string>`coalesce(max(l.counted), 0) + coalesce(sum(case
         when m.kind <> 'counted' and (l.at is null or m.at > l.at or (m.at = l.at and m.id > l.id))
         then m.qty else 0 end), 0)`.as('onHand'),
     ])
     .where('m.tenantId', '=', qctx.tenantId)
     .where('m.storeId', '=', qctx.storeId)
-    .groupBy('m.partId');
-  if (partIds !== undefined) query = query.where('m.partId', 'in', partIds);
+    .groupBy('m.itemId');
+  if (partIds !== undefined) query = query.where('m.itemId', 'in', partIds);
   return query;
 }
 
 /** Parts with this store's stock; `partIds` narrows the stock sum to those parts. */
 function partsWithStock(qctx: Qctx, partIds?: readonly string[]) {
   let query = qctx.db
-    .selectFrom('inventoryParts as p')
-    .leftJoin(stockByPart(qctx, partIds).as('s'), 's.partId', 'p.id')
+    .selectFrom('inventoryItems as p')
+    .leftJoin(stockByPart(qctx, partIds).as('s'), 's.itemId', 'p.id')
     .select(['p.id', 'p.name', 'p.code', 'p.fits', 'p.archived', 's.onHand'])
     .where('p.tenantId', '=', qctx.tenantId);
   if (partIds !== undefined) query = query.where('p.id', 'in', partIds);
@@ -137,7 +137,7 @@ function partsWithStock(qctx: Qctx, partIds?: readonly string[]) {
 
 type RawPart = Awaited<ReturnType<ReturnType<typeof partsWithStock>['execute']>>[number];
 
-function toPart(row: RawPart): PartRow {
+function toPart(row: RawPart): ItemRow {
   return {
     id: row.id,
     name: row.name,
@@ -158,7 +158,7 @@ async function toMovements(
   );
   return rows.map((row) => ({
     id: row.id,
-    partId: row.partId,
+    itemId: row.itemId,
     kind: row.kind as MovementKind,
     qty: Number(row.qty),
     counted: row.counted === null ? null : Number(row.counted),
@@ -180,13 +180,13 @@ function storeMovements(qctx: Qctx) {
     .where('storeId', '=', qctx.storeId);
 }
 
-// ── listParts ──────────────────────────────────────────────────────────────────────────────────
+// ── listItems ──────────────────────────────────────────────────────────────────────────────────
 
 /** `active`: on the list; `belowZero`: more taken than the store had, for the owner to sort out. */
 export const PART_FILTERS = ['active', 'belowZero', 'archived'] as const;
 export type PartFilter = (typeof PART_FILTERS)[number];
 
-export const listPartsInput = z
+export const listItemsInput = z
   .object({
     text: z.string().trim().max(200).default(''),
     filter: z.enum(PART_FILTERS).default('active'),
@@ -194,16 +194,16 @@ export const listPartsInput = z
     offset: z.number().int().min(0).default(0),
   })
   .strict();
-export type ListPartsInput = z.input<typeof listPartsInput>;
+export type ListPartsInput = z.input<typeof listItemsInput>;
 
 /**
  * Parts by name, or by fuzzy match when `text` is given (best match first). `nextCursor` is the
  * next offset while more remain.
  */
-export async function listPartsHandler(
-  input: z.output<typeof listPartsInput>,
+export async function listItemsHandler(
+  input: z.output<typeof listItemsInput>,
   qctx: Qctx,
-): Promise<QueryPage<PartRow>> {
+): Promise<QueryPage<ItemRow>> {
   let query = partsWithStock(qctx);
   query =
     input.filter === 'archived'
@@ -216,10 +216,10 @@ export async function listPartsHandler(
     // Ranked by the shared fuzzy index; the filter then narrows the hits it ranked. Hits the filter
     // drops (archived, or in stock when only below zero is shown) leave gaps, so the window widens
     // until it holds the page and one more.
-    const index = await searchIndexFor(qctx, partSearchSource);
+    const index = await searchIndexFor(qctx, itemSearchSource);
     const wanted = input.offset + input.limit + 1;
     let window = wanted;
-    let ranked: PartRow[] = [];
+    let ranked: ItemRow[] = [];
     for (;;) {
       const ids = index.search(input.text, window).map((hit) => hit.id);
       if (ids.length === 0) return { rows: [], nextCursor: null };
@@ -248,11 +248,11 @@ export async function listPartsHandler(
   };
 }
 
-export const listPartsQuery = {
-  name: 'listParts',
+export const listItemsQuery = {
+  name: 'listItems',
   permission: INVENTORY_PERMISSION.read,
-  input: listPartsInput,
-  handler: listPartsHandler,
+  input: listItemsInput,
+  handler: listItemsHandler,
 } as const;
 
 // ── countBelowZero ─────────────────────────────────────────────────────────────────────────────
@@ -266,7 +266,7 @@ export async function countBelowZeroHandler(
 ): Promise<QueryPage<{ readonly count: number }>> {
   const row = await qctx.db
     .selectFrom(stockByPart(qctx).as('s'))
-    .innerJoin('inventoryParts as p', 'p.id', 's.partId')
+    .innerJoin('inventoryItems as p', 'p.id', 's.itemId')
     .select((eb) => eb.fn.countAll<number | string>().as('count'))
     .where('p.archived', '=', 0)
     .where('s.onHand', '<', 0)
@@ -281,26 +281,26 @@ export const countBelowZeroQuery = {
   handler: countBelowZeroHandler,
 } as const;
 
-// ── getPart ────────────────────────────────────────────────────────────────────────────────────
+// ── getItem ────────────────────────────────────────────────────────────────────────────────────
 
-export const getPartInput = z.object({ partId: z.string().min(1) }).strict();
-export type GetPartInput = z.input<typeof getPartInput>;
+export const getItemInput = z.object({ itemId: z.string().min(1) }).strict();
+export type GetPartInput = z.input<typeof getItemInput>;
 
-export async function getPartHandler(
-  input: z.output<typeof getPartInput>,
+export async function getItemHandler(
+  input: z.output<typeof getItemInput>,
   qctx: Qctx,
-): Promise<QueryPage<PartDetailRow>> {
-  const row = await partsWithStock(qctx, [input.partId]).executeTakeFirst();
+): Promise<QueryPage<ItemDetailRow>> {
+  const row = await partsWithStock(qctx, [input.itemId]).executeTakeFirst();
   if (row === undefined) return { rows: [], nextCursor: null };
   const models = await qctx.db
-    .selectFrom('inventoryPartFits')
+    .selectFrom('inventoryItemFits')
     .select(['brand', 'model'])
     .where('tenantId', '=', qctx.tenantId)
-    .where('partId', '=', input.partId)
+    .where('itemId', '=', input.itemId)
     .orderBy('position')
     .execute();
   const movements = await storeMovements(qctx)
-    .where('partId', '=', input.partId)
+    .where('itemId', '=', input.itemId)
     .orderBy('at', 'desc')
     .orderBy('id', 'desc')
     .limit(MOVEMENTS_SHOWN)
@@ -311,11 +311,11 @@ export async function getPartHandler(
   };
 }
 
-export const getPartQuery = {
-  name: 'getPart',
+export const getItemQuery = {
+  name: 'getItem',
   permission: INVENTORY_PERMISSION.read,
-  input: getPartInput,
-  handler: getPartHandler,
+  input: getItemInput,
+  handler: getItemHandler,
 } as const;
 
 // ── partsForUse ────────────────────────────────────────────────────────────────────────────────
@@ -337,19 +337,19 @@ export async function partsForUseHandler(
     .orderBy('id', 'desc')
     .execute();
   const movements = await toMovements(qctx, raw);
-  const partIds = [...new Set(movements.map((movement) => movement.partId))];
+  const partIds = [...new Set(movements.map((movement) => movement.itemId))];
   const parts =
     partIds.length === 0 ? [] : (await partsWithStock(qctx, partIds).execute()).map(toPart);
   const out = new Map<string, number>();
   for (const movement of movements) {
-    out.set(movement.partId, (out.get(movement.partId) ?? 0) - movement.qty);
+    out.set(movement.itemId, (out.get(movement.itemId) ?? 0) - movement.qty);
   }
   return {
     rows: [
       {
         parts: parts
           .map((part) => ({
-            partId: part.id,
+            itemId: part.id,
             name: part.name,
             code: part.code,
             out: out.get(part.id) ?? 0,
@@ -370,38 +370,38 @@ export const partsForUseQuery = {
   handler: partsForUseHandler,
 } as const;
 
-// ── partsFitting ───────────────────────────────────────────────────────────────────────────────
+// ── itemsFitting ───────────────────────────────────────────────────────────────────────────────
 
-export const partsFittingInput = z
+export const itemsFittingInput = z
   .object({
     brand: z.string().trim().max(60),
     model: z.string().trim().min(1).max(100),
     limit: z.number().int().min(1).max(50).default(20),
   })
   .strict();
-export type PartsFittingInput = z.input<typeof partsFittingInput>;
+export type PartsFittingInput = z.input<typeof itemsFittingInput>;
 
 /**
  * The parts on the list that fit one phone model, for the take step to offer first: a servisan for
  * an Oppo A57 shows the A57 parts before anyone types. Matched on the compacted spelling, so
  * "OPPO A-57" finds parts picked as "Oppo A57"; a part listed by model alone matches on the model.
  */
-export async function partsFittingHandler(
-  input: z.output<typeof partsFittingInput>,
+export async function itemsFittingHandler(
+  input: z.output<typeof itemsFittingInput>,
   qctx: Qctx,
-): Promise<QueryPage<PartRow>> {
+): Promise<QueryPage<ItemRow>> {
   const keys = [compactModel(input.brand, input.model), compactModel(input.model)].filter(
     (key) => key !== '',
   );
   const ids = (
     await qctx.db
-      .selectFrom('inventoryPartFits')
-      .select('partId')
+      .selectFrom('inventoryItemFits')
+      .select('itemId')
       .distinct()
       .where('tenantId', '=', qctx.tenantId)
       .where('modelKey', 'in', keys)
       .execute()
-  ).map((row) => row.partId);
+  ).map((row) => row.itemId);
   if (ids.length === 0) return { rows: [], nextCursor: null };
   const rows = await partsWithStock(qctx, ids)
     .where('p.archived', '=', 0)
@@ -411,9 +411,9 @@ export async function partsFittingHandler(
   return { rows: rows.map(toPart), nextCursor: null };
 }
 
-export const partsFittingQuery = {
-  name: 'partsFitting',
+export const itemsFittingQuery = {
+  name: 'itemsFitting',
   permission: INVENTORY_PERMISSION.read,
-  input: partsFittingInput,
-  handler: partsFittingHandler,
+  input: itemsFittingInput,
+  handler: itemsFittingHandler,
 } as const;

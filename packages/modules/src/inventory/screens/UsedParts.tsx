@@ -33,7 +33,7 @@ import {
 import { MAX_MOVEMENT_QTY, type PartUseKind } from '../constants.js';
 import { stockText } from '../labels.js';
 import { ti } from '../i18n.js';
-import type { PartRow, UsedPartRow } from '../queries.js';
+import type { ItemRow, UsedPartRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 
 /** What the parts are for, as the stock rules record it. */
@@ -102,9 +102,9 @@ export function UsedPartsSection({
             <View>
               {parts.map((part) => (
                 <View
-                  key={part.partId}
+                  key={part.itemId}
                   style={styles.usedRow}
-                  testID={`${testID}.part.${part.partId}`}
+                  testID={`${testID}.part.${part.itemId}`}
                 >
                   <View style={styles.usedText}>
                     <Text style={styles.name}>{part.name}</Text>
@@ -121,7 +121,7 @@ export function UsedPartsSection({
                       label={ti('inventory.use.putBack')}
                       accessibilityLabel={`${ti('inventory.use.putBack')} ${part.name}`}
                       onPress={() => onPutBack(part)}
-                      testID={`${testID}.putBack.${part.partId}`}
+                      testID={`${testID}.putBack.${part.itemId}`}
                     />
                   ) : null}
                 </View>
@@ -156,7 +156,7 @@ export function TakePartStep({
   const runtime = useInventoryRuntime();
   const runner = useActionRunner();
   const [text, setText] = useState('');
-  const [picked, setPicked] = useState<PartRow | null>(null);
+  const [picked, setPicked] = useState<ItemRow | null>(null);
   const [qty, setQty] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
   const typed = text.trim();
@@ -166,10 +166,10 @@ export function TakePartStep({
   const query = useInventoryQuery(
     async (rt) => {
       const all = (
-        await rt.query('listParts', { text: searchText, filter: 'active', limit: PICK_LIMIT })
+        await rt.query('listItems', { text: searchText, filter: 'active', limit: PICK_LIMIT })
       ).rows;
-      if (!fitsDevice) return { fitting: [] as readonly PartRow[], rest: all };
-      const fitting = (await rt.query('partsFitting', { brand: device.brand, model: device.model }))
+      if (!fitsDevice) return { fitting: [] as readonly ItemRow[], rest: all };
+      const fitting = (await rt.query('itemsFitting', { brand: device.brand, model: device.model }))
         .rows;
       const ids = new Set(fitting.map((row) => row.id));
       return { fitting, rest: all.filter((row) => !ids.has(row.id)) };
@@ -177,7 +177,7 @@ export function TakePartStep({
     `take:${searchText}:${fitsDevice ? `${device.brand}\u0000${device.model}` : ''}:${String(reloadNonce)}`,
   );
 
-  const choice = (row: PartRow): React.JSX.Element => {
+  const choice = (row: ItemRow): React.JSX.Element => {
     const selected = picked?.id === row.id;
     return (
       <Pressable
@@ -215,7 +215,7 @@ export function TakePartStep({
   const take = (): void => {
     if (picked === null) return;
     void runner
-      .run(() => runtime.run('takePart', { partId: picked.id, qty, use }))
+      .run(() => runtime.run('takePart', { itemId: picked.id, qty, use }))
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -317,7 +317,7 @@ export function PutBackStep({
   const [qty, setQty] = useState(1);
   const putBack = (): void => {
     void runner
-      .run(() => runtime.run('putBackPart', { partId: part.partId, qty, use }))
+      .run(() => runtime.run('putBackPart', { itemId: part.itemId, qty, use }))
       .then((result) => {
         if (result !== undefined) onDone();
       });

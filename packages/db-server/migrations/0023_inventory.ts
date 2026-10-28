@@ -18,10 +18,11 @@ const PERMISSIONS = [
     roles: ['main_owner', 'store_owner', 'cashier', 'technician'],
   },
   {
-    id: 'inventory.manage_parts',
-    action: 'manage_parts',
+    id: 'inventory.manage_items',
+    action: 'manage_items',
     isDangerous: false,
-    description: "Can add parts to the business's parts list and edit them.",
+    description:
+      "Can add items (spareparts, and later accessories and other goods) to the business's list and edit them.",
     roles: ['main_owner', 'store_owner'],
   },
   {
@@ -50,7 +51,7 @@ const PERMISSIONS = [
 
 export async function up(db: Kysely<unknown>): Promise<void> {
   await sql`
-    CREATE TABLE inventory_parts (
+    CREATE TABLE inventory_items (
       id         uuid PRIMARY KEY,
       tenant_id  uuid NOT NULL REFERENCES tenants(id),
       name       text NOT NULL,
@@ -63,14 +64,14 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       updated_at bigint NOT NULL
     )
   `.execute(db);
-  await secureTenantTable(db, 'inventory_parts');
+  await secureTenantTable(db, 'inventory_items');
 
   await sql`
     CREATE TABLE inventory_movements (
       id        uuid PRIMARY KEY,
       tenant_id uuid NOT NULL REFERENCES tenants(id),
       store_id  uuid NOT NULL REFERENCES stores(id),
-      part_id   uuid NOT NULL,
+      item_id   uuid NOT NULL,
       kind      text NOT NULL,
       qty       integer NOT NULL,
       counted   integer,
@@ -82,27 +83,27 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       at        bigint NOT NULL
     )
   `.execute(db);
-  await sql`CREATE INDEX idx_inventory_movements_part ON inventory_movements (store_id, part_id, at)`.execute(
+  await sql`CREATE INDEX idx_inventory_movements_part ON inventory_movements (store_id, item_id, at)`.execute(
     db,
   );
   await sql`CREATE INDEX idx_inventory_movements_use ON inventory_movements (use_id)`.execute(db);
   await secureTenantTable(db, 'inventory_movements');
 
   await sql`
-    CREATE TABLE inventory_part_fits (
-      part_id   uuid NOT NULL,
+    CREATE TABLE inventory_item_fits (
+      item_id   uuid NOT NULL,
       position  integer NOT NULL,
       tenant_id uuid NOT NULL REFERENCES tenants(id),
       brand     text NOT NULL,
       model     text NOT NULL,
       model_key text NOT NULL,
-      PRIMARY KEY (part_id, position)
+      PRIMARY KEY (item_id, position)
     )
   `.execute(db);
-  await sql`CREATE INDEX idx_inventory_part_fits_model ON inventory_part_fits (tenant_id, model_key)`.execute(
+  await sql`CREATE INDEX idx_inventory_item_fits_model ON inventory_item_fits (tenant_id, model_key)`.execute(
     db,
   );
-  await secureTenantTable(db, 'inventory_part_fits');
+  await secureTenantTable(db, 'inventory_item_fits');
 
   for (const permission of PERMISSIONS) {
     await sql`
@@ -128,7 +129,7 @@ export async function down(db: Kysely<unknown>): Promise<void> {
     await sql`DELETE FROM role_permissions WHERE permission_id = ${permission.id}`.execute(db);
     await sql`DELETE FROM permissions WHERE id = ${permission.id}`.execute(db);
   }
-  await sql`DROP TABLE inventory_part_fits`.execute(db);
+  await sql`DROP TABLE inventory_item_fits`.execute(db);
   await sql`DROP TABLE inventory_movements`.execute(db);
-  await sql`DROP TABLE inventory_parts`.execute(db);
+  await sql`DROP TABLE inventory_items`.execute(db);
 }

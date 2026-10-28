@@ -1,15 +1,15 @@
 {
   "opType": {
-    "partAdded": "Sparepart ditambahkan",
-    "partEdited": "Sparepart diubah",
+    "itemAdded": "Sparepart ditambahkan",
+    "itemEdited": "Sparepart diubah",
     "stockCounted": "Stok dikoreksi",
-    "partTaken": "Sparepart diambil",
-    "partPutBack": "Sparepart dikembalikan"
+    "itemTaken": "Sparepart diambil",
+    "itemPutBack": "Sparepart dikembalikan"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
-    "partNotFound": "Sparepart ini tidak ada di daftar.",
-    "partArchived": "Sparepart ini sudah diarsipkan.",
+    "itemNotFound": "Sparepart ini tidak ada di daftar.",
+    "itemArchived": "Sparepart ini sudah diarsipkan.",
     "moreThanTaken": "Jumlahnya lebih dari yang diambil untuk servisan ini.",
     "wrongUse": "Data servisannya tidak cocok. Coba lagi."
   },

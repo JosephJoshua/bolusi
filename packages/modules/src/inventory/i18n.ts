@@ -7,14 +7,14 @@ import {
 } from '../screen-kit/i18n.js';
 
 export const INVENTORY_KEYS = [
-  'inventory.opType.partAdded',
-  'inventory.opType.partEdited',
+  'inventory.opType.itemAdded',
+  'inventory.opType.itemEdited',
   'inventory.opType.stockCounted',
-  'inventory.opType.partTaken',
-  'inventory.opType.partPutBack',
+  'inventory.opType.itemTaken',
+  'inventory.opType.itemPutBack',
   'inventory.refusal.alreadyRecorded',
-  'inventory.refusal.partNotFound',
-  'inventory.refusal.partArchived',
+  'inventory.refusal.itemNotFound',
+  'inventory.refusal.itemArchived',
   'inventory.refusal.moreThanTaken',
   'inventory.refusal.wrongUse',
   'inventory.list.title',

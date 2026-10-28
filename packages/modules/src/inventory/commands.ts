@@ -7,7 +7,7 @@ import { DomainError, type CommandContext, type CommandHandlerResult } from '@bo
 import {
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_OP,
-  INVENTORY_PART_ENTITY,
+  INVENTORY_ITEM_ENTITY,
   MAX_COUNTED_QTY,
   MAX_MOVEMENT_QTY,
   MAX_PART_FITS,
@@ -15,7 +15,7 @@ import {
 } from './constants.js';
 import { MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME, zPartFit } from './operations.js';
 import { compactModel } from '../shared/model-key.js';
-import { getPartQuery, type PartDetailRow } from './queries.js';
+import { getItemQuery, type ItemDetailRow } from './queries.js';
 
 /** Blank optional text is no text. */
 const zOptionalText = (max: number) =>
@@ -48,12 +48,12 @@ const zPartDetails = z
   })
   .strict();
 
-async function loadPart(ctx: CommandContext, partId: string): Promise<PartDetailRow> {
-  const part = (await ctx.query(getPartQuery, { partId })).rows[0];
+async function loadPart(ctx: CommandContext, itemId: string): Promise<ItemDetailRow> {
+  const part = (await ctx.query(getItemQuery, { itemId })).rows[0];
   if (part === undefined) {
     throw new DomainError('ENTITY_NOT_FOUND', {
-      entityType: INVENTORY_PART_ENTITY,
-      entityId: partId,
+      entityType: INVENTORY_ITEM_ENTITY,
+      entityId: itemId,
     });
   }
   return part;
@@ -75,37 +75,37 @@ function nothingChanged(field: string): DomainError {
 
 // ── the parts list ───────────────────────────────────────────────────────────────────────────
 
-export const addPartInput = zPartDetails;
-export type AddPartInput = z.input<typeof addPartInput>;
+export const addItemInput = zPartDetails;
+export type AddPartInput = z.input<typeof addItemInput>;
 
-export function addPartHandler(
-  input: z.output<typeof addPartInput>,
+export function addItemHandler(
+  input: z.output<typeof addItemInput>,
   ctx: CommandContext,
-): CommandHandlerResult<{ partId: string }> {
-  const partId = ctx.newId();
+): CommandHandlerResult<{ itemId: string }> {
+  const itemId = ctx.newId();
   return {
     ops: [
       ctx.op({
-        type: INVENTORY_OP.partAdded,
-        entityType: INVENTORY_PART_ENTITY,
-        entityId: partId,
+        type: INVENTORY_OP.itemAdded,
+        entityType: INVENTORY_ITEM_ENTITY,
+        entityId: itemId,
         payload: { name: input.name, code: input.code, fits: input.fits },
       }),
     ],
-    result: { partId },
+    result: { itemId },
   };
 }
 
-export const editPartInput = zPartDetails
-  .extend({ partId: z.string().min(1), archived: z.boolean() })
+export const editItemInput = zPartDetails
+  .extend({ itemId: z.string().min(1), archived: z.boolean() })
   .strict();
-export type EditPartInput = z.input<typeof editPartInput>;
+export type EditPartInput = z.input<typeof editItemInput>;
 
-export async function editPartHandler(
-  input: z.output<typeof editPartInput>,
+export async function editItemHandler(
+  input: z.output<typeof editItemInput>,
   ctx: CommandContext,
-): Promise<CommandHandlerResult<{ partId: string }>> {
-  const part = await loadPart(ctx, input.partId);
+): Promise<CommandHandlerResult<{ itemId: string }>> {
+  const part = await loadPart(ctx, input.itemId);
   if (
     part.name === input.name &&
     part.code === input.code &&
@@ -117,13 +117,13 @@ export async function editPartHandler(
   return {
     ops: [
       ctx.op({
-        type: INVENTORY_OP.partEdited,
-        entityType: INVENTORY_PART_ENTITY,
+        type: INVENTORY_OP.itemEdited,
+        entityType: INVENTORY_ITEM_ENTITY,
         entityId: part.id,
         payload: { name: input.name, code: input.code, fits: input.fits, archived: input.archived },
       }),
     ],
-    result: { partId: part.id },
+    result: { itemId: part.id },
   };
 }
 
@@ -135,7 +135,7 @@ export const countStockInput = z
       .array(
         z
           .object({
-            partId: z.string().min(1),
+            itemId: z.string().min(1),
             counted: z.number().int().min(0).max(MAX_COUNTED_QTY),
           })
           .strict(),
@@ -160,11 +160,11 @@ export async function countStockHandler(
   const movementIds: string[] = [];
   const seen = new Set<string>();
   for (const count of input.counts) {
-    if (seen.has(count.partId)) {
+    if (seen.has(count.itemId)) {
       throw new DomainError('VALIDATION_FAILED', { field: 'counts', issue: 'a part twice' });
     }
-    seen.add(count.partId);
-    const part = await loadPart(ctx, count.partId);
+    seen.add(count.itemId);
+    const part = await loadPart(ctx, count.itemId);
     const movementId = ctx.newId();
     movementIds.push(movementId);
     ops.push(
@@ -173,7 +173,7 @@ export async function countStockHandler(
         entityType: INVENTORY_MOVEMENT_ENTITY,
         entityId: movementId,
         payload: {
-          partId: part.id,
+          itemId: part.id,
           counted: count.counted,
           expected: part.onHand,
           note: input.note,
@@ -188,7 +188,7 @@ export async function countStockHandler(
 
 export const usePartInput = z
   .object({
-    partId: z.string().min(1),
+    itemId: z.string().min(1),
     qty: z.number().int().min(1).max(MAX_MOVEMENT_QTY),
     use: z
       .object({
@@ -210,7 +210,7 @@ function useOp(ctx: CommandContext, type: string, input: z.output<typeof usePart
         type,
         entityType: INVENTORY_MOVEMENT_ENTITY,
         entityId: movementId,
-        payload: { partId: input.partId, qty: input.qty, use: input.use },
+        payload: { itemId: input.itemId, qty: input.qty, use: input.use },
       }),
     ],
     result: { movementId },
@@ -222,7 +222,7 @@ export function takePartHandler(
   input: z.output<typeof usePartInput>,
   ctx: CommandContext,
 ): CommandHandlerResult<{ movementId: string }> {
-  return useOp(ctx, INVENTORY_OP.partTaken, input);
+  return useOp(ctx, INVENTORY_OP.itemTaken, input);
 }
 
 /** Put an unused part back on the shelf. Only what the use took can go back. */
@@ -230,5 +230,5 @@ export function putBackPartHandler(
   input: z.output<typeof usePartInput>,
   ctx: CommandContext,
 ): CommandHandlerResult<{ movementId: string }> {
-  return useOp(ctx, INVENTORY_OP.partPutBack, input);
+  return useOp(ctx, INVENTORY_OP.itemPutBack, input);
 }

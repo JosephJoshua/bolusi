@@ -102,8 +102,8 @@ function journey(world: ChainWorld): OpSpec[] {
     });
     return [
       {
-        type: 'inventory.part_added',
-        entityType: 'inventory_part',
+        type: 'inventory.item_added',
+        entityType: 'inventory_item',
         entityId: part,
         storeId: null,
         payload: {
@@ -113,8 +113,8 @@ function journey(world: ChainWorld): OpSpec[] {
         },
       },
       {
-        type: 'inventory.part_edited',
-        entityType: 'inventory_part',
+        type: 'inventory.item_edited',
+        entityType: 'inventory_item',
         entityId: part,
         storeId: null,
         payload: {
@@ -127,9 +127,9 @@ function journey(world: ChainWorld): OpSpec[] {
           archived: false,
         },
       },
-      movement(1, 'inventory.stock_counted', { partId: part, counted: 3, expected: 0, note: null }),
-      movement(2, 'inventory.part_taken', { partId: part, qty: 2, use }),
-      movement(3, 'inventory.part_put_back', { partId: part, qty: 1, use }),
+      movement(1, 'inventory.stock_counted', { itemId: part, counted: 3, expected: 0, note: null }),
+      movement(2, 'inventory.item_taken', { itemId: part, qty: 2, use }),
+      movement(3, 'inventory.item_put_back', { itemId: part, qty: 1, use }),
     ];
   };
   const opened = (ticketId: string, ticketNumber: string, lineId: string): OpSpec => ({

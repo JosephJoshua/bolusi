@@ -13,12 +13,12 @@ import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js
 import { MAX_COUNTED_QTY } from '../constants.js';
 import { ti } from '../i18n.js';
 import { MAX_NOTE } from '../operations.js';
-import type { PartRow } from '../queries.js';
+import type { ItemRow } from '../queries.js';
 import { useInventoryRuntime } from '../runtime.js';
 
 export interface CountStepProps {
   readonly chrome: ScreenChrome;
-  readonly part: PartRow;
+  readonly part: ItemRow;
   readonly onDone: () => void;
   readonly onCancel: () => void;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
@@ -55,7 +55,7 @@ export function CountStep({
     void runner
       .run(() =>
         runtime.run('countStock', {
-          counts: [{ partId: part.id, counted }],
+          counts: [{ itemId: part.id, counted }],
           note: note.trim() === '' ? null : note,
         }),
       )

@@ -11,21 +11,21 @@ import { useSettledValue } from '../../screen-kit/index.js';
 import { compactModel } from '../../shared/model-key.js';
 import { MAX_PART_FITS } from '../constants.js';
 import { ti } from '../i18n.js';
-import type { PartFitRow } from '../queries.js';
+import type { ItemFitRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 
 const SUGGESTIONS = 5;
 
 export interface ModelsFieldProps {
-  readonly value: readonly PartFitRow[];
-  readonly onChange: (next: readonly PartFitRow[]) => void;
+  readonly value: readonly ItemFitRow[];
+  readonly onChange: (next: readonly ItemFitRow[]) => void;
   readonly testID: string;
 }
 
-const keyOf = (fit: PartFitRow): string => compactModel(fit.brand, fit.model);
+const keyOf = (fit: ItemFitRow): string => compactModel(fit.brand, fit.model);
 
 /** "Samsung Galaxy A14", or the model alone when it was typed without a brand. */
-export function fitLabel(fit: PartFitRow): string {
+export function fitLabel(fit: ItemFitRow): string {
   return `${fit.brand} ${fit.model}`.trim();
 }
 
@@ -54,7 +54,7 @@ export function ModelsField({ value, onChange, testID }: ModelsFieldProps): Reac
     !suggestions.some((option) => [keyOf(option), compactModel(option.model)].includes(typedKey));
   const full = value.length >= MAX_PART_FITS;
 
-  const add = (fit: PartFitRow): void => {
+  const add = (fit: ItemFitRow): void => {
     onChange([...value, { brand: fit.brand, model: fit.model }]);
     setText('');
   };

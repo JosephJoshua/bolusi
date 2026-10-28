@@ -13,15 +13,15 @@ import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js
 import { INVENTORY_PERMISSION, MAX_COUNTED_QTY } from '../constants.js';
 import { ti } from '../i18n.js';
 import { MAX_PART_CODE, MAX_PART_NAME } from '../operations.js';
-import type { PartDetailRow, PartFitRow } from '../queries.js';
+import type { ItemDetailRow, ItemFitRow } from '../queries.js';
 import { useInventoryRuntime } from '../runtime.js';
 import { ModelsField } from './ModelsField.js';
 
 export interface PartFormProps {
   readonly chrome: ScreenChrome;
   /** The part being edited; absent to add one. */
-  readonly part?: PartDetailRow | undefined;
-  readonly onDone: (partId: string) => void;
+  readonly part?: ItemDetailRow | undefined;
+  readonly onDone: (itemId: string) => void;
   readonly onCancel: () => void;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   readonly testID?: string | undefined;
@@ -41,9 +41,9 @@ export function PartForm({
   const canCount = adding && runtime.hasPermission(INVENTORY_PERMISSION.count);
   const [name, setName] = useState(part?.name ?? '');
   const [code, setCode] = useState(part?.code ?? '');
-  const [fits, setFits] = useState<readonly PartFitRow[]>(part?.models ?? []);
+  const [fits, setFits] = useState<readonly ItemFitRow[]>(part?.models ?? []);
   // What the phones were when the form (re)started, so kept phones alone are nothing to discard.
-  const [baseFits, setBaseFits] = useState<readonly PartFitRow[]>(part?.models ?? []);
+  const [baseFits, setBaseFits] = useState<readonly ItemFitRow[]>(part?.models ?? []);
   const [stock, setStock] = useState(0);
   const [tried, setTried] = useState(false);
   const dirty =
@@ -73,18 +73,18 @@ export function PartForm({
     void runner
       .run(async () => {
         if (part !== undefined) {
-          return runtime.run('editPart', { partId: part.id, archived: part.archived, ...details });
+          return runtime.run('editItem', { itemId: part.id, archived: part.archived, ...details });
         }
         // Kept, so a retry after the count failed saves the count, not a second copy of the part.
-        addedRef.current ??= (await runtime.run('addPart', details)).partId;
-        const partId = addedRef.current;
-        if (stock > 0) await runtime.run('countStock', { counts: [{ partId, counted: stock }] });
-        return { partId };
+        addedRef.current ??= (await runtime.run('addItem', details)).itemId;
+        const itemId = addedRef.current;
+        if (stock > 0) await runtime.run('countStock', { counts: [{ itemId, counted: stock }] });
+        return { itemId };
       })
       .then((result) => {
         if (result === undefined) return;
         if (!another) {
-          onDone(result.partId);
+          onDone(result.itemId);
           return;
         }
         // Parts often come in a run for one phone (its LCD, battery, connector): the phones stay.

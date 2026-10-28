@@ -61,32 +61,16 @@ export interface DeviceRegistry {
   storeId: string | null;
 }
 
-export interface InventoryMovements {
-  at: number;
-  counted: number | null;
-  id: string | null;
-  kind: string;
-  note: string | null;
-  partId: string;
-  qty: number;
-  storeId: string;
-  tenantId: string;
-  useId: string | null;
-  useKind: string | null;
-  useLabel: string | null;
-  userId: string;
-}
-
-export interface InventoryPartFits {
+export interface InventoryItemFits {
   brand: string;
+  itemId: string;
   model: string;
   modelKey: string;
-  partId: string;
   position: number;
   tenantId: string;
 }
 
-export interface InventoryParts {
+export interface InventoryItems {
   archived: number;
   code: string | null;
   createdAt: number;
@@ -97,6 +81,22 @@ export interface InventoryParts {
   tenantId: string;
   updatedAt: number;
   updatedBy: string;
+}
+
+export interface InventoryMovements {
+  at: number;
+  counted: number | null;
+  id: string | null;
+  itemId: string;
+  kind: string;
+  note: string | null;
+  qty: number;
+  storeId: string;
+  tenantId: string;
+  useId: string | null;
+  useKind: string | null;
+  useLabel: string | null;
+  userId: string;
 }
 
 export interface MediaItems {
@@ -436,9 +436,9 @@ export interface DB {
   authSessions: AuthSessions;
   conflicts: Conflicts;
   deviceRegistry: DeviceRegistry;
+  inventoryItemFits: InventoryItemFits;
+  inventoryItems: InventoryItems;
   inventoryMovements: InventoryMovements;
-  inventoryPartFits: InventoryPartFits;
-  inventoryParts: InventoryParts;
   mediaItems: MediaItems;
   metaKv: MetaKv;
   migrations: Migrations;

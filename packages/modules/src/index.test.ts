@@ -36,7 +36,7 @@ describe('ALL_MODULES — the single registration source (T-14 denominator)', ()
         'platform.user_locale_changed',
         'notes.note_created',
         'repair.ticket_opened',
-        'inventory.part_taken',
+        'inventory.item_taken',
         'auth.permission_denied',
       ]),
     );

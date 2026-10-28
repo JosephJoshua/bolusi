@@ -6,17 +6,17 @@ import type { OperationDeclaration } from '@bolusi/core';
 import { zUuidV7 } from '@bolusi/schemas';
 
 import {
-  partAddedApplier,
-  partEditedApplier,
-  partPutBackApplier,
-  partTakenApplier,
+  itemAddedApplier,
+  itemEditedApplier,
+  itemPutBackApplier,
+  itemTakenApplier,
   stockCountedApplier,
 } from './applier.js';
 import {
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_OP,
   MAX_PART_FITS,
-  INVENTORY_PART_ENTITY,
+  INVENTORY_ITEM_ENTITY,
   INVENTORY_PERMISSION,
   MAX_COUNTED_QTY,
   MAX_MOVEMENT_QTY,
@@ -24,10 +24,10 @@ import {
 } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import {
-  partAddedRule,
-  partEditedRule,
-  partPutBackRule,
-  partTakenRule,
+  itemAddedRule,
+  itemEditedRule,
+  itemPutBackRule,
+  itemTakenRule,
   stockCountedRule,
 } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
@@ -52,15 +52,15 @@ export const partDetailsPayload = z
   })
   .strict();
 
-export const partAddedPayload = partDetailsPayload;
+export const itemAddedPayload = partDetailsPayload;
 
-export const partEditedPayload = partDetailsPayload.extend({ archived: z.boolean() }).strict();
+export const itemEditedPayload = partDetailsPayload.extend({ archived: z.boolean() }).strict();
 
 const zQty = z.number().int().min(1).max(MAX_MOVEMENT_QTY);
 
 export const stockCountedPayload = z
   .object({
-    partId: zUuidV7,
+    itemId: zUuidV7,
     counted: z.number().int().min(0).max(MAX_COUNTED_QTY),
     /** What the counting device showed, kept so the history can say how far off the record was.
      * Stock itself is the latest count plus what moved after it (queries.ts). */
@@ -73,35 +73,35 @@ export const zPartUse = z
   .object({ kind: z.enum(PART_USE_KINDS), id: zUuidV7, label: z.string().min(1).max(60) })
   .strict();
 
-export const partTakenPayload = z.object({ partId: zUuidV7, qty: zQty, use: zPartUse }).strict();
+export const itemTakenPayload = z.object({ itemId: zUuidV7, qty: zQty, use: zPartUse }).strict();
 
-export const partPutBackPayload = partTakenPayload;
+export const itemPutBackPayload = itemTakenPayload;
 
 /** The op declarations. Rules that check a part's use need the use targets the composition wires. */
 export function inventoryOperations(
   targets: PartUseTargets,
 ): Readonly<Record<string, OperationDeclaration<InventoryDatabase>>> {
   return {
-    [INVENTORY_OP.partAdded]: {
+    [INVENTORY_OP.itemAdded]: {
       schemaVersion: 1,
-      payload: partAddedPayload,
+      payload: itemAddedPayload,
       scope: 'tenant',
-      reversal: 'Taken off the list by inventory.part_edited with archived = true.',
-      apply: partAddedApplier,
-      rule: partAddedRule,
-      permission: INVENTORY_PERMISSION.manageParts,
-      entityType: INVENTORY_PART_ENTITY,
+      reversal: 'Taken off the list by inventory.item_edited with archived = true.',
+      apply: itemAddedApplier,
+      rule: itemAddedRule,
+      permission: INVENTORY_PERMISSION.manageItems,
+      entityType: INVENTORY_ITEM_ENTITY,
     },
-    [INVENTORY_OP.partEdited]: {
+    [INVENTORY_OP.itemEdited]: {
       schemaVersion: 1,
-      payload: partEditedPayload,
+      payload: itemEditedPayload,
       scope: 'tenant',
-      reversal: 'Reversed by another inventory.part_edited with the previous details.',
-      apply: partEditedApplier,
-      rule: partEditedRule,
-      permission: INVENTORY_PERMISSION.manageParts,
-      entityType: INVENTORY_PART_ENTITY,
-      conflict: { key: 'inventory_part.details', severity: 'minor' },
+      reversal: 'Reversed by another inventory.item_edited with the previous details.',
+      apply: itemEditedApplier,
+      rule: itemEditedRule,
+      permission: INVENTORY_PERMISSION.manageItems,
+      entityType: INVENTORY_ITEM_ENTITY,
+      conflict: { key: 'inventory_item.details', severity: 'minor' },
     },
     [INVENTORY_OP.stockCounted]: {
       schemaVersion: 1,
@@ -112,21 +112,21 @@ export function inventoryOperations(
       permission: INVENTORY_PERMISSION.count,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
-    [INVENTORY_OP.partTaken]: {
+    [INVENTORY_OP.itemTaken]: {
       schemaVersion: 1,
-      payload: partTakenPayload,
-      reversal: 'Reversed by inventory.part_put_back for the same use.',
-      apply: partTakenApplier,
-      rule: partTakenRule(targets),
+      payload: itemTakenPayload,
+      reversal: 'Reversed by inventory.item_put_back for the same use.',
+      apply: itemTakenApplier,
+      rule: itemTakenRule(targets),
       permission: INVENTORY_PERMISSION.useParts,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
-    [INVENTORY_OP.partPutBack]: {
+    [INVENTORY_OP.itemPutBack]: {
       schemaVersion: 1,
-      payload: partPutBackPayload,
-      reversal: 'Reversed by taking the part again with inventory.part_taken.',
-      apply: partPutBackApplier,
-      rule: partPutBackRule(targets),
+      payload: itemPutBackPayload,
+      reversal: 'Reversed by taking the part again with inventory.item_taken.',
+      apply: itemPutBackApplier,
+      rule: itemPutBackRule(targets),
       permission: INVENTORY_PERMISSION.useParts,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },

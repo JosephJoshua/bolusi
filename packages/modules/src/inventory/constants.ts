@@ -9,31 +9,31 @@
 export const INVENTORY_MODULE_ID = 'inventory' as const;
 
 /** One part on the business's list. Tenant-wide: every store sees the same list. */
-export const INVENTORY_PART_ENTITY = 'inventory_part' as const;
+export const INVENTORY_ITEM_ENTITY = 'inventory_item' as const;
 /** One stock movement in one store. */
 export const INVENTORY_MOVEMENT_ENTITY = 'inventory_movement' as const;
 
 export const INVENTORY_TABLE = {
-  parts: 'inventory_parts',
+  items: 'inventory_items',
   movements: 'inventory_movements',
-  fits: 'inventory_part_fits',
+  fits: 'inventory_item_fits',
 } as const;
 
 /** The most phone models one part can list as fitting. */
 export const MAX_PART_FITS = 50;
 
 export const INVENTORY_OP = {
-  partAdded: 'inventory.part_added',
-  partEdited: 'inventory.part_edited',
+  itemAdded: 'inventory.item_added',
+  itemEdited: 'inventory.item_edited',
   stockCounted: 'inventory.stock_counted',
-  partTaken: 'inventory.part_taken',
-  partPutBack: 'inventory.part_put_back',
+  itemTaken: 'inventory.item_taken',
+  itemPutBack: 'inventory.item_put_back',
 } as const;
 
 export const INVENTORY_PERMISSION = {
   read: 'inventory.read',
   /** Add parts to the business's list and edit them. */
-  manageParts: 'inventory.manage_parts',
+  manageItems: 'inventory.manage_items',
   /** Set how many of a part the store has, from a count. */
   count: 'inventory.count',
   /** Take parts for a servisan and put them back, while it is being worked on. */

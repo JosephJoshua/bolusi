@@ -7,7 +7,7 @@
 import { defineRefusals, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { INVENTORY_PART_ENTITY } from './constants.js';
+import { INVENTORY_ITEM_ENTITY } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import type { InventoryDatabase } from './schema.js';
 
@@ -17,15 +17,15 @@ type Db = Parameters<Rule>[1]['db'];
 /** Every reason a stock change is refused, each with copy at `inventory.refusal.<reason>`. */
 export const INVENTORY_REFUSALS = defineRefusals('inventory', [
   'alreadyRecorded',
-  'partNotFound',
-  'partArchived',
+  'itemNotFound',
+  'itemArchived',
   'moreThanTaken',
   'wrongUse',
 ] as const);
 const { refuse } = INVENTORY_REFUSALS;
 
 interface UsePayload {
-  readonly partId: string;
+  readonly itemId: string;
   readonly qty: number;
   readonly use: {
     readonly kind: keyof PartUseTargets;
@@ -38,21 +38,21 @@ function payloadOf<T>(op: SignedOperation): T {
   return op.payload as unknown as T;
 }
 
-async function findPart(db: Db, op: SignedOperation, partId: string) {
+async function findPart(db: Db, op: SignedOperation, itemId: string) {
   return db
-    .selectFrom('inventoryParts')
+    .selectFrom('inventoryItems')
     .select(['id', 'archived'])
-    .where('id', '=', partId)
+    .where('id', '=', itemId)
     .where('tenantId', '=', op.tenantId)
     .executeTakeFirst();
 }
 
-async function requirePart(db: Db, op: SignedOperation, partId: string) {
-  const part = await findPart(db, op, partId);
+async function requirePart(db: Db, op: SignedOperation, itemId: string) {
+  const part = await findPart(db, op, itemId);
   if (part === undefined) {
-    throw refuse('partNotFound', {
+    throw refuse('itemNotFound', {
       code: 'ENTITY_NOT_FOUND',
-      details: { entityType: INVENTORY_PART_ENTITY, entityId: partId },
+      details: { entityType: INVENTORY_ITEM_ENTITY, entityId: itemId },
     });
   }
   return part;
@@ -77,7 +77,7 @@ async function requireFreshMovement(db: Db, op: SignedOperation): Promise<void> 
 export async function outOnUse(
   db: Db,
   op: Pick<SignedOperation, 'tenantId' | 'storeId'>,
-  partId: string,
+  itemId: string,
   useId: string,
 ): Promise<number> {
   const row = await db
@@ -85,34 +85,34 @@ export async function outOnUse(
     .select((eb) => eb.fn.sum<number | string | null>('qty').as('net'))
     .where('tenantId', '=', op.tenantId)
     .where('storeId', '=', op.storeId ?? '')
-    .where('partId', '=', partId)
+    .where('itemId', '=', itemId)
     .where('useId', '=', useId)
     .executeTakeFirst();
   // Takes are negative, so what is out is the negated sum.
   return -Number(row?.net ?? 0);
 }
 
-export const partAddedRule: Rule = async (op, { db }) => {
+export const itemAddedRule: Rule = async (op, { db }) => {
   const taken = await db
-    .selectFrom('inventoryParts')
+    .selectFrom('inventoryItems')
     .select('id')
     .where('id', '=', op.entityId)
     .executeTakeFirst();
   if (taken !== undefined) {
     throw refuse('alreadyRecorded', {
       code: 'VALIDATION_FAILED',
-      details: { field: 'partId', issue: 'already exists' },
+      details: { field: 'itemId', issue: 'already exists' },
     });
   }
 };
 
-export const partEditedRule: Rule = async (op, { db }) => {
+export const itemEditedRule: Rule = async (op, { db }) => {
   await requirePart(db, op, op.entityId);
 };
 
 export const stockCountedRule: Rule = async (op, { db }) => {
   await requireFreshMovement(db, op);
-  await requirePart(db, op, payloadOf<{ partId: string }>(op).partId);
+  await requirePart(db, op, payloadOf<{ itemId: string }>(op).itemId);
 };
 
 async function checkUse(
@@ -139,27 +139,27 @@ async function checkUse(
   return payload;
 }
 
-export function partTakenRule(targets: PartUseTargets): Rule {
+export function itemTakenRule(targets: PartUseTargets): Rule {
   return async (op, ctx) => {
     await requireFreshMovement(ctx.db, op);
     const payload = payloadOf<UsePayload>(op);
-    const part = await requirePart(ctx.db, op, payload.partId);
+    const part = await requirePart(ctx.db, op, payload.itemId);
     if (Number(part.archived) === 1) {
-      throw refuse('partArchived', { details: { entityId: payload.partId } });
+      throw refuse('itemArchived', { details: { entityId: payload.itemId } });
     }
     await checkUse(targets, op, ctx, 'take');
   };
 }
 
-export function partPutBackRule(targets: PartUseTargets): Rule {
+export function itemPutBackRule(targets: PartUseTargets): Rule {
   return async (op, ctx) => {
     await requireFreshMovement(ctx.db, op);
     const payload = payloadOf<UsePayload>(op);
     // An archived part can still come back: it was taken before it left the list.
-    await requirePart(ctx.db, op, payload.partId);
+    await requirePart(ctx.db, op, payload.itemId);
     await checkUse(targets, op, ctx, 'putBack');
     // Only what this use took can go back, so a put-back never invents stock.
-    const out = await outOnUse(ctx.db, op, payload.partId, payload.use.id);
+    const out = await outOnUse(ctx.db, op, payload.itemId, payload.use.id);
     if (payload.qty > out) {
       throw refuse('moreThanTaken', {
         code: 'VALIDATION_FAILED',
