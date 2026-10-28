@@ -137,6 +137,24 @@ fails a build, a boot or a test rather than waiting for review:
   the same rule that offered it, and says why it can no longer finish. See repair's
   `staleStep` in `flows.ts` and the `stale` prop on `FlowScreen`.
 
+## Money
+
+The `money` module (`packages/modules/src/money`) owns the ledger. Other modules
+never write its tables: their commands add money ops (`chargeOp`, `paymentOp`,
+`refundOp`) next to their own ops, and each money op's applier posts balanced
+lines from `postings.ts`. A line on `receivable` names its document, so a
+document's balance is a sum (negative while paid ahead). A module that charges
+customers registers a document source (`money/documents.ts`) in
+`packages/modules/src/index.ts`; the charge rule asks it for the exact amount.
+
+The server judges each pushed op alone, not a command's ops as a group, so each
+money rule is safe on its own: a charge equals the document's price, a refund by
+the counter returns at most the overpayment through the account it came in by,
+and lowering a bill, voiding a payment or settling a cash difference are owners'.
+A cash count records what was counted; the difference is computed against the
+book at the count's time, so late-synced cash shows up correctly. Stock and
+purchasing post through the same module (reserved accounts in `constants.ts`).
+
 ## Limits to carry into repair work
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
