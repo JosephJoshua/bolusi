@@ -251,7 +251,7 @@
     "incompleteLine": "Describe every line that has an amount.",
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
-    "downPaymentReference": "Enter the approval code from the EDC machine.",
+    "downPaymentReference": "Enter the approval code from the EDC slip.",
     "screenLock": "Enter the screen lock, or choose None.",
     "ownershipVideo": "The ownership video isn’t recorded yet."
   },

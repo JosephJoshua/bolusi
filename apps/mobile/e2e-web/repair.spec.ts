@@ -831,7 +831,7 @@ test('a down payment at intake shows what is left to pay, and opens with the tic
   await page.getByTestId('repair.intake.price.downPaymentMethod').scrollIntoViewIfNeeded();
   await shoot(page, 'dp-intake-edc');
   await tap(page, 'repair.intake.primary');
-  await expect(page.getByText('Isi kode approval dari mesin EDC.').first()).toBeVisible();
+  await expect(page.getByText('Isi kode approval dari struk EDC.').first()).toBeVisible();
   await fill(page, 'repair.intake.price.downPaymentMethod.reference', '004512');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.balance')).toHaveText('Rp 450.000');

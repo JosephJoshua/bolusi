@@ -251,7 +251,7 @@
     "incompleteLine": "Biaya ini belum ada keterangannya.",
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
-    "downPaymentReference": "Isi kode approval dari mesin EDC.",
+    "downPaymentReference": "Isi kode approval dari struk EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada.",
     "ownershipVideo": "Video kepemilikan belum direkam."
   },
