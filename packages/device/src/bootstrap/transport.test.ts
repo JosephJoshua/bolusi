@@ -31,6 +31,31 @@ function transport(fetchImpl: typeof fetch, token: string | null = 'bdt_secret')
   });
 }
 
+describe('a server that never answers', () => {
+  test('a hung request fails as a network error after the timeout, and is aborted', async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      const hung = vi.fn((_url: string, init: RequestInit) => {
+        signal = init.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      });
+      const pushing = transport(hung as unknown as typeof fetch).push(PUSH);
+      const outcome = pushing.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      const error = await outcome;
+      expect(error).toBeInstanceOf(SyncTransportError);
+      expect(error).toMatchObject({ code: null, status: null });
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('the wire (api/01-sync §3/§4)', () => {
   test('push POSTs the DTO to /v1/sync/push with the device token', async () => {
     const doFetch = vi.fn(async () => jsonResponse(200, { results: [], serverTime: 1 }));

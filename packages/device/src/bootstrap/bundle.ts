@@ -32,7 +32,7 @@ import {
 } from '@bolusi/core';
 import type { ClientDb } from '@bolusi/db-client';
 
-import { toTransportError } from './transport.js';
+import { SYNC_REQUEST_TIMEOUT_MS, toTransportError, withDeadline } from './transport.js';
 
 /**
  * `meta_kv` key holding the last bundle ETag (api/02-auth §5.2 — SHA-256 of the RFC 8785
@@ -98,19 +98,21 @@ export function createFetchBundleRefresh(config: BundleRefreshConfig): BundleRef
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
       if (etag !== null) headers['If-None-Match'] = etag;
 
-      const response = await doFetch(`${config.baseUrl}/v1/devices/me/bundle`, {
-        method: 'GET',
-        headers,
+      const body = await withDeadline(SYNC_REQUEST_TIMEOUT_MS, async (signal) => {
+        const response = await doFetch(`${config.baseUrl}/v1/devices/me/bundle`, {
+          method: 'GET',
+          headers,
+          signal,
+        });
+        // 304 is the steady state — a SUCCESS. Return WITHOUT touching the directory or the ETag.
+        if (response.status === 304) return null;
+        if (!response.ok) throw await toTransportError(response);
+        return (await response.json()) as BundleResponseBody;
       });
-
-      // 304 is the steady state — a SUCCESS. Return WITHOUT touching the directory or the ETag.
-      if (response.status === 304) {
+      if (body === null) {
         await config.onBundleChecked?.();
         return 'unchanged';
       }
-      if (!response.ok) throw await toTransportError(response);
-
-      const body = (await response.json()) as BundleResponseBody;
       await config.db.transaction(async () => {
         await applyBundle(config.db.db, body.bundle);
         await writeMeta(config.db.db, BUNDLE_ETAG_META_KEY, body.etag);
