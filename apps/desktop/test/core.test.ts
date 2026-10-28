@@ -24,7 +24,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 
-import { actingSession, actingStaffAdmin } from '../src/core/acting.js';
+import { actingSession, actingStaffAdmin, readForActing } from '../src/core/acting.js';
 import { heldPermissions } from '../src/core/permissions.js';
 import { nodeCryptoPort } from '../src/core/crypto.js';
 import { openNodeSqliteDriver } from '../src/core/sqlite-driver.js';
@@ -189,6 +189,24 @@ describe('who a window call may act as', () => {
     );
     expect(code(() => actingSession(sessionAs(null), 'u-1'))).toBe('NOT_AUTHENTICATED');
     expect(code(() => actingSession(null, 'u-1'))).toBe('NOT_AUTHENTICATED');
+  });
+
+  it('keeps a slow read only if its person is still signed in when it lands', async () => {
+    let now: AppSessionController | null = sessionAs('u-a');
+    const slowRead = (switchTo: AppSessionController | null) => (userId: string) => {
+      // The person switches (or the PC locks) while the identity read is still running.
+      now = switchTo;
+      return Promise.resolve(`identity of ${userId}`);
+    };
+
+    expect(await readForActing(() => now, 'u-a', slowRead(sessionAs('u-a')))).toBe(
+      'identity of u-a',
+    );
+    expect(await readForActing(() => now, 'u-a', slowRead(sessionAs('u-b')))).toBeNull();
+    expect(
+      await readForActing(() => now, 'u-a', slowRead(sessionAs('u-a', { locked: true }))),
+    ).toBeNull();
+    expect(await readForActing(() => now, 'u-a', slowRead(null))).toBeNull();
   });
 
   it('manages staff only with the permission to add staff', () => {

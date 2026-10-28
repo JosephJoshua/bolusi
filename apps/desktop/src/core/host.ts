@@ -76,7 +76,7 @@ import {
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingSession, actingStaffAdmin } from './acting.js';
+import { actingSession, actingStaffAdmin, readForActing } from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
@@ -342,9 +342,18 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         return;
       }
       if (repair?.userId === active.userId) return;
-      const identity = await readSessionIdentity(app, active.userId);
-      if (identity === null) return;
-      repair = { userId: active.userId, identity, runtime: buildRepair(app, enrollment, identity) };
+      const booted = app;
+      const enroll = enrollment;
+      const identity = await readForActing(
+        () => session,
+        active.userId,
+        (userId) => readSessionIdentity(booted, userId),
+      );
+      // Dropped when someone else signed in or the PC was re-registered while the read ran; the
+      // change that did it has already asked for a fresh bind.
+      if (identity === null || app !== booted || enrollment !== enroll) return;
+      if (repair?.userId === active.userId) return;
+      repair = { userId: active.userId, identity, runtime: buildRepair(booted, enroll, identity) };
       emit();
     } catch (error) {
       warn('repair runtime could not be built', error);
