@@ -35,7 +35,10 @@ import { uuidv7 } from '../uuidv7.js';
 
 const LOWERCASE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** §9 quota: 100 user-management mutations / tenant / day (create + patch + status + pin-verifier). */
+/**
+ * §9 quota: 100 user-management mutations / tenant / day (create + patch + status + pin-verifier).
+ * Charged only after the caller's permission checks pass, so refused calls cannot spend the budget.
+ */
 function enforceUsersQuota(deps: ServerDeps, tenantId: string, now: number): void {
   enforce(
     deps.identityRateStore.hit(
@@ -168,8 +171,6 @@ export function createUsersRouter(deps: ServerDeps) {
           const body = c.req.valid('json');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           const userId = await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
 
@@ -197,6 +198,7 @@ export function createUsersRouter(deps: ServerDeps) {
             if (await rolesConferOwnerPowers(db, roles)) {
               await requireTenantAdmin(db, acting, TENANT_ADMIN_PERMISSION);
             }
+            enforceUsersQuota(deps, tenantId, t);
 
             const newUserId = uuidv7(t);
             const passwordVerifier =
@@ -268,8 +270,6 @@ export function createUsersRouter(deps: ServerDeps) {
           const body = c.req.valid('json');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -296,6 +296,7 @@ export function createUsersRouter(deps: ServerDeps) {
             if (roles !== null && (await rolesConferOwnerPowers(db, roles))) {
               await requireTenantAdmin(db, acting, TENANT_ADMIN_PERMISSION);
             }
+            enforceUsersQuota(deps, tenantId, t);
 
             const patch: { name?: string; photoMediaId?: string | null } = {};
             if (body.name !== undefined) patch.name = body.name;
@@ -368,8 +369,6 @@ export function createUsersRouter(deps: ServerDeps) {
           if (!LOWERCASE_UUID.test(targetUserId)) throw new ApiError('NOT_FOUND');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -387,6 +386,7 @@ export function createUsersRouter(deps: ServerDeps) {
             if (targetUserId !== acting.userId && (await holdsOwnerPowers(db, targetUserId))) {
               await requireTenantAdmin(db, acting, PERM.userDeactivate);
             }
+            enforceUsersQuota(deps, tenantId, t);
 
             // LAST_ADMIN_PROTECTED (§5.4.4): deactivating the sole active tenant admin → 409. Server
             // endpoint check only — no projection guard, no Conflict record.
@@ -425,8 +425,6 @@ export function createUsersRouter(deps: ServerDeps) {
           if (!LOWERCASE_UUID.test(targetUserId)) throw new ApiError('NOT_FOUND');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -443,6 +441,7 @@ export function createUsersRouter(deps: ServerDeps) {
             if (targetUserId !== acting.userId && (await holdsOwnerPowers(db, targetUserId))) {
               await requireTenantAdmin(db, acting, PERM.userDeactivate);
             }
+            enforceUsersQuota(deps, tenantId, t);
             await db
               .updateTable('users')
               .set({ status: 'active' })
@@ -472,8 +471,6 @@ export function createUsersRouter(deps: ServerDeps) {
           const body = c.req.valid('json');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           // pin-verifier is device-token only (§4.5: control session "—").
           if (c.get('device') === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
 
@@ -534,6 +531,7 @@ export function createUsersRouter(deps: ServerDeps) {
                   });
               }
             }
+            enforceUsersQuota(deps, tenantId, t);
 
             // Greatest-asOf merge (§5.3): a stale POST is a no-op (idempotent convergence).
             const stored = await db
