@@ -79,6 +79,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'customerAgreementMismatch',
   'downPaymentAboveTotal',
   'downPaymentRecorded',
+  'repairTypesNotYours',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -423,6 +424,26 @@ export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
   if (!(await customerExists(db, op, op.entityId))) {
     throw notFound(REPAIR_CUSTOMER_ENTITY, op.entityId);
   }
+};
+
+/**
+ * The repair types of an open servisan, set after the diagnosis: by the counter, who took it in, or
+ * a technician, who found what is wrong. Not once the phone left or the servisan was cancelled,
+ * since the warranty the customer took home must not change.
+ */
+export const ticketRepairTypesChangedRule: Rule = async (op, { db, holdsPermission }) => {
+  requireOpen(await loadTicket(db, op), op.type);
+  if (
+    (await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) ||
+    (await holdsPermission(op.userId, REPAIR_PERMISSION.work))
+  ) {
+    return;
+  }
+  throw refuse('repairTypesNotYours', {
+    code: 'PERMISSION_DENIED',
+    details: { permissionId: REPAIR_PERMISSION.work },
+    message: `user ${op.userId} neither takes in nor works on phones`,
+  });
 };
 
 /**

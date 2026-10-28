@@ -40,6 +40,7 @@ import {
   capturedThumbnailRef,
   checksWithIssue,
   chosenAccessories,
+  chosenRepairTypes,
   chosenReady,
   intakeDownPayment,
   intakeTotal,
@@ -47,6 +48,7 @@ import {
   phoneText,
   parseRupiah,
   restOfChecksOk,
+  toggled,
   signedAmount,
   type IntakeDraft,
   type IntakeStep,
@@ -425,11 +427,9 @@ export function ConditionStep({
   const { width, fontScale } = useWindowDimensions();
   const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
   const togglePeripheral = (item: string): void =>
-    update({
-      peripherals: draft.peripherals.includes(item)
-        ? draft.peripherals.filter((p) => p !== item)
-        : [...draft.peripherals, item],
-    });
+    update({ peripherals: toggled(draft.peripherals, item) });
+  const toggleRepairType = (item: string): void =>
+    update({ repairTypes: toggled(draft.repairTypes, item) });
   return (
     <View>
       <TextInput
@@ -440,6 +440,22 @@ export function ConditionStep({
         multiline
         testID={`${testID}.complaint`}
       />
+      {/* What the counter expects to fix; the technician can change it after the diagnosis. */}
+      {options.repairTypes.length === 0 ? null : (
+        <Section title={tn('repair.condition.repairTypes')}>
+          <ChipRow testID={`${testID}.repairTypes`}>
+            {options.repairTypes.map((option) => (
+              <ToggleChip
+                key={option.id}
+                label={optionLabel('repairTypes', option)}
+                selected={draft.repairTypes.includes(option.id)}
+                onToggle={() => toggleRepairType(option.id)}
+                testID={`${testID}.repairType.${option.id}`}
+              />
+            ))}
+          </ChipRow>
+        </Section>
+      )}
       {options.checks.length === 0 ? null : (
         <Section
           title={tn('repair.condition.checks')}
@@ -698,6 +714,7 @@ export function ReviewStep({
 }): React.JSX.Element {
   const issues = checksWithIssue(draft, options.checks);
   const accessories = chosenAccessories(draft, options.accessories);
+  const repairTypes = chosenRepairTypes(draft, options.repairTypes);
   const section = (step: IntakeStep, children: React.ReactNode): React.JSX.Element => (
     <Section
       title={tn(INTAKE_STEP_KEY[step])}
@@ -761,6 +778,13 @@ export function ReviewStep({
         'condition',
         <>
           <Text style={styles.reviewText}>{draft.complaint}</Text>
+          {repairTypes.length === 0 ? null : (
+            <Field
+              label={tn('repair.condition.repairTypes')}
+              value={repairTypes.map((type) => optionLabel('repairTypes', type)).join(', ')}
+              testID={`${testID}.repairTypes`}
+            />
+          )}
           {issues.length === 0 ? null : (
             <Field
               label={tn('repair.condition.issues')}

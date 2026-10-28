@@ -22,6 +22,10 @@ export interface EditorRow {
   readonly text: string;
   /** This store does not offer it. */
   readonly hidden: boolean;
+  /** A repair type's warranty days as typed; empty on other lists. */
+  readonly warranty: string;
+  /** A repair type that needs an ownership video; false on other lists. */
+  readonly needsVideo: boolean;
 }
 
 export interface EditorState {
@@ -48,6 +52,8 @@ export function editorFor(
       id: option.id,
       text: option.label ?? builtInName(option) ?? option.id,
       hidden: hidden.has(option.id),
+      warranty: option.warrantyDays === undefined ? '' : String(option.warrantyDays),
+      needsVideo: option.needsVideo ?? false,
     })),
   };
 }
@@ -60,7 +66,10 @@ export function addRow(state: EditorState): { state: EditorState; key: string } 
     state: {
       ...state,
       added: state.added + 1,
-      rows: [...state.rows, { key, id: null, text: '', hidden: false }],
+      rows: [
+        ...state.rows,
+        { key, id: null, text: '', hidden: false, warranty: '', needsVideo: false },
+      ],
     },
   };
 }
@@ -92,6 +101,19 @@ export function moveRow(state: EditorState, from: number, to: number): EditorSta
  * id is its days, so a row typed as something other than whole days gets an id the rules refuse.
  */
 function optionOf(list: IntakeOptionList, row: EditorRow, builtInName: BuiltInName): IntakeOption {
+  const named = namedOption(list, row, builtInName);
+  if (list !== 'repairTypes') return named;
+  // Typed as anything but whole days, the warranty is one the rules refuse.
+  const warranty = row.warranty.trim();
+  const days = /^[0-9]{1,3}$/.test(warranty) ? Number(warranty) : -1;
+  return { ...named, warrantyDays: days, needsVideo: row.needsVideo };
+}
+
+function namedOption(
+  list: IntakeOptionList,
+  row: EditorRow,
+  builtInName: BuiltInName,
+): IntakeOption {
   if (list === 'readyBy') {
     if (row.id !== null) return { id: row.id, label: null };
     const text = row.text.trim();
@@ -107,7 +129,7 @@ function optionOf(list: IntakeOptionList, row: EditorRow, builtInName: BuiltInNa
 }
 
 /** Why a row cannot be saved, shown under it. */
-export type RowProblem = 'emptyLabel' | 'labelTooLong' | 'duplicate' | 'badReadyBy';
+export type RowProblem = 'emptyLabel' | 'labelTooLong' | 'duplicate' | 'badReadyBy' | 'badWarranty';
 
 /** Why the list as a whole cannot be saved, shown above the save button. */
 export type ListProblem = 'empty' | 'tooMany' | 'hidesAll';
@@ -128,7 +150,8 @@ export function editorProblems(
   for (const row of state.rows) {
     const option = optionOf(state.list, row, builtInName);
     const own = intakeListProblems(state.list, [option], nameOf).find(
-      (p): p is RowProblem => p === 'emptyLabel' || p === 'labelTooLong' || p === 'badReadyBy',
+      (p): p is RowProblem =>
+        p === 'emptyLabel' || p === 'labelTooLong' || p === 'badReadyBy' || p === 'badWarranty',
     );
     if (own !== undefined) {
       rows.set(row.key, own);
@@ -166,7 +189,7 @@ export function changedItems(
   state: EditorState,
   saved: readonly IntakeOption[],
   builtInName: BuiltInName,
-): { id: string | null; label: string | null }[] | null {
+): (Omit<IntakeOption, 'id'> & { id: string | null })[] | null {
   if (state.list === 'readyBy') {
     // Ready-by choices read soonest first whatever order they were added in.
     const items = sortReadyOptions(state.rows.map((row) => optionOf('readyBy', row, builtInName)));
@@ -174,12 +197,12 @@ export function changedItems(
   }
   const items = state.rows.map((row) => {
     const option = optionOf(state.list, row, builtInName);
-    return { id: row.id === null ? null : option.id, label: option.label };
+    return { ...option, id: row.id === null ? null : option.id };
   });
   const unchanged =
     items.every((item) => item.id !== null) &&
     sameOptions(
-      items.map((item) => ({ id: item.id!, label: item.label })),
+      items.map((item) => ({ ...item, id: item.id! })),
       saved,
     );
   return unchanged ? null : items;

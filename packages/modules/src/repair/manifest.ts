@@ -54,6 +54,8 @@ import {
   setCancelFeesInput,
   setPrintSettingsHandler,
   setPrintSettingsInput,
+  setRepairTypesHandler,
+  setRepairTypesInput,
   setUncollectedDaysHandler,
   setUncollectedDaysInput,
   startWorkHandler,
@@ -288,6 +290,12 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.setPrintSettings,
       input: setPrintSettingsInput,
       handler: setPrintSettingsHandler,
+    },
+    // The counter or a technician; the op's rule checks for either.
+    setRepairTypes: {
+      permission: REPAIR_PERMISSION.read,
+      input: setRepairTypesInput,
+      handler: setRepairTypesHandler,
     },
     setUncollectedDays: {
       permission: REPAIR_PERMISSION.setUncollectedDays,

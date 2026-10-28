@@ -128,6 +128,32 @@ describe('handover slip', () => {
     expect(text).not.toContain('KETENTUAN');
   });
 
+  it('prints each repair type’s warranty from the day the phone went home', () => {
+    const typed = sampleTicket({
+      outcome: 'repaired',
+      location: 'returned',
+      returnedAt: Date.UTC(2026, 9, 1, 3),
+      repairTypes: [
+        { item: 'screen', label: null, warrantyDays: 30, needsVideo: false },
+        { item: 'waterDamage', label: null, warrantyDays: 0, needsVideo: false },
+      ],
+    });
+    const text = allText(handoverSlip(typed, { ...ctx, handedOverByName: null, signature: null }));
+    expect(text).toMatch(/Jenis servis\s+: Ganti layar, Kena air/);
+    expect(text).toContain('GARANSI');
+    expect(text).toMatch(/Ganti layar\s+: s\/d 31\/10\/2026/);
+    expect(text).toMatch(/Kena air\s+: tanpa garansi/);
+
+    const cancelled = allText(
+      handoverSlip(
+        { ...typed, outcome: 'cancelled', cancelFee: 0 },
+        { ...ctx, handedOverByName: null, signature: null },
+      ),
+    );
+    expect(cancelled).not.toContain('GARANSI');
+    expect(allText(intakeSlip(typed, ctx))).not.toContain('GARANSI');
+  });
+
   it('shows the on-screen signature on plain paper', () => {
     const signature = { dataUri: 'data:image/png;base64,iVBORw0KGgo=', mono: null };
     const html = renderHtml(

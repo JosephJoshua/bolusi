@@ -265,6 +265,29 @@ export function downPaymentAction(
   return can.intake && open ? 'record' : null;
 }
 
+/**
+ * Whether this user may change what is being repaired now. Mirrors the op's rule: the counter or a
+ * technician, while the servisan is open (the warranty taken home must not change).
+ */
+export function canSetRepairTypes(
+  ticket: Pick<TicketSummaryRow, 'location' | 'outcome'>,
+  can: Pick<RepairAbilities, 'intake' | 'work'>,
+): boolean {
+  return (
+    ticket.location === 'in_store' && ticket.outcome !== 'cancelled' && (can.intake || can.work)
+  );
+}
+
+/** Why an open repair type step can no longer finish. */
+export function repairTypesStale(
+  ticket: Pick<TicketSummaryRow, 'location' | 'outcome'>,
+  can: Pick<RepairAbilities, 'intake' | 'work'>,
+): StaleStep | null {
+  if (canSetRepairTypes(ticket, can)) return null;
+  if (ticket.location === 'returned') return { kind: 'returned' };
+  return { kind: ticket.outcome === 'cancelled' ? 'cancelled' : 'changed' };
+}
+
 /** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
 export function amountOwed(
   row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal'>,
@@ -561,6 +584,8 @@ const zIntakeDraft = z.strictObject({
       lockKind: lockKind ?? (device.passcode === '' ? ('none' as const) : ('password' as const)),
     })),
   complaint: z.string(),
+  /** The repair type ids picked; a draft saved before repair types has none. */
+  repairTypes: z.array(z.string()).default([]),
   intakeNotes: z.string(),
   checks: z.record(z.string(), z.enum(CHECKLIST_STATES)),
   peripherals: z.array(z.string()),
@@ -590,6 +615,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     customer: { kind: 'new', name: '', phone: '' },
     device: { brand: '', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
     complaint: '',
+    repairTypes: [],
     intakeNotes: '',
     checks: {},
     peripherals: [],
@@ -738,6 +764,19 @@ export function chosenAccessories(
   return offered.filter(({ id }) => draft.peripherals.includes(id));
 }
 
+/** `items` with `item` added, or taken out when it is there: a chip toggled on or off. */
+export function toggled(items: readonly string[], item: string): string[] {
+  return items.includes(item) ? items.filter((i) => i !== item) : [...items, item];
+}
+
+/** The repair types picked, in list order (one the list no longer offers is left out). */
+export function chosenRepairTypes(
+  draft: Pick<IntakeDraft, 'repairTypes'>,
+  offered: readonly IntakeOption[],
+): IntakeOption[] {
+  return offered.filter(({ id }) => draft.repairTypes.includes(id));
+}
+
 export function intakeTotal(lines: readonly QuoteLineDraft[]): number {
   return validLines(lines).reduce((sum, line) => sum + signedAmount(line.kind, line.amount), 0);
 }
@@ -778,6 +817,7 @@ export function toOpenTicketInput(
           : encodeScreenLock({ kind: draft.device.lockKind, value: draft.device.passcode }),
     },
     complaint: draft.complaint.trim(),
+    repairTypes: chosenRepairTypes(draft, options.repairTypes).map(({ id }) => id),
     intakeNotes: draft.intakeNotes.trim(),
     checklist,
     peripherals: chosenAccessories(draft, options.accessories).map(({ id, label }) => ({

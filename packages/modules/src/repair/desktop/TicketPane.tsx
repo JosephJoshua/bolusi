@@ -46,9 +46,11 @@ import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import {
   amountOwed,
   balanceAfterDownPayment,
+  canSetRepairTypes,
   downPaymentAction,
   downPaymentStale,
   photoInSlot,
+  repairTypesStale,
   photoThumbnailRef,
   repairAbilities,
   staleStep,
@@ -63,7 +65,7 @@ import {
 } from '../flows.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel, warrantyLine } from '../labels.js';
 import {
   useRepairQuery,
   useRepairRuntime,
@@ -89,6 +91,7 @@ import {
   PriceChangeDialog,
   PrintDialog,
   ProposalDialog,
+  RepairTypesDialog,
   WaitForPartsDialog,
   WorkPhotosDialog,
 } from './steps.js';
@@ -127,6 +130,7 @@ type Step =
   | Exclude<TicketStep, { readonly kind: 'proposal' }>
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
+  | { readonly kind: 'repairTypes' }
   | { readonly kind: 'print' };
 
 interface LoadedTicket {
@@ -177,7 +181,9 @@ export function TicketPane({
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
-        : staleStep(step, ticket, can, runtime.userId);
+        : step.kind === 'repairTypes'
+          ? repairTypesStale(ticket, can)
+          : staleStep(step, ticket, can, runtime.userId);
 
   const closeStep = (): void => setStep({ kind: 'none' });
   const finishStep = (said: RepairKey | undefined): void => {
@@ -462,6 +468,7 @@ export function TicketPane({
         </div>
 
         <FactGrid>
+          {renderRepairTypes(row)}
           <Fact
             label={tn('repair.ticket.technician')}
             value={row.technicianName ?? tn('repair.ticket.unassigned')}
@@ -691,6 +698,47 @@ export function TicketPane({
     );
   }
 
+  /** What is being repaired and each type's warranty (the phone's ticket shows the same). */
+  function renderRepairTypes(row: TicketDetailRow): React.JSX.Element | null {
+    const editable = canSetRepairTypes(row, can);
+    if (row.repairTypes.length === 0 && !editable) return null;
+    return (
+      <Fact
+        label={tn('repair.repairTypes.title')}
+        value={
+          row.repairTypes.length === 0
+            ? tn('repair.repairTypes.none')
+            : row.repairTypes.map((type) => (
+                <span key={type.item} className="block">
+                  {warrantyLine(type, row.returnedAt)}
+                </span>
+              ))
+        }
+        action={
+          editable ? (
+            <Button
+              label={tn(
+                row.repairTypes.length === 0
+                  ? 'repair.repairTypes.choose'
+                  : 'repair.repairTypes.change',
+              )}
+              aria-label={tn('repair.repairTypes.title')}
+              variant="text"
+              size="sm"
+              onClick={() => {
+                setDone(null);
+                setStep({ kind: 'repairTypes' });
+              }}
+              disabled={runner.busy}
+              data-testid="repair.desk.ticket.action.repairTypes"
+            />
+          ) : null
+        }
+        testId="repair.desk.ticket.repairTypes"
+      />
+    );
+  }
+
   function renderStep(row: TicketDetailRow): React.JSX.Element | null {
     const common = { ticketId, stale, onClose: closeStep };
     switch (step.kind) {
@@ -745,6 +793,14 @@ export function TicketPane({
             current={row.downPayment}
             total={amountOwed(row)}
             onDone={() => finishStep('repair.done.downPayment')}
+          />
+        );
+      case 'repairTypes':
+        return (
+          <RepairTypesDialog
+            {...common}
+            current={row.repairTypes}
+            onDone={() => finishStep('repair.done.repairTypes')}
           />
         );
       case 'print':

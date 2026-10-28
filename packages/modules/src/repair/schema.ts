@@ -73,6 +73,8 @@ export interface RepairTicketsTable {
    * When the phone was last ready to collect: marked repaired, or cancelled. Null while it is being
    * worked on (a reopen clears it). A phone still in the store long after this is flagged.
    */
+  /** JSON array of the repair types, as recorded: `{ item, label, warrantyDays, needsVideo }`. */
+  repairTypesJson: string;
   readyAt: number | null;
 }
 

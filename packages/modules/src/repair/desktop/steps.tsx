@@ -13,6 +13,7 @@ import {
   Segmented,
   TextArea,
   TextField,
+  ToggleChip,
 } from '@bolusi/ui-web';
 import { Check, Printer, Signature } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -30,14 +31,17 @@ import {
   printableSlips,
   priceKinds,
   signedAmount,
+  toggled,
   type PriceKind,
   type StaleStep,
 } from '../flows.js';
+import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY } from '../labels.js';
+import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   useCancelFees,
+  useIntakeOptionSettings,
   useRepairQuery,
   useRepairRuntime,
   type RepairPrinting,
@@ -339,6 +343,76 @@ export function WaitForPartsDialog({
       </StepDialog>
       {leave.confirm}
     </>
+  );
+}
+
+// ── repair types ──────────────────────────────────────────────────────────────────────────────
+
+/** What is being repaired, changed once the diagnosis shows it (the phone's RepairTypesStep). */
+export function RepairTypesDialog({
+  ticketId,
+  stale,
+  current,
+  onDone,
+  onClose,
+}: StepDialogProps & { readonly current: TicketDetailRow['repairTypes'] }): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const settings = useIntakeOptionSettings();
+  const [picked, setPicked] = useState<readonly string[]>(() => current.map((type) => type.item));
+  const changed =
+    picked.length !== current.length || picked.some((id, i) => id !== current[i]!.item);
+  const submit = (): void => {
+    if (!changed) {
+      onClose();
+      return;
+    }
+    void runner
+      .run(() => runtime.run('setRepairTypes', { ticketId, repairTypes: [...picked] }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  return (
+    <StepDialog
+      title={tn('repair.repairTypes.title')}
+      runner={runner}
+      stale={stale}
+      onRequestClose={onClose}
+      size="sm"
+      testId="repair.desk.repairTypes"
+      footer={
+        <>
+          <CancelButton onClick={onClose} />
+          <Button
+            label={tn('repair.repairTypes.save')}
+            variant="primary"
+            onClick={submit}
+            busy={runner.busy}
+            disabled={stale !== null}
+            data-testid="repair.desk.repairTypes.submit"
+          />
+        </>
+      }
+    >
+      <QueryPanel query={settings} onRetry={() => undefined}>
+        {(data) => (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2" data-testid="repair.desk.repairTypes.chips">
+              {repairTypeChoices(storeIntakeOptions(data).repairTypes, current).map((option) => (
+                <ToggleChip
+                  key={option.id}
+                  label={optionLabel('repairTypes', option)}
+                  selected={picked.includes(option.id)}
+                  onToggle={() => setPicked((ids) => toggled(ids, option.id))}
+                />
+              ))}
+            </div>
+            <p className="text-small text-text-muted">{tn('repair.warranty.fromPickup')}</p>
+          </div>
+        )}
+      </QueryPanel>
+    </StepDialog>
   );
 }
 

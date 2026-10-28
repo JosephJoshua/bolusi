@@ -21,7 +21,8 @@
     "downPaymentCorrected": "DP diubah",
     "slipPrinted": "Nota dicetak",
     "storePrintSettingsChanged": "Tampilan nota diubah",
-    "storeUncollectedDaysChanged": "Batas HP belum diambil diubah"
+    "storeUncollectedDaysChanged": "Batas HP belum diambil diubah",
+    "ticketRepairTypesChanged": "Jenis servis diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -108,7 +109,8 @@
     "ok": "Normal",
     "peripherals": "Kelengkapan yang dititipkan",
     "restOk": "Sisanya normal",
-    "notesLabel": "Catatan"
+    "notesLabel": "Catatan",
+    "repairTypes": "Jenis servis"
   },
   "customer": {
     "change": "Ganti pelanggan",
@@ -276,7 +278,8 @@
     "repaired": "Selesai! HP siap diambil pelanggan.",
     "printed": "Nota dicetak.",
     "shared": "PDF nota sudah dikirim.",
-    "downPayment": "DP tersimpan."
+    "downPayment": "DP tersimpan.",
+    "repairTypes": "Jenis servis disimpan."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -301,7 +304,7 @@
   },
   "options": {
     "title": "Pilihan saat terima HP",
-    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi",
+    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi, jenis servis",
     "intro": "Berlaku di semua toko. Servisan yang sudah masuk tidak ikut berubah.",
     "introStore": "Pilih yang tampil di toko ini.",
     "count": "{count} pilihan",
@@ -311,14 +314,16 @@
       "accessories": "Kelengkapan",
       "photoAngles": "Sisi HP yang difoto",
       "brands": "Merek pilihan cepat",
-      "readyBy": "Estimasi selesai"
+      "readyBy": "Estimasi selesai",
+      "repairTypes": "Jenis servis"
     },
     "hint": {
       "checks": "Dicek kasir di depan pelanggan, urut dari atas.",
       "accessories": "Barang yang bisa dititipkan bersama HP.",
       "photoAngles": "Semua sisi di sini wajib difoto saat terima HP.",
       "brands": "Tampil sebagai pilihan cepat. Merek lain tetap bisa diketik.",
-      "readyBy": "Pilihan estimasi selesai saat terima HP."
+      "readyBy": "Pilihan estimasi selesai saat terima HP.",
+      "repairTypes": "Garansi dihitung sejak HP diambil."
     },
     "add": "Tambah",
     "addUnknown": "Tambah “Belum tahu”",
@@ -346,8 +351,15 @@
       "badReadyBy": "Isi 0 sampai 60 hari.",
       "empty": "Sisakan minimal satu pilihan.",
       "tooMany": "Maksimal 40 pilihan.",
-      "hidesAll": "Minimal satu pilihan harus tampil di toko ini."
-    }
+      "hidesAll": "Minimal satu pilihan harus tampil di toko ini.",
+      "badWarranty": "Isi garansi 0 sampai 365 hari."
+    },
+    "warrantyDays": "Garansi (hari)",
+    "needsVideo": "Perlu video kepemilikan",
+    "needsVideoCaption": "Pelanggan bilang di video bahwa HP ini miliknya.",
+    "warranty": "Garansi {count} hari",
+    "noWarranty": "Tanpa garansi",
+    "videoShort": "Perlu video"
   },
   "spec": {
     "battery": "Baterai",
@@ -596,12 +608,14 @@
     "discountOwnerOnly": "Hanya pemilik toko yang bisa memberi diskon.",
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
-    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya."
+    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
+    "repairTypesNotYours": "Hanya kasir atau teknisi yang bisa mengubah jenis servis."
   },
   "paper": {
     "title": "Kertas nota",
     "phoneSummary": "Ukuran kertas di HP ini",
-    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini."
+    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini.",
+    "deskHint": "Semua nota dari komputer ini dicetak di kertas ini."
   },
   "uncollected": {
     "title": "HP belum diambil",
@@ -647,5 +661,33 @@
     "none": "Belum ada printer di komputer ini. Pasang printernya di Windows dulu, lalu cari lagi.",
     "loadFailed": "Daftar printer belum bisa dibuka.",
     "gone": "{name} tidak terpasang lagi di komputer ini. Pilih printer lain."
+  },
+  "repairType": {
+    "screen": "Ganti layar",
+    "battery": "Ganti baterai",
+    "chargingPort": "Ganti konektor cas",
+    "camera": "Servis kamera",
+    "audio": "Servis speaker/mic",
+    "buttons": "Servis tombol",
+    "noPower": "Mati total",
+    "software": "Software / instal ulang",
+    "waterDamage": "Kena air",
+    "unlock": "Buka kunci / akun"
+  },
+  "warranty": {
+    "title": "Garansi",
+    "none": "tanpa garansi",
+    "days": "{count} hari",
+    "until": "s/d {date}",
+    "fromPickup": "Garansi dihitung sejak HP diambil.",
+    "line": "{name} · garansi {terms}",
+    "lineNone": "{name} · tanpa garansi"
+  },
+  "repairTypes": {
+    "none": "Belum dipilih",
+    "change": "Ubah",
+    "choose": "Pilih",
+    "title": "Jenis servis",
+    "save": "Simpan"
   }
 }

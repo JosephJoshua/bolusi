@@ -45,14 +45,16 @@ import {
 } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel, warrantyLine } from '../labels.js';
 import {
   amountOwed,
+  canSetRepairTypes,
   downPaymentAction,
   downPaymentStale,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
+  repairTypesStale,
   staleStep,
   ticketActions,
   ticketStatus,
@@ -91,6 +93,7 @@ import {
   WaitForPartsStep,
   PriceChangeStep,
   ProposalStep,
+  RepairTypesStep,
   WorkPhotosStep,
 } from './TicketSteps.js';
 
@@ -123,6 +126,7 @@ type Step =
   | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
+  | { readonly kind: 'repairTypes' }
   | { readonly kind: 'print' };
 
 export interface TicketDetailProps {
@@ -227,7 +231,9 @@ export function TicketDetail({
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
-        : staleStep(step, ticket, can, runtime.userId);
+        : step.kind === 'repairTypes'
+          ? repairTypesStale(ticket, can)
+          : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
     ticketId,
@@ -277,6 +283,17 @@ export function TicketDetail({
           onDone={() => {
             closeStep();
             setDone('repair.done.downPayment');
+          }}
+        />
+      );
+    case 'repairTypes':
+      return (
+        <RepairTypesStep
+          {...stepProps}
+          current={ticket?.repairTypes ?? []}
+          onDone={() => {
+            closeStep();
+            setDone('repair.done.repairTypes');
           }}
         />
       );
@@ -502,6 +519,7 @@ export function TicketDetail({
 
         <View style={styles.facts}>
           <FactGrid>
+            {renderRepairTypes(row)}
             <Fact
               label={tn('repair.ticket.technician')}
               value={row.technicianName ?? tn('repair.ticket.unassigned')}
@@ -765,6 +783,45 @@ export function TicketDetail({
           </View>
         ) : null}
       </Section>
+    );
+  }
+
+  /**
+   * What is being repaired, changed from here once the diagnosis shows it, and each type's
+   * warranty: how long while the phone is in the store, until when once it went home.
+   */
+  function renderRepairTypes(row: TicketDetailRow): React.JSX.Element | null {
+    const editable = canSetRepairTypes(row, can);
+    if (row.repairTypes.length === 0 && !editable) return null;
+    return (
+      <Fact
+        label={tn('repair.repairTypes.title')}
+        value={
+          row.repairTypes.length === 0
+            ? tn('repair.repairTypes.none')
+            : row.repairTypes.map((type) => warrantyLine(type, row.returnedAt)).join('\n')
+        }
+        wide
+        action={
+          editable ? (
+            <TextButton
+              label={tn(
+                row.repairTypes.length === 0
+                  ? 'repair.repairTypes.choose'
+                  : 'repair.repairTypes.change',
+              )}
+              accessibilityLabel={tn('repair.repairTypes.title')}
+              onPress={() => {
+                setDone(null);
+                setStep({ kind: 'repairTypes' });
+              }}
+              disabled={runner.busy}
+              testID={`${testID}.action.repairTypes`}
+            />
+          ) : null
+        }
+        testID={`${testID}.repairTypes`}
+      />
     );
   }
 

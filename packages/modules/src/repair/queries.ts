@@ -38,6 +38,7 @@ import {
   type IntakeOption,
   type IntakeOptionList,
   type IntakeOptionSettings,
+  type RecordedRepairType,
 } from './intake-options.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
@@ -143,6 +144,8 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly intakeNotes: string;
   readonly checklist: readonly (RecordedOption & { state: ChecklistState; note: string })[];
   readonly peripherals: readonly RecordedOption[];
+  /** What is being repaired, with each type's warranty as recorded; none on older tickets. */
+  readonly repairTypes: readonly RecordedRepairType[];
   readonly intakePhotos: readonly IntakePhotoAngle[];
   readonly createdBy: string;
   readonly createdByName: string | null;
@@ -655,6 +658,7 @@ export async function getTicketHandler(
       'intakeNotes',
       'checklistJson',
       'peripheralsJson',
+      'repairTypesJson',
       'intakePhotosJson',
       'createdBy',
       'returnedBy',
@@ -714,6 +718,7 @@ export async function getTicketHandler(
           [],
         ).map((check) => ({ ...recordedOption(check), state: check.state, note: check.note })),
         peripherals: parseJson<unknown[]>(detail.peripheralsJson, []).map(recordedOption),
+        repairTypes: parseJson<RecordedRepairType[]>(detail.repairTypesJson, []),
         intakePhotos: intakePhotoAngles(detail.intakePhotosJson),
         createdBy: detail.createdBy,
         createdByName: names.get(detail.createdBy) ?? null,

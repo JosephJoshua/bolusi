@@ -90,12 +90,20 @@ function journey(world: ChainWorld): OpSpec[] {
   const ticket = id(2);
   const cancelledTicket = id(3);
   const note = id(4);
-  const opened = (ticketId: string, ticketNumber: string, lineId: string): OpSpec => ({
+  const screen = { item: 'screen', label: null, warrantyDays: 30, needsVideo: false };
+  /** v3 with the repair types picked at intake; without them, the v2 an older app signs. */
+  const opened = (
+    ticketId: string,
+    ticketNumber: string,
+    lineId: string,
+    repairTypes?: readonly object[],
+  ): OpSpec => ({
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
     entityId: ticketId,
-    schemaVersion: 2,
+    schemaVersion: repairTypes === undefined ? 2 : 3,
     payload: {
+      ...(repairTypes === undefined ? {} : { repairTypes }),
       ticketNumber,
       customerId: customer,
       device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },
@@ -166,6 +174,20 @@ function journey(world: ChainWorld): OpSpec[] {
       },
     },
     {
+      type: 'repair.intake_options_changed',
+      entityType: 'repair_intake_options',
+      entityId: world.tenantId,
+      storeId: null,
+      schemaVersion: 2,
+      payload: {
+        list: 'repairTypes',
+        items: [
+          { id: 'screen', label: null, warrantyDays: 30, needsVideo: false },
+          { id: 'buka-icloud', label: 'Buka iCloud', warrantyDays: 0, needsVideo: true },
+        ],
+      },
+    },
+    {
       type: 'repair.store_cancel_fees_changed',
       entityType: 'repair_store_cancel_fees',
       entityId: world.storeId,
@@ -182,6 +204,13 @@ function journey(world: ChainWorld): OpSpec[] {
       entityType: 'repair_store_intake_options',
       entityId: world.storeId,
       payload: { list: 'checks', hidden: ['tinta-bocor'] },
+    },
+    {
+      type: 'repair.store_intake_options_changed',
+      entityType: 'repair_store_intake_options',
+      entityId: world.storeId,
+      schemaVersion: 2,
+      payload: { list: 'repairTypes', hidden: ['buka-icloud'] },
     },
     {
       type: 'repair.store_print_settings_changed',
@@ -209,13 +238,16 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId: customer,
       payload: { name: 'Yohanis Wenda', phone: '081234567890' },
     },
-    opened(ticket, formatTicketNumber(world.deviceId, 1), id(0x200)),
+    opened(ticket, formatTicketNumber(world.deviceId, 1), id(0x200), [screen]),
     onTicket('repair.down_payment_received', { amount: 100_000 }),
     onTicket('repair.down_payment_corrected', { amount: 150_000, reason: 'Salah ketik' }),
     onTicket('repair.slip_printed', { slip: 'intake' }),
     onTicket('repair.ticket_claimed', {}),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),
+    onTicket('repair.ticket_repair_types_changed', {
+      repairTypes: [screen, { item: 'battery', label: null, warrantyDays: 30, needsVideo: false }],
+    }),
     onTicket('repair.quote_change_proposed', {
       lineId: id(0x201),
       kind: 'part',
@@ -360,7 +392,7 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
   // The folds landed: each journey's end state is in the server's projections.
   const tickets = await db
     .selectFrom('repairTickets')
-    .select(['ticketNumber', 'outcome', 'location', 'downPayment'])
+    .select(['ticketNumber', 'outcome', 'location', 'downPayment', 'repairTypesJson'])
     .orderBy('ticketNumber')
     .execute();
   expect(tickets).toEqual([
@@ -369,12 +401,14 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
       outcome: 'repaired',
       location: 'returned',
       downPayment: '150000',
+      repairTypesJson: expect.stringContaining('"item":"battery"'),
     },
     {
       ticketNumber: formatTicketNumber(world.deviceId, 2),
       outcome: 'cancelled',
       location: 'in_store',
       downPayment: null,
+      repairTypesJson: '[]',
     },
   ]);
   const notes = await db.selectFrom('notes').select('archived').execute();

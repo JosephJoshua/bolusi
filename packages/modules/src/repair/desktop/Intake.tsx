@@ -38,6 +38,7 @@ import {
   phoneText,
   priceKinds,
   restOfChecksOk,
+  toggled,
   stepProblems,
   toOpenTicketInput,
   acceptsRupiahText,
@@ -892,11 +893,7 @@ function ConditionFields({
   readonly complaintError: string | undefined;
 }): React.JSX.Element {
   const togglePeripheral = (item: string): void =>
-    update({
-      peripherals: draft.peripherals.includes(item)
-        ? draft.peripherals.filter((p) => p !== item)
-        : [...draft.peripherals, item],
-    });
+    update({ peripherals: toggled(draft.peripherals, item) });
   return (
     <div className="flex flex-col gap-6">
       <TextArea
@@ -907,6 +904,24 @@ function ConditionFields({
         rows={2}
         data-testid="repair.desk.intake.complaint"
       />
+      {/* What the counter expects to fix; the technician can change it after the diagnosis. */}
+      {options.repairTypes.length === 0 ? null : (
+        <div>
+          <p className="mb-2 text-small font-semibold text-text">
+            {tn('repair.condition.repairTypes')}
+          </p>
+          <div className="flex flex-wrap gap-2" data-testid="repair.desk.intake.repairTypes">
+            {options.repairTypes.map((option) => (
+              <ToggleChip
+                key={option.id}
+                label={optionLabel('repairTypes', option)}
+                selected={draft.repairTypes.includes(option.id)}
+                onToggle={() => update({ repairTypes: toggled(draft.repairTypes, option.id) })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {options.checks.length === 0 ? null : (
         <div>
           <div className="mb-2 flex items-center justify-between gap-4">

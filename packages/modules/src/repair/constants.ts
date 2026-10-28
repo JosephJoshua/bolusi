@@ -34,6 +34,7 @@ export const REPAIR_OP = {
   customerRegistered: 'repair.customer_registered',
   customerDetailsCorrected: 'repair.customer_details_corrected',
   ticketOpened: 'repair.ticket_opened',
+  ticketRepairTypesChanged: 'repair.ticket_repair_types_changed',
   ticketClaimed: 'repair.ticket_claimed',
   technicianAssigned: 'repair.technician_assigned',
   workPhotosAdded: 'repair.work_photos_added',
@@ -175,4 +176,5 @@ export const REPAIR_CONFLICT_KEY = {
   technician: 'repair_ticket.technician',
   customer: 'repair_customer.details',
   downPayment: 'repair_ticket.down_payment',
+  repairTypes: 'repair_ticket.repair_types',
 } as const;

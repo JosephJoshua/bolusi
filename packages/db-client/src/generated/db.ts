@@ -332,6 +332,7 @@ export interface RepairTickets {
   peripheralsJson: string;
   quoteTotal: number;
   readyAt: number | null;
+  repairTypesJson: Generated<string>;
   returnedAt: number | null;
   returnedBy: string | null;
   storeId: string;

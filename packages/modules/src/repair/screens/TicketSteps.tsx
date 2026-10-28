@@ -11,6 +11,7 @@ import {
   TextInput,
   Icon,
   TextButton,
+  ToggleChip,
   color,
   radius,
   size,
@@ -22,11 +23,12 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { REPAIR_PERMISSION, WORK_PHOTOS_MAX, type WorkPhotoStage } from '../constants.js';
-import { standardCancelFee, type QuoteLineRow } from '../queries.js';
+import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
+import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY } from '../labels.js';
+import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   acceptsRupiahText,
   capturedThumbnailRef,
@@ -34,6 +36,7 @@ import {
   parseRupiah,
   priceKinds,
   signedAmount,
+  toggled,
   type PriceKind,
   type StaleStep,
 } from '../flows.js';
@@ -47,7 +50,12 @@ import {
   usePhotoGridCell,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useCancelFees, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import {
+  useCancelFees,
+  useIntakeOptionSettings,
+  useRepairQuery,
+  useRepairRuntime,
+} from '../runtime.js';
 
 interface StepProps {
   readonly chrome: RepairChrome;
@@ -460,6 +468,87 @@ export function DownPaymentStep({
           <Text style={repairStyles.caption}>{tn('repair.downPayment.removeHint')}</Text>
         </View>
       ) : null}
+    </FlowScreen>
+  );
+}
+
+// ── repair types ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * What is being repaired, changed once the diagnosis shows it: the store's types as chips, with the
+ * ones the servisan has picked. Saving with none picked is allowed: the counter may not know yet.
+ */
+export function RepairTypesStep({
+  chrome,
+  ticketId,
+  stale,
+  current,
+  onDone,
+  onCancel,
+  testID = 'repair.repairTypes',
+}: StepProps & {
+  readonly current: TicketDetailRow['repairTypes'];
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const settings = useIntakeOptionSettings();
+  const [picked, setPicked] = useState<readonly string[]>(() => current.map((type) => type.item));
+  const changed =
+    picked.length !== current.length || picked.some((id, i) => id !== current[i]!.item);
+  const submit = (): void => {
+    if (!changed) {
+      onCancel();
+      return;
+    }
+    void runner
+      .run(() => runtime.run('setRepairTypes', { ticketId, repairTypes: [...picked] }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tn('repair.repairTypes.title')}
+      onBack={onCancel}
+      primaryLabel={tn('repair.repairTypes.save')}
+      onPrimary={submit}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      stale={stale}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      <QueryView
+        query={settings}
+        onBack={onCancel}
+        onRetry={() => undefined}
+        testID={`${testID}.options`}
+      >
+        {(data) => {
+          const choices = repairTypeChoices(storeIntakeOptions(data).repairTypes, current);
+          return (
+            <View>
+              <View style={repairStyles.chips} testID={`${testID}.chips`}>
+                {choices.map((option) => (
+                  <ToggleChip
+                    key={option.id}
+                    label={optionLabel('repairTypes', option)}
+                    selected={picked.includes(option.id)}
+                    onToggle={() => setPicked((ids) => toggled(ids, option.id))}
+                    testID={`${testID}.type.${option.id}`}
+                  />
+                ))}
+              </View>
+              <Text style={[repairStyles.caption, repairStyles.gap]}>
+                {tn('repair.warranty.fromPickup')}
+              </Text>
+            </View>
+          );
+        }}
+      </QueryView>
     </FlowScreen>
   );
 }

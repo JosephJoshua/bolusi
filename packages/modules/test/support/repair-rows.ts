@@ -53,6 +53,7 @@ export function sampleTicket(overrides: Partial<TicketDetailRow> = {}): TicketDe
     downPaymentByName: null,
     downPaymentAt: null,
     readyAt: null,
+    repairTypes: [],
     slipPrints: { intake: 0, handover: 0 },
     devicePasscode: 'pin:975319',
     intakeNotes: 'Ada goresan di bodi belakang.',

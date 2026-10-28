@@ -19,6 +19,9 @@ import {
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
+  recordRepairTypes,
+  storeIntakeOptions,
+  type IntakeOption,
   type IntakeOptionSettings,
 } from './intake-options.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
@@ -159,6 +162,8 @@ function ticket(spec: {
   returnedBy?: string;
   /** Hours since it was marked repaired; a cancel is ready to collect when it was cancelled. */
   readyHoursAgo?: number;
+  /** Repair type ids from the default list. */
+  repairTypes?: readonly string[];
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -206,6 +211,7 @@ function ticket(spec: {
       { item: 'charger', label: null },
       { item: 'case', label: null },
     ],
+    repairTypes: demoRepairTypes(spec.repairTypes ?? []),
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',
@@ -233,6 +239,11 @@ function ticket(spec: {
   };
 }
 
+function demoRepairTypes(ids: readonly string[]): TicketDetailRow['repairTypes'] {
+  const recorded = recordRepairTypes(ids, DEFAULT_INTAKE_OPTIONS.repairTypes);
+  return 'types' in recorded ? recorded.types : [];
+}
+
 function seedTickets(): TicketDetailRow[] {
   return [
     ticket({
@@ -247,6 +258,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'received',
       technicianId: null,
       lines: [line('part', 'LCD A14 original', 650_000), line('labour', 'Pasang LCD', 100_000)],
+      repairTypes: ['screen'],
       hoursAgo: 2,
     }),
     ticket({
@@ -269,6 +281,7 @@ function seedTickets(): TicketDetailRow[] {
           createdBy: 'u-budi',
         }),
       ],
+      repairTypes: ['chargingPort', 'battery'],
       hoursAgo: 20,
       extraPhotos: [photoRow('before:m1'), photoRow('before:m2')],
       downPayment: 50_000,
@@ -285,6 +298,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'waiting_for_parts',
       technicianId: 'u-yosua',
       lines: [line('labour', 'Cek mesin', 50_000)],
+      repairTypes: ['noPower', 'waterDamage'],
       hoursAgo: 48,
       extraPhotos: [photoRow('before:m3')],
     }),
@@ -300,6 +314,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'repaired',
       technicianId: 'u-budi',
       lines: [line('part', 'Speaker Y21', 75_000), line('labour', 'Pasang speaker', 40_000)],
+      repairTypes: ['audio'],
       hoursAgo: 70,
       extraPhotos: [photoRow('before:m4'), photoRow('after:m5')],
       downPayment: 100_000,
@@ -316,6 +331,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'cancelled',
       technicianId: 'u-budi',
       lines: [line('part', 'Kamera C55', 220_000), line('labour', 'Pasang kamera', 50_000)],
+      repairTypes: ['camera'],
       hoursAgo: 90,
       extraPhotos: [photoRow('before:m6')],
       cancel: {
@@ -338,6 +354,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'cancelled',
       technicianId: 'u-budi',
       lines: [line('labour', 'Servis tombol power', 60_000)],
+      repairTypes: ['buttons'],
       hoursAgo: 120,
       extraPhotos: [photoRow('before:m7')],
       location: 'returned',
@@ -363,6 +380,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'repaired',
       technicianId: 'u-budi',
       lines: [line('part', 'Baterai A57', 180_000), line('labour', 'Ganti baterai', 50_000)],
+      repairTypes: ['battery'],
       hoursAgo: 75 * 24,
       readyHoursAgo: 72 * 24,
       extraPhotos: [photoRow('before:m8'), photoRow('after:m9')],
@@ -619,6 +637,19 @@ export function demoRepairRuntime(
     for (const listener of listeners) listener();
   };
 
+  // Recorded as the command does: the store's list now, a kept type keeps its terms.
+  const recordedTypes = (
+    ids: unknown,
+    kept: TicketDetailRow['repairTypes'],
+  ): TicketDetailRow['repairTypes'] => {
+    const recorded = recordRepairTypes(
+      (ids as string[] | undefined) ?? [],
+      storeIntakeOptions(options).repairTypes,
+      kept,
+    );
+    return 'types' in recorded ? recorded.types : kept;
+  };
+
   const find = (ticketId: string): TicketDetailRow => {
     const found = tickets.find((t) => t.id === ticketId);
     if (found === undefined)
@@ -868,6 +899,7 @@ export function demoRepairRuntime(
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
         peripherals: input['peripherals'] as TicketDetailRow['peripherals'],
+        repairTypes: recordedTypes(input['repairTypes'], []),
         intakePhotos: photos.map(({ slot, label }) => ({ slot, label })),
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
         createdAt: HARNESS_NOW,
@@ -958,14 +990,18 @@ export function demoRepairRuntime(
         : priceLine({ ...input, customerAgreed: undefined }, 'proposed', 'repair.quote_changed'),
     applyProposal: (input) => decide(input, 'applied', 'repair.quote_changed'),
     declineProposal: (input) => decide(input, 'declined', 'repair.quote_proposal_declined'),
+    setRepairTypes: (input) => {
+      const t = find(String(input['ticketId']));
+      return update(t.id, 'repair.ticket_repair_types_changed', {
+        repairTypes: recordedTypes(input['repairTypes'], t.repairTypes),
+      });
+    },
     changeIntakeOptions: (input) => {
       const list = input['list'] as keyof IntakeOptionSettings['lists'];
-      const items = (input['items'] as { id: string | null; label: string | null }[]).map(
-        (item) => {
-          optionIds += 1;
-          return { id: item.id ?? `opt-${String(optionIds)}`, label: item.label };
-        },
-      );
+      const items = (input['items'] as (IntakeOption & { id: string | null })[]).map((item) => {
+        optionIds += 1;
+        return { ...item, id: item.id ?? `opt-${String(optionIds)}` };
+      });
       options = { ...options, lists: { ...options.lists, [list]: items } };
       notify();
       return { list };
