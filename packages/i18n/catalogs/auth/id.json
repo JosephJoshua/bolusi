@@ -339,6 +339,7 @@
       "notesHint": "Tulis dan arsipkan catatan toko",
       "syncProblems": "Masalah sinkron",
       "syncProblemsHint": "Lihat dan tandai perubahan yang bentrok"
-    }
+    },
+    "risky": "Berisiko · {hint}"
   }
 }

@@ -10,6 +10,7 @@ import {
   abilitiesOf,
   LIMITED_ABILITIES,
   permissionsFor,
+  RISKY_ABILITIES,
   ROLE_ABILITY_GROUPS,
   toggleAbility,
   type RoleAbilityGroup,
@@ -49,9 +50,21 @@ export function abilityHint(abilityId: string): string {
   return t(`auth.roles.ability.${abilityId}Hint` as TranslationKey);
 }
 
+/** A switch's caption: its hint, marked first when it hands out a risky power. */
+export function abilityCaption(abilityId: string): string {
+  const hint = abilityHint(abilityId);
+  return RISKY_ABILITIES.has(abilityId) ? t('auth.roles.risky', { hint }) : hint;
+}
+
 /** The roles the editor offers: every store role but the owners'. */
 export function editableRoles(directory: StaffDirectory): readonly StaffRole[] {
   return directory.roles.filter((role) => !role.ownerRole);
+}
+
+/** How many active people hold this role, shown beside it. */
+export function roleHolders(directory: StaffDirectory, roleId: string): number {
+  return directory.members.filter((member) => member.active && member.roleIds.includes(roleId))
+    .length;
 }
 
 /** Whether anyone here holds this role, so it cannot be deleted yet. */

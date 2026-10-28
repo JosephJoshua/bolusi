@@ -10,7 +10,7 @@ import {
 } from '@bolusi/core';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import {
-  abilityHint,
+  abilityCaption,
   abilityLabel,
   editableRoles,
   groupTitle,
@@ -18,6 +18,7 @@ import {
   roleChangeOf,
   roleDraftOf,
   roleHint,
+  roleHolders,
   roleInUse,
   roleName,
   roleNameProblem,
@@ -233,7 +234,7 @@ function RoleList({
                 <span className="break-words text-small text-text-muted">{roleHint(role)}</span>
               </span>
               <span className="shrink-0 text-small text-text-muted">
-                {t('auth.roles.holders', { count: holders(directory, role) })}
+                {t('auth.roles.holders', { count: roleHolders(directory, role.id) })}
               </span>
               <ChevronRight size={18} aria-hidden className="shrink-0 text-text-muted" />
             </button>
@@ -259,11 +260,6 @@ function RoleList({
       </ul>
     </div>
   );
-}
-
-function holders(directory: StaffDirectory, role: StaffRole): number {
-  return directory.members.filter((member) => member.active && member.roleIds.includes(role.id))
-    .length;
 }
 
 function AddRoleDialog({
@@ -491,11 +487,9 @@ function RoleEditor({
               <Switch
                 key={ability.id}
                 label={abilityLabel(ability.id)}
-                caption={abilityHint(ability.id)}
+                caption={abilityCaption(ability.id)}
                 checked={draft.on.has(ability.id)}
-                onChange={(value) =>
-                  edit((current) => switchAbility(current, ability.id, value))
-                }
+                onChange={(value) => edit((current) => switchAbility(current, ability.id, value))}
                 disabled={busy}
                 className="py-3"
                 testId={`desktop.roles.ability.${ability.id}`}

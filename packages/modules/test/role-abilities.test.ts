@@ -14,6 +14,8 @@ import {
   ROLE_ABILITIES,
   ROLE_BASE_PERMISSIONS,
   toggleAbility,
+  RISKY_ABILITIES,
+  riskyAbilities,
 } from '../src/role-abilities.js';
 
 const registry = assemblePermissionRegistry(
@@ -82,4 +84,12 @@ describe('what the server takes', () => {
   test('a switch is on only when all of it is held', () => {
     expect(abilitiesOf(['money.read', 'money.move_cash']).has('moneyCash')).toBe(false);
   });
+});
+
+test('the editor marks exactly the switches behind which a module declares a dangerous permission', () => {
+  const derived = riskyAbilities(ALL_MODULES as unknown as Parameters<typeof riskyAbilities>[0]);
+  expect([...RISKY_ABILITIES].sort()).toEqual([...derived].sort());
+  // Discounts and cancels are risky; seeing the servisan list is not.
+  expect(RISKY_ABILITIES.has('repairDiscount')).toBe(true);
+  expect(RISKY_ABILITIES.has('repairView')).toBe(false);
 });

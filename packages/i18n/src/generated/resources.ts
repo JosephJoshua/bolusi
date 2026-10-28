@@ -504,6 +504,7 @@ const source = {
           syncProblems: 'Masalah sinkron',
           syncProblemsHint: 'Lihat dan tandai perubahan yang bentrok',
         },
+        risky: 'Berisiko · {hint}',
       },
     },
     sync: {
@@ -1168,6 +1169,7 @@ export const resources = {
             syncProblems: 'Sync problems',
             syncProblemsHint: 'See and settle clashing changes',
           },
+          risky: 'Risky · {hint}',
         },
       },
       sync: {

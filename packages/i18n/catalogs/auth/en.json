@@ -339,6 +339,7 @@
       "notesHint": "Write and archive store notes",
       "syncProblems": "Sync problems",
       "syncProblemsHint": "See and settle clashing changes"
-    }
+    },
+    "risky": "Risky · {hint}"
   }
 }

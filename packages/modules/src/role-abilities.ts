@@ -261,3 +261,44 @@ export function normalizeRolePermissions(
   // A switch held only in part, or without what it needs, is not a list the editor makes.
   return permissionIds.every((id) => normalized.includes(id)) ? normalized : null;
 }
+
+/**
+ * The switches the editor marks so they are not flipped lightly: each hands out a power a module
+ * declares dangerous (cash, prices, refunds, stock corrections). Written out so a device reads it
+ * without every module; `riskyAbilities(ALL_MODULES)` must give exactly these (role-abilities.test).
+ */
+export const RISKY_ABILITIES: ReadonlySet<string> = new Set<RoleAbilityId>([
+  'repairPrice',
+  'repairDiscount',
+  'repairCancel',
+  'repairDownPayment',
+  'repairWarranty',
+  'moneyCash',
+  'moneyRefund',
+  'moneyVoid',
+  'moneyCredit',
+  'moneyAdjust',
+  'moneyAccounts',
+  'stockCount',
+  'stockCorrect',
+]);
+
+/** The switches behind which some module declares a dangerous permission. */
+export function riskyAbilities(
+  modules: readonly {
+    readonly permissions?: Readonly<Record<string, { readonly isDangerous: boolean }>>;
+  }[],
+): ReadonlySet<string> {
+  const dangerous = new Set(
+    modules.flatMap((module) =>
+      Object.entries(module.permissions ?? {})
+        .filter(([, declaration]) => declaration.isDangerous)
+        .map(([id]) => id),
+    ),
+  );
+  return new Set(
+    ROLE_ABILITIES.filter((ability) => ability.permissionIds.some((id) => dangerous.has(id))).map(
+      (ability) => ability.id,
+    ),
+  );
+}

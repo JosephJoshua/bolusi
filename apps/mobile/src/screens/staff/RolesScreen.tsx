@@ -14,7 +14,7 @@ import {
 } from '@bolusi/core';
 import type { RoleChange } from '@bolusi/device/bootstrap/staff';
 import {
-  abilityHint,
+  abilityCaption,
   abilityLabel,
   editableRoles,
   groupTitle,
@@ -22,6 +22,7 @@ import {
   roleChangeOf,
   roleDraftOf,
   roleHint,
+  roleHolders,
   roleInUse,
   roleName,
   roleNameProblem,
@@ -251,7 +252,9 @@ export function RolesScreen({
             ) : (
               <ListRow
                 primaryText={roleName(role)}
-                secondaryText={roleHint(role)}
+                secondaryText={`${roleHint(role)} · ${t('auth.roles.holders', {
+                  count: roleHolders(loaded.directory, role.id),
+                })}`}
                 onPress={() => {
                   setNotice(null);
                   setStep({ kind: 'edit', roleId: role.id });
@@ -506,7 +509,7 @@ function RoleEditor({
                 <SwitchRow
                   key={ability.id}
                   label={abilityLabel(ability.id)}
-                  caption={abilityHint(ability.id)}
+                  caption={abilityCaption(ability.id)}
                   value={draft.on.has(ability.id)}
                   onValueChange={(value) =>
                     edit((current) => switchAbility(current, ability.id, value))
