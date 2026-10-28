@@ -132,6 +132,7 @@
     "nextDay": "Berikutnya",
     "none": "Belum ada catatan di hari ini.",
     "voided": "Dibatalkan: {reason}",
+    "handoverRefund": "Sisa DP saat HP diambil",
     "more": "Muat lagi",
     "void": "Batalkan",
     "col": {

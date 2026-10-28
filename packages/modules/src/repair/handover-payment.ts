@@ -10,7 +10,6 @@ import {
 } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { ReturnDeviceInput } from './commands.js';
-import { tn } from './i18n.js';
 
 export interface HandoverPayment {
   readonly lines: readonly PaymentLine[];
@@ -27,7 +26,7 @@ export interface HandoverPayment {
   /** The counter has typed something worth asking about before leaving. */
   readonly touched: boolean;
   /** The money part of `returnDevice`. */
-  readonly input: Pick<ReturnDeviceInput, 'payments' | 'unpaidReason' | 'refundReason'>;
+  readonly input: Pick<ReturnDeviceInput, 'payments' | 'unpaidReason'>;
 }
 
 export function useHandoverPayment(
@@ -57,7 +56,6 @@ export function useHandoverPayment(
     input: {
       payments: unpaid ? [] : [...entry.payments],
       unpaidReason: unpaid ? unpaidReason : null,
-      refundReason: tn('repair.handover.refundReason'),
     },
   };
 }

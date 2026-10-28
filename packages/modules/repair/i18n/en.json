@@ -150,7 +150,6 @@
     "payNow": "Pay now",
     "payLaterReason": "Why pay later",
     "payLaterNote": "The remaining {amount} is recorded as the customer’s debt.",
-    "refundReason": "Rest of the DP returned at handover",
     "checks": "Check with the customer",
     "accessoryBack": "{name} returned",
     "noteNeeded": "Note",

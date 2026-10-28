@@ -124,7 +124,6 @@ export const REPAIR_KEYS = [
   'repair.handover.payNow',
   'repair.handover.payLaterReason',
   'repair.handover.payLaterNote',
-  'repair.handover.refundReason',
   'repair.hint.handoverPayment',
   'repair.handover.photo',
   'repair.handover.sign',

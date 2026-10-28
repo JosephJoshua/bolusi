@@ -132,6 +132,7 @@
     "nextDay": "Next",
     "none": "No records on this day.",
     "voided": "Cancelled: {reason}",
+    "handoverRefund": "Rest of the DP, at pickup",
     "more": "Load more",
     "void": "Cancel",
     "col": {

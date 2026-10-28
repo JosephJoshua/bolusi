@@ -150,7 +150,6 @@
     "payNow": "Bayar sekarang",
     "payLaterReason": "Alasan bayar nanti",
     "payLaterNote": "Sisa {amount} dicatat sebagai utang pelanggan.",
-    "refundReason": "Sisa DP dikembalikan saat serah terima",
     "checks": "Cek bersama pelanggan",
     "accessoryBack": "{name} dikembalikan",
     "noteNeeded": "Catatan",

@@ -134,6 +134,12 @@ export const MAX_REFERENCE = 100;
 export const MAX_DOCUMENT_LABEL = 80;
 export const MAX_ACCOUNT_NAME = 60;
 
+/**
+ * The reason a refund made at handover records: a code, so the history reads it in each reader's
+ * language (`historyLine`) rather than in the words of the device that saved it.
+ */
+export const HANDOVER_REFUND_REASON = 'handover_refund';
+
 /** What an entry is, on its row: the op type without the module prefix. */
 export const ENTRY_KINDS = [
   'charge_recorded',

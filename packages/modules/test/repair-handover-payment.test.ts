@@ -243,6 +243,8 @@ describe('a cancelled phone', () => {
       ['charge_recorded', 'cancel_fee_revenue', 50_000],
       ['refund_paid', 'cash', 150_000],
     ]);
+    // Saved as a code, not in the words of this device's language: each reader sees their own.
+    expect(money.entries.at(-1)?.reason).toBe('handover_refund');
     await expectBalancedBooks(h);
   });
 

@@ -62,7 +62,7 @@ import {
   type PrintSettings,
   type TicketDetailRow,
 } from './queries.js';
-import { CASH_ACCOUNT } from '../money/constants.js';
+import { CASH_ACCOUNT, HANDOVER_REFUND_REASON } from '../money/constants.js';
 import {
   chargeOp,
   paymentOp,
@@ -751,8 +751,6 @@ export const returnDeviceInput = z
       .nullable()
       .default(null)
       .transform((reason) => (reason === null || reason === '' ? null : reason)),
-    /** Shown in the history next to money handed back (a cancelled servisan's DP less its fee). */
-    refundReason: zText(200).default(''),
     /** What the counter went through with the customer (`handoverChecklist`), ticked or not. */
     checklist: z
       .array(zHandoverCheck)
@@ -794,8 +792,6 @@ export function refundsFor(
   return refunds;
 }
 
-const HANDOVER_REFUND_REASON = 'Returned at handover';
-
 /**
  * Hand the device back, with a photo and the customer's signature (when: `deviceReturnedRule`).
  * The servisan is charged what it costs, the customer pays the rest, and what they paid beyond
@@ -824,10 +820,11 @@ export async function returnDeviceHandler(
     const paidNow = input.payments.reduce((sum, payment) => sum + payment.amount, 0);
     balance = money.balance + toCharge - paidNow;
     if (balance < 0) {
-      const reason = input.refundReason === '' ? HANDOVER_REFUND_REASON : input.refundReason;
       const bill = money.charged + toCharge - money.reduced;
       for (const refund of refundsFor(money, -balance, bill, input.payments)) {
-        ops.push(refundOp(ctx, document, { ...refund, reason, reference: null }));
+        ops.push(
+          refundOp(ctx, document, { ...refund, reason: HANDOVER_REFUND_REASON, reference: null }),
+        );
       }
     }
   }

@@ -2,7 +2,7 @@
 // method, the drawer's moves, a count's difference and what customers still owe.
 import { formatMoney } from '@bolusi/i18n';
 
-import { CASH_ACCOUNT, type CashMoveKind } from './constants.js';
+import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, type CashMoveKind } from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -137,6 +137,23 @@ export function splitOpenBalances<T extends OpenBalanceRow>(rows: readonly T[]):
   };
 }
 
+/**
+ * A record's reason as the history shows it. The handover refund's code reads in this reader's
+ * language, and so do the fixed words older versions saved in its place.
+ */
+const HANDOVER_REFUND_WORDS = new Set([
+  HANDOVER_REFUND_REASON,
+  'Returned at handover',
+  'Sisa DP dikembalikan saat serah terima',
+  'Rest of the DP returned at handover',
+]);
+
+function reasonText(reason: string | null): string | null {
+  return reason !== null && HANDOVER_REFUND_WORDS.has(reason)
+    ? tm('money.history.handoverRefund')
+    : reason;
+}
+
 /** How each kind of record reads in the day's history. */
 const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
   charge_recorded: 'money.opType.chargeRecorded',
@@ -185,7 +202,9 @@ export function historyLine(
       customer,
       entry.documentLabel,
       method,
-      voided ? tm('money.history.voided', { reason: entry.voidReason ?? '' }) : entry.reason,
+      voided
+        ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
+        : reasonText(entry.reason),
     ].filter((part): part is string => part !== null && part !== ''),
     amount: `${signed < 0 ? '−' : ''}${formatMoney(Math.abs(signed))}`,
     voided,

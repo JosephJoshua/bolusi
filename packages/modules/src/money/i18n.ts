@@ -120,6 +120,7 @@ export const MONEY_KEYS = [
   'money.history.nextDay',
   'money.history.none',
   'money.history.voided',
+  'money.history.handoverRefund',
   'money.history.more',
   'money.void.title',
   'money.void.save',

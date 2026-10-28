@@ -192,6 +192,12 @@ describe('history', () => {
     const refund = historyLine(entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }), []);
     expect(refund.amount).toBe(`−${formatMoney(20_000)}`);
     expect(refund.details).toContain('Batal');
+    // A handover refund is saved as a code, and older ones in fixed English: both read localized.
+    for (const reason of ['handover_refund', 'Returned at handover']) {
+      const handover = historyLine(entry({ kind: 'refund_paid', amount: 1, reason }), []);
+      expect(handover.details).toContain('Sisa DP saat HP diambil');
+      expect(handover.details).not.toContain(reason);
+    }
     const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
     expect(short.label).toBe('money.kas.adjusted');
     expect(short.amount).toBe(`−${formatMoney(5_000)}`);
