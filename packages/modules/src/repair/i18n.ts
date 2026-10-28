@@ -737,6 +737,7 @@ export const REPAIR_KEYS = [
   'repair.customerPage.lookup.submit',
   'repair.customerPage.lookup.invalid',
   'repair.refusal.ownershipVideoNeeded',
+  'repair.refusal.cancelFeeChanged',
   'repair.problem.ownershipVideo',
   'repair.video.title',
   'repair.video.hint',

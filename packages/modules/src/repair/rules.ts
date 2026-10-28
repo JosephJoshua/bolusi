@@ -126,6 +126,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'handedOverBefore',
   'customerShared',
   'customerMismatch',
+  'cancelFeeChanged',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -912,8 +913,18 @@ export const ticketCancelledRule: Rule = async (op, ctx) => {
   }
   // v1, from before fees, names no fee and charges nothing (the applier records no fee): a drop
   // of the whole standard fee, which an older phone must not get past the limit with.
-  const fee = payloadOf<{ fee?: number }>(op).fee ?? 0;
+  const { fee: named, standardFee } = payloadOf<{ fee?: number; standardFee?: number }>(op);
+  const fee = named ?? 0;
   const standard = await standardFeeOf(ctx.db, op, ticket);
+  // The record keeps both fees, and the owners' cancel list flags a fee below the store's: one the
+  // device named differently was judged by settings that have changed since, or forged.
+  if (named !== undefined && standardFee !== standard) {
+    throw refuse('cancelFeeChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'standardFee', issue: `the store's fee is now ${standard}` },
+      message: `ticket ${ticket.ticketNumber}: the store's cancellation fee is ${standard}`,
+    });
+  }
   const counted = cancelDrop(standard, fee, await discountsStanding(ctx.db, op));
   await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, counted);
 };
