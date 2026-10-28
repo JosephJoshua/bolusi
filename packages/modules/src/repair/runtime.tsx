@@ -198,6 +198,22 @@ export function useStoreDisplayName(): string | null {
   return name.status === 'ready' ? name.data : null;
 }
 
+/** The enrolled store's name, which slips print while the owner leaves theirs empty. */
+export function usePrintStoreName(): string {
+  const printing = useRepairRuntime().printing;
+  const [name, setName] = useState('');
+  useEffect(() => {
+    let live = true;
+    void printing?.storeName().then((loaded) => {
+      if (live) setName(loaded);
+    });
+    return () => {
+      live = false;
+    };
+  }, [printing]);
+  return name;
+}
+
 export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
   return useRepairQuery(
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,

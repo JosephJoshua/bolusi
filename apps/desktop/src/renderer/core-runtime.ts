@@ -10,7 +10,7 @@ import type { CoreCaptureOutcome, SessionView } from '../core/api.js';
 import { CORE_EVENTS } from '../core/api.js';
 import type { Client } from '../main/rpc.js';
 
-import { compressPhoto, type PcCapture } from './capture.js';
+import { compressPhoto, pickPhotoFile, type PcCapture } from './capture.js';
 import { desktopPrinting } from './print.js';
 
 // The ids a form takes up front (a new ticket's) are UUIDv7 like every other id; the window mints
@@ -74,6 +74,12 @@ export function createCoreRepairRuntime(deps: {
     loadModelPhoto: (photo) => call('repair.loadModelPhoto', photo),
     async capturePhoto(request?: CaptureRequest) {
       const photo = await capture.photo(request);
+      if (photo === null) return null;
+      return captured(await call('media.importImage', await compressPhoto(photo)));
+    },
+    // A picture from this PC's files, such as the store's logo.
+    async pickPhoto() {
+      const photo = await pickPhotoFile();
       if (photo === null) return null;
       return captured(await call('media.importImage', await compressPhoto(photo)));
     },

@@ -62,6 +62,9 @@ const canvasCompressor = (blobs: Map<string, Blob>): ImageCompressorPort => ({
       canvas.height = Math.max(1, Math.round(source.height * scale));
       const context = canvas.getContext('2d');
       if (context === null) throw new Error('no canvas to encode the photo');
+      // JPEG has no transparency: a see-through logo lands on white paper, not black.
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
       context.drawImage(source, 0, 0, canvas.width, canvas.height);
       const blob = await toBlob(canvas, quality);
       const name = `pass:${blobs.size}`;

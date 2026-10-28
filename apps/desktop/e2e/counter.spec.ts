@@ -178,6 +178,7 @@ test('the page gets only the narrow print and update calls, through the real pre
 
   // The printer list comes from the OS through the main process; with none chosen, no test page.
   await page.getByTestId('nav.settings').click();
+  await page.getByTestId('desktop.settings.nav.computer').click();
   await expect(page.getByTestId('repair.desk.printing')).toBeVisible();
   await expect(
     page
@@ -185,17 +186,19 @@ test('the page gets only the narrow print and update calls, through the real pre
       .or(page.getByTestId('repair.desk.printing.printers')),
   ).toBeVisible();
   await expect(page.getByTestId('repair.desk.printing.test')).toBeDisabled();
-  await expect(page.getByTestId('desktop.version')).toHaveText(/^Versi aplikasi \d+\.\d+\.\d+$/);
+  await expect(page.getByTestId('desktop.version')).toHaveText(/^\d+\.\d+\.\d+$/);
 });
 
 test('the paper picked in Settings is kept by the main process across a restart', async () => {
   await page.getByTestId('nav.settings').click();
+  await page.getByTestId('desktop.settings.nav.computer').click();
   const a5 = page.getByTestId('repair.desk.printing.paper.a5');
   await a5.click();
   await expect(a5).toHaveAttribute('data-state', 'on');
   await app.close();
   await launch();
   await page.getByTestId('nav.settings').click();
+  await page.getByTestId('desktop.settings.nav.computer').click();
   await expect(page.getByTestId('repair.desk.printing.paper.a5')).toHaveAttribute(
     'data-state',
     'on',

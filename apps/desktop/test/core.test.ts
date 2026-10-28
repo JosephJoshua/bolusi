@@ -1,7 +1,14 @@
 // @vitest-environment node
 // The offline core's own parts on the PC: the database driver, the crypto, and the line between the
 // window and the core. Each is checked against the same suites and vectors the phone's are.
-import { bytesToHex, DomainError, hexToBytes, RuleRefusal, utf8ToBytes } from '@bolusi/core';
+import {
+  bytesToHex,
+  DomainError,
+  hexToBytes,
+  RuleRefusal,
+  StaffAdminError,
+  utf8ToBytes,
+} from '@bolusi/core';
 import {
   argon2idVectors,
   DRIVER_CONFORMANCE_CASES,
@@ -113,6 +120,12 @@ describe('window to core calls', () => {
       plain: () => {
         throw new TypeError('boom');
       },
+      lastOwner: () => {
+        throw new StaffAdminError('lastOwner');
+      },
+      forged: () => {
+        throw Object.assign(new Error('x'), { name: 'StaffAdminError', reason: 'whatever' });
+      },
     });
     const client = connect(window, reviveCoreError);
 
@@ -128,5 +141,11 @@ describe('window to core calls', () => {
     expect(plain).not.toBeInstanceOf(DomainError);
     expect((plain as Error).name).toBe('TypeError');
     expect((plain as Error).message).toBe('boom');
+
+    const lastOwner = await client.call('lastOwner').catch((error: unknown) => error);
+    expect(lastOwner).toBeInstanceOf(StaffAdminError);
+    expect((lastOwner as StaffAdminError).reason).toBe('lastOwner');
+    const forged = await client.call('forged').catch((error: unknown) => error);
+    expect((forged as StaffAdminError).reason).toBe('unexpected');
   });
 });

@@ -543,6 +543,10 @@ export const REPAIR_KEYS = [
   'repair.uncollected.saved',
   'repair.uncollected.summary',
   'repair.uncollected.title',
+  'repair.desk.settings.discard',
+  'repair.desk.settings.slipLead',
+  'repair.desk.options.dragHandle',
+  'repair.desk.options.new',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];

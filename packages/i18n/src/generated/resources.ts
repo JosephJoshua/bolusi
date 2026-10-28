@@ -267,7 +267,7 @@ const source = {
         addTitle: 'Karyawan baru',
         editTitle: 'Ubah karyawan',
         name: 'Nama',
-        nameHint: 'Nama ini tampil saat memilih akun di HP toko.',
+        nameHint: 'Nama ini tampil saat memilih akun di HP atau komputer toko.',
         roles: 'Tugas',
         rolesHint: 'Boleh pilih lebih dari satu.',
         roleHint: {
@@ -341,6 +341,25 @@ const source = {
           action: 'Daftarkan ulang komputer ini',
         },
         unsyncedBody: 'Dikirim setelah komputer ini terdaftar, tetap atas nama yang membuatnya.',
+        settings: {
+          account: 'Akun',
+          pinSummary: 'PIN untuk masuk ke komputer ini',
+          thisPc: 'Komputer ini',
+          staffOffline:
+            'Butuh internet untuk mengubah karyawan. Sambungkan komputer ini ke internet, lalu ulangi.',
+          handOverTitle: 'Giliran {name}',
+          handOverBody: 'Minta {name} mengetik PIN barunya sendiri. Kamu tidak perlu tahu PIN-nya.',
+          noOtherStaff: 'Belum ada karyawan lain di komputer ini.',
+          notYetHere:
+            '{name} akan muncul di komputer ini setelah tersinkron. Buat PIN-nya nanti lewat PIN karyawan.',
+          addedBody: 'Kalau dia ada di sini, minta dia membuat PIN sendiri sekarang.',
+          colName: 'Nama',
+          colRoles: 'Tugas',
+          colStatus: 'Status',
+          colActions: 'Tindakan',
+          lockedCount: '{count} terkunci',
+          pinFor: 'PIN baru untuk {name}',
+        },
       },
     },
     sync: {
@@ -837,6 +856,26 @@ export const resources = {
           },
           unsyncedBody:
             'Sent once this computer is registered, still under the name of whoever made them.',
+          settings: {
+            account: 'Account',
+            pinSummary: 'The PIN you sign in with on this computer',
+            thisPc: 'This computer',
+            staffOffline:
+              'Changing staff needs the internet. Connect this computer, then try again.',
+            handOverTitle: '{name}’s turn',
+            handOverBody:
+              'Ask {name} to type their new PIN themselves. You do not need to know it.',
+            noOtherStaff: 'No other staff on this computer yet.',
+            notYetHere:
+              '{name} will appear on this computer after it syncs. Make their PIN later under Staff PINs.',
+            addedBody: 'If they are here, ask them to make their own PIN now.',
+            colName: 'Name',
+            colRoles: 'Roles',
+            colStatus: 'Status',
+            colActions: 'Actions',
+            lockedCount: '{count} locked',
+            pinFor: 'New PIN for {name}',
+          },
         },
       },
       sync: {
