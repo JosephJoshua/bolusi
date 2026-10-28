@@ -116,5 +116,53 @@
     "message": "Isian yang belum disimpan akan hilang.",
     "confirm": "Keluar",
     "keep": "Tetap di sini"
+  },
+  "history": {
+    "open": "Riwayat",
+    "title": "Riwayat kas",
+    "today": "Hari ini",
+    "previousDay": "Sebelumnya",
+    "nextDay": "Berikutnya",
+    "none": "Belum ada catatan di hari ini.",
+    "voided": "Dibatalkan: {reason}",
+    "more": "Muat lagi"
+  },
+  "void": {
+    "title": "Batalkan pembayaran",
+    "save": "Batalkan pembayaran",
+    "hint": "Isi alasannya.",
+    "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
+    "reason": "Alasan"
+  },
+  "kind": {
+    "qris": "QRIS",
+    "edc": "EDC",
+    "transfer": "Transfer bank"
+  },
+  "methods": {
+    "title": "Metode pembayaran",
+    "summary": "QRIS, EDC, dan rekening transfer",
+    "add": "Tambah metode",
+    "addTitle": "Tambah metode",
+    "editTitle": "Ubah metode",
+    "cashAlways": "Selalu ada",
+    "central": "Semua toko",
+    "inactive": "Tidak dipakai",
+    "none": "Belum ada QRIS, EDC, atau rekening.",
+    "noneHint": "Tambahkan supaya kasir bisa memilihnya saat menerima pembayaran.",
+    "kind": "Jenis",
+    "name": "Nama",
+    "namePlaceholder": "Contoh: QRIS BCA",
+    "nameRequired": "Isi namanya.",
+    "allStores": "Milik pusat",
+    "allStoresCaption": "Bisa dipakai di semua toko atau toko yang dipilih.",
+    "active": "Dipakai",
+    "activeCaption": "Kalau dimatikan, kasir tidak bisa memilihnya lagi. Catatan lamanya tetap ada.",
+    "save": "Simpan",
+    "saved": "{name} disimpan.",
+    "usedAt": "Dipakai di",
+    "someStores": "Pilih toko",
+    "storeCount": "{count} toko",
+    "storeRequired": "Pilih paling sedikit satu toko."
   }
 }

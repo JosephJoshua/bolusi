@@ -13,7 +13,19 @@ import {
 
 import type { MoneyModule } from './manifest.js';
 
-export interface MoneyRuntime extends ModulePort<MoneyModule>, LiveSource {
+/** A store of the business, by name. */
+export interface MoneyStore {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** The ledger's port, and the business's stores a central payment method may be given to. */
+export interface MoneyPort extends ModulePort<MoneyModule> {
+  /** Every store of the business, as this device last heard; this store alone before then. */
+  stores(): Promise<readonly MoneyStore[]>;
+}
+
+export interface MoneyRuntime extends MoneyPort, LiveSource {
   /** A colleague's name for "counted by"; null for someone this device does not know. */
   nameOf(userId: string): string | null;
   /**

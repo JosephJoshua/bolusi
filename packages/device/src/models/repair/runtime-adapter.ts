@@ -7,6 +7,7 @@ import {
   bindModulePort,
   listSwitcherUsers,
   OP_SYNC_STATUS_TABLE,
+  readStores,
   type CommandIdentity,
   type InvalidationBus,
   type ModuleRuntime,
@@ -61,7 +62,10 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
   const port = bindModulePort(repairModule, deps.runtime, deps.identity);
   return {
     ...port,
-    money: bindModulePort(moneyModule, deps.runtime, deps.identity),
+    money: {
+      ...bindModulePort(moneyModule, deps.runtime, deps.identity),
+      stores: () => readStores(deps.db),
+    },
     // Every repair table, not one: a ticket row joins its customer, lines and photos, and a pulled
     // change to any of them must re-render the open screen (04 §7). The op log too, since each
     // screen shows its tickets' sync status.

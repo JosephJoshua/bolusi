@@ -30,6 +30,7 @@ import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { KasHome } from './src/screens/money/KasHome.js';
+import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
 import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
@@ -750,7 +751,7 @@ export default function App(props: AppProps): React.JSX.Element {
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setUncollectedDays);
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
-  const closeRepairSettings = useCallback(() => setRoute('settings'), []);
+  const backToSettings = useCallback(() => setRoute('settings'), []);
   const closeParts = useCallback(() => setRoute('home'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
@@ -771,6 +772,12 @@ export default function App(props: AppProps): React.JSX.Element {
     moneyRuntime !== null &&
     (moneyRuntime.hasPermission(MONEY_PERMISSION.read) ||
       moneyRuntime.hasPermission(MONEY_PERMISSION.countCash));
+  // The list reads the methods as the payment step does, so it also needs `receive`.
+  const canManageAccounts =
+    moneyRuntime !== null &&
+    moneyRuntime.hasPermission(MONEY_PERMISSION.receive) &&
+    (moneyRuntime.hasPermission(MONEY_PERMISSION.manageAccounts) ||
+      moneyRuntime.hasPermission(MONEY_PERMISSION.manageCentralAccounts));
   const currentUser = useMemo(() => {
     if (props.session === null) return null;
     const found = (props.users ?? []).find((user) => user.id === props.session?.userId);
@@ -1145,6 +1152,17 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               ) : null;
             if (syncStatus !== null && syncReturn !== 'home') return syncStatus;
+            // The chip on a settings page or the parts list: tapping it leaves through the page's guard.
+            const routeSyncChip = (
+              <SyncChip
+                state={chip}
+                pendingCount={props.sync.pendingOperationCount}
+                accessibilityLabels={syncChipAccessibilityLabels({
+                  pendingCount: props.sync.pendingOperationCount,
+                })}
+                onPress={() => leaveHome(() => setRoute('syncStatus'))}
+              />
+            );
             if (shellZone.route === 'settings' && currentUser !== null) {
               return (
                 <SettingsScreen
@@ -1171,67 +1189,85 @@ export default function App(props: AppProps): React.JSX.Element {
                   }
                   // Each row for whoever may change it here: the store's settings for owners, the
                   // phone's paper for anyone who prints.
-                  repair={{
-                    section: tn('repair.board.title'),
-                    rows: [
-                      ...(canSetIntakeOptions
-                        ? [
-                            {
-                              icon: 'list' as const,
-                              title: tn('repair.options.title'),
-                              summary: tn('repair.options.summary'),
-                              onOpen: () => setRoute('intakeOptions'),
-                              testID: 'settings-intake-options',
-                            },
-                          ]
-                        : []),
-                      ...(canSetCancelFees
+                  modules={[
+                    {
+                      section: tn('repair.board.title'),
+                      testID: 'settings-section-repair',
+                      rows: [
+                        ...(canSetIntakeOptions
+                          ? [
+                              {
+                                icon: 'list' as const,
+                                title: tn('repair.options.title'),
+                                summary: tn('repair.options.summary'),
+                                onOpen: () => setRoute('intakeOptions'),
+                                testID: 'settings-intake-options',
+                              },
+                            ]
+                          : []),
+                        ...(canSetCancelFees
+                          ? [
+                              {
+                                icon: 'money' as const,
+                                title: tn('repair.fees.title'),
+                                summary: tn('repair.fees.summary'),
+                                onOpen: () => setRoute('cancelFees'),
+                                testID: 'settings-cancel-fees',
+                              },
+                            ]
+                          : []),
+                        ...(canSetUncollectedDays
+                          ? [
+                              {
+                                icon: 'clock' as const,
+                                title: tn('repair.uncollected.title'),
+                                summary: tn('repair.uncollected.summary'),
+                                onOpen: () => setRoute('uncollectedDays'),
+                                testID: 'settings-uncollected-days',
+                              },
+                            ]
+                          : []),
+                        ...(canSetPrintSettings
+                          ? [
+                              {
+                                icon: 'print' as const,
+                                title: tn('repair.printSettings.title'),
+                                summary: tn('repair.printSettings.summary'),
+                                onOpen: () => setRoute('printSettings'),
+                                testID: 'settings-print-settings',
+                              },
+                            ]
+                          : []),
+                        // The phone's own paper: anyone who prints here may set it.
+                        ...(props.repair?.printing !== undefined
+                          ? [
+                              {
+                                icon: 'paper' as const,
+                                title: tn('repair.paper.title'),
+                                summary: tn('repair.paper.phoneSummary'),
+                                onOpen: () => setRoute('printPaper'),
+                                testID: 'settings-print-paper',
+                              },
+                            ]
+                          : []),
+                      ],
+                    },
+                    {
+                      section: tm('money.kas.title'),
+                      testID: 'settings-section-money',
+                      rows: canManageAccounts
                         ? [
                             {
                               icon: 'money' as const,
-                              title: tn('repair.fees.title'),
-                              summary: tn('repair.fees.summary'),
-                              onOpen: () => setRoute('cancelFees'),
-                              testID: 'settings-cancel-fees',
+                              title: tm('money.methods.title'),
+                              summary: tm('money.methods.summary'),
+                              onOpen: () => setRoute('paymentMethods'),
+                              testID: 'settings-payment-methods',
                             },
                           ]
-                        : []),
-                      ...(canSetUncollectedDays
-                        ? [
-                            {
-                              icon: 'clock' as const,
-                              title: tn('repair.uncollected.title'),
-                              summary: tn('repair.uncollected.summary'),
-                              onOpen: () => setRoute('uncollectedDays'),
-                              testID: 'settings-uncollected-days',
-                            },
-                          ]
-                        : []),
-                      ...(canSetPrintSettings
-                        ? [
-                            {
-                              icon: 'print' as const,
-                              title: tn('repair.printSettings.title'),
-                              summary: tn('repair.printSettings.summary'),
-                              onOpen: () => setRoute('printSettings'),
-                              testID: 'settings-print-settings',
-                            },
-                          ]
-                        : []),
-                      // The phone's own paper: anyone who prints here may set it.
-                      ...(props.repair?.printing !== undefined
-                        ? [
-                            {
-                              icon: 'paper' as const,
-                              title: tn('repair.paper.title'),
-                              summary: tn('repair.paper.phoneSummary'),
-                              onOpen: () => setRoute('printPaper'),
-                              testID: 'settings-print-paper',
-                            },
-                          ]
-                        : []),
-                    ],
-                  }}
+                        : [],
+                    },
+                  ]}
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}
                   onOpenSync={openSyncStatus}
@@ -1250,17 +1286,18 @@ export default function App(props: AppProps): React.JSX.Element {
                 <RepairSettingsRoute
                   page={shellZone.route}
                   runtime={props.repair}
-                  syncChip={
-                    <SyncChip
-                      state={chip}
-                      pendingCount={props.sync.pendingOperationCount}
-                      accessibilityLabels={syncChipAccessibilityLabels({
-                        pendingCount: props.sync.pendingOperationCount,
-                      })}
-                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
-                    />
-                  }
-                  onClose={closeRepairSettings}
+                  syncChip={routeSyncChip}
+                  onClose={backToSettings}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'paymentMethods' && moneyRuntime !== null) {
+              return (
+                <PaymentMethodsRoute
+                  runtime={moneyRuntime}
+                  syncChip={routeSyncChip}
+                  onClose={backToSettings}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );
@@ -1269,16 +1306,7 @@ export default function App(props: AppProps): React.JSX.Element {
               return (
                 <PartsRoute
                   runtime={props.repair.inventory}
-                  syncChip={
-                    <SyncChip
-                      state={chip}
-                      pendingCount={props.sync.pendingOperationCount}
-                      accessibilityLabels={syncChipAccessibilityLabels({
-                        pendingCount: props.sync.pendingOperationCount,
-                      })}
-                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
-                    />
-                  }
+                  syncChip={routeSyncChip}
                   onClose={closeParts}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1614,6 +1642,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'printSettings',
   'printPaper',
   'parts',
+  'paymentMethods',
 ]);
 
 /**

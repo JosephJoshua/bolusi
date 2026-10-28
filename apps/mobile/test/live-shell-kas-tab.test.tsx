@@ -166,3 +166,30 @@ describe('the Kas tab', () => {
     });
   });
 });
+
+describe('payment methods in Settings', () => {
+  async function openSettings(shown: RenderResult): Promise<void> {
+    await press(shown, 'ui.avatarButton');
+    await press(shown, 'shell-open-settings');
+    expect(await waitUntil(() => shown.query('settings-section-language') !== null)).toBe(true);
+  }
+
+  test('are for whoever manages the store’s accounts, and back returns to Settings', async () => {
+    const shown = await signedIn([...COUNTER, MONEY_PERMISSION.manageAccounts]);
+    await openSettings(shown);
+    await press(shown, 'settings-payment-methods');
+    expect(await waitUntil(() => shown.query('money.methods.cash') !== null)).toBe(true);
+
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(shown.query('money.methods')).toBeNull();
+    expect(shown.query('settings-payment-methods')).not.toBeNull();
+  });
+
+  test('are not there for the counter', async () => {
+    const shown = await signedIn(COUNTER);
+    await openSettings(shown);
+    expect(shown.query('settings-payment-methods')).toBeNull();
+    expect(shown.query('settings-section-money')).toBeNull();
+  });
+});

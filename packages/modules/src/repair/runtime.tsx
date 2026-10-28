@@ -9,7 +9,7 @@ import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
-import type { MoneyModule } from '../money/manifest.js';
+import type { MoneyPort } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
@@ -113,7 +113,7 @@ export interface RepairTechnician {
 
 export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSource {
   /** The money ledger: payment methods, a servisan's payments, and taking money at handover. */
-  readonly money: ModulePort<MoneyModule>;
+  readonly money: MoneyPort;
   /** Op sync statuses per ticket id (design-system §3.5); an absent ticket is all-synced. */
   ticketSyncStatuses(ticketIds: readonly string[]): Promise<EntitySyncStatuses>;
   /** Active colleagues who hold `repair.work` in this store, by name. */

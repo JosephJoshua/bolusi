@@ -262,6 +262,12 @@ describe('payments', () => {
       );
     await expectRefused(pay(), 'VALIDATION_FAILED', 'accountNotUsable');
     expect((await h.moneyQuery('paymentAccounts', {}, h.cashierId)).rows).toEqual([]);
+    // The business owner's Settings still lists it, to give it to this store too; nobody else's.
+    const everyStore = { includeInactive: true, everyStore: true };
+    expect((await h.moneyQuery('paymentAccounts', everyStore, h.ownerId)).rows).toMatchObject([
+      { id: accountId, storeIds: [otherStore] },
+    ]);
+    expect((await h.moneyQuery('paymentAccounts', everyStore, h.storeOwnerId)).rows).toEqual([]);
 
     await h.money(
       'saveCentralAccount',

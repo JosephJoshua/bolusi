@@ -48,6 +48,8 @@ export interface KasBoardProps {
   readonly onMove: () => void;
   readonly onSettle: (count: CashCountRow) => void;
   readonly onReceive: (balance: NamedBalance) => void;
+  /** The day's records; absent for someone who cannot read the store's money. */
+  readonly onHistory?: (() => void) | undefined;
   /** A tablet beside another pane shows no header of its own; absent on a phone. */
   readonly testID?: string | undefined;
 }
@@ -64,6 +66,7 @@ export function KasBoard({
   onMove,
   onSettle,
   onReceive,
+  onHistory,
   testID = 'money.kas',
 }: KasBoardProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
@@ -113,6 +116,7 @@ export function KasBoard({
   const mayCount = can(MONEY_PERMISSION.countCash);
   const maySettle = can(MONEY_PERMISSION.adjustCash);
   const mayReceive = can(MONEY_PERMISSION.receive);
+  const mayRead = can(MONEY_PERMISSION.read);
 
   return (
     <AppShell
@@ -140,15 +144,26 @@ export function KasBoard({
               ? tm('money.kas.notCounted')
               : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
           </Text>
-          {can(MONEY_PERMISSION.moveCash) ? (
+          {can(MONEY_PERMISSION.moveCash) || (onHistory !== undefined && mayRead) ? (
             <View style={styles.drawerAction}>
-              <Button
-                label={tm('money.kas.move')}
-                variant="secondary"
-                size="compact"
-                onPress={onMove}
-                testID={`${testID}.move`}
-              />
+              {can(MONEY_PERMISSION.moveCash) ? (
+                <Button
+                  label={tm('money.kas.move')}
+                  variant="secondary"
+                  size="compact"
+                  onPress={onMove}
+                  testID={`${testID}.move`}
+                />
+              ) : null}
+              {onHistory !== undefined && mayRead ? (
+                <Button
+                  label={tm('money.history.open')}
+                  variant="secondary"
+                  size="compact"
+                  onPress={onHistory}
+                  testID={`${testID}.history`}
+                />
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -257,7 +272,7 @@ export function differenceText(difference: number): string {
 }
 
 /** A label (and a line under it) left, its amount right; a chevron when it opens a step. */
-function Row({
+export function Row({
   label,
   detail,
   value,
@@ -269,7 +284,8 @@ function Row({
   readonly label: string;
   readonly detail?: string | undefined;
   readonly value: string;
-  readonly tone?: 'text' | 'danger' | undefined;
+  /** `struck`: a record that no longer counts (a cancelled payment). */
+  readonly tone?: 'text' | 'danger' | 'struck' | undefined;
   readonly strong?: boolean | undefined;
   readonly onPress?: (() => void) | undefined;
   readonly testID: string;
@@ -286,6 +302,7 @@ function Row({
         style={[
           strong ? styles.rowValueStrong : styles.rowValue,
           tone === 'danger' && styles.danger,
+          tone === 'struck' && styles.struck,
         ]}
         testID={`${testID}.value`}
       >
@@ -324,7 +341,7 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
-  drawerAction: { flexDirection: 'row', marginTop: space.md },
+  drawerAction: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
   row: {
     minHeight: touch.min,
     paddingVertical: space.sm,
@@ -343,4 +360,5 @@ const styles = StyleSheet.create({
   rowValue: { ...type.bodySm, fontWeight: '600', color: color.text, fontVariant: ['tabular-nums'] },
   rowValueStrong: { ...type.bodyBold, color: color.text, fontVariant: ['tabular-nums'] },
   danger: { color: color.danger },
+  struck: { color: color.textMuted, textDecorationLine: 'line-through' },
 });

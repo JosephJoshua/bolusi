@@ -13,14 +13,12 @@ import {
   PrintSettingsScreen,
   RepairRuntimeProvider,
   UncollectedDaysScreen,
-  type DiscardGuard,
   type RepairRuntime,
-  type StepBack,
 } from '@bolusi/modules/repair/screens';
-import { useCallback, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
+import { useRouteSurfaceNav } from '../../navigation/useRouteSurfaceNav.js';
 
 export type RepairSettingsPage =
   'intakeOptions' | 'cancelFees' | 'uncollectedDays' | 'printSettings' | 'printPaper';
@@ -40,31 +38,10 @@ export function RepairSettingsRoute({
   onClose,
   onRegisterSurfaceNav,
 }: RepairSettingsRouteProps): React.JSX.Element {
-  const discardGuardRef = useRef<DiscardGuard | null>(null);
-  const registerDiscardGuard = useCallback((guard: DiscardGuard | null): void => {
-    discardGuardRef.current = guard;
-  }, []);
-  const stepBackRef = useRef<StepBack | null>(null);
-  const registerStepBack = useCallback((back: StepBack | null): void => {
-    stepBackRef.current = back;
-  }, []);
-
-  useEffect(() => {
-    const runLeave = (proceed: () => void): void => {
-      const guard = discardGuardRef.current;
-      if (guard !== null) guard(proceed);
-      else proceed();
-    };
-    onRegisterSurfaceNav?.({
-      handleBack: () => {
-        if (stepBackRef.current?.() === true) return true;
-        runLeave(onClose);
-        return true;
-      },
-      requestLeave: runLeave,
-    });
-    return () => onRegisterSurfaceNav?.(null);
-  }, [onClose, onRegisterSurfaceNav]);
+  const { registerDiscardGuard, registerStepBack } = useRouteSurfaceNav(
+    onClose,
+    onRegisterSurfaceNav,
+  );
 
   return (
     <RepairRuntimeProvider runtime={runtime}>

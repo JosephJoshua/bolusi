@@ -334,3 +334,76 @@ describe('what customers owe', () => {
     expect(screen.all('money.receive.primary')[0]!.props['disabled']).toBe(true);
   });
 });
+
+describe('Riwayat', () => {
+  async function paid(harness: RepairHarness): Promise<string> {
+    const { ticketId, ticketNumber } = (await harness.run(
+      'openTicket',
+      intake(harness),
+      harness.cashierId,
+    )) as { ticketId: string; ticketNumber: string };
+    await harness.money(
+      'receivePayments',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: ticketNumber },
+        payments: [{ account: 'cash', amount: 200_000 }],
+      },
+      harness.cashierId,
+    );
+    const row = await harness.db
+      .selectFrom('moneyEntries')
+      .select('id')
+      .where('kind', '=', 'payment_received')
+      .executeTakeFirstOrThrow();
+    return row.id!;
+  }
+
+  test('an owner cancels a wrong payment with a reason; it stays, struck through', async () => {
+    h = await openRepairScreenHarness(5412);
+    const entryId = await paid(h);
+    const screen = await mount(h, h.storeOwnerId);
+    expect(text(screen, 'money.kas.expected')).toBe('Rp 200.000');
+
+    await press(screen, 'money.kas.history');
+    expect(text(screen, 'money.history.day')).toBe('Hari ini');
+    expect(screen.all('money.history.next')[0]!.props['disabled']).toBe(true);
+    const row = `money.history.entry.${entryId}`;
+    expect(text(screen, row)).toContain('Pembayaran diterima');
+    expect(text(screen, row)).toContain('Yohanis Wenda');
+    expect(text(screen, row)).toContain('Tunai');
+
+    await press(screen, row);
+    expect(text(screen, 'money.void.amount')).toBe('Rp 200.000');
+    expect(screen.all('money.void.primary')[0]!.props['disabled']).toBe(true);
+    type(screen, 'money.void.reason', 'Salah metode');
+    await settle();
+    await press(screen, 'money.void.primary');
+
+    // Back on the day's records: the payment is still there, cancelled, and no longer pressable.
+    expect(text(screen, row)).toContain('Dibatalkan: Salah metode');
+    await press(screen, 'money.history.back');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp 0');
+  });
+
+  test('the counter reads the records but cannot cancel one', async () => {
+    h = await openRepairScreenHarness(5413);
+    const entryId = await paid(h);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'money.kas.history');
+    const row = screen.all(`money.history.entry.${entryId}`)[0]!;
+    expect(row.props['onPress']).toBeUndefined();
+  });
+
+  test('the day before is its own page', async () => {
+    h = await openRepairScreenHarness(5414);
+    await paid(h);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'money.kas.history');
+    await press(screen, 'money.history.previous');
+    expect(text(screen, 'money.history.day')).not.toBe('Hari ini');
+    expect(screen.query('money.history.empty')).not.toBeNull();
+    await press(screen, 'money.history.next');
+    expect(text(screen, 'money.history.day')).toBe('Hari ini');
+    expect(screen.query('money.history.empty')).toBeNull();
+  });
+});
