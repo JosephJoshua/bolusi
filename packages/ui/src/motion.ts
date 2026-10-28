@@ -17,8 +17,9 @@ export const easeEnter = Easing.bezier(...motion.easing.enter);
 export const easeExit = Easing.bezier(...motion.easing.exit);
 
 // One subscription for the whole app instead of one query per animated component, started when
-// this module loads so the setting is known before the first sheet or toast plays.
-let reduced = false;
+// this module loads. Until the system answers, assume less motion: anything that mounts in those
+// first milliseconds appears in place rather than animating against the person's setting.
+let reduced = true;
 const listeners = new Set<() => void>();
 
 function setReduced(next: boolean): void {
@@ -27,7 +28,7 @@ function setReduced(next: boolean): void {
   for (const listener of listeners) listener();
 }
 
-void AccessibilityInfo.isReduceMotionEnabled().then(setReduced, () => {});
+void AccessibilityInfo.isReduceMotionEnabled().then(setReduced, () => setReduced(false));
 AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
 
 function subscribe(listener: () => void): () => void {

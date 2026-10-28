@@ -76,6 +76,10 @@ const styles = StyleSheet.create({
 
 const COMPACT_SLOP = (touch.min - sizes.control) / 2;
 
+const wrapStyles = StyleSheet.create({
+  compactWrap: { paddingVertical: COMPACT_SLOP, marginVertical: -COMPACT_SLOP },
+});
+
 export function Button({
   label,
   onPress,
@@ -91,7 +95,9 @@ export function Button({
 
   return (
     // The scale lives on a wrapper because Pressable's style function cannot carry an animated value.
-    <Animated.View style={press.style}>
+    // A compact button's wrapper reaches out over its hit slop (and gives the room back as margin):
+    // Android drops touches outside a parent's bounds, which would cut the 48 dp target to 36.
+    <Animated.View style={[compact ? wrapStyles.compactWrap : null, press.style]}>
       <Pressable
         testID={testID}
         accessibilityRole="button"

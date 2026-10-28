@@ -283,13 +283,29 @@ export const Easing = {
 /** The system "reduce motion" switch, off until a test flips it with `__setReduceMotion`. */
 const reduceMotionListeners = new Set<(enabled: boolean) => void>();
 let reduceMotion = false;
+let heldAnswer: ((enabled: boolean) => void) | null = null;
+let holdAnswer = false;
 export const AccessibilityInfo = {
-  isReduceMotionEnabled: (): Promise<boolean> => Promise.resolve(reduceMotion),
+  isReduceMotionEnabled: (): Promise<boolean> =>
+    holdAnswer
+      ? new Promise((resolve) => {
+          heldAnswer = resolve;
+        })
+      : Promise.resolve(reduceMotion),
   addEventListener: (_event: string, listener: (enabled: boolean) => void) => {
     reduceMotionListeners.add(listener);
     return { remove: () => reduceMotionListeners.delete(listener) };
   },
 };
+/** The system takes its time answering the first query until `__answerReduceMotion`. */
+export function __holdReduceMotionAnswer(): void {
+  holdAnswer = true;
+}
+export function __answerReduceMotion(enabled: boolean): void {
+  holdAnswer = false;
+  heldAnswer?.(enabled);
+  heldAnswer = null;
+}
 export function __setReduceMotion(enabled: boolean): void {
   reduceMotion = enabled;
   for (const listener of reduceMotionListeners) listener(enabled);

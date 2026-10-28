@@ -5,6 +5,7 @@
  */
 import { act } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import type { ReactElement } from 'react';
 
 import { Button } from '../src/components/Button.js';
 import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
@@ -17,6 +18,12 @@ import { fire, render } from './render.js';
 
 type Live = { readonly value: number };
 const valueOf = (style: unknown): number => (style as Live).value;
+
+/** A wrapper's style, merged the way RN would read it. */
+function flat(style: unknown): Record<string, unknown> {
+  const parts = (Array.isArray(style) ? style : [style]).filter(Boolean) as object[];
+  return Object.assign({}, ...parts) as Record<string, unknown>;
+}
 
 function transformOf(style: Record<string, unknown>, key: string): number {
   const entry = (style['transform'] as Record<string, unknown>[]).find((t) => key in t);
@@ -74,7 +81,7 @@ describe('entrances land on the still layout', () => {
 describe('press feedback', () => {
   const scaleOf = (r: ReturnType<typeof render>): number => {
     const wrapper = r.container.queryAll((node) => node.type === 'Animated.View')[0]!;
-    return transformOf(wrapper.props['style'] as Record<string, unknown>, 'scale');
+    return transformOf(flat(wrapper.props['style']), 'scale');
   };
 
   test('a pressed button shrinks and springs back on release', () => {
@@ -97,4 +104,40 @@ describe('press feedback', () => {
     fire(r.get('b'), 'onPressIn');
     expect(scaleOf(r)).toBe(1);
   });
+});
+
+describe('before the system says whether to reduce motion', () => {
+  test('nothing moves until it answers, then presses shrink', async () => {
+    vi.resetModules();
+    const double = await import('./doubles/react-native.js');
+    double.__holdReduceMotionAnswer();
+    const { Button: FreshButton } = await import('../src/components/Button.js');
+    const harness = await import('./render.js');
+    const r = harness.render(
+      (<FreshButton testID="b" label="Lanjut" onPress={vi.fn()} />) as ReactElement,
+    );
+    const scale = (): number => {
+      const wrapper = r.container.queryAll((node) => node.type === 'Animated.View')[0]!;
+      return transformOf(flat(wrapper.props['style']), 'scale');
+    };
+    harness.fire(r.get('b'), 'onPressIn');
+    expect(scale()).toBe(1);
+    harness.fire(r.get('b'), 'onPressOut');
+
+    await act(async () => {
+      double.__answerReduceMotion(false);
+      await Promise.resolve();
+    });
+    harness.fire(r.get('b'), 'onPressIn');
+    expect(scale()).toBe(motion.pressScale);
+  });
+});
+
+test('a compact button keeps its 48 dp touch target inside its wrapper', () => {
+  const r = render(<Button testID="b" label="Ubah" size="compact" onPress={vi.fn()} />);
+  const wrapper = r.container.queryAll((node) => node.type === 'Animated.View')[0]!;
+  const wrap = flat(wrapper.props['style']);
+  const slop = r.get('b').props['hitSlop'] as { top: number; bottom: number };
+  expect(wrap['paddingVertical']).toBe(slop.top);
+  expect(wrap['marginVertical']).toBe(-slop.bottom);
 });
