@@ -122,6 +122,8 @@ export interface PhoneCatalogWriter {
   modelsNeedingPhoto(limit: number): Promise<PendingModel[]>;
   /** Store the photo, or record that there is none to get (`null`). */
   savePhoto(modelId: number, photo: PhoneModelPhoto | null, at: number): Promise<void>;
+  /** Remove a wrong photo; devices get a new revision when a stored one goes. */
+  removePhoto(modelId: number, at: number): Promise<void>;
   /** Models whose own page was never fetched, newest first. */
   modelsNeedingDetails(limit: number): Promise<PendingModel[]>;
   /** Store the page's details, or record that the page is gone (`null`). */
@@ -286,6 +288,29 @@ export function createPhoneCatalogWriterOn(db: Kysely<DB>): PhoneCatalogWriter {
             photoAt: at,
             updatedAt: at,
             ...(old?.photoSha256 === photo.sha256 ? {} : { revision: nextRevision }),
+          })
+          .where('id', '=', modelId)
+          .execute();
+      });
+    },
+
+    async removePhoto(modelId, at) {
+      await db.transaction().execute(async (trx) => {
+        const old = await trx
+          .selectFrom('phoneModels')
+          .select('photoSha256')
+          .where('id', '=', modelId)
+          .forUpdate()
+          .executeTakeFirst();
+        if (old === undefined) return;
+        await trx.deleteFrom('phoneModelPhotos').where('modelId', '=', modelId).execute();
+        await trx
+          .updateTable('phoneModels')
+          .set({
+            photoSha256: null,
+            photoAt: at,
+            updatedAt: at,
+            ...(old.photoSha256 === null ? {} : { revision: nextRevision }),
           })
           .where('id', '=', modelId)
           .execute();
