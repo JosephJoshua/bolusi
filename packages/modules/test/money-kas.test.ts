@@ -1,6 +1,11 @@
 // The Kas arithmetic the phone and the PC share: money in by method, counts left to settle, today's
 // count and what customers owe or are owed.
-import { describe, expect, test } from 'vitest';
+import { formatMoney, initI18n } from '@bolusi/i18n';
+import { beforeAll, describe, expect, test } from 'vitest';
+
+import enCatalog from '../money/i18n/en.json' with { type: 'json' };
+import idCatalog from '../money/i18n/id.json' with { type: 'json' };
+import { registerMoneyCatalog } from '../src/money/i18n.js';
 
 import {
   countToday,
@@ -8,9 +13,16 @@ import {
   moneyInByMethod,
   differenceToSettle,
   drawerMoves,
+  historyLine,
   splitOpenBalances,
+  voidable,
 } from '../src/money/kas.js';
-import type { CashCountRow, MoneyEntryRow, OpenBalanceRow } from '../src/money/queries.js';
+import type {
+  CashCountRow,
+  MoneyEntryRow,
+  OpenBalanceRow,
+  PaymentAccountRow,
+} from '../src/money/queries.js';
 
 function entry(overrides: Partial<MoneyEntryRow>): MoneyEntryRow {
   return {
@@ -120,4 +132,62 @@ test("the drawer's moves include an owner's correction, signed as it changed the
     ['in', 'money.moveKind.float', 50_000],
     ['fix', 'money.kas.adjusted', -5_000],
   ]);
+});
+
+describe('history', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const qris: PaymentAccountRow = {
+    id: 'q',
+    kind: 'qris',
+    name: 'QRIS BCA',
+    active: false,
+    central: false,
+    storeIds: [],
+  };
+
+  test('a payment names its servisan and method, even one switched off since', () => {
+    const line = historyLine(entry({ account: 'account:q', amount: 150_000 }), [qris]);
+    expect(line).toEqual({
+      label: 'money.opType.paymentReceived',
+      details: ['B7B-0001', 'QRIS BCA'],
+      amount: formatMoney(150_000),
+      voided: false,
+    });
+  });
+
+  test('money that left the drawer or the bill reads negative', () => {
+    const expense = historyLine(
+      entry({
+        kind: 'cash_moved',
+        subKind: 'expense',
+        account: null,
+        amount: 25_000,
+        reason: 'Bensin',
+        documentLabel: null,
+      }),
+      [],
+    );
+    expect(expense.label).toBe('money.moveKind.expense');
+    expect(expense.details).toEqual(['Bensin']);
+    expect(expense.amount).toBe(`−${formatMoney(25_000)}`);
+    const refund = historyLine(entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }), []);
+    expect(refund.amount).toBe(`−${formatMoney(20_000)}`);
+    expect(refund.details).toContain('Batal');
+    const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
+    expect(short.label).toBe('money.kas.adjusted');
+    expect(short.amount).toBe(`−${formatMoney(5_000)}`);
+  });
+
+  test('only a payment still standing can be cancelled', () => {
+    expect(voidable(entry({}))).toBe(true);
+    const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
+    expect(voidable(voided)).toBe(false);
+    expect(historyLine(voided, []).voided).toBe(true);
+    expect(voidable(entry({ kind: 'refund_paid' }))).toBe(false);
+    expect(voidable(entry({ kind: 'charge_recorded' }))).toBe(false);
+  });
 });

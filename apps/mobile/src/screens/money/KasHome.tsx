@@ -6,11 +6,14 @@
 import {
   CountCashStep,
   KasBoard,
+  KasHistory,
   MoneyRuntimeProvider,
   MoveCashStep,
   ReceiveDebtStep,
   SettleCountStep,
+  VoidPaymentStep,
   type CashCountRow,
+  type MoneyEntryRow,
   type MoneyRuntime,
   type NamedBalance,
 } from '@bolusi/modules/money/screens';
@@ -26,7 +29,9 @@ type KasView =
   | { readonly kind: 'count' }
   | { readonly kind: 'move' }
   | { readonly kind: 'settle'; readonly count: CashCountRow }
-  | { readonly kind: 'receive'; readonly balance: NamedBalance };
+  | { readonly kind: 'receive'; readonly balance: NamedBalance }
+  | { readonly kind: 'history' }
+  | { readonly kind: 'void'; readonly entry: MoneyEntryRow };
 
 export interface KasHomeProps {
   readonly runtime: MoneyRuntime;
@@ -45,11 +50,14 @@ export function KasHome({
   onRegisterSurfaceNav,
 }: KasHomeProps): React.JSX.Element {
   const [view, setView] = useState<KasView>({ kind: 'board' });
+  // The day Riwayat shows, kept here so it is still there back from a payment.
+  const [historyDay, setHistoryDay] = useState<number | null>(null);
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback((guard: DiscardGuard | null): void => {
     guardRef.current = guard;
   }, []);
   const toBoard = (): void => setView({ kind: 'board' });
+  const toHistory = (): void => setView({ kind: 'history' });
   // Inside a step the header keeps only the sync chip, as in repair's flows.
   const stepChrome = { syncChip, avatar: null };
 
@@ -66,7 +74,7 @@ export function KasHome({
     };
     onRegisterSurfaceNav?.({
       handleBack: () => {
-        leave(() => setView({ kind: 'board' }));
+        leave(() => setView({ kind: view.kind === 'void' ? 'history' : 'board' }));
         return true;
       },
       requestLeave: leave,
@@ -85,6 +93,10 @@ export function KasHome({
             onMove={() => setView({ kind: 'move' })}
             onSettle={(count) => setView({ kind: 'settle', count })}
             onReceive={(balance) => setView({ kind: 'receive', balance })}
+            onHistory={() => {
+              setHistoryDay(null);
+              toHistory();
+            }}
           />
         );
       case 'count':
@@ -123,6 +135,27 @@ export function KasHome({
             onRegisterDiscardGuard={registerGuard}
             onDone={toBoard}
             onCancel={toBoard}
+          />
+        );
+      case 'history':
+        return (
+          <KasHistory
+            chrome={stepChrome}
+            now={now}
+            day={historyDay}
+            onDay={setHistoryDay}
+            onBack={toBoard}
+            onVoid={(entry) => setView({ kind: 'void', entry })}
+          />
+        );
+      case 'void':
+        return (
+          <VoidPaymentStep
+            chrome={stepChrome}
+            entry={view.entry}
+            onRegisterDiscardGuard={registerGuard}
+            onDone={toHistory}
+            onCancel={toHistory}
           />
         );
     }

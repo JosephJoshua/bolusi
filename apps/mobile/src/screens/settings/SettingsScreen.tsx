@@ -44,6 +44,7 @@ import {
 /** A module's section in Settings, its copy resolved by the caller. */
 export interface SettingsModuleSection {
   readonly section: string;
+  readonly testID: string;
   readonly rows: readonly SettingsModuleRow[];
 }
 
@@ -86,12 +87,12 @@ export interface SettingsScreenProps {
    */
   readonly onOpenStaff?: (() => void) | undefined;
   /**
-   * The owner's repair settings (intake lists, cancellation fees) — each row present ONLY for someone
-   * who may change it at this store, and the section absent when none is; core still enforces them.
-   * The caller supplies the repair module's copy, so this screen never imports the module's screens
-   * (whose lists would nest a FlatList in this scrolling shell).
+   * The modules' settings (repair's intake lists and fees, money's payment methods) — each row present
+   * ONLY for someone who may change it at this store, and a section absent when it has no rows; core
+   * still enforces them. The caller supplies the modules' copy, so this screen never imports their
+   * screens (whose lists would nest a FlatList in this scrolling shell).
    */
-  readonly repair?: SettingsModuleSection | undefined;
+  readonly modules?: readonly SettingsModuleSection[] | undefined;
   readonly syncChip: SyncChipState;
   /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
   readonly pendingCount: number;
@@ -110,7 +111,7 @@ export function SettingsScreen({
   onOpenStaffPins,
   lockedStaffCount = 0,
   onOpenStaff,
-  repair,
+  modules = [],
   syncChip,
   pendingCount,
   onOpenSync,
@@ -189,20 +190,22 @@ export function SettingsScreen({
         </Section>
       )}
 
-      {repair !== undefined && repair.rows.length > 0 ? (
-        <Section title={repair.section} testID="settings-section-repair">
-          {repair.rows.map((row) => (
-            <ListRow
-              key={row.testID}
-              leading={<RowIcon name={row.icon} />}
-              primaryText={row.title}
-              secondaryText={row.summary}
-              onPress={row.onOpen}
-              testID={row.testID}
-            />
-          ))}
-        </Section>
-      ) : null}
+      {modules
+        .filter((module) => module.rows.length > 0)
+        .map((module) => (
+          <Section key={module.testID} title={module.section} testID={module.testID}>
+            {module.rows.map((row) => (
+              <ListRow
+                key={row.testID}
+                leading={<RowIcon name={row.icon} />}
+                primaryText={row.title}
+                secondaryText={row.summary}
+                onPress={row.onOpen}
+                testID={row.testID}
+              />
+            ))}
+          </Section>
+        ))}
 
       {/*
         The testID carries the locale `t()` is actually resolving in (read from the i18next instance,

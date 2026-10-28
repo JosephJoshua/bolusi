@@ -116,5 +116,50 @@
     "message": "What you entered will be lost.",
     "confirm": "Leave",
     "keep": "Stay here"
+  },
+  "history": {
+    "open": "History",
+    "title": "Cash history",
+    "today": "Today",
+    "previousDay": "Previous",
+    "nextDay": "Next",
+    "none": "No records on this day.",
+    "voided": "Cancelled: {reason}",
+    "more": "Load more"
+  },
+  "void": {
+    "title": "Cancel payment",
+    "save": "Cancel payment",
+    "hint": "Enter the reason.",
+    "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
+    "reason": "Reason"
+  },
+  "kind": {
+    "qris": "QRIS",
+    "edc": "EDC",
+    "transfer": "Bank transfer"
+  },
+  "methods": {
+    "title": "Payment methods",
+    "summary": "QRIS, EDC and transfer accounts",
+    "add": "Add method",
+    "addTitle": "Add method",
+    "editTitle": "Edit method",
+    "cashAlways": "Always available",
+    "central": "All stores",
+    "centralSome": "Head office",
+    "inactive": "Not in use",
+    "none": "No QRIS, EDC or bank accounts yet.",
+    "noneHint": "Add them so the counter can pick them when taking a payment.",
+    "kind": "Type",
+    "name": "Name",
+    "namePlaceholder": "E.g. QRIS BCA",
+    "nameRequired": "Enter a name.",
+    "allStores": "For all stores",
+    "allStoresCaption": "Owned centrally, usable at every store.",
+    "active": "In use",
+    "activeCaption": "When off, the counter can no longer pick it. Past records stay.",
+    "save": "Save",
+    "saved": "{name} saved."
   }
 }
