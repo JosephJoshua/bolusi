@@ -69,11 +69,12 @@
     "clearSearch": "Clear search",
     "checkSync": "Check sync status",
     "cancelledBy": "by {name}",
-    "feeChanged": "Fee changed"
+    "feeChanged": "Fee changed",
+    "pickTicket": "Pick a repair to see its details."
   },
   "cancel": {
     "reason": "Why is it cancelled?",
-    "consequence": "The repair stops. When collecting the phone, the customer only pays the cancellation fee. The phone stays in the store until then.",
+    "consequence": "The customer only pays the cancellation fee when collecting the phone.",
     "fee": "Cancellation fee",
     "beforeWork": "Work hasn’t started",
     "afterWork": "Work has started",
@@ -135,7 +136,7 @@
     "signAgain": "Sign again",
     "signature": "Customer signature",
     "signatureTitle": "Customer signs to receive the phone",
-    "cancelled": "The repair was cancelled, so the repair price is not charged."
+    "cancelled": "Repair charges are not billed."
   },
   "intake": {
     "discard": "Discard intake",
@@ -184,7 +185,7 @@
     "open": "Open photo",
     "position": "{index} of {total}",
     "share": "Save or send",
-    "shareFailed": "Couldn’t save this photo. Try again later.",
+    "shareFailed": "Couldn’t save the photo. Try again.",
     "beforeN": "Before {n}",
     "afterN": "After {n}"
   },
@@ -214,15 +215,15 @@
     "alreadyAgreed": "Has the customer agreed?",
     "changeReason": "Reason for the change",
     "waitingEvent": "Price change waiting for the customer",
-    "waitsHint": "If not yet, the price is saved and waits for the customer. The total only changes once they agree.",
+    "waitsHint": "If not, the total changes once the customer agrees.",
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
     "refund": "Refunded"
   },
   "problem": {
-    "complaint": "Write what the customer says is wrong.",
-    "customerName": "Enter the customer name or pick an existing customer.",
+    "complaint": "Enter the complaint.",
+    "customerName": "Enter the customer name.",
     "deviceBrand": "Enter the brand.",
     "deviceModel": "Enter the model.",
     "photos": "All six photos are required.",
@@ -279,19 +280,19 @@
     "hide": "Hide"
   },
   "hint": {
-    "handover": "Take the handover photo and the customer’s signature first.",
+    "handover": "Take the photo and signature first.",
     "photo": "Take at least one photo first.",
     "reason": "Write the reason first.",
     "priceLine": "Fill in the description, amount and reason.",
     "cancelFee": "Enter the cancellation fee first.",
-    "discountOwner": "Only an owner can give a discount. Decline it, or ask an owner to decide.",
+    "discountOwner": "Only an owner can approve a discount.",
     "downPayment": "Enter the amount first.",
     "downPaymentCorrect": "Enter the correct down payment first.",
     "downPaymentSame": "The amount has not changed."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
-    "message": "The photos and notes you’ve added here will be lost.",
+    "message": "Anything not saved here will be lost.",
     "confirm": "Leave",
     "keep": "Stay"
   },
@@ -453,8 +454,11 @@
     "handoverAbout": "The bill and proof of pickup.",
     "reprint": "Printed {count} times already.",
     "paper": "Paper",
+    "paperHalf": "Half form",
+    "paperFull": "Full form",
     "paperA4": "A4",
-    "paperA5": "A5"
+    "paperA5": "A5",
+    "onPaper": "{paper} paper"
   },
   "downPayment": {
     "recordTitle": "Record down payment",
@@ -490,6 +494,69 @@
     "save": "Save",
     "saved": "Slip details saved."
   },
+  "desk": {
+    "checksOk": "Working",
+    "closeTicket": "Close details",
+    "col": {
+      "customer": "Customer",
+      "device": "Phone",
+      "number": "No.",
+      "status": "Status",
+      "technician": "Technician",
+      "received": "Received",
+      "cancelledBy": "Cancelled by",
+      "cancelledAt": "Cancelled"
+    },
+    "copied": "Number copied",
+    "copyPhone": "Copy phone number",
+    "currency": "Rp",
+    "done": {
+      "handover": "Handed back to the customer."
+    },
+    "photoCount": "{taken} of {total}",
+    "photoDownload": "Save photo",
+    "photoMismatch": "Photo damaged",
+    "photoNext": "Next photo",
+    "photoPrevious": "Previous photo",
+    "photoUnavailable": "Not on this PC yet",
+    "priceKind": "Type",
+    "receivedBy": "Received by {name} · {at}",
+    "results": "{count, plural, one {# repair found} other {# repairs found}}",
+    "useCustomer": "Use",
+    "copyFailed": "Couldn’t copy the number",
+    "incomplete": "Incomplete",
+    "price": "Price",
+    "filter": {
+      "status": "Status",
+      "technician": "Technician",
+      "received": "Received",
+      "brand": "Brand",
+      "clear": "Clear filter",
+      "reset": "Clear all filters",
+      "search": "Search",
+      "noMatches": "Nothing matches",
+      "chosen": "{count} selected",
+      "from": "From",
+      "to": "To",
+      "range": "{from} – {to}",
+      "since": "Since {from}",
+      "until": "Until {to}",
+      "today": "Today",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days",
+      "thisMonth": "This month",
+      "empty": "No repairs match the filters"
+    },
+    "table": {
+      "columns": "Columns",
+      "range": "{from}–{to} of {total}",
+      "perPage": "{size} per page",
+      "previous": "Previous page",
+      "next": "Next page",
+      "page": "Page {page}",
+      "pages": "Pages"
+    }
+  },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
     "customerNotFound": "This customer isn’t in this store.",
@@ -521,5 +588,11 @@
     "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it."
+  },
+  "paper": {
+    "title": "Slip paper",
+    "phoneSummary": "Paper size on this phone",
+    "phoneHint": "Every slip from this phone prints on this paper.",
+    "deskHint": "Every slip from this computer prints on this paper."
   }
 }

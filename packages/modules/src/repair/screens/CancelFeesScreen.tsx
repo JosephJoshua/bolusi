@@ -15,7 +15,7 @@ import type { CancelFees } from '../queries.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
-import { useCancelFees, useRepairRuntime } from './runtime.js';
+import { useCancelFees, useRepairRuntime } from '../runtime.js';
 
 export interface CancelFeesScreenProps {
   readonly chrome: RepairChrome;

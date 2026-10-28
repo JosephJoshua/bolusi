@@ -4,6 +4,7 @@
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import { color } from '@bolusi/ui';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
@@ -18,6 +19,7 @@ import {
   render,
   repairRuntimeFor,
   settle,
+  settleTyping,
   text,
   type,
   USER_NAMES,
@@ -27,7 +29,7 @@ import {
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
-import { RepairHome } from './RepairHome.js';
+import { RepairHome, listPaneWidth } from './RepairHome.js';
 
 let h: RepairHarness | null = null;
 /** A second device in the same store, when a test needs changes that arrive by sync. */
@@ -190,7 +192,7 @@ describe('counter intake', () => {
     const screen = await mount(h, h.cashierId);
     await press(screen, 'repair.board.newIntake');
     type(screen, 'repair.intake.customer.name', 'yohanes');
-    await settle();
+    await settleTyping();
     const customerId = (await h.query('searchCustomers', { text: 'Yohanis' }, h.cashierId)).rows[0]
       .id as string;
     await press(screen, `repair.intake.customer.match.${customerId}`);
@@ -647,7 +649,10 @@ describe('the board', () => {
     const ticketId = await openTicket(h);
     const screen = await mount(h, h.cashierId);
     type(screen, 'repair.board.search', 'yohanes wenda');
+    // Nothing is searched until the typing pauses.
     await settle();
+    expect(screen.query('repair.board.views')).not.toBeNull();
+    await settleTyping();
     expect(screen.query(`repair.board.row.${ticketId}`)).not.toBeNull();
     expect(screen.query('repair.board.views')).toBeNull();
   });
@@ -984,5 +989,101 @@ describe('price and assignment details', () => {
     await press(screen, 'repair.ticket.action.assign');
     expect(text(screen, `repair.assign.row.${h.technicianId}.secondary`)).toContain('1');
     expect(text(screen, `repair.assign.row.${h.technician2Id}.secondary`)).toContain('0');
+  });
+});
+
+describe('on a tablet', () => {
+  /** Runs `body` with the window at a tablet's size, then puts the phone back. */
+  async function asTablet(
+    size: { readonly width: number; readonly height: number },
+    body: () => Promise<void>,
+  ): Promise<void> {
+    const original = { ...__windowMetrics };
+    Object.assign(__windowMetrics, size);
+    try {
+      await body();
+    } finally {
+      Object.assign(__windowMetrics, original);
+    }
+  }
+
+  /** White on the filled primary button, blue on the outlined secondary one. */
+  function intakeLabelColor(screen: RenderResult): unknown {
+    return StyleSheet.flatten(screen.get('repair.board.newIntake.label').props['style'])['color'];
+  }
+
+  test('in landscape the board stays beside the open ticket', async () => {
+    h = await openRepairScreenHarness(5801);
+    const ticketId = await openTicket(h);
+    await asTablet({ width: 1280, height: 800 }, async () => {
+      const screen = await mount(h!, h!.cashierId);
+      expect(screen.query('repair.split')).not.toBeNull();
+      expect(screen.query('repair.board.noTicketOpen')).not.toBeNull();
+      expect(intakeLabelColor(screen)).toBe(color.onPrimary);
+
+      await press(screen, `repair.board.row.${ticketId}`);
+      expect(screen.query('repair.board')).not.toBeNull();
+      expect(screen.query('repair.ticket.content')).not.toBeNull();
+      expect(screen.query('repair.board.noTicketOpen')).toBeNull();
+      // The board is in view, so the ticket has no back arrow; the open row is marked, and the
+      // ticket's next step is the one primary action on screen.
+      expect(screen.query('repair.ticket.back')).toBeNull();
+      expect(
+        screen.all(`repair.board.row.${ticketId}`)[0]!.props['accessibilityState'],
+      ).toMatchObject({ selected: true });
+      expect(intakeLabelColor(screen)).toBe(color.primary);
+    });
+  });
+
+  test('a step holding photos beside the board asks before another ticket replaces it', async () => {
+    h = await openRepairScreenHarness(5802);
+    const first = await openTicket(h);
+    const second = await openTicket(h);
+    await asTablet({ width: 1280, height: 800 }, async () => {
+      const screen = await mount(h!, h!.technicianId);
+      await press(screen, 'repair.board.views.unassigned');
+      await press(screen, `repair.board.row.${first}`);
+      await press(screen, 'repair.ticket.action.start');
+      await press(screen, 'repair.work.before.take.press');
+      // Its own row again is no change, so nothing is asked and the step stays.
+      await press(screen, `repair.board.row.${first}`);
+      expect(screen.query('repair.work.before.discard')).toBeNull();
+      expect(screen.query('repair.work.before')).not.toBeNull();
+      await press(screen, `repair.board.row.${second}`);
+      expect(screen.query('repair.work.before.discard')).not.toBeNull();
+      expect(screen.query('repair.work.before')).not.toBeNull();
+    });
+  });
+
+  test('upright, a tablet shows one screen at a time like a phone', async () => {
+    h = await openRepairScreenHarness(5803);
+    const ticketId = await openTicket(h);
+    await asTablet({ width: 800, height: 1280 }, async () => {
+      const screen = await mount(h!, h!.cashierId);
+      expect(screen.query('repair.split')).toBeNull();
+      expect(screen.query('repair.board.noTicketOpen')).toBeNull();
+      await press(screen, `repair.board.row.${ticketId}`);
+      expect(screen.query('repair.board')).toBeNull();
+      expect(screen.query('repair.ticket.back')).not.toBeNull();
+    });
+  });
+
+  test('the intake keeps the whole screen', async () => {
+    h = await openRepairScreenHarness(5804);
+    await asTablet({ width: 1280, height: 800 }, async () => {
+      const screen = await mount(h!, h!.cashierId);
+      await press(screen, 'repair.board.newIntake');
+      expect(screen.query('repair.split')).toBeNull();
+      expect(screen.query('repair.board')).toBeNull();
+      expect(screen.query('repair.intake.step.customer')).not.toBeNull();
+    });
+  });
+});
+
+describe('listPaneWidth', () => {
+  test('gives the board a phone width and the ticket the rest', () => {
+    expect(listPaneWidth(840)).toBe(340);
+    expect(listPaneWidth(960)).toBe(384);
+    expect(listPaneWidth(1280)).toBe(420);
   });
 });

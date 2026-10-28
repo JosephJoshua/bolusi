@@ -25,7 +25,7 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { tn } from '../i18n.js';
 import type { PrintSettings } from '../queries.js';
 import { FlowScreen, QueryView, Section, repairStyles, type RepairChrome } from './parts.js';
-import { usePrintSettings, useRepairRuntime, useRepairThumbnail } from './runtime.js';
+import { usePrintSettings, useRepairRuntime, useRepairThumbnail } from '../runtime.js';
 
 export interface PrintSettingsScreenProps {
   readonly chrome: RepairChrome;

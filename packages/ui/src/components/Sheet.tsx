@@ -40,6 +40,10 @@ const styles = StyleSheet.create({
     opacity: overlayOpacity,
   },
   sheet: {
+    // On a tablet the sheet rises in the middle at the content's width, not across the whole screen.
+    width: '100%',
+    maxWidth: size.contentMax,
+    alignSelf: 'center',
     maxHeight: '85%',
     backgroundColor: color.surface,
     borderTopLeftRadius: radius.md,

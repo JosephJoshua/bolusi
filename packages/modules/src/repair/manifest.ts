@@ -62,6 +62,7 @@ import { REPAIR_REFUSALS } from './rules.js';
 import { repairOperations } from './operations.js';
 import {
   cancelFeesQuery,
+  countTicketsQuery,
   getCustomerQuery,
   getTicketQuery,
   intakeOptionSettingsQuery,
@@ -71,6 +72,7 @@ import {
   printSettingsQuery,
   searchCustomersQuery,
   searchTicketsQuery,
+  ticketBrandsQuery,
 } from './queries.js';
 import type { RepairDatabase } from './schema.js';
 
@@ -280,6 +282,8 @@ export const repairModuleManifest = {
 
   queries: {
     listTickets: listTicketsQuery,
+    countTickets: countTicketsQuery,
+    ticketBrands: ticketBrandsQuery,
     searchTickets: searchTicketsQuery,
     getTicket: getTicketQuery,
     searchCustomers: searchCustomersQuery,

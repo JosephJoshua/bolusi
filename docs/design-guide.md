@@ -58,6 +58,10 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   not grids that eat the screen. Tap opens `PhotoViewer` (zoom, swipe, share).
 - Avatars and icons sit inside their bar with padding (36 dp disc), never
   touching its edges.
+- The counter PC app (`packages/ui-web`) is read closer and denser, so its
+  ladder is a step smaller: display 28, title 22, heading 17, body 15, small 14.
+  The 14 floor is the same. Mouse-first controls are 32 to 40 px tall; tables,
+  not cards, carry lists.
 
 ## 4. Alignment and spacing
 
@@ -85,6 +89,21 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 - The keyboard opens only when someone taps a field. A step never focuses a
   field on its own (it covered "Lanjut" on intake); `autoFocus` is only for a
   field that appears because the person just asked to type (Tambah, Ubah biaya).
+
+### Phones and tablets
+
+- Lay out by the room on screen (`useViewport().widthClass`: compact under
+  600 dp, medium, expanded from 840 dp), never by device type. Phones are
+  locked upright; tablets turn.
+- `AppShell` keeps content and the bottom action in one centred column of at
+  most `size.contentMax`; sheets rise at the same width. Never stretch a form,
+  a button or a line of text across a tablet.
+- A list with a detail (the servisan board) shows both side by side when
+  expanded; a task from start to finish (intake) keeps the whole screen.
+  Exactly one filled primary across both panes.
+- Check every changed screen at 360 x 640, 800 x 1280, 960 x 600 and
+  1280 x 800, and at 1.3x font. A short landscape tablet is the tightest case:
+  put things side by side rather than making the person scroll to a key.
 
 ## 5. No redundancy
 

@@ -9,8 +9,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
 import { tn } from '../i18n.js';
-import { PhotoGrid, PhotoThumb, Section, repairStyles } from './parts.js';
-import { useRepairRuntime } from './runtime.js';
+import { PhotoGrid, PhotoThumb, Section, repairStyles, usePhotoGridCell } from './parts.js';
+import { useRepairRuntime } from '../runtime.js';
 
 export interface BrowsablePhoto {
   readonly key: string;
@@ -44,6 +44,7 @@ export function usePhotoBrowser(
 ): PhotoBrowser {
   const runtime = useRepairRuntime();
   const [view, setView] = useState<Showing>({ kind: 'none' });
+  const gridCell = usePhotoGridCell();
   const share = runtime.sharePhoto;
 
   const back = (): boolean => {
@@ -110,7 +111,7 @@ export function usePhotoBrowser(
                     accessibilityRole="imagebutton"
                     accessibilityLabel={`${tn('repair.photo.open')} ${photo.label}`}
                     onPress={() => setView({ kind: 'one', index, fromAll: true })}
-                    style={repairStyles.gridCell}
+                    style={gridCell}
                     testID={`${testID}.sheet.${photo.key}`}
                   >
                     <PhotoThumb photo={photo.ref} testID={`${testID}.sheetThumb.${photo.key}`} />

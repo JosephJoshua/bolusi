@@ -8,7 +8,8 @@
  * "the harness actually booted" smoke check.
  *
  * On a wide browser window everything renders in a phone-width column, because these are phone
- * screens; stretched across a laptop they read nothing like the app.
+ * screens; stretched across a laptop they read nothing like the app. `&frame=tablet` drops that
+ * column so the window is the tablet, for checking the tablet layouts.
  *
  * i18n is booted by the entry (`index.web.tsx`) BEFORE this renders, because every screen resolves
  * labels through `t()` which throws if the instance is not up (07-i18n) — a device has the same rule.
@@ -18,17 +19,34 @@
  * chrome, not product UI, and must NOT enter the @bolusi/i18n catalog guarded by the id/en parity
  * gate (07-i18n §7.3). The real screens it links to resolve all their copy through the catalog. */
 import { getLocale, type Locale } from '@bolusi/i18n';
-import { Avatar, ListRow, SegmentedControl, color, radius, space, type } from '@bolusi/ui';
+import {
+  Avatar,
+  ListRow,
+  SegmentedControl,
+  ViewportProvider,
+  color,
+  radius,
+  space,
+  type,
+} from '@bolusi/ui';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ENTRIES, findEntry } from './gallery.js';
-import { DEMO_REPAIR_ROLES, type DemoRepairRole } from './repair-demo.js';
+import { DEMO_REPAIR_ROLES, type DemoRepairRole } from '@bolusi/modules/repair/demo';
 
 /** Parse `?screen=&state=` from the browser URL. Empty when neither is present. */
-export function readTarget(search: string): { screen: string | null; state: string | null } {
+export function readTarget(search: string): {
+  screen: string | null;
+  state: string | null;
+  tablet: boolean;
+} {
   const params = new URLSearchParams(search);
-  return { screen: params.get('screen'), state: params.get('state') };
+  return {
+    screen: params.get('screen'),
+    state: params.get('state'),
+    tablet: params.get('frame') === 'tablet',
+  };
 }
 
 /** Open a screen state (or the home page with no target), keeping the chosen language. */
@@ -40,6 +58,7 @@ function go(target: { screen: string; state: string } | null, locale: Locale = g
     params.set('state', target.state);
   }
   params.set('locale', locale);
+  if (readTarget(window.location.search).tablet) params.set('frame', 'tablet');
   window.location.search = `?${params.toString()}`;
 }
 
@@ -88,10 +107,19 @@ function initials(name: string): string {
 }
 
 /** Centres a phone-width column on wide windows; a no-op at phone width. */
-function PhoneColumn({ children }: { readonly children: ReactNode }): React.JSX.Element {
+function PhoneColumn({
+  tablet,
+  children,
+}: {
+  readonly tablet: boolean;
+  readonly children: ReactNode;
+}): React.JSX.Element {
   return (
     <View style={styles.backdrop}>
-      <View style={styles.column}>{children}</View>
+      {/* The screens size themselves to this column, not to the browser window around it. */}
+      <ViewportProvider deferUntilMeasured style={[styles.column, tablet ? styles.tablet : null]}>
+        {children}
+      </ViewportProvider>
     </View>
   );
 }
@@ -174,11 +202,13 @@ function PreviewHome(): React.JSX.Element {
 }
 
 export function WebHarnessRoot(): React.JSX.Element {
-  const { screen, state } = readTarget(typeof window === 'undefined' ? '' : window.location.search);
+  const { screen, state, tablet } = readTarget(
+    typeof window === 'undefined' ? '' : window.location.search,
+  );
 
   if (screen !== null && state !== null) {
     const entry = findEntry(screen, state);
-    if (entry !== undefined) return <PhoneColumn>{entry.render()}</PhoneColumn>;
+    if (entry !== undefined) return <PhoneColumn tablet={tablet}>{entry.render()}</PhoneColumn>;
     return (
       <View testID="web-harness-unknown" style={styles.pad}>
         <Text style={styles.title}>
@@ -189,7 +219,7 @@ export function WebHarnessRoot(): React.JSX.Element {
   }
 
   return (
-    <PhoneColumn>
+    <PhoneColumn tablet={tablet}>
       <PreviewHome />
     </PhoneColumn>
   );
@@ -208,6 +238,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     overflow: 'hidden',
   },
+  tablet: { maxWidth: '100%' },
   home: { flex: 1, backgroundColor: color.surface },
   pad: { padding: space.lg, gap: space.xl },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },

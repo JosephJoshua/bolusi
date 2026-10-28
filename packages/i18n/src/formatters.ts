@@ -70,6 +70,19 @@ export function formatMoney(amountIdr: number): string {
   return moneyFormat.format(amountIdr).replace(NBSP, ' ');
 }
 
+/**
+ * A phone number as people read it aloud: `0812-3456-7890`. Indonesian mobile numbers group in
+ * fours from the front; `+62` and `62` become `0`. Anything else (a landline, a short code, a
+ * foreign number) is shown as typed, so nothing a person entered is ever lost.
+ */
+export function formatPhone(phone: string): string {
+  const compact = phone.replace(/[\s.-]/g, '');
+  if (!/^\+?\d+$/.test(compact)) return phone;
+  const digits = compact.replace(/^\+?62/, '0');
+  if (!/^08\d{8,11}$/.test(digits)) return phone;
+  return [digits.slice(0, 4), digits.slice(4, 8), digits.slice(8)].join('-');
+}
+
 /** Counts and quantities, never money — active-locale grouping (§5.2). */
 export function formatNumber(value: number): string {
   return numberFormatFor(getLocale()).format(value).replace(NBSP, ' ');

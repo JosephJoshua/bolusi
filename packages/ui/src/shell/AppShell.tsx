@@ -121,18 +121,30 @@ const styles = StyleSheet.create({
    * `flex: 1` would clamp the content to the viewport height and defeat scrolling entirely; the
    * screen would clip exactly as it did before. `flexGrow: 1` lets short content still fill the
    * viewport (so the centered empty / loading / error states stay centered) while tall content is
-   * free to exceed it and scroll.
+   * free to exceed it and scroll. The padding moves onto the measured view inside, so a field's
+   * measured position is its scroll position (keyboard.tsx).
    */
-  contentContainer: { flexGrow: 1, padding: space.lg },
-  // Scrolling, the padding moves onto the measured view inside, so a field's measured position
-  // is its scroll position (keyboard.tsx).
   scrollContainer: { flexGrow: 1 },
   contentInner: { flexGrow: 1, padding: space.lg },
+  /**
+   * The plain slot is exactly the space between the header and the action bar. A list inside
+   * windows its rows against this height; a slot that grew with its content (`flexGrow` alone)
+   * let a `List` take its full content height, so it rendered every loaded row at once and the
+   * action bar slid off screen.
+   */
+  contentFixed: { flex: 1, padding: space.lg },
   actionBar: {
     padding: space.lg,
     borderTopWidth: border.hairline,
     borderTopColor: color.border,
   },
+  /**
+   * Content and the bottom action are one centred column no wider than `size.contentMax`. On a phone
+   * that is the whole width; on a tablet lines and buttons stop at a readable width instead of
+   * running edge to edge. The header and banner still span the screen, as app bars do.
+   */
+  column: { width: '100%', maxWidth: size.contentMax, alignSelf: 'center' },
+  columnFill: { flex: 1 },
 });
 
 export function AppShell({
@@ -235,21 +247,21 @@ export function AppShell({
             <View
               ref={reveal.contentRef}
               collapsable={false}
-              style={styles.contentInner}
+              style={[styles.contentInner, styles.column]}
               testID={`${testID}.contentInner`}
             >
               <RevealProvider port={reveal.port}>{children}</RevealProvider>
             </View>
           </ScrollView>
         ) : (
-          <View testID={`${testID}.content`} style={styles.contentContainer}>
-            {children}
+          <View testID={`${testID}.content`} style={styles.contentFixed}>
+            <View style={[styles.column, styles.columnFill]}>{children}</View>
           </View>
         )}
 
         {bottomAction === undefined ? null : (
           <View testID={`${testID}.actionBar`} style={styles.actionBar}>
-            {bottomAction}
+            <View style={styles.column}>{bottomAction}</View>
           </View>
         )}
 

@@ -213,6 +213,61 @@ export function downPaymentAction(
   return can.intake && open ? 'record' : null;
 }
 
+/** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
+export function amountOwed(
+  row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal'>,
+): number {
+  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+}
+
+/** Why an open down payment step can no longer finish: what it would do is no longer offered. */
+export function downPaymentStale(
+  ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
+  can: RepairAbilities,
+  mode: 'record' | 'correct',
+): StaleStep | null {
+  if (downPaymentAction(ticket, can) === mode) return null;
+  return { kind: ticket.location === 'returned' ? 'returned' : 'changed' };
+}
+
+/** What still stands between a typed down payment and saving it; null when it can be saved. */
+export type DownPaymentGap = 'aboveTotal' | 'amount' | 'correctAmount' | 'same' | 'reason';
+
+/**
+ * A down payment being recorded or corrected, as typed. A new one is at least Rp 1; a correction
+ * may bring it to nothing (removing it) but must change it and say why. Never above the total.
+ */
+export function downPaymentEntry(input: {
+  readonly mode: 'record' | 'correct';
+  /** The typed amount; null when nothing is typed. */
+  readonly typed: number | null;
+  readonly reason: string;
+  readonly current: number | null;
+  readonly total: number;
+}): {
+  readonly amount: number | null;
+  readonly aboveTotal: boolean;
+  readonly gap: DownPaymentGap | null;
+} {
+  const correcting = input.mode === 'correct';
+  const amount = input.typed ?? (correcting ? null : 0);
+  const aboveTotal = amount !== null && input.total > 0 && amount > input.total;
+  const gap: DownPaymentGap | null = aboveTotal
+    ? 'aboveTotal'
+    : !correcting
+      ? amount === null || amount <= 0
+        ? 'amount'
+        : null
+      : amount === null
+        ? 'correctAmount'
+        : amount === input.current
+          ? 'same'
+          : input.reason.trim() === ''
+            ? 'reason'
+            : null;
+  return { amount, aboveTotal, gap };
+}
+
 /** The slips a ticket can print: the intake receipt always, the handover slip once it is ready. */
 export function printableSlips(
   ticket: Pick<TicketSummaryRow, 'outcome' | 'location'>,
@@ -357,6 +412,19 @@ export function parseRupiah(text: string): number | null {
 /** Whether a keystroke in an amount field should be kept: a too-long amount is not typed at all. */
 export function acceptsRupiahText(text: string): boolean {
   return text.replace(/\D/g, '') === '' || parseRupiah(text) !== null;
+}
+
+/** Kinds offered when adding a price line. Adjustments (either sign) stay a back-office tool. */
+export const PRICE_KINDS = [
+  'part',
+  'labour',
+  'discount',
+] as const satisfies readonly QuoteLineKind[];
+export type PriceKind = (typeof PRICE_KINDS)[number];
+
+/** The kinds a user may add: a discount lowers the price, so only those who may discount see it. */
+export function priceKinds(discount: boolean): readonly PriceKind[] {
+  return PRICE_KINDS.filter((kind) => kind !== 'discount' || discount);
 }
 
 /**

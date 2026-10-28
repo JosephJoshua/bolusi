@@ -76,6 +76,8 @@ export const ICON_GLYPHS = Object.freeze({
   money: 'cash',
   /** Settings: printed slips (header, terms, paper). */
   print: 'printer-outline',
+  /** The paper a device prints on. */
+  paper: 'file-outline',
   /** PhotoSlot: an empty slot asks for a photo. */
   camera: 'camera-outline',
   /** ToggleChip / PhotoSlot: selected or done — always beside a label. */

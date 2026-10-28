@@ -728,6 +728,16 @@ export function fireOn(screen: RenderResult, testID: string): void {
 }
 
 /**
+ * Whether the home surface is on screen. Sync Status opened from home keeps it mounted underneath,
+ * hidden, so "home is gone" is asked here rather than by a home testID being absent.
+ */
+export function homeShown(screen: RenderResult): boolean {
+  const surface = screen.query('shell-home-surface');
+  if (surface === null) return false;
+  return (surface.props['style'] as { display?: string }).display !== 'none';
+}
+
+/**
  * Create a note through whichever create affordance the current NotesList state shows. Since task 129
  * (§3.1 max-one-primary) the list renders EXACTLY ONE create primary per state: the persistent
  * bottom-action button (`notes.list.create`) once rows exist, or the EmptyState CTA (`ui.emptyState.cta`)

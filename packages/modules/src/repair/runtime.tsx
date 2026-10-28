@@ -1,14 +1,14 @@
-// The repair screens' runtime port (04 §7), the same pattern as notes: screens read and write
+// The repair screens' runtime port (04 §7), the same pattern as notes: screens (phone and counter PC) read and write
 // through a small typed port the platform binds, never the database or the op log. The commands and
 // queries come straight from the module through `ModulePort`, so a new command needs no new wiring.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { ModulePort, PaperSettings } from '@bolusi/core';
 
-import type { IntakeOptionSettings } from '../intake-options.js';
-import type { DeviceModelPhoto } from '../device-models.js';
-import type { CancelFees, PrintSettings } from '../queries.js';
-import type { repairModule } from '../manifest.js';
+import type { IntakeOptionSettings } from './intake-options.js';
+import type { DeviceModelPhoto } from './device-models.js';
+import type { CancelFees, PrintSettings } from './queries.js';
+import type { repairModule } from './manifest.js';
 import {
   createRuntimeContext,
   useLiveQuery,
@@ -21,7 +21,7 @@ import {
   type ThumbnailLoader,
   type ThumbnailRef,
   type ThumbnailState,
-} from '../../screen-kit/index.js';
+} from '../screen-kit/index.js';
 
 /** A slip ready to leave the app: a self-contained HTML page for paper of this size. */
 export interface SlipOutput {

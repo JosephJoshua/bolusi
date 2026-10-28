@@ -24,7 +24,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 export interface HandoverProps {
   readonly ticketId: string;

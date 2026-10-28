@@ -11,6 +11,7 @@
 import { useRef, useState } from 'react';
 import { PanResponder, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 
+import { extendPattern, patternCentre as centre, type PatternPoint } from '../pattern.js';
 import { useScrollLock } from '../shell/scroll-lock.js';
 import { color, radius, space, type } from '../tokens.js';
 
@@ -29,33 +30,7 @@ export interface PatternLockProps {
 const DEFAULT_SIZE = 240;
 const LINE = 6;
 
-interface Point {
-  readonly x: number;
-  readonly y: number;
-}
-
-function centre(dot: number, cell: number): Point {
-  const index = dot - 1;
-  return { x: ((index % 3) + 0.5) * cell, y: (Math.floor(index / 3) + 0.5) * cell };
-}
-
-/** The dot under a point, when close enough to its centre. */
-function dotAt(point: Point, cell: number): number | null {
-  const col = Math.floor(point.x / cell);
-  const row = Math.floor(point.y / cell);
-  if (col < 0 || col > 2 || row < 0 || row > 2) return null;
-  const dot = row * 3 + col + 1;
-  const c = centre(dot, cell);
-  return Math.hypot(point.x - c.x, point.y - c.y) <= cell * 0.38 ? dot : null;
-}
-
-/** The dot exactly between two others (1 and 3 → 2; 1 and 9 → 5), if there is one. */
-function between(a: number, b: number): number | null {
-  const [ar, ac] = [Math.floor((a - 1) / 3), (a - 1) % 3];
-  const [br, bc] = [Math.floor((b - 1) / 3), (b - 1) % 3];
-  if ((ar + br) % 2 !== 0 || (ac + bc) % 2 !== 0) return null;
-  return ((ar + br) / 2) * 3 + (ac + bc) / 2 + 1;
-}
+type Point = PatternPoint;
 
 function Segment({ from, to }: { from: Point; to: Point }): React.JSX.Element {
   const length = Math.hypot(to.x - from.x, to.y - from.y);
@@ -98,12 +73,7 @@ export function PatternLock({
   };
 
   const add = (point: Point): void => {
-    const dot = dotAt(point, cell);
-    if (dot === null || dots.current.includes(String(dot))) return;
-    const last = dots.current.at(-1);
-    const middle = last === undefined ? null : between(Number(last), dot);
-    if (middle !== null && !dots.current.includes(String(middle))) dots.current += String(middle);
-    dots.current += String(dot);
+    dots.current = extendPattern(dots.current, point, cell);
   };
 
   const responder = useRef(
