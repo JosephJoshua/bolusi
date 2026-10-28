@@ -29,7 +29,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsc -b packages/modules/tsconfig.build.json packages/ui-web/tsconfig.build.json
+      - run: pnpm exec tsc -b packages/ui-web/tsconfig.build.json packages/modules/tsconfig.desktop.json
       - run: pnpm --filter @bolusi/desktop run build
       - run: pnpm --filter @bolusi/desktop exec electron-builder --win --publish always
         env:
