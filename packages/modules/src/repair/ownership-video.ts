@@ -1,13 +1,12 @@
-// The ownership video the same on the phone and the PC: recording and playing it through the
-// platform, and a servisan's clip as its screens show it (the latest one taken, whether one is
-// still needed, and taking one after intake). The views around it are each platform's own.
-import { useEffect, useRef, useState } from 'react';
+// The ownership video the same on the phone and the PC: recording it at intake and playing it
+// through the platform, and a servisan's clip as its screens show it. It is taken only at intake;
+// the handover's proof is its photo. The views around it are each platform's own.
+import { useEffect, useRef } from 'react';
 
 import type { ActionRunner, CapturedVideo, VideoMediaRef } from '../screen-kit/index.js';
 import { OWNERSHIP_VIDEO_MAX_MS } from './constants.js';
-import { ownershipVideoMissing, ownershipVideoOf, videoRefOf, type IntakeDraft } from './flows.js';
+import { ownershipVideoOf, videoRefOf, type IntakeDraft } from './flows.js';
 import { tn } from './i18n.js';
-import { needsOwnershipVideo } from './intake-options.js';
 import type { TicketDetailRow, TicketPhotoRow } from './queries.js';
 import { useRepairRuntime } from './runtime.js';
 
@@ -62,75 +61,25 @@ export function useRestoredVideoCheck(
 }
 
 export interface TicketVideo {
-  /** Whether the servisan shows the video at all: one was taken, or a repair type asks for it. */
-  readonly shown: boolean;
-  /** The latest clip, or null when none was taken. */
+  /** The latest clip, or null when the intake took none. */
   readonly latest: TicketPhotoRow | null;
   readonly video: VideoMediaRef | null;
-  /** Absent when this person or device cannot take one here. */
-  readonly record: (() => void) | undefined;
-  /** This person may take one, but this device has no camera for it. */
-  readonly noCamera: boolean;
   readonly play: ((video: VideoMediaRef) => void) | undefined;
 }
 
-/**
- * A servisan's ownership video. While the phone is still in the store the counter can take it, or
- * retake it, through `recordOwnershipVideo`; until then a repaired phone cannot be handed over.
- */
+/** A servisan's ownership video, taken only at intake: shown here to be played back. */
 export function useTicketVideo({
   ticket,
-  canRecord,
   runner,
-  onRecorded,
 }: {
   readonly ticket: TicketDetailRow;
-  /** Intake permission and a servisan still open. */
-  readonly canRecord: boolean;
   readonly runner: ActionRunner;
-  readonly onRecorded: () => void;
 }): TicketVideo {
-  const runtime = useRepairRuntime();
-  const { record, play } = useOwnershipVideo();
+  const { play } = useOwnershipVideo();
   const latest = ownershipVideoOf(ticket);
   return {
-    shown: latest !== null || needsOwnershipVideo(ticket.repairTypes),
     latest,
     video: latest === null ? null : videoRefOf(latest),
-    record:
-      canRecord && record !== undefined
-        ? (): void => {
-            void runner
-              .run(async () => {
-                const captured = await record();
-                if (captured === null) return null;
-                await runtime.run('recordOwnershipVideo', {
-                  ticketId: ticket.id,
-                  video: captured.videoRef,
-                });
-                return captured;
-              })
-              .then((captured) => {
-                if (captured !== undefined && captured !== null) onRecorded();
-              });
-          }
-        : undefined,
-    noCamera: canRecord && record === undefined,
     play: play === undefined ? undefined : (ref) => void runner.run(() => play(ref)),
   };
-}
-
-/**
- * The handover's video: `missing` holds a repaired phone back until the clip is taken; `shown`
- * stays true once it was asked for, so the clip just taken shows instead of the section vanishing.
- */
-export function useHandoverVideo(ticket: TicketDetailRow | undefined): {
-  readonly missing: boolean;
-  readonly shown: boolean;
-} {
-  const missing =
-    ticket !== undefined && ticket.outcome === 'repaired' && ownershipVideoMissing(ticket);
-  const [asked, setAsked] = useState(missing);
-  if (missing && !asked) setAsked(true);
-  return { missing, shown: missing || asked };
 }

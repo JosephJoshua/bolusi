@@ -1,7 +1,6 @@
 // The ownership video: the customer saying on camera that the phone is theirs, asked for by the
-// repair types that need it (unlocking, by default). The counter takes it at intake; a type added
-// later needs it before a repaired phone goes home. The same rules refuse on the device and the
-// server, and the servisan keeps the latest clip.
+// repair types that need it (unlocking, by default). The counter takes it at intake, and only
+// there: the handover's proof is its photo. The same rules refuse on the device and the server.
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import { DomainError } from '@bolusi/core';
@@ -13,7 +12,6 @@ import { REPAIR_OP } from '../src/repair/constants.js';
 import {
   emptyIntakeDraft,
   intakeNeedsVideo,
-  ownershipVideoMissing,
   ownershipVideoOf,
   stepProblems,
   toOpenTicketInput,
@@ -83,7 +81,6 @@ describe('at intake', () => {
     const ticketId = await opened(h, { repairTypes: ['unlock'], ownershipVideo: video });
     const row = await ticket(h, ticketId);
     expect(ownershipVideoOf(row)).toMatchObject({ mediaId: video.mediaId, mediaMime: 'video/mp4' });
-    expect(ownershipVideoMissing(row)).toBe(false);
     // The clip rides with the photos but is not one of the intake shots.
     expect(row.photos.filter((photo: { slot: string }) => photo.slot === 'front')).toHaveLength(1);
   });
@@ -92,7 +89,6 @@ describe('at intake', () => {
     const h = await harness(7402);
     const row = await ticket(h, await opened(h, { repairTypes: ['screen'] }));
     expect(ownershipVideoOf(row)).toBeNull();
-    expect(ownershipVideoMissing(row)).toBe(false);
   });
 
   test('an intake an older app signed, with no video, still folds', async () => {
@@ -121,57 +117,20 @@ describe('at intake', () => {
     for (const op of ops) await b.deliverPulled(op === v4 ? (v3 as never) : op, arrival++);
     const row = await ticket(b, ticketId);
     expect(row.repairTypes.map((type: { item: string }) => type.item)).toEqual(['unlock']);
-    expect(ownershipVideoMissing(row)).toBe(true);
+    expect(ownershipVideoOf(row)).toBeNull();
   });
 });
 
 describe('after intake', () => {
-  test('a type added later blocks a repaired handover until the counter records the video', async () => {
+  test('a type that needs the video, added later, does not hold the phone at pickup', async () => {
     const h = await harness(7405);
     const ticketId = await opened(h, { repairTypes: ['screen'] });
     await h.run('setRepairTypes', { ticketId, repairTypes: ['screen', 'unlock'] }, h.cashierId);
     await repair(h, ticketId);
-    expect(ownershipVideoMissing(await ticket(h, ticketId))).toBe(true);
-
-    const handover = await paidHandover(h, ticketId);
-    const err = await refusal(h.run('returnDevice', handover as never, h.cashierId));
-    expect(err.message).toBe('repair.refusal.ownershipVideoNeeded');
-
-    // Taking it needs the counter's intake permission.
-    const video = h.video(5);
-    expect(
-      (await refusal(h.run('recordOwnershipVideo', { ticketId, video }, h.technicianId))).code,
-    ).toBe('PERMISSION_DENIED');
-    await h.run('recordOwnershipVideo', { ticketId, video }, h.cashierId);
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
     const row = await ticket(h, ticketId);
-    expect(ownershipVideoOf(row)?.mediaId).toBe(video.mediaId);
-    expect(row.events.map((event: { kind: string }) => event.kind)).toContain(
-      REPAIR_OP.ownershipVideoRecorded,
-    );
-
-    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
-    expect((await ticket(h, ticketId)).location).toBe('returned');
-  });
-
-  test('a retake is the one that counts', async () => {
-    const h = await harness(7406);
-    const ticketId = await opened(h, { repairTypes: ['unlock'], ownershipVideo: h.video(1) });
-    h.advance(60_000);
-    const retake = h.video(2);
-    await h.run('recordOwnershipVideo', { ticketId, video: retake }, h.cashierId);
-    expect(ownershipVideoOf(await ticket(h, ticketId))?.mediaId).toBe(retake.mediaId);
-  });
-
-  test('a cancelled phone goes home without one, and nothing is recorded once it has', async () => {
-    const h = await harness(7407);
-    const ticketId = await opened(h, { repairTypes: ['screen'] });
-    await h.run('setRepairTypes', { ticketId, repairTypes: ['unlock'] }, h.cashierId);
-    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.storeOwnerId);
-    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
-    const err = await refusal(
-      h.run('recordOwnershipVideo', { ticketId, video: h.video(3) }, h.cashierId),
-    );
-    expect(err.code).toBe('INVALID_TRANSITION');
+    expect(row.location).toBe('returned');
+    expect(ownershipVideoOf(row)).toBeNull();
   });
 });
 

@@ -387,23 +387,6 @@ export async function setRepairTypesHandler(
   };
 }
 
-export const recordOwnershipVideoInput = z
-  .object({ ticketId: z.string().min(1), video: zVideoRef })
-  .strict();
-export type RecordOwnershipVideoInput = z.input<typeof recordOwnershipVideoInput>;
-
-/** The ownership video taken after intake, or a retake; the latest one is the one shown. */
-export async function recordOwnershipVideoHandler(
-  input: z.output<typeof recordOwnershipVideoInput>,
-  ctx: CommandContext,
-): Promise<CommandHandlerResult<{ ticketId: string }>> {
-  const ticket = await loadTicket(ctx, input.ticketId);
-  return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.ownershipVideoRecorded, { video: input.video })],
-    result: { ticketId: ticket.id },
-  };
-}
-
 // ── technician ─────────────────────────────────────────────────────────────────────────────────
 
 const ticketIdInput = z.object({ ticketId: z.string().min(1) }).strict();

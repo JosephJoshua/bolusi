@@ -233,10 +233,10 @@ Agreed with the owner after reviewing what the repair release still lacks.
 - **Ownership video:** taken by the counter at intake when a chosen type needs it. It
   shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
   720p (about 2 Mbit/s: MP4, or WebM from a PC whose browser engine cannot record MP4); it uploads in the
-  background like photos. A type that needs one added after intake makes it required
-  before a repaired phone goes home; the counter can take or retake it on the servisan
-  while the phone is in the store, and the latest clip counts. A warranty claim needs
-  none. A PC without a webcam cannot take one yet (phone handoff for video is next).
+  background like photos. It is taken only at intake (Joseph, 2026-10-28): the servisan
+  only plays it back, and a type that needs one added later asks for nothing more. The
+  handover's proof is its photo. A warranty claim needs none. A PC without a webcam
+  cannot take one yet (phone handoff for video is next).
 - **No separate QC step:** the technician's after photo stays, and the counter tests
   the phone with the customer at handover from a short checklist: the owner's
   "Cek saat serah terima" list (default: the customer tried the phone, the repaired

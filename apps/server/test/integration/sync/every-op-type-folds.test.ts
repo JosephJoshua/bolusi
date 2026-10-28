@@ -330,9 +330,6 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.down_payment_received', { amount: 100_000 }),
     onTicket('repair.down_payment_corrected', { amount: 150_000, reason: 'Salah ketik' }),
     onTicket('repair.slip_printed', { slip: 'intake' }),
-    onTicket('repair.ownership_video_recorded', {
-      video: { ...photo(13), mime: 'video/mp4', type: 'video', sizeBytes: 9_000_000 },
-    }),
     onTicket('repair.ticket_claimed', {}),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),

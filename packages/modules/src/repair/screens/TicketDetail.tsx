@@ -793,13 +793,7 @@ export function TicketDetail({
           </InventoryRuntimeProvider>
         )}
         {photos.section}
-        <TicketVideoSection
-          ticket={row}
-          canRecord={can.intake && row.location !== 'returned' && row.outcome !== 'cancelled'}
-          runner={runner}
-          onRecorded={() => setDone(tn('repair.done.video'))}
-          testID={`${testID}.video`}
-        />
+        <TicketVideoSection ticket={row} runner={runner} testID={`${testID}.video`} />
         {renderCondition(row)}
         <DeviceSpecs
           brand={row.deviceBrand}

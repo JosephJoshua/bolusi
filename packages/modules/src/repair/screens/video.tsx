@@ -1,5 +1,5 @@
-// The ownership video on the phone screens: one tile that records or retakes it, and a play button
-// once there is one. Used at intake, on the servisan and at handover.
+// The ownership video on the phone screens: at intake one tile that records or retakes it, and on
+// the servisan the clip that was taken, to play back.
 import { formatDateTime } from '@bolusi/i18n';
 import { Icon, PhotoSlot, TextButton, color, size, space } from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
@@ -59,55 +59,25 @@ export function OwnershipVideoTile({
   );
 }
 
-/** The servisan's ownership video: shown once one is taken or a repair type asks for it. */
+/** The servisan's ownership video, when the intake took one. */
 export function TicketVideoSection({
   ticket,
-  canRecord,
   runner,
-  onRecorded,
-  atHandover = false,
   testID,
 }: {
   readonly ticket: TicketDetailRow;
-  /** The handover's own hint already says it is needed: say what to film instead. */
-  readonly atHandover?: boolean;
-  /** Intake permission and a servisan still open. */
-  readonly canRecord: boolean;
   readonly runner: ActionRunner;
-  readonly onRecorded: () => void;
   readonly testID: string;
 }): React.JSX.Element | null {
-  const clip = useTicketVideo({ ticket, canRecord, runner, onRecorded });
-  if (!clip.shown) return null;
+  const clip = useTicketVideo({ ticket, runner });
+  if (clip.latest === null) return null;
   return (
     <Section title={tn('repair.video.title')} testID={testID}>
       <View style={styles.column}>
-        {clip.latest === null ? (
-          atHandover ? (
-            <Text style={repairStyles.muted} testID={`${testID}.hint`}>
-              {tn('repair.video.hint')}
-            </Text>
-          ) : (
-            <Text style={repairStyles.warning} testID={`${testID}.needed`}>
-              {tn('repair.video.needed')}
-            </Text>
-          )
-        ) : (
-          <Text style={repairStyles.muted} testID={`${testID}.recordedAt`}>
-            {tn('repair.video.recordedAt', { at: formatDateTime(clip.latest.capturedAt) })}
-          </Text>
-        )}
-        {clip.noCamera && clip.latest === null ? (
-          <Text style={repairStyles.muted} testID={`${testID}.noCamera`}>
-            {tn('repair.video.noCamera')}
-          </Text>
-        ) : null}
-        <OwnershipVideoTile
-          video={clip.video}
-          onRecord={clip.record}
-          onPlay={clip.play}
-          testID={`${testID}.tile`}
-        />
+        <Text style={repairStyles.muted} testID={`${testID}.recordedAt`}>
+          {tn('repair.video.recordedAt', { at: formatDateTime(clip.latest.capturedAt) })}
+        </Text>
+        <OwnershipVideoTile video={clip.video} onPlay={clip.play} testID={`${testID}.tile`} />
       </View>
     </Section>
   );

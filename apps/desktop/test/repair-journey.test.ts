@@ -278,8 +278,6 @@ const EXPECTED_SERVER_OPS = {
   'repair.customer_registered': 1,
   'repair.device_returned': 1,
   'repair.marked_repaired': 1,
-  // Unlocking was added after intake, so the counter takes the ownership video at pickup.
-  'repair.ownership_video_recorded': 1,
   'repair.quote_change_proposed': 1,
   // The counter's screen protector and the technician's battery once the customer agreed.
   'repair.quote_changed': 2,
@@ -329,12 +327,14 @@ describe('one servisan from intake to handover, offline in between', () => {
     await settle(bench);
     await signIn(bench, technician, TECH_PIN);
 
-    // ── Intake at the counter while the internet is down: photos, a repair type and a DP ─────
+    // ── Intake at the counter while the internet is down: photos, repair types, the customer's ──
+    // ownership video (unlocking asks for it) and a DP
     await switchTo(counter, cashier, CASHIER_PIN);
     await counter.setOnline(false);
     const slots = ['front', 'back', 'left', 'right', 'top', 'bottom'];
     const photos = [];
     for (const slot of slots) photos.push({ slot, label: null, ref: await photo(counter) });
+    const clip = await video(counter);
     const opened = await act(counter, 'repair')('openTicket', {
       customer: { name: 'Yakobus Mandowen', phone: '0813-4455-6677' },
       device: { brand: 'Samsung', model: 'Galaxy A54', color: 'Hitam', imei: '356789104455667' },
@@ -345,7 +345,8 @@ describe('one servisan from intake to handover, offline in between', () => {
         { kind: 'part', description: 'LCD A54', amount: 550_000 },
         { kind: 'labour', description: 'Pasang LCD', amount: 100_000 },
       ],
-      repairTypes: ['screen'],
+      repairTypes: ['screen', 'unlock'],
+      ownershipVideo: clip,
       photos,
       downPayment: DP,
     });
@@ -361,7 +362,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     await bench.setOnline(false);
     await tech('claimTicket', { ticketId });
     await tech('startWork', { ticketId, beforePhotos: [await photo(bench)] });
-    await tech('setRepairTypes', { ticketId, repairTypes: ['screen', 'battery', 'unlock'] });
+    await tech('setRepairTypes', { ticketId, repairTypes: ['screen', 'unlock', 'battery'] });
     const proposal = await tech('proposeQuoteChange', {
       ticketId,
       kind: 'part',
@@ -392,7 +393,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     await cash('applyProposal', { ticketId, lineId: proposal['lineId'], customerAgreed: true });
     await counter.setOnline(false);
     const total = INTAKE_TOTAL + GLASS + EXTRA;
-    const handover = {
+    await cash('returnDevice', {
       ticketId,
       handoverPhoto: await photo(counter),
       signature: await signature(counter),
@@ -403,14 +404,7 @@ describe('one servisan from intake to handover, offline in between', () => {
         { kind: 'check', item: 'repairWorks', label: null, done: true },
         { kind: 'accessory', item: 'charger', label: null, done: true },
       ],
-    };
-    // Unlocking needs the customer on video saying the phone is theirs before it goes home.
-    await expect(cash('returnDevice', handover)).rejects.toMatchObject({
-      message: 'repair.refusal.ownershipVideoNeeded',
     });
-    const clip = await video(counter);
-    await cash('recordOwnershipVideo', { ticketId, video: clip });
-    await cash('returnDevice', handover);
     const drawer = (await read(counter, 'money', 'cashDrawer', {}))[0]!;
     expect(drawer['expected']).toBe(total);
     await act(counter, 'money')('countCash', { counted: total, note: '' });
@@ -462,8 +456,8 @@ describe('one servisan from intake to handover, offline in between', () => {
     });
     expect((first!.ticket['repairTypes'] as { item: string }[]).map((type) => type.item)).toEqual([
       'screen',
-      'battery',
       'unlock',
+      'battery',
     ]);
     // The clip the counter took plays on a device that never had it: fetched and checked.
     const clips = (first!.ticket['photos'] as { slot: string; mediaId: string }[]).filter((p) =>

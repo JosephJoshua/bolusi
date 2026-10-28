@@ -1,6 +1,6 @@
-// The ownership video on the PC: a tile that records it while there is none, then a play and a
-// record-again button with when it was taken. Used in the intake page, the servisan and the
-// handover; the recording and the rules behind it are shared with the phone (`ownership-video.ts`).
+// The ownership video on the PC: at intake a tile that records it while there is none, then a play
+// and a record-again button; on the servisan the clip that was taken, with when, to play back. The
+// recording and the rules behind it are shared with the phone (`ownership-video.ts`).
 import { formatDateTime } from '@bolusi/i18n';
 import { Button, CaptureTile, Section } from '@bolusi/ui-web';
 import { Play, Video } from 'lucide-react';
@@ -82,71 +82,27 @@ export function OwnershipVideoField({
   );
 }
 
-/** The servisan's ownership video: shown once one is taken or a repair type asks for it. */
+/** The servisan's ownership video, when the intake took one. */
 export function TicketVideoSection({
   ticket,
-  canRecord,
   runner,
-  onRecorded,
   testId,
 }: {
   readonly ticket: TicketDetailRow;
-  /** Intake permission and a servisan still open. */
-  readonly canRecord: boolean;
   readonly runner: ActionRunner;
-  readonly onRecorded: () => void;
   readonly testId: string;
 }): React.JSX.Element | null {
-  const clip = useTicketVideo({ ticket, canRecord, runner, onRecorded });
-  if (!clip.shown) return null;
+  const clip = useTicketVideo({ ticket, runner });
+  if (clip.latest === null) return null;
   return (
     <Section title={tn('repair.video.title')} testId={testId}>
-      <div className="flex flex-col gap-3">
-        {clip.latest === null ? (
-          <p className="text-small font-semibold text-warning" data-testid={`${testId}.needed`}>
-            {tn('repair.video.needed')}
-          </p>
-        ) : null}
-        <OwnershipVideoField
-          video={clip.video}
-          recordedAt={clip.latest?.capturedAt ?? null}
-          onRecord={clip.record}
-          onPlay={clip.play}
-          noCamera={clip.noCamera}
-          testId={`${testId}.clip`}
-        />
-      </div>
-    </Section>
-  );
-}
-
-/** At handover, a repaired phone still without its video: taken here before it goes home. */
-export function HandoverVideo({
-  ticket,
-  canRecord,
-  runner,
-  testId,
-}: {
-  readonly ticket: TicketDetailRow;
-  readonly canRecord: boolean;
-  readonly runner: ActionRunner;
-  readonly testId: string;
-}): React.JSX.Element {
-  // The servisan reads live, so the clip taken here shows (and unblocks) without a reload.
-  const clip = useTicketVideo({ ticket, canRecord, runner, onRecorded: () => undefined });
-  return (
-    <section className="mt-4 flex flex-col gap-2" data-testid={testId}>
-      <h3 className="text-body font-semibold text-text">{tn('repair.video.title')}</h3>
-      {/* The footer already says it is needed: say what to film. */}
-      <p className="text-small text-text-muted">{tn('repair.video.hint')}</p>
       <OwnershipVideoField
         video={clip.video}
-        recordedAt={clip.latest?.capturedAt ?? null}
-        onRecord={clip.record}
+        recordedAt={clip.latest.capturedAt}
+        onRecord={undefined}
         onPlay={clip.play}
-        noCamera={clip.noCamera}
         testId={`${testId}.clip`}
       />
-    </section>
+    </Section>
   );
 }

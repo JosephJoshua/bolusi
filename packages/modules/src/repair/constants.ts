@@ -54,7 +54,6 @@ export const REPAIR_OP = {
   slipPrinted: 'repair.slip_printed',
   storePrintSettingsChanged: 'repair.store_print_settings_changed',
   storeUncollectedDaysChanged: 'repair.store_uncollected_days_changed',
-  ownershipVideoRecorded: 'repair.ownership_video_recorded',
 } as const;
 
 /**

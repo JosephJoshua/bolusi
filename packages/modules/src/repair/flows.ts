@@ -27,7 +27,6 @@ import {
   type WorkPhotoStage,
 } from './constants.js';
 import {
-  needsOwnershipVideo,
   readyDays,
   warrantyUntil,
   type IntakeOption,
@@ -651,13 +650,6 @@ export function ownershipVideoOf(ticket: Pick<TicketDetailRow, 'photos'>): Ticke
       .filter((photo) => isOwnershipVideoSlot(photo.slot))
       .sort((a, b) => b.capturedAt - a.capturedAt)[0] ?? null
   );
-}
-
-/** A repair type on the ticket asks for the ownership video and none was taken yet. */
-export function ownershipVideoMissing(
-  ticket: Pick<TicketDetailRow, 'photos' | 'repairTypes'>,
-): boolean {
-  return needsOwnershipVideo(ticket.repairTypes) && ownershipVideoOf(ticket) === null;
 }
 
 export function videoRefOf(photo: TicketPhotoRow): VideoMediaRef {

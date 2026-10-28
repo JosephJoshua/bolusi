@@ -615,31 +615,6 @@ test('unlocking takes the ownership video after the intake photos', async ({ pag
   await shoot(page, 'video-ticket');
 });
 
-test('a type added later that needs the video holds the handover until it is taken', async ({
-  page,
-}) => {
-  await open(page, 'counter');
-  await tap(page, 'repair.board.views.pickup');
-  await tap(page, 'repair.board.row.t-4');
-  await tap(page, 'repair.ticket.action.repairTypes');
-  await tap(page, 'repair.repairTypes.type.unlock');
-  await tap(page, 'repair.repairTypes.primary');
-  await expect(page.getByTestId('repair.ticket.video.needed')).toBeVisible();
-  await tap(page, 'repair.ticket.action.handover');
-  await expect(page.getByTestId('repair.handover.video.hint')).toBeVisible();
-  await fill(page, 'repair.handover.pay.line0.tendered', '20000');
-  await tickHandoverChecks(page);
-  await tap(page, 'repair.handover.photo.press');
-  await tap(page, 'repair.handover.signature.press');
-  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
-  await page.getByTestId('repair.handover.video').scrollIntoViewIfNeeded();
-  await shoot(page, 'video-handover-needed');
-  await tap(page, 'repair.handover.video.tile.slot.press');
-  // The clip just taken stays in sight, and the handover goes through.
-  await expect(page.getByTestId('repair.handover.video.recordedAt')).toBeVisible();
-  await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
-});
-
 test('once the phone goes home, the warranty shows its last day', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');

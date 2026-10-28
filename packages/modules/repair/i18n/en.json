@@ -22,8 +22,7 @@
     "slipPrinted": "Slip printed",
     "storePrintSettingsChanged": "Slip details changed",
     "storeUncollectedDaysChanged": "Not-collected limit changed",
-    "ticketRepairTypesChanged": "Repair type changed",
-    "ownershipVideoRecorded": "Ownership video recorded"
+    "ticketRepairTypesChanged": "Repair type changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -298,8 +297,7 @@
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved.",
-    "repairTypes": "Repair type saved.",
-    "video": "Ownership video saved."
+    "repairTypes": "Repair type saved."
   },
   "passcode": {
     "show": "Show",
@@ -758,7 +756,6 @@
     "retake": "Record again",
     "play": "Play",
     "recordNext": "Record ownership video",
-    "needed": "Needs the ownership video before pickup.",
     "recorded": "Recorded",
     "recordedAt": "Recorded {at}",
     "noCamera": "Record it on a store phone: open this servisan there.",

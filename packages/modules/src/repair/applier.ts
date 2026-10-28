@@ -627,12 +627,6 @@ export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = asyn
   await recordEvent(db, op, { technicianId });
 };
 
-export const ownershipVideoRecordedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { video } = payloadOf<{ video: VideoRef }>(op);
-  await insertPhotos(db, op, [[ownershipVideoSlot(video.mediaId), video]]);
-  await recordEvent(db, op, {});
-};
-
 export const workPhotosAddedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { stage, photos } = payloadOf<{ stage: WorkPhotoStage; photos: MediaRef[] }>(op);
   if (photos.length > 0) {

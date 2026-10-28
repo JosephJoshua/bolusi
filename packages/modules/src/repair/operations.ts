@@ -27,7 +27,6 @@ import {
   ticketCancelledApplier,
   ticketClaimedApplier,
   ticketOpenedApplier,
-  ownershipVideoRecordedApplier,
   ticketRepairTypesChangedApplier,
   workPausedApplier,
   workPhotosAddedApplier,
@@ -78,7 +77,6 @@ import {
   ticketCancelledRule,
   ticketClaimedRule,
   ticketOpenedRule,
-  ownershipVideoRecordedRule,
   ticketRepairTypesChangedRule,
   workPausedRule,
   workPhotosAddedRule,
@@ -238,9 +236,6 @@ export const ticketOpenedPayloadV3 = ticketOpenedPayloadV2
 export const ticketOpenedPayload = ticketOpenedPayloadV3
   .extend({ ownershipVideo: zVideoRef.nullable() })
   .strict();
-
-/** An ownership video taken after intake: a type that needs one was added, or a clip retaken. */
-export const ownershipVideoRecordedPayload = z.object({ video: zVideoRef }).strict();
 
 /** The repair types of an open servisan, replacing the previous ones (after the diagnosis). */
 export const ticketRepairTypesChangedPayload = z
@@ -476,15 +471,6 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: workPhotosAddedApplier,
     rule: workPhotosAddedRule,
     permission: REPAIR_PERMISSION.work,
-    entityType: REPAIR_TICKET_ENTITY,
-  },
-  [REPAIR_OP.ownershipVideoRecorded]: {
-    schemaVersion: 1,
-    payload: ownershipVideoRecordedPayload,
-    reversal: 'Not reversible: a clip is evidence; a retake is shown in its place.',
-    apply: ownershipVideoRecordedApplier,
-    rule: ownershipVideoRecordedRule,
-    permission: REPAIR_PERMISSION.intake,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.workStarted]: {

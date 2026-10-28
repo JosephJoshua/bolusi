@@ -21,7 +21,7 @@ import {
   ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
-import { ownershipVideoMissing, partsInWork } from './flows.js';
+import { partsInWork } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -1097,13 +1097,6 @@ export function demoRepairRuntime(
       notify();
       return { ticketId: id, ticketNumber: number, customerId: created.customerId };
     },
-    recordOwnershipVideo: (input) => {
-      const t = find(String(input['ticketId']));
-      const video = input['video'] as VideoRef;
-      return update(t.id, 'repair.ownership_video_recorded', {
-        photos: [...t.photos, photoRow(ownershipVideoSlot(video.mediaId), video)],
-      });
-    },
     claimTicket: (input) =>
       update(String(input['ticketId']), 'repair.ticket_claimed', {
         technicianId: actor.userId,
@@ -1248,9 +1241,6 @@ export function demoRepairRuntime(
       const note = String(input['note'] ?? '');
       const problem = handoverProblem(checklist, t.peripherals, note);
       if (problem !== null) throw REPAIR_REFUSALS.refuse(problem);
-      if (t.outcome === 'repaired' && ownershipVideoMissing(t)) {
-        throw REPAIR_REFUSALS.refuse('ownershipVideoNeeded');
-      }
       return update(
         t.id,
         'repair.device_returned',

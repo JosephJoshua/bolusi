@@ -22,8 +22,7 @@
     "slipPrinted": "Nota dicetak",
     "storePrintSettingsChanged": "Tampilan nota diubah",
     "storeUncollectedDaysChanged": "Batas HP belum diambil diubah",
-    "ticketRepairTypesChanged": "Jenis servisan diubah",
-    "ownershipVideoRecorded": "Video kepemilikan direkam"
+    "ticketRepairTypesChanged": "Jenis servisan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -298,8 +297,7 @@
     "printed": "Nota dicetak.",
     "shared": "PDF nota sudah dikirim.",
     "downPayment": "DP tersimpan.",
-    "repairTypes": "Jenis servisan disimpan.",
-    "video": "Video kepemilikan tersimpan."
+    "repairTypes": "Jenis servisan disimpan."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -758,7 +756,6 @@
     "retake": "Rekam ulang",
     "play": "Putar",
     "recordNext": "Rekam video kepemilikan",
-    "needed": "Perlu video kepemilikan sebelum HP diambil.",
     "recorded": "Sudah direkam",
     "recordedAt": "Direkam {at}",
     "noCamera": "Rekam lewat HP toko: buka servisan ini di HP.",

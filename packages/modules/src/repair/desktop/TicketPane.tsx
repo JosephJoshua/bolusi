@@ -526,13 +526,7 @@ export function TicketPane({
 
         {renderPrice(row)}
         <TicketPhotos ticket={row} />
-        <TicketVideoSection
-          ticket={row}
-          canRecord={can.intake && row.location !== 'returned' && row.outcome !== 'cancelled'}
-          runner={runner}
-          onRecorded={() => setDone('repair.done.video')}
-          testId="repair.desk.ticket.video"
-        />
+        <TicketVideoSection ticket={row} runner={runner} testId="repair.desk.ticket.video" />
         {renderCondition(row)}
         <DeviceSpecs brand={row.deviceBrand} model={row.deviceModel} repairs={can.work} />
 
