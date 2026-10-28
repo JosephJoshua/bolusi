@@ -83,14 +83,17 @@ void app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
     const kinds = 'mediaTypes' in details ? details.mediaTypes : undefined;
     callback(
-      ALLOWED_PERMISSIONS.has(permission) || (counter(contents) && camera(permission, kinds)),
+      ALLOWED_PERMISSIONS.has(permission) ||
+        (counter(contents) && details.isMainFrame && camera(permission, kinds)),
     );
   });
   session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => {
     const kind = details.mediaType;
     return (
       ALLOWED_PERMISSIONS.has(permission) ||
-      (counter(contents) && camera(permission, kind === undefined ? undefined : [kind]))
+      (counter(contents) &&
+        details.isMainFrame &&
+        camera(permission, kind === undefined ? undefined : [kind]))
     );
   });
   registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);

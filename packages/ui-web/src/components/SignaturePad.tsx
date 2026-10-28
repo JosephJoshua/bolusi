@@ -79,6 +79,7 @@ export function SignatureDialog({
     if (!open) return;
     strokes.current = [];
     setEmpty(true);
+    setSaveFailed(false);
   }, [open]);
 
   /** The pointer in canvas pixels, whatever size the pad is drawn at. */

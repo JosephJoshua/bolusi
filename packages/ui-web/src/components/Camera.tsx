@@ -89,6 +89,7 @@ export function CameraDialog({
     if (!open) return;
     let live = true;
     setState({ kind: 'starting' });
+    setSaveFailed(false);
     void (async () => {
       try {
         const inputs = await videoInputs();
@@ -112,10 +113,22 @@ export function CameraDialog({
           return;
         }
         stream.current = media;
-        if (video.current !== null) {
-          video.current.srcObject = media;
-          await video.current.play().catch(() => undefined);
+        const preview = video.current;
+        if (preview === null) {
+          setState({ kind: 'failed' });
+          return;
         }
+        preview.srcObject = media;
+        await preview.play().catch(() => undefined);
+        // Shooting needs a frame; a slow USB webcam takes a moment to give the first one.
+        if (preview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          await new Promise((resolve) =>
+            preview.addEventListener('loadeddata', resolve, { once: true }),
+          );
+        }
+        if (!live) return;
+        // Before the first grant Windows may list the cameras without ids; read them again.
+        setCameras(await videoInputs());
         setState({ kind: 'live' });
       } catch (error) {
         if (!live) return;
