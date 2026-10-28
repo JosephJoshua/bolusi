@@ -18,7 +18,9 @@ import {
 } from '@bolusi/test-support';
 import { MONEY_PERMISSION } from '@bolusi/modules/money';
 import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 
@@ -26,6 +28,7 @@ import { actingSession, actingStaffAdmin } from '../src/core/acting.js';
 import { heldPermissions } from '../src/core/permissions.js';
 import { nodeCryptoPort } from '../src/core/crypto.js';
 import { openNodeSqliteDriver } from '../src/core/sqlite-driver.js';
+import { logUnhandledRejections } from '../src/core/unhandled.js';
 import { connect, serve, type Channel } from '../src/main/rpc.js';
 import { reviveCoreError } from '../src/renderer/core-client.js';
 
@@ -216,5 +219,20 @@ describe('the permissions the window is told about', () => {
         ...Object.values(REPAIR_PERMISSION),
       ]),
     );
+  });
+});
+
+describe('a rejection nobody handles in the core', () => {
+  it('is logged, and the core keeps running', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const source = new EventEmitter();
+    logUnhandledRejections(source);
+    // Node ends the process when no listener takes an unhandled rejection; this one is taken.
+    expect(source.listenerCount('unhandledRejection')).toBe(1);
+    source.emit('unhandledRejection', new Error('identity read failed'));
+    expect(warn).toHaveBeenCalledWith('[bolusi] unhandled rejection in the core', {
+      error: 'identity read failed',
+    });
+    warn.mockRestore();
   });
 });

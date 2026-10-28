@@ -333,17 +333,22 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     return repair !== null && repair.userId === active.userId ? repair.runtime : null;
   }
 
+  /** Rebuild the repair runtime for whoever is signed in now. Run unawaited, so it never rejects. */
   async function bindRepair(): Promise<void> {
-    const active = session?.snapshot().session ?? null;
-    if (app === null || enrollment === null || active === null) {
-      repair = null;
-      return;
+    try {
+      const active = session?.snapshot().session ?? null;
+      if (app === null || enrollment === null || active === null) {
+        repair = null;
+        return;
+      }
+      if (repair?.userId === active.userId) return;
+      const identity = await readSessionIdentity(app, active.userId);
+      if (identity === null) return;
+      repair = { userId: active.userId, identity, runtime: buildRepair(app, enrollment, identity) };
+      emit();
+    } catch (error) {
+      warn('repair runtime could not be built', error);
     }
-    if (repair?.userId === active.userId) return;
-    const identity = await readSessionIdentity(app, active.userId);
-    if (identity === null) return;
-    repair = { userId: active.userId, identity, runtime: buildRepair(app, enrollment, identity) };
-    emit();
   }
 
   function buildRepair(
