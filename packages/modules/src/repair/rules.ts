@@ -1033,7 +1033,9 @@ export const downPaymentReceivedRule: Rule = async (op, { db }) => {
 
 /**
  * An owner's correction, at any time, of a ticket in this store (older devices; newer ones void
- * and re-record the payment in the ledger). Lowering it is within a limited role's limit only.
+ * and re-record the payment in the ledger, which the refund limit counts). Lowering it is an
+ * owner's alone: nothing counts it with the servisan's other price drops, and no phone that knows
+ * limited roles (managers) writes it, so no limit covers it.
  */
 export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
@@ -1043,8 +1045,9 @@ export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
     .select('downPayment')
     .where('id', '=', ticket.id)
     .executeTakeFirst();
-  const recorded = Number(row?.downPayment ?? 0);
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, recorded - amount);
+  const drop = Number(row?.downPayment ?? 0) - amount;
+  const judged = drop > 0 ? Number.MAX_SAFE_INTEGER : drop;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, judged);
 };
 
 /**

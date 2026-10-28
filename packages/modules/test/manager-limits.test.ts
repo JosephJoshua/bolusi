@@ -373,6 +373,34 @@ describe('refunds and voids', () => {
     await refund(10_000);
   });
 
+  test('an older phone’s DP correction lowers a DP only for an owner', async () => {
+    h = await openRepairHarness(9408);
+    const ticketId = await openTicket(h);
+    // An older phone recorded the DP on the ticket itself (repair.down_payment_received).
+    await h.db
+      .updateTable('repairTickets')
+      .set({ downPayment: 100_000 })
+      .where('id', '=', ticketId)
+      .execute();
+    const opened = (await h.ownOps()).find(
+      (op) => op.type === 'repair.ticket_opened' && op.entityId === ticketId,
+    )!;
+    const corrected = (amount: number, userId: string) => ({
+      ...opened,
+      type: 'repair.down_payment_corrected',
+      schemaVersion: 1,
+      userId,
+      payload: { amount, reason: 'Salah ketik' },
+    });
+    // Nothing counts it with the servisan's other price drops, so even Rp 1 is past any limit.
+    await expectOverLimit(
+      h.checkRule(corrected(99_999, h.managerId), managerLimit('priceDrop')),
+      'repair',
+    );
+    await h.checkRule(corrected(120_000, h.managerId), managerLimit('priceDrop'));
+    await h.checkRule(corrected(0, h.storeOwnerId), () => Promise.resolve(true));
+  });
+
   test('a payment recorded in place of a DP lowers what its void counts, until the bill', async () => {
     h = await openRepairHarness(9404);
     const ticketId = await repaired(h, { downPayment: 100_000 });
