@@ -147,7 +147,7 @@ describe('revocation is terminal and beats every other input (03 §Device)', () 
 
 describe('resolveZone is total — no input maps to nothing (the blank-screen guard)', () => {
   test('every combination of the input space resolves to a zone', () => {
-    const devices: DeviceStatus[] = ['unenrolled', 'active', 'revoked'];
+    const devices: DeviceStatus[] = ['unenrolled', 'active', 'revoked', 'unrecognised'];
     const sessions = [null, { userId: 'user-a' }];
     const locks = [true, false];
     const pins = [null, 'user-b'];

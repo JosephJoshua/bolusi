@@ -38,6 +38,8 @@
  * (first Android QA run).
  */
 
+import type { HeldPhone } from '@bolusi/core';
+
 /** api/02-auth §4.2's `LoginReq` bounds. Mirrored client-side so a bad field never leaves the device. */
 export const LOGIN_IDENTIFIER_MAX = 64;
 export const PASSWORD_MIN = 10;
@@ -77,6 +79,8 @@ export type EnrollmentFailure =
   | { readonly kind: 'rateLimited'; readonly retryAfterSeconds: number }
   /** 403 — the account exists and the password was right; it just may not enroll devices. */
   | { readonly kind: 'notPermitted' }
+  /** This phone holds another store's data, and this account may not enrol into that store. */
+  | { readonly kind: 'otherStore' }
   /** Transport — the only sanctioned "you need internet" in the app. */
   | { readonly kind: 'offline' }
   /** Anything else, keyed by DomainError code (07-i18n §4.2). */
@@ -91,6 +95,8 @@ export function failureKey(failure: EnrollmentFailure): string {
       return 'core.errors.RATE_LIMITED';
     case 'notPermitted':
       return 'auth.enroll.notOwner';
+    case 'otherStore':
+      return 'auth.enroll.otherStore';
     case 'offline':
       return 'auth.enroll.needsConnection';
     case 'unexpected':
@@ -111,6 +117,12 @@ export interface EnrollmentState {
   readonly failure: EnrollmentFailure | null;
   /** §8.5: a `revoked` device lands here with the danger banner. */
   readonly revoked: boolean;
+  /**
+   * What this phone already holds when it is being enrolled AGAIN: its store, which it may only be
+   * re-enrolled into, and the unsynced changes the owner reviews before they are carried over.
+   * Null on a new phone (and until it has been read).
+   */
+  readonly phone: HeldPhone | null;
 }
 
 export function initialEnrollmentState(revoked = false): EnrollmentState {
@@ -124,6 +136,7 @@ export function initialEnrollmentState(revoked = false): EnrollmentState {
     busy: false,
     failure: null,
     revoked,
+    phone: null,
   };
 }
 
@@ -199,6 +212,19 @@ export function bindingSummary(
 export function afterLogin(state: EnrollmentState, login: LoginResult): EnrollmentState {
   if (login.stores.length === 0) {
     return { ...state, busy: false, failure: { kind: 'notPermitted' } };
+  }
+  // A phone holding a store's data goes back to that store only: its records belong there. The
+  // choice narrows to it, so step 2 states it instead of offering a list.
+  if (state.phone !== null) {
+    const home = login.stores.find((store) => store.id === state.phone?.storeId);
+    if (home === undefined) return { ...state, busy: false, failure: { kind: 'otherStore' } };
+    return {
+      ...state,
+      busy: false,
+      login: { ...login, stores: [home] },
+      step: 'confirm',
+      selectedStoreId: home.id,
+    };
   }
   return {
     ...state,

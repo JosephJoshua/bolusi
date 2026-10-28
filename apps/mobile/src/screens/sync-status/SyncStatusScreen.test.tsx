@@ -48,6 +48,8 @@ function state(overrides: Partial<SyncState> = {}): SyncState {
     syncDisabledReason: null,
     lastSyncError: null,
     backoffUntil: null,
+    tokenRejectedSince: null,
+    tokenRejectedCount: 0,
     lastServerTime: NOW,
     lastServerTimeReceivedAt: NOW,
     ...overrides,
@@ -82,6 +84,7 @@ function renderSync(over: Partial<SyncStatusInput> = {}) {
       onOpenRejected={vi.fn()}
       onRetryMedia={vi.fn()}
       onOpenSwitcher={vi.fn()}
+      onReenroll={vi.fn()}
       expandedRejectedOpId={null}
     />,
   );
@@ -447,5 +450,52 @@ describe('a long refused list can be read to the end', () => {
     fire(screen.get('sync-rejected-more'), 'onPress');
     expect(rows(screen)).toBe(many.length);
     expect(screen.query('sync-rejected-more')).toBeNull();
+  });
+});
+
+describe('a phone the server no longer recognises', () => {
+  test('says so and offers re-enrolment as the one action', () => {
+    const onReenroll = vi.fn();
+    const screen = render(
+      <SyncStatusScreen
+        input={input({
+          pendingOperationCount: 3,
+          state: {
+            ...input().state,
+            syncDisabled: true,
+            syncDisabledReason: 'device_unrecognised',
+          },
+        })}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onSyncNow={vi.fn()}
+        onOpenRejected={vi.fn()}
+        onRetryMedia={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onReenroll={onReenroll}
+        expandedRejectedOpId={null}
+      />,
+    );
+    expect(textsIn(screen.get('sync-unrecognised'))).toContain(t('auth.unrecognised.title'));
+    expect(screen.query('sync-now')).toBeNull();
+    fire(screen.get('sync-reenroll'), 'onPress');
+    expect(onReenroll).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not offer to resend photos, which only re-enrolment can unblock', () => {
+    const failed = [{ mediaId: 'm-1', uploadStatus: 'failed' as const, progressPercent: null }];
+    const forgotten = renderSync({
+      media: failed,
+      state: { ...input().state, syncDisabled: true, syncDisabledReason: 'device_unrecognised' },
+    });
+    expect(forgotten.query('sync-media-section')).toBeNull();
+    // Control: on a phone the server knows, the same failed photo offers a resend.
+    expect(renderSync({ media: failed }).query('sync-media-section')).not.toBeNull();
+  });
+
+  test('is absent on a healthy phone', () => {
+    const screen = renderSync();
+    expect(screen.query('sync-unrecognised')).toBeNull();
+    expect(screen.query('sync-reenroll')).toBeNull();
   });
 });

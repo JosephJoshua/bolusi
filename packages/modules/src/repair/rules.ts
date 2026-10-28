@@ -11,7 +11,7 @@
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
-import { defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
+import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import {
@@ -393,12 +393,17 @@ async function pendingProposals(db: Db, op: SignedOperation): Promise<number> {
  * log, which both sides keep with the same columns: two devices may share a 3-letter code
  * (ticket-number.ts), and that rare collision must not refuse an honest ticket.
  */
-async function deviceUsedNumber(db: Db, op: SignedOperation, ticketNumber: string) {
+async function deviceUsedNumber(
+  db: Db,
+  op: SignedOperation,
+  ticketNumber: string,
+  devices: readonly string[],
+) {
   const { rows } = await sql<{ one: number }>`
     SELECT 1 AS one FROM repair_tickets t
     JOIN operations o ON o.entity_id = t.id AND o.type = ${op.type}
     WHERE t.store_id = ${storeOf(op)} AND t.ticket_number = ${ticketNumber}
-      AND o.device_id = ${op.deviceId}
+      AND o.device_id IN (${sql.join(devices)})
     LIMIT 1
   `.execute(db);
   return rows.length > 0;
@@ -422,8 +427,9 @@ export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
 
 /**
  * A new ticket: a fresh id, a customer of this store, a price that adds up, and a ticket number
- * this device minted (its own code) and has not used before. The number is printed for the
- * customer, so it is the device's to mint offline but never another device's to reuse.
+ * this device minted (its own code, or an earlier registration's it carried changes over from) and
+ * has not used before. The number is printed for the customer, so it is the device's to mint offline
+ * but never another device's to reuse.
  */
 export const ticketOpenedRule: Rule = async (op, { db, holdsPermission }) => {
   const payload = payloadOf<Payload<typeof ticketOpenedPayload>>(op);
@@ -449,14 +455,17 @@ export const ticketOpenedRule: Rule = async (op, { db, holdsPermission }) => {
     }
   }
   const number = payload.ticketNumber;
-  if (!number.startsWith(`${deviceCode(op.deviceId)}-`) || ticketCounter(number) === null) {
+  // A re-enrolled phone carries over tickets its earlier registration numbered offline.
+  const devices = await carriedRegistrations(db, op.deviceId);
+  const minted = devices.some((device) => number.startsWith(`${deviceCode(device)}-`));
+  if (!minted || ticketCounter(number) === null) {
     throw refuse('numberNotThisDevice', {
       code: 'VALIDATION_FAILED',
       details: { field: 'ticketNumber', issue: 'not minted by this device' },
       message: `ticket number ${number} does not belong to device ${op.deviceId}`,
     });
   }
-  if (await deviceUsedNumber(db, op, number)) {
+  if (await deviceUsedNumber(db, op, number, devices)) {
     throw refuse('numberUsed', {
       code: 'VALIDATION_FAILED',
       details: { field: 'ticketNumber', issue: 'already used' },

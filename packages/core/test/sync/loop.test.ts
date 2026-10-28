@@ -22,6 +22,8 @@ import { opRowOf } from '@bolusi/test-support';
 
 import {
   BUNDLE_REFRESH_INTERVAL_MS,
+  DEVICE_UNRECOGNISED_AFTER,
+  DEVICE_UNRECOGNISED_REASON,
   DomainError,
   SYNC_BACKOFF_SCHEDULE_MS,
   SYNC_LOOP_MACHINE,
@@ -634,6 +636,140 @@ describe('DEVICE_REVOKED 401 (03 §10 "any → idle")', () => {
     expect((await syncStateRow()).lastSyncError).toBe('AUTH_TOKEN_INVALID');
   });
 });
+
+describe('a server that no longer knows this device (persistent 401 AUTH_TOKEN_INVALID)', () => {
+  const tokenRejected = () => {
+    throw new SyncTransportError('token', { code: 'AUTH_TOKEN_INVALID', status: 401 });
+  };
+  const tokenMissing = () => {
+    throw new SyncTransportError('no token', { code: 'AUTH_TOKEN_MISSING', status: null });
+  };
+  const drained = { ops: [], nextCursor: 0, hasMore: false, serverTime: 1 };
+
+  /** Run the first cycle, then follow the backoff timer `retries` times. Returns elapsed ms. */
+  async function runAndRetry(
+    loop: Awaited<ReturnType<SyncHarness['makeLoop']>>,
+    retries: number,
+  ): Promise<number> {
+    const start = harness.clock.now();
+    loop.requestSync('manual');
+    await loop.settle();
+    for (let i = 0; i < retries; i += 1) {
+      const at = harness.timer.nextAt();
+      if (at === null) break;
+      await harness.timer.advance(at - harness.clock.now());
+      await loop.settle();
+    }
+    return harness.clock.now() - start;
+  }
+
+  it('keeps retrying until refused 3 times over 10 minutes, then stops and asks to re-enrol', async () => {
+    expect(DEVICE_UNRECOGNISED_AFTER).toEqual({ refusals: 3, ms: 600_000 });
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(...Array.from({ length: 12 }, () => tokenRejected));
+
+    // Refusals at 0 s, 5 s, 20 s, 80 s and 380 s: enough refusals, not enough time.
+    expect(await runAndRetry(loop, 4)).toBe(380_000);
+    expect(loop.state).toBe('backoff');
+    expect((await syncStateRow()).syncDisabled).toBe(0);
+    expect(harness.surface.ofKind('sync_disabled')).toHaveLength(0);
+
+    // The next refusal lands at 680 s, past the 10 minutes.
+    await harness.timer.advance(300_000);
+    await loop.settle();
+    expect(loop.state).toBe('idle');
+    const state = await syncStateRow();
+    expect(state.syncDisabled).toBe(1);
+    expect(state.syncDisabledReason).toBe(DEVICE_UNRECOGNISED_REASON);
+    expect(state.lastSyncError).toBe('AUTH_TOKEN_INVALID');
+    expect(state.backoffUntil).toBeNull();
+    expect(harness.surface.ofKind('sync_disabled')).toEqual([
+      { kind: 'sync_disabled', reason: 'device_unrecognised', labelKey: 'auth.unrecognised.title' },
+    ]);
+    expect(harness.timer.pending()).toBe(0);
+
+    const pullsBefore = harness.transport.pulls.length;
+    for (const reason of ALL_REASONS) loop.requestSync(reason);
+    await loop.settle();
+    expect(harness.transport.pulls.length).toBe(pullsBefore);
+  });
+
+  it('10 minutes of refusals is not enough without the third refusal', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(tokenRejected);
+    loop.requestSync('manual');
+    await loop.settle();
+    // The app sits idle (backgrounded) far longer than 10 minutes; one more refusal makes two.
+    harness.clock.set(harness.clock.now() + 3_600_000);
+    harness.transport.scriptPull(tokenRejected);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(loop.state).toBe('backoff');
+    expect((await syncStateRow()).syncDisabled).toBe(0);
+  });
+
+  it('a successful sync clears the streak', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(tokenRejected, tokenRejected, drained);
+    await runAndRetry(loop, 2);
+    expect(loop.state).toBe('idle');
+    expect(await tokenStreak()).toEqual({ since: null, count: 0 });
+
+    // Starting over: two refusals an hour apart are still only two.
+    harness.transport.scriptPull(tokenRejected);
+    loop.requestSync('manual');
+    await loop.settle();
+    harness.clock.set(harness.clock.now() + 3_600_000);
+    harness.transport.scriptPull(tokenRejected);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect((await syncStateRow()).syncDisabled).toBe(0);
+  });
+
+  it('network failures in between neither count nor break the streak', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(tokenRejected, netFail, netFail, netFail, tokenRejected);
+    await runAndRetry(loop, 4);
+    expect((await tokenStreak()).count).toBe(2);
+    harness.clock.set(harness.clock.now() + 600_000);
+    harness.transport.scriptPull(tokenRejected);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect((await syncStateRow()).syncDisabledReason).toBe(DEVICE_UNRECOGNISED_REASON);
+  });
+
+  it('the streak survives an app restart', async () => {
+    const first = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(tokenRejected, tokenRejected);
+    await runAndRetry(first, 1);
+    expect((await tokenStreak()).count).toBe(2);
+
+    // Killed and reopened 10 minutes later: a fresh loop must not start counting from zero.
+    harness.clock.set(harness.clock.now() + 600_000);
+    const second = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(tokenRejected);
+    second.requestSync('manual');
+    await second.settle();
+    expect((await syncStateRow()).syncDisabledReason).toBe(DEVICE_UNRECOGNISED_REASON);
+  });
+
+  it('a token missing on the phone never counts: only the server can say it forgot the device', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(...Array.from({ length: 8 }, () => tokenMissing));
+    await runAndRetry(loop, 7);
+    expect(loop.state).toBe('backoff');
+    expect(await tokenStreak()).toEqual({ since: null, count: 0 });
+    expect((await syncStateRow()).syncDisabled).toBe(0);
+  });
+});
+
+async function tokenStreak(): Promise<{ since: number | null; count: number }> {
+  const rows = await sql<{ since: number | null; count: number }>`
+    SELECT token_rejected_since AS "since", token_rejected_count AS "count"
+    FROM sync_state WHERE id = 1
+  `.execute(harness.db);
+  return rows.rows[0] as never;
+}
 
 describe('the loop never throws to its caller (api/01 §6)', () => {
   it.each([

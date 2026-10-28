@@ -99,6 +99,18 @@ const pinLockedOutPayload = z
   })
   .strict();
 
+/**
+ * `auth.device_changes_transferred`: a re-enrolled phone re-signed the changes its old registration
+ * never sent. They follow this op in the chain, `opCount` of them, so the payload names no op ids
+ * (a long-offline phone could otherwise outgrow a push body).
+ */
+const deviceChangesTransferredPayload = z
+  .object({
+    fromDeviceIds: z.array(z.string().min(1)).min(1),
+    opCount: z.number().int().min(1),
+  })
+  .strict();
+
 /** `auth.pin_lockout_cleared` (api/02-auth §6.2): a historical fact with no payload fields. */
 const pinLockoutClearedPayload = z.object({}).strict();
 
@@ -107,6 +119,9 @@ const pinLockoutClearedPayload = z.object({}).strict();
 // THREE auth op types carry no projection table, and that is deliberate, not a gap (the T-14
 // denominator: every op type in `authOperationRegistry` has an applier OR a stated reason it does
 // not project — stated here):
+//   auth.device_changes_transferred
+//                         — an audit record in the log itself; who re-enrolled and what moved is
+//                           read from the op, and nothing on the device is derived from it.
 //   auth.device_enrolled  — the enrolled device is a DIRECTORY fact (server-owned bundle tables,
 //                           api/02-auth §4), never a device-side projection; the genesis op exists
 //                           to root the hash chain (seq 1), not to fold a row.
@@ -131,7 +146,7 @@ function schemaVersionOf(type: string): number {
   return version;
 }
 
-/** The eight auth op declarations (04 §3), keyed by op type — the FULL api/02-auth §6.2 set. */
+/** The auth op declarations (04 §3), keyed by op type — the FULL api/02-auth §6.2 set. */
 export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDatabase>>> = {
   [AUTH_OP.deviceEnrolled]: {
     schemaVersion: schemaVersionOf(AUTH_OP.deviceEnrolled),
@@ -207,6 +222,17 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.pinLockoutCleared],
     entityType: AUTH_OP_ENTITY[AUTH_OP.pinLockoutCleared],
+  },
+  [AUTH_OP.deviceChangesTransferred]: {
+    schemaVersion: schemaVersionOf(AUTH_OP.deviceChangesTransferred),
+    payload: deviceChangesTransferredPayload,
+    reversal:
+      'Historical fact; the carried changes are ordinary ops and are each refused or accepted on their own.',
+    apply: noProjection,
+    // An audit fact about the device chain; every carried change is still checked on its own.
+    rule: null,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.deviceChangesTransferred],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.deviceChangesTransferred],
   },
   [AUTH_OP.permissionDenied]: {
     schemaVersion: schemaVersionOf(AUTH_OP.permissionDenied),

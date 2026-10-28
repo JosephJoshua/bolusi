@@ -88,6 +88,18 @@ behind adapters. Node tests do not establish native performance or correctness.
   a wrong clock cannot win last-writer-wins. A device whose last sync found its
   clock that far ahead saves nothing until the clock is fixed.
 - Pending, rejected, and conflicting offline work stays visible and recoverable.
+- A phone whose token the server refuses (401 `AUTH_TOKEN_INVALID`) 3 times over
+  10+ minutes stops syncing (`device_unrecognised`) but keeps working; the sync
+  screen offers re-enrolment. Re-enrolling a phone that holds a store's data binds
+  it to that store only, and its unsynced changes are re-signed under the new
+  device after one `auth.device_changes_transferred` record
+  (`packages/core/src/auth/carry-over.ts`), keeping their ids, authors and times.
+  The server checks each one like any other push; one it already holds comes back
+  `duplicate` and still uses up its chain position. A value an earlier registration
+  minted offline (a ticket number) stays valid: rules ask `carriedRegistrations`,
+  which follows the transfer records. The open session ends before the bind, and
+  sync restarts under the new device as soon as the bind succeeds. Synced changes a
+  restored server lost are not re-sent.
 - Money uses integer IDR. Stock receipt, consumption, shipment, and payment are
   distinct events; business modules need direct tests for their effects.
 - Preserve evidence integrity and keep credential/PIN material out of projections,
