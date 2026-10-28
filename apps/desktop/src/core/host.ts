@@ -59,10 +59,11 @@ import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-t
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import { REPAIR_PERMISSION, repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef } from '@bolusi/modules/screen-kit';
-import type { MediaRef } from '@bolusi/schemas';
+import type { HandoffKind, HandoffPageLabels, MediaRef } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import type { CoreState, SessionView } from './api.js';
+import type { CoreState, HandoffEvent, SessionView } from './api.js';
+import { createHandoffClient } from './handoff.js';
 import { nodeRealtimeSocket } from './websocket.js';
 
 /** The repair runtime the core builds for whoever is signed in. */
@@ -98,6 +99,8 @@ export interface CoreHost {
   requestSync(): void;
   /** Fires when a repair read may have changed (the live-query signal). */
   onRepairChanged(listener: () => void): () => void;
+  /** Fires with what the paired phone did (the phone handoff). */
+  onHandoff(listener: (event: HandoffEvent) => void): () => void;
   stop(): Promise<void>;
 }
 
@@ -198,6 +201,17 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
   const stateListeners = new Set<(state: CoreState) => void>();
   const repairListeners = new Set<() => void>();
+  const handoffListeners = new Set<(event: HandoffEvent) => void>();
+  // The phone handoff talks to the server with this PC's token, so it lives here; the window gets
+  // ids and what the phone sent, and keeps that through `media.*` like its own capture.
+  const handoff = createHandoffClient({
+    baseUrl: deps.apiBaseUrl,
+    deviceToken: loadDeviceToken,
+    emit: (event) => {
+      for (const listener of handoffListeners) listener(event);
+    },
+    ...fetchOptions,
+  });
   let current: CoreState = {
     phase: 'booting',
     bootError: null,
@@ -619,6 +633,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     stopped = true;
     stopServices();
     for (const cleanup of cleanups.splice(0)) cleanup();
+    handoff.stop();
     await app?.close();
   }
 
@@ -729,6 +744,12 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       if (outcome.kind !== 'captured') return { kind: outcome.kind } as const;
       return { kind: 'captured', mediaRef: outcome.ref } as const;
     },
+
+    // ── Phone handoff: a store phone takes the photo or signature for this PC ───────────────────
+    'handoff.pair': (labels: HandoffPageLabels) => handoff.pair(labels),
+    'handoff.ask': (id: string, kind: HandoffKind, title: string) => handoff.ask(id, kind, title),
+    'handoff.withdraw': (id: string, seq: number) => handoff.withdraw(id, seq),
+    'handoff.unpair': (id: string) => handoff.unpair(id),
   } satisfies Handlers;
 
   return {
@@ -744,6 +765,10 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     onRepairChanged(listener) {
       repairListeners.add(listener);
       return () => repairListeners.delete(listener);
+    },
+    onHandoff(listener) {
+      handoffListeners.add(listener);
+      return () => handoffListeners.delete(listener);
     },
   };
 }

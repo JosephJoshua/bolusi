@@ -103,6 +103,14 @@ Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a 
 (XPS-only) driver does not pass RAW jobs. CI's `desktop-windows` job spools a real job
 to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
 
+Photos and signatures: the webcam and the on-screen pad when the PC has them, otherwise
+a store phone, through the server (`apps/server/src/handoff`). The PC asks the server for
+a pairing and shows the phone page's address (`<BOLUSI_API_URL>/h/<key>`) as a QR; the
+phone opens it once in its own browser and stays paired, so every later photo and the
+signature appear on it by themselves (signatures on a landscape pad). Both need the
+internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
+a server restart, or 30 minutes without a step.
+
 Releasing: set the `BOLUSI_API_URL` repository variable to the production server once
 (the workflow refuses to build without it), bump `version` in `apps/desktop/package.json`,
 merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user

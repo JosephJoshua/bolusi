@@ -22,21 +22,25 @@ export const consoleAccessLogSink: AccessLogSink = (record) => {
   console.log(JSON.stringify({ msg: 'access', ...record }));
 };
 
+/** A phone handoff path carries its pairing's secret key, which is a credential: never logged. */
+const loggedPath = (path: string): string => path.replace(/^\/h\/[^/]+/, '/h/:key');
+
 export function accessLog(options: { sink: AccessLogSink }): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     await next();
     const deviceId = c.get('device')?.deviceId;
+    const path = loggedPath(c.req.path);
     const record: AccessLogRecord =
       deviceId === undefined
         ? {
             method: c.req.method,
-            path: c.req.path,
+            path,
             status: c.res.status,
             requestId: c.get('requestId'),
           }
         : {
             method: c.req.method,
-            path: c.req.path,
+            path,
             status: c.res.status,
             requestId: c.get('requestId'),
             deviceId,

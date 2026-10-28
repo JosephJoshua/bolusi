@@ -17,22 +17,23 @@ const INSTALLED = process.env['BOLUSI_E2E_EXECUTABLE'];
 // Chromium's built-in test pattern stands in for a webcam; the app's own permission rules still
 // decide whether the page may use it.
 const FLAGS = ['--no-sandbox', '--use-fake-device-for-media-stream'];
+const TILES = '[data-testid^="repair.desk.intake.photo."]:not([data-testid$=".all"])';
 
-async function launch(): Promise<void> {
+async function launch(flags: readonly string[] = FLAGS): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
   // settings are unchanged.
   // These screens run over the seeded demo; the live app has its own tests.
   const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1' };
   app = await electron.launch(
     INSTALLED === undefined
-      ? { args: [...FLAGS, `${import.meta.dirname}/..`], env }
-      : { executablePath: INSTALLED, args: FLAGS, env },
+      ? { args: [...flags, `${import.meta.dirname}/..`], env }
+      : { executablePath: INSTALLED, args: [...flags], env },
   );
   page = await app.firstWindow();
   await page.getByTestId('repair.desk.board').waitFor();
 }
 
-test.beforeEach(launch);
+test.beforeEach(() => launch());
 
 test.afterEach(async () => {
   await app.close();
@@ -157,7 +158,7 @@ test('a phone nobody collected shows in its own list, and the message opens What
   expect(app.windows()).toHaveLength(1);
 });
 
-test('the page gets only the narrow print and update calls, through the real preload', async () => {
+test('the page gets only the narrow print, update and core calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;
     return {
@@ -207,7 +208,7 @@ test('the paper picked in Settings is kept by the main process across a restart'
 test('takes an intake photo with the webcam', async () => {
   await page.getByTestId('repair.desk.board.newIntake').click();
   await page.getByTestId('repair.desk.intake').waitFor();
-  const tile = page.locator('[data-testid^="repair.desk.intake.photo."]').first();
+  const tile = page.locator(TILES).first();
   await tile.click();
   const camera = page.getByTestId('desktop.camera');
   await expect(camera.getByTestId('desktop.camera.shoot')).toBeEnabled();
