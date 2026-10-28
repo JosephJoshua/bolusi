@@ -50,6 +50,7 @@ export const MONEY_KEYS = [
   'money.refusal.notCharged',
   'money.refusal.refundAbovePaid',
   'money.refusal.tenderedTooLow',
+  'money.refusal.overLimit',
   'money.kas.title',
   'money.kas.expected',
   'money.kas.notCounted',

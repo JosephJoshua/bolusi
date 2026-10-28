@@ -404,6 +404,42 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('POST', (ctx) => `/v1/users/${ctx.tenantBUserId}/deactivate`),
   },
+  'PUT /v1/role-limits': {
+    // The store is another business's: refused as a denial, never a 404 that confirms it exists.
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: '/v1/role-limits',
+      init: {
+        method: 'PUT',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({
+          storeId: ctx.tenantBStoreId,
+          roleId: ctx.nonexistentId,
+          priceDrop: 1,
+          refund: 1,
+          credit: 1,
+        }),
+      },
+      foreignId: ctx.tenantBStoreId,
+    }),
+    unassignedStore: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_UNASSIGNED_STORE },
+    unassignedStoreRequest: (ctx) => ({
+      path: '/v1/role-limits',
+      init: {
+        method: 'PUT',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({
+          storeId: ctx.tenantAStore2Id,
+          roleId: ctx.nonexistentId,
+          priceDrop: 1,
+          refund: 1,
+          credit: 1,
+        }),
+      },
+    }),
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('PUT', () => '/v1/role-limits'),
+  },
   'POST /v1/users/:userId/reactivate': {
     crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
     crossTenantRequest: (ctx) => ({

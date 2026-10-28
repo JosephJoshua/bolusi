@@ -30,7 +30,8 @@
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
-    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan."
+    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
+    "overLimit": "Melebihi batasmu. Minta pemilik toko."
   },
   "method": {
     "cash": "Tunai"

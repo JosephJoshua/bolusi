@@ -1,6 +1,6 @@
 // Pieces every desktop repair screen shares: the status chip, a verified photo's state, the
 // banners for a refused action or a step overtaken by a change from elsewhere, and money entry.
-import { formatNumber, t, translateErrorCode } from '@bolusi/i18n';
+import { formatNumber, t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import {
   Banner,
   Chip,
@@ -88,7 +88,7 @@ export function ActionError({
   return (
     <Banner
       tone="danger"
-      message={translateErrorCode(errorCode)}
+      message={translateFailure(errorCode)}
       onDismiss={onDismiss}
       dismissLabel={t('core.action.close')}
     />

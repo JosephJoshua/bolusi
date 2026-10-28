@@ -1193,6 +1193,7 @@ export function Root({
             : createStaffControls({
                 port: staffAdmin,
                 tenantAdmin: sessionSnapshot.tenantAdmin,
+                canSetLimits: sessionSnapshot.canSetLimits,
                 load: () => session.listStaff(),
                 context: () => session.staffContext(),
                 refreshDirectory: async () => {

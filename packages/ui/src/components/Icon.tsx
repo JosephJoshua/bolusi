@@ -60,6 +60,8 @@ export const ICON_GLYPHS = Object.freeze({
   lock: 'lock-outline',
   /** Settings: PIN rows (change your own, manage staff PINs). */
   pin: 'dialpad',
+  /** Settings: how far a limited role (a manager) may go. */
+  limits: 'shield-account-outline',
   /** Settings: the language rows. */
   language: 'translate',
   /** Settings: notification rows. */

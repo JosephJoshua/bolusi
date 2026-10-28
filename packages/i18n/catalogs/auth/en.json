@@ -137,6 +137,7 @@
     "roleHint": {
       "cashier": "Take in devices, set prices and hand devices back",
       "technician": "Work on repairs, including before and after photos",
+      "manager": "Cashier and technician work, plus limited discounts and refunds",
       "storeOwner": "Everything in the store, including staff, discounts and cancelling repairs"
     },
     "save": "Save",
@@ -218,6 +219,30 @@
       "colStatus": "Status",
       "lockedCount": "{count} locked",
       "pinFor": "New PIN for {name}"
+    }
+  },
+  "limits": {
+    "title": "Limits",
+    "settingsSummary": "Discounts, refunds and pay later",
+    "formTitle": "{role} limits",
+    "intro": "Per servisan. Anything above needs a store owner.",
+    "priceDrop": "Discount",
+    "priceDropHint": "Includes price cuts and a lower cancel fee",
+    "refund": "Refund",
+    "refundHint": "Includes voiding payments and down payments",
+    "credit": "Pay later",
+    "creditHint": "What the customer still owes when they take the phone",
+    "save": "Save",
+    "saved": "{role} limits saved.",
+    "missing": "Fill in all three. Enter 0 to always need a store owner.",
+    "empty": "No roles with limits yet",
+    "emptyBody": "Limits apply to roles such as Manager. Another owner sets the limits of your own role.",
+    "failure": {
+      "offline": "Changing limits needs internet. Connect, then try again.",
+      "denied": "You can’t change these limits. Ask the main owner.",
+      "lastOwner": "There must always be one main owner.",
+      "rateLimited": "Too many changes today. Try again tomorrow.",
+      "unexpected": "The limits weren’t saved. Try again in a moment."
     }
   }
 }

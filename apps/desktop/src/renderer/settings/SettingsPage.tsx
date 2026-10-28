@@ -33,6 +33,7 @@ import type { CounterPerson } from '../Counter.js';
 import { useAppVersion } from '../updates.js';
 import type { SettingsAccess } from './access.js';
 import { AccountPanel } from './AccountPanel.js';
+import { LimitsPanel } from './LimitsPanel.js';
 import { StaffPanel } from './StaffPanel.js';
 import { StaffPinsPanel } from './StaffPinsPanel.js';
 
@@ -40,6 +41,7 @@ type SettingsPageKey =
   | 'account'
   | 'staff'
   | 'staffPins'
+  | 'limits'
   | 'fees'
   | 'uncollected'
   | 'slip'
@@ -91,6 +93,9 @@ export function SettingsPage({
                       : undefined,
                 },
               ]),
+          ...(staff?.canSetLimits === true
+            ? [{ value: 'limits' as const, label: t('auth.limits.title') }]
+            : []),
         ],
       },
       {
@@ -210,6 +215,14 @@ function Page({
       );
     case 'staffPins':
       return <StaffPinsPanel access={access.staffPins!} actorUserId={person.userId} />;
+    case 'limits':
+      return (
+        <LimitsPanel
+          controls={access.staff!}
+          actorUserId={person.userId}
+          onDirtyChange={onDirtyChange}
+        />
+      );
     case 'fees':
       return <CancelFeesSettings onDirtyChange={onDirtyChange} />;
     case 'uncollected':

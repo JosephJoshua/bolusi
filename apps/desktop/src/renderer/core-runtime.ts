@@ -34,13 +34,15 @@ function captured(outcome: CoreCaptureOutcome): CapturedMedia {
 
 export function createCoreRepairRuntime(deps: {
   readonly client: Client;
-  readonly session: Pick<SessionView, 'permissions' | 'colleaguePermissions'>;
+  readonly session: Pick<SessionView, 'permissions' | 'colleaguePermissions' | 'limits'>;
   readonly userId: string;
   readonly storeName: string;
   readonly capture: PcCapture;
 }): RepairRuntime {
   const { client, userId, capture } = deps;
   const granted = new Set(deps.session.permissions);
+  const limitOf = (permission: string): number | null =>
+    granted.has(permission) ? (deps.session.limits[permission] ?? null) : 0;
   const call = <T>(method: string, ...args: readonly unknown[]): Promise<T> =>
     client.call<T>(method, userId, ...args);
 
@@ -66,6 +68,7 @@ export function createCoreRepairRuntime(deps: {
     hasPermission: (permission) => granted.has(permission),
     colleagueHasPermission: (colleague, permission) =>
       deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+    limitOf,
     newId,
     // The ledger's port: the same person, permissions and change feed as the repair screens.
     money: {
@@ -77,6 +80,7 @@ export function createCoreRepairRuntime(deps: {
       hasPermission: (permission) => granted.has(permission),
       colleagueHasPermission: (colleague, permission) =>
         deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+      limitOf,
       newId,
       stores: () => call('money.stores'),
     },

@@ -170,6 +170,7 @@ export async function provisionTenant(
             name: role.key,
             scopeType: role.scopeType,
             isSystemDefault: true,
+            limited: role.limited ?? false,
             createdAt: BigInt(t),
           })
           .execute();

@@ -58,12 +58,14 @@ export const PERM = AUTH_PERMISSION;
  */
 export const TENANT_ADMIN_PERMISSION = AUTH_PERMISSION.roleManage;
 
-export type RoleKey = 'main_owner' | 'store_owner' | 'staff' | 'cashier' | 'technician';
+export type RoleKey = 'main_owner' | 'store_owner' | 'staff' | 'cashier' | 'technician' | 'manager';
 
 export interface DefaultRoleDef {
   readonly key: RoleKey;
   readonly scopeType: 'tenant' | 'store';
   readonly permissionIds: readonly string[];
+  /** Its money decisions go only as far as each store sets (core authz/limits.ts). */
+  readonly limited?: boolean;
 }
 
 const ALL_IDS = PERMISSIONS.map((p) => p.id);
@@ -104,6 +106,26 @@ const CASHIER_PERMS = [
   'money.count_cash',
 ];
 const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work', ...PARTS_USER_PERMS];
+// Managers (product-scope.md, "Managers, limits, approvals and roles"): the counter's and the
+// technician's work, plus the owners' daily decisions, each money decision within the limits the
+// store owner sets. Settings, staff and payment methods stay with the owners. Migration 0027 seeds
+// the same list for businesses that existed before.
+const MANAGER_PERMS = [
+  ...new Set([
+    ...CASHIER_PERMS,
+    ...TECHNICIAN_PERMS,
+    'repair.cancel',
+    'repair.discount',
+    'repair.correct_down_payment',
+    'repair.warranty_exception',
+    'inventory.correct_use',
+    'inventory.count',
+    'money.adjust_cash',
+    'money.refund',
+    'money.void_payment',
+    'money.extend_credit',
+  ]),
+];
 
 /** 02 §10 — the system-default roles, seeded at provisioning. Store owners can edit grants later. */
 export const DEFAULT_ROLES: readonly DefaultRoleDef[] = [
@@ -112,4 +134,5 @@ export const DEFAULT_ROLES: readonly DefaultRoleDef[] = [
   { key: 'staff', scopeType: 'store', permissionIds: STAFF_PERMS },
   { key: 'cashier', scopeType: 'store', permissionIds: CASHIER_PERMS },
   { key: 'technician', scopeType: 'store', permissionIds: TECHNICIAN_PERMS },
+  { key: 'manager', scopeType: 'store', permissionIds: MANAGER_PERMS, limited: true },
 ];

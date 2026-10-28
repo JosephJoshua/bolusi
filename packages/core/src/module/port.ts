@@ -6,6 +6,7 @@
 // error at every caller. Permission checks stay where they are: in the runtimes this delegates to.
 import type { z } from 'zod';
 
+import type { PermissionAllowance } from '../authz/limits.js';
 import type { CommandIdentity, InputParser, QueryHandle } from '../runtime/ctx.js';
 import type {
   CommandDefinition,
@@ -63,6 +64,12 @@ export interface ModulePort<M extends ModuleOperations> {
    */
   colleagueHasPermission(userId: string, permissionId: string): boolean;
   /**
+   * The most the user may use a limited permission for, in rupiah per servisan (a discount, a
+   * refund, a phone handed over unpaid): null when nothing limits them, 0 when they do not hold it.
+   * For showing what is within reach; the op's rule decides on save.
+   */
+  limitOf(permissionId: string): number | null;
+  /**
    * A fresh id from the runtime's id source. A form takes one up front for the record it will
    * create and keeps it in its draft, so a draft restored after the app died mid-submit cannot
    * create that record twice.
@@ -99,6 +106,13 @@ export function bindModulePort<M extends ModuleOperations, DB>(
       runtime.commands.enforcementPoint.hasPermission(identity, permissionId),
     colleagueHasPermission: (userId, permissionId) =>
       runtime.commands.enforcementPoint.hasPermission({ ...identity, userId }, permissionId),
+    limitOf: (permissionId) =>
+      limitOfAllowance(runtime.commands.enforcementPoint.allowance(identity, permissionId)),
     newId: () => ctx.newId(),
   };
+}
+
+/** `ModulePort.limitOf` from an allowance: 0 when not held, null when not limited. */
+export function limitOfAllowance(allowance: PermissionAllowance): number | null {
+  return allowance.allowed ? allowance.limit : 0;
 }

@@ -1,5 +1,7 @@
 // Demo data for the desktop build, which runs the counter screens over the in-memory repair demo
 // before the offline core is wired in. Names here are seeded data, not interface copy.
+import type { StaffDirectory } from '@bolusi/core';
+import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { demoRepairRuntime, type DemoRepairRole } from '@bolusi/modules/repair/demo';
 import type { RepairRuntime } from '@bolusi/modules/repair/desktop';
 
@@ -24,6 +26,7 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
   { role: 'owner', userId: 'u-andi', name: 'Andi Pratama', roleKey: 'main_owner' },
   { role: 'storeOwner', userId: 'u-yosua', name: 'Yosua Wonda', roleKey: 'store_owner' },
   { role: 'technician', userId: 'u-budi', name: 'Budi Santoso', roleKey: 'technician' },
+  { role: 'manager', userId: 'u-maria', name: 'Maria Kogoya', roleKey: 'manager' },
 ];
 
 // Captures live only in this window's memory: the demo has no media store. The real build hands
@@ -108,5 +111,98 @@ export function demoRuntimeFor(person: DemoPerson, capture: PcCapture): RepairRu
       runtime.printing === undefined
         ? undefined
         : desktopPrinting(runtime.printing, DEMO_STORE_NAME),
+  };
+}
+
+const DEMO_ROLES: StaffDirectory['roles'] = [
+  { id: 'r-cashier', key: 'cashier', ownerRole: false, limits: null },
+  { id: 'r-technician', key: 'technician', ownerRole: false, limits: null },
+  {
+    id: 'r-manager',
+    key: 'manager',
+    ownerRole: false,
+    limits: { priceDrop: 50_000, refund: 30_000, credit: 100_000 },
+  },
+  { id: 'r-store_owner', key: 'store_owner', ownerRole: true, limits: null },
+];
+
+/** The demo store's people over an in-memory server, for an owner's "Karyawan" and limits. */
+let demoDirectory: StaffDirectory = {
+  roles: DEMO_ROLES,
+  members: DEMO_PEOPLE.map((person) => ({
+    id: person.userId,
+    name: person.name,
+    active: true,
+    roleKeys: [person.roleKey],
+    roleIds: [`r-${person.roleKey}`],
+    owner: person.roleKey.endsWith('owner'),
+    hasPin: true,
+  })),
+};
+
+/** Staff controls for the demo's owners; others manage no one. Changes last until reload. */
+export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
+  if (person.role !== 'owner' && person.role !== 'storeOwner') return undefined;
+  const server = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 400));
+  return {
+    tenantAdmin: person.role === 'owner',
+    load: () => Promise.resolve(demoDirectory),
+    onCreate: async (draft) => {
+      await server();
+      const id = `u-demo-${String(demoDirectory.members.length)}`;
+      demoDirectory = {
+        ...demoDirectory,
+        members: [
+          ...demoDirectory.members,
+          {
+            id,
+            name: draft.name,
+            active: true,
+            roleKeys: draft.roleIds.map((roleId) => roleId.slice(2)),
+            roleIds: draft.roleIds,
+            owner: false,
+            hasPin: false,
+          },
+        ],
+      };
+      return { userId: id };
+    },
+    onUpdate: async (userId, change) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        members: demoDirectory.members.map((member) =>
+          member.id === userId
+            ? {
+                ...member,
+                ...(change.name === undefined ? {} : { name: change.name }),
+                ...(change.roleIds === undefined
+                  ? {}
+                  : {
+                      roleIds: change.roleIds,
+                      roleKeys: change.roleIds.map((roleId) => roleId.slice(2)),
+                    }),
+              }
+            : member,
+        ),
+      };
+    },
+    onSetActive: async (userId, active) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        members: demoDirectory.members.map((member) =>
+          member.id === userId ? { ...member, active } : member,
+        ),
+      };
+    },
+    canSetLimits: true,
+    onSetLimits: async (roleId, limits) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        roles: demoDirectory.roles.map((role) => (role.id === roleId ? { ...role, limits } : role)),
+      };
+    },
   };
 }

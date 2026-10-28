@@ -13,6 +13,7 @@ import {
   readSyncState,
   type ClockPort,
   type CommandIdentity,
+  type LimitAmounts,
   type LocationPort,
   type TimerPort,
 } from '@bolusi/core';
@@ -267,6 +268,12 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
               ),
             ]),
           );
+    const limits =
+      repairRuntime === null
+        ? {}
+        : Object.fromEntries(
+            permissions.map((permission) => [permission, repairRuntime.limitOf(permission)]),
+          );
     return {
       active,
       users: snapshot.users,
@@ -278,9 +285,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       canUnlock: snapshot.canUnlock,
       canReset: snapshot.canReset,
       canManageStaff: snapshot.canManageStaff,
+      canSetLimits: snapshot.canSetLimits,
       tenantAdmin: snapshot.tenantAdmin,
       permissions,
       colleaguePermissions,
+      limits,
     };
   }
 
@@ -382,6 +391,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     return createStaffControls({
       port: staffAdmin,
       tenantAdmin: current.snapshot().tenantAdmin,
+      canSetLimits: current.snapshot().canSetLimits,
       load: () => current.listStaff(),
       context: () => current.staffContext(),
       refreshDirectory: async () => {
@@ -748,6 +758,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     ) => staffFor(userId).onUpdate(memberId, change),
     'staff.setActive': (userId: string, memberId: string, active: boolean) =>
       staffFor(userId).onSetActive(memberId, active),
+    'staff.setLimits': (userId: string, roleId: string, limits: LimitAmounts) =>
+      staffFor(userId).onSetLimits(roleId, limits),
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
     'sync.requestManual'() {

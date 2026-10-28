@@ -52,6 +52,8 @@ export const AUTH_PERMISSION = {
   pinChange: 'auth.pin_change',
   pinUnlock: 'auth.pin_unlock',
   roleManage: 'auth.role_manage',
+  /** Set how far each limited role may go at the store (authz/limits.ts). */
+  limitManage: 'auth.limit_manage',
   deviceEnroll: 'auth.device_enroll',
   deviceRevoke: 'auth.device_revoke',
   deviceRead: 'auth.device_read',

@@ -307,7 +307,8 @@
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
     "downPaymentSame": "Jumlahnya masih sama.",
-    "handoverPayment": "Lengkapi pembayarannya dulu."
+    "handoverPayment": "Lengkapi pembayarannya dulu.",
+    "discountLimit": "Batas diskonmu {amount} per servisan."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -643,7 +644,8 @@
     "claimWithTypes": "Klaim garansi memakai jenis servisan dari servisan aslinya.",
     "warrantyEnded": "Garansinya sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
     "claimChargeOwnerOnly": "Klaim garansi gratis. Hanya pemilik yang bisa menagih biaya.",
-    "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya."
+    "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya.",
+    "overLimit": "Melebihi batasmu. Minta pemilik toko."
   },
   "paper": {
     "title": "Kertas nota",

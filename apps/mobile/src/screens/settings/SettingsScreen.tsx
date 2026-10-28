@@ -86,6 +86,8 @@ export interface SettingsScreenProps {
    * here (`auth.user_create`), so the row is absent for everyone else. The server still decides.
    */
   readonly onOpenStaff?: (() => void) | undefined;
+  /** Open "Batas wewenang" — present ONLY for someone who may set limits here. */
+  readonly onOpenLimits?: (() => void) | undefined;
   /**
    * The modules' settings (repair's intake lists and fees, money's payment methods) — each row present
    * ONLY for someone who may change it at this store, and a section absent when it has no rows; core
@@ -111,6 +113,7 @@ export function SettingsScreen({
   onOpenStaffPins,
   lockedStaffCount = 0,
   onOpenStaff,
+  onOpenLimits,
   modules = [],
   syncChip,
   pendingCount,
@@ -161,7 +164,9 @@ export function SettingsScreen({
         />
       </Section>
 
-      {onOpenStaff === undefined && onOpenStaffPins === undefined ? null : (
+      {onOpenStaff === undefined &&
+      onOpenStaffPins === undefined &&
+      onOpenLimits === undefined ? null : (
         // The owner's people: who works here, and their PINs.
         <Section title={t('core.settings.team')} testID="settings-section-team">
           {onOpenStaff === undefined ? null : (
@@ -171,6 +176,15 @@ export function SettingsScreen({
               secondaryText={t('auth.staff.settingsSummary')}
               onPress={onOpenStaff}
               testID="settings-staff"
+            />
+          )}
+          {onOpenLimits === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="limits" />}
+              primaryText={t('auth.limits.title')}
+              secondaryText={t('auth.limits.settingsSummary')}
+              onPress={onOpenLimits}
+              testID="settings-limits"
             />
           )}
           {onOpenStaffPins === undefined ? null : (
