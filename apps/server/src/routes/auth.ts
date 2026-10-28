@@ -35,10 +35,13 @@ export function createAuthRouter(deps: ServerDeps) {
             t,
           ),
         );
-        // §9: 5 failures / identifier / 15 min → locked. Checked (not incremented) up front.
+        // §9: 5 failures / identifier / 15 min → locked. Each attempt reserves a failure slot
+        // synchronously, BEFORE the first await, and a success hands it back. Checking first and
+        // counting the failure after the KDF let concurrent wrong guesses all pass the check.
+        const failKey = `login-fail:${body.loginIdentifier}`;
         enforce(
-          deps.identityRateStore.check(
-            `login-fail:${body.loginIdentifier}`,
+          deps.identityRateStore.hit(
+            failKey,
             IDENTITY_LIMITS.loginFailPerIdentifier.limit,
             IDENTITY_LIMITS.loginFailPerIdentifier.windowMs,
             t,
@@ -47,12 +50,7 @@ export function createAuthRouter(deps: ServerDeps) {
 
         const cred = await deps.authDirectory.findLoginCredential(body.loginIdentifier);
 
-        const fail = async (): Promise<never> => {
-          deps.identityRateStore.add(
-            `login-fail:${body.loginIdentifier}`,
-            IDENTITY_LIMITS.loginFailPerIdentifier.windowMs,
-            t,
-          );
+        const fail = (): never => {
           throw new IdentityError('AUTH_INVALID_CREDENTIALS');
         };
 
@@ -65,6 +63,7 @@ export function createAuthRouter(deps: ServerDeps) {
 
         const ok = await deps.passwordKdf.verify(body.password, cred.passwordVerifier);
         if (!ok || cred.status !== 'active') return fail();
+        deps.identityRateStore.refund(failKey, IDENTITY_LIMITS.loginFailPerIdentifier.windowMs, t);
 
         // Success: mint the session + gather the store list, under the resolved tenant.
         const result = await deps.forTenant(cred.tenantId, async (db) => {

@@ -20,10 +20,8 @@ export interface RateDecision {
 export interface WindowLimitStore {
   /** Increment `key`'s window count, then report whether it is within `limit`. */
   hit(key: string, limit: number, windowMs: number, nowMs: number): RateDecision;
-  /** Report whether `key` is within `limit` WITHOUT incrementing (retryAfter = window remaining). */
-  check(key: string, limit: number, windowMs: number, nowMs: number): RateDecision;
-  /** Increment `key`'s window count without evaluating a limit (e.g. login-failure accrual). */
-  add(key: string, windowMs: number, nowMs: number): void;
+  /** Take back one earlier `hit` on `key` (e.g. a reserved login-failure slot that succeeded). */
+  refund(key: string, windowMs: number, nowMs: number): void;
 }
 
 interface Window {
@@ -57,17 +55,9 @@ export class InMemoryWindowLimitStore implements WindowLimitStore {
     return this.#decision(w, limit, windowMs, nowMs);
   }
 
-  check(key: string, limit: number, windowMs: number, nowMs: number): RateDecision {
+  refund(key: string, windowMs: number, nowMs: number): void {
     const w = this.#current(key, windowMs, nowMs);
-    // `check` reads the window without a hit: over-limit iff the count already reached the limit.
-    if (w.count < limit) return { allowed: true, retryAfterSeconds: 0 };
-    const remainingMs = w.startedAt + windowMs - nowMs;
-    return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil(remainingMs / 1000)) };
-  }
-
-  add(key: string, windowMs: number, nowMs: number): void {
-    const w = this.#current(key, windowMs, nowMs);
-    w.count += 1;
+    w.count = Math.max(0, w.count - 1);
   }
 }
 
