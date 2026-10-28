@@ -238,23 +238,30 @@
     "reason": "Alasan",
     "reference": "No. referensi (opsional)",
     "save": "Kembalikan {amount}",
-    "saveEmpty": "Kembalikan uang",
+    "saveEmpty": "Kembalikan",
     "tooMuch": "Paling banyak {amount} lewat metode ini.",
     "lowersBill": "Tagihan juga turun {amount}.",
-    "hint": "Isi jumlah dan alasannya.",
-    "nothing": "Belum ada pembayaran yang bisa dikembalikan."
+    "nothing": "Belum ada pembayaran yang bisa dikembalikan.",
+    "hint": {
+      "method": "Pilih metodenya dulu.",
+      "amount": "Isi jumlahnya dulu.",
+      "reason": "Tulis alasannya dulu."
+    }
   },
   "reduce": {
     "title": "Kurangi tagihan",
     "action": "Kurangi tagihan",
-    "owed": "Sisa tagihan",
+    "owed": "Sisa bayar",
     "amount": "Potongan",
-    "after": "Sisa setelah dipotong",
+    "after": "Sisa jadi",
     "becomesCredit": "Jadi lebih bayar {amount}. Kembalikan ke pelanggan.",
     "reason": "Alasan",
     "save": "Kurangi {amount}",
-    "saveEmpty": "Kurangi tagihan",
+    "saveEmpty": "Kurangi",
     "tooMuch": "Paling banyak {amount}.",
-    "hint": "Isi potongan dan alasannya."
+    "hint": {
+      "amount": "Isi potongannya dulu.",
+      "reason": "Tulis alasannya dulu."
+    }
   }
 }

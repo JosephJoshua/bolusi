@@ -37,6 +37,7 @@ import {
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { refundsFor } from './commands.js';
 import { amountOwed } from './flows.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { REPAIR_REFUSALS, claimProblem } from './rules.js';
@@ -1488,13 +1489,24 @@ export function demoRepairRuntime(
   ): void {
     const document = { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber };
     const owed = amountOwed(t);
-    if (owed <= 0 || (ledger.documentMoney(t.id)?.charged ?? 0) > 0) return;
-    ledger.recordCharge({ document, amount: owed, at });
+    if ((ledger.documentMoney(t.id)?.charged ?? 0) > 0) return;
+    if (owed > 0) ledger.recordCharge({ document, amount: owed, at });
     const byHand = (t.downPayment ?? 0) - (ledger.documentMoney(t.id)?.paid ?? 0);
     const all = byHand > 0 ? [{ account: CASH_ACCOUNT, amount: byHand }, ...payments] : payments;
     all.forEach((payment, n) => {
       ledger.recordPayment({ id: `m-${t.id}-${String(n)}`, document, ...payment, at });
     });
+    // As the real handover: what was paid beyond the bill goes back through how it came in.
+    const money = ledger.documentMoney(t.id);
+    if (money === null || money.balance >= 0) return;
+    for (const refund of refundsFor(money, -money.balance)) {
+      void ledger.run('refund', {
+        document,
+        ...refund,
+        reason: 'Dikembalikan saat diambil',
+        reference: null,
+      });
+    }
   }
   // What went home before today was paid in full at the counter, except the one debt.
   tickets = tickets.map((t) => {

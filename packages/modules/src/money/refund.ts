@@ -12,6 +12,7 @@ import { CASH_ACCOUNT, MONEY_PERMISSION } from './constants.js';
 import type { RefundInput, ReduceChargeInput } from './commands.js';
 import type { MoneyDocument } from './documents.js';
 import { accountLabel, moneyInByMethod, type NamedBalance } from './kas.js';
+import { tm } from './i18n.js';
 import { rupiah } from './payment-entry.js';
 import type { DocumentMoney, PaymentAccountRow } from './queries.js';
 import { useMoneyQuery, useMoneyRuntime } from './runtime.js';
@@ -228,4 +229,20 @@ export function useReduceCharge(target: MoneyTarget): ReduceChargeForm {
         ? null
         : { document: target.document, amount, reason: reason.trim() },
   };
+}
+
+/**
+ * What still stands before saving, said under the button; nothing for an amount above the most,
+ * which its field already says.
+ */
+export function refundHint(form: Pick<RefundForm, 'ready' | 'problem' | 'methods'>): string | null {
+  // With nothing to give back, the step says so instead.
+  if (!form.ready || form.methods.length === 0) return null;
+  if (form.problem === null || form.problem === 'tooMuch') return null;
+  return tm(`money.refund.hint.${form.problem}`);
+}
+
+export function reduceHint(form: Pick<ReduceChargeForm, 'ready' | 'problem'>): string | null {
+  if (!form.ready || form.problem === null || form.problem === 'tooMuch') return null;
+  return tm(`money.reduce.hint.${form.problem}`);
 }

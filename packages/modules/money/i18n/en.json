@@ -238,23 +238,30 @@
     "reason": "Reason",
     "reference": "Reference no. (optional)",
     "save": "Give back {amount}",
-    "saveEmpty": "Give money back",
+    "saveEmpty": "Give back",
     "tooMuch": "At most {amount} through this method.",
     "lowersBill": "The bill also comes down {amount}.",
-    "hint": "Fill in the amount and the reason.",
-    "nothing": "No payment to give back yet."
+    "nothing": "No payment to give back yet.",
+    "hint": {
+      "method": "Pick a method first.",
+      "amount": "Enter the amount first.",
+      "reason": "Write the reason first."
+    }
   },
   "reduce": {
     "title": "Lower the bill",
     "action": "Lower the bill",
-    "owed": "Still owed",
+    "owed": "Left to pay",
     "amount": "Taken off",
-    "after": "Owed after",
+    "after": "Left after",
     "becomesCredit": "That leaves {amount} overpaid. Give it back to the customer.",
     "reason": "Reason",
     "save": "Take off {amount}",
-    "saveEmpty": "Lower the bill",
+    "saveEmpty": "Lower",
     "tooMuch": "At most {amount}.",
-    "hint": "Fill in the amount and the reason."
+    "hint": {
+      "amount": "Enter how much to take off first.",
+      "reason": "Write the reason first."
+    }
   }
 }

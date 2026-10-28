@@ -330,7 +330,14 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
           // As refundHandler: an owner giving back beyond the overpayment lowers the bill first.
           const doc = input['document'] as MoneyDocument;
           const amount = Number(input['amount']);
-          const credit = Math.max(0, -(documentMoney(doc.id)?.balance ?? 0));
+          const money = documentMoney(doc.id);
+          const credit = Math.max(0, -(money?.balance ?? 0));
+          // Refused as the rules refuse it, so the preview never shows what a store cannot do.
+          if (money === null || amount > credit + money.charged - money.reduced) {
+            return Promise.reject(
+              MONEY_REFUSALS.refuse('refundAbovePaid', { code: 'VALIDATION_FAILED' }),
+            );
+          }
           const fields = {
             reason: String(input['reason']),
             documentKind: doc.kind,
@@ -356,6 +363,18 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
         }
         case 'reduceCharge': {
           const doc = input['document'] as MoneyDocument;
+          const money = documentMoney(doc.id);
+          if (options.mayRefund?.() !== true) {
+            // The command itself needs `money.refund`, as the runtime checks before any rule.
+            return Promise.reject(
+              Object.assign(new Error('permission'), { code: 'PERMISSION_DENIED' }),
+            );
+          }
+          if (money === null || Number(input['amount']) > money.charged - money.reduced) {
+            return Promise.reject(
+              MONEY_REFUSALS.refuse('aboveCharged', { code: 'VALIDATION_FAILED' }),
+            );
+          }
           add({
             kind: 'charge_reduced',
             amount: Number(input['amount']),

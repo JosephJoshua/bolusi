@@ -41,7 +41,6 @@ import {
   CountCashDialog,
   MoveCashDialog,
   ReceiveDebtDialog,
-  ReduceChargeDialog,
   RefundDialog,
   SettleCountDialog,
   VoidPaymentDialog,
@@ -55,7 +54,6 @@ type Task =
   | { readonly kind: 'settle'; readonly count: CashCountRow }
   | { readonly kind: 'receive'; readonly balance: NamedBalance }
   | { readonly kind: 'refund'; readonly target: MoneyTarget }
-  | { readonly kind: 'reduce'; readonly target: MoneyTarget }
   | {
       readonly kind: 'void';
       readonly entry: MoneyEntryRow;
@@ -127,7 +125,6 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           onSettle={(count) => setTask({ kind: 'settle', count })}
           onReceive={(balance) => setTask({ kind: 'receive', balance })}
           onRefund={(balance) => setTask({ kind: 'refund', target: targetOf(balance) })}
-          onReduce={(balance) => setTask({ kind: 'reduce', target: targetOf(balance) })}
         />
       )}
 
@@ -141,9 +138,6 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
       ) : null}
       {task?.kind === 'refund' ? (
         <RefundDialog target={task.target} onDone={close} onClose={close} />
-      ) : null}
-      {task?.kind === 'reduce' ? (
-        <ReduceChargeDialog target={task.target} onDone={close} onClose={close} />
       ) : null}
       {task?.kind === 'void' ? (
         <VoidPaymentDialog
@@ -164,16 +158,13 @@ function Today({
   onSettle,
   onReceive,
   onRefund,
-  onReduce,
 }: {
   readonly day: ReturnType<typeof useKasDay>;
   readonly onSettle: (count: CashCountRow) => void;
   readonly onReceive: (balance: NamedBalance) => void;
   readonly onRefund: (balance: NamedBalance) => void;
-  readonly onReduce: (balance: NamedBalance) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const mayReduce = runtime.hasPermission(MONEY_PERMISSION.refund);
   const { drawerQuery, drawer, accounts, entriesReady, methods, moves, open, difference, counted } =
     day;
   const { may } = day;
@@ -311,26 +302,13 @@ function Today({
                       .join(' · ')}
                     value={formatMoney(row.balance)}
                     action={
-                      may.receive || mayReduce ? (
-                        <div className="flex gap-2">
-                          {mayReduce ? (
-                            <Button
-                              label={tm('money.reduce.action')}
-                              variant="text"
-                              size="sm"
-                              onClick={() => onReduce(row)}
-                              data-testid={`${testId}.owed.${row.documentId}.reduce`}
-                            />
-                          ) : null}
-                          {may.receive ? (
-                            <Button
-                              label={tm('money.kas.receive')}
-                              size="sm"
-                              onClick={() => onReceive(row)}
-                              data-testid={`${testId}.owed.${row.documentId}.receive`}
-                            />
-                          ) : null}
-                        </div>
+                      may.receive ? (
+                        <Button
+                          label={tm('money.kas.receive')}
+                          size="sm"
+                          onClick={() => onReceive(row)}
+                          data-testid={`${testId}.owed.${row.documentId}.receive`}
+                        />
                       ) : undefined
                     }
                     testId={`${testId}.owed.${row.documentId}`}

@@ -42,7 +42,7 @@ import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
 import { canSimulateQris } from '../qris.js';
 import type { CashCountRow } from '../queries.js';
 import { useDebtReceipt } from '../receive-debt.js';
-import { useReduceCharge, useRefund, type MoneyTarget } from '../refund.js';
+import { reduceHint, refundHint, useReduceCharge, useRefund, type MoneyTarget } from '../refund.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { PaymentLines } from './PaymentLines.js';
@@ -577,11 +577,7 @@ export function RefundStep({
       }
       onPrimary={submit}
       primaryDisabled={form.input === null}
-      primaryHint={
-        form.input === null && form.ready && form.methods.length > 0
-          ? tm('money.refund.hint')
-          : undefined
-      }
+      primaryHint={refundHint(form) ?? undefined}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -717,7 +713,7 @@ export function ReduceChargeStep({
       }
       onPrimary={submit}
       primaryDisabled={form.input === null}
-      primaryHint={form.input === null ? tm('money.reduce.hint') : undefined}
+      primaryHint={reduceHint(form) ?? undefined}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -729,7 +725,6 @@ export function ReduceChargeStep({
         <Line
           label={tm('money.reduce.owed')}
           value={formatMoney(Math.max(0, form.owed))}
-          strong
           testID={`${testID}.owed`}
         />
       </View>
@@ -750,6 +745,7 @@ export function ReduceChargeStep({
         <Line
           label={tm('money.reduce.after')}
           value={formatMoney(Math.max(0, form.after))}
+          strong
           testID={`${testID}.after`}
         />
         {form.after < 0 && form.problem !== 'tooMuch' ? (
@@ -778,8 +774,14 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   lineLabel: { ...type.bodySm, color: color.textMuted, flexShrink: 1, marginRight: space.md },
   lineLabelStrong: { ...type.bodyBold, color: color.text, flexShrink: 1, marginRight: space.md },
-  lineValue: { ...type.bodySm, color: color.text, fontVariant: ['tabular-nums'] },
-  lineValueStrong: { ...type.heading, color: color.text, fontVariant: ['tabular-nums'] },
+  // The amount never wraps: "Rp" and its figure stay on one line, the label wraps instead.
+  lineValue: { ...type.bodySm, color: color.text, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  lineValueStrong: {
+    ...type.heading,
+    color: color.text,
+    fontVariant: ['tabular-nums'],
+    flexShrink: 0,
+  },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   fieldLabel: { ...type.caption, color: color.textMuted, marginBottom: space.sm },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },

@@ -172,8 +172,9 @@ describe('Kas on the PC', () => {
 
   it('offers lowering a debt to owners only', async () => {
     await openKas();
-    await screen.findByTestId('money.desk.kas.owed.t-9.receive');
-    expect(screen.queryByTestId('money.desk.kas.owed.t-9.reduce')).toBeNull();
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    expect(screen.queryByTestId('money.desk.receive.reduce')).toBeNull();
   });
 
   it('lets an owner lower a debt past what is left, then give back what is owed back', async () => {
@@ -186,19 +187,24 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
 
-    fireEvent.click(byTestId('money.desk.kas.owed.t-9.reduce'));
+    // Lowered over the payment it was about to take, which waits underneath if left.
+    fireEvent.click(byTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.click(byTestId('money.desk.receive.reduce'));
     await screen.findByTestId('money.desk.reduce');
     // The whole debt is filled in; the bill comes down at most by what was charged.
     expect(byTestId('money.desk.reduce.amount')).toHaveProperty('value', '250.000');
     expect(text('money.desk.reduce.after')).toBe('Rp0');
     fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '500000' } });
     expect(text('money.desk.reduce')).toContain('PalingbanyakRp450.000');
+    expect(screen.queryByTestId('money.desk.reduce.hint')).toBeNull();
     expect(byTestId('money.desk.reduce.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '300000' } });
     expect(byTestId('money.desk.reduce.becomesCredit').textContent).toContain('50.000');
     fireEvent.change(byTestId('money.desk.reduce.reason'), { target: { value: 'Pelanggan lama' } });
     fireEvent.click(byTestId('money.desk.reduce.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.reduce')).toBeNull());
+    expect(screen.queryByTestId('money.desk.receive')).toBeNull();
     await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
     expect(text('money.desk.kas.owedBack.t-9.value')).toBe('Rp50.000');
 

@@ -2,7 +2,7 @@
 // into the drawer, an owner settling a counted difference, a customer paying a debt, money going
 // back to a customer, an owner lowering a bill and an owner cancelling a payment. The rules are the phone's (kas.ts and the commands); only the layout differs.
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
-import { TextField, ToggleChip } from '@bolusi/ui-web';
+import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
 import { useState } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
@@ -12,6 +12,7 @@ import {
   CASH_MOVE_KINDS,
   MAX_REASON,
   MAX_REFERENCE,
+  MONEY_PERMISSION,
   type CashMoveKind,
 } from '../constants.js';
 import { tm } from '../i18n.js';
@@ -27,7 +28,14 @@ import { rupiah } from '../payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { canSimulateQris } from '../qris.js';
 import { useDebtReceipt } from '../receive-debt.js';
-import { useReduceCharge, useRefund, type MoneyTarget } from '../refund.js';
+import {
+  reduceHint,
+  refundHint,
+  targetOf,
+  useReduceCharge,
+  useRefund,
+  type MoneyTarget,
+} from '../refund.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { AmountField, AmountLine, MoneyDialog } from './parts.js';
@@ -323,6 +331,8 @@ export function ReceiveDebtDialog({
   const runner = useActionRunner();
   const receipt = useDebtReceipt(balance);
   const { entry, input, qris } = receipt;
+  // An owner lowers the bill over this dialog, so what was typed here waits underneath.
+  const [reducing, setReducing] = useState(false);
   const testId = 'money.desk.receive';
 
   const submit = (): void => {
@@ -376,7 +386,25 @@ export function ReceiveDebtDialog({
           qris={qris}
           testId={`${testId}.pay`}
         />
+        {runtime.hasPermission(MONEY_PERMISSION.refund) ? (
+          <Button
+            label={tm('money.reduce.action')}
+            variant="text"
+            size="sm"
+            className="-ml-2 self-start"
+            onClick={() => setReducing(true)}
+            data-testid={`${testId}.reduce`}
+          />
+        ) : null}
       </MoneyDialog>
+      {reducing ? (
+        <ReduceChargeDialog
+          target={targetOf(balance)}
+          // The bill it was paying changed: the board shows what is owed now.
+          onDone={onDone}
+          onClose={() => setReducing(false)}
+        />
+      ) : null}
       {qris.open !== null && runtime.qris !== undefined ? (
         <QrisDialog
           open={qris.open}
@@ -439,7 +467,7 @@ export function RefundDialog({
       }
       onSubmit={submit}
       submitDisabled={form.input === null}
-      hint={form.input === null && form.ready && !nothing ? tm('money.refund.hint') : null}
+      hint={refundHint(form)}
       size="md"
       testId={testId}
     >
@@ -565,7 +593,7 @@ export function ReduceChargeDialog({
       }
       onSubmit={submit}
       submitDisabled={form.input === null}
-      hint={form.input === null ? tm('money.reduce.hint') : null}
+      hint={reduceHint(form)}
       testId={testId}
     >
       <AmountField
