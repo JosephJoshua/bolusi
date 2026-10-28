@@ -3,10 +3,22 @@
  * amount, and what that method needs (cash handed over for the change, an EDC's approval code).
  * "Tambah metode lain" splits the bill. The arithmetic is `paymentEntry`, shared with the PC.
  * A field still empty is not an error: the bottom bar's hint says what is missing. Only a value
- * that cannot be right (less cash than the amount) is marked.
+ * that cannot be right (less cash than the amount) is marked. On a QRIS method connected to Xendit
+ * the line shows its QR instead (`qris`, QrisSheet), unless the counter takes it by hand.
  */
 import { formatMoney } from '@bolusi/i18n';
-import { ChipRow, TextButton, TextInput, ToggleChip, border, color, space, type } from '@bolusi/ui';
+import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';
+import {
+  Button,
+  ChipRow,
+  TextButton,
+  TextInput,
+  ToggleChip,
+  border,
+  color,
+  space,
+  type,
+} from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { referenceRequired } from '../constants.js';
@@ -17,11 +29,13 @@ import {
   lineKind,
   newPaymentLine,
   offeredAccount,
+  paidByQr,
   paymentMethods,
   type PaymentEntry,
   type PaymentLine,
 } from '../payment-entry.js';
 import type { PaymentAccountRow } from '../queries.js';
+import { qrAmountOk, type QrisCheckout } from '../qris-hooks.js';
 
 export interface PaymentLinesProps {
   readonly lines: readonly PaymentLine[];
@@ -31,6 +45,8 @@ export interface PaymentLinesProps {
   readonly onChange: (lines: readonly PaymentLine[]) => void;
   /** Where a line's key comes from, so a screen keeps keys stable across renders. */
   readonly newKey: () => string;
+  /** QRIS through Xendit; absent where payments are only taken by hand. */
+  readonly qris?: QrisCheckout | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -40,6 +56,7 @@ export function PaymentLines({
   accounts,
   onChange,
   newKey,
+  qris,
   testID = 'money.payment',
 }: PaymentLinesProps): React.JSX.Element {
   const methods = paymentMethods(accounts);
@@ -54,6 +71,16 @@ export function PaymentLines({
 
   return (
     <View style={styles.lines} testID={testID}>
+      {qris !== undefined && qris.received > 0 ? (
+        <Text style={styles.received} testID={`${testID}.qrisReceived`}>
+          {tm('money.qris.received', { amount: formatMoney(qris.received) })}
+        </Text>
+      ) : null}
+      {qris !== undefined && qris.unresolved > 0 ? (
+        <Text style={styles.unresolved} testID={`${testID}.qrisUnresolved`}>
+          {tm('money.qris.unresolved', { amount: formatMoney(qris.unresolved) })}
+        </Text>
+      ) : null}
       {lines.map((line, index) => {
         const id = `${testID}.line${String(index)}`;
         const account = offeredAccount(line.account, accounts);
@@ -61,6 +88,8 @@ export function PaymentLines({
         const problem = entry.problems[line.key];
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
+        const connected = qris?.qrAccounts.has(account) === true;
+        const byQr = connected && paidByQr(line, qris.qrAccounts);
         return (
           <View key={line.key} style={[styles.line, index > 0 && styles.nextLine]} testID={id}>
             {methods.length > 1 ? (
@@ -71,7 +100,13 @@ export function PaymentLines({
                     label={method.label}
                     selected={account === method.account}
                     onToggle={() =>
-                      set(line.key, { account: method.account, tendered: '', reference: '' })
+                      set(line.key, {
+                        account: method.account,
+                        tendered: '',
+                        reference: '',
+                        qr: undefined,
+                        manual: false,
+                      })
                     }
                     testID={`${id}.method.${method.account}`}
                   />
@@ -106,6 +141,17 @@ export function PaymentLines({
                   </View>
                 ) : null}
               </View>
+            ) : byQr ? (
+              <View style={styles.qr}>
+                <Button
+                  label={tm('money.qris.show')}
+                  variant="secondary"
+                  size="compact"
+                  disabled={!qrAmountOk(line) || entry.overpaid > 0}
+                  onPress={() => qris.show(line.key)}
+                  testID={`${id}.showQr`}
+                />
+              </View>
             ) : (
               <View style={styles.field}>
                 <TextInput
@@ -118,6 +164,19 @@ export function PaymentLines({
                   autoCapitalize="characters"
                   testID={`${id}.reference`}
                 />
+                {connected && line.manual !== true ? (
+                  <Text style={styles.qrNote} testID={`${id}.qrMinimum`}>
+                    {tm('money.qris.minimum', { amount: formatMoney(QRIS_MIN_AMOUNT) })}
+                  </Text>
+                ) : connected ? (
+                  <View style={styles.lineAction}>
+                    <TextButton
+                      label={tm('money.qris.useQr')}
+                      onPress={() => qris.useQr(line.key)}
+                      testID={`${id}.useQr`}
+                    />
+                  </View>
+                ) : null}
               </View>
             )}
             {lines.length > 1 ? (
@@ -185,6 +244,10 @@ const styles = StyleSheet.create({
   },
   changeLabel: { ...type.bodySm, color: color.textMuted, flexShrink: 1 },
   changeValue: { ...type.bodyBold, color: color.text, fontVariant: ['tabular-nums'] },
+  qr: { gap: space.sm, alignItems: 'flex-start' },
+  qrNote: { ...type.bodySm, color: color.textMuted },
+  received: { ...type.bodySm, color: color.success },
+  unresolved: { ...type.bodySm, color: color.warning },
   remaining: { marginTop: -space.md },
   remainingText: { ...type.bodySm, color: color.textMuted },
   overpaid: { ...type.bodySm, color: color.danger, marginTop: -space.md },

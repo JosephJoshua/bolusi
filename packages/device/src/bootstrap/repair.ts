@@ -7,6 +7,7 @@
  */
 import type { CommandIdentity } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
+import type { QrisPort } from '@bolusi/modules/money';
 import { REPAIR_TICKET_ENTITY, catalogModelSearch, tn } from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { PhotoCapture } from '@bolusi/modules/screen-kit';
@@ -77,6 +78,8 @@ export function createSessionRepairRuntime(deps: {
   readonly print?: PrintPlatform | undefined;
   /** The camera's code scanner for the items screens; absent ⇒ they offer no scan. */
   readonly scanCode?: (() => Promise<string | null>) | undefined;
+  /** QRIS through Xendit for a user (`qris-transport.ts`); absent ⇒ QRIS is only taken by hand. */
+  readonly qris?: ((userId: string) => QrisPort) | undefined;
 }): RepairRuntime {
   const { app, identity } = deps;
   const printing =
@@ -111,6 +114,7 @@ export function createSessionRepairRuntime(deps: {
     media: deps.media,
     printing,
     inventory,
+    qris: deps.qris?.(identity.userId),
   });
   return repair;
 }

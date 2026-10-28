@@ -313,7 +313,8 @@
     "downPaymentCorrect": "Enter the correct down payment first.",
     "downPaymentSame": "The amount has not changed.",
     "handoverPayment": "Complete the payment first.",
-    "handoverChecks": "Tick everything, or write why not."
+    "handoverChecks": "Tick everything, or write why not.",
+    "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
   },
   "discardPhotos": {
     "title": "Leave without saving?",

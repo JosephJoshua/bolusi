@@ -72,6 +72,7 @@ export type {
 } from './components/PhotoViewer.js';
 export type { PatternLockProps } from './components/PatternLock.js';
 export type { PinPadProps, PinPadState } from './components/PinPad.js';
+export type { QrCodeProps } from './components/QrCode.js';
 export type { QuantityStepperProps } from './components/QuantityStepper.js';
 export type { SearchFieldProps } from './components/SearchField.js';
 export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';

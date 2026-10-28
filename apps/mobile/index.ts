@@ -34,6 +34,7 @@ import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
+import { createFetchQris } from '@bolusi/device/bootstrap/qris-transport';
 import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root, type RootProps } from './src/bootstrap/Root.js';
@@ -461,6 +462,8 @@ function createRepair(
     ),
     print: expoPrintPlatform,
     scanCode,
+    // QRIS through Xendit: online-only server calls as the signed-in person, on the device bearer.
+    qris: createFetchQris({ baseUrl: apiBaseUrl(), deviceToken: () => keystore.loadDeviceToken() }),
   });
 }
 

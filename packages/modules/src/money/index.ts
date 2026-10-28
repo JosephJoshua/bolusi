@@ -39,3 +39,12 @@ export {
   type OpenBalanceRow,
   type PaymentAccountRow,
 } from './queries.js';
+export {
+  QRIS_FAILURES,
+  QrisError,
+  canSimulateQris,
+  qrisFailure,
+  type QrisFailure,
+  type QrisPort,
+} from './qris.js';
+export { forgetShownQrs } from './qris-hooks.js';
