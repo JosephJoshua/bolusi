@@ -1,10 +1,11 @@
 // The Electron main process: one locked-down window for the counter screens. The renderer gets no
 // Node and no way to open other pages; the preload gives it a few narrow calls (`bridge.ts`):
-// printing and updates for now, the offline core next.
-import { app, BrowserWindow, session, type IpcMainInvokeEvent } from 'electron';
+// printing and updates for now, the offline core next. Only `wa.me` links open outside the app.
+import { app, BrowserWindow, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { fileURLToPath } from 'node:url';
 
 import { DeviceSettingsFile } from './device-settings.js';
+import { opensExternally } from './external-links.js';
 import { registerPrinting } from './printing.js';
 import { registerUpdates } from './updater.js';
 
@@ -45,9 +46,12 @@ function createWindow(): void {
   window.on('closed', () => counterWindows.delete(window));
   window.once('ready-to-show', () => window.show());
 
-  // The app is one page: nothing navigates it or opens another window. Opening a link in the
-  // browser waits for a feature that needs it, with a list of the hosts it may open.
-  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // The app is one page: nothing navigates it or opens another window. A link to a listed host
+  // opens outside it, in the browser or the app that handles it (WhatsApp Desktop for wa.me).
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (opensExternally(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
   window.webContents.on('will-navigate', (event) => event.preventDefault());
 
   if (DEV_SERVER_URL !== undefined) void window.loadURL(DEV_SERVER_URL);

@@ -439,12 +439,31 @@ describe('an open step after the ticket changed elsewhere', () => {
 
 describe('board views', () => {
   test('mine filters to the user; pickup is finished work still in the store', () => {
-    expect(boardFilter('mine', 'u1')).toMatchObject({ technicianId: 'u1', location: 'in_store' });
-    expect(boardFilter('pickup', 'u1')).toEqual({
+    expect(boardFilter('mine', 'u1', 0)).toMatchObject({
+      technicianId: 'u1',
+      location: 'in_store',
+    });
+    expect(boardFilter('pickup', 'u1', 0)).toEqual({
       outcomes: ['repaired', 'cancelled'],
       location: 'in_store',
     });
-    expect(boardFilter('returned', 'u1')).toEqual({ location: 'returned' });
+    expect(boardFilter('returned', 'u1', 0)).toEqual({ location: 'returned' });
+  });
+
+  test('phones not collected are finished, still in the store, ready before the cut-off', async () => {
+    expect(boardFilter('uncollected', 'u1', 1_000)).toEqual({
+      outcomes: ['repaired', 'cancelled'],
+      location: 'in_store',
+      readyBefore: 1_000,
+    });
+    // Only that view reads the cut-off.
+    expect(boardFilter('pickup', 'u1', 1_000)).not.toHaveProperty('readyBefore');
+    expect(boardSort('uncollected')).toBe('readyAt.asc');
+    h = await openRepairHarness(4105);
+    // The counter and owners call the customer; technicians have no use for the list.
+    expect(boardViews(abilitiesOf(h, h.cashierId))).toContain('uncollected');
+    expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('uncollected');
+    expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('uncollected');
   });
 
   test('the cancelled view is for owners only and lists the latest cancel first', async () => {
@@ -453,7 +472,7 @@ describe('board views', () => {
     expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('cancelled');
     expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('cancelled');
     expect(boardViews(abilitiesOf(h, h.ownerId))).toContain('cancelled');
-    expect(boardFilter('cancelled', 'u1')).toEqual({ outcomes: ['cancelled'] });
+    expect(boardFilter('cancelled', 'u1', 0)).toEqual({ outcomes: ['cancelled'] });
     expect(boardSort('cancelled')).toBe('cancelledAt.desc');
     expect(boardSort('active')).toBe('createdAt.desc');
   });
