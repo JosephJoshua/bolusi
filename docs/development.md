@@ -123,6 +123,9 @@ PowerShell calling winspool); A4/A5 pages print without a dialog. The printer's
 Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a v4
 (XPS-only) driver does not pass RAW jobs. CI's `desktop-windows` job spools a real job
 to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
+The installer turns off Electron's run-as-Node, inspect and `NODE_OPTIONS` switches and only
+loads its own checked `app.asar` (`electronFuses` in `electron-builder.yml`); the CI build
+keeps inspect on, which Playwright needs.
 
 Photos and signatures: the webcam and the on-screen pad when the PC has them, otherwise
 a store phone, through the server (`apps/server/src/handoff`). The PC asks the server for

@@ -12,6 +12,16 @@ files:
   - '!dist/**/*.map'
   - package.json
 asar: true
+# Switches baked into the installed Bolusi.exe so it runs only its own checked app.asar and cannot
+# be started as a plain Node or with a debugger or NODE_OPTIONS. CI's installed-app e2e build turns
+# the inspect switch back on: Playwright drives the app through it (see ci.yml).
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+  enableNodeOptionsEnvironmentVariable: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+  enableCookieEncryption: true
 # Chromium's other UI translations are dead weight on a 4 GB counter PC's disk.
 electronLanguages:
   - id

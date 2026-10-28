@@ -76,7 +76,9 @@ jobs:
           "BOLUSI_TEST_PRINTER=Bolusi Test" >> $env:GITHUB_ENV
           "BOLUSI_TEST_PRINT_FILE=$out" >> $env:GITHUB_ENV
       - run: pnpm --filter @bolusi/desktop exec vitest run test/raw-print.windows.test.ts
-      - run: pnpm --filter @bolusi/desktop dist
+      # As released, except Playwright needs the inspect switch (`--inspect=0`) to drive the app.
+      - run: pnpm --filter @bolusi/desktop run build
+      - run: pnpm --filter @bolusi/desktop exec electron-builder --win --publish never -c.electronFuses.enableNodeCliInspectArguments=true
       - name: Install it silently, as an update would
         shell: pwsh
         run: |
