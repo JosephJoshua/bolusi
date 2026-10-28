@@ -150,3 +150,194 @@ export async function registerBackgroundTask(
     return { kind: 'failed', error };
   }
 }
+
+// ── THE HOST: one task executor, defined before boot, driving at most one client ────────────────
+//
+// `TaskManager.defineTask` has to run at module scope (index.ts): when the OS launches the app
+// straight into the background, expo-task-manager dispatches the task right after the bundle
+// loads, and a task with no executor at that moment is UNREGISTERED (build/TaskManager.js), so it
+// would never run again. The clients are built later. The host bridges the two, and decides what a
+// pass drives:
+//
+//   - the foreground client, when Root has started one (the app is open or merely backgrounded);
+//   - otherwise a headless client, built from the shared boot for this pass only and stopped after
+//     it. On Android this is a killed app woken by WorkManager: the JS runs but Root never mounts.
+//
+// Never both at once. A foreground client `claim`s the host before it starts: that stops a
+// headless pass at its next safe point and waits for it to end, so two loops never work one
+// database. A pass that starts while a foreground client is starting waits for it to attach.
+
+/** How long a pass waits for a foreground client that has claimed the host but not yet attached. */
+export const CLIENT_BOOT_WAIT_MS = 20_000;
+
+/** What a pass drives: a started client's background surface. */
+export interface BackgroundPassTarget {
+  /** Kick off the work for this pass. */
+  requestBackground(): void;
+  /** Resolves when that work (and any coalesced rerun) is done. */
+  settle(): Promise<void>;
+  /** Stop at the next safe point, for a headless pass out of time or handing over to the open app. */
+  pause?(): void;
+}
+
+/** A client built for one headless pass. `stop` runs after the pass, however it ended. */
+export interface HeadlessPass {
+  readonly target: BackgroundPassTarget;
+  stop(): void;
+}
+
+/** The foreground client's hold on the host, from just before it starts until it stops. */
+export interface BackgroundLease {
+  /** The client is started; passes drive it from now on. */
+  attach(target: BackgroundPassTarget): void;
+  /**
+   * The client stopped (or failed to start). `settled` resolves once its loop has finished the
+   * work in flight; nothing else drives the database until then. Idempotent; a stale lease's
+   * release does nothing.
+   */
+  release(settled?: Promise<void>): void;
+}
+
+export interface BackgroundHost {
+  /** Call before a foreground client starts: ends any headless pass first. */
+  claim(): Promise<BackgroundLease>;
+  /** The task executor: one bounded pass. Never rejects; failures go to `onError`. */
+  runPass(): Promise<void>;
+}
+
+/** What the composition root hands a client so it can register its task. */
+export interface BackgroundBinding {
+  readonly platform: BackgroundTaskPlatform;
+  readonly host: BackgroundHost;
+}
+
+export function createBackgroundHost(deps: {
+  readonly timer: TimerPort;
+  /** Build and start a client for one pass, or `null` when there is nothing to drive (unenrolled). */
+  readonly startHeadless?: () => Promise<HeadlessPass | null>;
+  readonly onError?: (error: unknown) => void;
+}): BackgroundHost {
+  const { timer } = deps;
+  let lease: { target: BackgroundPassTarget | null } | null = null;
+  const waiting = new Set<(target: BackgroundPassTarget | null) => void>();
+  let headless: { pass: HeadlessPass | null; done: Promise<void> } | null = null;
+  /** A released foreground client's last work in flight. Never rejects. */
+  let releasing: Promise<void> = Promise.resolve();
+
+  const wake = (target: BackgroundPassTarget | null): void => {
+    for (const done of waiting) done(target);
+    waiting.clear();
+  };
+
+  function waitForAttach(): Promise<BackgroundPassTarget | null> {
+    return new Promise((resolve) => {
+      const cancel = timer.schedule(CLIENT_BOOT_WAIT_MS, () => {
+        waiting.delete(done);
+        resolve(null);
+      });
+      const done = (target: BackgroundPassTarget | null): void => {
+        cancel();
+        resolve(target);
+      };
+      waiting.add(done);
+    });
+  }
+
+  /**
+   * One bounded pass. Only a headless client is paused at the budget: the open app's loops keep
+   * going (the pass just stops waiting for them), since cutting them short would drop the open
+   * app's own triggers for nothing.
+   */
+  function drive(target: BackgroundPassTarget, headlessTarget: boolean): Promise<void> {
+    return runBoundedPass({
+      start: () => target.requestBackground(),
+      settle: () => target.settle(),
+      ...(headlessTarget && target.pause !== undefined
+        ? { onBudgetSpent: () => target.pause?.() }
+        : {}),
+      timer,
+    });
+  }
+
+  async function runHeadless(
+    run: { pass: HeadlessPass | null },
+    start: () => Promise<HeadlessPass | null>,
+  ): Promise<void> {
+    const pass = await start();
+    if (pass === null) return;
+    run.pass = pass;
+    try {
+      // A foreground client may have claimed the host while this one was booting.
+      if (lease === null) await drive(pass.target, true);
+    } finally {
+      pass.stop();
+    }
+  }
+
+  return {
+    async claim() {
+      const current: { target: BackgroundPassTarget | null } = { target: null };
+      lease = current;
+      if (headless !== null) {
+        headless.pass?.target.pause?.();
+        await headless.done;
+      }
+      await releasing;
+      return {
+        attach(target) {
+          if (lease !== current) return;
+          current.target = target;
+          wake(target);
+        },
+        release(settled) {
+          if (lease !== current) return;
+          lease = null;
+          if (settled !== undefined) {
+            const previous = releasing;
+            releasing = Promise.all([previous, settled.catch(() => undefined)]).then(
+              () => undefined,
+            );
+          }
+          wake(null);
+        },
+      };
+    },
+
+    async runPass() {
+      try {
+        if (headless !== null) return await headless.done;
+        if (lease !== null) {
+          const target = lease.target ?? (await waitForAttach());
+          if (target !== null) await drive(target, false);
+          return;
+        }
+        await releasing;
+        // A foreground client may have claimed, or another pass started, while we waited.
+        if (lease !== null || headless !== null) return;
+        if (deps.startHeadless === undefined) return;
+        const run: { pass: HeadlessPass | null; done: Promise<void> } = {
+          pass: null,
+          done: Promise.resolve(),
+        };
+        headless = run;
+        // `done` never rejects, so a foreground `claim` that awaits it cannot be failed by the pass.
+        run.done = runHeadless(run, deps.startHeadless)
+          .catch((error: unknown) => deps.onError?.(error))
+          .finally(() => {
+            if (headless === run) headless = null;
+          });
+        await run.done;
+      } catch (error) {
+        deps.onError?.(error);
+      }
+    },
+  };
+}
+
+/** Define + register a task whose executor is the host's pass, reporting whether it took. */
+export function registerHostTask(
+  binding: BackgroundBinding,
+  name: string,
+): Promise<BackgroundRegistration> {
+  return registerBackgroundTask(binding.platform, name, () => binding.host.runPass());
+}

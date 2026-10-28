@@ -42,16 +42,18 @@ import {
   useRepairRuntime,
   type RepairPrinting,
 } from '../runtime.js';
-import { DESK_PAPERS, PAPER_KEY, useDevicePaper } from '../paper.js';
+import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { outputSlip } from '../slip-output.js';
 
 import {
   ActionError,
   MoneyField,
+  PrinterProblemBanner,
   QueryPanel,
   StaleNotice,
   photoLabels,
   usePhotoState,
+  usePrinterProblem,
 } from './parts.js';
 
 export interface StepDialogProps {
@@ -1059,12 +1061,24 @@ export function PrintDialog({
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
   const [paper] = useDevicePaper(printing, DESK_PAPERS);
+  const { state: printers } = useDevicePrinters(printing.printers);
+  const [problem, catchProblem, clearProblem] = usePrinterProblem();
   const [asking, setAsking] = useState(false);
   const testId = 'repair.desk.print';
+  // Where it will print, said before it does; no printer picked yet is said at once.
+  const printer =
+    printers.kind === 'ready'
+      ? (printers.printers.find((p) => p.name === printers.chosen) ?? null)
+      : null;
+  const listed = printing.printers !== undefined && printers.kind === 'ready';
+  const unpicked = listed && printers.chosen === null;
+  // A printer unplugged since it was picked is said too, but printing stays possible: it may be back.
+  const missing = listed && printers.chosen !== null && printer === null;
+  const shownProblem = problem ?? (unpicked ? 'noPrinter' : missing ? 'printerMissing' : null);
 
   const print = (): void => {
     void runner
-      .run(() => outputSlip(runtime, printing, ticket, slip, DESK_PAPERS, 'print'))
+      .run(() => catchProblem(outputSlip(runtime, printing, ticket, slip, DESK_PAPERS, 'print')))
       .then((outcome) => {
         if (outcome === 'unconfirmed') setAsking(true);
         else if (outcome === 'done') onDone();
@@ -1098,32 +1112,44 @@ export function PrintDialog({
               variant="primary"
               onClick={print}
               busy={runner.busy}
+              disabled={unpicked}
               data-testid={`${testId}.submit`}
             />
           </>
         }
       >
-        <div>
-          {slips.length > 1 ? (
-            <Segmented
-              label={tn('repair.print.slip')}
-              options={slips.map((value) => ({ value, label: tn(SLIP_KEY[value].title) }))}
-              value={slip}
-              onChange={setSlip}
-              testId={`${testId}.slip`}
-            />
-          ) : (
-            <p className="text-body font-semibold text-text">{tn(SLIP_KEY[slip].title)}</p>
-          )}
-          <p className="mt-2 text-small text-text-muted" data-testid={`${testId}.about`}>
-            {tn(SLIP_KEY[slip].about)}
-            {printed === 0 ? null : <> {tn('repair.print.reprint', { count: printed })}</>}
-          </p>
-          {paper === null ? null : (
-            <p className="mt-1 text-small text-text-muted" data-testid={`${testId}.paper`}>
-              {tn('repair.print.onPaper', { paper: tn(PAPER_KEY[paper]) })}
+        <div className="flex flex-col gap-4">
+          <div>
+            {slips.length > 1 ? (
+              <Segmented
+                label={tn('repair.print.slip')}
+                options={slips.map((value) => ({ value, label: tn(SLIP_KEY[value].title) }))}
+                value={slip}
+                onChange={setSlip}
+                testId={`${testId}.slip`}
+              />
+            ) : (
+              <p className="text-body font-semibold text-text">{tn(SLIP_KEY[slip].title)}</p>
+            )}
+            <p className="mt-2 text-small text-text-muted" data-testid={`${testId}.about`}>
+              {tn(SLIP_KEY[slip].about)}
+              {printed === 0 ? null : <> {tn('repair.print.reprint', { count: printed })}</>}
             </p>
-          )}
+            {paper === null ? null : (
+              <p className="mt-1 text-small text-text-muted" data-testid={`${testId}.paper`}>
+                {printer === null
+                  ? tn('repair.print.onPaper', { paper: tn(PAPER_KEY[paper]) })
+                  : tn('repair.print.onPrinter', {
+                      printer: printer.label,
+                      paper: tn(PAPER_KEY[paper]),
+                    })}
+              </p>
+            )}
+          </div>
+          <PrinterProblemBanner
+            problem={shownProblem}
+            onDismiss={problem === null ? undefined : clearProblem}
+          />
         </div>
       </StepDialog>
       <ConfirmDialog

@@ -27,13 +27,17 @@ import {
 import { ClipboardList, CloudOff, FilterX, Plus, SearchX, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { statusesFor, type EntitySyncStatuses } from '../../screen-kit/index.js';
+import { statusesFor, useTick, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import {
   amountOwed,
   boardViews,
+  UNCOLLECTED_REFRESH_MS,
   defaultBoardView,
+  flagsUncollected,
   repairAbilities,
   ticketStatus,
+  uncollectedBefore,
+  uncollectedDays,
   type BoardView,
   type RepairAbilities,
   type TicketStatus,
@@ -71,6 +75,7 @@ const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
   mine: 'repair.board.view.mine',
   unassigned: 'repair.board.view.unassigned',
   pickup: 'repair.board.view.pickup',
+  uncollected: 'repair.board.view.uncollected',
   returned: 'repair.board.view.returned',
   cancelled: 'repair.board.view.cancelled',
 };
@@ -121,6 +126,9 @@ interface LoadedBoard {
   /** Every row the filters let through, on all pages. */
   readonly total: number;
   readonly statuses: EntitySyncStatuses;
+  /** The store's not-collected limit in days, and the time the rows were read against it. */
+  readonly uncollectedLimit: number;
+  readonly readAt: number;
 }
 
 /** Whether a key press was meant for a field rather than for the page. */
@@ -166,6 +174,8 @@ export function RepairBoardPage({
     tableRef.current?.focus();
   };
   const searching = text.trim() !== '';
+  // Re-read now and then, so a phone passes into "not collected" on a board nobody touches.
+  const hour = useTick(UNCOLLECTED_REFRESH_MS);
   const scope = JSON.stringify([
     searching ? `q:${text.trim()}` : view,
     facets,
@@ -178,6 +188,8 @@ export function RepairBoardPage({
     async (rt) => {
       let rows: readonly TicketSummaryRow[];
       let total: number;
+      const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
+      const readAt = clock();
       if (searching) {
         // Search ranks across every ticket; the filters, sort and pages then apply to its matches.
         const found = (await rt.query('searchTickets', { text: text.trim(), limit: SEARCH_LIMIT }))
@@ -189,7 +201,12 @@ export function RepairBoardPage({
         total = kept.length;
         rows = kept.slice((page - 1) * pageSize, page * pageSize);
       } else {
-        const filter = tableFilter(view, rt.userId, facets);
+        const filter = tableFilter(
+          view,
+          rt.userId,
+          uncollectedBefore(uncollectedLimit, readAt),
+          facets,
+        );
         const [list, count] = await Promise.all([
           rt.query('listTickets', {
             filter,
@@ -207,9 +224,9 @@ export function RepairBoardPage({
         total = count.rows[0]?.count ?? 0;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
-      return { scope, rows, total, statuses };
+      return { scope, rows, total, statuses, uncollectedLimit, readAt };
     },
-    `desk.board:${scope}:${String(reloadNonce)}`,
+    `desk.board:${scope}:${String(reloadNonce)}:${String(hour)}`,
   );
   const loaded = query.status === 'ready' ? query.data : null;
   // The last page's rows stay up while the next one reads, so the table does not flash; they
@@ -264,8 +281,18 @@ export function RepairBoardPage({
 
   const showCancel = !searching && view === 'cancelled';
   const columns = useMemo(
-    () => boardColumns({ statuses: loaded?.statuses ?? {}, showCancel, searching }),
-    [loaded?.statuses, showCancel, searching],
+    () =>
+      boardColumns({
+        statuses: loaded?.statuses ?? {},
+        showCancel,
+        searching,
+        // The counter and owners call the customer about a phone left too long.
+        waited:
+          flagsUncollected(can) && loaded !== null
+            ? (row) => uncollectedDays(row, loaded.uncollectedLimit, loaded.readAt)
+            : () => null,
+      }),
+    [loaded, showCancel, searching, can],
   );
   const filtered = facetCount(facets) > 0;
 
@@ -448,13 +475,14 @@ export function RepairBoardPage({
       </PageHeader>
 
       {/* The servisan opens beside the table when both fit (the table's fixed columns need about
-          650 px); on a narrower screen it slides over the table's right side instead. */}
+          680 px, next to a 400 px pane); on a narrower screen it slides over the table's right
+          side instead. */}
       <div className="flex min-h-0 flex-1 flex-col @container">
         <div
           className={
             selectedTicketId === null
               ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
-              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1048px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
+              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1080px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
           }
         >
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -548,12 +576,13 @@ export function RepairBoardPage({
           {selectedTicketId === null ? null : (
             <div
               ref={paneRef}
-              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1048px]:static @[1048px]:w-auto @[1048px]:shadow-none"
+              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1080px]:static @[1080px]:w-auto @[1080px]:shadow-none"
             >
               <TicketPane
                 // A fresh pane per ticket: nothing said about the last one carries over.
                 key={selectedTicketId}
                 ticketId={selectedTicketId}
+                now={clock}
                 onClose={closePane}
                 onOpenSyncStatus={onOpenSyncStatus}
               />
@@ -587,9 +616,12 @@ function boardColumns({
   statuses,
   showCancel,
   searching,
+  waited,
 }: {
   readonly statuses: EntitySyncStatuses;
   readonly searching: boolean;
+  /** Days a finished phone has waited past the store's limit; null when it is not flagged. */
+  readonly waited: (row: TicketSummaryRow) => number | null;
   /** The owners' cancelled view: who cancelled and why, and the fee charged. */
   readonly showCancel: boolean;
 }): Column[] {
@@ -623,7 +655,9 @@ function boardColumns({
       header: tn('repair.desk.col.customer'),
       // Names are encrypted on the device, so only search results (decrypted) sort by name.
       enableSorting: searching,
-      meta: { track: 'minmax(140px, 1.3fr)' },
+      // The name is how the counter finds a servisan, so it gets as much room as the device and a
+      // minimum that holds a typical full name.
+      meta: { track: 'minmax(168px, 2fr)' },
       // With the device column folded away (a narrow window, or the pane open) the device takes the
       // phone number's place under the name.
       cell: ({ row: { original: row }, table }) => (
@@ -657,7 +691,7 @@ function boardColumns({
       id: 'technician',
       accessorFn: (row) => (showCancel ? row.cancelledByName : row.technicianName) ?? '',
       header: tn(showCancel ? 'repair.desk.col.cancelledBy' : 'repair.desk.col.technician'),
-      meta: { track: 'minmax(140px, 0.9fr)', fold: 2 },
+      meta: { track: 'minmax(132px, 1fr)', fold: 2 },
       enableSorting: false,
       cell: ({ row: { original: row } }) =>
         showCancel ? (
@@ -674,7 +708,7 @@ function boardColumns({
       id: 'status',
       accessorFn: (row) => statusLabel(ticketStatus(row)),
       header: tn('repair.desk.col.status'),
-      meta: { track: 'minmax(196px, 1.1fr)' },
+      meta: { track: 'minmax(196px, 1fr)' },
       enableSorting: false,
       cell: ({ row: { original: row } }) => {
         const feeChanged =
@@ -682,12 +716,15 @@ function boardColumns({
           row.cancelFee !== null &&
           row.cancelStandardFee !== null &&
           row.cancelFee !== row.cancelStandardFee;
+        const days = waited(row);
         const warning =
           row.pendingProposals > 0
             ? tn('repair.board.priceChangeWaiting')
             : feeChanged
               ? tn('repair.board.feeChanged')
-              : null;
+              : days !== null
+                ? tn('repair.board.waited', { days })
+                : null;
         return (
           <span className="flex flex-col items-start gap-1">
             <StatusChip status={ticketStatus(row)} />
@@ -705,7 +742,7 @@ function boardColumns({
       id: 'received',
       accessorFn: (row) => (showCancel ? (row.cancelledAt ?? 0) : row.createdAt),
       header: tn(showCancel ? 'repair.desk.col.cancelledAt' : 'repair.desk.col.received'),
-      meta: { track: '112px', fold: 1 },
+      meta: { track: '104px', fold: 1 },
       // The owners' cancelled view lists by when it was cancelled, a date the query only sorts newest first.
       enableSorting: !showCancel,
       cell: ({ row: { original: row } }) => {

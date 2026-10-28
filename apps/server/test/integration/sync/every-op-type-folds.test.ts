@@ -183,6 +183,12 @@ function journey(world: ChainWorld): OpSpec[] {
       payload: { beforeWork: 0, afterWork: 25_000 },
     },
     {
+      type: 'repair.store_uncollected_days_changed',
+      entityType: 'repair_store_uncollected',
+      entityId: world.storeId,
+      payload: { days: 45 },
+    },
+    {
       type: 'repair.store_intake_options_changed',
       entityType: 'repair_store_intake_options',
       entityId: world.storeId,

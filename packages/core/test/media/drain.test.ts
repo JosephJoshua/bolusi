@@ -172,6 +172,52 @@ describe('resume is SERVER-authoritative — local progress lies, the server win
   });
 });
 
+describe('pause and stop (a background pass out of time, or handing the queue to the open app)', () => {
+  function pausingOnFirstInit(harness: MediaHarness, act: (loop: MediaDrainLoop<never>) => void) {
+    const loop = loopFor(harness);
+    const init = harness.server.init.bind(harness.server);
+    let fired = false;
+    harness.server.init = (mediaId, request) => {
+      if (!fired) {
+        fired = true;
+        act(loop); // asked while the first item is mid-upload
+      }
+      return init(mediaId, request);
+    };
+    return loop;
+  }
+
+  it('pause() finishes the item in flight, leaves the rest queued, and the next trigger resumes', async () => {
+    await givenCapture(h, 'p-1', jpegBytes(50), { capturedAt: 1_000 });
+    await givenCapture(h, 'p-2', jpegBytes(50), { capturedAt: 2_000 });
+    const loop = pausingOnFirstInit(h, (l) => l.pause());
+
+    loop.requestDrain('background_task');
+    await loop.settle();
+    // Never left `uploading`: the next owner's crash recovery has nothing of ours to reset.
+    expect((await readStatus(h.db, 'p-1')).uploadStatus).toBe('uploaded');
+    expect((await readStatus(h.db, 'p-2')).uploadStatus).toBe('pending');
+
+    loop.requestDrain('periodic');
+    await loop.settle();
+    expect((await readStatus(h.db, 'p-2')).uploadStatus).toBe('uploaded');
+  });
+
+  it('stop() finishes the item in flight and ignores every later trigger', async () => {
+    await givenCapture(h, 's-1', jpegBytes(50), { capturedAt: 1_000 });
+    await givenCapture(h, 's-2', jpegBytes(50), { capturedAt: 2_000 });
+    const loop = pausingOnFirstInit(h, (l) => l.stop());
+
+    loop.requestDrain('background_task');
+    await loop.settle();
+    loop.requestDrain('manual');
+    await loop.onConnectivityRegained();
+    await loop.settle();
+    expect((await readStatus(h.db, 's-1')).uploadStatus).toBe('uploaded');
+    expect((await readStatus(h.db, 's-2')).uploadStatus).toBe('pending');
+  });
+});
+
 describe('crash recovery (03 §4: app restart finds no live upload task)', () => {
   it('resets uploading -> pending at startup and resumes WITHOUT re-sending held chunks', async () => {
     const bytes = jpegBytes(3 * WIRE_CHUNK_SIZE);

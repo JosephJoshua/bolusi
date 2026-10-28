@@ -176,6 +176,7 @@ export async function openRepairHarness(
                 P.setCancelFees,
                 P.correctDownPayment,
                 P.setPrintSettings,
+                P.setUncollectedDays,
                 ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
               ]),
             ],

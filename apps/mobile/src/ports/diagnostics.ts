@@ -18,9 +18,9 @@
 // It is a structured `console.warn`. That is the whole v0 implementation and it is deliberately the
 // smallest honest thing: there is no crash reporter, no remote log sink, and no on-device log buffer
 // in this repo, so anything grander would be a comment describing software that does not exist. What
-// it buys today: the record is visible in the Expo dev client / Metro (NOT a release APK's logcat — a
-// React Native release build does not flush JS `console` there, proven by task 201's lane run
-// 34153987393), and — because every producer now routes through ONE named object — adding a real
+// it buys today: the record is visible in the Expo dev client / Metro, and in a release APK's logcat
+// on the 2026-10-28 emulator run for PR #21 (an earlier lane run, 34153987393, saw none there, so do
+// not rely on logcat alone), and — because every producer now routes through ONE named object — adding a real
 // backend later is a change to this file alone, not a hunt through call sites. A remote/persisted diagnostics backend is a separate,
 // outward-facing decision (CLAUDE.md §6) and is NOT claimed here.
 //
