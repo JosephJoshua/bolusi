@@ -41,6 +41,7 @@ import { useAppVersion } from '../updates.js';
 import type { SettingsAccess } from './access.js';
 import { AccountPanel } from './AccountPanel.js';
 import { LimitsPanel } from './LimitsPanel.js';
+import { RolesPanel } from './RolesPanel.js';
 import { StaffPanel } from './StaffPanel.js';
 import { StaffPinsPanel } from './StaffPinsPanel.js';
 
@@ -49,6 +50,7 @@ type SettingsPageKey =
   | 'staff'
   | 'staffPins'
   | 'limits'
+  | 'roles'
   | 'fees'
   | 'uncollected'
   | 'slip'
@@ -105,6 +107,10 @@ export function SettingsPage({
               ]),
           ...(staff?.canSetLimits === true
             ? [{ value: 'limits' as const, label: t('auth.limits.title') }]
+            : []),
+          // The role editor is the main owner's alone.
+          ...(staff?.tenantAdmin === true
+            ? [{ value: 'roles' as const, label: t('auth.roles.title') }]
             : []),
         ],
       },
@@ -240,6 +246,8 @@ function Page({
           onDirtyChange={onDirtyChange}
         />
       );
+    case 'roles':
+      return <RolesPanel controls={access.staff!} onDirtyChange={onDirtyChange} />;
     case 'fees':
       return <CancelFeesSettings onDirtyChange={onDirtyChange} />;
     case 'uncollected':

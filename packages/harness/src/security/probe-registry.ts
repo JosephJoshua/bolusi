@@ -440,6 +440,65 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('PUT', () => '/v1/role-limits'),
   },
+  'POST /v1/roles': {
+    // Roles are the business's own; another business's id is refused like one that exists nowhere.
+    // (Tenant B has no role the probe fixture names, so its user id stands in as a foreign id.)
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: '/v1/roles',
+      init: {
+        method: 'POST',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ name: 'Probe', copyFromRoleId: ctx.tenantBUserId }),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'roles are business-wide; no store parameter exists',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', () => '/v1/roles'),
+  },
+  'PATCH /v1/roles/:roleId': {
+    // Roles are the business's own; another business's id is refused like one that exists nowhere.
+    // (Tenant B has no role the probe fixture names, so its user id stands in as a foreign id.)
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: `/v1/roles/${ctx.tenantBUserId}`,
+      init: {
+        method: 'PATCH',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ limited: true }),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'roles are business-wide; no store parameter exists',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('PATCH', (ctx) => `/v1/roles/${ctx.tenantBUserId}`),
+  },
+  'DELETE /v1/roles/:roleId': {
+    // Roles are the business's own; another business's id is refused like one that exists nowhere.
+    // (Tenant B has no role the probe fixture names, so its user id stands in as a foreign id.)
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: `/v1/roles/${ctx.tenantBUserId}`,
+      init: {
+        method: 'DELETE',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'roles are business-wide; no store parameter exists',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('DELETE', (ctx) => `/v1/roles/${ctx.tenantBUserId}`),
+  },
   'POST /v1/users/:userId/reactivate': {
     crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
     crossTenantRequest: (ctx) => ({

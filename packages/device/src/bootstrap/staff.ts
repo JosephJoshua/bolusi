@@ -25,6 +25,20 @@ export interface StaffControls {
   /** The signed-in user may set limited roles' amounts at this store (`auth.limit_manage`). */
   readonly canSetLimits: boolean;
   readonly onSetLimits: (roleId: string, limits: LimitAmounts) => Promise<void>;
+  /** The role editor, for the main owner ({@link tenantAdmin}) only. */
+  readonly onCreateRole: (
+    name: string,
+    copyFromRoleId: string,
+  ) => Promise<{ readonly roleId: string }>;
+  readonly onUpdateRole: (roleId: string, change: RoleChange) => Promise<void>;
+  readonly onDeleteRole: (roleId: string) => Promise<void>;
+}
+
+/** What the role editor changes about a role; anything left out stays. */
+export interface RoleChange {
+  readonly name?: string;
+  readonly permissionIds?: readonly string[];
+  readonly limited?: boolean;
 }
 
 export interface StaffControlsDeps {
@@ -72,5 +86,15 @@ export function createStaffControls(deps: StaffControlsDeps): StaffControls {
       const { actingUserId, storeId } = context();
       return thenRefresh(deps.port.setLimits({ actingUserId, storeId, roleId, limits }));
     },
+    onCreateRole: async (name, copyFromRoleId) =>
+      thenRefresh(
+        deps.port.createRole({ actingUserId: context().actingUserId, name, copyFromRoleId }),
+      ),
+    onUpdateRole: async (roleId, change) =>
+      thenRefresh(
+        deps.port.updateRole({ actingUserId: context().actingUserId, roleId, ...change }),
+      ),
+    onDeleteRole: async (roleId) =>
+      thenRefresh(deps.port.deleteRole({ actingUserId: context().actingUserId, roleId })),
   };
 }

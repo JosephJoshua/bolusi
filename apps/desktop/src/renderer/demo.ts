@@ -1,6 +1,6 @@
 // Demo data for the desktop build, which runs the counter screens over the in-memory repair demo
 // before the offline core is wired in. Names here are seeded data, not interface copy.
-import type { StaffDirectory } from '@bolusi/core';
+import { StaffAdminError, type StaffDirectory } from '@bolusi/core';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { demoRepairRuntime, type DemoRepairRole } from '@bolusi/modules/repair/demo';
 import type { RepairRuntime } from '@bolusi/modules/repair/desktop';
@@ -10,6 +10,7 @@ import { SIGNATURE_PX, type DrawnSignature } from '@bolusi/ui-web';
 
 import { compressPhoto, type PcCapture } from './capture.js';
 import { desktopPrinting } from './print.js';
+import { PRESET_ROLE_ABILITIES, permissionsFor } from '@bolusi/modules/roles';
 
 export const DEMO_STORE_NAME = 'Toko Sorong Kota';
 
@@ -115,15 +116,38 @@ export function demoRuntimeFor(person: DemoPerson, capture: PcCapture): RepairRu
 }
 
 const DEMO_ROLES: StaffDirectory['roles'] = [
-  { id: 'r-cashier', key: 'cashier', ownerRole: false, limits: null },
-  { id: 'r-technician', key: 'technician', ownerRole: false, limits: null },
+  {
+    id: 'r-cashier',
+    key: 'cashier',
+    custom: false,
+    permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.cashier)),
+    ownerRole: false,
+    limits: null,
+  },
+  {
+    id: 'r-technician',
+    key: 'technician',
+    custom: false,
+    permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.technician)),
+    ownerRole: false,
+    limits: null,
+  },
   {
     id: 'r-manager',
     key: 'manager',
+    custom: false,
+    permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.manager)),
     ownerRole: false,
     limits: { priceDrop: 50_000, refund: 30_000, credit: 100_000 },
   },
-  { id: 'r-store_owner', key: 'store_owner', ownerRole: true, limits: null },
+  {
+    id: 'r-store_owner',
+    key: 'store_owner',
+    custom: false,
+    permissionIds: [],
+    ownerRole: true,
+    limits: null,
+  },
 ];
 
 /** The demo store's people over an in-memory server, for an owner's "Karyawan" and limits. */
@@ -158,7 +182,7 @@ export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
             id,
             name: draft.name,
             active: true,
-            roleKeys: draft.roleIds.map((roleId) => roleId.slice(2)),
+            roleKeys: keysOf(draft.roleIds),
             roleIds: draft.roleIds,
             owner: false,
             hasPin: false,
@@ -180,7 +204,7 @@ export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
                   ? {}
                   : {
                       roleIds: change.roleIds,
-                      roleKeys: change.roleIds.map((roleId) => roleId.slice(2)),
+                      roleKeys: keysOf(change.roleIds),
                     }),
               }
             : member,
@@ -204,5 +228,68 @@ export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
         roles: demoDirectory.roles.map((role) => (role.id === roleId ? { ...role, limits } : role)),
       };
     },
+    onCreateRole: async (name, copyFromRoleId) => {
+      await server();
+      const source = demoDirectory.roles.find((role) => role.id === copyFromRoleId);
+      if (source === undefined) throw new StaffAdminError('denied');
+      const roleId = `r-made-${String(demoDirectory.roles.length)}`;
+      demoDirectory = {
+        ...demoDirectory,
+        roles: [
+          ...demoDirectory.roles,
+          {
+            ...source,
+            id: roleId,
+            key: name,
+            custom: true,
+            limits: source.limits === null ? null : { priceDrop: 0, refund: 0, credit: 0 },
+          },
+        ],
+      };
+      return { roleId };
+    },
+    onUpdateRole: async (roleId, change) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        roles: demoDirectory.roles.map((role) =>
+          role.id !== roleId
+            ? role
+            : {
+                ...role,
+                ...(change.name === undefined ? {} : { key: change.name }),
+                ...(change.permissionIds === undefined
+                  ? {}
+                  : { permissionIds: change.permissionIds }),
+                ...(change.limited === undefined
+                  ? {}
+                  : {
+                      limits: change.limited
+                        ? (role.limits ?? { priceDrop: 0, refund: 0, credit: 0 })
+                        : null,
+                    }),
+              },
+        ),
+      };
+      // A renamed role shows its new name on everyone holding it.
+      demoDirectory = {
+        ...demoDirectory,
+        members: demoDirectory.members.map((member) => ({
+          ...member,
+          roleKeys: keysOf(member.roleIds),
+        })),
+      };
+    },
+    onDeleteRole: async (roleId) => {
+      await server();
+      demoDirectory = {
+        ...demoDirectory,
+        roles: demoDirectory.roles.filter((role) => role.id !== roleId),
+      };
+    },
   };
+}
+
+function keysOf(roleIds: readonly string[]): string[] {
+  return roleIds.flatMap((id) => demoDirectory.roles.find((role) => role.id === id)?.key ?? []);
 }

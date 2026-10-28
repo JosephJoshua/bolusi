@@ -410,7 +410,11 @@ governance notes in "Decision" where they differ.
 - **Every role is editable:** only the main owner edits roles. Each permission
   is a plain-language switch in groups (risky ones marked), and a new role
   starts as a copy of another ("Kasir senior"). Store owners give the roles to
-  their own staff.
+  their own staff. In the app a role is a "Tugas". The owner roles are fixed,
+  and power over people, devices, limits and the audit log is never a switch.
+  A made role can be renamed, and deleted only while nobody holds it. A role
+  that gets its first discount, cancel, DP, refund, void or Bayar nanti switch
+  becomes limited (Rp 0 until limits are set); the main owner can turn that off.
 - **Limits belong to a role in a store:** a role is either free of limits (the
   owners) or limited. For a limited role, each store owner sets three amounts
   for their store in "Batas wewenang": price drops (discounts and a smaller

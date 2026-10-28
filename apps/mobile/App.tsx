@@ -64,6 +64,7 @@ import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
 import { LimitsScreen } from './src/screens/staff/LimitsScreen.js';
+import { RolesScreen } from './src/screens/staff/RolesScreen.js';
 import { StaffScreen } from './src/screens/staff/StaffScreen.js';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
@@ -1184,6 +1185,10 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenLimits={
                     props.staff?.canSetLimits === true ? () => setRoute('limits') : undefined
                   }
+                  // The role editor is the main owner's alone.
+                  onOpenRoles={
+                    props.staff?.tenantAdmin === true ? () => setRoute('roles') : undefined
+                  }
                   lockedStaffCount={
                     [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
                       (id) => id !== currentUser.id,
@@ -1382,6 +1387,20 @@ export default function App(props: AppProps): React.JSX.Element {
                   actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
                   load={staff.load}
                   onSave={staff.onSetLimits}
+                  onClose={() => setRoute('settings')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'roles' && props.staff?.tenantAdmin === true) {
+              // The main owner's "Tugas karyawan": the store roles and their switches, online.
+              const staff = props.staff;
+              return (
+                <RolesScreen
+                  load={staff.load}
+                  onCreate={staff.onCreateRole}
+                  onUpdate={staff.onUpdateRole}
+                  onDelete={staff.onDeleteRole}
                   onClose={() => setRoute('settings')}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1655,6 +1674,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'staff',
   'staffPins',
   'limits',
+  'roles',
   'printSettings',
   'printPaper',
   'parts',
