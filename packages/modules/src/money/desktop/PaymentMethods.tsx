@@ -67,7 +67,6 @@ export function PaymentMethodsSettings(): React.JSX.Element {
   return (
     <SettingsPanel
       title={tm('money.methods.title')}
-      lead={tm('money.methods.noneHint')}
       actions={
         <Button
           label={tm('money.methods.add')}
@@ -141,6 +140,7 @@ export function PaymentMethodsSettings(): React.JSX.Element {
               <StatePanel
                 icon={CreditCard}
                 title={tm('money.methods.none')}
+                hint={tm('money.methods.noneHint')}
                 testId={`${testId}.empty`}
               />
             ) : null}

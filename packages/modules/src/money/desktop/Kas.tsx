@@ -440,11 +440,7 @@ function History({
           const line = lineOf(entry);
           return (
             <span className="block min-w-0">
-              <span
-                className={
-                  line.voided ? 'text-body text-text-muted line-through' : 'text-body text-text'
-                }
-              >
+              <span className={line.voided ? 'text-body text-text-muted' : 'text-body text-text'}>
                 {tm(line.label)}
               </span>
               {line.details.length === 0 ? null : (

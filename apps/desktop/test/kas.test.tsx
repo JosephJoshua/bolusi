@@ -211,6 +211,8 @@ describe('payment methods in PC Settings', () => {
 
   it('adds a head-office method for the stores the owner picks, naming them in the list', async () => {
     await openMethods('Andi Pratama');
+    // The "add one so the counter can pick it" hint is for an empty list only.
+    expect(screen.queryByText(/supaya kasir bisa memilihnya/)).toBeNull();
     fireEvent.click(byTestId('money.desk.methods.add'));
     await screen.findByTestId('money.desk.methodForm');
     fireEvent.change(byTestId('money.desk.methodForm.name'), { target: { value: 'QRIS Pusat' } });
