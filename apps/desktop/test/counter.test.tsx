@@ -7,6 +7,7 @@ import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { forgetShownQrs } from '@bolusi/modules/money';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
@@ -66,7 +67,11 @@ beforeEach(() => {
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // Each test opens fresh demo data: QRs shown in one are not the next one's.
+  forgetShownQrs();
+});
 
 function renderApp(): void {
   render(
@@ -78,6 +83,8 @@ function renderApp(): void {
 
 const RETAKE = 'Foto ulang';
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
+/** An element's text without spaces: amounts print "Rp" and the figure apart. */
+const text = (id: string): string => byTestId(id).textContent!.replace(/\s/g, '');
 
 async function openTicket(name: string): Promise<void> {
   fireEvent.click(await screen.findByText(name));
@@ -363,6 +370,45 @@ describe('counter app over demo data', () => {
       target: { value: '20000' },
     });
     expect(byTestId('repair.desk.handover.pay.line0.change').textContent).toContain('5.000');
+    await waitFor(() =>
+      expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
+    );
+    fireEvent.click(byTestId('repair.desk.handover.submit'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.handover')).toBeNull());
+  });
+
+  it('takes the rest by QRIS: the same QR again after closing, then paid and handed back', async () => {
+    renderApp();
+    // Test mode's "pay it" is for someone who manages the method.
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
+    await screen.findByTestId('repair.desk.handover');
+    const methods = within(byTestId('repair.desk.handover.pay.line0.methods'));
+    fireEvent.click(methods.getByRole('button', { name: 'QRIS BCA' }));
+    // A connected QRIS takes no reference: the customer scans the QR.
+    expect(screen.queryByTestId('repair.desk.handover.pay.line0.reference')).toBeNull();
+    fireEvent.click(await screen.findByTestId('repair.desk.handover.pay.line0.showQr'));
+    const code = await screen.findByTestId('repair.desk.handover.qris.code');
+    const shown = code.getAttribute('data-value');
+    expect(text('repair.desk.handover.qris.amount')).toBe('Rp15.000');
+    fireEvent.click(byTestId('repair.desk.handover.qris.close'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.handover.qris')).toBeNull());
+    expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', true);
+
+    fireEvent.click(byTestId('repair.desk.handover.pay.line0.showQr'));
+    expect(
+      (await screen.findByTestId('repair.desk.handover.qris.code')).getAttribute('data-value'),
+    ).toBe(shown);
+    fireEvent.click(byTestId('repair.desk.handover.qris.simulate'));
+    await screen.findByTestId('repair.desk.handover.qris.paid');
+    fireEvent.click(byTestId('repair.desk.handover.qris.done'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.handover.qris')).toBeNull());
+    // Paid in full: nothing is left to take here.
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.handover.payment')).toBeNull());
+    await captureHandover();
     await waitFor(() =>
       expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
     );

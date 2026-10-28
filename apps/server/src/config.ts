@@ -25,9 +25,14 @@ const zConfig = z.object({
   // `pushPortFromConfig` FAILS CLOSED and LOUD when it is missing. Set it, or the server refuses to
   // boot.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
-  // OPTIONAL. The origin phones and PCs reach this server at. TLS ends at the proxy, so the request
-  // URL the server sees is http either way; cookies are marked Secure unless this says http.
-  PUBLIC_URL: z.string().url().optional(),
+  // OPTIONAL, together. Integrated QRIS through Xendit (qris/service.ts): the 32-byte base64 key
+  // that seals each payment account's Xendit secret key at rest, and this server's public origin,
+  // where Xendit posts payments. Either unset ⇒ QRIS through Xendit is off and its routes answer
+  // 503; QRIS by hand works as before. It also needs SYSTEM_KEY_DIR (the payment is a system record).
+  // PUBLIC_URL also marks cookies Secure: TLS ends at the proxy, so the request URL the server sees
+  // is http either way; cookies are Secure unless this says http.
+  PAYMENT_SECRETS_KEY: z.string().min(1).optional(),
+  PUBLIC_URL: z.url().optional(),
   // OPTIONAL. Comma-separated addresses or CIDR ranges of the reverse proxies in front of this
   // server. Unset, X-Forwarded-For is ignored and the socket peer is the client. Set, a request
   // whose peer is one of them is keyed by the rightmost forwarded address that is not.
@@ -46,6 +51,9 @@ export type ServerConfig = {
   readonly secureCookies: boolean;
   /** Proxies whose X-Forwarded-For is believed; absent ⇒ the header is never read. */
   readonly trustedProxies?: BlockList;
+  /** Both set ⇒ integrated QRIS is on. */
+  readonly paymentSecretsKey?: string;
+  readonly publicUrl?: string;
 };
 
 /** Validate and normalize the environment. Throws a readable error if a required var is missing. */
@@ -78,5 +86,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       ? {}
       : { expoAccessToken: parsed.data.EXPO_ACCESS_TOKEN }),
     ...(trustedProxies === undefined ? {} : { trustedProxies }),
+    ...(parsed.data.PAYMENT_SECRETS_KEY === undefined
+      ? {}
+      : { paymentSecretsKey: parsed.data.PAYMENT_SECRETS_KEY }),
+    ...(parsed.data.PUBLIC_URL === undefined
+      ? {}
+      : { publicUrl: parsed.data.PUBLIC_URL.replace(/\/+$/, '') }),
   };
 }

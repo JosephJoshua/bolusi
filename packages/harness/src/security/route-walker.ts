@@ -138,6 +138,9 @@ export interface ProbeContext {
   readonly tenantAOtherDeviceMediaId: string;
   /** A live phone handoff pairing of tenant A's store-2 PC (another device's, another store's). */
   readonly tenantAStore2HandoffId: string;
+  /** A QRIS payment account of tenant A's store 2, and a QR made on it. */
+  readonly tenantAStore2QrisAccountId: string;
+  readonly tenantAStore2QrisChargeId: string;
 
   readonly tenantBTenantId: string;
   readonly tenantBUserId: string;
@@ -155,6 +158,9 @@ export interface ProbeContext {
   readonly tenantBHeldPushToken: string;
   /** A live phone handoff pairing of tenant B's PC. */
   readonly tenantBHandoffId: string;
+  /** Tenant B's QRIS payment account, and a QR made on it. */
+  readonly tenantBQrisAccountId: string;
+  readonly tenantBQrisChargeId: string;
 
   /** A syntactically valid id that exists nowhere (the "nonexistent" media leg). */
   readonly nonexistentId: string;

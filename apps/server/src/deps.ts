@@ -24,6 +24,7 @@ import { ALL_MODULES } from '@bolusi/modules';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
+import type { QrisConfig } from './qris/service.js';
 import { HandoffRelay } from './handoff/relay.js';
 import { createDbVerifyToken } from './auth/verify-token.js';
 import { noblePasswordKdf, type PasswordKdf } from './crypto/index.js';
@@ -312,6 +313,9 @@ export interface ServerDeps {
   readonly phoneCatalog: PhoneCatalogReader;
   /** The counter PC ↔ store phone handoff (handoff/relay.ts); in memory, like the realtime hub. */
   readonly handoffRelay: HandoffRelay;
+  /** Integrated QRIS through Xendit (qris/service.ts). Absent ⇒ its routes answer 503; it also
+   *  needs `systemKeyStore`, since a confirmed payment is a record the server signs. */
+  readonly qris?: QrisConfig;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -445,6 +449,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     },
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
+    ...(overrides.qris === undefined ? {} : { qris: overrides.qris }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };

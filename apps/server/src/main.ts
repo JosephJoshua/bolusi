@@ -14,6 +14,7 @@ import { requireMediaStorageDir } from './media/config.js';
 import { clientIpBehindProxies } from './middleware/client-ip.js';
 import { serverCryptoPort } from './oplog/index.js';
 import { pushPortFromConfig } from './push/expo-transport.js';
+import { qrisFromConfig } from './qris/config.js';
 import { serveWithRealtime } from './realtime/serve.js';
 import { systemKeyStoreFromConfig } from './sync/system-key-store.js';
 
@@ -41,6 +42,9 @@ const pushPort = pushPortFromConfig(config);
 // dir IS set fails LOUD at its first real collision, never silently off (sync/system-key-store.ts).
 const systemKeyStore = systemKeyStoreFromConfig(config, serverCryptoPort);
 
+// Integrated QRIS (qris/service.ts): on when PAYMENT_SECRETS_KEY and PUBLIC_URL are both set.
+const qris = qrisFromConfig(config);
+
 function productionClientIp(c: Context<AppEnv>): string {
   try {
     const address = getConnInfo(c).remote.address;
@@ -58,6 +62,7 @@ const app = createApp({
   secureCookies: config.secureCookies,
   pushPort,
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
+  ...(qris === undefined ? {} : { qris }),
 });
 
 // Attaches the `ws` server for the GET /v1/realtime upgrade (api/00 §12.1).

@@ -10,6 +10,7 @@ import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { forgetShownQrs } from '@bolusi/modules/money';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
@@ -20,7 +21,11 @@ beforeEach(() => {
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // Each test opens fresh demo data: QRs shown in one are not the next one's.
+  forgetShownQrs();
+});
 
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
 /** An element's text without spaces: amounts print "Rp" and the figure apart. */
@@ -165,6 +170,57 @@ describe('Kas on the PC', () => {
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp450.000'));
   });
 
+  it('takes a whole debt by QRIS, recorded by the server, and the step just closes', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    const methods = within(byTestId('money.desk.receive.pay.line0.methods'));
+    fireEvent.click(methods.getByRole('button', { name: 'QRIS BCA' }));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.pay.line0.showQr'));
+    expect(text('money.desk.receive.qris.amount')).toBe('Rp450.000');
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.simulate'));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.done'));
+    await waitFor(() => expect(text('money.desk.receive.owed')).toBe('Rp0'));
+    expect(byTestId('money.desk.receive.submit').textContent).toBe('Selesai');
+    fireEvent.click(byTestId('money.desk.receive.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+  });
+
+  it('takes part of a debt by QRIS and the rest in cash, taking a sum below what QRIS takes by hand', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    const methods = within(byTestId('money.desk.receive.pay.line0.methods'));
+    fireEvent.click(methods.getByRole('button', { name: 'QRIS BCA' }));
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '1000' },
+    });
+    // Below what QRIS takes, the line is taken by hand with its reference.
+    expect(screen.queryByTestId('money.desk.receive.pay.line0.showQr')).toBeNull();
+    expect(byTestId('money.desk.receive.pay.line0.reference')).toBeTruthy();
+    expect(byTestId('money.desk.receive.pay.line0.qrMinimum').textContent).toContain('1.500');
+    // No QR for more than is owed: Xendit gives no change.
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '500000' },
+    });
+    expect(byTestId('money.desk.receive.pay.line0.showQr')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '100000' },
+    });
+    // A QR line is only paid once the customer pays its QR.
+    expect(byTestId('money.desk.receive.submit')).toHaveProperty('disabled', true);
+    fireEvent.click(byTestId('money.desk.receive.pay.line0.showQr'));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.simulate'));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.done'));
+    await waitFor(() => expect(text('money.desk.receive.owed')).toBe('Rp350.000'));
+    fireEvent.click(byTestId('money.desk.receive.pay.add'));
+    expect(byTestId('money.desk.receive.pay.line0.amount')).toHaveProperty('value', '350.000');
+    fireEvent.click(byTestId('money.desk.receive.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+  });
+
   it('offers cancelling a payment to owners only', async () => {
     await openKas();
     fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });
@@ -231,6 +287,33 @@ describe('payment methods in PC Settings', () => {
     expect(await screen.findByText('QRIS Pusat disimpan.')).toBeTruthy();
     const row = within(byTestId('money.desk.methods.list')).getByText('QRIS Pusat').closest('li')!;
     expect(row.textContent).toContain('Bolusi Sorong, Bolusi Manokwari');
+  });
+
+  it('connects a QRIS method to Xendit with its secret key, and disconnects it after asking', async () => {
+    await openMethods('Yosua Wonda');
+    fireEvent.click(byTestId('money.desk.methods.row.01920000-0000-7000-8000-00000000a001.open'));
+    await screen.findByTestId('money.desk.methodForm');
+    expect(
+      (await screen.findByTestId('money.desk.methodForm.qris.connected')).textContent,
+    ).toContain('Terhubung, mode uji');
+    fireEvent.click(byTestId('money.desk.methodForm.qris.disconnect'));
+    fireEvent.click(await screen.findByTestId('money.desk.methodForm.qris.confirm.confirm'));
+    const key = await screen.findByTestId('money.desk.methodForm.qris.key');
+    expect(byTestId('money.desk.methodForm.qris.connect')).toHaveProperty('disabled', true);
+    fireEvent.change(key, { target: { value: 'xnd_production_0123456789abcdef' } });
+    fireEvent.click(byTestId('money.desk.methodForm.qris.connect'));
+    expect(
+      (await screen.findByTestId('money.desk.methodForm.qris.connected')).textContent,
+    ).toContain('Terhubung');
+    expect(byTestId('money.desk.methodForm.qris.connected').textContent).not.toContain('mode uji');
+    // Other kinds have nothing to connect.
+    fireEvent.click(
+      within(byTestId('money.desk.methodForm')).getByRole('button', { name: 'Batal' }),
+    );
+    await waitFor(() => expect(screen.queryByTestId('money.desk.methodForm')).toBeNull());
+    fireEvent.click(byTestId('money.desk.methods.row.01920000-0000-7000-8000-00000000a002.open'));
+    await screen.findByTestId('money.desk.methodForm');
+    expect(screen.queryByTestId('money.desk.methodForm.qris')).toBeNull();
   });
 
   it('switches a method off instead of deleting it, and a store owner leaves head-office ones be', async () => {

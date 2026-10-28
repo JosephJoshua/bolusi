@@ -18,7 +18,6 @@ import type { ReactNode } from 'react';
 import {
   Animated,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +28,8 @@ import {
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
+
+import { NATIVE_DRIVER } from '../motion.js';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
 import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
@@ -70,7 +71,6 @@ const DOUBLE_TAP_MS = 300;
 /** Movement under this many dp still counts as a tap. */
 const TAP_SLOP = 10;
 const NOTICE_MS = 2000;
-const NATIVE_DRIVER = Platform.OS !== 'web';
 
 const styles = StyleSheet.create({
   root: {
