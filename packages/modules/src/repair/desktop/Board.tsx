@@ -336,10 +336,10 @@ export function RepairBoardPage({
   const statusOptions = statusChoices(searching ? 'search' : view);
   const now = clock();
   const toolbar = (
-    <div className="flex h-12 items-center gap-2 px-6" data-testid="repair.desk.board.filters">
-      {/* One row that scrolls sideways when the pane leaves it little room, never a second row.
-          The right edge fades, so a filter running under it reads as more to scroll to. */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [scrollbar-width:none]">
+    <div className="flex items-start gap-2 px-6 py-2" data-testid="repair.desk.board.filters">
+      {/* One row where it fits; when the pane leaves it little room the filters wrap to a second
+          row rather than run under an edge a mouse cannot scroll. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         {statusOptions.length > 0 ? (
           <OptionsFilter
             label={tn('repair.desk.filter.status')}
@@ -479,15 +479,16 @@ export function RepairBoardPage({
         />
       </PageHeader>
 
-      {/* The servisan opens beside the table when both fit (the table's fixed columns need about
-          680 px, next to a 400 px pane); on a narrower screen it slides over the table's right
-          side instead. */}
+      {/* The servisan opens beside the table when both fit: a 400 px pane next to a table folded
+          down to number, customer and status (about 530 px), which a 1024 px window with the
+          sidebar down to icons holds. Narrower than that (the sidebar opened wide on a small
+          screen), it covers the whole board rather than half of it, so no column is cut. */}
       <div className="flex min-h-0 flex-1 flex-col @container">
         <div
           className={
             selectedTicketId === null
               ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
-              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1080px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
+              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[960px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
           }
         >
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -581,7 +582,7 @@ export function RepairBoardPage({
           {selectedTicketId === null ? null : (
             <div
               ref={paneRef}
-              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1080px]:static @[1080px]:w-auto @[1080px]:shadow-none"
+              className="absolute inset-0 z-10 flex animate-pane-in flex-col @[960px]:static"
             >
               <TicketPane
                 // A fresh pane per ticket: nothing said about the last one carries over.
@@ -762,7 +763,8 @@ function boardColumns({
       // A cancelled servisan costs the customer its fee, never the repair price.
       accessorFn: amountOwed,
       header: tn('repair.price.total'),
-      meta: { track: '116px', align: 'end' },
+      // The last to give way: beside an open servisan, whose pane shows the price, on a small screen.
+      meta: { track: '116px', align: 'end', fold: 4 },
       cell: ({ getValue }) => (
         <span className="tabular text-body font-semibold text-text">
           {formatMoney(getValue() as number)}

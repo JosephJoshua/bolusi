@@ -396,7 +396,8 @@ export function TicketPane({
         messageKind === null &&
         claimAction === null ? null : (
           // The next step leads; printing and the rarer moves ("Lainnya") wait quietly at the end.
-          <div className="flex items-center gap-2">
+          // A narrow pane wraps them rather than push the last one out of sight.
+          <div className="flex flex-wrap items-center gap-2">
             {layout.next === null ? null : (
               <Button
                 label={label(layout.next)}

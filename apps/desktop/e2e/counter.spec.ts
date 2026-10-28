@@ -60,6 +60,7 @@ test('F2 does not start an intake while a dialog is open', async () => {
 });
 
 for (const [width, height] of [
+  [1024, 600],
   [1024, 640],
   [1280, 720],
   [1366, 768],
@@ -69,7 +70,7 @@ for (const [width, height] of [
 ] as const) {
   test(`the board fits a ${String(width)}×${String(height)} screen, with and without a servisan open`, async () => {
     await page.setViewportSize({ width, height });
-    const fits = async (): Promise<void> => {
+    const fits = async (paneOpen: boolean): Promise<void> => {
       const table = page.getByTestId('repair.desk.board.table');
       const overflow = await table.evaluate((grid) =>
         [...grid.querySelectorAll('[role="row"]')].some(
@@ -88,17 +89,30 @@ for (const [width, height] of [
           .map((name) => name!.textContent);
       });
       expect(cutNames).toEqual([]);
-      await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({ ratio: 1 });
+      // Every queue is in sight: the tabs wrap rather than scroll sideways.
+      const views = page.getByTestId('repair.desk.board.views');
+      expect(await views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1)).toBe(true);
+      await expect(page.getByTestId('repair.desk.board.views.active')).toBeInViewport({ ratio: 1 });
+      if (paneOpen) {
+        // The servisan sits beside the table, never over part of it (its pane shows the total).
+        const tableBox = (await table.boundingBox())!;
+        const paneBox = (await page.getByTestId('repair.desk.ticket').boundingBox())!;
+        expect(paneBox.x).toBeGreaterThanOrEqual(tableBox.x + tableBox.width - 1);
+      } else {
+        await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({
+          ratio: 1,
+        });
+      }
       // Only the table and the pane scroll; the window never does, so paging stays in reach.
       expect(
         await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight),
       ).toBe(true);
       await expect(page.getByTestId('repair.desk.board.pagination')).toBeInViewport({ ratio: 1 });
     };
-    await fits();
+    await fits(false);
     await page.getByText('Maria Kogoya').click();
     await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();
-    await fits();
+    await fits(true);
   });
 }
 
@@ -136,6 +150,25 @@ for (const [width, height, sidebar] of [
     ).toBe(true);
   });
 }
+
+test('an owner sees every queue beside an open servisan on a 1366×768 screen', async () => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.getByTestId('desktop.person').click();
+  await page.getByRole('menuitem', { name: 'Yosua Wonda' }).click();
+  await page.getByTestId('repair.desk.board.views.cancelled').click();
+  await page.getByText('Lince Wakerkwa').click();
+  await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();
+  const views = page.getByTestId('repair.desk.board.views');
+  expect(await views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1)).toBe(true);
+  for (const view of ['active', 'cancelled']) {
+    await expect(page.getByTestId(`repair.desk.board.views.${view}`)).toBeInViewport({ ratio: 1 });
+  }
+  // Nor is a filter cut off at the toolbar's edge.
+  await expect(page.getByTestId('repair.desk.filter.priceWaiting')).toBeInViewport({ ratio: 1 });
+  const toolbar = (await page.getByTestId('repair.desk.board.filters').boundingBox())!;
+  const price = (await page.getByTestId('repair.desk.filter.priceWaiting').boundingBox())!;
+  expect(price.x + price.width).toBeLessThanOrEqual(toolbar.x + toolbar.width);
+});
 
 test('a phone nobody collected shows in its own list, and the message opens WhatsApp outside the app', async () => {
   // Stands in for the OS: records what the app asked to open instead of starting a browser.
