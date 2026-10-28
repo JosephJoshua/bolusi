@@ -9,6 +9,25 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export interface ApprovalRequests {
+  amount: number;
+  basis: string;
+  decidedAt: number | null;
+  decidedBy: string | null;
+  id: string | null;
+  inputJson: string;
+  kind: string;
+  note: string | null;
+  reason: string;
+  requestedAt: number;
+  requestedBy: string;
+  status: string;
+  storeId: string;
+  targetId: string;
+  targetType: string;
+  tenantId: string;
+}
+
 export interface AuthPermissionDenials {
   deviceId: string;
   id: string | null;
@@ -521,6 +540,7 @@ export interface UserWork {
 }
 
 export interface DB {
+  approvalRequests: ApprovalRequests;
   authPermissionDenials: AuthPermissionDenials;
   authSessions: AuthSessions;
   conflicts: Conflicts;

@@ -5,6 +5,9 @@
  */
 import idCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enCatalog from '@bolusi/modules/repair/i18n/en.json';
+import approvalsId from '@bolusi/modules/approvals/i18n/id.json';
+import approvalsEn from '@bolusi/modules/approvals/i18n/en.json';
+import { registerApprovalsCatalog } from '@bolusi/modules/approvals/screens';
 import { registerRepairCatalog, type RepairRuntime } from '@bolusi/modules/repair/screens';
 import { TYPING_PAUSE_MS } from '@bolusi/modules/screen-kit';
 import { act } from 'react';
@@ -15,7 +18,13 @@ import {
   intake,
   type RepairHarness,
 } from '../../../packages/modules/test/support/repair-harness.js';
-import { fire, render, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
+import {
+  fire,
+  render,
+  textsIn,
+  type RenderResult,
+  waitUntil,
+} from '../../../packages/ui/test/render.js';
 import { createRepairRuntime } from '@bolusi/device/models/repair/runtime-adapter';
 
 export {
@@ -25,12 +34,14 @@ export {
   render,
   fire,
   textsIn,
+  waitUntil,
   type RepairHarness,
   type RenderResult,
 };
 
 export function ensureRepairCatalog(): void {
   registerRepairCatalog({ id: idCatalog, en: enCatalog });
+  registerApprovalsCatalog({ id: approvalsId, en: approvalsEn });
 }
 
 export const USER_NAMES = {

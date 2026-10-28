@@ -442,6 +442,23 @@ governance notes in "Decision" where they differ.
   their PIN. Role and limit changes are online only and reach phones with the
   next sync; the server judges each synced action by the current roles and
   limits and refuses one over them, which the owner sees.
+- **Approvals as built (first part):** a discount and a cancel. The counter's
+  "Batalkan" and a discount past someone's limit (counting the servisan's other
+  discounts) become "Minta persetujuan". The request shows on the servisan, and
+  approvers get a "Persetujuan (n)" queue on the board. Approving runs the
+  action as the approver, checked by the same rules and their own limit. A
+  waiting request of a kind blocks a second one on the same servisan, and any
+  change to the servisan (even one that leaves the total as it was) closes it.
+  Two approvers answering one request while offline cannot apply it twice: the
+  decision is named after the request, so the second is refused at sync.
+- **Approvals as built (second part):** Bayar nanti and DP fixes. At handover,
+  "Bayar nanti" beyond someone (or past their limit, shown up front) asks with
+  the reason typed; once approved, anyone at the counter may leave that
+  servisan's debt up to the approved amount, and a higher bill needs asking
+  again. The counter's "Ubah DP" asks too; a fix counts against the refund
+  limit by what its voids take off (the decrease through the same method, all
+  of it through another). Refunds beyond an overpayment and voids from Kas are
+  not requestable: no counter screen starts them.
 
 ## Open product choices
 

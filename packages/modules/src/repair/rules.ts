@@ -14,7 +14,9 @@ import type { z } from 'zod';
 import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
+import { approvedPermit } from '../approvals/permits.js';
 import {
+  REPAIR_APPROVAL_KIND,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
@@ -139,16 +141,16 @@ async function requireDiscountPermission(
 }
 
 /** What the discounts still standing on the op's ticket take off, besides line `exceptLineId`. */
-async function discountsStanding(db: Db, op: SignedOperation, exceptLineId: string) {
-  const row = await db
+async function discountsStanding(db: Db, op: TicketRef, exceptLineId?: string) {
+  let query = db
     .selectFrom('repairQuoteLines')
     .select(sql<number>`coalesce(sum(-amount), 0)`.as('drop'))
     .where('ticketId', '=', op.entityId)
     .where('storeId', '=', storeOf(op))
     .where('amount', '<', 0)
-    .where('status', '!=', 'declined')
-    .where('id', '!=', exceptLineId)
-    .executeTakeFirst();
+    .where('status', '!=', 'declined');
+  if (exceptLineId !== undefined) query = query.where('id', '!=', exceptLineId);
+  const row = await query.executeTakeFirst();
   return Number(row?.drop ?? 0);
 }
 
@@ -339,7 +341,7 @@ function alreadyRecorded(field: string, id: string): DomainError {
   });
 }
 
-async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | undefined> {
+async function findTicket(db: Db, op: TicketRef): Promise<TicketState | undefined> {
   const row = await db
     .selectFrom('repairTickets')
     .select([
@@ -367,16 +369,19 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
   };
 }
 
-async function loadTicket(db: Db, op: SignedOperation): Promise<TicketState> {
+async function loadTicket(db: Db, op: TicketRef): Promise<TicketState> {
   const ticket = await findTicket(db, op);
   if (ticket === undefined) throw notFound(REPAIR_TICKET_ENTITY, op.entityId);
   return ticket;
 }
 
 /** Repair ops are store-scoped, so a null store never matches a row. */
-function storeOf(op: SignedOperation): string {
+function storeOf(op: { readonly storeId: string | null }): string {
   return op.storeId ?? '';
 }
+
+/** A servisan as rules find it: the op's, or the one an approval request is about. */
+type TicketRef = Pick<SignedOperation, 'tenantId' | 'storeId' | 'entityId'>;
 
 async function customerExists(db: Db, op: SignedOperation, customerId: string): Promise<boolean> {
   const row = await db
@@ -465,7 +470,7 @@ async function hasWorkPhoto(db: Db, op: SignedOperation, stage: WorkPhotoStage, 
 }
 
 /** When work on the ticket was last (re)started, or 0 if never. */
-async function lastStartedAt(db: Db, op: SignedOperation): Promise<number> {
+async function lastStartedAt(db: Db, op: TicketRef): Promise<number> {
   const row = await db
     .selectFrom('repairTicketEvents')
     .select((eb) => eb.fn.max('at').as('at'))
@@ -808,19 +813,55 @@ export const ticketCancelledRule: Rule = async (op, ctx) => {
   // v1, from before fees, charged nothing and named no fee.
   const fee = payloadOf<{ fee?: number }>(op).fee;
   if (fee === undefined) return;
-  const fees = await ctx.db
+  const standard = await standardFeeOf(ctx.db, op, ticket);
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, standard - fee);
+};
+
+/** The store's cancellation fee for this ticket as these records have it now. */
+async function standardFeeOf(db: Db, ref: TicketRef, ticket: TicketState): Promise<number> {
+  const fees = await db
     .selectFrom('repairStoreCancelFees')
     .select(['beforeWork', 'afterWork'])
-    .where('storeId', '=', storeOf(op))
+    .where('storeId', '=', storeOf(ref))
     .executeTakeFirst();
-  const standard = standardCancelFee(
-    { workStarted: (await lastStartedAt(ctx.db, op)) > 0, claimOfTicketId: ticket.claimOfTicketId },
+  return standardCancelFee(
+    { workStarted: (await lastStartedAt(db, ref)) > 0, claimOfTicketId: ticket.claimOfTicketId },
     fees === undefined
       ? NO_CANCEL_FEES
       : { beforeWork: Number(fees.beforeWork), afterWork: Number(fees.afterWork) },
   );
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, standard - fee);
-};
+}
+
+/**
+ * What an approval request about a servisan depends on (approvals/kinds.ts): where it is, how it
+ * stands and its price. Null when this store has no such servisan.
+ */
+export async function ticketApprovalBasis(db: Db, ref: TicketRef): Promise<string | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined) return null;
+  // Lines are only ever added, so a price that comes back to the same total still moves the basis.
+  const lines = await db
+    .selectFrom('repairQuoteLines')
+    .select(sql<number>`count(*)`.as('count'))
+    .where('ticketId', '=', ref.entityId)
+    .where('storeId', '=', storeOf(ref))
+    .executeTakeFirst();
+  return [ticket.outcome, ticket.location, ticket.quoteTotal, Number(lines?.count ?? 0)].join('|');
+}
+
+/** What the discounts standing on a servisan take off (all but declined ones). */
+export async function ticketDiscounts(db: Db, ref: TicketRef): Promise<number> {
+  return discountsStanding(db, ref);
+}
+
+/** The fee a cancel of this open servisan is held to now, or null when it cannot be cancelled. */
+export async function cancelStandardFee(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined || ticket.location === 'returned' || ticket.outcome === 'cancelled') {
+    return null;
+  }
+  return standardFeeOf(db, ref, ticket);
+}
 
 /** A technician's suggestion; one the cashier could never apply would only block handover. */
 export const quoteChangeProposedRule: Rule = async (op, ctx) => {
@@ -941,16 +982,9 @@ async function requireHandoverChecks(db: Db, op: SignedOperation): Promise<void>
  * leaves a balance, so this is refused too.
  */
 async function requirePaid(op: SignedOperation, ctx: Parameters<Rule>[1]): Promise<void> {
-  const { db } = ctx;
   const unpaidReason =
     payloadOf<Partial<Payload<typeof deviceReturnedPayload>>>(op).unpaidReason ?? null;
-  const lookup = { tenantId: op.tenantId, storeId: op.storeId ?? '', documentId: op.entityId };
-  const ledger = db as unknown as Kysely<never>;
-  const expected = await repairMoneyDocument.charge(ledger, lookup);
-  const document = { kind: REPAIR_DOCUMENT_KIND, id: op.entityId };
-  const charged = await documentTotal(ledger, lookup.storeId, document, 'charge_recorded');
-  const owed = (expected?.amount ?? 0) > charged;
-  const balance = await documentBalance(ledger, lookup.storeId, document);
+  const { owed, balance } = await ticketLedger(ctx.db, op);
   if (!owed && balance <= 0) return;
   if (unpaidReason === null) {
     throw refuse('notPaid', {
@@ -958,7 +992,15 @@ async function requirePaid(op: SignedOperation, ctx: Parameters<Rule>[1]): Promi
       details: { field: 'payments', issue: 'the servisan is not paid in full' },
     });
   }
-  if (!(await ctx.holdsPermission(op.userId, MONEY_PERMISSION.extendCredit))) {
+  // An owner's approved "Bayar nanti" lets anyone at the counter leave a debt up to its amount.
+  const permit = await approvedPermit(ctx.db as unknown as Kysely<never>, {
+    tenantId: op.tenantId,
+    storeId: storeOf(op),
+    kind: REPAIR_APPROVAL_KIND.payLater,
+    targetId: op.entityId,
+  });
+  const permitted = permit !== null && permit >= balance;
+  if (!permitted && !(await ctx.holdsPermission(op.userId, MONEY_PERMISSION.extendCredit))) {
     throw refuse('unpaidOwnerOnly', {
       code: 'PERMISSION_DENIED',
       details: { permissionId: MONEY_PERMISSION.extendCredit },
@@ -971,8 +1013,42 @@ async function requirePaid(op: SignedOperation, ctx: Parameters<Rule>[1]): Promi
       details: { field: 'charge', issue: 'the servisan is not charged' },
     });
   }
+  if (permitted) return;
   // A limited role (a manager) lets a phone go only for a debt within its store's limit.
   await requireWithinLimit(op, ctx, MONEY_PERMISSION.extendCredit, balance);
+}
+
+/** Whether the servisan is charged less than it costs, and what is left to pay on what it is. */
+async function ticketLedger(db: Db, ref: TicketRef) {
+  const lookup = { tenantId: ref.tenantId, storeId: storeOf(ref), documentId: ref.entityId };
+  const ledger = db as unknown as Kysely<never>;
+  const expected = await repairMoneyDocument.charge(ledger, lookup);
+  const document = { kind: REPAIR_DOCUMENT_KIND, id: ref.entityId };
+  const charged = await documentTotal(ledger, lookup.storeId, document, 'charge_recorded');
+  const balance = await documentBalance(ledger, lookup.storeId, document);
+  return {
+    expected: expected?.amount ?? 0,
+    charged,
+    owed: (expected?.amount ?? 0) > charged,
+    balance,
+  };
+}
+
+/**
+ * What the customer would owe if the phone left now unpaid: its price or fee, less what they paid.
+ * Null unless it is ready to collect (repaired or cancelled, still in the store).
+ */
+export async function handoverDebt(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (
+    ticket === undefined ||
+    ticket.location !== 'in_store' ||
+    (ticket.outcome !== 'repaired' && ticket.outcome !== 'cancelled')
+  ) {
+    return null;
+  }
+  const { expected, charged, balance } = await ticketLedger(db, ref);
+  return Math.max(0, Math.max(0, expected - charged) + balance);
 }
 
 /** One franchise list, written to the tenant's single options record and meeting the list rules. */

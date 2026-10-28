@@ -27,7 +27,8 @@ import {
   type ModuleRuntime,
 } from '@bolusi/core';
 
-import { inventoryModule, moneyModule } from '../../src/index.js';
+import { APPROVAL_PERMISSION } from '../../src/approvals/index.js';
+import { approvalsModule, inventoryModule, moneyModule } from '../../src/index.js';
 import { INVENTORY_PERMISSION } from '../../src/inventory/index.js';
 import { MONEY_PERMISSION } from '../../src/money/index.js';
 import { repairModule, REPAIR_PERMISSION } from '../../src/repair/index.js';
@@ -46,9 +47,10 @@ const P = REPAIR_PERMISSION;
 const M = MONEY_PERMISSION;
 const I = INVENTORY_PERMISSION;
 
+// Every role asks for and answers approvals; the decision's own permission says what.
 const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
   scopeType,
-  permissionIdsJson: JSON.stringify(permissionIds),
+  permissionIdsJson: JSON.stringify([...permissionIds, APPROVAL_PERMISSION.use]),
 });
 
 // Query rows are read loosely in tests; the query modules own the real row types.
@@ -114,6 +116,18 @@ export interface RepairHarness {
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Run an approvals command as `userId`. */
+  approvals<K extends keyof typeof approvalsModule.commands>(
+    command: K,
+    input: Parameters<(typeof approvalsModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run an approvals query as `userId`. */
+  approvalsQuery<K extends keyof typeof approvalsModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
   /** Run a repair query as `userId`. */
   query<K extends keyof typeof repairModule.queries>(
     query: K,
@@ -146,6 +160,7 @@ export async function openRepairHarness(
     repairModule as unknown as AnyModuleDefinition<ClientDatabase>,
     inventoryModule as unknown as AnyModuleDefinition<ClientDatabase>,
     moneyModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    approvalsModule as unknown as AnyModuleDefinition<ClientDatabase>,
   ]);
   const engine = createProjectionEngine(db, registry.projections);
 
@@ -171,6 +186,7 @@ export async function openRepairHarness(
       repairModule as unknown as ModulePermissionManifest,
       inventoryModule as unknown as ModulePermissionManifest,
       moneyModule as unknown as ModulePermissionManifest,
+      approvalsModule as unknown as ModulePermissionManifest,
     ]),
     {
       load: () =>
@@ -371,6 +387,21 @@ export async function openRepairHarness(
         deviceId,
       })) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    approvals: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        approvalsModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    approvalsQuery: async (query, input, userId) => {
+      return (await runtime.queries.execute(
+        approvalsModule.queries[query] as never,
+        input as never,
+        { tenantId, storeId, userId, deviceId },
+      )) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
     query: async (query, input, userId) => {
       return (await runtime.queries.execute(repairModule.queries[query] as never, input as never, {
         tenantId,
@@ -389,6 +420,7 @@ export async function openRepairHarness(
             eb('type', 'like', 'repair.%'),
             eb('type', 'like', 'inventory.%'),
             eb('type', 'like', 'money.%'),
+            eb('type', 'like', 'approvals.%'),
           ]),
         )
         .orderBy('seq', 'asc')

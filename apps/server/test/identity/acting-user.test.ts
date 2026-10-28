@@ -100,8 +100,8 @@ test('permission ids used in the §4.5 checks are exactly 02-permissions §11 re
     expect(PERMISSION_BY_ID.has(id), `${id} not in the registry`).toBe(true);
   }
   // Non-vacuity (T-14): the registry is the full v0 set, not silently empty.
-  expect(PERMISSIONS).toHaveLength(51);
-  expect(PERMISSION_BY_ID.size).toBe(51);
+  expect(PERMISSIONS).toHaveLength(52);
+  expect(PERMISSION_BY_ID.size).toBe(52);
 });
 
 test('drift guard: the canonical @bolusi/core permission registry matches the seeded DB permissions table exactly', async () => {
@@ -117,7 +117,7 @@ test('drift guard: the canonical @bolusi/core permission registry matches the se
     .selectFrom('permissions')
     .select(['id', 'scope', 'isDangerous', 'description'])
     .execute();
-  expect(rows.length, 'permissions table is empty — the drift guard would be vacuous').toBe(51);
+  expect(rows.length, 'permissions table is empty — the drift guard would be vacuous').toBe(52);
   const dbById = new Map(
     rows.map((r) => [
       r.id,

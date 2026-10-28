@@ -9,6 +9,7 @@
 // placed here before it ships).
 import { AUTH_PERMISSION, PLATFORM_PERMISSION } from '@bolusi/core';
 
+import { APPROVAL_PERMISSION } from './approvals/constants.js';
 import { INVENTORY_PERMISSION } from './inventory/constants.js';
 import { MONEY_PERMISSION } from './money/constants.js';
 import { NOTES_PERMISSION } from './notes/constants.js';
@@ -157,10 +158,14 @@ export const LIMITED_ABILITIES = [
   'moneyCredit',
 ] as const satisfies readonly RoleAbilityId[];
 
-/** Held by every role: each person's own PIN and language. */
+/**
+ * Held by every role: each person's own PIN and language, and approval requests (what someone may
+ * ask for and decide is the decision's own permission).
+ */
 export const ROLE_BASE_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.pinChange,
   PLATFORM_PERMISSION.setLocale,
+  APPROVAL_PERMISSION.use,
 ];
 
 /**

@@ -365,7 +365,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         : await voidedOffDocument(db, storeOf(op), {
             kind: entry.documentKind,
             id: entry.documentId,
-            voiding: { id: entry.id, amount: Number(entry.amount) },
+            voiding: [{ id: entry.id, amount: Number(entry.amount) }],
           });
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
   };
@@ -561,13 +561,16 @@ async function requireReplaceable(
  * was recorded in its place counts only beyond what that one holds, and only while the document is
  * not charged: once billed, every void counts in full.
  */
-async function voidedOffDocument(
+export async function voidedOffDocument(
   db: Db,
   storeId: string,
   document: {
     readonly kind: string;
     readonly id: string;
-    readonly voiding: { readonly id: string; readonly amount: number };
+    /** The payments being voided now. */
+    readonly voiding: readonly { readonly id: string; readonly amount: number }[];
+    /** A payment about to be recorded in place of one (a down payment fix asked, not yet made). */
+    readonly replacing?: { readonly replaces: string; readonly amount: number } | undefined;
   },
 ): Promise<number> {
   const payments = await db
@@ -582,13 +585,17 @@ async function voidedOffDocument(
     ...payments
       .filter((row) => row.voidedBy !== null)
       .map((row) => ({ id: row.id, amount: Number(row.amount) })),
-    document.voiding,
+    ...document.voiding,
   ];
   const total = voided.reduce((sum, { amount }) => sum + amount, 0);
   if ((await documentTotal(db, storeId, document, 'charge_recorded')) > 0) return total;
+  const replacements = [
+    ...payments.map((row) => ({ replaces: row.relatedEntryId, amount: Number(row.amount) })),
+    ...(document.replacing === undefined ? [] : [document.replacing]),
+  ];
   const credit = voided.reduce((sum, { id, amount }) => {
-    const replacement = payments.find((row) => row.relatedEntryId === id);
-    return sum + (replacement === undefined ? 0 : Math.min(amount, Number(replacement.amount)));
+    const replacement = replacements.find((row) => row.replaces === id);
+    return sum + (replacement === undefined ? 0 : Math.min(amount, replacement.amount));
   }, 0);
   return total - credit;
 }

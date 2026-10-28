@@ -10,6 +10,8 @@
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/schemas';
 
+import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import { demoApprovals } from '../approvals/demo.js';
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
@@ -1473,7 +1475,69 @@ export function demoRepairRuntime(
       }
     },
   });
-  let permitted = new Set<string>(actor.permissions);
+  // Everyone asks for and answers approvals; the decision's own permission says what.
+  let permitted = new Set<string>([...actor.permissions, APPROVAL_PERMISSION.use]);
+  const approvals = demoApprovals({
+    kinds: {
+      'repair.discount': {
+        permission: P.discount,
+        commandPermission: P.quoteChange,
+        amount: (input) => -Number(input['amount']),
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['changeQuote']!(input),
+      },
+      'repair.cancel': {
+        permission: P.cancel,
+        commandPermission: P.cancel,
+        amount: (input) => {
+          const standard = standardCancelFee(find(String(input['ticketId'])), cancelFees);
+          return Math.max(0, standard - Number(input['fee'] ?? standard));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['cancelTicket']!(input),
+      },
+      // A permit: approving changes nothing until the counter hands the phone over.
+      'repair.payLater': {
+        permission: MONEY_PERMISSION.extendCredit,
+        commandPermission: MONEY_PERMISSION.extendCredit,
+        amount: (input) => {
+          const t = find(String(input['ticketId']));
+          return Math.max(0, amountOwed(t) - (t.downPayment ?? 0));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: () => null,
+      },
+      // The demo counts a fix through the same method: what the DP goes down by.
+      'repair.downPayment': {
+        permission: P.correctDownPayment,
+        commandPermission: P.correctDownPayment,
+        amount: (input) =>
+          Math.max(0, (find(String(input['ticketId'])).downPayment ?? 0) - Number(input['amount'])),
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['correctDownPayment']!(input),
+      },
+    },
+    actor: () => ({ userId: actor.userId, name: actor.name, can: (id) => permitted.has(id) }),
+    now: () => HARNESS_NOW,
+    notify,
+    // The counter asked for a discount on the first servisan, waiting for an owner.
+    seed: [
+      {
+        kind: 'repair.discount',
+        input: {
+          ticketId: 't-1',
+          kind: 'discount',
+          description: 'Diskon pelanggan tetap',
+          amount: -25_000,
+          reason: 'Pelanggan tetap, sudah 3 kali servis di sini',
+          customerAgreed: false,
+        },
+        reason: 'Pelanggan tetap, sudah 3 kali servis di sini',
+        by: DEMO_REPAIR_ROLES.counter,
+        at: HARNESS_NOW - 20 * 60_000,
+      },
+    ],
+  });
   const runtime = {
     inventory,
     get userId() {
@@ -1481,7 +1545,7 @@ export function demoRepairRuntime(
     },
     actAs: (next: DemoRepairRole) => {
       actor = DEMO_REPAIR_ROLES[next];
-      permitted = new Set<string>(actor.permissions);
+      permitted = new Set<string>([...actor.permissions, APPROVAL_PERMISSION.use]);
       notify();
     },
     query: (name: string, input: Input) => queries[name]!(input),
@@ -1535,6 +1599,17 @@ export function demoRepairRuntime(
       limitOf: (id: string) => demoLimitOf(actor, permitted, id),
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
       stores: () => Promise.resolve(DEMO_STORES),
+      get userId() {
+        return actor.userId;
+      },
+    },
+    approvals: {
+      query: approvals.query,
+      run: approvals.run,
+      hasPermission: (id: string) => permitted.has(id),
+      colleagueHasPermission: () => false,
+      limitOf: (id: string) => demoLimitOf(actor, permitted, id),
+      newId: () => `a-new-${String(Math.random()).slice(2, 10)}`,
       get userId() {
         return actor.userId;
       },

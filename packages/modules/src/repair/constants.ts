@@ -207,3 +207,12 @@ export const REPAIR_CONFLICT_KEY = {
   downPayment: 'repair_ticket.down_payment',
   repairTypes: 'repair_ticket.repair_types',
 } as const;
+
+/** The servisan decisions an owner may hand out through an approval request (approval-kinds.ts). */
+export const REPAIR_APPROVAL_KIND = {
+  discount: 'repair.discount',
+  cancel: 'repair.cancel',
+  /** A permit: the phone may leave unpaid, up to the amount approved (Bayar nanti). */
+  payLater: 'repair.payLater',
+  downPayment: 'repair.downPayment',
+} as const;

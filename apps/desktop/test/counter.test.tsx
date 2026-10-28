@@ -3,6 +3,9 @@ import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import idApprovalsCatalog from '@bolusi/modules/approvals/i18n/id.json';
+import enApprovalsCatalog from '@bolusi/modules/approvals/i18n/en.json';
+import { registerApprovalsCatalog } from '@bolusi/modules/approvals/desktop';
 import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
@@ -66,6 +69,7 @@ beforeEach(() => {
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
+  registerApprovalsCatalog({ id: idApprovalsCatalog, en: enApprovalsCatalog });
 });
 afterEach(() => {
   cleanup();
@@ -248,22 +252,54 @@ describe('counter app over demo data', () => {
     await waitFor(() => expect(screen.queryByTestId('repair.desk.ticket.customer')).toBeNull());
   });
 
-  it('offers cancelling a servisan to owners only', async () => {
+  it('has the counter ask an owner to cancel a servisan', async () => {
     renderApp();
     await openTicket('Benny Kambu');
-    expect(screen.queryByTestId('repair.desk.ticket.action.cancel')).toBeNull();
-
-    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
-    await openTicket('Benny Kambu');
-    expect(byTestId('repair.desk.ticket.action.cancel')).toBeTruthy();
+    fireEvent.click(byTestId('repair.desk.ticket.action.cancel'));
+    const dialog = await screen.findByTestId('repair.desk.cancel');
+    expect(within(dialog).getByRole('heading').textContent).toBe('Minta pembatalan');
+    expect(byTestId('repair.desk.cancel.asks').textContent).toBe('Perlu persetujuan pemilik toko.');
+    fireEvent.change(byTestId('repair.desk.cancel.reason'), {
+      target: { value: 'Pelanggan tidak jadi' },
+    });
+    fireEvent.click(byTestId('repair.desk.cancel.submit'));
+    await screen.findByText('Permintaan dikirim. Pemilik toko akan memutuskan.');
+    expect(byTestId('repair.desk.ticket.approvals').textContent).toContain('Menunggu');
   });
 
-  it('shows a manager their discount limit, and the refusal in words above it', async () => {
+  it('leads an owner’s board with what waits on them, and approves it from the servisan', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    // The demo's counter asked for a discount on Yohanis Wenda's servisan.
+    expect((await screen.findByTestId('repair.desk.board.views.approvals')).textContent).toBe(
+      'Persetujuan (1)',
+    );
+    await showView('approvals');
+    // Only the servisan waiting on them is listed.
+    await waitFor(() => expect(screen.queryByText('Benny Kambu')).toBeNull());
+    await openTicket('Yohanis Wenda');
+    const section = byTestId('repair.desk.ticket.approvals');
+    expect(section.textContent).toContain('Diskon');
+    fireEvent.click(within(section).getByRole('button', { name: 'Putuskan' }));
+    const dialog = await screen.findByTestId('repair.desk.approval');
+    expect(within(dialog).getByTestId('repair.desk.approval.amount').textContent).toBe(
+      '-Rp 25.000',
+    );
+    fireEvent.click(within(dialog).getByTestId('repair.desk.approval.approve'));
+    await screen.findByText('Disetujui dan sudah dicatat.');
+    // Approved, it waits on the customer like any price change; nothing waits on the owner now.
+    expect(byTestId('repair.desk.ticket.price').textContent).toContain('Diskon pelanggan tetap');
+    await waitFor(() =>
+      expect(screen.queryByTestId('repair.desk.board.views.approvals')).toBeNull(),
+    );
+  });
+
+  it('shows a manager their discount limit, and asks an owner for more', async () => {
     renderApp();
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Maria Kogoya' }));
-    await openTicket('Yohanis Wenda');
+    await openTicket('Benny Kambu');
     fireEvent.click(byTestId('repair.desk.ticket.action.changePrice'));
     const dialog = await screen.findByTestId('repair.desk.price.change');
     fireEvent.click(within(dialog).getByTestId('repair.desk.price.change.kind.discount'));
@@ -277,9 +313,13 @@ describe('counter app over demo data', () => {
     fireEvent.change(byTestId('repair.desk.price.change.reason'), {
       target: { value: 'Pelanggan tetap' },
     });
-    fireEvent.click(byTestId('repair.desk.price.change.agreed'));
-    // The rule's own copy, not a generic failure.
-    await within(dialog).findByText('Melebihi batasmu. Minta pemilik toko.');
+    // Beyond the limit the customer's answer waits: an owner decides first.
+    expect(byTestId('repair.desk.price.change.asks').textContent).toBe(
+      'Melebihi batasmu, jadi perlu persetujuan.',
+    );
+    expect(screen.queryByTestId('repair.desk.price.change.agreed')).toBeNull();
+    fireEvent.click(byTestId('repair.desk.price.change.submit'));
+    await screen.findByText('Permintaan dikirim. Pemilik toko akan memutuskan.');
   });
 
   it('suggests catalog models as the model is typed and fills in the brand', async () => {
@@ -328,7 +368,14 @@ describe('counter app over demo data', () => {
     await waitFor(() =>
       expect(byTestId('repair.desk.ticket.balance').textContent).toContain('30.000'),
     );
-    expect(screen.queryByTestId('repair.desk.ticket.downPayment.correct')).toBeNull();
+    // The counter cannot change it, only ask an owner to.
+    fireEvent.click(byTestId('repair.desk.ticket.downPayment.correct'));
+    await screen.findByText('Minta ubah DP');
+    expect(byTestId('repair.desk.downPayment.correct.submit').textContent).toBe(
+      'Minta persetujuan',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.downPayment.correct')).toBeNull());
 
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
@@ -357,9 +404,14 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
     await screen.findByTestId('repair.desk.handover');
     expect(byTestId('repair.desk.handover.balance').textContent).toContain('15.000');
-    // The rest is filled in as cash; a counter without the owner's say cannot leave it unpaid.
+    // The rest is filled in as cash; a counter leaves it unpaid only once an owner approves.
     expect(byTestId('repair.desk.handover.pay.line0.amount')).toHaveProperty('value', '15.000');
-    expect(screen.queryByTestId('repair.desk.handover.payLater')).toBeNull();
+    fireEvent.click(byTestId('repair.desk.handover.payLater'));
+    expect(byTestId('repair.desk.handover.asks').textContent).toBe(
+      'Perlu persetujuan pemilik toko.',
+    );
+    expect(byTestId('repair.desk.handover.askPayLater')).toHaveProperty('disabled', true);
+    fireEvent.click(byTestId('repair.desk.handover.payLater'));
     await captureHandover();
     fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
       target: { value: '10000' },
