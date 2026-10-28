@@ -10,7 +10,12 @@ export {
   type ButtonSize,
   type ButtonVariant,
 } from './components/Button.js';
-export { CameraDialog, type CameraLabels } from './components/Camera.js';
+export {
+  CameraDialog,
+  CameraPreview,
+  type CameraLabels,
+  type WebcamState,
+} from './components/Camera.js';
 export { Chip, ToggleChip, type ChipTone } from './components/Chip.js';
 export { ChoiceList, type ChoiceOption } from './components/ChoiceList.js';
 export { ConfirmDialog } from './components/ConfirmDialog.js';

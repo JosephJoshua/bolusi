@@ -38,7 +38,8 @@ export interface CaptureDialogs {
   readonly Host: () => React.JSX.Element;
 }
 
-async function hasWebcam(): Promise<boolean> {
+/** Whether Windows lists a webcam; false when it cannot be asked. */
+export async function hasWebcam(): Promise<boolean> {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     return devices.some((device) => device.kind === 'videoinput');
@@ -48,7 +49,7 @@ async function hasWebcam(): Promise<boolean> {
 }
 
 /** A finger or pen to sign with; a mouse alone makes a poor signature. */
-const hasTouch = (): boolean =>
+export const hasTouch = (): boolean =>
   typeof window.matchMedia === 'function' && window.matchMedia('(any-pointer: coarse)').matches;
 
 /** `handoff` is the desktop app's phone handoff; without it (a plain browser) there is none. */

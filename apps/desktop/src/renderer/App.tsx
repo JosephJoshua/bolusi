@@ -370,6 +370,8 @@ function LiveCounter({
         settings={settings}
         restoredDraft={restoredDraft}
         onDraftChange={onDraftChange}
+        setupPending={state.setupFor === userId}
+        onSetupDone={() => void client.call('device.finishSetup').catch(() => undefined)}
       />
     </RepairRuntimeProvider>
   );
