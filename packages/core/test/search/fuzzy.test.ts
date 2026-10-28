@@ -9,7 +9,9 @@ import {
   digitScore,
   foldWord,
   FuzzyIndex,
+  hasExactCode,
   normalizePhone,
+  prepareDocument,
   scoreDocument,
   type SearchDocument,
 } from '../../src/search/index.js';
@@ -49,7 +51,9 @@ const ticketDoc = (t: Ticket): SearchDocument => ({
 function search(docs: readonly SearchDocument[], query: string): { id: string }[] {
   const hits = new FuzzyIndex(docs).search(query, 20);
   const compiled = compileQuery(query);
-  const scanned = docs
+  const exact =
+    compiled === null ? [] : docs.filter((doc) => hasExactCode(compiled, prepareDocument(doc)));
+  const scanned = (exact.length > 0 ? exact : docs)
     .map((doc) => ({ doc, score: compiled === null ? 0 : scoreDocument(compiled, doc) }))
     .filter((hit) => hit.score > 0)
     .sort((a, b) => b.score - a.score || b.doc.rank - a.doc.rank || (a.doc.id < b.doc.id ? -1 : 1))
@@ -215,7 +219,9 @@ describe('ticket search', () => {
     expect(ids(searchTickets(tickets, 'k7q-00'))).toEqual(['t2', 't1']);
     expect(ids(searchTickets(tickets, 'K7Q-004'))).toEqual(['t2', 't1']);
     expect(ids(searchTickets(tickets, 'm2x'))).toEqual(['t3']);
-    expect(ids(searchTickets(tickets, 'K7Q-0042'))[0]).toBe('t1');
+    // The whole number typed right is that servisan alone, not its neighbours too.
+    expect(ids(searchTickets(tickets, 'K7Q-0042'))).toEqual(['t1']);
+    expect(ids(searchTickets(tickets, 'k7q0042'))).toEqual(['t1']);
     // The start must be typed right, or one wrong digit lists the neighbouring counters too.
     expect(searchTickets(tickets, 'K7R')).toEqual([]);
     expect(searchTickets(tickets, 'K7R-00')).toEqual([]);

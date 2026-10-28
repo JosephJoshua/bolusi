@@ -1,4 +1,6 @@
 import { registerRootComponent } from 'expo';
+import { createElement } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -32,6 +34,7 @@ import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-trans
 import { createFetchStaffAdmin } from './src/bootstrap/staff-transport.js';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root, type RootProps } from './src/bootstrap/Root.js';
+import { lockPhonesToPortrait } from './src/ports/orientation.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
 import { SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
@@ -600,7 +603,10 @@ function buildRootProps(): RootProps {
 
 function Bootstrapped(): React.JSX.Element | null {
   rootProps ??= buildRootProps();
-  return Root(rootProps);
+  // Live system insets for the shell, so the header follows the status bar when a tablet turns.
+  return createElement(SafeAreaProvider, null, Root(rootProps));
 }
 
+// Before the first screen, so a phone held sideways at launch turns upright straight away.
+lockPhonesToPortrait();
 registerRootComponent(Bootstrapped);

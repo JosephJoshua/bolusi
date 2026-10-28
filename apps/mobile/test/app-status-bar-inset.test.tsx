@@ -36,6 +36,7 @@ vi.mock('expo-location', () => ({
 }));
 
 import { StatusBar as RNStatusBar } from 'react-native';
+import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 
 import App, { type AppProps } from '../App.js';
 import { render, type RenderResult } from '../../../packages/ui/test/render.js';
@@ -118,5 +119,22 @@ describe('shell status-bar inset (edge-to-edge top inset)', () => {
       screen = render(<App {...props()} />);
     });
     expect(screen!.styleOf('bolusi-app-shell').paddingTop).toBeGreaterThan(0);
+  });
+
+  test('follows the live safe-area inset when a tablet turns', () => {
+    // A tablet launched in landscape and turned upright: the status bar grows, `currentHeight` keeps
+    // its launch value, and only the live inset knows. The header must move down with it.
+    const insets = (top: number): EdgeInsets => ({ top, right: 0, bottom: 0, left: 0 });
+    const withInsets = (top: number): React.JSX.Element => (
+      <SafeAreaInsetsContext.Provider value={insets(top)}>
+        <App {...props()} />
+      </SafeAreaInsetsContext.Provider>
+    );
+    act(() => {
+      screen = render(withInsets(28));
+    });
+    expect(screen!.styleOf('bolusi-app-shell').paddingTop).toBe(28);
+    screen!.rerender(withInsets(52));
+    expect(screen!.styleOf('bolusi-app-shell').paddingTop).toBe(52);
   });
 });

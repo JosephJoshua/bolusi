@@ -92,6 +92,7 @@ import {
   enrolledDevice,
   fireCreateNote,
   fireOn,
+  homeShown,
   mountRoot,
   seedDirectory,
   settle,
@@ -317,7 +318,12 @@ describe('a push tap preserves the draft and does not drift the switcher origin 
     // (145's gate) a `notes.editor.discard` sheet would appear here instead of the sync-status screen.
     expect(screen.query('sync-status-screen')).not.toBeNull();
     expect(screen.query('notes.editor.discard')).toBeNull();
-    expect(screen.query('notes.editor.title')).toBeNull();
+    expect(homeShown(screen)).toBe(false);
+    // And Back returns to the editor with the typing, which stayed mounted under Sync Status.
+    fireOn(screen, 'sync-status-screen.back');
+    await settle();
+    expect(homeShown(screen)).toBe(true);
+    expect(screen.get('notes.editor.body.field').props['value']).toBe('setengah tertulis');
   });
 
   test('Leg B — a tap that lands WHILE the switcher is open does not drift its back-origin', async () => {
@@ -409,7 +415,7 @@ describe('the LIVE shell registers a push token and routes a tap (task 135; api/
     });
 
     expect(screen.query('sync-status-screen')).not.toBeNull();
-    expect(screen.query('notes.list.title')).toBeNull();
+    expect(homeShown(screen)).toBe(false);
   });
 
   test('POSITIVE CONTROL: an unknown payload navigates NOWHERE — so "always navigates" cannot pass', async () => {

@@ -25,6 +25,7 @@
 export {
   ActivityIndicator,
   Animated,
+  Dimensions,
   PanResponder,
   FlatList,
   Keyboard,

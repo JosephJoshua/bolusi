@@ -76,6 +76,7 @@ import {
   fakeAppState,
   fireCreateNote,
   fireOn,
+  homeShown,
   manualTimer,
   mountRoot,
   seedDirectory,
@@ -346,9 +347,9 @@ describe('SEC-AUTH-08 ROUTE — the shell route is retained per user across the 
 
     expect(await unlockAs(harness, fixture.userId)).toBe(true);
     await openSyncStatus(harness);
-    // DENOMINATOR: A really is off `home` — on the Sync Status surface, and the notes list is gone.
+    // DENOMINATOR: A really is off `home` — on the Sync Status surface, and the notes list is hidden.
     expect(screen.query('sync-status-screen')).not.toBeNull();
-    expect(screen.query('notes.list.title')).toBeNull();
+    expect(homeShown(screen)).toBe(false);
     // The route was retained under A (consuming task 133's `withRoute`).
     expect(controller.snapshot().workspace?.route).toBe('syncStatus');
 
@@ -363,7 +364,7 @@ describe('SEC-AUTH-08 ROUTE — the shell route is retained per user across the 
     // (This arm PASSES with or without the guard: A's route persisted across the non-unmounting App
     // anyway. It is the positive half the task required; the guard is falsified by the NEXT test.)
     expect(screen.query('sync-status-screen')).not.toBeNull();
-    expect(screen.query('notes.list.title')).toBeNull();
+    expect(homeShown(screen)).toBe(false);
   });
 
   test('THE ROUTE PRIVACY CONTROL: A on Sync Status → idle lock → USER B unlocks → B lands on their OWN home, NOT A`s route', async () => {
