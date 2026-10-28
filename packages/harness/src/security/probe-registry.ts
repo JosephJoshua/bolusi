@@ -623,6 +623,22 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   'GET /h/:key/next': PHONE_PAGE,
   'POST /h/:key/send': PHONE_PAGE,
 
+  // ── app updates ───────────────────────────────────────────────────────────────────────────────
+  'GET /updates/manifest': {
+    crossTenant: {
+      kind: 'absent',
+      reason:
+        'no tenant data: every phone of a build gets the same signed manifest from the public release repo (docs/app-updates.md)',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the answer carries no store scope' },
+    unauthenticated: {
+      kind: 'absent',
+      reason:
+        'bearer-exempt by design: expo-updates sends no credentials, and phones trust the update by its signature, not the channel',
+    },
+    unauthenticatedRequest: unauthLeg('GET', () => '/updates/manifest'),
+  },
+
   // ── realtime ──────────────────────────────────────────────────────────────────────────────────
   'GET /v1/realtime': {
     crossTenant: {
