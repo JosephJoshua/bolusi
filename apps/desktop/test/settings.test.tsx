@@ -120,6 +120,7 @@ describe('Settings on the PC', () => {
       'staff',
       'staffPins',
       'fees',
+      'uncollected',
       'slip',
       'options.checks',
       'options.readyBy',
@@ -315,6 +316,24 @@ describe('repair settings on the PC', () => {
     const run = callsTo('repair.run').find((args) => args[1] === 'setCancelFees');
     expect(run?.[0]).toBe(OWNER.id);
     expect((run?.[2] as { beforeWork: number }).beforeWork).toBe(35_000);
+  });
+
+  it('saves after how many days an uncollected phone is flagged, within the allowed range', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    renderApp();
+    await openSettings('uncollected');
+    const days = (await screen.findByTestId('repair.desk.uncollected.days')) as HTMLInputElement;
+    expect(days.value).toBe('60');
+    fireEvent.change(days, { target: { value: '400' } });
+    fireEvent.click(byTestId('repair.desk.uncollected.save'));
+    expect(screen.getByTestId('repair.desk.uncollected').textContent).toContain('1 sampai 365');
+    expect(callsTo('repair.run').some((args) => args[1] === 'setUncollectedDays')).toBe(false);
+
+    fireEvent.change(days, { target: { value: '30' } });
+    fireEvent.click(byTestId('repair.desk.uncollected.save'));
+    await screen.findByTestId('repair.desk.uncollected.saved');
+    const run = callsTo('repair.run').find((args) => args[1] === 'setUncollectedDays');
+    expect(run?.[2]).toEqual({ days: 30 });
   });
 
   it('renames, hides and adds intake items, then saves the list once', async () => {

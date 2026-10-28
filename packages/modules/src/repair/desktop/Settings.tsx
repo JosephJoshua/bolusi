@@ -1,5 +1,6 @@
 // The owner's repair settings on the counter PC, each a page of the PC's Settings: one intake list
-// ("Pilihan saat terima HP"), the cancellation fees and what the slips print. They run the same
+// ("Pilihan saat terima HP"), the cancellation fees, when an uncollected phone is flagged and what
+// the slips print. They run the same
 // commands and pure form logic as the phone screens; only the layout is the desktop's (inline rows
 // to type in, drag to reorder, one save bar). Each page tells Settings whether it holds unsaved
 // changes, so leaving it asks first.
@@ -24,6 +25,7 @@ import { CircleCheck, ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
+import { parseUncollectedDays } from '../constants.js';
 import { repairAbilities, type RepairAbilities } from '../flows.js';
 import { rebaseForm } from '../form-rebase.js';
 import { tn, type RepairKey } from '../i18n.js';
@@ -64,6 +66,7 @@ import {
   usePrintStoreName,
   useRepairRuntime,
   useRepairThumbnail,
+  useUncollectedLimit,
 } from '../runtime.js';
 import { ActionError, MoneyField, QueryPanel } from './parts.js';
 
@@ -103,11 +106,13 @@ const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
 export function repairSettingsAccess(abilities: RepairAbilities): {
   readonly intakeOptions: boolean;
   readonly cancelFees: boolean;
+  readonly uncollected: boolean;
   readonly printSettings: boolean;
 } {
   return {
     intakeOptions: abilities.manageIntakeOptions || abilities.hideIntakeOptions,
     cancelFees: abilities.setCancelFees,
+    uncollected: abilities.setUncollectedDays,
     printSettings: abilities.setPrintSettings,
   };
 }
@@ -643,6 +648,100 @@ function FeesForm({
             setFees(baseline);
           }}
           saveLabel={tn('repair.fees.save')}
+          testId={testId}
+        />
+      </FormFooter>
+    </div>
+  );
+}
+
+// ── HP belum diambil ───────────────────────────────────────────────────────────────────────────
+
+export function UncollectedSettings({ onDirtyChange }: RepairSettingsProps): React.JSX.Element {
+  const [reload, setReload] = useState(0);
+  const limit = useUncollectedLimit(reload);
+  return (
+    <SettingsPanel
+      title={tn('repair.uncollected.title')}
+      lead={tn('repair.uncollected.intro')}
+      testId="repair.desk.uncollected"
+    >
+      <QueryPanel query={limit} onRetry={() => setReload((n) => n + 1)}>
+        {(saved) => <UncollectedForm saved={saved.days} onDirtyChange={onDirtyChange} />}
+      </QueryPanel>
+    </SettingsPanel>
+  );
+}
+
+function UncollectedForm({
+  saved,
+  onDirtyChange,
+}: {
+  readonly saved: number;
+  readonly onDirtyChange: RepairSettingsProps['onDirtyChange'];
+}): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [baseline, setBaseline] = useState(saved);
+  const [text, setText] = useState(String(saved));
+  const [attempted, setAttempted] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const days = parseUncollectedDays(text);
+  const dirty = text !== String(baseline);
+  useReportDirty(dirty, onDirtyChange);
+  useFollowSaved(saved, (next) => {
+    if (!dirty) setText(String(next));
+    setBaseline(next);
+  });
+  const testId = 'repair.desk.uncollected';
+
+  const save = (): void => {
+    if (!dirty || runner.busy) return;
+    if (days === null) {
+      setAttempted(true);
+      return;
+    }
+    void runner
+      .run(() => runtime.run('setUncollectedDays', { days }))
+      .then((result) => {
+        if (result === undefined) return;
+        setBaseline(result.days);
+        setText(String(result.days));
+        setAttempted(false);
+        setNotice(tn('repair.uncollected.saved'));
+      });
+  };
+
+  return (
+    <div className="flex flex-1 flex-col gap-4">
+      <Card>
+        <div className="max-w-xs">
+          <TextField
+            label={tn('repair.uncollected.days')}
+            hint={tn('repair.uncollected.hint')}
+            value={text}
+            onChange={(event) => {
+              setNotice(null);
+              setText(event.target.value.replace(/\D/g, '').slice(0, 3));
+            }}
+            inputMode="numeric"
+            error={attempted && days === null ? tn('repair.uncollected.hint') : undefined}
+            data-testid={`${testId}.days`}
+          />
+        </div>
+      </Card>
+      <ActionError errorCode={runner.errorCode} onDismiss={runner.clearError} />
+      <FormFooter>
+        <SaveBar
+          dirty={dirty}
+          busy={runner.busy}
+          saved={notice}
+          onSave={save}
+          onDiscard={() => {
+            setAttempted(false);
+            setText(String(baseline));
+          }}
+          saveLabel={tn('repair.uncollected.save')}
           testId={testId}
         />
       </FormFooter>

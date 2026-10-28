@@ -13,6 +13,7 @@ import {
   repairAbilities,
   repairSettingsAccess,
   SlipSettings,
+  UncollectedSettings,
   tn,
   useRepairRuntime,
   type IntakeOptionList,
@@ -36,7 +37,14 @@ import { StaffPanel } from './StaffPanel.js';
 import { StaffPinsPanel } from './StaffPinsPanel.js';
 
 type SettingsPageKey =
-  'account' | 'staff' | 'staffPins' | 'fees' | 'slip' | `options.${IntakeOptionList}` | 'computer';
+  | 'account'
+  | 'staff'
+  | 'staffPins'
+  | 'fees'
+  | 'uncollected'
+  | 'slip'
+  | `options.${IntakeOptionList}`
+  | 'computer';
 
 /** Asks the page being left whether it may go; `proceed` runs once it may. */
 export type LeaveGuard = (proceed: () => void) => void;
@@ -91,6 +99,9 @@ export function SettingsPage({
         items: [
           ...(repair.cancelFees
             ? [{ value: 'fees' as const, label: tn('repair.fees.title') }]
+            : []),
+          ...(repair.uncollected
+            ? [{ value: 'uncollected' as const, label: tn('repair.uncollected.title') }]
             : []),
           ...(repair.printSettings
             ? [{ value: 'slip' as const, label: tn('repair.printSettings.title') }]
@@ -201,6 +212,8 @@ function Page({
       return <StaffPinsPanel access={access.staffPins!} actorUserId={person.userId} />;
     case 'fees':
       return <CancelFeesSettings onDirtyChange={onDirtyChange} />;
+    case 'uncollected':
+      return <UncollectedSettings onDirtyChange={onDirtyChange} />;
     case 'slip':
       return <SlipSettings onDirtyChange={onDirtyChange} />;
     case 'computer':

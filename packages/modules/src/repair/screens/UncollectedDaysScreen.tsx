@@ -9,7 +9,7 @@ import { Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
-import { MAX_UNCOLLECTED_DAYS, MIN_UNCOLLECTED_DAYS } from '../constants.js';
+import { parseUncollectedDays } from '../constants.js';
 import { tn } from '../i18n.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useRepairRuntime, useUncollectedLimit } from '../runtime.js';
@@ -49,13 +49,6 @@ export function UncollectedDaysScreen({
   );
 }
 
-/** Typed digits as a day count within the allowed range; null when empty or out of range. */
-function parseDays(text: string): number | null {
-  if (text === '') return null;
-  const days = Number(text);
-  return days >= MIN_UNCOLLECTED_DAYS && days <= MAX_UNCOLLECTED_DAYS ? days : null;
-}
-
 function DaysForm({
   saved,
   chrome,
@@ -77,7 +70,7 @@ function DaysForm({
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
 
-  const days = parseDays(text);
+  const days = parseUncollectedDays(text);
   const dirty = days !== baseline;
 
   useEffect(() => {

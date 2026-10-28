@@ -11,6 +11,7 @@ export {
   IntakeListSettings,
   repairSettingsAccess,
   SlipSettings,
+  UncollectedSettings,
   type RepairSettingsProps,
 } from './Settings.js';
 export { repairAbilities } from '../flows.js';

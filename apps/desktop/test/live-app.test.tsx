@@ -1,9 +1,7 @@
 // The window over the offline core: which screen shows for each state the core reports, and what
 // the window asks the core for. The core here is a stand-in that answers repair calls from the
 // seeded demo and records everything else, so the gate and the calls are tested without a process.
-import type { ActiveSession } from '@bolusi/core';
 import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
-import type { SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { initI18n } from '@bolusi/i18n';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
