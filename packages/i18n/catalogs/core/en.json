@@ -143,18 +143,25 @@
     "qrLabel": "QR code for the phone",
     "orOpen": "Or open on the phone:",
     "waiting": "Waiting for the phone…",
-    "opened": "Phone connected. Waiting for it to send…",
     "noNetwork": "This computer isn’t on the store Wi-Fi. Connect it, then try again.",
     "failed": "Couldn’t connect a phone. Try again.",
-    "expired": "This code has expired. Make a new one.",
+    "expired": "The phone connection has ended. Make a new code.",
     "page": {
       "photoHint": "Take a photo, then send it to the computer.",
       "send": "Send to computer",
       "sending": "Sending…",
-      "sent": "Sent. Carry on at the computer.",
+      "sent": "Sent.",
       "failed": "Not sent. Check the phone is still on the store Wi-Fi and the code is still showing on the computer, then try again.",
       "expired": "This code has expired. Scan a new one from the computer.",
-      "unreadable": "Couldn’t read that photo. Take it again."
-    }
+      "unreadable": "Couldn’t read that photo. Take it again.",
+      "waiting": "Phone connected. The next step will show up here.",
+      "rotate": "Turn the phone on its side.",
+      "rotateNow": "Turn the screen",
+      "withdrawn": "Cancelled on the computer."
+    },
+    "newCode": "Use another phone",
+    "photoOnPhone": "Take the photo on the phone",
+    "signOnPhone": "Ask the customer to sign on the phone",
+    "waitingSend": "Waiting for the phone to send…"
   }
 }

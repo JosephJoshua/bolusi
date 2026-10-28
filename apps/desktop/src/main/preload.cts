@@ -25,8 +25,10 @@ const bridge: DesktopBridge = {
     install: () => electron.ipcRenderer.invoke('updates:install'),
   },
   handoff: {
-    open: (kind, labels) => electron.ipcRenderer.invoke('handoff:open', kind, labels),
-    cancel: (id) => electron.ipcRenderer.invoke('handoff:cancel', id),
+    pair: (labels) => electron.ipcRenderer.invoke('handoff:pair', labels),
+    ask: (id, kind, title) => electron.ipcRenderer.invoke('handoff:ask', id, kind, title),
+    withdraw: (id, seq) => electron.ipcRenderer.invoke('handoff:withdraw', id, seq),
+    unpair: (id) => electron.ipcRenderer.invoke('handoff:unpair', id),
     onEvent: (listener) => {
       const relay = (_event: unknown, event: HandoffEvent): void => listener(event);
       electron.ipcRenderer.on('handoff:event', relay);

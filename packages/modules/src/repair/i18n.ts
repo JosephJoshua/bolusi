@@ -235,6 +235,7 @@ export const REPAIR_KEYS = [
   'repair.photo.open',
   'repair.photo.position',
   'repair.photo.retake',
+  'repair.photo.takeAll',
   'repair.photo.seeAll',
   'repair.photo.share',
   'repair.photo.shareFailed',

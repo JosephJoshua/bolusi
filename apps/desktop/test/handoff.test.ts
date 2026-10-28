@@ -1,6 +1,6 @@
 // @vitest-environment node
-// The phone handoff's page server, over real HTTP on this machine: what a phone gets and may send,
-// and what reaches the counter window. A stand-in for the window records the events.
+// The phone handoff's page server, over real HTTP on this machine: what a paired phone gets and may
+// send, and what reaches the counter window. A stand-in for the window records the events.
 import type { WebContents } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,22 +10,26 @@ import { HandoffServer, lanAddresses, strokesOf } from '../src/main/handoff.js';
 vi.mock('electron', () => ({ ipcMain: {} }));
 
 const LABELS: HandoffPageLabels = {
-  title: 'Depan <b>',
-  hint: 'Ambil foto, lalu kirim ke komputer.',
+  photoHint: 'Ambil foto, lalu kirim ke komputer.',
+  signatureHint: 'Minta pelanggan tanda tangan <b>',
   take: 'Ambil foto',
   retake: 'Ulangi',
   clear: 'Hapus',
   send: 'Kirim ke komputer',
   sending: 'Mengirim…',
   sent: 'Terkirim.',
+  waiting: 'Menunggu.',
+  rotate: 'Putar HP.',
+  rotateNow: 'Putar layar',
   failed: 'Belum terkirim.',
+  withdrawn: 'Dibatalkan.',
   expired: 'Kedaluwarsa </script><script>alert(1)</script>',
   unreadable: 'Tidak bisa dibaca.',
 };
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 
 let server: HandoffServer;
-afterEach(() => server.cancel());
+afterEach(() => server.unpair());
 
 function window(): { contents: WebContents; events: HandoffEvent[] } {
   const events: HandoffEvent[] = [];
@@ -38,72 +42,72 @@ function window(): { contents: WebContents; events: HandoffEvent[] } {
   return { contents, events };
 }
 
-async function openOn(kind: 'photo' | 'signature'): Promise<{
-  url: string;
-  id: string;
-  events: HandoffEvent[];
-}> {
+async function paired(): Promise<{ url: string; id: string; events: HandoffEvent[] }> {
   server = new HandoffServer(() => ['127.0.0.1']);
   const { contents, events } = window();
-  const opened = await server.open(contents, kind, LABELS);
+  const opened = await server.pair(contents, LABELS);
   if (!opened.ok) throw new Error(opened.problem);
   return { url: opened.urls[0]!, id: opened.id, events };
 }
 
+const next = async (url: string, v: number): Promise<{ v: number; ask: unknown }> =>
+  (await (await fetch(`${url}/next?v=${String(v)}`)).json()) as { v: number; ask: unknown };
+
 describe('phone handoff', () => {
-  it('serves the page once the code is scanned, with its copy escaped and scripts locked down', async () => {
-    const { url, id, events } = await openOn('photo');
+  it('serves the page when the code is scanned, with its copy escaped and scripts locked down', async () => {
+    const { url, id, events } = await paired();
     expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/h\/[A-Za-z0-9_-]{32}$/);
     const response = await fetch(url);
     expect(response.status).toBe(200);
     expect(response.headers.get('content-security-policy')).toMatch(/default-src 'none'/);
     expect(response.headers.get('cache-control')).toBe('no-store');
     const html = await response.text();
-    expect(html).toContain('<title>Depan &#60;b&#62;</title>');
+    expect(html).toContain('Minta pelanggan tanda tangan &#60;b&#62;');
     expect(html).not.toContain('</script><script>alert(1)');
     expect(html).toContain('capture="environment"');
-    expect(events).toEqual([{ id, type: 'opened' }]);
-    // Opening it again (a reload) does not announce it twice.
+    expect(html).not.toMatch(/ style="/);
+    expect(events).toEqual([{ id, type: 'paired' }]);
+    // Opening it again (a reload) does not pair twice.
     await fetch(url);
     expect(events).toHaveLength(1);
   });
 
-  it('takes one JPEG from the phone and then stops answering', async () => {
-    const { url, id, events } = await openOn('photo');
-    const sent = await fetch(`${url}/send`, { method: 'POST', body: JPEG });
-    expect(sent.status).toBe(204);
-    expect(events.at(-1)).toEqual({ id, type: 'photo', bytes: JPEG });
-    // The key is spent, and the port is closed.
-    await expect(fetch(`${url}/send`, { method: 'POST', body: JPEG })).rejects.toThrow();
-  });
+  it('puts each step in front of the paired phone and takes what it sends, one scan for all', async () => {
+    const { url, id, events } = await paired();
+    expect(await next(url, -1)).toEqual({ v: 0, ask: null });
 
-  it('refuses what is not a photo, and a wrong key, without spending the code', async () => {
-    const { url, events } = await openOn('photo');
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    expect((await fetch(`${url}/send`, { method: 'POST', body: png })).status).toBe(415);
-    const wrong = url.replace(/\/h\/.{32}$/, `/h/${'A'.repeat(32)}`);
-    expect((await fetch(wrong)).status).toBe(410);
-    expect((await fetch(`${wrong}/send`, { method: 'POST', body: JPEG })).status).toBe(410);
-    expect((await fetch(url.replace(/\/h\/.*$/, '/'))).status).toBe(404);
-    expect(events).toEqual([]);
-    expect((await fetch(`${url}/send`, { method: 'POST', body: JPEG })).status).toBe(204);
-  });
+    // The phone waits; the counter asks for a photo and the wait ends with it.
+    const waiting = next(url, 0);
+    const front = server.ask(id, 'photo', 'Depan');
+    expect(await waiting).toEqual({ v: 1, ask: { seq: front, kind: 'photo', title: 'Depan' } });
+    expect(
+      (await fetch(`${url}/send?seq=${String(front)}`, { method: 'POST', body: JPEG })).status,
+    ).toBe(204);
+    expect(events.at(-1)).toEqual({ id, type: 'photo', seq: front, bytes: JPEG });
+    expect(await next(url, 1)).toEqual({ v: 2, ask: null });
 
-  it('takes the drawn strokes for a signature, kept inside the pad', async () => {
-    const { url, id, events } = await openOn('signature');
-    const body = JSON.stringify({
-      strokes: [
-        [
-          { x: 10, y: 20 },
-          { x: 900, y: -5 },
-        ],
-      ],
+    // The next step goes to the same phone without a new code.
+    const sign = server.ask(id, 'signature', 'Tanda tangan');
+    expect((await next(url, 2)).ask).toEqual({
+      seq: sign,
+      kind: 'signature',
+      title: 'Tanda tangan',
     });
-    const sent = await fetch(`${url}/send`, { method: 'POST', body });
+    const strokes = [
+      [
+        { x: 10, y: 20 },
+        { x: 900, y: -5 },
+      ],
+    ];
+    const sent = await fetch(`${url}/send?seq=${String(sign)}`, {
+      method: 'POST',
+      body: JSON.stringify({ strokes }),
+    });
     expect(sent.status).toBe(204);
     expect(events.at(-1)).toEqual({
       id,
       type: 'signature',
+      seq: sign,
       strokes: [
         [
           { x: 10, y: 20 },
@@ -114,27 +118,65 @@ describe('phone handoff', () => {
     });
   });
 
-  it('refuses an empty or malformed signature', async () => {
-    const { url } = await openOn('signature');
+  it('refuses a send for a step the counter backed out of or replaced', async () => {
+    const { url, id, events } = await paired();
+    const first = server.ask(id, 'photo', 'Depan')!;
+    server.withdraw(id, first);
+    expect((await next(url, 1)).ask).toBeNull();
+    expect(
+      (await fetch(`${url}/send?seq=${String(first)}`, { method: 'POST', body: JPEG })).status,
+    ).toBe(409);
+    const second = server.ask(id, 'photo', 'Belakang')!;
+    const third = server.ask(id, 'photo', 'Atas')!;
+    expect(
+      (await fetch(`${url}/send?seq=${String(second)}`, { method: 'POST', body: JPEG })).status,
+    ).toBe(409);
+    expect(events).toEqual([]);
+    expect(
+      (await fetch(`${url}/send?seq=${String(third)}`, { method: 'POST', body: JPEG })).status,
+    ).toBe(204);
+  });
+
+  it('refuses what is not a photo, and a wrong key, without spending the step', async () => {
+    const { url, id, events } = await paired();
+    const seq = server.ask(id, 'photo', 'Depan')!;
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    expect(
+      (await fetch(`${url}/send?seq=${String(seq)}`, { method: 'POST', body: png })).status,
+    ).toBe(415);
+    const wrong = url.replace(/\/h\/.{32}$/, `/h/${'A'.repeat(32)}`);
+    expect((await fetch(wrong)).status).toBe(410);
+    expect(
+      (await fetch(`${wrong}/send?seq=${String(seq)}`, { method: 'POST', body: JPEG })).status,
+    ).toBe(410);
+    expect((await fetch(url.replace(/\/h\/.*$/, '/'))).status).toBe(404);
+    expect(events).toEqual([]);
+    expect(
+      (await fetch(`${url}/send?seq=${String(seq)}`, { method: 'POST', body: JPEG })).status,
+    ).toBe(204);
+  });
+
+  it('refuses an empty or malformed signature, and one past the size limit', async () => {
+    const { url, id } = await paired();
+    const seq = server.ask(id, 'signature', 'Tanda tangan')!;
     for (const body of ['nope', '{"strokes":[]}', '{"strokes":[[{"x":"1","y":2}]]}']) {
-      expect((await fetch(`${url}/send`, { method: 'POST', body })).status).toBe(400);
+      expect((await fetch(`${url}/send?seq=${String(seq)}`, { method: 'POST', body })).status).toBe(
+        400,
+      );
     }
-  });
-
-  it('refuses an upload past the size limit', async () => {
-    const { url } = await openOn('signature');
     const huge = new Uint8Array(2 * 1024 * 1024).fill(32);
-    const response = await fetch(`${url}/send`, { method: 'POST', body: huge }).catch(() => null);
-    // The server cuts the upload off; the phone sees a refusal or a dropped connection.
-    expect(response === null || response.status === 413).toBe(true);
+    expect(
+      (await fetch(`${url}/send?seq=${String(seq)}`, { method: 'POST', body: huge })).status,
+    ).toBe(413);
   });
 
-  it('expires the code after ten minutes and tells the counter', async () => {
+  it('ends a pairing nobody uses for half an hour, and tells the counter', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
-      const { url, id, events } = await openOn('photo');
-      vi.advanceTimersByTime(10 * 60 * 1000);
+      const { url, id, events } = await paired();
+      vi.advanceTimersByTime(30 * 60 * 1000);
       expect(events.at(-1)).toEqual({ id, type: 'expired' });
+      expect(server.ask(id, 'photo', 'Depan')).toBeNull();
       vi.useRealTimers();
       await expect(fetch(url)).rejects.toThrow();
     } finally {
@@ -142,32 +184,39 @@ describe('phone handoff', () => {
     }
   });
 
-  it('cancels when the counter backs out, and a new code replaces the old', async () => {
-    const first = await openOn('photo');
-    const { contents } = window();
-    const second = await server.open(contents, 'photo', LABELS);
+  it('a phone waiting for the next step hears when the pairing ends', async () => {
+    const { url, id } = await paired();
+    const waiting = fetch(`${url}/next?v=0`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    server.unpair(id);
+    expect((await waiting).status).toBe(410);
+  });
+
+  it('a new code replaces the old, and unpairing closes the port', async () => {
+    const first = await paired();
+    const second = await server.pair(window().contents, LABELS);
     if (!second.ok) throw new Error(second.problem);
-    expect((await fetch(`${second.urls[0]!}`)).status).toBe(200);
+    expect((await fetch(second.urls[0]!)).status).toBe(200);
     const oldKey = first.url.split('/h/')[1]!;
     expect((await fetch(second.urls[0]!.replace(/[^/]+$/, oldKey))).status).toBe(410);
-    server.cancel(second.id);
+    server.unpair(second.id);
     await expect(fetch(second.urls[0]!)).rejects.toThrow();
   });
 
-  it('lets the newer of two quick opens win, leaving one port open', async () => {
+  it('lets the newer of two quick pairings win, leaving one port open', async () => {
     server = new HandoffServer(() => ['127.0.0.1']);
     const [first, second] = await Promise.all([
-      server.open(window().contents, 'photo', LABELS),
-      server.open(window().contents, 'photo', LABELS),
+      server.pair(window().contents, LABELS),
+      server.pair(window().contents, LABELS),
     ]);
     expect(first).toEqual({ ok: false, problem: 'failed' });
     if (!second.ok) throw new Error(second.problem);
     expect((await fetch(second.urls[0]!)).status).toBe(200);
-    server.cancel(second.id);
+    server.unpair(second.id);
     await expect(fetch(second.urls[0]!)).rejects.toThrow();
   });
 
-  it('stops waiting when the counter page reloads', async () => {
+  it('unpairs when the counter page reloads', async () => {
     server = new HandoffServer(() => ['127.0.0.1']);
     const handlers = new Map<string, () => void>();
     const contents = {
@@ -176,7 +225,7 @@ describe('phone handoff', () => {
       once: (name: string, handler: () => void) => handlers.set(name, handler),
       off: (name: string) => handlers.delete(name),
     } as unknown as WebContents;
-    const opened = await server.open(contents, 'photo', LABELS);
+    const opened = await server.pair(contents, LABELS);
     if (!opened.ok) throw new Error(opened.problem);
     handlers.get('did-start-loading')!();
     await expect(fetch(opened.urls[0]!)).rejects.toThrow();
@@ -185,7 +234,7 @@ describe('phone handoff', () => {
 
   it('says so when the PC is on no store network', async () => {
     server = new HandoffServer(() => []);
-    expect(await server.open(window().contents, 'photo', LABELS)).toEqual({
+    expect(await server.pair(window().contents, LABELS)).toEqual({
       ok: false,
       problem: 'noNetwork',
     });

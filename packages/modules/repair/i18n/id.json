@@ -177,6 +177,7 @@
       "top": "Atas"
     },
     "take": "Ambil foto",
+    "takeAll": "Ambil semua foto",
     "takeNext": "Ambil foto: {slot}",
     "expired": "Ada foto yang sudah terhapus. Ambil ulang, ya.",
     "title": "Foto",

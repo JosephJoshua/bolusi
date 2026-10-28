@@ -17,6 +17,7 @@ const INSTALLED = process.env['BOLUSI_E2E_EXECUTABLE'];
 // Chromium's built-in test pattern stands in for a webcam; the app's own permission rules still
 // decide whether the page may use it.
 const FLAGS = ['--no-sandbox', '--use-fake-device-for-media-stream'];
+const TILES = '[data-testid^="repair.desk.intake.photo."]:not([data-testid$=".all"])';
 
 async function launch(flags: readonly string[] = FLAGS): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
@@ -135,7 +136,7 @@ test('the page gets only the narrow print, update and handoff calls, through the
   expect(shape).toEqual({
     keys: ['handoff', 'printers', 'updates'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
-    handoff: ['cancel', 'onEvent', 'open'],
+    handoff: ['ask', 'onEvent', 'pair', 'unpair', 'withdraw'],
     node: 'undefined',
     process: 'undefined',
   });
@@ -171,7 +172,7 @@ test('the paper picked in Settings is kept by the main process across a restart'
 test('takes an intake photo with the webcam', async () => {
   await page.getByTestId('repair.desk.board.newIntake').click();
   await page.getByTestId('repair.desk.intake').waitFor();
-  const tile = page.locator('[data-testid^="repair.desk.intake.photo."]').first();
+  const tile = page.locator(TILES).first();
   await tile.click();
   const camera = page.getByTestId('desktop.camera');
   await expect(camera.getByTestId('desktop.camera.shoot')).toBeEnabled();
@@ -189,6 +190,8 @@ test('takes the customer signature at handover, over the handover dialog', async
   await page.getByTestId('repair.desk.ticket.action.handover').click();
   await page.getByTestId('repair.desk.handover').waitFor();
   await page.getByTestId('repair.desk.handover.signature').click();
+  // No touch screen here, so the phone is offered first; this test signs on the PC.
+  await page.getByTestId('desktop.handoff.back').click();
   const pad = page.getByTestId('desktop.signature.pad');
   await expect(page.getByTestId('desktop.signature.use')).toBeDisabled();
   const box = (await pad.boundingBox())!;
@@ -208,78 +211,103 @@ test('takes the customer signature at handover, over the handover dialog', async
 
 /**
  * A phone's browser on the store Wi-Fi, played by a plain window of the same Electron (no extra
- * browser to install on CI) with a phone-sized touch screen. It reaches the page over the PC's LAN
- * address like a phone would.
+ * browser to install on CI). It reaches the page over the PC's LAN address like a phone would.
  */
-async function phoneOpening(url: string): Promise<{ phone: Page; done: () => Promise<void> }> {
+async function phoneOpening(
+  url: string,
+  size = { width: 390, height: 844 },
+): Promise<{ phone: Page; done: () => Promise<void> }> {
   const opening = app.waitForEvent('window');
-  await app.evaluate(({ BrowserWindow }, address) => {
-    const window = new BrowserWindow({ width: 390, height: 844, show: true });
-    void window.loadURL(address);
-  }, url);
+  await app.evaluate(
+    ({ BrowserWindow }, { address, size }) => {
+      const window = new BrowserWindow({ ...size, show: true });
+      void window.loadURL(address);
+    },
+    { address: url, size },
+  );
   const phone = await opening;
+  await phone.setViewportSize(size);
   await phone.waitForLoadState();
   return { phone, done: () => phone.close() };
 }
 
-test('a PC without a webcam takes the intake photo on a phone over the store Wi-Fi', async () => {
+async function jpegOn(phone: Page): Promise<Buffer> {
+  const bytes = await phone.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2400;
+    canvas.height = 1800;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = '#2a6';
+    context.fillRect(0, 0, 2400, 1800);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.9),
+    );
+    return [...new Uint8Array(await blob!.arrayBuffer())];
+  });
+  return Buffer.from(bytes);
+}
+
+test('a PC without a webcam takes every intake photo on one paired phone', async () => {
   await app.close();
   await launch(['--no-sandbox']);
   await page.getByTestId('repair.desk.board.newIntake').click();
-  const tile = page.locator('[data-testid^="repair.desk.intake.photo."]').first();
-  await tile.click();
-  await expect(page.getByTestId('desktop.camera.problem')).toBeVisible();
-  await page.getByTestId('desktop.usePhone').click();
+  const tiles = page.locator(TILES);
+  const count = await tiles.count();
+  await page.getByTestId('repair.desk.intake.photo.all').click();
+  // No webcam: straight to the QR, no camera error first.
   const url = (await page.getByTestId('desktop.handoff.url').textContent())!;
   expect(url).toMatch(/^http:\/\/[\d.]+:\d+\/h\//);
 
   const { phone, done } = await phoneOpening(url);
   try {
-    await expect(page.getByTestId('desktop.handoff.status')).toContainText(/tersambung/);
-    const jpeg = await phone.evaluate(async () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 2400;
-      canvas.height = 1800;
-      const context = canvas.getContext('2d')!;
-      context.fillStyle = '#2a6';
-      context.fillRect(0, 0, 2400, 1800);
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, 'image/jpeg', 0.9),
-      );
-      return [...new Uint8Array(await blob!.arrayBuffer())];
-    });
-    await phone.locator('#file').setInputFiles({
-      name: 'front.jpg',
-      mimeType: 'image/jpeg',
-      buffer: Buffer.from(jpeg),
-    });
-    await expect(phone.locator('#preview')).toBeVisible();
-    await phone.locator('#send').click();
-    await expect(phone.locator('#note')).toContainText('Terkirim');
+    await expect(page.getByTestId('desktop.handoff.onPhone')).toBeVisible();
+    const jpeg = await jpegOn(phone);
+    // One scan, then each angle shows up on the phone by itself.
+    for (let n = 0; n < count; n += 1) {
+      const title = (await tiles.nth(n).textContent())!;
+      await expect(phone.locator('#photo-title')).toBeVisible();
+      expect(title).toContain(await phone.locator('#photo-title').textContent());
+      await phone.locator('#file').setInputFiles({
+        name: 'shot.jpg',
+        mimeType: 'image/jpeg',
+        buffer: jpeg,
+      });
+      await expect(phone.locator('#preview')).toBeVisible();
+      await phone.locator('#photo-send').click();
+      await expect(tiles.nth(n).locator('img')).toHaveAttribute('src', /^blob:/);
+    }
+    await expect(phone.locator('#waiting')).toBeVisible();
   } finally {
     await done();
   }
   await expect(page.getByTestId('desktop.handoff')).toBeHidden();
-  await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/);
+  await expect(page.getByTestId('repair.desk.intake.photo.all')).toBeHidden();
 });
 
-test('the customer signs on a phone at handover', async () => {
+test('the customer signs on a phone turned on its side', async () => {
   await page.getByTestId('repair.desk.board.views.pickup').click();
   await page.getByText('Ester Mandowen').click();
   await page.getByTestId('repair.desk.ticket.action.handover').click();
   await page.getByTestId('repair.desk.handover.signature').click();
-  await page.getByTestId('desktop.usePhone').click();
+  // No touch screen on this PC: the phone is offered straight away.
   const url = (await page.getByTestId('desktop.handoff.url').textContent())!;
   const { phone, done } = await phoneOpening(url);
   try {
+    // Held upright, the page asks to turn the phone.
+    await expect(phone.locator('#rotate')).toBeVisible();
+    await expect(phone.locator('#pad')).toBeHidden();
+    await phone.setViewportSize({ width: 844, height: 390 });
     const pad = phone.locator('#pad');
+    await expect(pad).toBeVisible();
     const box = (await pad.boundingBox())!;
+    // Most of the screen is pad.
+    expect(box.width).toBeGreaterThan(560);
     await phone.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.6);
     await phone.mouse.down();
     await phone.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.3, { steps: 8 });
     await phone.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.6, { steps: 8 });
     await phone.mouse.up();
-    await phone.locator('#send').click();
+    await phone.locator('#sign-send').click();
     await expect(phone.locator('#note')).toContainText('Terkirim');
   } finally {
     await done();

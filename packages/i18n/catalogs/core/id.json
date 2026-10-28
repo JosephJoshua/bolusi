@@ -143,18 +143,25 @@
     "qrLabel": "Kode QR untuk HP",
     "orOpen": "Atau buka di HP:",
     "waiting": "Menunggu HP…",
-    "opened": "HP sudah tersambung. Menunggu kiriman…",
     "noNetwork": "Komputer ini belum tersambung ke Wi-Fi toko. Sambungkan dulu, lalu coba lagi.",
     "failed": "HP belum bisa disambungkan. Coba lagi.",
-    "expired": "Kodenya sudah kedaluwarsa. Buat kode baru.",
+    "expired": "Sambungan ke HP sudah berakhir. Buat kode baru.",
     "page": {
       "photoHint": "Ambil foto, lalu kirim ke komputer.",
       "send": "Kirim ke komputer",
       "sending": "Mengirim…",
-      "sent": "Terkirim. Lanjutkan di komputer.",
+      "sent": "Terkirim.",
       "failed": "Belum terkirim. Pastikan HP masih pakai Wi-Fi toko dan kodenya masih tampil di komputer, lalu coba lagi.",
       "expired": "Kode ini sudah kedaluwarsa. Pindai kode baru dari komputer.",
-      "unreadable": "Fotonya tidak bisa dibaca. Ambil lagi."
-    }
+      "unreadable": "Fotonya tidak bisa dibaca. Ambil lagi.",
+      "waiting": "HP sudah tersambung. Langkah berikutnya muncul di sini.",
+      "rotate": "Putar HP ke posisi mendatar.",
+      "rotateNow": "Putar layar",
+      "withdrawn": "Dibatalkan di komputer."
+    },
+    "newCode": "Ganti HP",
+    "photoOnPhone": "Ambil fotonya di HP",
+    "signOnPhone": "Minta pelanggan tanda tangan di HP",
+    "waitingSend": "Menunggu kiriman dari HP…"
   }
 }
