@@ -64,13 +64,11 @@ export const CASH_MOVE_LABEL: Readonly<Record<CashMoveKind, MoneyKey>> = {
 /**
  * The difference an owner still has to settle: the latest count's, when it is off and not settled.
  * Only the latest one: an earlier difference left unsettled is still in the book, so the next count
- * finds it again, and settling both would correct the drawer twice.
+ * finds it again, and settling both would correct the drawer twice. `counts` is newest first, as
+ * `cashDrawer` lists them (the server's rule orders them the same way).
  */
 export function differenceToSettle(counts: readonly CashCountRow[]): CashCountRow | null {
-  const latest = counts.reduce<CashCountRow | null>(
-    (found, count) => (found === null || count.countedAt > found.countedAt ? count : found),
-    null,
-  );
+  const latest = counts[0] ?? null;
   return latest !== null && latest.difference !== 0 && latest.settled === 0 ? latest : null;
 }
 

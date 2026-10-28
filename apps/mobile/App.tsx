@@ -776,11 +776,60 @@ export default function App(props: AppProps): React.JSX.Element {
     (next: HomeTab): void => setHomeTab({ userId: currentUser?.id ?? '', tab: next }),
     [currentUser],
   );
-  // Whose Kas was opened: kept mounted behind Servisan from then on, for that person only.
-  const kasOpened = useRef<string | null>(null);
-  if (tab === 'kas') kasOpened.current = currentUser?.id ?? null;
-  const kasMounted =
-    tab === 'kas' || (kasOpened.current !== null && kasOpened.current === currentUser?.id);
+  /**
+   * The home surface's back/leave with tabs. On Servisan it is repair's own. On Kas, back closes an
+   * open Kas step or returns to Servisan (never an app exit from the second tab), and leaving home
+   * still asks about a half-done intake on the hidden Servisan, after showing it.
+   */
+  const repairNavRef = useRef<SurfaceNav | null>(null);
+  const kasNavRef = useRef<SurfaceNav | null>(null);
+  const tabRef = useRef<HomeTab>(tab);
+  const selectTabRef = useRef(selectTab);
+  selectTabRef.current = selectTab;
+  const syncHomeNav = useCallback((): void => {
+    registerSurfaceNav(
+      tabRef.current === 'repair'
+        ? repairNavRef.current
+        : {
+            handleBack: () => {
+              const kas = kasNavRef.current;
+              if (kas !== null) return kas.handleBack();
+              selectTabRef.current('repair');
+              return true;
+            },
+            requestLeave: (proceed) => {
+              const repair = repairNavRef.current;
+              if (repair === null) {
+                proceed();
+                return;
+              }
+              selectTabRef.current('repair');
+              repair.requestLeave(proceed);
+            },
+          },
+    );
+  }, [registerSurfaceNav]);
+  const registerRepairNav = useCallback(
+    (nav: SurfaceNav | null): void => {
+      repairNavRef.current = nav;
+      syncHomeNav();
+    },
+    [syncHomeNav],
+  );
+  // A Kas step holds what was typed only while it shows, so the tabs give way to its own back.
+  const [kasStepOpen, setKasStepOpen] = useState(false);
+  const registerKasNav = useCallback(
+    (nav: SurfaceNav | null): void => {
+      kasNavRef.current = nav;
+      setKasStepOpen(nav !== null);
+      syncHomeNav();
+    },
+    [syncHomeNav],
+  );
+  useEffect(() => {
+    tabRef.current = tab;
+    syncHomeNav();
+  }, [tab, syncHomeNav]);
 
   // The shell's edge-to-edge insets, resolved once per render and applied at BOTH `bolusi-app-shell`
   // returns below — so the capture zone and the main zone can never drift on the top inset. The top
@@ -1306,7 +1355,7 @@ export default function App(props: AppProps): React.JSX.Element {
                     runtime={props.repair}
                     // The clock itself, not this render's reading: an intake can sit open for hours.
                     now={props.clock ?? systemClock.now}
-                    onRegisterSurfaceNav={tab === 'repair' ? registerSurfaceNav : undefined}
+                    onRegisterSurfaceNav={registerRepairNav}
                     restoredDraft={restoredIntakeDraft}
                     onDraftChange={publishIntakeDraft}
                     onOpenSyncStatus={openSyncStatus}
@@ -1315,31 +1364,31 @@ export default function App(props: AppProps): React.JSX.Element {
                   />
                 );
                 if (!showsKas || moneyRuntime === null) return repairHome;
-                // Both stay mounted once opened, so a half-done intake survives a look at Kas.
+                // Servisan stays mounted behind Kas, so a half-done intake survives a look at the
+                // drawer. Kas holds nothing worth keeping, so it is only there while it shows.
                 return (
                   <View style={FILL}>
                     <View style={tab === 'repair' ? FILL : HIDDEN}>{repairHome}</View>
-                    {kasMounted ? (
-                      <View style={tab === 'kas' ? FILL : HIDDEN}>
-                        <KasHome
-                          runtime={moneyRuntime}
-                          now={props.clock ?? systemClock.now}
-                          syncChip={homeSyncChip}
-                          avatar={homeAvatar}
-                          onRegisterSurfaceNav={tab === 'kas' ? registerSurfaceNav : undefined}
-                          onBackAtRoot={() => selectTab('repair')}
-                        />
-                      </View>
+                    {tab === 'kas' ? (
+                      <KasHome
+                        runtime={moneyRuntime}
+                        now={props.clock ?? systemClock.now}
+                        syncChip={homeSyncChip}
+                        avatar={homeAvatar}
+                        onRegisterSurfaceNav={registerKasNav}
+                      />
                     ) : null}
-                    <TabBar
-                      tabs={[
-                        { key: 'repair', label: tn('repair.board.title'), icon: 'repair' },
-                        { key: 'kas', label: tm('money.kas.title'), icon: 'money' },
-                      ]}
-                      selected={tab}
-                      onSelect={selectTab}
-                      testID="shell-tabs"
-                    />
+                    {tab === 'kas' && kasStepOpen ? null : (
+                      <TabBar
+                        tabs={[
+                          { key: 'repair', label: tn('repair.board.title'), icon: 'repair' },
+                          { key: 'kas', label: tm('money.kas.title'), icon: 'money' },
+                        ]}
+                        selected={tab}
+                        onSelect={selectTab}
+                        testID="shell-tabs"
+                      />
+                    )}
                   </View>
                 );
               }

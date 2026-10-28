@@ -1,7 +1,7 @@
 /**
  * KasHome — the money surface at the shell's Kas tab, built like `RepairHome`: it owns the board →
  * step navigation as local state, binds the money runtime once and publishes its back to the
- * shell, so hardware back closes an open step instead of leaving Kas.
+ * shell while a step is open, so hardware back closes the step instead of leaving Kas.
  */
 import {
   CountCashStep,
@@ -31,9 +31,8 @@ export interface KasHomeProps {
   readonly now: () => number;
   readonly syncChip: ReactNode;
   readonly avatar: ReactNode;
+  /** Published while a step is open, so hardware back closes it; null on the board. */
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
-  /** Hardware back on the board: Kas is a tab, so back goes to the first one instead of leaving. */
-  readonly onBackAtRoot: () => void;
 }
 
 export function KasHome({
@@ -42,7 +41,6 @@ export function KasHome({
   syncChip,
   avatar,
   onRegisterSurfaceNav,
-  onBackAtRoot,
 }: KasHomeProps): React.JSX.Element {
   const [view, setView] = useState<KasView>({ kind: 'board' });
   const toBoard = (): void => setView({ kind: 'board' });
@@ -50,16 +48,19 @@ export function KasHome({
   const stepChrome = { syncChip, avatar: null };
 
   useEffect(() => {
+    if (view.kind === 'board') {
+      onRegisterSurfaceNav?.(null);
+      return;
+    }
     onRegisterSurfaceNav?.({
       handleBack: () => {
-        if (view.kind === 'board') onBackAtRoot();
-        else setView({ kind: 'board' });
+        setView({ kind: 'board' });
         return true;
       },
       requestLeave: (proceed) => proceed(),
     });
     return () => onRegisterSurfaceNav?.(null);
-  }, [view, onRegisterSurfaceNav, onBackAtRoot]);
+  }, [view, onRegisterSurfaceNav]);
 
   const screen = (() => {
     switch (view.kind) {

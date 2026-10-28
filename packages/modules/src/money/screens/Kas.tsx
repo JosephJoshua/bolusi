@@ -17,7 +17,7 @@ import {
   touch,
   type,
 } from '@bolusi/ui';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Section, type ScreenChrome } from '../../screen-kit/screens/index.js';
@@ -35,7 +35,7 @@ import {
   movesOut,
   splitOpenBalances,
 } from '../kas.js';
-import type { CashCountRow, OpenBalanceRow } from '../queries.js';
+import type { CashCountRow, MoneyEntryRow, OpenBalanceRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -67,11 +67,26 @@ export function KasBoard({
 }: KasBoardProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const can = (permission: string) => runtime.hasPermission(permission);
-  // Today is fixed while the board is open; a new day starts when it is opened again.
-  const [today] = useState(() => dayStart(now()));
+  // Read each render, so a board shown again the next morning reads the new day.
+  const today = dayStart(now());
   const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
   const entries = useMoneyQuery(
-    async (rt) => (await rt.query('moneyEntries', { from: today, to: today + DAY_MS })).rows,
+    async (rt) => {
+      // Every record of the day, however busy it was: the totals are sums over all of them.
+      const rows: MoneyEntryRow[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await rt.query('moneyEntries', {
+          from: today,
+          to: today + DAY_MS,
+          limit: 500,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+        rows.push(...page.rows);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+      return rows;
+    },
     `entries:${String(today)}`,
   );
   const accounts = useMoneyQuery(

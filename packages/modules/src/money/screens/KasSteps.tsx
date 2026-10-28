@@ -13,7 +13,7 @@ import { StepScreen, type ScreenChrome } from '../../screen-kit/screens/index.js
 
 import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
 import { tm } from '../i18n.js';
-import { CASH_MOVE_LABEL } from '../kas.js';
+import { CASH_MOVE_LABEL, differenceToSettle } from '../kas.js';
 import {
   digitsOf,
   digitsText,
@@ -291,13 +291,18 @@ export function SettleCountStep({
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
+  const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
   const [reason, setReason] = useState('');
-  const counter = runtime.nameOf(count.countedBy);
+  // The figures as they stand: a payment from before the count can sync while the owner reads.
+  const counts = drawer.status === 'ready' ? drawer.data.counts : null;
+  const live = counts?.find((row) => row.id === count.id) ?? count;
+  const open = counts === null || differenceToSettle(counts)?.id === count.id;
+  const counter = runtime.nameOf(live.countedBy);
 
   const submit = (): void => {
-    if (reason.trim() === '') return;
+    if (reason.trim() === '' || !open) return;
     void runner
-      .run(() => runtime.run('adjustCash', { amount: count.difference, countId: count.id, reason }))
+      .run(() => runtime.run('adjustCash', { amount: live.difference, countId: live.id, reason }))
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -310,8 +315,8 @@ export function SettleCountStep({
       onBack={onCancel}
       primaryLabel={tm('money.settle.save')}
       onPrimary={submit}
-      primaryDisabled={reason.trim() === ''}
-      primaryHint={tm('money.settle.hint')}
+      primaryDisabled={reason.trim() === '' || !open}
+      primaryHint={open ? tm('money.settle.hint') : tm('money.settle.closed')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -319,21 +324,21 @@ export function SettleCountStep({
     >
       {counter === null ? null : (
         <Text style={styles.muted}>
-          {tm('money.settle.countedBy', { name: counter, time: formatDateTime(count.countedAt) })}
+          {tm('money.settle.countedBy', { name: counter, time: formatDateTime(live.countedAt) })}
         </Text>
       )}
       <View style={styles.sum}>
-        <Line label={tm('money.kas.expected')} value={formatMoney(count.expected)} />
-        <Line label={tm('money.count.counted')} value={formatMoney(count.counted)} />
+        <Line label={tm('money.kas.expected')} value={formatMoney(live.expected)} />
+        <Line label={tm('money.count.counted')} value={formatMoney(live.counted)} />
         <Line
           label={tm('money.count.difference')}
-          value={differenceText(count.difference)}
+          value={differenceText(live.difference)}
           strong
           testID={`${testID}.difference`}
         />
       </View>
-      {count.note === null || count.note === '' ? null : (
-        <Text style={styles.muted}>{count.note}</Text>
+      {live.note === null || live.note === '' ? null : (
+        <Text style={styles.muted}>{live.note}</Text>
       )}
       <View style={styles.gap}>
         <TextInput

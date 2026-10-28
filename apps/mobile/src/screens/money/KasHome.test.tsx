@@ -3,7 +3,7 @@
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog, type MoneyRuntime } from '@bolusi/modules/money/screens';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test } from 'vitest';
 
 import {
   ensureRepairCatalog,
@@ -38,11 +38,7 @@ function moneyRuntimeFor(harness: RepairHarness, userId: string): MoneyRuntime {
   };
 }
 
-async function mount(
-  harness: RepairHarness,
-  userId: string,
-  onBackAtRoot: () => void = vi.fn(),
-): Promise<RenderResult> {
+async function mount(harness: RepairHarness, userId: string): Promise<RenderResult> {
   ensureRepairCatalog();
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
   // The board's "today" is the harness clock's day: every op it writes lands on it.
@@ -58,7 +54,6 @@ async function mount(
       now={() => now}
       syncChip={null}
       avatar={null}
-      onBackAtRoot={onBackAtRoot}
     />,
   );
   await settle();
@@ -112,6 +107,29 @@ describe('the drawer', () => {
 
     expect(screen.query('money.kas.differences')).toBeNull();
     expect(text(screen, 'money.kas.expected')).toBe('Rp 95.000');
+  });
+
+  test('a newer count while the owner reads closes the settle step to the older difference', async () => {
+    h = await openRepairScreenHarness(5409);
+    await float(h, 100_000);
+    await h.money('countCash', { counted: 95_000 }, h.cashierId);
+    const screen = await mount(h, h.storeOwnerId);
+    const countId = (
+      (await h.moneyQuery('cashDrawer', {}, h.storeOwnerId)).rows[0] as {
+        counts: { id: string }[];
+      }
+    ).counts[0]!.id;
+    await press(screen, `money.kas.difference.${countId}`);
+    type(screen, 'money.settle.reason', 'Salah kembalian');
+    await settle();
+    expect(screen.all('money.settle.primary')[0]!.props['disabled']).toBe(false);
+
+    await h.money('countCash', { counted: 95_000 }, h.cashierId);
+    await settle();
+    expect(screen.all('money.settle.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(screen, 'money.settle.primaryHint')).toBe(
+      'Selisih ini sudah diselesaikan atau ada hitungan yang lebih baru.',
+    );
   });
 
   test('cash out of the drawer needs a reason, and shows with today’s moves', async () => {
@@ -174,9 +192,8 @@ describe('the drawer', () => {
     expect(deposit).toEqual({ account: `account:${accountId}`, amount: 60_000 });
   });
 
-  test('back on the board goes to the first tab, and back in a step closes it', async () => {
+  test('back in a step returns to the board, where Kas has no back of its own', async () => {
     h = await openRepairScreenHarness(5405);
-    const backAtRoot = vi.fn();
     let nav: { handleBack: () => boolean } | null = null;
     ensureRepairCatalog();
     registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
@@ -189,18 +206,16 @@ describe('the drawer', () => {
         onRegisterSurfaceNav={(next) => {
           nav = next;
         }}
-        onBackAtRoot={backAtRoot}
       />,
     );
     await settle();
+    expect(nav).toBeNull();
     await press(screen, 'money.kas.count');
     expect(screen.query('money.count')).not.toBeNull();
-    nav!.handleBack();
+    expect(nav!.handleBack()).toBe(true);
     await settle();
     expect(screen.query('money.count')).toBeNull();
-    expect(backAtRoot).not.toHaveBeenCalled();
-    nav!.handleBack();
-    expect(backAtRoot).toHaveBeenCalledTimes(1);
+    expect(nav).toBeNull();
   });
 });
 

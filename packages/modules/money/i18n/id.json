@@ -29,7 +29,8 @@
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
-    "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru."
+    "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
+    "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan."
   },
   "method": {
     "cash": "Tunai"
@@ -99,7 +100,8 @@
     "countedBy": "Dihitung {name}, {time}",
     "reason": "Alasan",
     "save": "Selesaikan selisih",
-    "hint": "Isi alasannya."
+    "hint": "Isi alasannya.",
+    "closed": "Selisih ini sudah diselesaikan atau ada hitungan yang lebih baru."
   },
   "receive": {
     "title": "Terima pembayaran",

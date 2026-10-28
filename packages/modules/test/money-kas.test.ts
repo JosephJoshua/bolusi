@@ -79,7 +79,7 @@ describe('counts', () => {
     const short = count({ id: 'short', difference: -10_000, countedAt: 1 });
     const again = count({ id: 'again', difference: -10_000, countedAt: 2 });
     expect(differenceToSettle([again, short])?.id).toBe('again');
-    expect(differenceToSettle([count({ id: 'exact', countedAt: 3 }), again])).toBeNull();
+    expect(differenceToSettle([count({ id: 'exact', countedAt: 3 }), again, short])).toBeNull();
     expect(differenceToSettle([{ ...again, settled: -10_000 }])).toBeNull();
     expect(differenceToSettle([])).toBeNull();
   });

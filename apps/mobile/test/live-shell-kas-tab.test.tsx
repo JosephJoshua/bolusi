@@ -127,17 +127,37 @@ describe('the Kas tab', () => {
     expect(shown.get('repair.intake.customer.name.field').props['value']).toBe('Yohanis Wenda');
   });
 
-  test('hardware back on Kas goes to Servisan, and from a Kas step back to the board', async () => {
+  test('switching user from Kas first shows the half-typed intake and asks there', async () => {
+    const shown = await signedIn(COUNTER);
+    await press(shown, 'repair.board.newIntake');
+    fire(shown.get('repair.intake.customer.name.field'), 'onChangeText', 'Yohanis Wenda');
+    await settle();
+    await press(shown, 'shell-tabs.kas');
+    await waitUntil(() => shown.query('money.kas.expected') !== null);
+
+    fire(shown.all('ui.avatarButton').at(-1)!, 'onPress');
+    await settle();
+    await press(shown, 'account-menu-switch-user');
+
+    expect(shown.query('money.kas')).toBeNull();
+    expect(shown.query('repair.intake.discard')).not.toBeNull();
+    expect(shown.query('switcher-screen')).toBeNull();
+  });
+
+  test('hardware back on Kas goes to Servisan, and from a Kas step (without tabs) back to the board', async () => {
     const shown = await signedIn(COUNTER);
     await press(shown, 'shell-tabs.kas');
     await waitUntil(() => shown.query('money.kas.count') !== null);
     await press(shown, 'money.kas.count');
     expect(shown.query('money.count')).not.toBeNull();
+    // A step keeps what was typed only while it shows: no tabs to leave it by.
+    expect(shown.query('shell-tabs')).toBeNull();
 
     expect(__emitHardwareBack()).toBe(true);
     await settle();
     expect(shown.query('money.count')).toBeNull();
     expect(shown.query('money.kas')).not.toBeNull();
+    expect(shown.query('shell-tabs')).not.toBeNull();
 
     expect(__emitHardwareBack()).toBe(true);
     await settle();

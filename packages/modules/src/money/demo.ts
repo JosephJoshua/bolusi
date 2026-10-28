@@ -109,17 +109,26 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     if (e.kind === 'cash_adjusted') return e.amount;
     return 0;
   };
-  const cashBefore = (at: number | null): number =>
+  const cashNow = (): number => entries.reduce((sum, e) => sum + cashEffect(e), 0);
+  /** As `countExpected`: a correction that settled an earlier count stands at that count. */
+  const countExpected = (count: Stored): number =>
     entries
-      .filter((e) => at === null || e.createdAt < at)
+      .filter((e) => {
+        const settles = e.kind === 'cash_adjusted' ? byId(e.relatedEntryId) : undefined;
+        return settles === undefined ? e.createdAt < count.createdAt : earlier(settles, count);
+      })
       .reduce((sum, e) => sum + cashEffect(e), 0);
+  const byId = (id: string | null): Stored | undefined =>
+    id === null ? undefined : entries.find((e) => e.id === id);
+  const earlier = (a: Stored, b: Stored): boolean =>
+    a.createdAt < b.createdAt || (a.createdAt === b.createdAt && a.id < b.id);
 
   const drawer = (): CashDrawer => {
     const counts: CashCountRow[] = entries
       .filter((e) => e.kind === 'cash_counted')
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((count) => {
-        const expected = cashBefore(count.createdAt);
+        const expected = countExpected(count);
         return {
           id: count.id,
           counted: count.amount,
@@ -133,7 +142,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
             .reduce((sum, e) => sum + e.amount, 0),
         };
       });
-    return { expected: cashBefore(null), counts };
+    return { expected: cashNow(), counts };
   };
 
   const openBalances = (): OpenBalanceRow[] => {
