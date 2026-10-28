@@ -397,7 +397,9 @@ export function DownPaymentStep({
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
   const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
-  const accounts = usePaymentAccounts() ?? [];
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const correcting = mode === 'correct';
   const { amount, aboveTotal, gap } = downPaymentEntry({
     mode,
@@ -407,7 +409,7 @@ export function DownPaymentStep({
     total,
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
-  const complete = gap === null;
+  const complete = gap === null && loadedAccounts !== null;
 
   const submit = (): void => {
     if (!complete || amount === null) return;

@@ -623,7 +623,7 @@ export const deviceReturnedRule: Rule = async (op, { db, holdsPermission }) => {
       'priceChangesPending',
       'price proposals are undecided',
     );
-  } // Version 1 predates the money ledger: its servisan was settled on paper.
+  }
   // Every version: an older payload carries no reason, so it hands over only a paid phone.
   await requirePaid(db, op, holdsPermission);
 };

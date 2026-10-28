@@ -821,7 +821,9 @@ export function HandoverDialog({
   const [photo, setPhoto] = useState<MediaRef | null>(null);
   const [signature, setSignature] = useState<MediaRef | null>(null);
   const [note, setNote] = useState('');
-  const accounts = usePaymentAccounts() ?? [];
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
@@ -843,8 +845,10 @@ export function HandoverDialog({
       if (captured !== undefined && captured !== null) keep(captured.mediaRef);
     });
   };
+  const captured = photo !== null && signature !== null;
+  const complete = captured && settled && loadedAccounts !== null;
   const submit = (): void => {
-    if (photo === null || signature === null || !settled) return;
+    if (!complete || photo === null || signature === null) return;
     void runner
       .run(() =>
         runtime.run('returnDevice', {
@@ -859,8 +863,6 @@ export function HandoverDialog({
         if (result !== undefined) onDone();
       });
   };
-  const captured = photo !== null && signature !== null;
-  const complete = captured && settled;
 
   return (
     <>
@@ -1032,7 +1034,9 @@ export function DownPaymentDialog({
   const [typed, setTyped] = useState<number | null>(null);
   const [reason, setReason] = useState('');
   const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
-  const accounts = usePaymentAccounts() ?? [];
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
   const correcting = mode === 'correct';
   const { amount, aboveTotal, gap } = downPaymentEntry({
     mode,
@@ -1045,7 +1049,7 @@ export function DownPaymentDialog({
   const testId = `repair.desk.downPayment.${mode}`;
 
   const submit = (): void => {
-    if (gap !== null || amount === null) return;
+    if (gap !== null || amount === null || loadedAccounts === null) return;
     void runner
       .run(() =>
         correcting
@@ -1089,7 +1093,7 @@ export function DownPaymentDialog({
               variant="primary"
               onClick={submit}
               busy={runner.busy}
-              disabled={gap !== null || stale !== null}
+              disabled={gap !== null || stale !== null || loadedAccounts === null}
               data-testid={`${testId}.submit`}
             />
           </>

@@ -66,7 +66,9 @@ export function Handover({
     async (rt) => (await rt.query('getTicket', { ticketId })).rows[0],
     `handover:${ticketId}:${String(reloadNonce)}`,
   );
-  const accounts = usePaymentAccounts() ?? [];
+  // Until the store's methods load, a method picked earlier would read as cash.
+  const loadedAccounts = usePaymentAccounts();
+  const accounts = loadedAccounts ?? [];
 
   // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
   // than take a signature for a handover that would be refused.
@@ -101,7 +103,7 @@ export function Handover({
   };
 
   const submit = (): void => {
-    if (photo === null || signature === null || !settled) return;
+    if (photo === null || signature === null || !settled || loadedAccounts === null) return;
     void runner
       .run(() =>
         runtime.run('returnDevice', {
@@ -125,7 +127,7 @@ export function Handover({
       overlay={discard.overlay}
       primaryLabel={tn('repair.action.handover')}
       onPrimary={submit}
-      primaryDisabled={photo === null || signature === null || !settled}
+      primaryDisabled={photo === null || signature === null || !settled || loadedAccounts === null}
       primaryHint={tn(settled ? 'repair.hint.handover' : 'repair.hint.handoverPayment')}
       busy={runner.busy}
       errorCode={runner.errorCode}

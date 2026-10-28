@@ -57,8 +57,15 @@ import {
   type PrintSettings,
   type TicketDetailRow,
 } from './queries.js';
-import { CASH_ACCOUNT, MONEY_ENTRY_ENTITY, MONEY_OP } from '../money/constants.js';
-import { chargeOp, paymentOp, refundOp, zPaymentInput } from '../money/commands.js';
+import { CASH_ACCOUNT } from '../money/constants.js';
+import {
+  chargeOp,
+  paymentOp,
+  refundOp,
+  voidOp,
+  zPaymentInput,
+  zReference,
+} from '../money/commands.js';
 import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
@@ -75,13 +82,6 @@ const zPhone = z
   .max(40)
   .nullable()
   .transform((phone) => (phone === null || phone === '' ? null : phone));
-const zDpReference = z
-  .string()
-  .trim()
-  .max(100)
-  .nullable()
-  .default(null)
-  .transform((ref) => (ref === null || ref === '' ? null : ref));
 const zAmountInput = z.number().int().min(-MAX_LINE_AMOUNT).max(MAX_LINE_AMOUNT);
 
 const zLineInput = z
@@ -217,7 +217,7 @@ export const openTicketInput = z
     /** How the DP was paid: the drawer or one of the store's accounts. */
     downPaymentAccount: zAccountRef.default(CASH_ACCOUNT),
     /** An EDC approval code, or a transfer's reference. */
-    downPaymentReference: zDpReference,
+    downPaymentReference: zReference,
   })
   .strict();
 export type OpenTicketInput = z.input<typeof openTicketInput>;
@@ -782,7 +782,7 @@ export const recordDownPaymentInput = z
     ticketId: z.string().min(1),
     amount: z.number().int().min(1).max(MAX_LINE_AMOUNT),
     account: zAccountRef.default(CASH_ACCOUNT),
-    reference: zDpReference,
+    reference: zReference,
   })
   .strict();
 export type RecordDownPaymentInput = z.input<typeof recordDownPaymentInput>;
@@ -824,7 +824,7 @@ export const correctDownPaymentInput = z
     reason: zRequiredText(500),
     /** How the right amount came in; the first payment's method when not said. */
     account: zAccountRef.optional(),
-    reference: zDpReference,
+    reference: zReference,
   })
   .strict();
 export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
@@ -851,14 +851,7 @@ export async function correctDownPaymentHandler(
   const live = money.entries.filter(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
   );
-  const ops: OpDraft[] = live.map((entry) =>
-    ctx.op({
-      type: MONEY_OP.paymentVoided,
-      entityType: MONEY_ENTRY_ENTITY,
-      entityId: entry.id,
-      payload: { reason: input.reason },
-    }),
-  );
+  const ops: OpDraft[] = live.map((entry) => voidOp(ctx, entry.id, input.reason));
   if (input.amount > 0) {
     const first = live[0];
     const method =
