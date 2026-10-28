@@ -4,6 +4,7 @@
 // approval code (`referenceRequired`).
 import { CASH_ACCOUNT, referenceRequired, type PaymentAccountKind } from './constants.js';
 import type { PaymentInput } from './commands.js';
+import { tm } from './i18n.js';
 import type { PaymentAccountRow } from './queries.js';
 
 /** What the counter typed for one method. Amounts are digits as typed, '' when empty. */
@@ -110,4 +111,38 @@ export function newPaymentLine(
     tendered: '',
     reference: '',
   };
+}
+
+/**
+ * The method a payment goes through, as offered here: the one picked while the store still offers
+ * it, the drawer otherwise (an account switched off since a draft picked it).
+ */
+export function offeredAccount(account: string, accounts: readonly PaymentAccountRow[]): string {
+  return accounts.some((row) => `account:${row.id}` === account) ? account : CASH_ACCOUNT;
+}
+
+/** Whether a single payment (a DP) still needs the reference its method asks for (an EDC code). */
+export function referenceMissing(
+  account: string,
+  reference: string,
+  accounts: readonly PaymentAccountRow[],
+): boolean {
+  return (
+    referenceRequired(lineKind(offeredAccount(account, accounts), accounts)) &&
+    reference.trim() === ''
+  );
+}
+
+export interface PaymentMethod {
+  /** `cash` or `account:<id>`. */
+  readonly account: string;
+  readonly label: string;
+}
+
+/** The methods a counter picks from, the drawer first. */
+export function paymentMethods(accounts: readonly PaymentAccountRow[]): PaymentMethod[] {
+  return [
+    { account: CASH_ACCOUNT, label: tm('money.method.cash') },
+    ...accounts.map((row) => ({ account: `account:${row.id}`, label: row.name })),
+  ];
 }

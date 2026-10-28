@@ -17,9 +17,16 @@ import {
 import { Check, Printer, Signature } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 
-import { MONEY_PERMISSION } from '../../money/constants.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/desktop/PaymentLines.js';
-import { newPaymentLine, paymentEntry, type PaymentLine } from '../../money/payment-entry.js';
+import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
+import {
+  newPaymentLine,
+  offeredAccount,
+  paymentEntry,
+  referenceMissing,
+  type PaymentLine,
+} from '../../money/payment-entry.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_PERMISSION,
@@ -42,6 +49,7 @@ import { tn, type RepairKey } from '../i18n.js';
 import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY } from '../labels.js';
 import {
   useCancelFees,
+  usePaymentAccounts,
   useRepairQuery,
   useRepairRuntime,
   type RepairPrinting,
@@ -822,11 +830,7 @@ export function HandoverDialog({
   const [unpaidReason, setUnpaidReason] = useState('');
   const keys = useRef(0);
   const newKey = (): string => `line${String((keys.current += 1))}`;
-  const accountsQuery = useRepairQuery(
-    async (rt) => (await rt.money.query('paymentAccounts', {})).rows,
-    'handover:accounts',
-  );
-  const accounts = accountsQuery.status === 'ready' ? accountsQuery.data : [];
+  const accounts = usePaymentAccounts();
   const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
   const lines = typedLines ?? (due > 0 ? [newPaymentLine('line0', due)] : []);
@@ -1040,8 +1044,20 @@ export function DownPaymentDialog({
   const runner = useActionRunner();
   const [typed, setTyped] = useState<number | null>(null);
   const [reason, setReason] = useState('');
+  const [method, setMethod] = useState<{ account: string; reference: string }>({
+    account: CASH_ACCOUNT,
+    reference: '',
+  });
+  const accounts = usePaymentAccounts();
   const correcting = mode === 'correct';
-  const { amount, aboveTotal, gap } = downPaymentEntry({ mode, typed, reason, current, total });
+  const { amount, aboveTotal, gap } = downPaymentEntry({
+    mode,
+    typed,
+    reason,
+    current,
+    total,
+    referenceMissing: referenceMissing(method.account, method.reference, accounts),
+  });
   const testId = `repair.desk.downPayment.${mode}`;
 
   const submit = (): void => {
@@ -1050,7 +1066,12 @@ export function DownPaymentDialog({
       .run(() =>
         correcting
           ? runtime.run('correctDownPayment', { ticketId, amount, reason })
-          : runtime.run('recordDownPayment', { ticketId, amount }),
+          : runtime.run('recordDownPayment', {
+              ticketId,
+              amount,
+              account: offeredAccount(method.account, accounts),
+              reference: method.reference,
+            }),
       )
       .then((result) => {
         if (result !== undefined) onDone();
@@ -1114,6 +1135,15 @@ export function DownPaymentDialog({
             autoFocus
             data-testid={`${testId}.amount`}
           />
+          {correcting ? null : (
+            <PaymentMethodField
+              accounts={accounts}
+              account={method.account}
+              reference={method.reference}
+              onChange={setMethod}
+              testId={`${testId}.method`}
+            />
+          )}
           {correcting ? (
             <TextArea
               label={tn('repair.downPayment.reason')}

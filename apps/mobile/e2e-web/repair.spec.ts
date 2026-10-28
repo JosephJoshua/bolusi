@@ -612,6 +612,16 @@ test('a down payment at intake shows what is left to pay, and opens with the tic
   await fill(page, 'repair.intake.price.downPaymentInput', '200000');
   await expect(page.getByTestId('repair.intake.price.balance')).toHaveText('Rp 450.000');
   await shoot(page, 'dp-intake-price');
+  // Paid on the EDC: the step waits for its approval code.
+  await tap(
+    page,
+    'repair.intake.price.downPaymentMethod.method.account:01920000-0000-7000-8000-00000000a002',
+  );
+  await page.getByTestId('repair.intake.price.downPaymentMethod').scrollIntoViewIfNeeded();
+  await shoot(page, 'dp-intake-edc');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByText('Isi kode approval dari mesin EDC.').first()).toBeVisible();
+  await fill(page, 'repair.intake.price.downPaymentMethod.reference', '004512');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.balance')).toHaveText('Rp 450.000');
   await page.getByTestId('repair.intake.review.balance').scrollIntoViewIfNeeded();
@@ -632,6 +642,9 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await tap(page, 'repair.board.row.t-1');
   await tap(page, 'repair.ticket.downPayment.record');
   await fill(page, 'repair.downPayment.amount', '100000');
+  await tap(page, 'repair.downPayment.method.method.account:01920000-0000-7000-8000-00000000a002');
+  await expect(page.getByTestId('repair.downPayment.primary')).toBeDisabled();
+  await fill(page, 'repair.downPayment.method.reference', '004512');
   await shoot(page, 'dp-record');
   await tap(page, 'repair.downPayment.primary');
   await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 100.000');

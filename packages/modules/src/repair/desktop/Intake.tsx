@@ -66,7 +66,14 @@ import {
   optionLabel,
   readyLabel,
 } from '../labels.js';
-import { useIntakeOptionSettings, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import {
+  useIntakeOptionSettings,
+  usePaymentAccounts,
+  useRepairQuery,
+  useRepairRuntime,
+} from '../runtime.js';
+import type { PaymentAccountRow } from '../../money/queries.js';
+import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import type { MediaRef } from '@bolusi/schemas';
 
 import {
@@ -98,6 +105,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
   downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
+  downPaymentReference: 'repair.problem.downPaymentReference',
   screenLock: 'repair.problem.screenLock',
 };
 
@@ -112,6 +120,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   incompleteLine: 'repair.desk.intake.lines',
   negativeTotal: 'repair.desk.intake.lines',
   downPaymentAboveTotal: 'repair.desk.intake.downPayment',
+  downPaymentReference: 'repair.desk.intake.downPaymentMethod.reference',
   screenLock: 'repair.desk.intake.lock.kind',
 };
 
@@ -160,12 +169,13 @@ export function IntakePage({
   const update = (patch: Partial<IntakeDraft>): void =>
     setDraft((current) => ({ ...current, ...patch }));
   const dirty = intakeDirty(draft);
+  const accounts = usePaymentAccounts();
   const problemsBy = useMemo(
     () =>
       Object.fromEntries(
-        SECTIONS.map((section) => [section, stepProblems(draft, section, options)]),
+        SECTIONS.map((section) => [section, stepProblems(draft, section, options, accounts)]),
       ),
-    [draft, options],
+    [draft, options, accounts],
   ) as Readonly<Record<Section, IntakeProblem[]>>;
   const problems = SECTIONS.flatMap((section) => problemsBy[section]);
   const problemText = (problem: IntakeProblem): string | undefined =>
@@ -235,7 +245,7 @@ export function IntakePage({
       return;
     }
     void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now())))
+      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
       .then((opened) => {
         if (opened === undefined) return;
         onDraftChange?.(null);
@@ -357,6 +367,8 @@ export function IntakePage({
                   lineError={problemText('incompleteLine')}
                   totalError={problemText('negativeTotal') ?? problemText('quoteLines')}
                   downPaymentError={problemText('downPaymentAboveTotal')}
+                  accounts={accounts}
+                  referenceError={problemText('downPaymentReference')}
                 />
               </IntakeSection>
             </div>
@@ -1050,6 +1062,8 @@ function PriceFields({
   lineError,
   totalError,
   downPaymentError,
+  accounts,
+  referenceError,
 }: {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
@@ -1058,6 +1072,8 @@ function PriceFields({
   readonly lineError: string | undefined;
   readonly totalError: string | undefined;
   readonly downPaymentError: string | undefined;
+  readonly accounts: readonly PaymentAccountRow[];
+  readonly referenceError: string | undefined;
 }): React.JSX.Element {
   const lines = draft.lines.length === 0 ? [EMPTY_LINE] : draft.lines;
   const setLine = (index: number, patch: Partial<QuoteLineDraft>): void =>
@@ -1171,6 +1187,21 @@ function PriceFields({
             data-testid="repair.desk.intake.downPayment"
           />
         </div>
+        {intakeDownPayment(draft) > 0 ? (
+          <div className="mt-3">
+            <PaymentMethodField
+              accounts={accounts}
+              account={draft.downPaymentAccount}
+              reference={draft.downPaymentReference}
+              onChange={({ account, reference }) =>
+                update({ downPaymentAccount: account, downPaymentReference: reference })
+              }
+              referenceError={referenceError}
+              align="end"
+              testId="repair.desk.intake.downPaymentMethod"
+            />
+          </div>
+        ) : null}
       </div>
       <div>
         <p className="mb-2 text-small font-semibold text-text">{tn('repair.ticket.readyBy')}</p>

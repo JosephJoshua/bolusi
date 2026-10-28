@@ -9,6 +9,7 @@ import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
 import type { MoneyModule } from '../money/manifest.js';
+import type { PaymentAccountRow } from '../money/queries.js';
 import type { repairModule } from './manifest.js';
 import {
   createRuntimeContext,
@@ -206,6 +207,17 @@ export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
     'intakeOptionSettings',
   );
+}
+
+const NO_ACCOUNTS: readonly PaymentAccountRow[] = [];
+
+/** The store's payment methods besides cash, live; none while they load, so cash stands alone. */
+export function usePaymentAccounts(): readonly PaymentAccountRow[] {
+  const accounts = useRepairQuery(
+    async (rt) => (await rt.money.query('paymentAccounts', {})).rows,
+    'paymentAccounts',
+  );
+  return accounts.status === 'ready' ? accounts.data : NO_ACCOUNTS;
 }
 
 /** A model photo's uri once loaded; null while loading or when there is none to show. */

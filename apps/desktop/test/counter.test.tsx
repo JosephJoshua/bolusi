@@ -153,6 +153,13 @@ describe('counter app over demo data', () => {
     await waitFor(() =>
       expect(byTestId('repair.desk.intake.balance').textContent).toContain('750.000'),
     );
+    // Paid through QRIS: the reference is optional, so nothing more is asked.
+    fireEvent.click(
+      within(byTestId('repair.desk.intake.downPaymentMethod')).getByRole('button', {
+        name: 'QRIS BCA',
+      }),
+    );
+    expect(byTestId('repair.desk.intake.downPaymentMethod.reference')).toHaveProperty('value', '');
     await waitFor(() => expect(screen.queryByTestId(/^repair\.desk\.intake\.jump\./)).toBeNull());
 
     fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
@@ -223,6 +230,16 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.downPayment.record.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('repair.desk.downPayment.record.amount'), {
       target: { value: '20000' },
+    });
+    // Through the EDC, the approval code comes first.
+    fireEvent.click(
+      within(byTestId('repair.desk.downPayment.record.method')).getByRole('button', {
+        name: 'EDC Mandiri',
+      }),
+    );
+    expect(byTestId('repair.desk.downPayment.record.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('repair.desk.downPayment.record.method.reference'), {
+      target: { value: '004512' },
     });
     fireEvent.click(byTestId('repair.desk.downPayment.record.submit'));
     await waitFor(() =>

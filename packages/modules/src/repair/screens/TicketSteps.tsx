@@ -47,7 +47,10 @@ import {
   usePhotoGridCell,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useCancelFees, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { useCancelFees, usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { CASH_ACCOUNT } from '../../money/constants.js';
+import { offeredAccount, referenceMissing } from '../../money/payment-entry.js';
+import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 interface StepProps {
   readonly chrome: RepairChrome;
@@ -388,6 +391,11 @@ export function DownPaymentStep({
   // Empty even when correcting: the recorded amount is shown above, and the step asks for a new one.
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
+  const [method, setMethod] = useState<{ account: string; reference: string }>({
+    account: CASH_ACCOUNT,
+    reference: '',
+  });
+  const accounts = usePaymentAccounts();
   const correcting = mode === 'correct';
   const { amount, aboveTotal, gap } = downPaymentEntry({
     mode,
@@ -395,6 +403,7 @@ export function DownPaymentStep({
     reason,
     current,
     total,
+    referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const complete = gap === null;
 
@@ -404,7 +413,12 @@ export function DownPaymentStep({
       .run(() =>
         correcting
           ? runtime.run('correctDownPayment', { ticketId, amount, reason })
-          : runtime.run('recordDownPayment', { ticketId, amount }),
+          : runtime.run('recordDownPayment', {
+              ticketId,
+              amount,
+              account: offeredAccount(method.account, accounts),
+              reference: method.reference,
+            }),
       )
       .then((result) => {
         if (result !== undefined) onDone();
@@ -448,6 +462,17 @@ export function DownPaymentStep({
           {tn('repair.downPayment.ofTotal', { amount: formatMoney(total) })}
         </Text>
       </View>
+      {correcting ? null : (
+        <View style={repairStyles.gap}>
+          <PaymentMethodField
+            accounts={accounts}
+            account={method.account}
+            reference={method.reference}
+            onChange={setMethod}
+            testID={`${testID}.method`}
+          />
+        </View>
+      )}
       {correcting ? (
         <View style={repairStyles.gap}>
           <TextInput

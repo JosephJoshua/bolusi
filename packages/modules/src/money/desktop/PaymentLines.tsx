@@ -7,9 +7,15 @@ import { formatMoney, formatNumber } from '@bolusi/i18n';
 import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
 import { Plus } from 'lucide-react';
 
-import { CASH_ACCOUNT, referenceRequired } from '../constants.js';
+import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
-import { lineKind, newPaymentLine, type PaymentEntry, type PaymentLine } from '../payment-entry.js';
+import {
+  lineKind,
+  newPaymentLine,
+  paymentMethods,
+  type PaymentEntry,
+  type PaymentLine,
+} from '../payment-entry.js';
 import type { PaymentAccountRow } from '../queries.js';
 
 export interface PaymentLinesProps {
@@ -40,10 +46,7 @@ export function PaymentLines({
   newKey,
   testId = 'money.desk.payment',
 }: PaymentLinesProps): React.JSX.Element {
-  const methods = [
-    { account: CASH_ACCOUNT, label: tm('money.method.cash') },
-    ...accounts.map((row) => ({ account: `account:${row.id}`, label: row.name })),
-  ];
+  const methods = paymentMethods(accounts);
   const labelOf = (account: string) =>
     methods.find((method) => method.account === account)?.label ?? tm('money.method.cash');
   const set = (key: string, patch: Partial<PaymentLine>) =>

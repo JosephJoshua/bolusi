@@ -53,6 +53,8 @@ import {
   type QuoteLineDraft,
 } from '../flows.js';
 import { useSettledValue } from '../../screen-kit/index.js';
+import type { PaymentAccountRow } from '../../money/queries.js';
+import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 import type { IntakeOption, IntakeOptionLists } from '../intake-options.js';
 import {
   CatalogPhoto,
@@ -576,10 +578,15 @@ export function PriceStep({
   options,
   lineError,
   downPaymentError,
+  accounts,
+  referenceError,
   testID,
 }: StepProps & {
   readonly lineError: string | undefined;
   readonly downPaymentError: string | undefined;
+  /** The store's payment methods besides cash, for how the DP came in. */
+  readonly accounts: readonly PaymentAccountRow[];
+  readonly referenceError: string | undefined;
 }): React.JSX.Element {
   const kinds = usePriceKinds();
   const lines = draft.lines.length === 0 ? [EMPTY_LINE] : draft.lines;
@@ -663,6 +670,20 @@ export function PriceStep({
           testID={`${testID}.downPaymentInput`}
         />
       </View>
+      {intakeDownPayment(draft) > 0 ? (
+        <View style={repairStyles.gap}>
+          <PaymentMethodField
+            accounts={accounts}
+            account={draft.downPaymentAccount}
+            reference={draft.downPaymentReference}
+            onChange={({ account, reference }) =>
+              update({ downPaymentAccount: account, downPaymentReference: reference })
+            }
+            referenceError={referenceError}
+            testID={`${testID}.downPaymentMethod`}
+          />
+        </View>
+      ) : null}
       <DownPaymentRows
         total={intakeTotal(draft.lines)}
         downPayment={intakeDownPayment(draft)}

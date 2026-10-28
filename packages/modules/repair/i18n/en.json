@@ -242,6 +242,7 @@
     "incompleteLine": "Describe every line that has an amount.",
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
+    "downPaymentReference": "Enter the approval code from the EDC machine.",
     "screenLock": "Enter the screen lock, or choose None."
   },
   "ready": {
@@ -434,6 +435,7 @@
     "estimateTotal": "Estimated total",
     "total": "Total",
     "downPayment": "Down payment",
+    "paid": "Paid",
     "balance": "Balance due",
     "sign": {
       "customer": "Customer",

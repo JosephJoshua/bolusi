@@ -242,6 +242,7 @@
     "incompleteLine": "Biaya ini belum ada keterangannya.",
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
+    "downPaymentReference": "Isi kode approval dari mesin EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
   },
   "ready": {
@@ -434,6 +435,7 @@
     "estimateTotal": "Estimasi total",
     "total": "Total",
     "downPayment": "DP",
+    "paid": "Sudah dibayar",
     "balance": "Sisa bayar",
     "sign": {
       "customer": "Pelanggan",

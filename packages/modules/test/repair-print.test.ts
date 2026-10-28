@@ -123,9 +123,20 @@ describe('handover slip', () => {
     expect(text).toContain('Biaya pembatalan');
     expect(text).toContain('Pelanggan tidak jadi');
     expect(text).not.toContain('Ganti LCD');
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 20\.000/);
     expect(text).toMatch(/Sisa bayar\s+Rp 30\.000/);
     // No repair, so no warranty terms.
     expect(text).not.toContain('KETENTUAN');
+  });
+
+  it('a slip printed once the phone is paid for reads as paid in full', () => {
+    const paid = sampleTicket({ downPayment: 950_000, location: 'returned' });
+    const text = allText(
+      handoverSlip(paid, { ...ctx, handedOverByName: 'Maria Kasir', signature: null }),
+    );
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 950\.000/);
+    expect(text).toMatch(/Sisa bayar\s+Rp 0/);
+    expect(text).not.toMatch(/\bDP\b/);
   });
 
   it('shows the on-screen signature on plain paper', () => {
