@@ -42,6 +42,8 @@ export interface CoreState {
   readonly bootError: string | null;
   readonly device: DeviceStatus;
   readonly deviceInfo: DeviceInfo | null;
+  /** The owner this PC's first-run setup waits for; null once done, or on a PC set up before it. */
+  readonly setupFor: string | null;
   /** Null before the PC is enrolled. */
   readonly session: SessionView | null;
   /** Null until the core has booted. */

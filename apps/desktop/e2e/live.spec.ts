@@ -121,6 +121,10 @@ async function registerAndSignIn(page: Page, name: string): Promise<void> {
   await page.getByTestId('enrol.finish').click();
   await page.getByTestId('switcher.person').first().click();
   await page.keyboard.type(lane.credentials.pin);
+  // The owner who registered the PC is offered its setup first; it can wait.
+  await page.getByTestId('desktop.setup.next').click();
+  await expect(page.getByTestId('desktop.setup.capture')).toBeVisible();
+  await page.getByTestId('desktop.setup.later').click();
   await expect(page.getByTestId('repair.desk.board.newIntake')).toBeVisible();
 }
 

@@ -9,7 +9,9 @@ import { extname, join } from 'node:path';
 import {
   createUuidV7Generator,
   DomainError,
+  finishDeviceSetup,
   readDeviceId,
+  readDeviceSetupFor,
   readSyncState,
   type ClockPort,
   type CommandIdentity,
@@ -206,6 +208,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   let media: MediaClient | null = null;
   let ticker: IdleTicker | null = null;
   let deviceInfo: DeviceInfo | null = null;
+  /** The owner this PC's first-run setup waits for (core device-setup.ts), or null. */
+  let setupFor: string | null = null;
   let syncReads: SyncStatusReads = NO_SYNC_STATUS_READS;
   let bootError: string | null = null;
   let stopped = false;
@@ -241,6 +245,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     bootError: null,
     device: 'unenrolled',
     deviceInfo: null,
+    setupFor: null,
     session: null,
     sync: null,
   };
@@ -315,6 +320,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       bootError: null,
       device: shell.device,
       deviceInfo,
+      setupFor,
       session: sessionView(),
       sync: shell.sync,
     };
@@ -623,6 +629,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         platform: PLATFORM,
         appVersion: deps.appVersion,
       });
+      setupFor = await readDeviceSetupFor(booted.db.db);
       emit();
       const started = generation;
       await startSync(booted, enroll);
@@ -680,6 +687,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     );
     startProjectionRebuild(booting);
     deviceInfo = await readDeviceInfo(booting, { platform: PLATFORM, appVersion: deps.appVersion });
+    setupFor = await readDeviceSetupFor(booting.db.db);
     emit();
     await startEnrolledServices(booting, enroll);
     await rereadSyncStatus();
@@ -729,6 +737,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'enrollment.heldPhone': () => requireEnrollment().controller.heldPhone(),
     'enrollment.finish'() {
       requireEnrollment().controller.finish();
+    },
+    // The first-run setup is finished or skipped: it does not open by itself again.
+    async 'device.finishSetup'() {
+      if (app === null) return;
+      await finishDeviceSetup(app.db.db);
+      setupFor = null;
+      emit();
     },
 
     // ── PIN session ─────────────────────────────────────────────────────────────────────────────

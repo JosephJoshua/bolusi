@@ -213,6 +213,47 @@ describe('printing on the counter PC', () => {
   });
 });
 
+describe('the printer reminder', () => {
+  it('says no printer is chosen until one is, and leads to where it is chosen', async () => {
+    setBridge(fakePrinters());
+    renderApp();
+    const reminder = await screen.findByTestId('desktop.printerReminder');
+    expect(reminder.getAttribute('aria-label')).toBe('Printer belum dipilih');
+    fireEvent.click(reminder);
+    await screen.findByTestId('desktop.settings.computer');
+    // Gone as soon as the choice is saved, still in Settings.
+    fireEvent.click(await screen.findByText('EPSON LX-310'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.printerReminder')).toBeNull());
+  });
+
+  it("opens this computer's settings again after the person moved to another section", async () => {
+    setBridge(fakePrinters());
+    renderApp();
+    fireEvent.click(await screen.findByTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
+    fireEvent.click(byTestId('desktop.settings.nav.account'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.settings.computer')).toBeNull());
+    fireEvent.click(byTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
+  });
+
+  it('says when the chosen printer is gone', async () => {
+    setBridge(fakePrinters({ chosen: 'EPSON LX-300', installed: ['EPSON LX-310'] }));
+    renderApp();
+    expect((await screen.findByTestId('desktop.printerReminder')).getAttribute('aria-label')).toBe(
+      'Printer tidak ditemukan',
+    );
+  });
+
+  it('stays out of the way once a printer is ready', async () => {
+    setBridge(fakePrinters({ chosen: 'EPSON LX-310' }));
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('desktop.printerReminder')).toBeNull();
+  });
+});
+
 describe('updates', () => {
   it('offers a downloaded version in the title bar and shows the installed one in Settings', async () => {
     const updates = fakeUpdates({ kind: 'ready', version: '0.2.0' });
