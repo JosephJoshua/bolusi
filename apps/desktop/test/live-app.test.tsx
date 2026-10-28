@@ -2,6 +2,7 @@
 // the window asks the core for. The core here is a stand-in that answers repair calls from the
 // seeded demo and records everything else, so the gate and the calls are tested without a process.
 import type { ActiveSession } from '@bolusi/core';
+import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
 import type { SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { initI18n } from '@bolusi/i18n';
 import { demoRepairRuntime } from '@bolusi/modules/repair/demo';
@@ -187,14 +188,15 @@ describe('the PC over the offline core', () => {
     fireEvent.change(screen.getByTestId('enrol.password'), { target: { value: 'rahasia-toko' } });
     fireEvent.click(screen.getByTestId('enrol.submit'));
     await screen.findByTestId('enrol.confirm');
-    expect(core.calls[0]).toEqual({
+    const enrolCalls = () => core.calls.filter((call) => call.method !== 'enrollment.heldPhone');
+    expect(enrolCalls()[0]).toEqual({
       method: 'enrollment.login',
       args: [{ loginIdentifier: 'andi', password: 'rahasia-toko' }],
     });
     fireEvent.change(screen.getByTestId('enrol.deviceName'), { target: { value: 'PC Kasir' } });
     fireEvent.click(screen.getByTestId('enrol.bind'));
     await screen.findByTestId('enrol.done');
-    expect(core.calls[1]).toEqual({
+    expect(enrolCalls()[1]).toEqual({
       method: 'enrollment.enroll',
       args: [{ storeId: 'st-1', deviceName: 'PC Kasir' }],
     });
@@ -202,10 +204,91 @@ describe('the PC over the offline core', () => {
     expect(core.methods()).toContain('enrollment.finish');
   });
 
+  it('re-registers a PC into its own store and shows whose unsent changes it carries over', async () => {
+    core = new FakeCore(ready({ device: 'revoked', session: null }));
+    core.answers['enrollment.heldPhone'] = () => ({
+      storeId: 'st-2',
+      storeName: 'Toko Sorong Kota',
+      replacesDeviceId: null,
+      unsynced: [
+        { userId: 'u-siti', name: 'Siti Rahayu', count: 3, types: ['repair.ticket_opened'] },
+        { userId: 'u-gone', name: null, count: 1, types: ['repair.work_started'] },
+      ],
+    });
+    core.answers['enrollment.login'] = () => ({
+      tenantId: 't-1',
+      tenantName: 'Bolusi',
+      user: { id: 'u-owner', name: 'Andi Pratama' },
+      stores: [
+        { id: 'st-1', name: 'Toko Jayapura' },
+        { id: 'st-2', name: 'Toko Sorong Kota' },
+      ],
+      controlSession: '',
+    });
+    renderApp();
+    await waitFor(() => expect(core.methods()).toContain('enrollment.heldPhone'));
+    fireEvent.change(screen.getByTestId('enrol.identifier'), { target: { value: 'andi' } });
+    fireEvent.change(screen.getByTestId('enrol.password'), { target: { value: 'rahasia-toko' } });
+    fireEvent.click(screen.getByTestId('enrol.submit'));
+    await screen.findByTestId('enrol.confirm');
+    // Its records belong to its own store, so that is the only one offered.
+    expect(screen.getByTestId('enrol.store').textContent).toContain('Toko Sorong Kota');
+    expect(screen.queryByTestId('enrol.stores')).toBeNull();
+    expect(screen.getByTestId('enrol.unsynced.u-siti').textContent).toContain('3 perubahan');
+    expect(screen.getByTestId('enrol.unsynced.u-gone').textContent).toContain('Karyawan lama');
+  });
+
   it('shows a blocked PC the registration again, whatever session was open', () => {
     core = new FakeCore(ready({ device: 'revoked', session: session(signedIn(OWNER, ALL)) }));
     renderApp();
     expect(screen.getByTestId('enrol.credentials').textContent).toContain('diblokir');
+    expect(screen.queryByTestId('desktop.shell')).toBeNull();
+  });
+
+  it('offers to register a PC the server forgot again, from the sync panel', async () => {
+    const forgotten: SyncStatusInput = {
+      state: {
+        cursor: 12,
+        devicesDirectoryVersion: 1,
+        lastSuccessfulSyncAt: 0,
+        lastPushAt: 0,
+        lastPullAt: 0,
+        lastServerTime: 0,
+        lastServerTimeReceivedAt: 0,
+        pushHalted: false,
+        syncDisabled: true,
+        syncDisabledReason: 'device_unrecognised',
+        lastSyncError: null,
+        backoffUntil: null,
+        tokenRejectedSince: 0,
+        tokenRejectedCount: 3,
+      },
+      loopState: 'idle',
+      pendingOperationCount: 4,
+      pendingMediaCount: 0,
+      rejected: [],
+      quarantined: [],
+      media: [],
+      isOffline: false,
+      manualSyncBusy: false,
+      manualSyncError: null,
+      firstSync: null,
+      now: 60_000,
+    };
+    // Work goes on while the PC is forgotten: the counter stays open.
+    core = new FakeCore(
+      ready({ device: 'unrecognised', session: session(signedIn(OWNER, ALL)), sync: forgotten }),
+    );
+    renderApp();
+    await screen.findByTestId('desktop.shell');
+    fireEvent.click(screen.getByTestId('desktop.sync'));
+    // Sending cannot help, so registering again is the one action offered.
+    expect(screen.queryByTestId('desktop.sync.now')).toBeNull();
+    expect(screen.getByTestId('desktop.sync.dialog').textContent).toContain(
+      'Server tidak mengenali komputer ini lagi',
+    );
+    fireEvent.click(screen.getByTestId('desktop.sync.reenrol'));
+    expect(await screen.findByTestId('enrol.credentials')).toBeTruthy();
     expect(screen.queryByTestId('desktop.shell')).toBeNull();
   });
 

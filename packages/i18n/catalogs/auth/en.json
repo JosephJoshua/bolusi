@@ -195,6 +195,12 @@
     "backTo": "Back to {name}",
     "otherPerson": "Not you?",
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
+    "hidePassword": "Hide password",
+    "unrecognised": {
+      "title": "This computer needs to be registered again",
+      "body": "The server no longer recognises this computer. Every change stays safe here until an owner registers it again.",
+      "action": "Register this computer again"
+    },
+    "unsyncedBody": "Sent once this computer is registered, still under the name of whoever made them."
   }
 }

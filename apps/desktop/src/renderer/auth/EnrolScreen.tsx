@@ -1,7 +1,8 @@
 // Registering this PC to a store, once: the owner signs in, picks the store and names the PC. The
 // same steps and rules as the phone's wizard (the shared enrolment model); only the screens are
 // the PC's, and the owner's sign-in token stays in the core.
-import { t } from '@bolusi/i18n';
+import type { HeldPhone } from '@bolusi/core';
+import { t, translateOpType } from '@bolusi/i18n';
 import {
   afterLogin,
   bindingSummary,
@@ -18,13 +19,15 @@ import {
 } from '@bolusi/device/models/enrollment/model';
 import { Banner, Button, ChoiceList, ConfirmDialog, SecretField, TextField } from '@bolusi/ui-web';
 import { CircleCheck } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { AuthHeading, AuthLayout } from './AuthLayout.js';
 
 export interface EnrolCalls {
   login(request: { loginIdentifier: string; password: string }): Promise<LoginResult>;
   enroll(request: { storeId: string; deviceName: string }): Promise<void>;
+  /** What this PC holds from an earlier registration; null on a new PC. */
+  heldPhone(): Promise<HeldPhone | null>;
   finish(): void;
 }
 
@@ -42,6 +45,24 @@ export function EnrolScreen({
   const [state, setState] = useState<EnrollmentState>(() => initialEnrollmentState(revoked));
   const [discarding, setDiscarding] = useState(false);
   const patch = (next: Partial<EnrollmentState>): void => setState((s) => ({ ...s, ...next }));
+
+  // A PC enrolled before goes back to its own store, and the owner sees the unsent changes that
+  // will be carried over (core auth/carry-over.ts), like the phone.
+  // Read once when the wizard opens; the window rebuilds `calls` on every core update.
+  const readHeld = useRef(calls.heldPhone);
+  useEffect(() => {
+    let live = true;
+    readHeld
+      .current()
+      .then((phone) => {
+        if (live) setState((s) => ({ ...s, phone: phone ?? null }));
+      })
+      // Unreadable: the wizard still works, and the core refuses a bind into another store anyway.
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const submitCredentials = async (): Promise<void> => {
     if (!canSubmitCredentials(state)) return;
@@ -158,6 +179,7 @@ export function EnrolScreen({
             disabled={state.busy}
             data-testid="enrol.deviceName"
           />
+          <UnsyncedChanges state={state} />
           <div className="flex flex-col gap-2">
             {missing === null || state.busy ? null : (
               <p className="text-small text-text-muted" data-testid="enrol.missing">
@@ -268,5 +290,44 @@ export function EnrolScreen({
         onCancel={() => setDiscarding(false)}
       />
     </AuthLayout>
+  );
+}
+
+/**
+ * A PC enrolled again still holds what never reached the server. The owner sees whose changes they
+ * are just above the button that binds the PC: pressing it carries them over, each still credited
+ * to whoever made it.
+ */
+function UnsyncedChanges({ state }: { readonly state: EnrollmentState }): React.JSX.Element | null {
+  const authors = state.phone?.unsynced ?? [];
+  if (authors.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-2" data-testid="enrol.unsynced">
+      <div>
+        <p className="text-small font-semibold text-text">{t('auth.enroll.unsyncedTitle')}</p>
+        <p className="text-small text-text-muted">{t('auth.pc.unsyncedBody')}</p>
+      </div>
+      <ul className="flex flex-col divide-y divide-border rounded-sm border border-border">
+        {authors.map((author) => (
+          <li
+            key={author.userId}
+            className="flex items-start justify-between gap-4 px-3 py-2"
+            data-testid={`enrol.unsynced.${author.userId}`}
+          >
+            <div className="min-w-0">
+              <p className="break-words text-body text-text">
+                {author.name ?? t('auth.enroll.formerStaff')}
+              </p>
+              <p className="break-words text-small text-text-muted">
+                {author.types.map((opType) => translateOpType(opType)).join(', ')}
+              </p>
+            </div>
+            <span className="shrink-0 whitespace-nowrap text-small text-text-muted">
+              {t('auth.enroll.unsyncedCount', { count: author.count })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

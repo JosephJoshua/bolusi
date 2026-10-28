@@ -335,6 +335,12 @@ const source = {
         otherPerson: 'Bukan kamu?',
         showPassword: 'Lihat kata sandi',
         hidePassword: 'Sembunyikan kata sandi',
+        unrecognised: {
+          title: 'Komputer ini perlu didaftarkan ulang',
+          body: 'Server tidak mengenali komputer ini lagi. Semua perubahan tetap aman di sini sampai pemilik mendaftarkannya ulang.',
+          action: 'Daftarkan ulang komputer ini',
+        },
+        unsyncedBody: 'Dikirim setelah komputer ini terdaftar, tetap atas nama yang membuatnya.',
       },
     },
     sync: {
@@ -395,6 +401,7 @@ const source = {
       pc: {
         savedHere: '{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.',
         offline: 'Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.',
+        mediaFailed: '{count} foto belum bisa dikirim. Fotonya aman di komputer ini.',
       },
     },
     conflict: {
@@ -823,6 +830,13 @@ export const resources = {
           otherPerson: 'Not you?',
           showPassword: 'Show password',
           hidePassword: 'Hide password',
+          unrecognised: {
+            title: 'This computer needs to be registered again',
+            body: 'The server no longer recognises this computer. Every change stays safe here until an owner registers it again.',
+            action: 'Register this computer again',
+          },
+          unsyncedBody:
+            'Sent once this computer is registered, still under the name of whoever made them.',
         },
       },
       sync: {
@@ -888,6 +902,8 @@ export const resources = {
           savedHere:
             '{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}',
           offline: 'Changes are saved on this computer and sent when it is online.',
+          mediaFailed:
+            '{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}',
         },
       },
       conflict: {
