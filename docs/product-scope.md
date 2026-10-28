@@ -414,8 +414,9 @@ governance notes in "Decision" where they differ.
 - **Limits belong to a role in a store:** a role is either free of limits (the
   owners) or limited. For a limited role, each store owner sets three amounts
   for their store in "Batas wewenang": price drops (discounts and a smaller
-  cancel fee), refunds (including voided payments, which is how a DP is
-  corrected) and Bayar nanti. Each one counts everything of its kind on one
+  cancel fee), refunds (including voided payments; a corrected DP counts only
+  what it went down by, unless it moves to another payment method) and Bayar
+  nanti. Each one counts everything of its kind on one
   servisan together. A new limit is Rp 0, so a limited role does none of these
   until the owner sets one. Someone holding two roles gets the higher limit, and
   nobody sets the limits of a role they hold.

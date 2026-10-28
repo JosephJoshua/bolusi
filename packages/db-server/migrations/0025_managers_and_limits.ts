@@ -1,6 +1,5 @@
 // Managers and the limits on owners' money decisions (product-scope.md, "Managers, limits,
-// approvals and roles"). Mirrors client migration 23. 0025 and 0026 belong to other branches and
-// must be merged first.
+// approvals and roles"). Mirrors client migration 21.
 //
 // A role is either free of limits (the owners) or limited; a limited role's amounts are set per
 // store and per kind, and a kind with no row is Rp 0 there. Every business gets the Manajer role:

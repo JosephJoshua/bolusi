@@ -22,6 +22,7 @@
     "tenderedTooLow": "Uang yang diterima kurang dari jumlah bayar.",
     "paymentNotFound": "Pembayaran ini tidak ditemukan.",
     "alreadyVoided": "Pembayaran ini sudah dibatalkan.",
+    "replacementNotFound": "Pembayaran penggantinya tidak ditemukan.",
     "refundAboveCredit": "Uang yang dikembalikan lebih dari kelebihan bayar. Minta pemilik.",
     "notCharged": "Tagihannya belum dicatat. Minta pemilik untuk mengembalikan uang.",
     "refundAbovePaid": "Uang yang dikembalikan lebih dari yang dibayar pelanggan.",

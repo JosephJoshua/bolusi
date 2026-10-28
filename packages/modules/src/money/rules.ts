@@ -42,6 +42,7 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'tenderedTooLow',
   'paymentNotFound',
   'alreadyVoided',
+  'replacementNotFound',
   'refundAboveCredit',
   'notCharged',
   'refundAbovePaid',
@@ -310,12 +311,13 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
   };
 
   const paymentReceivedRule: Rule = async (op, { db }) => {
-    const { document, account, amount, reference, tendered } = payloadOf<{
+    const { document, account, amount, reference, tendered, replaces } = payloadOf<{
       document: MoneyDocument;
       account: string;
       amount: number;
       reference: string | null;
       tendered: number | null;
+      replaces?: string;
     }>(op);
     await requireFreshEntry(db, op);
     await requireDocument(db, op, document);
@@ -332,18 +334,19 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         details: { field: 'tendered', issue: 'cash handed over is less than the payment' },
       });
     }
+    if (replaces !== undefined) await requireReplaceable(db, op, document, account, replaces);
   };
 
   /**
    * An owner cancels a payment of this store that still counts. A limited role (a manager) may
-   * only while the payments voided on its document, this one with them, stay within its store's
-   * refund limit: a void takes money off the book like a refund does.
+   * only while the money voids took off its document stays within its store's refund limit: a void
+   * takes money off the book like a refund does.
    */
   const paymentVoidedRule: Rule = async (op, ctx) => {
     const { db } = ctx;
     const entry = await db
       .selectFrom('moneyEntries')
-      .select(['kind', 'voidedBy', 'amount', 'documentKind', 'documentId'])
+      .select(['id', 'kind', 'voidedBy', 'amount', 'documentKind', 'documentId'])
       .where('id', '=', op.entityId)
       .where('storeId', '=', storeOf(op))
       .executeTakeFirst();
@@ -356,23 +359,15 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (entry.voidedBy !== null) {
       throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
     }
-    const earlier =
+    const takenOff =
       entry.documentKind === null || entry.documentId === null
-        ? 0
-        : Number(
-            (
-              await db
-                .selectFrom('moneyEntries')
-                .select(sql<string | number>`COALESCE(SUM(amount), 0)`.as('total'))
-                .where('storeId', '=', storeOf(op))
-                .where('kind', '=', 'payment_received')
-                .where('voidedBy', 'is not', null)
-                .where('documentKind', '=', entry.documentKind)
-                .where('documentId', '=', entry.documentId)
-                .executeTakeFirst()
-            )?.total ?? 0,
-          );
-    await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, earlier + Number(entry.amount));
+        ? Number(entry.amount)
+        : await voidedOffDocument(db, storeOf(op), {
+            kind: entry.documentKind,
+            id: entry.documentId,
+            voiding: { id: entry.id, amount: Number(entry.amount) },
+          });
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
   };
 
   /**
@@ -516,6 +511,86 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     cashCountedRule,
     cashAdjustedRule,
   };
+}
+
+/**
+ * A payment recorded in place of another (a corrected DP) names a live payment of the same
+ * document, through the same account, that nothing else replaces yet, while the document is not
+ * charged: before the bill, what the customer paid is still just the DP.
+ */
+async function requireReplaceable(
+  db: Db,
+  op: SignedOperation,
+  document: MoneyDocument,
+  account: string,
+  replaces: string,
+): Promise<void> {
+  const store = storeOf(op);
+  const target = await db
+    .selectFrom('moneyEntries')
+    .select(['kind', 'voidedBy', 'account', 'documentKind', 'documentId'])
+    .where('id', '=', replaces)
+    .where('storeId', '=', store)
+    .executeTakeFirst();
+  const replacedAlready = await db
+    .selectFrom('moneyEntries')
+    .select('id')
+    .where('storeId', '=', store)
+    .where('kind', '=', 'payment_received')
+    .where('relatedEntryId', '=', replaces)
+    .executeTakeFirst();
+  const fits =
+    target !== undefined &&
+    target.kind === 'payment_received' &&
+    target.voidedBy === null &&
+    target.documentKind === document.kind &&
+    target.documentId === document.id &&
+    target.account === account &&
+    replacedAlready === undefined &&
+    (await documentTotal(db, store, document, 'charge_recorded')) === 0;
+  if (!fits) {
+    throw refuse('replacementNotFound', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'replaces', entityId: replaces },
+    });
+  }
+}
+
+/**
+ * The money voids took off a document, the void being judged included. A payment voided after one
+ * was recorded in its place counts only beyond what that one holds, and only while the document is
+ * not charged: once billed, every void counts in full.
+ */
+async function voidedOffDocument(
+  db: Db,
+  storeId: string,
+  document: {
+    readonly kind: string;
+    readonly id: string;
+    readonly voiding: { readonly id: string; readonly amount: number };
+  },
+): Promise<number> {
+  const payments = await db
+    .selectFrom('moneyEntries')
+    .select(['id', 'amount', 'voidedBy', 'relatedEntryId'])
+    .where('storeId', '=', storeId)
+    .where('kind', '=', 'payment_received')
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .execute();
+  const voided = [
+    ...payments
+      .filter((row) => row.voidedBy !== null)
+      .map((row) => ({ id: row.id, amount: Number(row.amount) })),
+    document.voiding,
+  ];
+  const total = voided.reduce((sum, { amount }) => sum + amount, 0);
+  if ((await documentTotal(db, storeId, document, 'charge_recorded')) > 0) return total;
+  const credit = voided.reduce((sum, { id, amount }) => {
+    const replacement = payments.find((row) => row.relatedEntryId === id);
+    return sum + (replacement === undefined ? 0 : Math.min(amount, Number(replacement.amount)));
+  }, 0);
+  return total - credit;
 }
 
 /** An account stays with the store that made it (or central), and keeps its kind. */

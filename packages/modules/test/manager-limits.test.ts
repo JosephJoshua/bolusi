@@ -52,6 +52,29 @@ function changePrice(harness: RepairHarness, ticketId: string, amount: number, u
   );
 }
 
+async function repaired(harness: RepairHarness, overrides: Record<string, unknown>) {
+  const ticketId = await openTicket(harness, overrides);
+  await harness.run(
+    'startWork',
+    { ticketId, beforePhotos: [harness.photo(20)] },
+    harness.technicianId,
+  );
+  await harness.run(
+    'markRepaired',
+    { ticketId, afterPhotos: [harness.photo(21)] },
+    harness.technicianId,
+  );
+  return ticketId;
+}
+const unpaid = (harness: RepairHarness, ticketId: string, cash: number) => ({
+  ticketId,
+  handoverPhoto: harness.photo(7),
+  signature: harness.photo(8),
+  checklist: accessoriesBack(),
+  payments: cash > 0 ? [{ account: 'cash', amount: cash }] : [],
+  unpaidReason: 'Bayar Jumat',
+});
+
 describe('discounts', () => {
   test('a manager discounts up to the limit at intake; an owner beyond it', async () => {
     h = await openRepairHarness(9101);
@@ -98,29 +121,6 @@ describe('cancel fees', () => {
 });
 
 describe('Bayar nanti', () => {
-  async function repaired(harness: RepairHarness, overrides: Record<string, unknown>) {
-    const ticketId = await openTicket(harness, overrides);
-    await harness.run(
-      'startWork',
-      { ticketId, beforePhotos: [harness.photo(20)] },
-      harness.technicianId,
-    );
-    await harness.run(
-      'markRepaired',
-      { ticketId, afterPhotos: [harness.photo(21)] },
-      harness.technicianId,
-    );
-    return ticketId;
-  }
-  const unpaid = (harness: RepairHarness, ticketId: string, cash: number) => ({
-    ticketId,
-    handoverPhoto: harness.photo(7),
-    signature: harness.photo(8),
-    checklist: accessoriesBack(),
-    payments: cash > 0 ? [{ account: 'cash', amount: cash }] : [],
-    unpaidReason: 'Bayar Jumat',
-  });
-
   test('a manager lets a phone go for a debt within the limit only', async () => {
     h = await openRepairHarness(9301);
     // The bill is 750.000: paying 650.000 leaves 100.000, the limit; 649.999 leaves one more.
@@ -182,5 +182,81 @@ describe('refunds and voids', () => {
     // Earlier refunds on the servisan count.
     await expectOverLimit(refund(1, h.managerId), 'money');
     await refund(10_000, h.storeOwnerId);
+  });
+
+  test('a DP correction counts only what the DP went down by', async () => {
+    h = await openRepairHarness(9403);
+    const ticketId = await openTicket(h, { downPayment: 100_000 });
+    const correct = (amount: number, userId: string) =>
+      h!.run('correctDownPayment', { ticketId, amount, reason: 'Salah ketik' }, userId);
+    await correct(80_000, h.managerId);
+    await correct(70_000, h.managerId);
+    // 100.000 to 69.000 is past the manager's Rp 30.000, however it is split.
+    await expectOverLimit(correct(69_000, h.managerId), 'money');
+    await correct(0, h.storeOwnerId);
+
+    const other = await openTicket(h, { downPayment: 100_000 });
+    await expectOverLimit(
+      h.run('correctDownPayment', { ticketId: other, amount: 60_000, reason: 'x' }, h.managerId),
+      'money',
+    );
+  });
+
+  test('a payment recorded in place of a DP lowers what its void counts, until the bill', async () => {
+    h = await openRepairHarness(9404);
+    const ticketId = await repaired(h, { downPayment: 100_000 });
+    const other = await openTicket(h, { downPayment: 100_000 });
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 90_000, reason: 'Salah ketik' },
+      h.managerId,
+    );
+    const ops = await h.ownOps();
+    const replacement = ops.filter((op) => op.type === 'money.payment_received').at(-1)!;
+    const voided = ops.filter((op) => op.type === 'money.payment_voided').at(-1)!;
+    let judged: number | null = null;
+    const judge = (_user: string, _permission: string, amount: number) => {
+      judged = amount;
+      return Promise.resolve(true);
+    };
+    const voidOfReplacement = () =>
+      h!.checkRule({ ...voided, entityId: replacement.entityId }, judge);
+    const forgedReplacement = (replaces: string) =>
+      h!.checkRule({
+        ...replacement,
+        entityId: '0191e000-0000-7000-8000-00000000f0f0',
+        payload: { ...replacement.payload, replaces },
+      });
+    const refusal = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (e: unknown) => refusalKeyOf(e),
+      );
+
+    // Voiding the Rp 90.000 too takes the whole Rp 100.000 DP off, no more.
+    await voidOfReplacement();
+    expect(judged).toBe(100_000);
+    // Another servisan's payment cannot be replaced from this one.
+    const otherDp = (
+      await h.db
+        .selectFrom('moneyEntries')
+        .select('id')
+        .where('documentId', '=', other)
+        .where('kind', '=', 'payment_received')
+        .executeTakeFirstOrThrow()
+    ).id!;
+    expect(await refusal(forgedReplacement(otherDp))).toBe('money.refusal.replacementNotFound');
+
+    // Once billed, nothing is recorded in place of a payment and every void counts in full.
+    await h.run(
+      'returnDevice',
+      { ...unpaid(h, ticketId, 660_000), unpaidReason: undefined },
+      h.cashierId,
+    );
+    expect(await refusal(forgedReplacement(replacement.entityId))).toBe(
+      'money.refusal.replacementNotFound',
+    );
+    await voidOfReplacement();
+    expect(judged).toBe(190_000);
   });
 });

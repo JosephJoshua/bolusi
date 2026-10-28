@@ -22,6 +22,7 @@
     "tenderedTooLow": "The cash received is less than the payment.",
     "paymentNotFound": "This payment wasn’t found.",
     "alreadyVoided": "This payment is already cancelled.",
+    "replacementNotFound": "Its replacement payment wasn’t found.",
     "refundAboveCredit": "That’s more than the customer overpaid. Ask an owner.",
     "notCharged": "The bill isn’t recorded yet. Ask an owner to give the money back.",
     "refundAbovePaid": "That’s more than the customer paid.",

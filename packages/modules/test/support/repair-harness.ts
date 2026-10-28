@@ -59,8 +59,12 @@ export interface RepairHarness {
   readonly runtime: ModuleRuntime<ClientDatabase>;
   readonly db: Kysely<ClientDatabase>;
   readonly engine: ReturnType<typeof createProjectionEngine<ClientDatabase>>;
-  /** Judges an op by its type's rule against this device's records, as push ingestion would. */
-  readonly checkRule: (op: SignedOperation) => Promise<void>;
+  /** Judges an op by its type's rule against this device's records, as push ingestion would.
+   *  Everyone holds every permission with no limit, unless `withinLimit` says otherwise. */
+  readonly checkRule: (
+    op: SignedOperation,
+    withinLimit?: (userId: string, permissionId: string, amount: number) => Promise<boolean>,
+  ) => Promise<void>;
   readonly tenantId: string;
   readonly storeId: string;
   readonly deviceId: string;
@@ -293,11 +297,11 @@ export async function openRepairHarness(
     runtime,
     db,
     engine,
-    checkRule: (op) =>
+    checkRule: (op, withinLimit = () => Promise.resolve(true)) =>
       registry.checkOpRule(op, {
         db: db as never,
         holdsPermission: () => Promise.resolve(true),
-        withinLimit: () => Promise.resolve(true),
+        withinLimit,
       }),
     tenantId,
     storeId,

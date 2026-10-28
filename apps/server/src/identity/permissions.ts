@@ -108,7 +108,7 @@ const CASHIER_PERMS = [
 const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work', ...PARTS_USER_PERMS];
 // Managers (product-scope.md, "Managers, limits, approvals and roles"): the counter's and the
 // technician's work, plus the owners' daily decisions, each money decision within the limits the
-// store owner sets. Settings, staff and payment methods stay with the owners. Migration 0027 seeds
+// store owner sets. Settings, staff and payment methods stay with the owners. Migration 0025 seeds
 // the same list for businesses that existed before.
 const MANAGER_PERMS = [
   ...new Set([

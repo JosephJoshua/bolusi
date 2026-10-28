@@ -46,6 +46,7 @@ export const MONEY_KEYS = [
   'money.refusal.notThisStore',
   'money.refusal.paymentNotFound',
   'money.refusal.referenceRequired',
+  'money.refusal.replacementNotFound',
   'money.refusal.refundAboveCredit',
   'money.refusal.notCharged',
   'money.refusal.refundAbovePaid',
