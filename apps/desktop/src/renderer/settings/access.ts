@@ -23,4 +23,6 @@ export interface SettingsAccess {
   readonly staff?: StaffControls | undefined;
   /** This PC as registered; null before the core read it. */
   readonly device?: DeviceInfo | null | undefined;
+  /** Rename this PC, for someone who may register devices here; REJECTS with a `StaffAdminError`. */
+  readonly renameDevice?: ((name: string) => Promise<void>) | undefined;
 }

@@ -78,21 +78,42 @@ describe.skipIf(process.platform === 'win32')('raw print', () => {
 describe('device settings file', () => {
   it('starts empty, keeps each change, and survives a reopen', async () => {
     const settings = new DeviceSettingsFile(dir);
-    expect(await settings.read()).toEqual({ printer: null, paper: null });
+    expect(await settings.read()).toEqual({
+      printer: null,
+      paper: null,
+      camera: null,
+      microphone: null,
+    });
     await Promise.all([
       settings.update({ printer: 'EPSON LX-310' }),
       settings.update({ paper: { preset: 'a4', widthMm: 210, heightMm: 297 } }),
+      settings.update({ camera: { deviceId: 'cam-2', label: 'Logitech C270' } }),
     ]);
     expect(await new DeviceSettingsFile(dir).read()).toEqual({
       printer: 'EPSON LX-310',
       paper: { preset: 'a4', widthMm: 210, heightMm: 297 },
+      camera: { deviceId: 'cam-2', label: 'Logitech C270' },
+      microphone: null,
     });
   });
 
   it('reads a damaged file as empty instead of refusing to print', async () => {
     await writeFile(join(dir, 'device-settings.json'), '{"printer": 42');
-    expect(await new DeviceSettingsFile(dir).read()).toEqual({ printer: null, paper: null });
-    await writeFile(join(dir, 'device-settings.json'), '{"printer": 42}');
-    expect(await new DeviceSettingsFile(dir).read()).toEqual({ printer: null, paper: null });
+    expect(await new DeviceSettingsFile(dir).read()).toEqual({
+      printer: null,
+      paper: null,
+      camera: null,
+      microphone: null,
+    });
+    await writeFile(
+      join(dir, 'device-settings.json'),
+      '{"printer": 42, "camera": {"deviceId": 7}}',
+    );
+    expect(await new DeviceSettingsFile(dir).read()).toEqual({
+      printer: null,
+      paper: null,
+      camera: null,
+      microphone: null,
+    });
   });
 });

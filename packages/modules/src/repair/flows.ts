@@ -6,10 +6,12 @@ import { zMediaRef, zVideoRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
-import { CASH_ACCOUNT } from '../money/constants.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
 import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
+import type { MoneyTarget } from '../money/refund.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { OpenTicketInput } from './commands.js';
 import type { RepairKey } from './i18n.js';
 import {
@@ -369,6 +371,39 @@ export function downPaymentAction(
   return can.intake && open ? 'record' : null;
 }
 
+/** The servisan as the money ledger names it, and whose money goes back. */
+export function ticketMoneyTarget(
+  ticket: Pick<TicketSummaryRow, 'id' | 'ticketNumber' | 'customerName'>,
+): MoneyTarget {
+  return {
+    document: { kind: REPAIR_DOCUMENT_KIND, id: ticket.id, label: ticket.ticketNumber },
+    customer: ticket.customerName,
+  };
+}
+
+/**
+ * What may be done with a servisan's money once the phone went home (refund.ts has the details):
+ * give back an overpayment (the counter) or any of what was paid (an owner), and an owner lowers
+ * what is still owed.
+ */
+export function ticketMoneyActions(
+  ticket: Pick<
+    TicketSummaryRow,
+    'location' | 'outcome' | 'cancelFee' | 'quoteTotal' | 'reduced' | 'downPayment'
+  >,
+  hasPermission: (permission: string) => boolean,
+): { readonly refund: boolean; readonly reduce: boolean } {
+  if (ticket.location !== 'returned') return { refund: false, reduce: false };
+  const owner = hasPermission(MONEY_PERMISSION.refund);
+  const paid = ticket.downPayment ?? 0;
+  const owed = amountOwed(ticket) - paid;
+  // Money going back is the counter's command, so even an owner needs `receive` (manifest.ts).
+  return {
+    refund: hasPermission(MONEY_PERMISSION.receive) && ((owner && paid > 0) || owed < 0),
+    reduce: owner && owed > 0,
+  };
+}
+
 /**
  * Whether this user may change what is being repaired now. Mirrors the op's rule: the counter or a
  * technician, while the servisan is open (the warranty taken home must not change).
@@ -457,11 +492,14 @@ export function repairTypesStale(
   return { kind: ticket.outcome === 'cancelled' ? 'cancelled' : 'changed' };
 }
 
-/** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
+/**
+ * What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total, less
+ * what an owner took off it once charged.
+ */
 export function amountOwed(
-  row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal'>,
+  row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal' | 'reduced'>,
 ): number {
-  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+  return (row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal) - row.reduced;
 }
 
 /**
@@ -549,6 +587,11 @@ export function balanceAfterDownPayment(
   return downPayment > total
     ? { kind: 'refund', amount: downPayment - total }
     : { kind: 'due', amount: total - downPayment };
+}
+
+/** What a cancelled servisan's customer gets back at pickup: the DP above the fee, if any. */
+export function cancelRefund(downPayment: number, fee: number | null): number {
+  return fee === null ? 0 : Math.max(0, downPayment - fee);
 }
 
 // ── an open step after the ticket changed ────────────────────────────────────────────────────

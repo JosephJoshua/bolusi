@@ -469,6 +469,7 @@ describe('one servisan from intake to handover, offline in between', () => {
       outcome: 'repaired',
       quoteTotal: total,
       pendingProposals: 0,
+      reduced: 0,
       // Paid so far: the DP and the rest at pickup.
       downPayment: total,
     });

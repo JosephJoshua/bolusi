@@ -45,6 +45,9 @@ export const SHELL_ROUTES = [
   'printPaper',
   'parts',
   'paymentMethods',
+  'renameDevice',
+  // The first-run setup of a newly registered phone (apps/mobile screens/setup).
+  'deviceSetup',
 ] as const;
 export type ShellRoute = (typeof SHELL_ROUTES)[number];
 
@@ -191,6 +194,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       if (zone.route === 'printSettings') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'printPaper') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'paymentMethods') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'renameDevice') return { kind: 'shellRoute', route: 'settings' };
       return { kind: 'shellRoute', route: 'home' };
   }
 }

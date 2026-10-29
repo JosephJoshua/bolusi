@@ -3,6 +3,9 @@
 // cashier decides, the handover, live updates from a colleague, and the intake kept across a lock.
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
+import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
+import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
 import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
 import { PrinterProblem, type RepairPrinting } from '@bolusi/modules/repair/screens';
 import { color } from '@bolusi/ui';
@@ -12,6 +15,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { __windowMetrics } from '../../../test/doubles/react-native.js';
 
 import {
+  accessoriesBack,
   ensureRepairCatalog,
   intake,
   openRepairScreenHarness,
@@ -51,6 +55,7 @@ async function mount(
   props: Partial<Parameters<typeof RepairHome>[0]> = {},
 ): Promise<RenderResult> {
   ensureRepairCatalog();
+  registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
   const screen = render(
     <RepairHome
       runtime={repairRuntimeFor(harness, userId)}
@@ -396,6 +401,28 @@ describe('price changes and handover', () => {
     // What the customer signs for is the cancellation fee, never the repair price.
     expect(text(screen, 'repair.handover.total')).toContain('25.000');
     expect(text(screen, 'repair.handover.total')).not.toContain('750.000');
+  });
+
+  // Android QA: a cancelled servisan's DP went back through the account it came in by without the
+  // counter being told; now the cancel form and the handover both say what goes back, and how.
+  test('a DP above the cancel fee is said to go back, and the handover says through what', async () => {
+    h = await openRepairScreenHarness(5307);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 90_000 }, h.cashierId);
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, 'repair.ticket.action.cancel');
+    expect(text(owner, 'repair.cancel.consequence')).toContain('80.000');
+    owner.unmount();
+
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.handover');
+    expect(text(screen, 'repair.handover.giveBack')).toContain('80.000 lewat Tunai');
   });
 
   test('leaving the handover after taking a photo asks first', async () => {
@@ -1208,5 +1235,49 @@ describe('listPaneWidth', () => {
     expect(listPaneWidth(840)).toBe(340);
     expect(listPaneWidth(960)).toBe(384);
     expect(listPaneWidth(1280)).toBe(420);
+  });
+});
+
+describe('money once the phone went home', () => {
+  test('an owner gives part of a paid bill back from the servisan; the counter cannot', async () => {
+    h = await openRepairScreenHarness(5701);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: h.photo(7),
+        signature: h.photo(8),
+        payments: [{ account: 'cash', amount: 750_000 }],
+        checklist: accessoriesBack(),
+      },
+      h.cashierId,
+    );
+    const counter = await mount(h, h.cashierId);
+    await press(counter, 'repair.board.views.returned');
+    await press(counter, `repair.board.row.${ticketId}`);
+    expect(counter.query('repair.ticket.refund')).toBeNull();
+    expect(counter.query('repair.ticket.reduce')).toBeNull();
+    counter.unmount();
+
+    const screen = await mount(h, h.ownerId);
+    await press(screen, 'repair.board.views.returned');
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(screen.query('repair.ticket.reduce')).toBeNull();
+    await press(screen, 'repair.ticket.refund');
+    expect(text(screen, 'money.refund.paid')).toContain('Rp 750.000');
+    type(screen, 'money.refund.amount', '50000');
+    await settle();
+    expect(text(screen, 'money.refund.lowersBill')).toBe('Tagihan juga turun Rp 50.000.');
+    type(screen, 'money.refund.reason', 'Garansi kaca');
+    await settle();
+    await press(screen, 'money.refund.primary');
+
+    expect(text(screen, 'repair.ticket.done')).toContain('Uang sudah dikembalikan.');
+    expect(text(screen, 'repair.ticket.reduced')).toBe('-Rp 50.000');
+    expect(text(screen, 'repair.ticket.downPayment')).toBe('-Rp 700.000');
+    expect(text(screen, 'repair.ticket.balance')).toBe('Rp 0');
   });
 });

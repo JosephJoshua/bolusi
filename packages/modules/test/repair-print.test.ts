@@ -139,6 +139,19 @@ describe('handover slip', () => {
     expect(text).not.toContain('KETENTUAN');
   });
 
+  it('takes what an owner lowered off the bill, so a reprint after a refund owes nothing', () => {
+    const text = allText(
+      handoverSlip(
+        { ...repaired, location: 'returned', reduced: 150_000, downPayment: 1_000_000 },
+        { ...ctx, handedOverByName: null, signature: null },
+      ),
+    );
+    expect(text).toMatch(/Total\s+Rp 1\.150\.000/);
+    expect(text).toMatch(/Potongan\s+-Rp 150\.000/);
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 1\.000\.000/);
+    expect(text).toMatch(/Sisa bayar\s+Rp 0/);
+  });
+
   it('prints each repair type’s warranty from the day the phone went home', () => {
     const typed = sampleTicket({
       outcome: 'repaired',

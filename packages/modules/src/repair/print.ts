@@ -160,14 +160,17 @@ function totals(
   total: number,
   paidSoFar: number | null,
   paidLabel: string,
+  reduced = 0,
 ): PrintAmountRow[] {
   const paid = paidSoFar ?? 0;
   const rows: PrintAmountRow[] = [
-    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 },
+    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 && reduced === 0 },
   ];
-  if (paid > 0) {
-    const balance = balanceAfterDownPayment(total, paid);
-    rows.push({ label: paidLabel, amount: formatMoney(-paid) });
+  // What an owner took off once charged, so the rest adds up to what the customer owes.
+  if (reduced > 0) rows.push({ label: tn('repair.price.reduced'), amount: formatMoney(-reduced) });
+  if (paid > 0 || reduced > 0) {
+    const balance = balanceAfterDownPayment(total - reduced, paid);
+    if (paid > 0) rows.push({ label: paidLabel, amount: formatMoney(-paid) });
     rows.push({
       label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
       amount: formatMoney(balance.amount),
@@ -250,6 +253,7 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
         ticket.downPayment,
         // Reprinted after pickup, what was paid is more than the DP.
         tn(ticket.location === 'returned' ? 'repair.slip.paid' : 'repair.slip.downPayment'),
+        ticket.reduced,
       ),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
@@ -305,6 +309,7 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
           ticket.cancelFee ?? 0,
           ticket.downPayment,
           tn('repair.slip.paid'),
+          ticket.reduced,
         ),
       }
     : {
@@ -318,6 +323,7 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
           ticket.quoteTotal,
           ticket.downPayment,
           tn('repair.slip.paid'),
+          ticket.reduced,
         ),
       };
   const aside: PrintBlock[] = [

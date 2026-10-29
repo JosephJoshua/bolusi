@@ -120,6 +120,8 @@ export interface RepairHarness {
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Whether `userId` holds `permission` here, as the screens ask it. */
+  hasPermission(userId: string, permission: string): boolean;
   /** Every op this device appended, in seq order (for replaying onto another harness). */
   ownOps(): Promise<SignedOperation[]>;
   deliverPulled(op: SignedOperation, arrivalSeq: number): Promise<void>;
@@ -379,6 +381,8 @@ export async function openRepairHarness(
         deviceId,
       })) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    hasPermission: (userId, permission) =>
+      runtime.commands.createContext(userId).colleagueHasPermission(userId, permission),
     ownOps: async () => {
       const rows = await db
         .selectFrom('operations')

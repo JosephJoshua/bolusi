@@ -36,6 +36,7 @@ function row(overrides: Partial<TicketSummaryRow>): TicketSummaryRow {
     quoteTotal: 100_000,
     estimatedReadyAt: null,
     pendingProposals: 0,
+    reduced: 0,
     createdAt: NOW,
     updatedAt: NOW,
     cancelFee: null,

@@ -5,27 +5,31 @@
 import { t } from '@bolusi/i18n';
 import {
   DESK_PAPERS,
-  PAPER_KEY,
+  paperLabel,
   PrintSettings,
+  STORE_BASIC_KEY,
+  STORE_BASIC_SETTING,
   tn,
   useDevicePaper,
   useDevicePrinters,
+  useMissingStoreBasics,
   useRepairRuntime,
 } from '@bolusi/modules/repair/desktop';
 import {
   Button,
   Card,
-  CameraPreview,
   Fact,
   FactGrid,
   PageHeader,
   Section,
   type WebcamState,
 } from '@bolusi/ui-web';
-import { CircleCheck, PenLine, Smartphone } from 'lucide-react';
+import { ChevronRight, CircleCheck, PenLine, Smartphone } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { hasTouch, hasWebcam } from '../capture-dialogs.js';
+import { CameraAndMicrophone } from '../media-choice.js';
+import { StartWithWindows } from '../startup.js';
 
 const STEPS = ['printer', 'capture'] as const;
 type Step = (typeof STEPS)[number] | 'done';
@@ -33,12 +37,24 @@ type Step = (typeof STEPS)[number] | 'done';
 /** Where photos come from: this PC's webcam, a store phone, or not known yet. */
 type PhotoSource = 'webcam' | 'phone' | null;
 
-export function DeviceSetupPage({ onDone }: { readonly onDone: () => void }): React.JSX.Element {
+/** Where a missing store basic is filled in, in Settings. */
+export type StoreBasicSetting = 'slip' | 'paymentMethods';
+
+export function DeviceSetupPage({
+  onDone,
+  onOpenSetting,
+}: {
+  readonly onDone: () => void;
+  /** Finishes the setup and opens the setting that fills a missing store basic. */
+  readonly onOpenSetting: (setting: StoreBasicSetting) => void;
+}): React.JSX.Element {
   const [step, setStep] = useState<Step>('printer');
   const [photos, setPhotos] = useState<PhotoSource>(null);
   const index = step === 'done' ? -1 : STEPS.indexOf(step);
 
-  if (step === 'done') return <Ready photos={photos} onStart={onDone} />;
+  if (step === 'done') {
+    return <Ready photos={photos} onStart={onDone} onOpenSetting={onOpenSetting} />;
+  }
 
   return (
     <>
@@ -117,17 +133,7 @@ function CaptureCheck({
         {webcam === null ? null : source === 'webcam' ? (
           <div className="flex flex-col gap-3">
             <p className="text-body text-text">{t('auth.pc.setup.cameraWebcam')}</p>
-            <CameraPreview
-              labels={{
-                retry: t('core.action.retry'),
-                starting: t('core.camera.starting'),
-                none: t('core.camera.none'),
-                denied: t('core.camera.denied'),
-                failed: t('core.camera.failed'),
-              }}
-              onState={setPreview}
-              testId="desktop.setup.camera"
-            />
+            <CameraAndMicrophone onState={setPreview} testId="desktop.setup.camera" />
           </div>
         ) : (
           <Line icon={<Smartphone size={20} aria-hidden />} testId="desktop.setup.phone">
@@ -163,12 +169,14 @@ function Line({
 function Ready({
   photos,
   onStart,
+  onOpenSetting,
 }: {
   readonly photos: PhotoSource;
   readonly onStart: () => void;
+  readonly onOpenSetting: (setting: StoreBasicSetting) => void;
 }): React.JSX.Element {
   const printing = useRepairRuntime().printing;
-  const [paper] = useDevicePaper(printing, DESK_PAPERS);
+  const { paper } = useDevicePaper(printing, DESK_PAPERS);
   const { state } = useDevicePrinters(printing?.printers);
   const chosen =
     state.kind === 'ready' ? (state.printers.find((p) => p.name === state.chosen) ?? null) : null;
@@ -195,7 +203,7 @@ function Ready({
             )}
             <Fact
               label={t('auth.pc.setup.donePaper')}
-              value={paper === null ? '…' : tn(PAPER_KEY[paper])}
+              value={paper === null ? '…' : paperLabel(paper)}
             />
             {photos === null ? null : (
               <Fact
@@ -212,6 +220,7 @@ function Ready({
             />
           </FactGrid>
         </Card>
+        <StartWithWindows />
         {unpicked ? (
           <p className="text-body text-text-muted">{t('auth.pc.setup.laterHint')}</p>
         ) : null}
@@ -224,7 +233,51 @@ function Ready({
           autoFocus
           data-testid="desktop.setup.start"
         />
+        {/* Below the start: filling these in is for whenever the owner has a moment. */}
+        <StoreBasics onOpen={onOpenSetting} />
       </div>
     </div>
+  );
+}
+
+/** What the store still lacks before its slips and payments are its own, each opening its setting. */
+function StoreBasics({
+  onOpen,
+}: {
+  readonly onOpen: (setting: StoreBasicSetting) => void;
+}): React.JSX.Element | null {
+  const missing = useMissingStoreBasics();
+  if (missing === null || missing.length === 0) return null;
+  return (
+    <Section
+      title={tn('repair.basics.title')}
+      className="w-full pt-4 text-left"
+      testId="desktop.setup.basics"
+    >
+      <ul className="divide-y divide-border overflow-hidden rounded-md border border-border bg-surface">
+        {missing.map((basic) => (
+          <li key={basic}>
+            <button
+              type="button"
+              onClick={() =>
+                onOpen(STORE_BASIC_SETTING[basic] === 'printSettings' ? 'slip' : 'paymentMethods')
+              }
+              data-testid={`desktop.setup.basics.${basic}`}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-alt focus-visible:bg-surface-alt focus-visible:outline-none"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-body text-text">
+                  {tn(STORE_BASIC_KEY[basic].title)}
+                </span>
+                <span className="block text-small text-text-muted">
+                  {tn(STORE_BASIC_KEY[basic].summary)}
+                </span>
+              </span>
+              <ChevronRight size={16} aria-hidden className="shrink-0 text-text-muted" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Section>
   );
 }
