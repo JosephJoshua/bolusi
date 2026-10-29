@@ -967,9 +967,9 @@ describe('correcting a saved servisan', () => {
       { ticketId: mine.ticketId, customer: { customerId: other.customerId } },
       h.cashierId,
     );
-    const moved = (await h.ownOps()).findLast(
-      (op) => op.type === REPAIR_OP.ticketDetailsCorrected,
-    )!;
+    const moved = (await h.ownOps())
+      .filter((op) => op.type === REPAIR_OP.ticketDetailsCorrected)
+      .at(-1)!;
     const payload = moved.payload as Record<string, unknown>;
     // A crafted change claiming a different "now" than the record it points at is refused.
     const forged = {
