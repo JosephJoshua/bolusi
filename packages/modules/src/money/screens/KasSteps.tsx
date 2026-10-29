@@ -42,7 +42,17 @@ import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
 import { canSimulateQris } from '../qris.js';
 import type { CashCountRow } from '../queries.js';
 import { useDebtReceipt } from '../receive-debt.js';
-import { reduceHint, refundHint, useReduceCharge, useRefund, type MoneyTarget } from '../refund.js';
+import {
+  reduceAmountError,
+  reduceHint,
+  reduceLimitText,
+  refundAmountError,
+  refundHint,
+  refundLimitText,
+  useReduceCharge,
+  useRefund,
+  type MoneyTarget,
+} from '../refund.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { PaymentLines } from './PaymentLines.js';
@@ -625,13 +635,14 @@ export function RefundStep({
               label={tm('money.refund.amount')}
               digits={form.digits}
               onChange={form.setDigits}
-              errorMessage={
-                form.problem === 'tooMuch'
-                  ? tm('money.refund.tooMuch', { amount: formatMoney(form.max) })
-                  : undefined
-              }
+              errorMessage={refundAmountError(form)}
               testID={`${testID}.amount`}
             />
+            {refundLimitText(form) === null ? null : (
+              <Text style={styles.muted} testID={`${testID}.limit`}>
+                {refundLimitText(form)}
+              </Text>
+            )}
             {form.lowersBill > 0 ? (
               <Text style={styles.muted} testID={`${testID}.lowersBill`}>
                 {tm('money.refund.lowersBill', { amount: formatMoney(form.lowersBill) })}
@@ -733,13 +744,14 @@ export function ReduceChargeStep({
           label={tm('money.reduce.amount')}
           digits={form.digits}
           onChange={form.setDigits}
-          errorMessage={
-            form.problem === 'tooMuch'
-              ? tm('money.reduce.tooMuch', { amount: formatMoney(form.max) })
-              : undefined
-          }
+          errorMessage={reduceAmountError(form)}
           testID={`${testID}.amount`}
         />
+        {reduceLimitText(form) === null ? null : (
+          <Text style={styles.muted} testID={`${testID}.limit`}>
+            {reduceLimitText(form)}
+          </Text>
+        )}
       </View>
       <View style={styles.sum}>
         <Line

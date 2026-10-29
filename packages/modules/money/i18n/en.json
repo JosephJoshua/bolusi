@@ -229,6 +229,8 @@
     "unresolvedMany": "{count} earlier QRs are not paid yet. If the customer paid, wait a moment."
   },
   "refund": {
+    "limit": "Your refund limit is {amount}.",
+    "overLimit": "Above your limit. At most {amount}.",
     "title": "Give money back",
     "action": "Give back",
     "credit": "Overpaid",
@@ -249,6 +251,8 @@
     }
   },
   "reduce": {
+    "limit": "Your limit for lowering a bill is {amount}.",
+    "overLimit": "Above your limit. At most {amount}.",
     "title": "Lower the bill",
     "action": "Lower the bill",
     "owed": "Left to pay",

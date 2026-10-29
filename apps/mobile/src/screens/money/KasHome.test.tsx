@@ -433,6 +433,25 @@ describe('money back and lowered bills', () => {
 
     expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 650.000');
   });
+
+  // Android QA (#90): a manager over their limit only learned it when the save was refused.
+  test('a manager sees their limit and cannot take more off a bill than it allows', async () => {
+    h = await openRepairScreenHarness(5413);
+    const ticketId = await handedOver(h, []);
+    const screen = await mount(h, h.managerId);
+    await press(screen, `money.kas.owed.${ticketId}`);
+    await press(screen, 'money.receive.reduce');
+    expect(text(screen, 'money.reduce.limit')).toContain('Rp 30.000');
+    type(screen, 'money.reduce.amount', '40000');
+    type(screen, 'money.reduce.reason', 'Pelanggan lama');
+    await settle();
+    expect(text(screen, 'money.reduce')).toContain('Melebihi batasmu. Paling banyak Rp 30.000.');
+    expect(screen.all('money.reduce.primary')[0]!.props['disabled']).toBe(true);
+    type(screen, 'money.reduce.amount', '30000');
+    await settle();
+    await press(screen, 'money.reduce.primary');
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 720.000');
+  });
 });
 
 describe('Riwayat', () => {

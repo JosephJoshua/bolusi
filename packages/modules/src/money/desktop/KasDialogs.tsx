@@ -29,8 +29,12 @@ import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.
 import { canSimulateQris } from '../qris.js';
 import { useDebtReceipt } from '../receive-debt.js';
 import {
+  reduceAmountError,
   reduceHint,
+  reduceLimitText,
+  refundAmountError,
   refundHint,
+  refundLimitText,
   targetOf,
   useReduceCharge,
   useRefund,
@@ -520,11 +524,7 @@ export function RefundDialog({
               label={tm('money.refund.amount')}
               digits={form.digits}
               onChange={form.setDigits}
-              error={
-                form.problem === 'tooMuch'
-                  ? tm('money.refund.tooMuch', { amount: formatMoney(form.max) })
-                  : undefined
-              }
+              error={refundAmountError(form)}
               testId={`${testId}.amount`}
             />
             {form.account === CASH_ACCOUNT || form.account === '' ? null : (
@@ -538,6 +538,11 @@ export function RefundDialog({
               />
             )}
           </div>
+          {refundLimitText(form) === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
+              {refundLimitText(form)}
+            </p>
+          )}
           {form.lowersBill > 0 ? (
             <p className="text-body text-text-muted" data-testid={`${testId}.lowersBill`}>
               {tm('money.refund.lowersBill', { amount: formatMoney(form.lowersBill) })}
@@ -600,13 +605,14 @@ export function ReduceChargeDialog({
         label={tm('money.reduce.amount')}
         digits={form.digits}
         onChange={form.setDigits}
-        error={
-          form.problem === 'tooMuch'
-            ? tm('money.reduce.tooMuch', { amount: formatMoney(form.max) })
-            : undefined
-        }
+        error={reduceAmountError(form)}
         testId={`${testId}.amount`}
       />
+      {reduceLimitText(form) === null ? null : (
+        <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
+          {reduceLimitText(form)}
+        </p>
+      )}
       <div className="flex flex-col gap-2 rounded-sm bg-surface-alt p-3">
         <AmountLine
           label={tm('money.reduce.owed')}

@@ -6,6 +6,7 @@
 // phone went home: beyond the overpayment the bill is lowered by the difference first
 // (commands.ts refundHandler), so the customer does not end up owing it. Either way it goes back
 // through a method the customer paid with, as much as went in through it.
+import { formatMoney } from '@bolusi/i18n';
 import { useMemo, useState } from 'react';
 
 import { CASH_ACCOUNT, MONEY_PERMISSION } from './constants.js';
@@ -92,8 +93,12 @@ export interface RefundForm {
   /** The amount as typed, digits only. */
   readonly digits: string;
   readonly setDigits: (digits: string) => void;
-  /** The most the picked method can give back. */
+  /** The most the picked method can give back, within a limited role's limit. */
   readonly max: number;
+  /** A limited role's (a manager's) refund limit per document; null when not limited. */
+  readonly limit: number | null;
+  /** The amount is above `max` because of `limit`, not the method. */
+  readonly overLimit: boolean;
   readonly reason: string;
   readonly setReason: (reason: string) => void;
   /** Not for cash: the transfer's or reversal's number, if there is one. */
@@ -109,6 +114,7 @@ export interface RefundForm {
 export function useRefund(target: MoneyTarget): RefundForm {
   const runtime = useMoneyRuntime();
   const owner = runtime.hasPermission(MONEY_PERMISSION.refund);
+  const limit = owner ? runtime.limitOf(MONEY_PERMISSION.refund) : null;
   const { money, accounts } = useDocumentMoney(target.document);
   const methods = useMemo(
     () => (money === null || accounts === null ? [] : refundMethods(money, accounts, owner)),
@@ -124,7 +130,9 @@ export function useRefund(target: MoneyTarget): RefundForm {
   const method =
     picked === null ? (methods[0] ?? null) : (methods.find((m) => m.account === picked) ?? null);
   const credit = money === null ? 0 : Math.max(0, -money.balance);
-  const max = method?.limit ?? 0;
+  const methodMax = method?.limit ?? 0;
+  const max =
+    money === null || limit === null ? methodMax : withinRefundLimit(money, methodMax, limit);
   // Until typed, the overpayment (all of it that this method can give back).
   const digits = typed ?? (credit > 0 ? String(Math.min(credit, max)) : '');
   const amount = rupiah(digits);
@@ -156,6 +164,8 @@ export function useRefund(target: MoneyTarget): RefundForm {
     digits,
     setDigits,
     max,
+    limit,
+    overLimit: problem === 'tooMuch' && max < methodMax,
     reason,
     setReason,
     reference,
@@ -182,8 +192,15 @@ export interface ReduceChargeForm {
   readonly ready: boolean;
   /** What the customer still owes. */
   readonly owed: number;
-  /** The most the bill can come down: what was charged, less what was taken off before. */
+  /**
+   * The most the bill can come down: what was charged, less what was taken off before, and for a
+   * limited role no further than its limit.
+   */
   readonly max: number;
+  /** A limited role's limit on what is taken off a document; null when not limited. */
+  readonly limit: number | null;
+  /** The amount is above `max` because of `limit`. */
+  readonly overLimit: boolean;
   readonly digits: string;
   readonly setDigits: (digits: string) => void;
   readonly reason: string;
@@ -197,11 +214,17 @@ export interface ReduceChargeForm {
 
 /** An owner lowers a bill already charged; the whole debt is filled in. */
 export function useReduceCharge(target: MoneyTarget): ReduceChargeForm {
+  const limit = useMoneyRuntime().limitOf(MONEY_PERMISSION.refund);
   const { money } = useDocumentMoney(target.document);
   const [typed, setDigits] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const owed = money === null ? 0 : money.balance;
-  const max = money === null ? 0 : money.charged - money.reduced;
+  const chargedMax = money === null ? 0 : money.charged - money.reduced;
+  // As the server counts it (rules.ts chargeReducedRule): all taken off the document, this too.
+  const max =
+    money === null || limit === null
+      ? chargedMax
+      : Math.max(0, Math.min(chargedMax, limit - money.reduced));
   const digits = typed ?? (owed > 0 ? String(Math.min(owed, max)) : '');
   const amount = rupiah(digits);
   const problem: ReduceProblem | null =
@@ -216,6 +239,8 @@ export function useReduceCharge(target: MoneyTarget): ReduceChargeForm {
     ready: money !== null,
     owed,
     max,
+    limit,
+    overLimit: problem === 'tooMuch' && max < chargedMax,
     digits,
     setDigits,
     reason,
@@ -229,6 +254,57 @@ export function useReduceCharge(target: MoneyTarget): ReduceChargeForm {
         ? null
         : { document: target.document, amount, reason: reason.trim() },
   };
+}
+
+/**
+ * The most a limited role (a manager) may give back through a method, counted as the server does
+ * (rules.ts refundPaidRule): within the overpayment it is the counter's refund, which no limit
+ * holds; beyond it, every refund on the document and what the bill comes down by (commands.ts
+ * refundHandler) must each stay within the limit.
+ */
+export function withinRefundLimit(money: DocumentMoney, methodMax: number, limit: number): number {
+  // Before anything is charged, no refund is the counter's (a DP is not an overpayment yet).
+  const credit = money.charged > 0 ? Math.max(0, -money.balance) : 0;
+  const refunded = money.entries
+    .filter((entry) => entry.kind === 'refund_paid')
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const limited = Math.min(limit - refunded, limit - money.reduced + credit);
+  return Math.min(methodMax, Math.max(Math.min(credit, methodMax), limited));
+}
+
+/**
+ * Under the amount: a limited role's limit, before the save would refuse it. Not while the amount's
+ * own error already says how far it may go.
+ */
+export function refundLimitText(form: Pick<RefundForm, 'limit' | 'overLimit'>): string | null {
+  if (form.limit === null || form.overLimit) return null;
+  return tm('money.refund.limit', { amount: formatMoney(form.limit) });
+}
+
+export function reduceLimitText(
+  form: Pick<ReduceChargeForm, 'limit' | 'overLimit'>,
+): string | null {
+  if (form.limit === null || form.overLimit) return null;
+  return tm('money.reduce.limit', { amount: formatMoney(form.limit) });
+}
+
+/** The amount's error: above what the method (or the limit) allows. */
+export function refundAmountError(
+  form: Pick<RefundForm, 'problem' | 'max' | 'overLimit'>,
+): string | undefined {
+  if (form.problem !== 'tooMuch') return undefined;
+  return tm(form.overLimit ? 'money.refund.overLimit' : 'money.refund.tooMuch', {
+    amount: formatMoney(form.max),
+  });
+}
+
+export function reduceAmountError(
+  form: Pick<ReduceChargeForm, 'problem' | 'max' | 'overLimit'>,
+): string | undefined {
+  if (form.problem !== 'tooMuch') return undefined;
+  return tm(form.overLimit ? 'money.reduce.overLimit' : 'money.reduce.tooMuch', {
+    amount: formatMoney(form.max),
+  });
 }
 
 /**

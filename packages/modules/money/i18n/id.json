@@ -229,6 +229,8 @@
     "unresolvedMany": "{count} QR tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
   },
   "refund": {
+    "limit": "Batas pengembalianmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
     "title": "Kembalikan uang",
     "action": "Kembalikan",
     "credit": "Lebih bayar",
@@ -249,6 +251,8 @@
     }
   },
   "reduce": {
+    "limit": "Batas potonganmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
     "title": "Kurangi tagihan",
     "action": "Kurangi tagihan",
     "owed": "Sisa bayar",
