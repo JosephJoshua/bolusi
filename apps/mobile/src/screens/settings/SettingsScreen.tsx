@@ -26,9 +26,10 @@ import {
   type,
   type IconName,
   type SyncChipState,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 import { initialsOf } from '@bolusi/device/models/switcher/model';

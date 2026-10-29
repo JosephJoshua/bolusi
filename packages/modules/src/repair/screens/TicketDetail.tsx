@@ -24,10 +24,11 @@ import {
   space,
   touch,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import {

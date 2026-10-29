@@ -6,7 +6,8 @@
  *
  * A clear button appears once something is typed, so going back to the whole list is one tap.
  */
-import { Pressable, TextInput as RNTextInput, StyleSheet, View } from 'react-native';
+import { NativeTextInput as RNTextInput } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useRevealOnFocus } from '../shell/keyboard.js';
 import { border, color, radius, size, space, touch, type } from '../tokens.js';

@@ -17,9 +17,10 @@ import {
   size,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useRef } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import type { DiscardGuard } from '../../screen-kit/index.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';

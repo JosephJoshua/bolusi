@@ -4,9 +4,9 @@
  * carry, most used first, so a filter never offers something that finds nothing. The phones a
  * part fits are left to search, which already matches them typo and all.
  */
-import { ChoiceChips, SegmentedControl, color, space, type } from '@bolusi/ui';
+import { ChoiceChips, SegmentedControl, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION, TAG_FACET } from '../constants.js';

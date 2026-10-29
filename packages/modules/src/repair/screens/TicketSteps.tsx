@@ -17,10 +17,11 @@ import {
   size,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { REPAIR_PERMISSION, WORK_PHOTOS_MAX, type WorkPhotoStage } from '../constants.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';

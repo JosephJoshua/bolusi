@@ -4,9 +4,9 @@
  * in and may still change it, with the reason on record. Leaving with unsaved changes asks first.
  */
 import { formatMoney } from '@bolusi/i18n';
-import { ConfirmSheet, TextInput } from '@bolusi/ui';
+import { ConfirmSheet, TextInput, Text } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 

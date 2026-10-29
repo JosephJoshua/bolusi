@@ -18,8 +18,9 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';

@@ -5,9 +5,9 @@
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
 
-import { ConfirmSheet, StepHeader, color, space, type } from '@bolusi/ui';
+import { ConfirmSheet, StepHeader, color, space, type, Text } from '@bolusi/ui';
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import {
   useActionRunner,

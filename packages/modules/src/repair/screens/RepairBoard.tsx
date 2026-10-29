@@ -21,10 +21,11 @@ import {
   type,
   type ListState,
   type OperationSyncStatus,
+  Text,
 } from '@bolusi/ui';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { TicketSummaryRow } from '../queries.js';
 import {

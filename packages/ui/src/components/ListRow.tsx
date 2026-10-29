@@ -5,7 +5,8 @@
  * from its 64 dp default rather than cutting a word off.
  */
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';

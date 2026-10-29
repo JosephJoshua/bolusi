@@ -18,10 +18,11 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 

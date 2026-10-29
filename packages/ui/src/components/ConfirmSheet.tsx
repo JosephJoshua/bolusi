@@ -18,7 +18,8 @@
  * second, invisible view hierarchy to reason about. Android hardware-back → cancel is navigation
  * wiring (§8.1), and belongs to the screen (task 24), not here.
  */
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, StyleSheet, View } from 'react-native';
 
 import { useSheetEntrance } from '../motion.js';
 import { NAV_BAR_INSET } from '../platform-insets.js';

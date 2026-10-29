@@ -3,9 +3,9 @@
  * The user picks the slip when there are two; the paper is this phone's, set in Settings. The page is
  * built from the ticket as it reads at that moment, then logged so the next print says "Cetak ulang".
  */
-import { ConfirmSheet, SegmentedControl, color, space, type } from '@bolusi/ui';
+import { ConfirmSheet, SegmentedControl, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { SlipKind } from '../constants.js';
 import { printableSlips } from '../flows.js';

@@ -3,9 +3,9 @@
  * complaint, what was left with it. Intake's own fields on one screen; only what differs is saved,
  * and the servisan's history keeps what it was.
  */
-import { TextInput } from '@bolusi/ui';
+import { TextInput, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import {

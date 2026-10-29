@@ -10,7 +10,8 @@
  * adjacent targets) and overlap the neighbouring avatar. The padding is computed from the tokens,
  * not hand-tuned, so it stays correct if either number ever moves.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon, type IconName } from './Icon.js';
