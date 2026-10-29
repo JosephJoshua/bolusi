@@ -539,6 +539,15 @@ describe('a change from a newer app holds the pull', () => {
     expect(textsIn(screen.get('sync-update-result'))).toContain(t('sync.updateNeeded.failed'));
   });
 
+  test('says when new data last arrived, not "last connected", since pushes still reach the server', () => {
+    const [line] = textsIn(renderWaiting().get('sync-last-synced'));
+    expect(line?.startsWith(t('sync.updateNeeded.lastArrived', { relative: '' }).trim())).toBe(
+      true,
+    );
+    const [healthy] = textsIn(renderSync().get('sync-last-synced'));
+    expect(healthy?.startsWith(t('sync.status.lastSynced', { relative: '' }).trim())).toBe(true);
+  });
+
   test('a build without over-the-air updates only explains', () => {
     const screen = renderWaiting();
     expect(screen.query('sync-update-needed')).not.toBeNull();

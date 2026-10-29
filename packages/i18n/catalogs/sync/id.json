@@ -72,6 +72,7 @@
     "check": "Cek pembaruan",
     "checking": "Mengecek pembaruan…",
     "none": "Belum ada pembaruan untuk HP ini. Coba lagi nanti.",
-    "failed": "Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi."
+    "failed": "Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.",
+    "lastArrived": "Data baru terakhir masuk {relative}"
   }
 }

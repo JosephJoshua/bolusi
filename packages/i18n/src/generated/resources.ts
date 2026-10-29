@@ -494,6 +494,7 @@ const source = {
         checking: 'Mengecek pembaruan…',
         none: 'Belum ada pembaruan untuk HP ini. Coba lagi nanti.',
         failed: 'Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.',
+        lastArrived: 'Data baru terakhir masuk {relative}',
       },
     },
     conflict: {
@@ -1107,6 +1108,7 @@ export const resources = {
           checking: 'Checking for updates…',
           none: 'No update for this phone yet. Try again later.',
           failed: 'Couldn’t check for updates. Check the connection, then try again.',
+          lastArrived: 'New data last arrived {relative}',
         },
       },
       conflict: {

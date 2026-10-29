@@ -125,6 +125,7 @@ export function SyncStatusScreen({
   const sync = manualSync(input);
   const queue = mediaQueue(input);
   const problems = syncProblems(input);
+  const updateNeeded = problems.some((problem) => problem.kind === 'appUpdateNeeded');
   // The header chip is the five-state, media-blind verdict (design-system §8.1). The headline is that
   // verdict PLUS the `photosPending` distinction the chip cannot carry (task 147).
   const chip = syncChipState(input);
@@ -274,7 +275,11 @@ export function SyncStatusScreen({
             {reassuranceMessage(input, 'phone')}
           </Text>
           <Text style={styles.meta} testID="sync-last-synced">
-            {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
+            {/* While a newer app holds the pull, pushes still reach the server: "last connected"
+                would read as offline, so say what actually stopped. */}
+            {t(updateNeeded ? 'sync.updateNeeded.lastArrived' : 'sync.status.lastSynced', {
+              relative: relativeLabel(input),
+            })}
           </Text>
         </View>
       </View>
@@ -354,15 +359,10 @@ export function SyncStatusScreen({
         </View>
       ) : null}
 
-      {problems.some((problem) => problem.kind === 'appUpdateNeeded') ? (
+      {updateNeeded ? (
         <View style={styles.section} testID="sync-update-needed">
           <Text style={styles.sectionTitle}>{t('sync.updateNeeded.title')}</Text>
           <Text style={styles.sectionText}>{t('sync.updateNeeded.body')}</Text>
-          {updateCheck === 'none' || updateCheck === 'failed' ? (
-            <Text style={styles.sectionText} testID="sync-update-result">
-              {t(updateCheck === 'none' ? 'sync.updateNeeded.none' : 'sync.updateNeeded.failed')}
-            </Text>
-          ) : null}
           {onCheckForUpdate === undefined ? null : (
             <View style={styles.sectionAction}>
               <TextButton
@@ -378,6 +378,11 @@ export function SyncStatusScreen({
               />
             </View>
           )}
+          {updateCheck === 'none' || updateCheck === 'failed' ? (
+            <Text style={styles.sectionText} testID="sync-update-result">
+              {t(updateCheck === 'none' ? 'sync.updateNeeded.none' : 'sync.updateNeeded.failed')}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 

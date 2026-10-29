@@ -72,6 +72,7 @@
     "check": "Check for updates",
     "checking": "Checking for updates…",
     "none": "No update for this phone yet. Try again later.",
-    "failed": "Couldn’t check for updates. Check the connection, then try again."
+    "failed": "Couldn’t check for updates. Check the connection, then try again.",
+    "lastArrived": "New data last arrived {relative}"
   }
 }
