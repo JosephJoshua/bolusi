@@ -476,6 +476,38 @@ describe('phone handoff', () => {
     expect(screen.queryByTestId('desktop.handoff')).toBeNull();
   });
 
+  it('backs out of a step on the phone when the counter locks, and offers no missing webcam', async () => {
+    cameras([]);
+    const handoff = fakeHandoff({ ok: true, id: 'h6', urls: [PHONE_PAGE] });
+    const dialogs = mount(handoff);
+    let video!: { value: unknown };
+    await act(async () => {
+      video = track(dialogs.capture.video(VIDEO));
+      await Promise.resolve();
+    });
+    act(() => handoff.emit({ id: 'h6', type: 'paired' }));
+    await screen.findByTestId('desktop.handoff.onPhone');
+    await waitFor(() => expect(handoff.asks).toHaveLength(1));
+    // No webcam to go back to.
+    expect(screen.queryByTestId('desktop.handoff.back')).toBeNull();
+    // The idle lock: the step is withdrawn, so the phone hears the computer stopped waiting.
+    act(() => dialogs.capture.backOut());
+    await waitFor(() => expect(video.value).toBeNull());
+    expect(handoff.withdrawn).toEqual([1]);
+    expect(screen.queryByTestId('desktop.handoff')).toBeNull();
+    // A clip sent after that is no one's.
+    act(() =>
+      handoff.emit({
+        id: 'h6',
+        type: 'video',
+        seq: 1,
+        bytes: new Uint8Array([1]),
+        mime: 'video/mp4',
+      }),
+    );
+    expect(handoff.unpaired).toEqual([]);
+  });
+
   it('offers the phone when the webcam cannot record', async () => {
     cameras([{ kind: 'videoinput', deviceId: 'cam' }], 'NotReadableError');
     const handoff = fakeHandoff({ ok: true, id: 'h6', urls: [PHONE_PAGE] });

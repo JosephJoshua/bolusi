@@ -179,10 +179,13 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
   };
 
   /** Straight to the phone when it is already paired, or when this PC cannot do the step. */
+  /** Whether the last photo or video step found a webcam here to go back to from the phone. */
+  let webcam = true;
   const startVia = async (kind: Pending['kind']): Promise<Pending['via']> => {
     if (phone === null || !(await phoneAvailable)) return 'pc';
+    if (kind !== 'signature') webcam = await hasWebcam();
     if (phone.paired) return 'phone';
-    return (kind === 'signature' ? hasTouch() : await hasWebcam()) ? 'pc' : 'phone';
+    return (kind === 'signature' ? hasTouch() : webcam) ? 'pc' : 'phone';
   };
 
   const keepPhoto = async (blob: Blob): Promise<void> => {
@@ -256,9 +259,13 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
           link={link}
           kind={current?.kind ?? 'photo'}
           title={current?.title ?? ''}
-          backLabel={t(
-            current?.kind === 'signature' ? 'core.handoff.useScreen' : 'core.handoff.useWebcam',
-          )}
+          backLabel={
+            current?.kind === 'signature'
+              ? t('core.handoff.useScreen')
+              : webcam
+                ? t('core.handoff.useWebcam')
+                : null
+          }
           onBack={() => switchTo('pc')}
           onNewCode={() => phone?.repair()}
           onClose={close}
@@ -373,6 +380,10 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
           closePlayer();
           loadPlaying({ title: request.title, source: { kind: 'loading' }, load, done: resolve });
         }),
+      backOut: () => {
+        close();
+        closePlayer();
+      },
     },
     Host,
   };
