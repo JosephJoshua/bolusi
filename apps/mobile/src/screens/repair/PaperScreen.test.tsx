@@ -69,7 +69,7 @@ describe('the phone slip paper', () => {
     expect(screen.query('repair.paper.error')).toBeNull();
   });
 
-  test('takes a size the store types, and keeps the last good one when it is out of range', async () => {
+  test('saves a size as it is typed, and keeps the last good one when it is out of range', async () => {
     h = await openRepairScreenHarness(94);
     ensureRepairCatalog();
     const printing = fakePrinting();
@@ -85,8 +85,8 @@ describe('the phone slip paper', () => {
     expect(printing.saved.at(-1)).toMatchObject({ preset: 'custom', widthMm: 210, heightMm: 297 });
 
     typeInto(screen, 'repair.paper.size.width', '216');
+    // No field is left: the counter types the last digit and presses back, and the size stays.
     typeInto(screen, 'repair.paper.size.height', '140');
-    fire(screen.get('repair.paper.size.height.field'), 'onBlur');
     await settle();
     expect(printing.saved.at(-1)).toEqual({
       preset: 'custom',
@@ -98,11 +98,22 @@ describe('the phone slip paper', () => {
 
     const before = printing.saved.length;
     typeInto(screen, 'repair.paper.size.width', '30');
+    await settle();
+    // Not red while it could still be the start of a good number.
+    expect(screen.get('repair.paper.size.range').props.style).not.toContainEqual({
+      color: color.danger,
+    });
     fire(screen.get('repair.paper.size.width.field'), 'onBlur');
     await settle();
     expect(printing.saved).toHaveLength(before);
     expect(screen.get('repair.paper.size.range').props.style).toContainEqual({
       color: color.danger,
     });
+
+    // A number already too big shows at once.
+    typeInto(screen, 'repair.paper.size.height', '999');
+    await settle();
+    expect(printing.saved).toHaveLength(before);
+    expect(screen.get('repair.paper.size.height.field').props.value).toBe('999');
   });
 });

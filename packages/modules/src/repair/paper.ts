@@ -9,7 +9,7 @@ import {
   zPaperSettings,
   type PaperSettings,
 } from '@bolusi/core';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { tn, type RepairKey } from './i18n.js';
 import type { DevicePrinter, DevicePrinters, RepairPrinting } from './runtime.js';
@@ -168,8 +168,10 @@ export function paperRangeHint(): string {
 }
 
 /**
- * The typed size's fields, shared by the phone and the PC: what is typed, saved as each field is
- * left, and whether the last try was out of range (then nothing changed).
+ * The typed size's fields, shared by the phone and the PC: what is typed, saved as it is typed
+ * whenever it is a size a printer takes, so leaving the screen straight after the last digit keeps
+ * it. A size out of range is not saved; the range turns red once a field is left with it, or at once
+ * when a number is already too big to fix by typing on.
  */
 export function useCustomPaperForm(device: DevicePaper): {
   readonly width: string;
@@ -178,37 +180,53 @@ export function useCustomPaperForm(device: DevicePaper): {
   readonly setHeight: (value: string) => void;
   readonly continuous: boolean;
   readonly setContinuous: (continuous: boolean) => void;
-  /** Saves what is typed; called as a field is left. */
-  readonly commit: () => void;
+  /** A field was left: an out-of-range size now shows as such. */
+  readonly leave: () => void;
   readonly invalid: boolean;
 } {
   const { paper, saveCustom } = device;
   const custom = paper?.preset === 'custom' ? paper : null;
-  const [width, setWidth] = useState('');
-  const [height, setHeight] = useState('');
-  const [invalid, setInvalid] = useState(false);
-  // What was saved, once read and after each save.
+  // The fields start from the saved size, or from it once read. Saves made while typing never
+  // write back into them, so a save that lands late cannot undo a digit typed after it.
   const savedWidth = custom?.widthMm;
   const savedHeight = custom?.heightMm;
+  const [width, setWidth] = useState(savedWidth === undefined ? '' : String(savedWidth));
+  const [height, setHeight] = useState(savedHeight === undefined ? '' : String(savedHeight));
+  const [left, setLeft] = useState(false);
+  const seeded = useRef(savedWidth !== undefined);
   useEffect(() => {
-    if (savedWidth === undefined || savedHeight === undefined) return;
+    if (seeded.current || savedWidth === undefined || savedHeight === undefined) return;
+    seeded.current = true;
     setWidth(String(savedWidth));
     setHeight(String(savedHeight));
   }, [savedWidth, savedHeight]);
   const continuous = custom?.continuous ?? false;
-  const save = (over: Partial<CustomPaperSize>): void => {
-    const size = { widthMm: Number(width), heightMm: Number(height), continuous, ...over };
-    void saveCustom(size).then((saved) => setInvalid(!saved));
+  const size = (w: string, h: string, c: boolean): CustomPaperSize => ({
+    widthMm: Number(w),
+    heightMm: Number(h),
+    continuous: c,
+  });
+  const typed = (w: string, h: string): void => {
+    seeded.current = true;
+    setWidth(w);
+    setHeight(h);
+    if (customPaper(size(w, h, continuous)) !== null) void saveCustom(size(w, h, continuous));
   };
+  const outOfRange =
+    width !== '' && height !== '' && customPaper(size(width, height, continuous)) === null;
+  const tooBig = Number(width) > MAX_PAPER_WIDTH_MM || Number(height) > MAX_PAPER_HEIGHT_MM;
   return {
     width,
     height,
-    setWidth: (value) => setWidth(value.replace(/\D/g, '')),
-    setHeight: (value) => setHeight(value.replace(/\D/g, '')),
+    setWidth: (value) => typed(value.replace(/\D/g, ''), height),
+    setHeight: (value) => typed(width, value.replace(/\D/g, '')),
     continuous,
-    setContinuous: (next) => save({ continuous: next }),
-    commit: () => save({}),
-    invalid,
+    setContinuous: (next) => {
+      if (customPaper(size(width, height, next)) !== null)
+        void saveCustom(size(width, height, next));
+    },
+    leave: () => setLeft(true),
+    invalid: outOfRange && (left || tooBig),
   };
 }
 

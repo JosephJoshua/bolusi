@@ -1394,6 +1394,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenSystemSettings={() => void Linking.openSettings()}
                   onOpenSetting={setRoute}
                   onDone={() => setRoute('home')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );
             }
@@ -1738,7 +1739,8 @@ const HIDDEN = { display: 'none' } as const;
 
 /**
  * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
- * hardware back asks the surface first: the repair/notes home, and the owner's repair settings.
+ * hardware back asks the surface first: the repair/notes home, the owner's repair settings, and the
+ * new-phone setup's steps.
  */
 const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
@@ -1752,6 +1754,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'printPaper',
   'parts',
   'paymentMethods',
+  'deviceSetup',
 ]);
 
 /**

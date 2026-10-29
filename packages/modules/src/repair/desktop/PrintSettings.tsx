@@ -164,7 +164,7 @@ export function PrintSettings(): React.JSX.Element | null {
   );
 }
 
-/** The typed size, saved as each field is left, and whether it is the tractor-feed kind. */
+/** The typed size, saved as it is typed, and whether it is the tractor-feed kind. */
 function CustomSize({
   device,
   testId,
@@ -175,12 +175,8 @@ function CustomSize({
   readonly onChange: () => void;
 }): React.JSX.Element {
   const form = useCustomPaperForm(device);
-  const commit = (): void => {
-    onChange();
-    form.commit();
-  };
   const enter = (event: React.KeyboardEvent): void => {
-    if (event.key === 'Enter') commit();
+    if (event.key === 'Enter') form.leave();
   };
   return (
     <div className="flex flex-col gap-3" data-testid={testId}>
@@ -188,8 +184,11 @@ function CustomSize({
         <TextField
           label={tn('repair.print.paperWidth')}
           value={form.width}
-          onChange={(event) => form.setWidth(event.target.value)}
-          onBlur={commit}
+          onChange={(event) => {
+            onChange();
+            form.setWidth(event.target.value);
+          }}
+          onBlur={form.leave}
           onKeyDown={enter}
           inputMode="numeric"
           maxLength={3}
@@ -199,8 +198,11 @@ function CustomSize({
         <TextField
           label={tn('repair.print.paperHeight')}
           value={form.height}
-          onChange={(event) => form.setHeight(event.target.value)}
-          onBlur={commit}
+          onChange={(event) => {
+            onChange();
+            form.setHeight(event.target.value);
+          }}
+          onBlur={form.leave}
           onKeyDown={enter}
           inputMode="numeric"
           maxLength={3}

@@ -180,8 +180,8 @@ describe('printing on the counter PC', () => {
     await waitFor(() =>
       expect(byTestId('repair.desk.printing.size.range').className).toContain('text-danger'),
     );
+    // A good size saves as it is typed, without leaving the field.
     fireEvent.change(width, { target: { value: '216' } });
-    fireEvent.blur(width);
     // It starts from the paper it had: the store's half forms, tractor-feed.
     expect(byTestId('repair.desk.printing.size.continuous').getAttribute('aria-checked')).toBe(
       'true',

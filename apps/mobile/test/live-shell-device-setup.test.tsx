@@ -54,11 +54,12 @@ import {
   waitUntil,
   type Fixture,
 } from './live-shell-support.js';
-import { __emitAppState } from './doubles/react-native.js';
+import { __emitAppState, __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.js';
 import type { RenderResult } from '../../../packages/ui/test/render.js';
 
 let fixture: Fixture | null = null;
 afterEach(async () => {
+  __resetHardwareBack();
   await fixture?.close();
   fixture = null;
 });
@@ -140,6 +141,17 @@ describe('setting up a newly registered phone', () => {
     fireOn(screen, 'setup.next');
     expect(await waitUntil(() => screen.query('setup.done') !== null)).toBe(true);
     expect(await readDeviceSetupFor(fixture.app.db.db)).toBe(fixture.userId);
+    // The phone's back goes one step back, like the header's, without ending the setup.
+    let consumed = false;
+    await act(async () => {
+      consumed = __emitHardwareBack();
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    });
+    expect(consumed).toBe(true);
+    expect(await waitUntil(() => screen.query('setup.permissions') !== null)).toBe(true);
+    expect(await readDeviceSetupFor(fixture.app.db.db)).toBe(fixture.userId);
+    fireOn(screen, 'setup.next');
+    expect(await waitUntil(() => screen.query('setup.done') !== null)).toBe(true);
     fireOn(screen, 'setup.start');
     expect(await waitUntil(() => screen.query('notes.list.title') !== null)).toBe(true);
     expect(

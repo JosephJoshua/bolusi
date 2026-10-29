@@ -23,6 +23,7 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 
+import type { SurfaceNav } from '../../navigation/surface.js';
 import type { PermissionPort } from '../../push/permission.js';
 
 /** What the OS says about one permission: asked and given, still askable, or refused for good. */
@@ -40,6 +41,8 @@ export interface DeviceSetupScreenProps {
   readonly basics?: ReactNode;
   /** Finished or put off: the setup does not open by itself again. */
   readonly onDone: () => void;
+  /** Hardware back goes one step back, the same as the header back. */
+  readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -53,6 +56,7 @@ export function DeviceSetupScreen({
   paper,
   basics,
   onDone,
+  onRegisterSurfaceNav,
   testID = 'setup',
 }: DeviceSetupScreenProps): React.JSX.Element {
   const steps: readonly Step[] = paper === undefined ? ['permissions'] : ['permissions', 'paper'];
@@ -67,6 +71,16 @@ export function DeviceSetupScreen({
     else if (step === 'done') setStep(steps[steps.length - 1]!);
     else onDone();
   };
+  useEffect(() => {
+    onRegisterSurfaceNav?.({
+      handleBack: () => {
+        back();
+        return true;
+      },
+      requestLeave: (proceed) => proceed(),
+    });
+    return () => onRegisterSurfaceNav?.(null);
+  });
 
   if (step === 'done') {
     const answerLabel = (answer: PermissionAnswer | null): string =>

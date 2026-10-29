@@ -66,7 +66,7 @@ export function PaperChoice({
   );
 }
 
-/** The typed size, saved as each field is left. A phone prints cut sheets, never tractor-feed. */
+/** The typed size, saved as it is typed. A phone prints cut sheets, never tractor-feed. */
 function CustomSize({
   device,
   testID,
@@ -83,8 +83,8 @@ function CustomSize({
             label={tn('repair.print.paperWidth')}
             value={form.width}
             onChangeText={form.setWidth}
-            onBlur={form.commit}
-            onSubmitEditing={form.commit}
+            onBlur={form.leave}
+            onSubmitEditing={form.leave}
             keyboardType="number-pad"
             maxLength={3}
             testID={`${testID}.width`}
@@ -95,15 +95,15 @@ function CustomSize({
             label={tn('repair.print.paperHeight')}
             value={form.height}
             onChangeText={form.setHeight}
-            onBlur={form.commit}
-            onSubmitEditing={form.commit}
+            onBlur={form.leave}
+            onSubmitEditing={form.leave}
             keyboardType="number-pad"
             maxLength={3}
             testID={`${testID}.height`}
           />
         </View>
       </View>
-      {/* The range, red once a size outside it was not saved. */}
+      {/* The range, red while the typed size is outside it and so not saved. */}
       <Text
         style={[repairStyles.muted, form.invalid ? styles.invalid : null]}
         testID={`${testID}.range`}
