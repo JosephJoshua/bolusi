@@ -87,6 +87,8 @@ export interface RepairBoardPageProps {
   readonly selectedTicketId: string | null;
   readonly onSelectTicket: (ticketId: string | null) => void;
   readonly onNewIntake: () => void;
+  /** An unsaved intake or warranty claim this person left: "Servisan baru" says it carries on with it. */
+  readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
   /** Starts a warranty claim's intake from the open servisan. */
   readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   readonly onOpenSyncStatus?: (() => void) | undefined;
@@ -154,6 +156,7 @@ export function RepairBoardPage({
   selectedTicketId,
   onSelectTicket,
   onNewIntake,
+  waitingDraft = null,
   onStartClaim,
   onOpenSyncStatus,
   filters,
@@ -449,7 +452,13 @@ export function RepairBoardPage({
         actions={
           can.intake ? (
             <Button
-              label={tn('repair.action.newIntake')}
+              label={tn(
+                waitingDraft === 'claim'
+                  ? 'repair.action.resumeClaim'
+                  : waitingDraft === 'intake'
+                    ? 'repair.action.resumeIntake'
+                    : 'repair.action.newIntake',
+              )}
               variant="primary"
               icon={Plus}
               shortcut="F2"

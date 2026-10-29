@@ -320,6 +320,41 @@ describe('counter app over demo data', () => {
     await screen.findByTestId('repair.desk.intake.claim');
   });
 
+  it('says on the board that an unsaved intake or claim waits behind Servisan baru', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    expect(byTestId('repair.desk.board.newIntake').textContent).toContain('Servisan baru');
+    fireEvent.keyDown(window, { key: 'F2' });
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Mati total' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    await waitFor(() =>
+      expect(byTestId('repair.desk.board.newIntake').textContent).toContain(
+        'Lanjutkan servisan baru',
+      ),
+    );
+
+    // A claim taking that intake's place is named as the claim.
+    fireEvent.change(byTestId('repair.desk.board.search'), { target: { value: 'K7Q-0005' } });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    fireEvent.click(
+      within(await screen.findByTestId('desktop.claimReplacesIntake')).getByRole('button', {
+        name: 'Mulai klaim',
+      }),
+    );
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Layar bergaris lagi' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    await waitFor(() =>
+      expect(byTestId('repair.desk.board.newIntake').textContent).toContain(
+        'Lanjutkan klaim garansi',
+      ),
+    );
+  });
+
   it('keeps a warranty claim only once something is typed in it', async () => {
     renderApp();
     fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {

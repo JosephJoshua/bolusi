@@ -40,6 +40,8 @@
     "proposePrice": "Propose price change",
     "reopen": "Reopen repair",
     "resume": "Resume repair",
+    "resumeClaim": "Continue warranty claim",
+    "resumeIntake": "Continue new repair",
     "start": "Start repair",
     "waitForParts": "Mark waiting for parts",
     "reassign": "Change technician",

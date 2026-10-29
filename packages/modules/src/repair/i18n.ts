@@ -31,6 +31,8 @@ export const REPAIR_KEYS = [
   'repair.action.reassignShort',
   'repair.action.reopen',
   'repair.action.resume',
+  'repair.action.resumeClaim',
+  'repair.action.resumeIntake',
   'repair.action.start',
   'repair.action.takeOver',
   'repair.action.waitForParts',

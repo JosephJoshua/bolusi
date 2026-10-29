@@ -298,6 +298,9 @@ export function Counter({
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
+          waitingDraft={
+            restoredDraft === null ? null : restoredDraft.claimOf === null ? 'intake' : 'claim'
+          }
           onStartClaim={startClaim}
           onOpenSyncStatus={onOpenSyncStatus}
         />
