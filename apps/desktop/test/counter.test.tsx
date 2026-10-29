@@ -301,6 +301,28 @@ describe('counter app over demo data', () => {
     expect(screen.queryByTestId('repair.desk.intake.models')).toBeNull();
   });
 
+  it('keeps a typed model on Enter when the suggestions are other models', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    fireEvent.keyDown(window, { key: 'F2' });
+    const model = await screen.findByTestId('repair.desk.intake.model');
+    // Not in the catalog: the near misses are offered, none is taken by Enter.
+    fireEvent.change(model, { target: { value: 'Galaxy A53' } });
+    const list = await screen.findByTestId('repair.desk.intake.models');
+    expect(list.textContent).toContain('Galaxy A5');
+    expect(list.textContent).not.toContain('Galaxy A53');
+    fireEvent.keyDown(model, { key: 'Enter' });
+    expect(screen.queryByTestId('repair.desk.intake.models')).toBeNull();
+    expect(model).toHaveProperty('value', 'Galaxy A53');
+    // Chosen with the arrows, a suggestion is taken.
+    fireEvent.change(model, { target: { value: 'Galaxy A53 ' } });
+    await screen.findByTestId('repair.desk.intake.models');
+    fireEvent.keyDown(model, { key: 'ArrowDown' });
+    fireEvent.keyDown(model, { key: 'Enter' });
+    expect(model).not.toHaveProperty('value', 'Galaxy A53 ');
+    expect((model as HTMLInputElement).value).toMatch(/^Galaxy A5[456]$/);
+  });
+
   it('records a down payment at the counter, and only an owner changes one', async () => {
     renderApp();
     await openTicket('Petrus Yikwa');
