@@ -152,13 +152,13 @@ body { font: 9pt/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #11
 .store-name { font-size: 14pt; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .store-line { font-size: 8pt; color: #444; overflow-wrap: anywhere; }
 .doc { display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm; margin: ${v(5)} 0 1mm; }
-.doc > div:first-child { min-width: 0; }
+.doc > div:first-child { flex: 1 1 auto; min-width: 45%; }
 .title { font-size: 11pt; font-weight: 700; letter-spacing: 0.04em; }
 .meta { font-size: 8pt; color: #444; }
-.doc-right { text-align: right; flex: none; }
+.doc-right { text-align: right; flex: 0 1 auto; min-width: 0; }
 .copy-label { display: inline-block; border: 0.8pt solid #111; border-radius: 99px; padding: 0.3mm 2.5mm;
   font-size: 7.5pt; font-weight: 600; margin-bottom: 1.2mm; }
-.ref { font-size: 17pt; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.ref { font-size: 17pt; font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
 main.columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 9mm; }
 h2 { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #555;
   margin: ${v(5.5)} 0 ${v(3)}; break-after: avoid; page-break-after: avoid; overflow-wrap: anywhere; }

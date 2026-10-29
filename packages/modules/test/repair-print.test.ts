@@ -1,9 +1,13 @@
 import { initI18n, setLocale } from '@bolusi/i18n';
 import {
+  MAX_PAPER_HEIGHT_MM,
+  MAX_PAPER_WIDTH_MM,
+  MIN_PAPER_MM,
   PAPER_PRESETS,
   layoutGrid,
   renderHtml,
   type GridRow,
+  type PaperSettings,
   type PrintDocument,
 } from '@bolusi/core';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -252,7 +256,22 @@ describe('handover slip', () => {
 });
 
 describe('slip layout', () => {
-  const papers = Object.values(PAPER_PRESETS);
+  // Every preset, and custom sizes at the edges of what Settings accepts, either kind of paper.
+  const custom = (widthMm: number, heightMm: number, continuous: boolean): PaperSettings => ({
+    preset: 'custom',
+    widthMm,
+    heightMm,
+    continuous,
+    carbonless: continuous,
+  });
+  const papers = [
+    ...Object.values(PAPER_PRESETS),
+    custom(MIN_PAPER_MM, MIN_PAPER_MM, true),
+    custom(80, 200, true),
+    custom(MIN_PAPER_MM, MAX_PAPER_HEIGHT_MM, false),
+    custom(MAX_PAPER_WIDTH_MM, MIN_PAPER_MM, true),
+    custom(MAX_PAPER_WIDTH_MM, MAX_PAPER_HEIGHT_MM, false),
+  ];
 
   it('fits an ordinary intake slip on one short landscape form, the money beside the phone', () => {
     const { geometry, pages } = layoutGrid(
@@ -363,7 +382,21 @@ describe('slip layout', () => {
     terms: filler('t', 2000),
     link: null,
   };
-  const slips = (): [PrintDocument, PrintDocument] => {
+  // The same servisan repaired and picked up instead: its handover slip prints warranty terms and
+  // a warranty line per repair type.
+  const repaired = {
+    ...longest,
+    outcome: 'repaired' as const,
+    location: 'returned' as const,
+    returnedAt: Date.UTC(2026, 9, 1, 3),
+    repairTypes: Array.from({ length: 20 }, (_, i) => ({
+      item: `custom${i}`,
+      label: filler(`rt${i}x`, 60),
+      warrantyDays: 365,
+      needsVideo: false,
+    })),
+  };
+  const slips = (): PrintDocument[] => {
     // A long site too: the link's address beside the signatures must fit as well.
     const linked = {
       ...longCtx,
@@ -372,10 +405,11 @@ describe('slip layout', () => {
     return [
       intakeSlip(longest, linked),
       handoverSlip(longest, { ...linked, handedOverByName: filler('hb', 200), signature: null }),
+      handoverSlip(repaired, { ...linked, handedOverByName: filler('hb', 200), signature: null }),
     ];
   };
   const words = (value: string): string[] => value.split(/[\s():,.-]+/).filter((w) => w !== '');
-  const expected = (intake: boolean): string[] =>
+  const expected = (slip: number): string[] =>
     [
       longCtx.header.name,
       ...longCtx.header.lines,
@@ -383,7 +417,7 @@ describe('slip layout', () => {
       longest.customerPhone ?? '',
       longest.deviceColor,
       longest.deviceImei ?? '',
-      ...(intake
+      ...(slip === 0
         ? [
             // The longest servisan is a cancelled one, whose handover slip has no warranty terms.
             longCtx.terms ?? '',
@@ -394,7 +428,9 @@ describe('slip layout', () => {
             ...longest.peripherals.map((p) => p.label ?? ''),
             ...longest.quoteLines.map((l) => l.description),
           ]
-        : [longest.outcomeNote ?? '']),
+        : slip === 1
+          ? [longest.outcomeNote ?? '']
+          : [longCtx.terms ?? '', ...repaired.repairTypes.map((t) => t.label)]),
     ].flatMap(words);
 
   it.each(papers)('prints every word of the longest values inside the paper ($preset)', (paper) => {
@@ -419,7 +455,7 @@ describe('slip layout', () => {
           for (const word of words(rowText(row))) printed.add(word);
         }
       }
-      const missing = expected(i === 0).filter((word) => !printed.has(word));
+      const missing = expected(i).filter((word) => !printed.has(word));
       expect(missing).toEqual([]);
     }
   });
@@ -428,7 +464,7 @@ describe('slip layout', () => {
     for (const [i, doc] of slips().entries()) {
       const html = renderHtml(doc, paper);
       const printed = new Set(words(html.replace(/<[^>]+>/g, ' ')));
-      expect(expected(i === 0).filter((word) => !printed.has(word))).toEqual([]);
+      expect(expected(i).filter((word) => !printed.has(word))).toEqual([]);
     }
   });
 });
