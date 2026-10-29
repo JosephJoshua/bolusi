@@ -48,6 +48,9 @@ const RULE_UNAUTH = 'api/00 §3/§7 — no credentials reaches no handler';
 const RULE_HANDOFF_OWNER =
   'a phone handoff pairing belongs to the PC that made it; any other device gets the cross-tenant 404';
 
+const RULE_QRIS_STORE =
+  'a QRIS account or QR is set up and followed from a device of its own store; any other store gets the cross-tenant 404';
+
 /** Device bearer + the acting-user claim the control-plane routes need (api/02-auth §4.5). */
 const actingHeaders = (ctx: ProbeContext, userId: string): Record<string, string> => ({
   Authorization: ctx.tenantAAuth,
@@ -142,6 +145,44 @@ function handoffProbes(method: string, suffix: string, body?: string): EndpointP
     ),
   };
 }
+
+/** A QRIS account or QR addressed by id, as the signed-in person on the store-1 device. */
+function qrisProbes(
+  method: string,
+  path: (id: string) => string,
+  ids: {
+    readonly foreign: (ctx: ProbeContext) => string;
+    readonly store2: (ctx: ProbeContext) => string;
+  },
+  body?: string,
+): EndpointProbes {
+  const build = (ctx: ProbeContext, id: string) => ({
+    path: path(id),
+    init: {
+      method,
+      headers: actingHeaders(ctx, ctx.tenantAUserId),
+      ...(body === undefined ? {} : { body }),
+    },
+    foreignId: id,
+  });
+  return {
+    crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => build(ctx, ids.foreign(ctx)),
+    unassignedStore: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_QRIS_STORE },
+    unassignedStoreRequest: (ctx) => build(ctx, ids.store2(ctx)),
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg(method, (ctx) => path(ids.foreign(ctx))),
+  };
+}
+
+const QRIS_ACCOUNT = {
+  foreign: (ctx: ProbeContext) => ctx.tenantBQrisAccountId,
+  store2: (ctx: ProbeContext) => ctx.tenantAStore2QrisAccountId,
+};
+const QRIS_CHARGE = {
+  foreign: (ctx: ProbeContext) => ctx.tenantBQrisChargeId,
+  store2: (ctx: ProbeContext) => ctx.tenantAStore2QrisChargeId,
+};
 
 /** The phone page routes take no bearer: the pairing's 24-byte random key in the path is the credential. */
 const PHONE_PAGE: EndpointProbes = {
@@ -452,6 +493,65 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('PUT', () => '/v1/role-limits'),
   },
+  'POST /v1/roles': {
+    // Roles are the business's own; another business's id is refused like one that exists nowhere.
+    // (Tenant B has no role the probe fixture names, so its user id stands in as a foreign id.)
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: '/v1/roles',
+      init: {
+        method: 'POST',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ name: 'Probe', copyFromRoleId: ctx.tenantBUserId }),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'roles are business-wide; no store parameter exists',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', () => '/v1/roles'),
+  },
+  'PATCH /v1/roles/:roleId': {
+    // Roles are the business's own; another business's id is refused like one that exists nowhere.
+    // (Tenant B has no role the probe fixture names, so its user id stands in as a foreign id.)
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: `/v1/roles/${ctx.tenantBUserId}`,
+      init: {
+        method: 'PATCH',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ limited: true }),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'roles are business-wide; no store parameter exists',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('PATCH', (ctx) => `/v1/roles/${ctx.tenantBUserId}`),
+  },
+  'DELETE /v1/roles/:roleId': {
+    // Roles are the business's own; another business's id is refused like one that exists nowhere.
+    // (Tenant B has no role the probe fixture names, so its user id stands in as a foreign id.)
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: `/v1/roles/${ctx.tenantBUserId}`,
+      init: {
+        method: 'DELETE',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'roles are business-wide; no store parameter exists',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('DELETE', (ctx) => `/v1/roles/${ctx.tenantBUserId}`),
+  },
   'POST /v1/users/:userId/reactivate': {
     crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
     crossTenantRequest: (ctx) => ({
@@ -634,6 +734,83 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   'GET /h/:key': PHONE_PAGE,
   'GET /h/:key/next': PHONE_PAGE,
   'POST /h/:key/send': PHONE_PAGE,
+
+  // ── QRIS through Xendit ───────────────────────────────────────────────────────────────────────
+  'GET /v1/money/qris/accounts': {
+    crossTenant: { kind: 'denied', verdict: ACTING_USER_INVALID, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: '/v1/money/qris/accounts',
+      init: { method: 'GET', headers: actingHeaders(ctx, ctx.tenantBUserId) },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'no scope parameter: the list is the accounts the bearer device’s store can use',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('GET', () => '/v1/money/qris/accounts'),
+  },
+  'PUT /v1/money/qris/accounts/:accountId': qrisProbes(
+    'PUT',
+    (id) => `/v1/money/qris/accounts/${id}`,
+    QRIS_ACCOUNT,
+    JSON.stringify({ secretKey: 'xnd_development_probe_never_sent' }),
+  ),
+  'DELETE /v1/money/qris/accounts/:accountId': qrisProbes(
+    'DELETE',
+    (id) => `/v1/money/qris/accounts/${id}`,
+    QRIS_ACCOUNT,
+  ),
+  'POST /v1/money/qris/charges': {
+    // The counter's permission in the bearer device's store comes first, so a foreign account or
+    // servisan reads exactly like an unknown one.
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: '/v1/money/qris/charges',
+      init: {
+        method: 'POST',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({
+          id: ctx.nonexistentId,
+          accountId: ctx.tenantBQrisAccountId,
+          document: { kind: 'repair.ticket', id: ctx.nonexistentId, label: 'K-1' },
+          amount: 15_000,
+        }),
+      },
+      foreignId: ctx.tenantBQrisAccountId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason:
+        'the store is the bearer device’s; another store’s account or servisan fails the payment rule (CHANGE_REFUSED, apps/server qris.test.ts)',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', () => '/v1/money/qris/charges'),
+  },
+  'GET /v1/money/qris/charges/:id': qrisProbes(
+    'GET',
+    (id) => `/v1/money/qris/charges/${id}`,
+    QRIS_CHARGE,
+  ),
+  'POST /v1/money/qris/charges/:id/simulate': qrisProbes(
+    'POST',
+    (id) => `/v1/money/qris/charges/${id}/simulate`,
+    QRIS_CHARGE,
+  ),
+  'POST /xendit/qr/:tenantId': {
+    crossTenant: {
+      kind: 'absent',
+      reason:
+        'no bearer: the callback token of the QR it names is checked against that tenant’s own row, and a wrong one is one bare 401 (apps/server qris.test.ts)',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — Xendit carries no store scope' },
+    unauthenticated: {
+      kind: 'absent',
+      reason:
+        'bearer-exempt by design: Xendit has no device token, so the callback token is its only credential',
+    },
+    unauthenticatedRequest: unauthLeg('POST', (ctx) => `/xendit/qr/${ctx.tenantBTenantId}`),
+  },
 
   // ── realtime ──────────────────────────────────────────────────────────────────────────────────
   'GET /v1/realtime': {

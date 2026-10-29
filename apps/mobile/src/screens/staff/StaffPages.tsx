@@ -36,11 +36,11 @@ import {
   FAILURE_KEY,
   formRoles,
   PROBLEM_KEY,
-  ROLE_HINT_KEY,
   staffChange,
   staffDraftProblem,
   toggleRole,
 } from '@bolusi/device/models/staff/model';
+import { roleHint, roleName } from '@bolusi/device/models/staff/roles';
 
 /**
  * The add form, and an active person's page: name, roles, then (for an existing person) the ways
@@ -211,8 +211,8 @@ export function PersonForm({
             {roles.map((role) => (
               <ListRow
                 key={role.id}
-                primaryText={t(`role.${role.key}.name` as 'role.cashier.name')}
-                secondaryText={t(ROLE_HINT_KEY[role.key])}
+                primaryText={roleName(role)}
+                secondaryText={roleHint(role)}
                 checked={draft.roleIds.includes(role.id)}
                 onPress={() => {
                   if (busy) return;

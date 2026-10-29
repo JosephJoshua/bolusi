@@ -424,6 +424,10 @@ function useSettingsAccess(
           onSetActive: (memberId, active) => call<void>('staff.setActive', memberId, active),
           canSetLimits,
           onSetLimits: (roleId, limits) => call<void>('staff.setLimits', roleId, limits),
+          onCreateRole: (name, copyFromRoleId) =>
+            call<{ readonly roleId: string }>('staff.createRole', name, copyFromRoleId),
+          onUpdateRole: (roleId, change) => call<void>('staff.updateRole', roleId, change),
+          onDeleteRole: (roleId) => call<void>('staff.deleteRole', roleId),
         }
       : undefined;
     return {

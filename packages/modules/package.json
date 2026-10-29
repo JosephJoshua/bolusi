@@ -3,11 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "defineModule manifests (04-module-contract). Split exports: ./notes = platform-free manifest, ./notes/screens = RN (08 §3.2)",
+  "description": "defineModule manifests (04-module-contract). Split exports: ./notes = platform-free manifest, ./notes/screens = RN (08 \u00a73.2)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./roles": {
+      "types": "./dist/role-abilities.d.ts",
+      "default": "./dist/role-abilities.js"
     },
     "./notes": {
       "types": "./dist/notes/index.d.ts",

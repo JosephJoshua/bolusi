@@ -20,9 +20,12 @@ import { useState, type ReactNode } from 'react';
 
 import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/desktop/PaymentLines.js';
+import { QrisDialog } from '../../money/desktop/QrisDialog.js';
+import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
+import { freeHandoverNeedsOwner } from '../rules.js';
 import { useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
@@ -51,6 +54,7 @@ import {
   useIntakeOptionSettings,
   useDownPaymentMethod,
   usePaymentAccounts,
+  useTicketQris,
   useRepairQuery,
   useRepairRuntime,
   type RepairPrinting,
@@ -907,7 +911,10 @@ export function HandoverDialog({
   onClose,
 }: StepDialogProps & {
   /** What the checklist is made of: whether it was repaired, and what was left with it. */
-  readonly ticket: Pick<TicketDetailRow, 'outcome' | 'peripherals'>;
+  readonly ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'peripherals' | 'quoteTotal' | 'claimOfTicketId' | 'ticketNumber'
+  >;
   readonly customerName: string;
   /** What the customer pays in all: the price, or a cancelled servisan's fee. */
   readonly amount: number;
@@ -926,7 +933,8 @@ export function HandoverDialog({
   const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
-  const payment = useHandoverPayment(due, accounts, canPayLater);
+  const qris = useTicketQris(ticketId, ticket.ticketNumber);
+  const payment = useHandoverPayment(due, accounts, canPayLater, qris);
   const { settled } = payment;
   const checks = useHandoverChecks(ticket);
   const leave = useLeaveGuard(
@@ -950,7 +958,10 @@ export function HandoverDialog({
     });
   };
   const captured = photo !== null && signature !== null;
-  const complete = captured && settled && loadedAccounts !== null && checks.ready(note);
+  const ownerNeeded =
+    freeHandoverNeedsOwner(ticket) && !runtime.hasPermission(REPAIR_PERMISSION.warrantyException);
+  const complete =
+    !ownerNeeded && captured && settled && loadedAccounts !== null && checks.ready(note);
   const submit = (): void => {
     if (!complete || photo === null || signature === null) return;
     void runner
@@ -982,11 +993,15 @@ export function HandoverDialog({
             {complete ? null : (
               <p className="mr-auto text-small text-text-muted">
                 {tn(
-                  !settled
-                    ? 'repair.hint.handoverPayment'
-                    : checks.loaded && !checks.ready(note)
-                      ? 'repair.hint.handoverChecks'
-                      : 'repair.hint.handover',
+                  ownerNeeded
+                    ? 'repair.hint.handoverFree'
+                    : payment.qris.pending > 0
+                      ? 'repair.hint.handoverQris'
+                      : !settled
+                        ? 'repair.hint.handoverPayment'
+                        : checks.loaded && !checks.ready(note)
+                          ? 'repair.hint.handoverChecks'
+                          : 'repair.hint.handover',
                 )}
               </p>
             )}
@@ -1019,7 +1034,8 @@ export function HandoverDialog({
           </div>
           {downPayment === null || downPayment === 0 ? null : (
             <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t border-border pt-2 text-body">
-              <dt className="text-text-muted">{tn('repair.price.downPayment')}</dt>
+              {/* The DP and anything paid at this counter already (a QR): all of it is paid. */}
+              <dt className="text-text-muted">{tn('repair.price.paid')}</dt>
               <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
               <dt className="font-semibold text-text">
                 {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
@@ -1090,6 +1106,7 @@ export function HandoverDialog({
                 accounts={accounts}
                 onChange={payment.setLines}
                 newKey={payment.newKey}
+                qris={payment.qris}
                 testId="repair.desk.handover.pay"
               />
             )}
@@ -1133,6 +1150,18 @@ export function HandoverDialog({
           data-testid="repair.desk.handover.note"
         />
       </StepDialog>
+      {payment.qris.open !== null && qris.port !== undefined ? (
+        <QrisDialog
+          open={payment.qris.open}
+          port={qris.port}
+          canSimulate={canSimulateQris(runtime.hasPermission)}
+          onPaid={payment.qris.paid}
+          onRenew={payment.qris.renew}
+          onTakeByHand={payment.qris.takeByHand}
+          onClose={payment.qris.close}
+          testId="repair.desk.handover.qris"
+        />
+      ) : null}
       {leave.confirm}
     </>
   );

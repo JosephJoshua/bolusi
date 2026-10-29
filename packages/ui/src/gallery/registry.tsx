@@ -665,6 +665,19 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  QrCode: [
+    {
+      id: 'payment',
+      render: (l) => (
+        <componentInventory.QrCode
+          value="00020101021226670016COM.NOBUBANK.WWW01189360050300000898240214123456789012345204599953033605405150005802ID5911TOKO BOLUSI6007MANOKWARI6304ABCD"
+          accessibilityLabel={l.primaryText}
+          size={200}
+        />
+      ),
+    },
+  ],
+
   PhotoStrip: [
     {
       id: 'several',

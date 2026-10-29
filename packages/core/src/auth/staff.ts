@@ -15,13 +15,18 @@ import { sql, type Kysely } from 'kysely';
 import { parseLimitAmounts, type LimitAmounts } from '../authz/limits.js';
 import { AUTH_PERMISSION } from './operations.js';
 
-/** The roles an owner picks from, in the order they are offered. Custom roles come later. */
+/** The preset roles an owner picks from, in the order they are offered. Made roles follow. */
 export const STAFF_ROLE_KEYS = ['cashier', 'technician', 'manager', 'store_owner'] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
 export interface StaffRole {
   readonly id: string;
-  readonly key: StaffRoleKey;
+  /** `roles_directory.name`: a preset's key, or a made role's own name (`translateRoleKey`). */
+  readonly key: string;
+  /** Made in the role editor (not a preset): it can be renamed, and deleted while nobody holds it. */
+  readonly custom: boolean;
+  /** What the role may do, as permission ids. */
+  readonly permissionIds: readonly string[];
   /** An owner role (power over other accounts): only a main owner may hand it out. */
   readonly ownerRole: boolean;
   /** A limited role's amounts at this store (unreadable amounts read as Rp 0); null when free of
@@ -44,7 +49,8 @@ export interface StaffMember {
 }
 
 export interface StaffDirectory {
-  /** The pickable roles this tenant has, in {@link STAFF_ROLE_KEYS} order. */
+  /** The pickable roles this tenant has: the presets in {@link STAFF_ROLE_KEYS} order, then the
+   *  made ones by name. */
   readonly roles: readonly StaffRole[];
   /** Everyone in this store's directory, active first, then by name. */
   readonly members: readonly StaffMember[];
@@ -54,8 +60,15 @@ interface RoleRow {
   readonly id: string;
   readonly name: string;
   readonly scopeType: string;
+  readonly isSystemDefault: number | boolean;
   readonly permissionIds: string | readonly unknown[];
   readonly limits: string | null;
+}
+
+function permissionIdsOf(role: RoleRow): readonly string[] {
+  const parsed: unknown =
+    typeof role.permissionIds === 'string' ? JSON.parse(role.permissionIds) : role.permissionIds;
+  return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
 }
 
 /**
@@ -74,11 +87,18 @@ export const OWNER_POWER_PERMISSIONS: readonly string[] = [
 
 function isOwnerRole(role: RoleRow): boolean {
   if (role.scopeType === 'tenant') return true;
-  const parsed: unknown =
-    typeof role.permissionIds === 'string' ? JSON.parse(role.permissionIds) : role.permissionIds;
-  return (
-    Array.isArray(parsed) && parsed.some((id) => OWNER_POWER_PERMISSIONS.includes(id as string))
-  );
+  return permissionIdsOf(role).some((id) => OWNER_POWER_PERMISSIONS.includes(id));
+}
+
+function staffRoleOf(row: RoleRow): StaffRole {
+  return {
+    id: row.id,
+    key: row.name,
+    custom: !row.isSystemDefault,
+    permissionIds: permissionIdsOf(row),
+    ownerRole: isOwnerRole(row),
+    limits: limitsOf(row.limits),
+  };
 }
 
 function isStaffRoleKey(name: string): name is StaffRoleKey {
@@ -89,7 +109,8 @@ function isStaffRoleKey(name: string): name is StaffRoleKey {
 export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirectory> {
   const [roleRows, userRows, grantRows] = await Promise.all([
     sql<RoleRow>`
-      SELECT id, name, scope_type AS "scopeType", permission_ids AS "permissionIds", limits
+      SELECT id, name, scope_type AS "scopeType", is_system_default AS "isSystemDefault",
+        permission_ids AS "permissionIds", limits
       FROM roles_directory
     `.execute(db),
     sql<{ id: string; name: string; status: string; hasPin: number }>`
@@ -102,12 +123,15 @@ export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirec
   ]);
   const roleById = new Map(roleRows.rows.map((role) => [role.id, role]));
 
-  const roles = STAFF_ROLE_KEYS.flatMap((key) => {
-    const row = roleRows.rows.find((role) => role.name === key);
-    return row === undefined
-      ? []
-      : [{ id: row.id, key, ownerRole: isOwnerRole(row), limits: limitsOf(row.limits) }];
+  const presets = STAFF_ROLE_KEYS.flatMap((key) => {
+    const row = roleRows.rows.find((role) => role.isSystemDefault && role.name === key);
+    return row === undefined ? [] : [staffRoleOf(row)];
   });
+  const made = roleRows.rows
+    .filter((role) => !role.isSystemDefault && role.scopeType === 'store')
+    .map(staffRoleOf)
+    .sort((a, b) => a.key.localeCompare(b.key, 'id'));
+  const roles = [...presets, ...made];
 
   const members = userRows.rows.map((user): StaffMember => {
     const held = grantRows.rows
@@ -272,4 +296,20 @@ export interface StaffAdminPort {
   }): Promise<void>;
   /** Rename the device this runs on (an owner who may register devices here). */
   renameDevice(input: { readonly actingUserId: string; readonly name: string }): Promise<void>;
+  /** Make a role (the main owner), starting as a copy of another. */
+  createRole(input: {
+    readonly actingUserId: string;
+    readonly name: string;
+    readonly copyFromRoleId: string;
+  }): Promise<{ readonly roleId: string }>;
+  /** Change a role's name (made roles only), what it may do, or whether it is limited. */
+  updateRole(input: {
+    readonly actingUserId: string;
+    readonly roleId: string;
+    readonly name?: string | undefined;
+    readonly permissionIds?: readonly string[] | undefined;
+    readonly limited?: boolean | undefined;
+  }): Promise<void>;
+  /** Delete a made role nobody holds. */
+  deleteRole(input: { readonly actingUserId: string; readonly roleId: string }): Promise<void>;
 }

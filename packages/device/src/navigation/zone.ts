@@ -37,6 +37,7 @@ export const SHELL_ROUTES = [
   'staff',
   'staffPins',
   'limits',
+  'roles',
   'intakeOptions',
   'cancelFees',
   'uncollectedDays',

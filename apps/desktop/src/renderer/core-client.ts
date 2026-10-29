@@ -9,6 +9,7 @@ import {
   type DomainErrorDetails,
   type StaffAdminFailure,
 } from '@bolusi/core';
+import { QRIS_FAILURES, QrisError, type QrisFailure } from '@bolusi/modules/money';
 
 import { CORE_EVENTS, type CoreState } from '../core/api.js';
 import { CORE_PORT_MESSAGE, type CorePortMode, type DesktopBridge } from '../main/bridge.js';
@@ -27,7 +28,7 @@ const STAFF_FAILURES: readonly StaffAdminFailure[] = [
   'unexpected',
 ];
 
-/** Rebuild the error the core threw, as its own class when it is a domain or staff error. */
+/** Rebuild the error the core threw, as its own class when it is a domain, staff or QRIS error. */
 export function reviveCoreError(wire: WireError): Error {
   const { code, details, refusal, reason } = wire.fields;
   // A refused staff change says why, so "Karyawan" can tell offline from a refusal.
@@ -36,6 +37,12 @@ export function reviveCoreError(wire: WireError): Error {
       STAFF_FAILURES.includes(reason as StaffAdminFailure)
         ? (reason as StaffAdminFailure)
         : 'unexpected',
+    );
+  }
+  // So the QR and Xendit's settings can say offline, refused or Xendit down.
+  if (wire.name === 'QrisError') {
+    return new QrisError(
+      QRIS_FAILURES.includes(reason as QrisFailure) ? (reason as QrisFailure) : 'unexpected',
     );
   }
   if (wire.name !== 'DomainError' || typeof code !== 'string' || !isDomainErrorCode(code)) {

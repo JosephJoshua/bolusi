@@ -53,7 +53,14 @@ import {
   demoTicketCount,
   type DemoRepairRole,
 } from '@bolusi/modules/repair/demo';
-import { LimitsDemo, STAFF_ACTOR, STAFF_DEMO, STAFF_MANY, StaffDemo } from './staff-demo.js';
+import {
+  LimitsDemo,
+  RolesDemo,
+  STAFF_ACTOR,
+  STAFF_DEMO,
+  STAFF_MANY,
+  StaffDemo,
+} from './staff-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -184,6 +191,7 @@ function SettingsInteractive(): React.JSX.Element {
       onOpenChangePin={noop}
       onOpenStaff={noop}
       onOpenLimits={noop}
+      onOpenRoles={noop}
       onOpenStaffPins={noop}
       lockedStaffCount={1}
       modules={[
@@ -761,6 +769,22 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => (
       <ApproxFrame screen="limits" state={state}>
         <LimitsDemo {...props} />
+      </ApproxFrame>
+    ),
+  })),
+
+  // Tugas karyawan (main owner) — the roles, each opening its switches; offline refuses saving.
+  ...(
+    [
+      ['ready', {}],
+      ['offline', { offline: true }],
+    ] as const
+  ).map(([state, props]) => ({
+    screen: 'roles',
+    state,
+    render: () => (
+      <ApproxFrame screen="roles" state={state}>
+        <RolesDemo {...props} />
       </ApproxFrame>
     ),
   })),

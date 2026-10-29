@@ -330,6 +330,26 @@ export const PutRoleLimitsReq = z
   .strict();
 export type PutRoleLimitsReq = z.infer<typeof PutRoleLimitsReq>;
 
+// ============ /v1/roles (role editor, main owner) ============
+/** The longest role name the editor takes. */
+export const ROLE_NAME_MAX = 40;
+const zRoleName = z.string().trim().min(1).max(ROLE_NAME_MAX);
+/** A new store role, starting as a copy of another (its switches and whether it is limited). */
+export const CreateRoleReq = z
+  .object({ name: zRoleName, copyFromRoleId: z.string().uuid() })
+  .strict();
+export type CreateRoleReq = z.infer<typeof CreateRoleReq>;
+
+/** A store role's name (made roles only), switches, or whether owners' decisions are limited. */
+export const UpdateRoleReq = z
+  .object({
+    name: zRoleName.optional(),
+    permissionIds: z.array(z.string().min(1).max(64)).max(200).optional(),
+    limited: z.boolean().optional(),
+  })
+  .strict();
+export type UpdateRoleReq = z.infer<typeof UpdateRoleReq>;
+
 // ============ PATCH /v1/tenant/settings (§6.4) ============
 export const TenantSettingsReq = z
   .object({
