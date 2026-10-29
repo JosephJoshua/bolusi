@@ -50,14 +50,15 @@ export function FilterPopover({
             data-testid={testId}
             className={clsx(
               'inline-flex h-full cursor-pointer items-center gap-2 rounded-sm pl-3 font-semibold',
-              active ? 'pr-1 text-text' : 'pr-2 text-text-muted hover:text-text',
+              active ? 'pr-1 text-text' : 'pr-3 text-text-muted hover:text-text @min-[54rem]:pr-2',
             )}
           >
             <span>{label}</span>
             {active ? (
               <OverflowText text={summary} className="max-w-48 font-normal text-info" />
             ) : (
-              <ChevronDown size={14} aria-hidden />
+              // A narrow toolbar (its nearest `@container`) drops the arrow, so every filter fits.
+              <ChevronDown size={14} aria-hidden className="hidden @min-[54rem]:block" />
             )}
           </button>
         </RadixPopover.Trigger>
