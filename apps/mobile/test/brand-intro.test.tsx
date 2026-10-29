@@ -63,6 +63,9 @@ describe('BrandIntro', () => {
     // The hop has played (the double lands it at once), and the cover still waits for the app.
     expect(r.query('brand-intro')).not.toBeNull();
     r.rerender(<BrandIntro ready />);
+    // It lets the first screen settle a moment, then fades.
+    expect(r.query('brand-intro')).not.toBeNull();
+    act(() => vi.advanceTimersByTime(200));
     expect(r.query('brand-intro')).toBeNull();
   });
 
@@ -76,6 +79,7 @@ describe('BrandIntro', () => {
   test('stays gone if readiness flickers back', () => {
     const r = render(<BrandIntro ready />);
     draw(r);
+    act(() => vi.advanceTimersByTime(200));
     r.rerender(<BrandIntro ready={false} />);
     expect(r.query('brand-intro')).toBeNull();
   });
@@ -107,6 +111,8 @@ describe('BrandIntro', () => {
         double.__answerReduceMotion(false);
         await Promise.resolve();
       });
+      // The hop after the splash, then the fade after the first screen settles.
+      act(() => vi.advanceTimersByTime(200));
       act(() => vi.advanceTimersByTime(200));
       expect(r.query('brand-intro')).toBeNull();
     });

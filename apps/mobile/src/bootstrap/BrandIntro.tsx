@@ -33,6 +33,8 @@ const HOP = 0.2;
 const HOP_MS = 320;
 /** How long the native splash takes to go once hidden, before the disc may hop in view. */
 const SPLASH_EXIT_MS = 150;
+/** How long the fade waits after the first screen is laid out, for its first data to mount. */
+const SETTLE_MS = 160;
 /** How long a ready app waits for a cover that never drew before it is simply removed. */
 const NEVER_DRAWN_MS = 1_000;
 /** The longest the cover waits for the reduce-motion answer before simply leaving. */
@@ -157,10 +159,17 @@ export function BrandIntro({
       easing: easeExit,
       useNativeDriver: NATIVE_DRIVER,
     });
-    animation.start(({ finished }) => {
-      if (finished) setGone(true);
-    });
-    return () => animation.stop();
+    // A moment after the first screen is laid out: its first data still mounts right after, and
+    // that holds the UI thread long enough to cut a fade started at once down to two frames.
+    const timer = setTimeout(() => {
+      animation.start(({ finished }) => {
+        if (finished) setGone(true);
+      });
+    }, SETTLE_MS);
+    return () => {
+      clearTimeout(timer);
+      animation.stop();
+    };
   }, [ready, gone, hopped, still, leave]);
 
   if (gone) return null;
