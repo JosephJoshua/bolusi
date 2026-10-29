@@ -398,7 +398,15 @@ function useSettingsAccess(
   session: SessionView,
   userId: string,
 ): SettingsAccess {
-  const { canUnlock, canReset, canManageStaff, canSetLimits, tenantAdmin, pinRows } = session;
+  const {
+    canUnlock,
+    canReset,
+    canManageStaff,
+    canSetLimits,
+    canRenameDevice,
+    tenantAdmin,
+    pinRows,
+  } = session;
   // Colleagues whose PIN is locked here, from the same lockout machine as the PIN pad.
   const lockedCount = Object.entries(pinRows).filter(
     ([id, row]) => id !== userId && derivePinAuthState(row) === 'locked_out',
@@ -416,6 +424,10 @@ function useSettingsAccess(
           onSetActive: (memberId, active) => call<void>('staff.setActive', memberId, active),
           canSetLimits,
           onSetLimits: (roleId, limits) => call<void>('staff.setLimits', roleId, limits),
+          onCreateRole: (name, copyFromRoleId) =>
+            call<{ readonly roleId: string }>('staff.createRole', name, copyFromRoleId),
+          onUpdateRole: (roleId, change) => call<void>('staff.updateRole', roleId, change),
+          onDeleteRole: (roleId) => call<void>('staff.deleteRole', roleId),
         }
       : undefined;
     return {
@@ -434,6 +446,7 @@ function useSettingsAccess(
           : undefined,
       staff,
       device,
+      renameDevice: canRenameDevice ? (name) => call<void>('device.rename', name) : undefined,
     };
   }, [
     client,
@@ -442,6 +455,7 @@ function useSettingsAccess(
     canReset,
     canManageStaff,
     canSetLimits,
+    canRenameDevice,
     tenantAdmin,
     lockedCount,
     device,

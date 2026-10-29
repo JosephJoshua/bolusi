@@ -25,6 +25,7 @@ import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
+import { freeHandoverNeedsOwner } from '../rules.js';
 import { useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
@@ -58,7 +59,7 @@ import {
   useRepairRuntime,
   type RepairPrinting,
 } from '../runtime.js';
-import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
+import { DESK_PAPERS, paperLabel, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { outputSlip } from '../slip-output.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
@@ -910,7 +911,10 @@ export function HandoverDialog({
   onClose,
 }: StepDialogProps & {
   /** What the checklist is made of: whether it was repaired, and what was left with it. */
-  readonly ticket: Pick<TicketDetailRow, 'outcome' | 'peripherals' | 'ticketNumber'>;
+  readonly ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'peripherals' | 'quoteTotal' | 'claimOfTicketId' | 'ticketNumber'
+  >;
   readonly customerName: string;
   /** What the customer pays in all: the price, or a cancelled servisan's fee. */
   readonly amount: number;
@@ -954,7 +958,10 @@ export function HandoverDialog({
     });
   };
   const captured = photo !== null && signature !== null;
-  const complete = captured && settled && loadedAccounts !== null && checks.ready(note);
+  const ownerNeeded =
+    freeHandoverNeedsOwner(ticket) && !runtime.hasPermission(REPAIR_PERMISSION.warrantyException);
+  const complete =
+    !ownerNeeded && captured && settled && loadedAccounts !== null && checks.ready(note);
   const submit = (): void => {
     if (!complete || photo === null || signature === null) return;
     void runner
@@ -986,13 +993,15 @@ export function HandoverDialog({
             {complete ? null : (
               <p className="mr-auto text-small text-text-muted">
                 {tn(
-                  payment.qris.pending > 0
-                    ? 'repair.hint.handoverQris'
-                    : !settled
-                      ? 'repair.hint.handoverPayment'
-                      : checks.loaded && !checks.ready(note)
-                        ? 'repair.hint.handoverChecks'
-                        : 'repair.hint.handover',
+                  ownerNeeded
+                    ? 'repair.hint.handoverFree'
+                    : payment.qris.pending > 0
+                      ? 'repair.hint.handoverQris'
+                      : !settled
+                        ? 'repair.hint.handoverPayment'
+                        : checks.loaded && !checks.ready(note)
+                          ? 'repair.hint.handoverChecks'
+                          : 'repair.hint.handover',
                 )}
               </p>
             )}
@@ -1329,7 +1338,7 @@ export function PrintDialog({
   const slips = printableSlips(ticket);
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
-  const [paper] = useDevicePaper(printing, DESK_PAPERS);
+  const { paper } = useDevicePaper(printing, DESK_PAPERS);
   const { state: printers } = useDevicePrinters(printing.printers);
   const [problem, catchProblem, clearProblem] = usePrinterProblem();
   const [asking, setAsking] = useState(false);
@@ -1407,10 +1416,10 @@ export function PrintDialog({
             {paper === null ? null : (
               <p className="mt-1 text-small text-text-muted" data-testid={`${testId}.paper`}>
                 {printer === null
-                  ? tn('repair.print.onPaper', { paper: tn(PAPER_KEY[paper]) })
+                  ? tn('repair.print.onPaper', { paper: paperLabel(paper) })
                   : tn('repair.print.onPrinter', {
                       printer: printer.label,
-                      paper: tn(PAPER_KEY[paper]),
+                      paper: paperLabel(paper),
                     })}
               </p>
             )}

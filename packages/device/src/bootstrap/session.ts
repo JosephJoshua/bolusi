@@ -143,6 +143,11 @@ export interface AppSessionSnapshot {
    */
   readonly canSetLimits: boolean;
   /**
+   * Does the ACTIVE user hold `auth.device_enroll` here? Gates renaming this device in Settings, a UX
+   * gate like the others: the server decides.
+   */
+  readonly canRenameDevice: boolean;
+  /**
    * Is the ACTIVE user a tenant admin (tenant-wide `auth.role_manage`, the main owner)? Only they are
    * offered owner roles and other owners to manage; the server enforces the same rule.
    */
@@ -376,6 +381,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
         canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
         canSetLimits: actingUserHolds(AUTH_PERMISSION.limitManage),
+        canRenameDevice: actingUserHolds(AUTH_PERMISSION.deviceEnroll),
         tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };
     },
