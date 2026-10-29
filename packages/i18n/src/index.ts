@@ -30,7 +30,7 @@ export {
   translateRejectionCode,
 } from './errors.js';
 
-export { translateRoleKey } from './role.js';
+export { isPresetRoleKey, translateRoleKey } from './role.js';
 
 export {
   formatDate,

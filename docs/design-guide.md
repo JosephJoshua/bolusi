@@ -222,6 +222,22 @@ Run the app, take screenshots of every changed screen and state, and check:
 Share the screenshots with the owner along with what was verified on a real
 device vs only in the browser.
 
+## 11. Motion
+
+Motion explains what changed; it never decorates or makes anyone wait.
+
+- Timings and curves are the `motion` tokens (`packages/ui/src/tokens.ts`),
+  published to the PC as `--b-duration-*` and `--b-ease-*`. Nothing runs
+  past 220 ms. Things arriving decelerate (`enter`), leaving accelerates.
+- Only transform and opacity move. On the phone use the helpers in
+  `packages/ui/src/motion.ts` (`useEntrance`, `useSheetEntrance`, `usePop`,
+  `usePressScale`), which run on the native driver so cheap Androids keep
+  their frames. Never animate width, height, colour or layout.
+- Reduce motion in the OS means no movement: things appear in place.
+- Sheets rise as the scrim dims; toasts rise in; pressed buttons shrink a
+  touch; a success disc lands with a small overshoot. A spinner is never
+  the logo.
+
 ## References
 
 When unsure, look at how mature products solve the same problem (order

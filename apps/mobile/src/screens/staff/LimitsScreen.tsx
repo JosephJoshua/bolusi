@@ -43,6 +43,7 @@ import {
   type LimitRole,
   type LimitsText,
 } from '@bolusi/device/models/staff/limits';
+import { roleName } from '@bolusi/device/models/staff/roles';
 import { StaffShell } from './StaffPages.js';
 
 export interface LimitsScreenProps {
@@ -186,10 +187,6 @@ export function LimitsScreen({
       </View>
     </StaffShell>
   );
-}
-
-function roleName(role: LimitRole): string {
-  return t(`role.${role.key}.name` as 'role.manager.name');
 }
 
 /** "Diskon Rp 50.000 · Refund Rp 0 · Bayar nanti Rp 100.000", breaking only between amounts. */

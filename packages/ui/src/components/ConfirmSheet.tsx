@@ -18,8 +18,9 @@
  * second, invisible view hierarchy to reason about. Android hardware-back → cancel is navigation
  * wiring (§8.1), and belongs to the screen (task 24), not here.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 
+import { useSheetEntrance } from '../motion.js';
 import { NAV_BAR_INSET } from '../platform-insets.js';
 import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, size, space, type } from '../tokens.js';
@@ -88,10 +89,11 @@ export function ConfirmSheet({
   testID = 'ui.confirmSheet',
 }: ConfirmSheetProps): React.JSX.Element {
   useDismissKeyboard();
+  const entrance = useSheetEntrance();
   return (
     <View testID={testID} style={styles.root}>
-      <View testID={`${testID}.scrim`} style={styles.scrim} />
-      <View testID={`${testID}.sheet`} style={styles.sheet}>
+      <Animated.View testID={`${testID}.scrim`} style={[styles.scrim, entrance.scrim]} />
+      <Animated.View testID={`${testID}.sheet`} style={[styles.sheet, entrance.sheet]}>
         <Text testID={`${testID}.title`} style={styles.title}>
           {title}
         </Text>
@@ -117,7 +119,7 @@ export function ConfirmSheet({
             variant="secondary"
           />
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }

@@ -1,7 +1,7 @@
 // The desktop/web theme: the phone's colour and spacing tokens (`@bolusi/ui/tokens`, the one source)
 // published as CSS variables that `theme.css` maps into Tailwind, plus the desktop type ladder.
 // A desktop is read closer and denser than a phone, so text is a step smaller; the floor stays 14.
-import { color, identityPalette, radius } from '@bolusi/ui/tokens';
+import { color, identityPalette, motion, radius } from '@bolusi/ui/tokens';
 
 /** Desktop type ladder: display, title, heading, body and small, nothing in between. */
 export const desktopType = Object.freeze({
@@ -40,6 +40,10 @@ export function themeVariables(): Record<string, string> {
   });
   for (const [name, value] of Object.entries(radius))
     vars[`--b-radius-${name}`] = `${String(value)}px`;
+  for (const [name, ms] of Object.entries(motion.duration))
+    vars[`--b-duration-${name}`] = `${String(ms)}ms`;
+  for (const [name, points] of Object.entries(motion.easing))
+    vars[`--b-ease-${name}`] = `cubic-bezier(${points.join(', ')})`;
   for (const [name, { size, line }] of Object.entries(desktopType)) {
     vars[`--b-text-${name}`] = `${String(size)}px`;
     vars[`--b-text-${name}-line`] = `${String(line)}px`;

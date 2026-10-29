@@ -16,6 +16,7 @@ export {
   color,
   contrastPairs,
   identityPalette,
+  motion,
   overlayOpacity,
   radius,
   size,
@@ -25,6 +26,17 @@ export {
   type,
 } from './tokens.js';
 export type { ContrastPair } from './tokens.js';
+
+// ---- Motion (native driver, reduce-motion aware) ----------------------------------------------
+export {
+  NATIVE_DRIVER,
+  useEntrance,
+  usePop,
+  usePressScale,
+  useReducedMotion,
+  useSheetEntrance,
+} from './motion.js';
+export type { EntranceFrom, EntranceOptions } from './motion.js';
 
 // ---- Platform insets (system-window measurements, NOT design tokens — task 205) -----------------
 export { NAV_BAR_INSET } from './platform-insets.js';
@@ -72,6 +84,7 @@ export type {
 } from './components/PhotoViewer.js';
 export type { PatternLockProps } from './components/PatternLock.js';
 export type { PinPadProps, PinPadState } from './components/PinPad.js';
+export type { QrCodeProps } from './components/QrCode.js';
 export type { QuantityStepperProps } from './components/QuantityStepper.js';
 export type { SearchFieldProps } from './components/SearchField.js';
 export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';

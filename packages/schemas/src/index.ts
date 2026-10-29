@@ -13,3 +13,4 @@ export * from './ws.js';
 export * from './push.js';
 export * from './catalog.js';
 export * from './handoff.js';
+export * from './qris.js';

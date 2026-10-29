@@ -6,3 +6,6 @@ export { KasPage, type KasPageProps } from './Kas.js';
 export { PaymentLines, type PaymentLinesProps } from './PaymentLines.js';
 export { PaymentMethodField, type PaymentMethodFieldProps } from './PaymentMethodField.js';
 export { PaymentMethodsSettings, managesPaymentMethods } from './PaymentMethods.js';
+export { QrisDialog, type QrisDialogProps } from './QrisDialog.js';
+export { useQrisCheckout, type QrisCheckout } from '../qris-hooks.js';
+export { newPaymentLine, paymentEntry, type PaymentLine } from '../payment-entry.js';
