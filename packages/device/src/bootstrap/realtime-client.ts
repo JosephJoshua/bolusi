@@ -249,6 +249,8 @@ function createSseFactory(config: RealtimeTransportConfig): RealtimeTransportFac
           for (;;) {
             const chunk = await reader.read();
             if (chunk.done) break;
+            // Any bytes, a `: hb` heartbeat included, say the server is still answering.
+            callbacks.onHeartbeat();
             buffer += decoder.decode(chunk.value, { stream: true });
             let boundary = nextEventBoundary(buffer);
             while (boundary !== null) {

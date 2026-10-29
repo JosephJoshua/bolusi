@@ -30,6 +30,14 @@ export const WS_CONNECT_FAILURES_TO_SSE = 3;
 export const SSE_CONNECT_FAILURES_TO_POLLING = 3;
 /** Retry WS every 5 minutes while degraded (api/00 §12.3.4). Equals the backoff cap by design. */
 export const DEGRADED_WS_RETRY_MS = 300_000;
+/**
+ * The SSE leg hears a `: hb` comment every 25 s (api/00 §12.2, the server's
+ * SSE_HEARTBEAT_INTERVAL_MS). Nothing at all for 2.5 heartbeats means the server stopped answering
+ * while the stream stayed open (a hung process, a dead proxy): the stream is closed and reconnected
+ * like a drop. The WS leg has no watchdog: its keepalive is protocol ping/pong, which a client
+ * script never sees, and the server sends no other frame than a poke (SEC-RT-03).
+ */
+export const SSE_IDLE_LIMIT_MS = 62_500;
 
 /** The transport rung currently maintained as primary. `polling` means no active transport. */
 export type RealtimeRung = 'ws' | 'sse' | 'polling';
@@ -61,6 +69,8 @@ interface Conn {
   readonly token: object;
   readonly rung: 'ws' | 'sse';
   opened: boolean;
+  /** Cancels the idle watchdog of a leg that has a heartbeat; null when none is armed. */
+  watchdog: (() => void) | null;
 }
 
 export class RealtimeController {
@@ -124,6 +134,8 @@ export class RealtimeController {
     this.#clearWsRetryTimer();
     this.#closeHandle(this.#primaryHandle);
     this.#closeHandle(this.#recoveryHandle);
+    this.#clearWatchdog(this.#primaryConn);
+    this.#clearWatchdog(this.#recoveryConn);
     this.#primaryHandle = null;
     this.#recoveryHandle = null;
     this.#primaryConn = null;
@@ -144,13 +156,14 @@ export class RealtimeController {
   }
 
   #openConn(role: 'primary' | 'recovery', rung: 'ws' | 'sse'): void {
-    const conn: Conn = { role, token: {}, rung, opened: false };
+    const conn: Conn = { role, token: {}, rung, opened: false, watchdog: null };
     if (role === 'primary') this.#primaryConn = conn;
     else this.#recoveryConn = conn;
     const factory = rung === 'ws' ? this.#deps.ws : this.#deps.sse;
     const handle = factory.open({
       onOpen: () => this.#onOpen(conn),
       onMessage: (data) => this.#onMessage(conn, data),
+      onHeartbeat: () => this.#onHeartbeat(conn),
       onError: () => this.#onClosed(conn),
       onClose: () => this.#onClosed(conn),
     });
@@ -165,6 +178,7 @@ export class RealtimeController {
   #onOpen(conn: Conn): void {
     if (this.#stopped || !this.#isCurrent(conn)) return;
     conn.opened = true;
+    this.#armWatchdog(conn);
     if (conn.role === 'recovery') {
       this.#promoteRecovery(conn);
       return;
@@ -178,11 +192,36 @@ export class RealtimeController {
 
   #onMessage(conn: Conn, data: unknown): void {
     if (this.#stopped || !this.#isCurrent(conn)) return;
+    this.#armWatchdog(conn);
     this.#handleFrame(data);
+  }
+
+  #onHeartbeat(conn: Conn): void {
+    if (this.#stopped || !this.#isCurrent(conn)) return;
+    this.#armWatchdog(conn);
+  }
+
+  /** (Re)start the idle watchdog of an open leg that has a heartbeat (only SSE). */
+  #armWatchdog(conn: Conn): void {
+    if (conn.rung !== 'sse' || !conn.opened) return;
+    this.#clearWatchdog(conn);
+    conn.watchdog = this.#deps.timer.schedule(SSE_IDLE_LIMIT_MS, () => {
+      conn.watchdog = null;
+      if (this.#stopped || !this.#isCurrent(conn)) return;
+      // Silent past its heartbeat: close it ourselves and reconnect through the drop path.
+      this.#closeHandle(conn.role === 'primary' ? this.#primaryHandle : this.#recoveryHandle);
+      this.#onClosed(conn);
+    });
+  }
+
+  #clearWatchdog(conn: Conn | null): void {
+    conn?.watchdog?.();
+    if (conn !== null) conn.watchdog = null;
   }
 
   #onClosed(conn: Conn): void {
     if (this.#stopped || !this.#isCurrent(conn)) return;
+    this.#clearWatchdog(conn);
 
     if (conn.role === 'recovery') {
       // The parallel WS recovery probe failed/closed before promotion — drop it, keep the lower
@@ -246,6 +285,7 @@ export class RealtimeController {
     // lower rung. All counters reset (api/00 §12.3.4).
     this.#clearReconnectTimer();
     this.#closeHandle(this.#primaryHandle);
+    this.#clearWatchdog(this.#primaryConn);
     conn.role = 'primary';
     this.#primaryConn = conn;
     this.#primaryHandle = this.#recoveryHandle;
