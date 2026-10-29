@@ -361,6 +361,7 @@ export function CancelStep({
               if (acceptsRupiahText(text)) setFeeText(text);
             }}
             keyboardType="number-pad"
+            selectTextOnFocus
             autoFocus
             testID={`${testID}.feeInput`}
           />
@@ -478,6 +479,7 @@ export function DownPaymentStep({
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           autoFocus
           errorMessage={aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
           testID={`${testID}.amount`}
@@ -782,6 +784,7 @@ export function PriceChangeStep({
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           testID={`${testID}.amount`}
         />
         {amount === null ? null : (
