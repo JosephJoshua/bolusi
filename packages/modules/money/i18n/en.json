@@ -144,7 +144,8 @@
     "save": "Cancel payment",
     "hint": "Enter the reason.",
     "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
-    "reason": "Reason"
+    "reason": "Reason",
+    "limit": "Your cancel limit is {amount} per transaction. Above that, ask the store owner."
   },
   "kind": {
     "qris": "QRIS",

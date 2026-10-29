@@ -158,6 +158,8 @@ export function VoidPaymentStep({
     'accounts',
   );
   const [reason, setReason] = useState('');
+  // A limited role (a manager) sees what it may cancel before the server refuses it.
+  const limit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
   const discard = useDiscardConfirm({
     dirty: reason.trim() !== '',
     copy: {
@@ -208,6 +210,11 @@ export function VoidPaymentStep({
           .join(' · ')}
       </Text>
       <Text style={styles.body}>{tm('money.void.explain')}</Text>
+      {limit === null ? null : (
+        <Text style={styles.muted} testID={`${testID}.limit`}>
+          {tm('money.void.limit', { amount: formatMoney(limit) })}
+        </Text>
+      )}
       <View style={styles.gap}>
         <TextInput
           label={tm('money.void.reason')}

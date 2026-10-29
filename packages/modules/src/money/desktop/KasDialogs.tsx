@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 
-import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
+import { CASH_MOVE_KINDS, MAX_REASON, MONEY_PERMISSION, type CashMoveKind } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
   CASH_MOVE_LABEL,
@@ -401,6 +401,8 @@ export function VoidPaymentDialog({
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const [reason, setReason] = useState('');
+  // A limited role (a manager) sees what it may cancel before the server refuses it.
+  const limit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
   const testId = 'money.desk.void';
 
   const submit = (): void => {
@@ -439,6 +441,11 @@ export function VoidPaymentDialog({
         </span>
       </div>
       <p className="text-body text-text">{tm('money.void.explain')}</p>
+      {limit === null ? null : (
+        <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
+          {tm('money.void.limit', { amount: formatMoney(limit) })}
+        </p>
+      )}
       <ReasonField
         label={tm('money.void.reason')}
         value={reason}

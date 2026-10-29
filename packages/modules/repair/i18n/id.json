@@ -327,6 +327,7 @@
     "payLaterWaiting": "Tunggu disetujui, atau bayar sekarang.",
     "payLaterAsk": "Minta persetujuan, atau bayar sekarang.",
     "downPaymentLimit": "Kamu bisa mengurangi uang masuk sampai {amount}.",
+    "cancelLimit": "Kamu bisa memotong biaya sampai {amount}.",
     "handoverQris": "Tunggu QRIS masuk. Pastikan internet nyala."
   },
   "discardPhotos": {

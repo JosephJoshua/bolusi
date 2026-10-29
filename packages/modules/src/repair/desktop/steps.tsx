@@ -474,9 +474,11 @@ export function CancelDialog({
   const changed = standard !== null && charged !== null && charged !== standard;
   const complete = charged !== null && reason.trim() !== '';
   const holds = runtime.hasPermission(REPAIR_PERMISSION.cancel);
+  // A limited role (a manager) sees how far below the store's fee they may go before it is asked.
+  const limit = holds ? runtime.limitOf(REPAIR_PERMISSION.cancel) : null;
   const asking = asksApproval(
     holds,
-    runtime.limitOf(REPAIR_PERMISSION.cancel),
+    limit,
     standard === null || charged === null ? 0 : Math.max(0, standard - charged),
   );
 
@@ -577,6 +579,16 @@ export function CancelDialog({
                           : 'repair.cancel.beforeWork',
                     )}
               </p>
+              {!changing || limit === null || standard === null || standard === 0 ? null : (
+                <p
+                  className="mt-1 text-small text-text-muted"
+                  data-testid="repair.desk.cancel.limit"
+                >
+                  {tn('repair.hint.cancelLimit', {
+                    amount: formatMoney(Math.min(limit, standard)),
+                  })}
+                </p>
+              )}
             </div>
           )}
         </QueryPanel>

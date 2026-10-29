@@ -296,9 +296,11 @@ export function CancelStep({
   const changed = standard !== null && fee !== null && fee !== standard;
   const complete = fee !== null && reason.trim() !== '';
   const holds = runtime.hasPermission(REPAIR_PERMISSION.cancel);
+  // A limited role (a manager) sees how far below the store's fee they may go before it is asked.
+  const limit = holds ? runtime.limitOf(REPAIR_PERMISSION.cancel) : null;
   const asking = asksApproval(
     holds,
-    runtime.limitOf(REPAIR_PERMISSION.cancel),
+    limit,
     standard === null || fee === null ? 0 : Math.max(0, standard - fee),
   );
 
@@ -397,6 +399,11 @@ export function CancelStep({
             autoFocus
             testID={`${testID}.feeInput`}
           />
+          {limit === null || standard === null || standard === 0 ? null : (
+            <Text style={repairStyles.caption} testID={`${testID}.limit`}>
+              {tn('repair.hint.cancelLimit', { amount: formatMoney(Math.min(limit, standard)) })}
+            </Text>
+          )}
         </View>
       )}
       <View style={repairStyles.gap}>

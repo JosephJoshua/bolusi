@@ -144,7 +144,8 @@
     "save": "Batalkan pembayaran",
     "hint": "Isi alasannya.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
-    "reason": "Alasan"
+    "reason": "Alasan",
+    "limit": "Batas pembatalanmu {amount} per transaksi. Lebih dari itu, minta pemilik toko."
   },
   "kind": {
     "qris": "QRIS",

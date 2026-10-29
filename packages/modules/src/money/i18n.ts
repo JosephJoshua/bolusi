@@ -125,6 +125,7 @@ export const MONEY_KEYS = [
   'money.void.hint',
   'money.void.explain',
   'money.void.reason',
+  'money.void.limit',
   'money.kind.qris',
   'money.kind.edc',
   'money.kind.transfer',

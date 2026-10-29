@@ -322,6 +322,20 @@ describe('counter app over demo data', () => {
     await screen.findByText('Permintaan dikirim. Pemilik toko akan memutuskan.');
   });
 
+  it('shows a manager how far below the store fee they may cancel', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Maria Kogoya' }));
+    await openTicket('Benny Kambu');
+    fireEvent.click(byTestId('repair.desk.ticket.action.cancel'));
+    await screen.findByTestId('repair.desk.cancel');
+    expect(screen.queryByTestId('repair.desk.cancel.limit')).toBeNull();
+    fireEvent.click(await screen.findByTestId('repair.desk.cancel.changeFee'));
+    expect(byTestId('repair.desk.cancel.limit').textContent).toBe(
+      'Kamu bisa memotong biaya sampai Rp 50.000.',
+    );
+  });
+
   it('suggests catalog models as the model is typed and fills in the brand', async () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');

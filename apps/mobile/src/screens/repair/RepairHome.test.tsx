@@ -618,6 +618,22 @@ describe('cancelling (owners; the counter asks)', () => {
     expect(text(screen, 'repair.ticket.cancelFee')).toContain('20.000');
   });
 
+  test('a manager sees how far below the store fee they may cancel before changing it', async () => {
+    h = await openRepairScreenHarness(5508);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+
+    const screen = await mount(h, h.managerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    expect(screen.query('repair.cancel.limit')).toBeNull();
+    await press(screen, 'repair.cancel.changeFee');
+    // The manager's limit is Rp 50.000, but a fee of Rp 10.000 can only be cut by that much.
+    expect(text(screen, 'repair.cancel.limit')).toMatch(
+      /^Kamu bisa memotong biaya sampai Rp\s?10\.000\.$/,
+    );
+  });
+
   test('the owners’ cancelled view shows who cancelled, why, the fee, and a changed fee', async () => {
     h = await openRepairScreenHarness(5503);
     await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);

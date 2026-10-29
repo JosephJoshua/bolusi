@@ -327,6 +327,7 @@
     "payLaterWaiting": "Wait for approval, or pay now.",
     "payLaterAsk": "Ask for approval, or pay now.",
     "downPaymentLimit": "You can take up to {amount} off the money taken in.",
+    "cancelLimit": "You can cut the fee by up to {amount}.",
     "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
   },
   "discardPhotos": {
