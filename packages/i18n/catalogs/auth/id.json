@@ -36,7 +36,7 @@
     "reset": {
       "noUsers": "Belum ada karyawan lain di HP ini.",
       "done": "PIN baru sudah dibuat",
-      "denied": "Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain."
+      "denied": "Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik."
     },
     "unlock": {
       "confirm": "Bisa langsung masuk dengan PIN lamanya.",

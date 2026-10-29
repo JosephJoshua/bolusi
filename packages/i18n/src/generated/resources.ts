@@ -210,7 +210,7 @@ const source = {
         reset: {
           noUsers: 'Belum ada karyawan lain di HP ini.',
           done: 'PIN baru sudah dibuat',
-          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain.',
+          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik.',
         },
         unlock: {
           confirm: 'Bisa langsung masuk dengan PIN lamanya.',
@@ -830,7 +830,7 @@ export const resources = {
           reset: {
             noUsers: 'There’s no other staff on this phone yet.',
             done: 'New PIN is set',
-            denied: 'Only a main owner can make a new PIN for another main owner.',
+            denied: 'Only the main owner can make a new PIN for an owner.',
           },
           unlock: {
             confirm: 'They can sign in with their old PIN right away.',
