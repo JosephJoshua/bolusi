@@ -1,7 +1,7 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
-import { formatDate } from '@bolusi/i18n';
+import { formatDate, formatMoney } from '@bolusi/i18n';
 
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
 
@@ -307,4 +307,29 @@ export function refundLabel(refund: Pick<TicketRefund, 'name'>, on: 'screen' | '
   return tn(on === 'slip' ? 'repair.slip.refundVia' : 'repair.price.refundVia', {
     method: refund.name,
   });
+}
+
+/**
+ * What saving a corrected DP does to the payments taken, as the dialog says it under the method:
+ * a higher DP adds only the difference there, a lower one replaces what was taken. Nothing to say
+ * until a new amount is typed, or when it removes the DP (the hint under the reason says that).
+ */
+export function downPaymentChangeLine(
+  current: number | null,
+  amount: number | null,
+  method: string,
+): string | null {
+  const recorded = current ?? 0;
+  if (amount === null || amount === 0 || amount === recorded) return null;
+  return amount > recorded
+    ? tn('repair.downPayment.raised', {
+        added: formatMoney(amount - recorded),
+        method,
+        current: formatMoney(recorded),
+      })
+    : tn('repair.downPayment.replaced', {
+        current: formatMoney(recorded),
+        amount: formatMoney(amount),
+        method,
+      });
 }

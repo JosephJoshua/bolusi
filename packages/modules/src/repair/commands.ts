@@ -886,9 +886,10 @@ export const correctDownPaymentInput = z
 export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
 
 /**
- * An owner corrects a down payment, with a reason: the payments taken so far are voided and, when
- * the amount is not 0, one payment of the right amount is recorded through the method the owner
- * picks (the first payment's, unless said otherwise).
+ * An owner corrects a down payment, with a reason. Raising it keeps the payments taken so far and
+ * records only the difference through the method picked, so cash already in the drawer stays
+ * there. Lowering it voids the payments taken so far and, when the amount is not 0, records one
+ * payment of the right amount through the method picked (the first payment's, unless said).
  */
 export async function correctDownPaymentHandler(
   input: z.output<typeof correctDownPaymentInput>,
@@ -908,12 +909,24 @@ export async function correctDownPaymentHandler(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
   );
   const ops: OpDraft[] = [];
+  const first = live[0];
+  const method =
+    input.account === undefined
+      ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
+      : { account: input.account, reference: input.reference };
+  const recorded = ticket.downPayment ?? 0;
+  if (input.amount > recorded) {
+    // The customer paid more: what was taken stays where it is.
+    ops.push(
+      paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
+        ...method,
+        amount: input.amount - recorded,
+        tendered: null,
+      }),
+    );
+    return { ops, result: { ticketId: ticket.id } };
+  }
   if (input.amount > 0) {
-    const first = live[0];
-    const method =
-      input.account === undefined
-        ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
-        : { account: input.account, reference: input.reference };
     // Recorded first, in place of the largest payment through the same account, so a limited
     // role's refund limit counts only what the DP went down by there.
     const replaced = live

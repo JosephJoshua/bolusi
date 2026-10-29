@@ -28,7 +28,12 @@ import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../q
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import {
+  DOWN_PAYMENT_GAP_KEY,
+  PRICE_KIND_KEY,
+  downPaymentChangeLine,
+  optionLabel,
+} from '../labels.js';
 import {
   acceptsRupiahText,
   capturedThumbnailRef,
@@ -58,7 +63,8 @@ import {
   useRepairQuery,
   useRepairRuntime,
 } from '../runtime.js';
-import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { accountLabel } from '../../money/kas.js';
+import { chosenMethod, offeredAccount, referenceMissing } from '../../money/payment-entry.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 interface StepProps {
@@ -447,6 +453,11 @@ export function DownPaymentStep({
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const complete = gap === null && loadedAccounts !== null;
+  const changeLine = downPaymentChangeLine(
+    current,
+    amount,
+    accountLabel(offeredAccount(method.account, accounts), accounts),
+  );
 
   const submit = (): void => {
     if (!complete || amount === null) return;
@@ -517,6 +528,11 @@ export function DownPaymentStep({
             onChange={setMethod}
             testID={`${testID}.method`}
           />
+          {correcting && changeLine !== null ? (
+            <Text style={repairStyles.caption} testID={`${testID}.change`}>
+              {changeLine}
+            </Text>
+          ) : null}
         </View>
       )}
       {correcting ? (

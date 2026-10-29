@@ -523,7 +523,9 @@
     "current": "DP tercatat",
     "ofTotal": "Total biaya {amount}",
     "reason": "Alasan perubahan",
-    "removeHint": "Isi 0 kalau DP-nya batal."
+    "removeHint": "Isi 0 kalau DP-nya batal.",
+    "raised": "Tambahannya {added} dicatat lewat {method}. DP {current} tetap seperti tercatat.",
+    "replaced": "DP {current} dibatalkan, lalu {amount} dicatat lewat {method}."
   },
   "printSettings": {
     "title": "Tampilan nota",

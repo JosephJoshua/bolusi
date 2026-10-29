@@ -23,7 +23,8 @@ import { PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { QrisDialog } from '../../money/desktop/QrisDialog.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
-import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { accountLabel } from '../../money/kas.js';
+import { chosenMethod, offeredAccount, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
 import { useHandoverPayment } from '../handover-payment.js';
@@ -49,7 +50,13 @@ import {
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel, refundLabel } from '../labels.js';
+import {
+  DOWN_PAYMENT_GAP_KEY,
+  PRICE_KIND_KEY,
+  downPaymentChangeLine,
+  optionLabel,
+  refundLabel,
+} from '../labels.js';
 import {
   useCancelFees,
   useIntakeOptionSettings,
@@ -1245,6 +1252,11 @@ export function DownPaymentDialog({
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const testId = `repair.desk.downPayment.${mode}`;
+  const changeLine = downPaymentChangeLine(
+    current,
+    amount,
+    accountLabel(offeredAccount(method.account, accounts), accounts),
+  );
 
   const submit = (): void => {
     if (gap !== null || amount === null || loadedAccounts === null) return;
@@ -1334,6 +1346,11 @@ export function DownPaymentDialog({
               testId={`${testId}.method`}
             />
           )}
+          {correcting && changeLine !== null ? (
+            <p className="text-small text-text-muted" data-testid={`${testId}.change`}>
+              {changeLine}
+            </p>
+          ) : null}
           {correcting ? (
             <TextArea
               label={tn('repair.downPayment.reason')}

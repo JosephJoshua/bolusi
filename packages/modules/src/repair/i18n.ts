@@ -470,6 +470,8 @@ export const REPAIR_KEYS = [
   'repair.downPayment.ofTotal',
   'repair.downPayment.reason',
   'repair.downPayment.removeHint',
+  'repair.downPayment.raised',
+  'repair.downPayment.replaced',
   'repair.printSettings.title',
   'repair.printSettings.summary',
   'repair.printSettings.header',

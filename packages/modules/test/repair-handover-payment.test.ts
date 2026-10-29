@@ -519,6 +519,31 @@ describe('the DP once the phone went home', () => {
     await expectBalancedBooks(h);
   });
 
+  test('raising a DP through another method keeps the cash and records only the difference', async () => {
+    h = await openRepairHarness(7404);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const ticketId = await openTicket(h, { downPayment: 200_000 });
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 500_000, reason: 'Tambah lewat QRIS', account: `account:${accountId}` },
+      h.storeOwnerId,
+    );
+    const money = await ledger(h, ticketId);
+    expect(money.paid).toBe(500_000);
+    const live = money.entries.filter(
+      (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
+    );
+    expect(live.map((entry) => [entry.account, entry.amount])).toEqual([
+      ['cash', 200_000],
+      [`account:${accountId}`, 300_000],
+    ]);
+    await expectBalancedBooks(h);
+  });
+
   test('a DP partly given back is not re-recorded by a correction', async () => {
     h = await openRepairHarness(7402);
     const ticketId = await openTicket(h, { downPayment: 200_000 });

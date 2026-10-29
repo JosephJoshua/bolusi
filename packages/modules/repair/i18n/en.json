@@ -523,7 +523,9 @@
     "current": "Recorded down payment",
     "ofTotal": "Total {amount}",
     "reason": "Reason for the change",
-    "removeHint": "Enter 0 if the down payment is void."
+    "removeHint": "Enter 0 if the down payment is void.",
+    "raised": "The extra {added} is recorded as {method}. The {current} DP stays as recorded.",
+    "replaced": "The {current} DP is voided, then {amount} is recorded as {method}."
   },
   "printSettings": {
     "title": "Slip details",
