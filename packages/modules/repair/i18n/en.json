@@ -522,7 +522,8 @@
     "problem": {
       "noPrinter": "Choose a printer in Settings first.",
       "printerMissing": "Printer not found. Check its cable and power, or choose another printer in Settings.",
-      "failed": "Couldn’t print. Check the printer, then try again."
+      "failed": "Couldn’t print. Check the printer, then try again.",
+      "stuck": "Couldn’t get the slip ready. Try again."
     },
     "paperCustom": "Other size",
     "paperSize": "{width} × {height} mm",

@@ -46,8 +46,11 @@ export interface SlipOutput {
   readonly paper: PaperSettings;
 }
 
-/** Why a print did not go out: no printer picked yet, the picked one is gone, or it refused the job. */
-export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed';
+/**
+ * Why a print did not go out: no printer picked yet, the picked one is gone, it refused the job, or
+ * the phone's print dialog or PDF never got ready (the system's print call hung).
+ */
+export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed' | 'stuck';
 
 /** Thrown by `RepairPrinting.output` when the job did not reach the printer. */
 export class PrinterProblem extends Error {

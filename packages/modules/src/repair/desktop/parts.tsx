@@ -101,6 +101,7 @@ const PRINTER_PROBLEM_KEY: Readonly<Record<PrinterProblemReason, RepairKey>> = {
   noPrinter: 'repair.print.problem.noPrinter',
   printerMissing: 'repair.print.problem.printerMissing',
   failed: 'repair.print.problem.failed',
+  stuck: 'repair.print.problem.stuck',
 };
 
 export function PrinterProblemBanner({
