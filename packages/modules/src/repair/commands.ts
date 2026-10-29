@@ -153,10 +153,10 @@ async function ticketMoney(ctx: CommandContext, ticketId: string): Promise<Docum
 async function findSameCustomer(
   ctx: CommandContext,
   customer: { readonly name: string; readonly phone: string | null },
-): Promise<string | null> {
+): Promise<{ readonly id: string; readonly name: string; readonly phone: string | null } | null> {
   if (customer.phone === null) return null;
   const found = await ctx.query(searchCustomersQuery, { text: customer.phone, limit: 20 });
-  return found.rows.find((row) => sameCustomer(row, customer))?.id ?? null;
+  return found.rows.find((row) => sameCustomer(row, customer)) ?? null;
 }
 
 export const registerCustomerInput = z
@@ -310,7 +310,7 @@ export async function openTicketHandler(
       .rows[0]!.id;
   } else {
     // Retyping a returning customer (the "Pakai" card ignored) must not make them twice.
-    const known = await findSameCustomer(ctx, input.customer);
+    const known = (await findSameCustomer(ctx, input.customer))?.id ?? null;
     customerId = known ?? ctx.newId();
     if (known === null) {
       ops.push(
@@ -961,15 +961,22 @@ export async function correctTicketDetailsHandler(
   // servisan of theirs would be renamed too, and intake may have picked the wrong person. Then the
   // servisan moves to the customer the details name, found or made like at intake.
   if (customerChanged) {
-    changes['customer'] = customer;
     const known = await findSameCustomer(ctx, customer);
-    const shared =
-      (await ctx.query(countTicketsQuery, { filter: { customerId: ticket.customerId } })).rows[0]!
-        .count > 1;
-    if (known !== null || shared) {
-      const customerId = known ?? ctx.newId();
-      changes['customerId'] = customerId;
-      if (known === null) {
+    if (known !== null && known.id !== ticket.customerId) {
+      // Moved to the customer the details name, the history says them as their record reads.
+      changes['customer'] = { name: known.name, phone: known.phone };
+      changes['customerId'] = known.id;
+    } else {
+      changes['customer'] = customer;
+      // Spelled the way this record already is: renamed in place. Otherwise a shared record moves
+      // this servisan to a new customer, made like at intake.
+      const shared =
+        known === null &&
+        (await ctx.query(countTicketsQuery, { filter: { customerId: ticket.customerId } })).rows[0]!
+          .count > 1;
+      if (shared) {
+        const customerId = ctx.newId();
+        changes['customerId'] = customerId;
         ops.push(
           ctx.op({
             type: REPAIR_OP.customerRegistered,

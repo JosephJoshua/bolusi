@@ -189,8 +189,11 @@ silent edits, and each one names who did it and what it was before.
   day of the first handover. A reason is required. The handover photo and
   signature stop counting and payments stay; a payment booked to the wrong
   servisan is cancelled in Kas under its own rules. The warranty still counts
-  from the first handover, the servisan can no longer be cancelled, and its
-  customer, brand, model and IMEI stay as on the signed slip.
+  from the first handover, the servisan can no longer be cancelled (it can only
+  be handed over again), and its customer, brand, model and IMEI stay as on the
+  signed slip. The day is judged by the time the device signs the undo, so an
+  owner's device with its clock set back could undo later; managers stay bound
+  by their limit either way. Accepted: owners already hold the cash decisions.
 - **A mistyped cash move is voided by an owner** (adjust cash) with a reason,
   until a later count of the drawer was settled. The void dates back to the move,
   so a count taken after it reads as if the move never happened.

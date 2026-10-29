@@ -914,6 +914,35 @@ describe('correcting a saved servisan', () => {
     );
   });
 
+  test('details typed in another case fix the spelling, or join the customer they name', async () => {
+    h = await openRepairHarness(40);
+    const mine = await open(h, { customer: { name: 'yohanis wenda', phone: '0812-4455-6677' } });
+    // Its only servisan: the record is respelled in place.
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { name: 'Yohanis Wenda', phone: '081244556677' } },
+      h.cashierId,
+    );
+    expect(await ticket(h, mine.ticketId)).toMatchObject({
+      customerId: mine.customerId,
+      customerName: 'Yohanis Wenda',
+    });
+    // Typed loosely, the servisan moves to the customer as their record reads.
+    const mama = await open(h, { customer: { name: 'Mama Wenda', phone: '0813 1111 2222' } });
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { name: 'mama  wenda', phone: '081311112222' } },
+      h.cashierId,
+    );
+    const moved = await ticket(h, mine.ticketId);
+    expect(moved).toMatchObject({ customerId: mama.customerId, customerName: 'Mama Wenda' });
+    expect(moved.events.at(-1).detail.changes).toContainEqual({
+      field: 'customerName',
+      from: 'Yohanis Wenda',
+      to: 'Mama Wenda',
+    });
+  });
+
   test('a customer with two servisans is never renamed in place', async () => {
     h = await openRepairHarness(38);
     const first = await open(h);
