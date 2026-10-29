@@ -406,6 +406,11 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.intake.claimDevice.note').textContent).toBe(
       'Klaim hanya untuk HP ini.',
     );
+    // Its IMEI is fixed too: shown, not a field to type another phone's into.
+    const imei = byTestId('repair.desk.intake.imei');
+    expect(imei.tagName).not.toBe('INPUT');
+    expect(imei.querySelector('input')).toBeNull();
+    expect(imei.textContent).toContain('356789104455667');
   });
 
   it('suggests catalog models as the model is typed and fills in the brand', async () => {

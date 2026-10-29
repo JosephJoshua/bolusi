@@ -100,6 +100,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'warrantyEnded',
   'claimChargeOwnerOnly',
   'claimOtherPhone',
+  'claimOtherImei',
   'partsNotInWork',
   'partsNotYours',
   'notPaid',
@@ -613,13 +614,13 @@ export function claimProblem(
   if (claim.repairTypes.length > 0) return { reason: 'claimWithTypes', owner: false };
   // The warranty covers that customer's phone, not another one brought in under its number.
   const imei = (value: string | null): string => (value ?? '').trim();
+  if (claim.customerId !== original.customerId) return { reason: 'claimOtherPhone', owner: false };
   if (
-    claim.customerId !== original.customerId ||
-    (imei(claim.imei) !== '' &&
-      imei(original.deviceImei) !== '' &&
-      imei(claim.imei) !== imei(original.deviceImei))
+    imei(claim.imei) !== '' &&
+    imei(original.deviceImei) !== '' &&
+    imei(claim.imei) !== imei(original.deviceImei)
   ) {
-    return { reason: 'claimOtherPhone', owner: false };
+    return { reason: 'claimOtherImei', owner: false };
   }
   // Nor another model: a phone with no IMEI written down is still the brand and model it was.
   if (

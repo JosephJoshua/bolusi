@@ -628,6 +628,7 @@ export const REPAIR_KEYS = [
   'repair.warrantyClaim.sameDevice',
   'repair.cancel.claimFree',
   'repair.refusal.claimOtherPhone',
+  'repair.refusal.claimOtherImei',
   'repair.desk.settings.discard',
   'repair.desk.settings.slipLead',
   'repair.desk.options.dragHandle',

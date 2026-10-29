@@ -196,6 +196,7 @@ export function DeviceStep({
     update({ device: { ...device, ...patch } });
   const { matched, suggestions, memory, colours, pick, tidyModel } = useModelPicker(device, set);
   const claim = draft.claimOf !== null;
+  const fixedImei = draft.claimOf?.imei ?? '';
 
   return (
     <View>
@@ -320,13 +321,18 @@ export function DeviceStep({
         )}
       </View>
       <View style={repairStyles.gap}>
-        <TextInput
-          label={tn('repair.device.imeiField')}
-          value={device.imei}
-          onChangeText={(imei) => set({ imei })}
-          keyboardType="number-pad"
-          testID={`${testID}.imei`}
-        />
+        {/* A claim's phone keeps the IMEI its servisan wrote down: shown, never retyped. */}
+        {fixedImei === '' ? (
+          <TextInput
+            label={tn('repair.device.imeiField')}
+            value={device.imei}
+            onChangeText={(imei) => set({ imei })}
+            keyboardType="number-pad"
+            testID={`${testID}.imei`}
+          />
+        ) : (
+          <Field label={tn('repair.device.imei')} value={fixedImei} testID={`${testID}.imei`} />
+        )}
       </View>
       <ScreenLockField
         kind={device.lockKind}

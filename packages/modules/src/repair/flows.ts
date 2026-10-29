@@ -432,6 +432,7 @@ export function claimIntakeDraft(ticket: TicketDetailRow, lineDescription: strin
       ticketId: ticket.id,
       ticketNumber: ticket.ticketNumber,
       warrantyUntil: warrantyUntil(ticket.repairTypes, ticket.returnedAt),
+      imei: (ticket.deviceImei ?? '').trim(),
     },
   };
 }
@@ -837,6 +838,8 @@ const zIntakeDraft = z.strictObject({
       ticketNumber: z.string(),
       /** When that servisan's warranty ends; null when it had none. */
       warrantyUntil: z.number().int().nullable(),
+      /** The IMEI that servisan wrote down, fixed on the claim; '' when it had none. */
+      imei: z.string().default(''),
     })
     .nullable()
     .default(null),
@@ -1127,7 +1130,7 @@ export function toOpenTicketInput(
       brand: draft.device.brand.trim(),
       model: draft.device.model.trim(),
       color: draft.device.color.trim(),
-      imei: draft.device.imei.trim() || null,
+      imei: (draft.claimOf?.imei || draft.device.imei).trim() || null,
       passcode:
         draft.device.lockKind === 'none' || draft.device.passcode === ''
           ? null

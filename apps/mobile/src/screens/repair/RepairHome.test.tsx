@@ -244,7 +244,12 @@ test('a warranty claim shows the phone of its servisan instead of asking for ano
     step: 1,
     customer: { kind: 'existing', customerId: 'c-1', name: 'Ester', phone: '' },
     device: { ...base.device, brand: 'Samsung', model: 'Galaxy A54' },
-    claimOf: { ticketId: 't-1', ticketNumber: 'ZQ1-0001', warrantyUntil: null },
+    claimOf: {
+      ticketId: 't-1',
+      ticketNumber: 'ZQ1-0001',
+      warrantyUntil: null,
+      imei: '356789104455667',
+    },
   };
   const screen = await mount(h, h.cashierId, { restoredDraft: draft });
   expect(screen.query('repair.intake.step.device')).not.toBeNull();
@@ -252,6 +257,9 @@ test('a warranty claim shows the phone of its servisan instead of asking for ano
   expect(screen.query('repair.intake.device.brand')).toBeNull();
   expect(text(screen, 'repair.intake.device.claimDevice')).toBe('Samsung Galaxy A54');
   expect(text(screen, 'repair.intake.device.claimDevice.note')).toBe('Klaim hanya untuk HP ini.');
+  // Its IMEI is fixed too: shown, not a field to type another phone's into.
+  expect(text(screen, 'repair.intake.device.imei')).toBe('356789104455667');
+  expect(screen.query('repair.intake.device.imei.field')).toBeNull();
 });
 
 describe('an intake restored after the app died mid-submit', () => {

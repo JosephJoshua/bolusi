@@ -9,6 +9,7 @@ import {
   Banner,
   CaptureTile,
   ConfirmDialog,
+  Fact,
   IconButton,
   Kbd,
   PageHeader,
@@ -683,6 +684,7 @@ function DeviceFields({
   const picker = useModelPicker(device, set);
   const { matched, colours, memory } = picker;
   const claim = draft.claimOf !== null;
+  const fixedImei = draft.claimOf?.imei ?? '';
   return (
     <div className="flex flex-col gap-4">
       {/* A claim is for the phone its servisan repaired: shown, never retyped. */}
@@ -787,15 +789,26 @@ function DeviceFields({
             </div>
           )}
         </div>
-        <TextField
-          label={tn('repair.device.imeiField')}
-          value={device.imei}
-          onChange={(event) => set({ imei: event.target.value })}
-          inputMode="numeric"
-          autoComplete="off"
-          inputClassName="tabular"
-          data-testid="repair.desk.intake.imei"
-        />
+        {/* A claim's phone keeps the IMEI its servisan wrote down: shown, never retyped. */}
+        {fixedImei === '' ? (
+          <TextField
+            label={tn('repair.device.imeiField')}
+            value={device.imei}
+            onChange={(event) => set({ imei: event.target.value })}
+            inputMode="numeric"
+            autoComplete="off"
+            inputClassName="tabular"
+            data-testid="repair.desk.intake.imei"
+          />
+        ) : (
+          <dl>
+            <Fact
+              label={tn('repair.device.imei')}
+              value={<span className="tabular">{fixedImei}</span>}
+              testId="repair.desk.intake.imei"
+            />
+          </dl>
+        )}
       </div>
       <ScreenLockFields
         kind={device.lockKind}
