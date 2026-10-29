@@ -549,10 +549,10 @@ const source = {
       chip: { pending: 'Belum tersinkron', rejected: 'Ditolak' },
       status: {
         upToDate: 'Datanya aman di server.',
-        syncing: 'Sedang menyinkronkan perubahan.',
+        syncing: 'Datanya sedang disimpan ke server.',
         pending: '{count} perubahan belum tersinkron',
-        pendingMedia: '{count} foto belum tersinkron',
-        photosPending: 'Perubahan sudah tersinkron. Fotonya menyusul.',
+        pendingMedia: '{count} foto & video belum tersinkron',
+        photosPending: 'Perubahan sudah tersinkron. Foto & videonya menyusul.',
         attentionReassurance: 'Cek daftarnya di bawah.',
         offline: 'Perubahan tersimpan di HP ini dan disinkronkan saat ada koneksi.',
         reconnected: 'Terhubung kembali',
@@ -1266,12 +1266,12 @@ export const resources = {
         chip: { pending: 'Not synced yet', rejected: 'Rejected' },
         status: {
           upToDate: 'Your data is safe on the server.',
-          syncing: 'Syncing changes.',
+          syncing: 'Saving your data to the server.',
           pending:
             '{count, plural, one {# change not synced yet} other {# changes not synced yet}}',
           pendingMedia:
-            '{count, plural, one {# photo not synced yet} other {# photos not synced yet}}',
-          photosPending: 'Changes are synced. The photos will follow.',
+            '{count, plural, one {# photo or video not synced yet} other {# photos and videos not synced yet}}',
+          photosPending: 'Changes are synced. Photos and videos will follow.',
           attentionReassurance: 'See the list below.',
           offline: 'Changes are saved on this phone and synced once you’re connected.',
           reconnected: 'Back online',

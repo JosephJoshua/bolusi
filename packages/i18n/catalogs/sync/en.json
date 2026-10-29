@@ -5,10 +5,10 @@
   },
   "status": {
     "upToDate": "Your data is safe on the server.",
-    "syncing": "Syncing changes.",
+    "syncing": "Saving your data to the server.",
     "pending": "{count, plural, one {# change not synced yet} other {# changes not synced yet}}",
-    "pendingMedia": "{count, plural, one {# photo not synced yet} other {# photos not synced yet}}",
-    "photosPending": "Changes are synced. The photos will follow.",
+    "pendingMedia": "{count, plural, one {# photo or video not synced yet} other {# photos and videos not synced yet}}",
+    "photosPending": "Changes are synced. Photos and videos will follow.",
     "attentionReassurance": "See the list below.",
     "offline": "Changes are saved on this phone and synced once you’re connected.",
     "reconnected": "Back online",
