@@ -138,6 +138,11 @@ describe('before the system says whether to reduce motion', () => {
   });
 });
 
+test('a button has no Android ripple to show square past its rounded corners', () => {
+  const r = render(<Button testID="b" label="Lanjut" onPress={vi.fn()} />);
+  expect(r.get('b').props['android_ripple']).toBeUndefined();
+});
+
 test('a compact button keeps its 48 dp touch target inside its wrapper', () => {
   const r = render(<Button testID="b" label="Ubah" size="compact" onPress={vi.fn()} />);
   const wrapper = r.container.queryAll((node) => node.type === 'Animated.View')[0]!;
@@ -162,7 +167,7 @@ describe('sync chip motion', () => {
         node.queryAll((child) => child.props['testID'] === `ui.syncChip.icon.${state}`).length > 0,
     )[0]!;
 
-  test('the arrows turn while syncing', () => {
+  test('the cloud breathes while syncing', () => {
     const r = render(<SyncChip state="syncing" accessibilityLabels={labels} onPress={vi.fn()} />);
     expect(iconWrap(r, 'syncing').props['style']).not.toBeNull();
   });
@@ -198,6 +203,8 @@ describe('stamped title', () => {
     expect(transformOf(style, 'scale')).toBe(1);
     expect(valueOf(style['opacity'])).toBe(1);
     expect(r.styleOf('ui.appShell.title')['flex']).toBeUndefined();
+    // It grows from its leading edge, away from the back button.
+    expect(r.styleOf('ui.appShell.title')['transformOrigin']).toBe('left center');
   });
 
   test('every other title is the plain one', () => {

@@ -36,6 +36,7 @@ export {
   usePop,
   usePressScale,
   useReducedMotion,
+  useReducedMotionAnswer,
   useSheetEntrance,
   useStamp,
   useWipe,

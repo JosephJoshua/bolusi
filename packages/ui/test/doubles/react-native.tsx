@@ -291,6 +291,7 @@ export const Easing = {
   out: () => curve,
   in: () => curve,
   inOut: () => curve,
+  sin: curve,
 };
 
 /** The system "reduce motion" switch, off until a test flips it with `__setReduceMotion`. */

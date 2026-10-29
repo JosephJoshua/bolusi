@@ -20,12 +20,14 @@ export const easeExit = Easing.bezier(...motion.easing.exit);
 // this module loads. Until the system answers, assume less motion: anything that mounts in those
 // first milliseconds appears in place rather than animating against the person's setting.
 let reduced = true;
+let answered = false;
 const listeners = new Set<() => void>();
 
 function setReduced(next: boolean): void {
-  if (next === reduced) return;
+  const changed = next !== reduced || !answered;
   reduced = next;
-  for (const listener of listeners) listener();
+  answered = true;
+  if (changed) for (const listener of listeners) listener();
 }
 
 void AccessibilityInfo.isReduceMotionEnabled().then(setReduced, () => setReduced(false));
@@ -39,6 +41,14 @@ function subscribe(listener: () => void): () => void {
 /** True while the system asks for less motion. */
 export function useReducedMotion(): boolean {
   return useSyncExternalStore(subscribe, () => reduced);
+}
+
+/**
+ * The system's answer itself: `null` until it has given one. For a moment that plays once and
+ * must not be lost to the boot race, such as the opening intro, which waits for the answer.
+ */
+export function useReducedMotionAnswer(): boolean | null {
+  return useSyncExternalStore(subscribe, () => (answered ? reduced : null));
 }
 
 export type EntranceFrom = 'below' | 'above' | 'end' | 'start' | 'none';

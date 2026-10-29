@@ -44,4 +44,39 @@ describe('BrandIntro', () => {
     r.rerender(<BrandIntro ready />);
     expect(r.query('brand-intro')).toBeNull();
   });
+
+  describe('when the app is ready before the system says whether to reduce motion', () => {
+    async function fresh() {
+      vi.resetModules();
+      const double = await import('../../../packages/ui/test/doubles/react-native.js');
+      double.__holdReduceMotionAnswer();
+      const { BrandIntro: Fresh } = await import('../src/bootstrap/BrandIntro.js');
+      const harness = await import('../../../packages/ui/test/render.js');
+      return { double, Fresh, harness };
+    }
+
+    test('waits under the cover for the answer, then plays and goes', async () => {
+      const { double, Fresh, harness } = await fresh();
+      const r = harness.render(<Fresh ready />);
+      expect(r.query('brand-intro')).not.toBeNull();
+      await act(async () => {
+        double.__answerReduceMotion(false);
+        await Promise.resolve();
+      });
+      expect(r.query('brand-intro')).toBeNull();
+    });
+
+    test('never waits long: with no answer it goes after a moment', async () => {
+      vi.useFakeTimers();
+      try {
+        const { Fresh, harness } = await fresh();
+        const r = harness.render(<Fresh ready />);
+        expect(r.query('brand-intro')).not.toBeNull();
+        act(() => vi.advanceTimersByTime(400));
+        expect(r.query('brand-intro')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

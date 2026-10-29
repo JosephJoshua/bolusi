@@ -127,8 +127,19 @@ const styles = StyleSheet.create({
   titleDetail: { ...type.heading, color: color.text, flex: 1, marginHorizontal: space.sm },
   stampSlot: { flex: 1, alignItems: 'flex-start' },
   // The titles above without `flex`: a stamped title hugs its words inside `stampSlot`.
-  stampRoot: { ...type.title, color: color.text, marginHorizontal: space.sm },
-  stampDetail: { ...type.heading, color: color.text, marginHorizontal: space.sm },
+  // Grown from its leading edge, so the big first frame of the stamp never covers the back button.
+  stampRoot: {
+    ...type.title,
+    color: color.text,
+    marginHorizontal: space.sm,
+    transformOrigin: 'left center',
+  },
+  stampDetail: {
+    ...type.heading,
+    color: color.text,
+    marginHorizontal: space.sm,
+    transformOrigin: 'left center',
+  },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
   content: { flex: 1 },
   /**

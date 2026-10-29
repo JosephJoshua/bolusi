@@ -74,12 +74,13 @@ const styles = StyleSheet.create({
   },
 });
 
-/** One turn of the syncing arrows; slow enough to read as "working", not "stuck". */
-const SPIN_MS = 1_200;
+/** One breath of the syncing cloud; slow enough to read as "working", not "alarm". */
+const BREATH_MS = 1_200;
 const SETTLE_MS = 420;
 
 /**
- * The state's icon, in motion: while syncing the arrows turn, and when everything has just gone
+ * The state's icon, in motion: while syncing the cloud breathes (it is one glyph, so turning it
+ * would turn the whole cloud upside down), and when everything has just gone
  * through the tick gives a small flutter, like the bird settling. Nothing moves at rest or under
  * reduced motion, so a chip that sits synced all day costs nothing.
  */
@@ -97,18 +98,18 @@ function SyncIcon({
 }): React.JSX.Element {
   const still = useReducedMotion();
   const turn = useRef(new Animated.Value(0)).current;
-  const spinning = state === 'syncing' && !still;
+  const breathing = state === 'syncing' && !still;
   // Kept from mount: a later re-render of the header must not cut the flutter short.
   const [arrived] = useState(settled);
   const fluttering = arrived && !still;
 
   useEffect(() => {
-    if (spinning) {
+    if (breathing) {
       const loop = Animated.loop(
         Animated.timing(turn, {
           toValue: 1,
-          duration: SPIN_MS,
-          easing: Easing.linear,
+          duration: BREATH_MS,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: NATIVE_DRIVER,
         }),
       );
@@ -127,14 +128,10 @@ function SyncIcon({
     }
     turn.setValue(0);
     return undefined;
-  }, [spinning, fluttering, turn]);
+  }, [breathing, fluttering, turn]);
 
-  const motionStyle = spinning
-    ? {
-        transform: [
-          { rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) },
-        ],
-      }
+  const motionStyle = breathing
+    ? { opacity: turn.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.35, 1] }) }
     : fluttering
       ? {
           transform: [

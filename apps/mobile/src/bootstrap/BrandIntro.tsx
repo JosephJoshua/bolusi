@@ -6,7 +6,9 @@
  * ready the gold disc hops and lands on the b, and the mark grows a touch as the cover fades away
  * over the first screen. About 0.4 s, transform and opacity only, on the native driver.
  *
- * Reduce motion: the cover simply goes when the app is ready.
+ * Reduce motion: the cover simply goes when the app is ready. On a cold start the app can be ready
+ * before the system has said whether to reduce motion; the cover then waits for that answer (a few
+ * milliseconds, never more than `ANSWER_WAIT_MS`) rather than skip the intro by assuming.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
@@ -17,7 +19,7 @@ import {
   brandMarkWidth,
   easeExit,
   motion,
-  useReducedMotion,
+  useReducedMotionAnswer,
 } from '@bolusi/ui';
 import { brandSplash } from '@bolusi/ui/brand';
 
@@ -29,6 +31,8 @@ export const SPLASH_MARK_HEIGHT = (200 * 300) / 512;
 /** How high the disc hops, as a share of the mark's height. */
 const HOP = 0.2;
 const HOP_MS = 320;
+/** The longest the ready app waits under the cover for the reduce-motion answer. */
+const ANSWER_WAIT_MS = 400;
 /**
  * The hop's height over its time, sampled from a thrown ball's parabola (up to 0.45, down by 0.8),
  * so a linear clock gives a natural rise and fall. The rest is the landing.
@@ -57,14 +61,22 @@ export interface BrandIntroProps {
 }
 
 export function BrandIntro({ ready, onCovered }: BrandIntroProps): React.JSX.Element | null {
-  const still = useReducedMotion();
+  const answer = useReducedMotionAnswer();
+  const [gaveUp, setGaveUp] = useState(false);
+  const still = answer ?? (gaveUp ? true : null);
   const [gone, setGone] = useState(false);
   const hop = useRef(new Animated.Value(0)).current;
   const leave = useRef(new Animated.Value(0)).current;
   const covered = useRef(false);
 
   useEffect(() => {
-    if (!ready || gone) return;
+    if (!ready || still !== null) return;
+    const timer = setTimeout(() => setGaveUp(true), ANSWER_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [ready, still]);
+
+  useEffect(() => {
+    if (!ready || gone || still === null) return;
     if (still) {
       setGone(true);
       return;
@@ -83,7 +95,9 @@ export function BrandIntro({ ready, onCovered }: BrandIntroProps): React.JSX.Ele
         useNativeDriver: NATIVE_DRIVER,
       }),
     ]);
-    animation.start(() => setGone(true));
+    animation.start(({ finished }) => {
+      if (finished) setGone(true);
+    });
     return () => animation.stop();
   }, [ready, gone, still, hop, leave]);
 
