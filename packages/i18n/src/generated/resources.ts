@@ -196,8 +196,9 @@ const source = {
           title: 'Buat PIN baru',
           repeat: 'Ulangi PIN baru',
           mismatch: 'PIN tidak sama. Buat lagi dari awal.',
+          weak: 'PIN ini terlalu gampang ditebak. Pilih angka lain.',
           screenTitle: 'Buat PIN',
-          hint: '6 angka. Jangan pakai tanggal lahir.',
+          hint: '6 angka. Jangan pakai tanggal lahir atau 123456.',
           failed: 'PIN belum bisa dibuat. Coba lagi.',
         },
         change: {
@@ -443,6 +444,7 @@ const source = {
             'Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.',
           micFailed: 'Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon.',
         },
+        idleLocked: 'Terkunci karena lama tidak dipakai. Isian servisan baru tetap tersimpan.',
       },
       limits: {
         title: 'Batas wewenang',
@@ -958,8 +960,9 @@ export const resources = {
             title: 'Create a new PIN',
             repeat: 'Repeat the new PIN',
             mismatch: 'The PINs don’t match. Start again.',
+            weak: 'That PIN is too easy to guess. Choose other digits.',
             screenTitle: 'Create PIN',
-            hint: '6 digits. Avoid your birthday.',
+            hint: '6 digits. Avoid your birthday or 123456.',
             failed: 'The PIN couldn’t be saved. Try again.',
           },
           change: {
@@ -1211,6 +1214,7 @@ export const resources = {
               'The microphone isn’t allowed yet. Allow it in Windows Settings › Privacy › Microphone.',
             micFailed: 'The microphone won’t start. Close other apps that use it.',
           },
+          idleLocked: 'Locked after a while unused. Unsaved intakes are kept.',
         },
         limits: {
           title: 'Limits',

@@ -155,7 +155,7 @@ function ChangePinDialog({
 /** A fresh pad for each of current, new and repeat, so digits never carry over between them. */
 function padKey(phase: ChangePinPhase): string {
   if (phase.kind === 'new') {
-    return `new-${phase.entry.kind}-${String(phase.entry.kind === 'first' && phase.entry.afterMismatch)}`;
+    return `new-${phase.entry.kind}-${phase.entry.kind === 'first' ? String(phase.entry.problem) : ''}`;
   }
   if (phase.kind === 'current') return `current-${phase.feedback}`;
   return phase.kind;

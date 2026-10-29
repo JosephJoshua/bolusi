@@ -223,7 +223,7 @@ export function FirstPinScreen({
         {t(newPinPromptKey(entry))}
       </h1>
       <PinPad
-        key={entry.kind === 'first' && entry.afterMismatch ? 'mismatch' : entry.kind}
+        key={entry.kind === 'first' ? (entry.problem ?? entry.kind) : entry.kind}
         state={saving ? 'busy' : newPinPadState(entry)}
         onComplete={complete}
         label={t(newPinPromptKey(entry))}
