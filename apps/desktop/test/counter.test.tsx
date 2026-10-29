@@ -259,6 +259,51 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.action.cancel')).toBeTruthy();
   });
 
+  it('corrects a mistyped number after saving, and the history says what it was', async () => {
+    renderApp();
+    await openTicket('Yohanis Wenda');
+    fireEvent.click(byTestId('repair.desk.ticket.action.correctDetails'));
+    const dialog = await screen.findByTestId('repair.desk.correct');
+    const phone = within(dialog).getByLabelText('No. HP') as HTMLInputElement;
+    const before = phone.value;
+    fireEvent.change(phone, { target: { value: '0812' } });
+    fireEvent.click(byTestId('repair.desk.correct.submit'));
+    // A number that cannot be called is caught, as at intake.
+    await within(dialog).findByText(/nomor HP/i);
+    fireEvent.change(phone, { target: { value: '0813-1111-2222' } });
+    fireEvent.change(byTestId('repair.desk.correct.reason'), { target: { value: 'Salah ketik' } });
+    fireEvent.click(byTestId('repair.desk.correct.submit'));
+    await screen.findByText('Data servisan disimpan.');
+    expect(screen.queryByTestId('repair.desk.correct')).toBeNull();
+    const history = byTestId('repair.desk.ticket.history');
+    expect(history.textContent).toContain('Data servisan diubah');
+    expect(history.textContent).toContain(`No. HP: ${before} → 0813-1111-2222`);
+    expect(history.textContent).toContain('Salah ketik');
+  });
+
+  it('lets an owner take back a handover recorded on the wrong servisan', async () => {
+    renderApp();
+    await showView('returned');
+    await openTicket('Yulianus Wenda');
+    // The counter cannot; the owner can, and a reason is required.
+    expect(screen.queryByTestId('repair.desk.ticket.action.undoHandover')).toBeNull();
+    expect(screen.queryByTestId('repair.desk.ticket.action.correctDetails')).toBeNull();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    await showView('returned');
+    await openTicket('Yulianus Wenda');
+    fireEvent.click(byTestId('repair.desk.ticket.action.undoHandover'));
+    await screen.findByTestId('repair.desk.undoHandover');
+    expect((byTestId('repair.desk.undoHandover.submit') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(byTestId('repair.desk.undoHandover.reason'), {
+      target: { value: 'Salah servisan, HP masih di rak' },
+    });
+    fireEvent.click(byTestId('repair.desk.undoHandover.submit'));
+    await screen.findByText('Penyerahan dibatalkan. HP tercatat ada di toko.');
+    expect(byTestId('repair.desk.ticket.action.handover')).toBeTruthy();
+    expect(byTestId('repair.desk.ticket.history').textContent).toContain('Penyerahan dibatalkan');
+  });
+
   it('shows a manager their discount limit, and the refusal in words above it', async () => {
     renderApp();
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
@@ -299,6 +344,28 @@ describe('counter app over demo data', () => {
       'Samsung Galaxy A55',
     );
     expect(screen.queryByTestId('repair.desk.intake.models')).toBeNull();
+  });
+
+  it('keeps a typed model on Enter when the suggestions are other models', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    fireEvent.keyDown(window, { key: 'F2' });
+    const model = await screen.findByTestId('repair.desk.intake.model');
+    // Not in the catalog: the near misses are offered, none is taken by Enter.
+    fireEvent.change(model, { target: { value: 'Galaxy A53' } });
+    const list = await screen.findByTestId('repair.desk.intake.models');
+    expect(list.textContent).toContain('Galaxy A5');
+    expect(list.textContent).not.toContain('Galaxy A53');
+    fireEvent.keyDown(model, { key: 'Enter' });
+    expect(screen.queryByTestId('repair.desk.intake.models')).toBeNull();
+    expect(model).toHaveProperty('value', 'Galaxy A53');
+    // Chosen with the arrows, a suggestion is taken.
+    fireEvent.change(model, { target: { value: 'Galaxy A53 ' } });
+    await screen.findByTestId('repair.desk.intake.models');
+    fireEvent.keyDown(model, { key: 'ArrowDown' });
+    fireEvent.keyDown(model, { key: 'Enter' });
+    expect(model).not.toHaveProperty('value', 'Galaxy A53 ');
+    expect((model as HTMLInputElement).value).toMatch(/^Galaxy A5[456]$/);
   });
 
   it('records a down payment at the counter, and only an owner changes one', async () => {

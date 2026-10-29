@@ -53,9 +53,9 @@ async function writeJourney(a: RepairHarness): Promise<void> {
   };
   const second = (await a.run(
     'openTicket',
-    intake(a, { customer: { customerId: first.customerId } }),
+    intake(a, { customer: { name: 'Mama Wenda', phone: '0813 1111 2222' } }),
     a.cashierId,
-  )) as { ticketId: string };
+  )) as { ticketId: string; customerId: string };
 
   await a.run(
     'startWork',
@@ -120,7 +120,7 @@ async function writeJourney(a: RepairHarness): Promise<void> {
   );
   await a.run(
     'correctCustomerDetails',
-    { customerId: first.customerId, name: 'Yohanis Wenda', phone: '081200000000' },
+    { customerId: second.customerId, name: 'Mama Wenda', phone: '081200000000' },
     a.cashierId,
   );
 }

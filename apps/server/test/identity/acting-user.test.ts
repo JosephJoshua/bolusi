@@ -47,6 +47,10 @@ test('X-Acting-User: missing / unknown / other-tenant / not-usable-on-device →
   expect(await getDevices(device.token)).toBe(403);
   // Unknown id.
   expect(await getDevices(device.token, uuidv7(h.clock.now()))).toBe(403);
+  // Not a uuid, or a repeated header joined into one value: refused, never a 500.
+  for (const bad of ['not-a-uuid', '123', `${p.ownerUserId}, ${p.ownerUserId}`]) {
+    expect(await getDevices(device.token, bad)).toBe(403);
+  }
 
   // Other-tenant user id (RLS hides it → reads as absent → invalid).
   const other = await provision(h, {

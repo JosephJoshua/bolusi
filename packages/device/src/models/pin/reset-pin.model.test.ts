@@ -27,7 +27,7 @@ describe('resetPinReducer — choose → hand over → target enters new PIN →
     expect(phase.kind).toBe('entering');
     expect(phase).toMatchObject({
       kind: 'entering',
-      entry: { kind: 'first', afterMismatch: true },
+      entry: { kind: 'first', problem: 'mismatch' },
     });
   });
 
@@ -44,7 +44,7 @@ describe('resetPinReducer — choose → hand over → target enters new PIN →
     );
     expect(
       resetPinReducer(
-        { kind: 'entering', target: STAFF, entry: { kind: 'first', afterMismatch: false } },
+        { kind: 'entering', target: STAFF, entry: { kind: 'first', problem: null } },
         { kind: 'cancel' },
       ),
     ).toBe(RESET_LIST);

@@ -5,7 +5,7 @@
 // shows a new code. Nothing here is stored or synced; the PC keeps what it receives as its own
 // capture, which then syncs like any other. A clip is held here, one per pairing, until the PC
 // has collected past it (so a fetch cut short can be tried again), backs out, or asks again.
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import {
   HANDOFF_LIMITS,
@@ -49,6 +49,9 @@ export interface HandoffSession {
   readonly labels: HandoffPageLabels;
   idle: HubTimerHandle;
   paired: boolean;
+  /** Minted for the first browser to open the page. Only that browser may use the pairing after,
+   *  so a photographed QR is useless once the store phone has scanned it. */
+  phoneSecret: string | null;
   ended: boolean;
   seq: number;
   /** What the phone should do now; changes bump `version`, which the phone waits on. */
@@ -129,6 +132,7 @@ export class HandoffRelay {
       labels,
       idle: { cancel: () => undefined },
       paired: false,
+      phoneSecret: null,
       ended: false,
       seq: 0,
       ask: null,
@@ -194,12 +198,32 @@ export class HandoffRelay {
     wakeAll(session.pcWaiters);
   }
 
-  /** The phone opened the page: the first time, the PC hears it is paired. */
-  opened(session: HandoffSession): void {
+  /**
+   * A browser opened the page with `presented` (its phone secret, if it has one). The first one
+   * gets a new secret and the PC hears it is paired; later, only the browser holding that secret
+   * may reopen it. Returns the secret to keep, or null when this browser is not the paired phone.
+   */
+  opened(session: HandoffSession, presented: string | undefined): string | null {
+    if (session.phoneSecret === null) {
+      session.phoneSecret = randomBytes(24).toString('base64url');
+    } else if (!this.isPhone(session, presented)) {
+      return null;
+    }
     this.touch(session);
-    if (session.paired) return;
-    session.paired = true;
-    this.emit(session, { type: 'paired' });
+    if (!session.paired) {
+      session.paired = true;
+      this.emit(session, { type: 'paired' });
+    }
+    return session.phoneSecret;
+  }
+
+  /** Whether `presented` is the secret of the phone that opened this pairing. */
+  isPhone(session: HandoffSession, presented: string | undefined): boolean {
+    const secret = session.phoneSecret;
+    if (secret === null || presented === undefined) return false;
+    const a = Buffer.from(presented);
+    const b = Buffer.from(secret);
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 
   /** Waits until the phone's step changes from `seen`, the pairing ends, or a while passes. */

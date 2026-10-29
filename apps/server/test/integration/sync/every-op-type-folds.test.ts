@@ -168,19 +168,21 @@ function journey(world: ChainWorld): OpSpec[] {
       movement(3, 'inventory.item_put_back', { itemId: part, qty: 1, use }),
     ];
   };
-  /** v3 with the repair types picked at intake; without them, the v2 an older app signs. */
+  /** The current version, with the repair types picked at intake (none when left out). */
   const opened = (
     ticketId: string,
     ticketNumber: string,
     lineId: string,
-    repairTypes?: readonly object[],
+    repairTypes: readonly object[] = [],
   ): OpSpec => ({
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
     entityId: ticketId,
-    schemaVersion: repairTypes === undefined ? 2 : 3,
+    schemaVersion: 4,
     payload: {
-      ...(repairTypes === undefined ? {} : { repairTypes, claimOf: null }),
+      repairTypes,
+      claimOf: null,
+      ownershipVideo: null,
       ticketNumber,
       customerId: customer,
       device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },
@@ -363,6 +365,10 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.work_started', {}),
     onTicket('repair.work_photos_added', { stage: 'after', photos: [photo(8)] }),
     onTicket('repair.marked_repaired', { note: '' }),
+    onTicket('repair.ticket_details_corrected', {
+      device: { brand: 'Samsung', model: 'Galaxy A15', color: 'Hitam', imei: null },
+      reason: 'Salah ketik',
+    }),
 
     // money: a DP, the charge, a split payment, an owner's refund, a void, and the drawer
     {
@@ -419,6 +425,13 @@ function journey(world: ChainWorld): OpSpec[] {
       reason: 'Setor ke pemilik',
       account: null,
     }),
+    money('money.cash_moved', 0x40b, {
+      kind: 'float',
+      amount: 5_000_000,
+      reason: 'Uang kembalian',
+      account: null,
+    }),
+    money('money.cash_move_voided', 0x40b, { reason: 'Kelebihan nol' }),
     money('money.cash_counted', 0x409, { counted: 30_000, note: '' }),
     money('money.cash_adjusted', 0x40a, { amount: -10_000, countId: id(0x409), reason: 'Kurang' }),
 
@@ -429,10 +442,23 @@ function journey(world: ChainWorld): OpSpec[] {
         signature: photo(11),
         note: '',
         unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
       }),
-      schemaVersion: 2,
+      schemaVersion: 3,
     },
     onTicket('repair.slip_printed', { slip: 'handover' }),
+    // Handed over by mistake, then handed over again.
+    onTicket('repair.handover_reversed', { reason: 'Salah servisan' }),
+    {
+      ...onTicket('repair.device_returned', {
+        handoverPhoto: photo(13),
+        signature: photo(14),
+        note: '',
+        unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
+      }),
+      schemaVersion: 3,
+    },
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {
       type: 'repair.technician_assigned',

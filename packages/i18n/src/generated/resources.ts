@@ -176,6 +176,12 @@ const source = {
         noMicrophone:
           'Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi.',
       },
+      closeWindow: {
+        title: 'Tutup Bolusi?',
+        message: 'Yang sedang diisi belum tersimpan dan akan hilang.',
+        confirm: 'Tutup',
+        keep: 'Lanjut isi',
+      },
     },
     auth: {
       switcher: {
@@ -201,8 +207,9 @@ const source = {
           title: 'Buat PIN baru',
           repeat: 'Ulangi PIN baru',
           mismatch: 'PIN tidak sama. Buat lagi dari awal.',
+          weak: 'PIN ini terlalu gampang ditebak. Pilih angka lain.',
           screenTitle: 'Buat PIN',
-          hint: '6 angka. Jangan pakai tanggal lahir.',
+          hint: '6 angka. Jangan pakai tanggal lahir atau 123456.',
           failed: 'PIN belum bisa dibuat. Coba lagi.',
         },
         change: {
@@ -215,7 +222,7 @@ const source = {
         reset: {
           noUsers: 'Belum ada karyawan lain di HP ini.',
           done: 'PIN baru sudah dibuat',
-          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain.',
+          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik.',
         },
         unlock: {
           confirm: 'Bisa langsung masuk dengan PIN lamanya.',
@@ -448,6 +455,7 @@ const source = {
             'Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.',
           micFailed: 'Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon.',
         },
+        idleLocked: 'Terkunci karena lama tidak dipakai. Isian servisan baru tetap tersimpan.',
       },
       limits: {
         title: 'Batas wewenang',
@@ -731,6 +739,7 @@ const source = {
       refusal: {
         conflictNotFound: 'Data bentrok ini tidak ditemukan.',
         notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
+        idTaken: 'Data ini belum bisa disimpan. Buat ulang, ya.',
       },
     },
     push: {
@@ -942,6 +951,12 @@ export const resources = {
           noMicrophone:
             'No microphone found. Plug in a microphone or a webcam that has one, then try again.',
         },
+        closeWindow: {
+          title: 'Close Bolusi?',
+          message: 'What you are filling in is not saved yet and will be lost.',
+          confirm: 'Close',
+          keep: 'Keep editing',
+        },
       },
       auth: {
         switcher: {
@@ -967,8 +982,9 @@ export const resources = {
             title: 'Create a new PIN',
             repeat: 'Repeat the new PIN',
             mismatch: 'The PINs don’t match. Start again.',
+            weak: 'That PIN is too easy to guess. Choose other digits.',
             screenTitle: 'Create PIN',
-            hint: '6 digits. Avoid your birthday.',
+            hint: '6 digits. Avoid your birthday or 123456.',
             failed: 'The PIN couldn’t be saved. Try again.',
           },
           change: {
@@ -981,7 +997,7 @@ export const resources = {
           reset: {
             noUsers: 'There’s no other staff on this phone yet.',
             done: 'New PIN is set',
-            denied: 'Only a main owner can make a new PIN for another main owner.',
+            denied: 'Only the main owner can make a new PIN for an owner.',
           },
           unlock: {
             confirm: 'They can sign in with their old PIN right away.',
@@ -1220,6 +1236,7 @@ export const resources = {
               'The microphone isn’t allowed yet. Allow it in Windows Settings › Privacy › Microphone.',
             micFailed: 'The microphone won’t start. Close other apps that use it.',
           },
+          idleLocked: 'Locked after a while unused. Unsaved intakes are kept.',
         },
         limits: {
           title: 'Limits',
@@ -1519,6 +1536,7 @@ export const resources = {
         refusal: {
           conflictNotFound: 'This conflict wasn’t found.',
           notYourPreference: 'Only the account’s owner can change its language.',
+          idTaken: 'This couldn’t be saved. Create it again.',
         },
       },
       push: {

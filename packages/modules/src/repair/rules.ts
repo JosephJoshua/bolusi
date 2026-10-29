@@ -15,6 +15,7 @@ import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } f
 import type { SignedOperation } from '@bolusi/schemas';
 
 import {
+  HANDOVER_UNDO_WINDOW_MS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
@@ -47,6 +48,7 @@ import type {
   quoteProposalDeclinedPayload,
   slipPrintedPayload,
   technicianAssignedPayload,
+  ticketDetailsCorrectedPayload,
   ticketOpenedPayload,
   workPhotosAddedPayload,
 } from './operations.js';
@@ -109,6 +111,14 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'handoverNoteNeeded',
   'ownershipVideoNeeded',
   'freeHandoverOwnerOnly',
+  'notReturned',
+  'handoverHasClaim',
+  'claimSamePhone',
+  'nothingChanged',
+  'undoTooLate',
+  'handedOverBefore',
+  'customerShared',
+  'customerMismatch',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -139,17 +149,21 @@ async function requireDiscountPermission(
   await requireWithinLimit(op, ctx, REPAIR_PERMISSION.discount, earlier + drop);
 }
 
-/** What the discounts still standing on the op's ticket take off, besides line `exceptLineId`. */
-async function discountsStanding(db: Db, op: SignedOperation, exceptLineId: string) {
-  const row = await db
+/**
+ * What the discounts still standing on the op's ticket take off, besides line `exceptLineId`: the
+ * price drops already on the servisan, which its limit counts together with a new one (a discount,
+ * or a cancel fee below the store's).
+ */
+async function discountsStanding(db: Db, op: SignedOperation, exceptLineId?: string) {
+  let query = db
     .selectFrom('repairQuoteLines')
     .select(sql<number>`coalesce(sum(-amount), 0)`.as('drop'))
     .where('ticketId', '=', op.entityId)
     .where('storeId', '=', storeOf(op))
     .where('amount', '<', 0)
-    .where('status', '!=', 'declined')
-    .where('id', '!=', exceptLineId)
-    .executeTakeFirst();
+    .where('status', '!=', 'declined');
+  if (exceptLineId !== undefined) query = query.where('id', '!=', exceptLineId);
+  const row = await query.executeTakeFirst();
   return Number(row?.drop ?? 0);
 }
 
@@ -256,8 +270,11 @@ export interface TicketState {
   readonly location: DeviceLocation;
   readonly technicianId: string | null;
   readonly quoteTotal: number;
+  readonly cancelFee: number | null;
   /** The servisan this one is a warranty claim on; null for an ordinary one. */
   readonly claimOfTicketId: string | null;
+  /** When it was first handed over; kept when a handover is taken back. */
+  readonly returnedAt: number | null;
 }
 
 export function invalidTransition(
@@ -362,7 +379,9 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
       'location',
       'technicianId',
       'quoteTotal',
+      'cancelFee',
       'claimOfTicketId',
+      'returnedAt',
     ])
     .where('id', '=', op.entityId)
     .where('tenantId', '=', op.tenantId)
@@ -376,7 +395,9 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
     location: row.location as DeviceLocation,
     technicianId: row.technicianId,
     quoteTotal: Number(row.quoteTotal),
+    cancelFee: row.cancelFee === null ? null : Number(row.cancelFee),
     claimOfTicketId: row.claimOfTicketId,
+    returnedAt: row.returnedAt === null ? null : Number(row.returnedAt),
   };
 }
 
@@ -531,11 +552,45 @@ export const customerRegisteredRule: Rule = async (op, { db }) => {
   }
 };
 
+/**
+ * A customer's details are corrected while one of their servisans is still in the store, like the
+ * servisan's own details: once everything went home, the slips they signed are the record.
+ */
 export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
   if (!(await customerExists(db, op, op.entityId))) {
     throw notFound(REPAIR_CUSTOMER_ENTITY, op.entityId);
   }
+  await requireRenamable(db, op, op.entityId);
 };
+
+/**
+ * A customer's own record is renamed only while it names one servisan, still in the store, and
+ * never handed over: a rename would otherwise rewrite who a signed slip or a debt belongs to. A
+ * servisan opened elsewhere while offline counts too, once it syncs.
+ */
+async function requireRenamable(db: Db, op: SignedOperation, customerId: string): Promise<void> {
+  const tickets = await db
+    .selectFrom('repairTickets')
+    .select(['location', 'returnedAt'])
+    .where('customerId', '=', customerId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .execute();
+  if (tickets.length > 1) {
+    throw refuse('customerShared', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: customerId },
+      message: 'the customer has more than one servisan',
+    });
+  }
+  if (tickets.some((ticket) => ticket.location === 'returned' || ticket.returnedAt !== null)) {
+    throw refuse('returned', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: op.entityId },
+      message: 'a servisan of this customer was handed over',
+    });
+  }
+}
 
 /**
  * The repair types of an open servisan, set after the diagnosis: by the counter, who took it in, or
@@ -812,15 +867,20 @@ export const markedRepairedRule: Rule = async (op, { db }) => {
 
 /**
  * Cancel an open ticket. A fee below the store's standard fee is a price drop: an owner's to give,
- * and a limited role's (a manager's) within its store's limit. The standard fee is the store's as
- * these records have it, not the payload's, which the device writing it could set to anything.
+ * and a limited role's (a manager's) within its store's limit, together with the servisan's
+ * discounts. The standard fee is the store's as these records have it, not the payload's, which the
+ * device writing it could set to anything.
  */
 export const ticketCancelledRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
   requireOpen(ticket, op.type);
-  // v1, from before fees, charged nothing and named no fee.
-  const fee = payloadOf<{ fee?: number }>(op).fee;
-  if (fee === undefined) return;
+  // A handover taken back was charged and paid for: it goes home again, it is not cancelled.
+  if (ticket.returnedAt !== null) {
+    throw invalidTransition(ticket, op.type, 'handedOverBefore', 'it was handed over before');
+  }
+  // v1, from before fees, names no fee and charges nothing (the applier records no fee): a drop
+  // of the whole standard fee, which an older phone must not get past the limit with.
+  const fee = payloadOf<{ fee?: number }>(op).fee ?? 0;
   const fees = await ctx.db
     .selectFrom('repairStoreCancelFees')
     .select(['beforeWork', 'afterWork'])
@@ -832,7 +892,10 @@ export const ticketCancelledRule: Rule = async (op, ctx) => {
       ? NO_CANCEL_FEES
       : { beforeWork: Number(fees.beforeWork), afterWork: Number(fees.afterWork) },
   );
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, standard - fee);
+  // A smaller fee is a price drop on the servisan, counted with the discounts already on it.
+  const drop = standard - fee;
+  const total = drop > 0 ? drop + (await discountsStanding(ctx.db, op)) : drop;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, total);
 };
 
 /** A technician's suggestion; one the cashier could never apply would only block handover. */
@@ -850,16 +913,18 @@ export const quoteChangeProposedRule: Rule = async (op, ctx) => {
 /**
  * A price change by the cashier: a new line, or applying a technician's open proposal. Applying a
  * proposal is the customer agreeing to it; a new line waits exactly when the customer has not
- * agreed yet (v2; a v1 line has no `waitsForCustomer` and counted at once).
+ * agreed yet. A v1 line has no `waitsForCustomer` and counts at once, so it needs the customer's
+ * yes too (synced v1 history replays through the applier, which no rule judges).
  */
 export const quoteChangedRule: Rule = async (op, ctx) => {
   const { db, holdsPermission } = ctx;
   const line = payloadOf<Payload<typeof quoteChangedPayload>>(op);
   checkLineSign(line.kind, line.amount);
   await requireDiscountPermission(op, ctx, [line.amount], line.lineId);
+  const waits = op.schemaVersion >= 2 && line.waitsForCustomer;
   const agreementMismatch = line.fromProposal
     ? !line.customerAgreed
-    : op.schemaVersion >= 2 && line.waitsForCustomer !== !line.customerAgreed;
+    : waits !== !line.customerAgreed;
   if (agreementMismatch) {
     throw refuse('customerAgreementMismatch', {
       code: 'VALIDATION_FAILED',
@@ -928,6 +993,111 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
   await requirePaid(op, ctx);
   // Before v3 there was no checklist to judge.
   if (op.schemaVersion >= 3) await requireHandoverChecks(db, op);
+};
+
+/**
+ * Taking a handover back (owner decision): only one that happened, and not once a warranty claim
+ * was opened on it, since that claim already counts from this pickup.
+ */
+export const handoverReversedRule: Rule = async (op, ctx) => {
+  const { db } = ctx;
+  const ticket = await loadTicket(db, op);
+  if (ticket.location !== 'returned') {
+    throw invalidTransition(ticket, op.type, 'notReturned', 'the phone has not been handed over');
+  }
+  // Counted from the first handover, so taking it back again and again never stretches it.
+  if (ticket.returnedAt === null || op.timestamp - ticket.returnedAt > HANDOVER_UNDO_WINDOW_MS) {
+    throw invalidTransition(ticket, op.type, 'undoTooLate', 'the handover was too long ago');
+  }
+  // What went home is at stake: a limited role (a manager) only within its cancel limit.
+  const owed = ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, owed);
+  const claim = await db
+    .selectFrom('repairTickets')
+    .select('id')
+    .where('claimOfTicketId', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  if (claim !== undefined) {
+    throw invalidTransition(ticket, op.type, 'handoverHasClaim', 'a warranty claim names it');
+  }
+};
+
+/**
+ * Intake's record is corrected only while the phone is in the store: after pickup the slip the
+ * customer signed is the record. A claim is for the phone its servisan repaired, so its brand,
+ * model and IMEI stay as they are. A correction says what changed; moving the servisan to another
+ * customer is a correction too, and like the rest it ends at pickup.
+ */
+export const ticketDetailsCorrectedRule: Rule = async (op, { db }) => {
+  const ticket = await loadTicket(db, op);
+  if (ticket.location === 'returned') {
+    throw invalidTransition(ticket, op.type, 'returned', 'the device has already been returned');
+  }
+  const payload = payloadOf<Payload<typeof ticketDetailsCorrectedPayload>>(op);
+  if (Object.keys(payload).every((field) => field === 'reason')) {
+    throw refuse('nothingChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'device', issue: 'nothing to correct' },
+    });
+  }
+  // After a handover (since taken back) the slip the customer signed names them and that phone.
+  const handedOver = ticket.returnedAt !== null;
+  if (handedOver && (payload.customer !== undefined || payload.customerId !== undefined)) {
+    throw invalidTransition(ticket, op.type, 'handedOverBefore', 'it was handed over before');
+  }
+  if (payload.customerId !== undefined) {
+    // The history's "now" must be the customer the servisan moves to.
+    const target = await db
+      .selectFrom('repairCustomers')
+      .select(['name', 'phone'])
+      .where('id', '=', payload.customerId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirst();
+    if (target === undefined) throw notFound(REPAIR_CUSTOMER_ENTITY, payload.customerId);
+    if (
+      payload.customer === undefined ||
+      payload.customer.name !== target.name ||
+      payload.customer.phone !== target.phone
+    ) {
+      throw refuse('customerMismatch', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'customer', issue: 'not the customer it moves to' },
+      });
+    }
+  } else if (payload.customer !== undefined) {
+    // Without a move the servisan's customer is renamed in place, under the same rule as a rename.
+    const row = await db
+      .selectFrom('repairTickets')
+      .select('customerId')
+      .where('id', '=', op.entityId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirstOrThrow();
+    await requireRenamable(db, op, row.customerId);
+  }
+  const lockedPhone = ticket.claimOfTicketId !== null || handedOver;
+  if (lockedPhone && payload.device !== undefined) {
+    const row = await db
+      .selectFrom('repairTickets')
+      .select(['deviceBrand', 'deviceModel', 'deviceImei'])
+      .where('id', '=', op.entityId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirstOrThrow();
+    if (
+      row.deviceBrand !== payload.device.brand ||
+      row.deviceModel !== payload.device.model ||
+      row.deviceImei !== payload.device.imei
+    ) {
+      throw refuse(handedOver ? 'handedOverBefore' : 'claimSamePhone', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'device', issue: 'the phone is the one on the signed slip' },
+      });
+    }
+  }
 };
 
 function ownershipVideoNeeded(): DomainError {
@@ -1046,7 +1216,9 @@ export const downPaymentReceivedRule: Rule = async (op, { db }) => {
 
 /**
  * An owner's correction, at any time, of a ticket in this store (older devices; newer ones void
- * and re-record the payment in the ledger). Lowering it is within a limited role's limit only.
+ * and re-record the payment in the ledger, which the refund limit counts). Lowering it is an
+ * owner's alone: nothing counts it with the servisan's other price drops, and no phone that knows
+ * limited roles (managers) writes it, so no limit covers it.
  */
 export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
@@ -1056,8 +1228,9 @@ export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
     .select('downPayment')
     .where('id', '=', ticket.id)
     .executeTakeFirst();
-  const recorded = Number(row?.downPayment ?? 0);
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, recorded - amount);
+  const drop = Number(row?.downPayment ?? 0) - amount;
+  const judged = drop > 0 ? Number.MAX_SAFE_INTEGER : drop;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, judged);
 };
 
 /**

@@ -44,6 +44,7 @@ export {
   TextArea,
   TextField,
   controlClass,
+  useSelectOnFocus,
   type SecretFieldProps,
   type TextAreaProps,
   type TextFieldProps,

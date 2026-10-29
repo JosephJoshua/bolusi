@@ -2,7 +2,7 @@
 // two ways to print on it. A dot-matrix slip goes as raw ESC/P text (`raw-print.ts`); a page for
 // plain paper is drawn by Chromium in a hidden window and printed without a dialog. Either way the
 // job goes to the chosen printer, so nobody picks one at every print.
-import { BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,7 +58,13 @@ async function printPage(
   const dir = await mkdtemp(join(tmpdir(), 'bolusi-page-'));
   const window = new BrowserWindow({
     show: false,
-    webPreferences: { sandbox: true, contextIsolation: true, javascript: false, spellcheck: false },
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      javascript: false,
+      spellcheck: false,
+      devTools: !app.isPackaged,
+    },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());

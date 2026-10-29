@@ -5,8 +5,11 @@ import { Eye, EyeOff } from 'lucide-react';
 import {
   forwardRef,
   useId,
+  useRef,
   useState,
+  type FocusEvent,
   type InputHTMLAttributes,
+  type MouseEvent,
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
@@ -63,19 +66,57 @@ export const controlClass = (invalid: boolean): string =>
     invalid ? 'border-danger focus:border-danger' : 'border-border focus:border-primary',
   );
 
+/**
+ * Focus handlers that select what a field holds, so typing replaces it. For amounts and counts: a
+ * click puts the caret wherever it lands, and typing 50000 before a "0" makes 500.000. The mouse-up
+ * after a click would drop the selection, so the one that focused the field is swallowed.
+ */
+export function useSelectOnFocus<T extends HTMLInputElement>(handlers: {
+  readonly onFocus?: ((event: FocusEvent<T>) => void) | undefined;
+  readonly onMouseUp?: ((event: MouseEvent<T>) => void) | undefined;
+}): { onFocus: (event: FocusEvent<T>) => void; onMouseUp: (event: MouseEvent<T>) => void } {
+  const justFocused = useRef(false);
+  return {
+    onFocus: (event) => {
+      event.currentTarget.select();
+      justFocused.current = true;
+      handlers.onFocus?.(event);
+    },
+    onMouseUp: (event) => {
+      if (justFocused.current) event.preventDefault();
+      justFocused.current = false;
+      handlers.onMouseUp?.(event);
+    },
+  };
+}
+
 export interface TextFieldProps
   extends FieldFrameProps, Omit<InputHTMLAttributes<HTMLInputElement>, 'className'> {
   /** Shown inside the field before the value, such as "Rp". */
   readonly prefix?: string | undefined;
   readonly inputClassName?: string | undefined;
+  /** Selects what the field holds when it gets focus, for amounts (see useSelectOnFocus). */
+  readonly selectOnFocus?: boolean | undefined;
 }
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
-  { label, hint, error, labelAside, className, prefix, inputClassName, id: idProp, ...rest },
+  {
+    label,
+    hint,
+    error,
+    labelAside,
+    className,
+    prefix,
+    inputClassName,
+    selectOnFocus = false,
+    id: idProp,
+    ...rest
+  },
   ref,
 ) {
   const generated = useId();
   const id = idProp ?? generated;
+  const select = useSelectOnFocus(rest);
   const input = (
     <input
       ref={ref}
@@ -89,6 +130,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         inputClassName,
       )}
       {...rest}
+      {...(selectOnFocus ? select : {})}
     />
   );
   return (

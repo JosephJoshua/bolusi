@@ -135,6 +135,48 @@ export function assertPinFormat(pin: string): void {
 }
 
 /**
+ * A PIN anyone would try first: one digit six times (111111), a run up or down (123456, 987654),
+ * a repeated pair or triple (121212, 123123), or a well-known pattern on the keypad. With ten tries
+ * at a shared counter, these guard nothing. Birthdays can't be told apart from other PINs here.
+ */
+export function weakPin(pin: string): boolean {
+  if (/^(\d)\1+$/.test(pin)) return true;
+  const steps = [...pin].slice(1).map((digit, i) => Number(digit) - Number(pin[i]));
+  if (steps.every((step) => step === 1) || steps.every((step) => step === -1)) return true;
+  if (/^(\d\d)\1+$/.test(pin) || /^(\d\d\d)\1$/.test(pin)) return true;
+  return COMMON_PINS.has(pin);
+}
+
+// Keypad shapes and pairs that top leaked-PIN lists, beyond the runs and repeats above.
+const COMMON_PINS: ReadonlySet<string> = new Set([
+  '112233',
+  '123321',
+  '654456',
+  '159753',
+  '147258',
+  '147852',
+  '258369',
+  '369258',
+  '741852',
+  '789456',
+  '963852',
+  '102030',
+  '000123',
+]);
+
+/** A new PIN: six digits, and not one `weakPin` would guess. */
+export function assertNewPin(pin: string): void {
+  assertPinFormat(pin);
+  if (weakPin(pin)) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'pin', issue: 'weak' },
+      'PIN is too easy to guess (repeated digits, a run, or a common pattern)',
+    );
+  }
+}
+
+/**
  * Verify `pin` for `userId` on this device (api/02-auth §6.1/§6.5).
  *
  * @throws {DomainError} `PIN_LOCKED` / `PIN_RATE_LIMITED` when the attempt is gated (no KDF run);

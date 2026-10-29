@@ -1,0 +1,182 @@
+diff --git a/android/src/main/java/expo/modules/print/PrintModule.kt b/android/src/main/java/expo/modules/print/PrintModule.kt
+index 719d2969772d8a99faf0025fabc145f1f969c6f7..414fdb57bc7792328083e2f48831248653010a37 100644
+--- a/android/src/main/java/expo/modules/print/PrintModule.kt
++++ b/android/src/main/java/expo/modules/print/PrintModule.kt
+@@ -19,12 +19,30 @@ import java.lang.ref.WeakReference
+ import kotlin.coroutines.Continuation
+ import kotlin.coroutines.resume
+ import kotlin.coroutines.resumeWithException
++import kotlin.math.abs
++import kotlin.math.roundToInt
+ 
+ private const val ORIENTATION_PORTRAIT = "portrait"
+ private const val ORIENTATION_LANDSCAPE = "landscape"
++private const val MILS_PER_POINT = 1000.0 / 72.0
++private const val MILS_PER_MM = 40
++
++private val STANDARD_MEDIA_SIZES = listOf(
++  PrintAttributes.MediaSize.ISO_A3,
++  PrintAttributes.MediaSize.ISO_A4,
++  PrintAttributes.MediaSize.ISO_A5,
++  PrintAttributes.MediaSize.ISO_A6,
++  PrintAttributes.MediaSize.ISO_B5,
++  PrintAttributes.MediaSize.JIS_B5,
++  PrintAttributes.MediaSize.NA_LETTER,
++  PrintAttributes.MediaSize.NA_LEGAL
++)
+ 
+ class PrintModule : Module() {
+   private val jobName = "Printing"
++  // Android's guide says to keep the WebView referenced until its page is handed on: an unattached
++  // WebView can be collected mid-load, and then its callback never runs and the promise never settles.
++  private val renderTasks = mutableSetOf<PrintPDFRenderTask>()
+   override fun definition() = ModuleDefinition {
+     Name("ExpoPrint")
+ 
+@@ -54,10 +72,11 @@ class PrintModule : Module() {
+           // Renders HTML to PDF and then prints
+           try {
+             val renderTask = PrintPDFRenderTask(context, options)
++            renderTasks.add(renderTask)
+             renderTask.render(
+               null,
+               null,
+-              createPrintCallbacks(options, continuation)
++              createPrintCallbacks(renderTask, options, continuation)
+             )
+           } catch (e: Exception) {
+             continuation.resumeWithException(UnexpectedPrintException("There was an error while trying to print HTML ", e))
+@@ -100,18 +119,20 @@ class PrintModule : Module() {
+     return withContext(Dispatchers.Main) {
+       return@withContext suspendCancellableCoroutine { continuation ->
+         val renderTask = PrintPDFRenderTask(context, options)
++        renderTasks.add(renderTask)
+         renderTask.render(
+           outputFile,
+           fileDescriptor,
+-          createPrintToFileCallbacks(options, continuation)
++          createPrintToFileCallbacks(renderTask, options, continuation)
+         )
+       }
+     }
+   }
+ 
+-  private fun createPrintToFileCallbacks(options: PrintOptions, continuation: Continuation<FilePrintResult>): PrintPDFRenderTask.Callbacks {
++  private fun createPrintToFileCallbacks(renderTask: PrintPDFRenderTask, options: PrintOptions, continuation: Continuation<FilePrintResult>): PrintPDFRenderTask.Callbacks {
+     return object : PrintPDFRenderTask.Callbacks() {
+       override fun onRenderFinished(document: PrintDocumentAdapter, outputFile: File?, numberOfPages: Int) {
++        renderTasks.remove(renderTask)
+         val uri = FileUtils.uriFromFile(outputFile).toString()
+         var base64: String? = null
+         if (options.base64) {
+@@ -127,19 +148,28 @@ class PrintModule : Module() {
+       }
+ 
+       override fun onRenderError(exception: CodedException) {
++        renderTasks.remove(renderTask)
+         continuation.resumeWithException(exception)
+       }
+     }
+   }
+ 
+-  private fun createPrintCallbacks(options: PrintOptions, continuation: Continuation<Unit>): PrintPDFRenderTask.Callbacks {
++  private fun createPrintCallbacks(renderTask: PrintPDFRenderTask, options: PrintOptions, continuation: Continuation<Unit>): PrintPDFRenderTask.Callbacks {
+     return object : PrintPDFRenderTask.Callbacks() {
+       override fun onRenderFinished(document: PrintDocumentAdapter, outputFile: File?, numberOfPages: Int) {
+-        printDocumentToPrinter(document, options)
++        renderTasks.remove(renderTask)
++        // Thrown here it would escape into the WebView's callback and leave the promise unsettled.
++        try {
++          printDocumentToPrinter(document, options)
++        } catch (e: Exception) {
++          continuation.resumeWithException(UnexpectedPrintException("There was an error while trying to print HTML ", e))
++          return
++        }
+         continuation.resume(Unit)
+       }
+ 
+       override fun onRenderError(exception: CodedException) {
++        renderTasks.remove(renderTask)
+         continuation.resumeWithException(exception)
+       }
+     }
+@@ -159,7 +189,11 @@ class PrintModule : Module() {
+     // @tsapeta: Unfortunately these attributes might be ignored on some devices or Android versions,
+     // in other words it might not change the default orientation in the print dialog,
+     // however the user can change it there.
+-    if (ORIENTATION_LANDSCAPE == orientation) {
++    val pageSize = mediaSizeFromOptions(options)
++    if (pageSize != null) {
++      // The dialog preselects a printer's paper only when its size matches exactly, to the mil.
++      builder.setMediaSize(if (ORIENTATION_LANDSCAPE == orientation) pageSize.asLandscape() else pageSize.asPortrait())
++    } else if (ORIENTATION_LANDSCAPE == orientation) {
+       builder.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_LANDSCAPE)
+     } else {
+       builder.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_PORTRAIT)
+@@ -170,4 +204,21 @@ class PrintModule : Module() {
+     builder.setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+     return builder
+   }
++
++  // `width` and `height` are points (1/72 inch). A size within a millimetre of a standard paper
++  // becomes that paper, since points are rounded and the dialog needs its exact size to select it.
++  private fun mediaSizeFromOptions(options: PrintOptions): PrintAttributes.MediaSize? {
++    val width = options.width ?: return null
++    val height = options.height ?: return null
++    if (width <= 0 || height <= 0) return null
++    val shortMils = (minOf(width, height) * MILS_PER_POINT).roundToInt()
++    val longMils = (maxOf(width, height) * MILS_PER_POINT).roundToInt()
++    return STANDARD_MEDIA_SIZES.firstOrNull {
++      abs(it.widthMils - shortMils) <= MILS_PER_MM && abs(it.heightMils - longMils) <= MILS_PER_MM
++    } ?: PrintAttributes.MediaSize("expo-print-$shortMils-$longMils", "${toMm(shortMils)} x ${toMm(longMils)} mm", shortMils, longMils)
++  }
++
++  private fun toMm(mils: Int): Int {
++    return (mils * 25.4 / 1000).roundToInt()
++  }
+ }
+diff --git a/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt b/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
+index d1e413e1035546906db487176493579bbad15f26..6ecc04ab1b14fbd8a33e2b6724022dd1c3b373c5 100644
+--- a/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
++++ b/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
+@@ -28,6 +28,7 @@ internal class PrintPDFRenderTask(private val context: Context, private val opti
+   private var fileDescriptor: ParcelFileDescriptor? = null
+   private lateinit var document: PrintDocumentAdapter
+   private var numberOfPages = 0
++  private var pageFinished = false
+ 
+   @UiThread
+   fun render(outputFile: File?, fileDescriptor: ParcelFileDescriptor?, callbacks: Callbacks) {
+@@ -87,6 +88,9 @@ internal class PrintPDFRenderTask(private val context: Context, private val opti
+     }
+ 
+     override fun onPageFinished(view: WebView, url: String) {
++      // It can be called more than once for one load; the promise settles only on the first.
++      if (pageFinished) return
++      pageFinished = true
+       document = view.createPrintDocumentAdapter("Document")
+       // layout the document with appropriate print attributes
+       document.onLayout(null, printAttributes, null, object : PrintDocumentAdapterLayoutCallback() {}, null)
+diff --git a/ios/ExpoPrintWithPrinter.swift b/ios/ExpoPrintWithPrinter.swift
+index 9ef2bd382808a068cbee847c38ccdd2c94114713..31e01ff96f453f0de932714ee06c4f1e29d86208 100644
+--- a/ios/ExpoPrintWithPrinter.swift
++++ b/ios/ExpoPrintWithPrinter.swift
+@@ -113,10 +113,15 @@ public class ExpoPrintWithPrinter {
+           promise.reject(PrintingJobFailedException("Provided printer is not available."))
+         }
+       }
+-    } else if UIDevice.current.userInterfaceIdiom == UIUserInterfaceIdiom.pad {
+-      printInteractionController.present(from: rootController.view.frame, in: rootController.view, animated: true, completionHandler: completionHandler)
+     } else {
+-      printInteractionController.present(animated: true, completionHandler: completionHandler)
++      // `present` returns false when the sheet cannot show (another is still on screen or animating
++      // away), and nothing promises the handler then runs, so the promise could never settle.
++      let presented = UIDevice.current.userInterfaceIdiom == UIUserInterfaceIdiom.pad
++        ? printInteractionController.present(from: rootController.view.frame, in: rootController.view, animated: true, completionHandler: completionHandler)
++        : printInteractionController.present(animated: true, completionHandler: completionHandler)
++      if !presented {
++        promise.reject(PrintingJobFailedException("The print dialog could not be shown."))
++      }
+     }
+   }
+ 

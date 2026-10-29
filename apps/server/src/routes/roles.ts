@@ -10,7 +10,7 @@ import type { TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
-import { isTenantAdmin } from '../auth/permissions.js';
+import { isTenantAdmin, rolesConferOwnerPowers } from '../auth/permissions.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { ApiError } from '../errors.js';
@@ -22,7 +22,6 @@ import { zJson } from '../middleware/validator-hook.js';
 import { announceDirectoryChange } from '../realtime/announce.js';
 import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 import { uuidv7 } from '../uuidv7.js';
-import { rolesConferOwnerPowers } from './users.js';
 
 const LOWERCASE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

@@ -29,8 +29,8 @@ catalog:
   intl-messageformat: 11.2.11
 
   # §2.4 server
-  hono: 4.12.30
-  '@hono/node-server': 2.0.8
+  hono: 4.12.34
+  '@hono/node-server': 2.0.12
   ws: 8.21.1
   '@hono/zod-validator': 0.8.0
   pg: 8.22.0

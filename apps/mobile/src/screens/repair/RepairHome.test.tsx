@@ -7,6 +7,7 @@ import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
 import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import { PrinterProblem, type RepairPrinting } from '@bolusi/modules/repair/screens';
 import { color } from '@bolusi/ui';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -475,6 +476,73 @@ describe('price changes and handover', () => {
   });
 });
 
+describe('putting a mistake right', () => {
+  test('the counter corrects the number and the IMEI after saving; the history keeps both', async () => {
+    h = await openRepairScreenHarness(5510);
+    const ticketId = await openTicket(h);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.correctDetails');
+    type(screen, 'repair.correct.customer.phone', '0813 1111 2222');
+    type(screen, 'repair.correct.device.imei', '1234');
+    await settle();
+    await press(screen, 'repair.correct.primary');
+    // A wrong IMEI is caught as at intake; nothing is saved.
+    expect(screen.query('repair.correct.device.imei.error')).not.toBeNull();
+    expect((await ticketRow(h, ticketId)).customerPhone).toBe('081244556677');
+    type(screen, 'repair.correct.device.imei', '356789104455660');
+    type(screen, 'repair.correct.reason', 'Salah ketik');
+    await settle();
+    await press(screen, 'repair.correct.primary');
+
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket).toMatchObject({ customerPhone: '081311112222', deviceImei: '356789104455660' });
+    expect(text(screen, 'repair.ticket.timeline')).toContain(
+      'No. HP: 0812-4455-6677 → 0813-1111-2222',
+    );
+  });
+
+  test('only an owner takes a handover back, with a reason; the phone is then in the store', async () => {
+    h = await openRepairScreenHarness(5511);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
+    await h.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: h.photo(64),
+        signature: h.photo(65),
+        checklist: ['charger', 'case'].map((item) => ({
+          kind: 'accessory',
+          item,
+          label: null,
+          done: true,
+        })),
+      },
+      h.cashierId,
+    );
+    const counter = await mount(h, h.cashierId);
+    await press(counter, 'repair.board.views.returned');
+    await press(counter, `repair.board.row.${ticketId}`);
+    expect(counter.query('repair.ticket.action.undoHandover')).toBeNull();
+    expect(counter.query('repair.ticket.action.correctDetails')).toBeNull();
+    counter.unmount();
+
+    // On the device's clock: a handover is taken back only within a day of it.
+    const owner = await mount(h, h.storeOwnerId, { now: () => h!.now() });
+    await press(owner, 'repair.board.views.returned');
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, 'repair.ticket.action.undoHandover');
+    expect(owner.all('repair.undoHandover.primary')[0]!.props['disabled']).toBe(true);
+    type(owner, 'repair.undoHandover.reason', 'Salah servisan, HP masih di rak');
+    await settle();
+    await press(owner, 'repair.undoHandover.primary');
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket.location).toBe('in_store');
+    expect(ticket.photos.map((p: { slot: string }) => p.slot)).not.toContain('signature');
+  });
+});
+
 describe('cancelling (owners only)', () => {
   test('the counter is never offered a cancel; a store owner is, also on a repaired phone', async () => {
     h = await openRepairScreenHarness(5501);
@@ -510,6 +578,12 @@ describe('cancelling (owners only)', () => {
     expect(screen.all('repair.cancel.primary')[0]!.props['disabled']).toBe(true);
 
     await press(screen, 'repair.cancel.changeFee');
+    // Grouped like every amount, and a 0 typed past turns into the amount, not "015000".
+    const feeValue = (): unknown => screen.get('repair.cancel.feeInput.field').props['value'];
+    expect(feeValue()).toBe('50.000');
+    type(screen, 'repair.cancel.feeInput', '015000');
+    await settle();
+    expect(feeValue()).toBe('15.000');
     type(screen, 'repair.cancel.feeInput', '20.000');
     await settle();
     expect(text(screen, 'repair.cancel.feeAmount')).toContain('20.000');
@@ -1188,6 +1262,44 @@ describe('on a tablet', () => {
       expect(screen.query('repair.board')).toBeNull();
       expect(screen.query('repair.intake.step.customer')).not.toBeNull();
     });
+  });
+});
+
+describe('printing a slip', () => {
+  // Android QA once saw Cetak spin with no dialog, then every print fail until restart. The port now
+  // gives up on a hung print call as `stuck`; the step says so and the next tap prints.
+  test('a print that got stuck says to try again, and the retry prints', async () => {
+    h = await openRepairScreenHarness(5301);
+    const ticketId = await openTicket(h);
+    const output = vi
+      .fn<RepairPrinting['output']>()
+      .mockRejectedValueOnce(new PrinterProblem('stuck'))
+      .mockResolvedValueOnce('unconfirmed');
+    const printing: RepairPrinting = {
+      storeName: async () => 'Bolusi Sorong',
+      userName: async () => null,
+      readPaper: async () => null,
+      writePaper: async () => undefined,
+      output,
+      imageDataUri: async () => null,
+    };
+    const screen = await mount(h, h.cashierId, {
+      runtime: { ...repairRuntimeFor(h, h.cashierId), printing },
+    });
+    await press(screen, `repair.board.row.${ticketId}`);
+    if (screen.query('repair.ticket.more.open') !== null)
+      await press(screen, 'repair.ticket.more.open');
+    await press(screen, 'repair.ticket.action.print');
+
+    await press(screen, 'repair.print.primary');
+    expect(text(screen, 'repair.print.notice')).toBe('Notanya belum bisa disiapkan. Coba lagi.');
+    expect(screen.query('repair.print.error')).toBeNull();
+    expect(screen.all('repair.print.primary')[0]!.props['disabled']).not.toBe(true);
+
+    await press(screen, 'repair.print.primary');
+    expect(output).toHaveBeenCalledTimes(2);
+    expect(screen.query('repair.print.notice')).toBeNull();
+    expect(screen.query('repair.print.ask')).not.toBeNull();
   });
 });
 

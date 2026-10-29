@@ -13,8 +13,8 @@ catalogs:
       specifier: 3.5.14
       version: 3.5.14
     '@hono/node-server':
-      specifier: 2.0.8
-      version: 2.0.8
+      specifier: 2.0.12
+      version: 2.0.12
     '@hono/zod-validator':
       specifier: 0.8.0
       version: 0.8.0
@@ -58,8 +58,8 @@ catalogs:
       specifier: 0.8.3
       version: 0.8.3
     hono:
-      specifier: 4.12.30
-      version: 4.12.30
+      specifier: 4.12.34
+      version: 4.12.34
     i18next:
       specifier: 26.3.6
       version: 26.3.6
@@ -117,6 +117,11 @@ catalogs:
 
 overrides:
   zod: 4.4.3
+
+patchedDependencies:
+  expo-print@57.0.2:
+    hash: b3ad7ece0cbaba554b92d9605b7a84cc50e593a256f70d82bb110f2b476de741
+    path: patches/expo-print@57.0.2.patch
 
 importers:
 
@@ -314,7 +319,7 @@ importers:
         version: 57.0.3(expo@57.0.4)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       expo-print:
         specifier: 57.0.2
-        version: 57.0.2(expo@57.0.4)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))
+        version: 57.0.2(patch_hash=b3ad7ece0cbaba554b92d9605b7a84cc50e593a256f70d82bb110f2b476de741)(expo@57.0.4)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))
       expo-screen-orientation:
         specifier: 57.0.3
         version: 57.0.3(expo@57.0.4)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))
@@ -414,10 +419,10 @@ importers:
         version: link:../../packages/schemas
       '@hono/node-server':
         specifier: 'catalog:'
-        version: 2.0.8(hono@4.12.30)
+        version: 2.0.12(hono@4.12.34)
       '@hono/zod-validator':
         specifier: 'catalog:'
-        version: 0.8.0(hono@4.12.30)(zod@4.4.3)
+        version: 0.8.0(hono@4.12.34)(zod@4.4.3)
       '@noble/curves':
         specifier: 'catalog:'
         version: 2.2.0
@@ -426,7 +431,7 @@ importers:
         version: 2.2.0
       hono:
         specifier: 'catalog:'
-        version: 4.12.30
+        version: 4.12.34
       ws:
         specifier: 'catalog:'
         version: 8.21.1
@@ -650,7 +655,7 @@ importers:
         version: 0.5.4
       '@hono/node-server':
         specifier: 'catalog:'
-        version: 2.0.8(hono@4.12.30)
+        version: 2.0.12(hono@4.12.34)
       kysely:
         specifier: 'catalog:'
         version: 0.29.3
@@ -1815,8 +1820,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@2.0.8':
-    resolution: {integrity: sha512-GuCWzLxwg218fy1JaHculFsdcuY12hxit83V+algozTPnwhNjLrRL/Alg9OYjLZLoUZ1rw/S4CdTMsnkSKCmFA==}
+  '@hono/node-server@2.0.12':
+    resolution: {integrity: sha512-eWpQYr67tqJLeaSUl0Q+TquuYfUdTibpOJlUMV2FfUP7+KqCC5TufnwnlXL6mobZBJbGAYRd7ZvEBDCbLInjhg==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
@@ -4320,8 +4325,8 @@ packages:
   hermes-parser@0.36.1:
     resolution: {integrity: sha512-GApNk4zLHi2UWoWZZkx7LNCOSzLSc5lB55pZ/PhK7ycFeg7u5LcF88p/WbpIi1XUDtE0MpHE3uRR3u3KB7TjSQ==}
 
-  hono@4.12.30:
-    resolution: {integrity: sha512-emn+JoJjrN9YTpRDS5it/UI2SO9BAE37T6I3d963RxcZ81G9A4pr2SZTEiiaiKbzx+NKRg5BZ89fCL7gCJCUog==}
+  hono@4.12.34:
+    resolution: {integrity: sha512-GqXJqY/xJkJmuloTrnV1ZEXG3fqte+VjkUqoRNZXcrUidiUOP4fMSIHHY4tsqZBK++kVyWmt/AAfSUuy57/eSA==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@4.1.0:
@@ -7780,13 +7785,13 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@hono/node-server@2.0.8(hono@4.12.30)':
+  '@hono/node-server@2.0.12(hono@4.12.34)':
     dependencies:
-      hono: 4.12.30
+      hono: 4.12.34
 
-  '@hono/zod-validator@0.8.0(hono@4.12.30)(zod@4.4.3)':
+  '@hono/zod-validator@0.8.0(hono@4.12.34)(zod@4.4.3)':
     dependencies:
-      hono: 4.12.30
+      hono: 4.12.34
       zod: 4.4.3
 
   '@humanfs/core@0.19.2':
@@ -10085,7 +10090,7 @@ snapshots:
       - supports-color
       - typescript
 
-  expo-print@57.0.2(expo@57.0.4)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3)):
+  expo-print@57.0.2(patch_hash=b3ad7ece0cbaba554b92d9605b7a84cc50e593a256f70d82bb110f2b476de741)(expo@57.0.4)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3)):
     dependencies:
       expo: 57.0.4(@babel/core@7.29.7)(@expo/dom-webview@57.0.0)(@expo/metro-runtime@57.0.6)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       react-native: 0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3)
@@ -10494,7 +10499,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.36.1
 
-  hono@4.12.30: {}
+  hono@4.12.34: {}
 
   hosted-git-info@4.1.0:
     dependencies:

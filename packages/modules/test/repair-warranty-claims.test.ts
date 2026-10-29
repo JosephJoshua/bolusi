@@ -183,7 +183,7 @@ describe('whose phone, and when', () => {
       brand: 'Samsung',
       model: 'Galaxy A14',
       color: 'Hitam',
-      imei: '350000000000001',
+      imei: '350000000000006',
     };
     await expectRefusal(
       claim(h, original, h.ownerId, { device: otherPhone }),

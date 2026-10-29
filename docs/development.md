@@ -38,13 +38,17 @@ pnpm dev:mobile
 ```
 
 The DB uses a per-worktree Docker port. Use `pnpm db:url`, not an assumed port 5432.
-In another terminal, start the server with the reported URL and your configuration:
+That URL is the owner (a superuser) for migrations and CLIs. The server refuses to start
+as a superuser or BYPASSRLS role, because those skip row-level security; `pnpm db:app-url`
+sets a local password on `bolusi_app` (after `db:migrate`) and prints its URL.
+In another terminal, start the server with it and your configuration:
 
 ```sh
-DATABASE_URL="$(pnpm -s db:url)" pnpm dev:server
+DATABASE_URL="$(pnpm -s db:app-url)" pnpm dev:server
 ```
 
-Set `EXPO_ACCESS_TOKEN` in your local environment first. See
+Set `EXPO_ACCESS_TOKEN` and `MEDIA_STORAGE_DIR` (a private directory for photos) in your
+local environment first. See
 `apps/server/.env.example`, `src/config.ts` and `src/main.ts` for boot requirements.
 Use `pnpm --filter @bolusi/server provision-tenant --help` for enrollment setup.
 Do not paste provisioning secrets into chats or commit them.
@@ -123,17 +127,23 @@ PowerShell calling winspool); A4/A5 pages print without a dialog. The printer's
 Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a v4
 (XPS-only) driver does not pass RAW jobs. CI's `desktop-windows` job spools a real job
 to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
+The installer turns off Electron's run-as-Node, inspect and `NODE_OPTIONS` switches and only
+loads its own checked `app.asar` (`electronFuses` in `electron-builder.yml`); the CI build
+keeps inspect on, which Playwright needs.
 
 Photos and signatures: the webcam and the on-screen pad when the PC has them, otherwise
 a store phone, through the server (`apps/server/src/handoff`). The PC asks the server for
 a pairing and shows the phone page's address (`<BOLUSI_API_URL>/h/<key>`) as a QR; the
 phone opens it once in its own browser and stays paired, so every later photo and the
-signature appear on it by themselves (signatures on a landscape pad). Both need the
+signature appear on it by themselves (signatures on a landscape pad). The first browser to
+open the address gets a cookie for that pairing; any other browser with the same address gets
+410, so a photo of the QR is useless once the store phone has scanned it. Both need the
 internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
 a server restart, or 30 minutes without a step.
 
-Releasing: set the `BOLUSI_API_URL` repository variable to the production server once
-(the workflow refuses to build without it), bump `version` in `apps/desktop/package.json`,
+Releasing: set the `BOLUSI_API_URL` repository variable to the production server's
+`https://` address once (the workflow refuses to build without one, and an installed app
+ignores a plain-HTTP address), bump `version` in `apps/desktop/package.json`,
 merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
 installer on Windows and publishes it with `latest.yml` to that GitHub Release.
 Installed apps check the latest release a minute after start and every 4 hours,

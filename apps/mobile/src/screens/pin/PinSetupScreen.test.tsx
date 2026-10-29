@@ -52,6 +52,19 @@ describe('PinSetupScreen stores the first PIN and signs in with it', () => {
     expect(onSignIn).toHaveBeenCalledExactlyOnceWith('482913');
   });
 
+  test('easy PINs twice in a row each clear the pad, and a good one still goes through', async () => {
+    const onSetFirstPin = vi.fn(() => Promise.resolve());
+    const { screen } = renderSetup(onSetFirstPin);
+
+    enterPin(screen, '111111');
+    enterPin(screen, '123456');
+    enterPin(screen, '482913');
+    enterPin(screen, '482913');
+    await flush();
+
+    expect(onSetFirstPin).toHaveBeenCalledExactlyOnceWith('user-new', '482913');
+  });
+
   test('a repeat that does not match stores nothing and starts over', async () => {
     const onSetFirstPin = vi.fn(() => Promise.resolve());
     const { screen, onSignIn } = renderSetup(onSetFirstPin);
