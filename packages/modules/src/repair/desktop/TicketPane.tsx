@@ -176,7 +176,7 @@ export function TicketPane({
   if (ticket !== undefined) lastTicket.current = ticket;
   const stepTicket = ticket ?? lastTicket.current;
   const statuses = query.status === 'ready' ? (query.data.statuses[ticketId] ?? []) : [];
-  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
+  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId, now());
   const stale: StaleStep | null =
     step.kind === 'none' || step.kind === 'print' || ticket === undefined
       ? null
@@ -184,7 +184,7 @@ export function TicketPane({
         ? downPaymentStale(ticket, can, step.mode)
         : step.kind === 'repairTypes'
           ? repairTypesStale(ticket, can)
-          : staleStep(step, ticket, can, runtime.userId);
+          : staleStep(step, ticket, can, runtime.userId, now());
 
   const closeStep = (): void => setStep({ kind: 'none' });
   const finishStep = (said: RepairKey | undefined): void => {

@@ -32,7 +32,7 @@ import {
   type TicketAction,
 } from '../src/repair/flows.js';
 import type { PaymentAccountRow } from '../src/money/queries.js';
-import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
+import { HANDOVER_UNDO_WINDOW_MS, INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
 import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
@@ -187,7 +187,7 @@ describe('ticket actions', () => {
       for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
-        for (const action of ticketActions(row, abilitiesOf(h, userId), userId)) {
+        for (const action of ticketActions(row, abilitiesOf(h, userId), userId, h.now())) {
           const ticketId = await ticketIn(h, state);
           await expect(
             perform(h, action, ticketId, userId),
@@ -237,7 +237,7 @@ describe('ticket actions', () => {
       for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
-        const offered = ticketActions(row, abilitiesOf(h, userId), userId);
+        const offered = ticketActions(row, abilitiesOf(h, userId), userId, h.now());
         for (const action of all) {
           if (offered.some((o) => sameCommand(o, action))) continue;
           const ticketId = await ticketIn(h, state);
@@ -268,6 +268,7 @@ describe('ticket actions', () => {
       location: 'in_store' as const,
       technicianId: null,
       pendingProposals: 0,
+      returnedAt: null,
       ...ticket,
     });
 
@@ -297,8 +298,24 @@ describe('ticket actions', () => {
     }
     // After pickup an owner can only take a mistaken handover back; nobody corrects intake's record.
     expect(
-      ticketActions(row({ outcome: 'repaired', location: 'returned' }), storeOwner, h.storeOwnerId),
+      ticketActions(
+        row({ outcome: 'repaired', location: 'returned', returnedAt: Date.now() }),
+        storeOwner,
+        h.storeOwnerId,
+      ),
     ).toEqual(['undoHandover']);
+    // Only within a day of the first handover; once taken back it is never cancelled.
+    const dayAgo = Date.now() - HANDOVER_UNDO_WINDOW_MS - 1;
+    expect(
+      ticketActions(
+        row({ outcome: 'repaired', location: 'returned', returnedAt: dayAgo }),
+        storeOwner,
+        h.storeOwnerId,
+      ),
+    ).toEqual([]);
+    expect(
+      ticketActions(row({ outcome: 'repaired', returnedAt: dayAgo }), storeOwner, h.storeOwnerId),
+    ).not.toContain('cancel');
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
     expect(
@@ -323,6 +340,7 @@ describe('ticket actions', () => {
         location: 'in_store' as const,
         technicianId: null,
         pendingProposals: 0,
+        returnedAt: null,
         ...ticket,
       };
       return arrangeTicketActions(ticketActions(row, can, userId), row, userId);
@@ -436,6 +454,7 @@ describe('an open step after the ticket changed elsewhere', () => {
     technicianId: null,
     pendingProposals: 0,
     quoteLines: [],
+    returnedAt: null,
     ...ticket,
   });
 

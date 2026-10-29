@@ -105,34 +105,43 @@ export function CorrectDetailsStep({
         {() =>
           options === null ? null : (
             <View>
-              <Section title={tn(INTAKE_STEP_KEY.customer)}>
-                <CustomerStep
-                  draft={draft}
-                  update={update}
-                  options={options}
-                  nameError={problemText('customerName')}
-                  phoneError={problemText('customerPhone')}
-                  currentCustomerId={ticket.customerId}
-                  testID={`${testID}.customer`}
-                />
-              </Section>
-              <Section title={tn(INTAKE_STEP_KEY.device)}>
-                {/* A claim is for its servisan's phone: the rule refuses another one. */}
-                {ticket.claimOfTicketId === null ? (
-                  <DeviceStep
-                    draft={draft}
-                    update={update}
-                    options={options}
-                    brandError={problemText('deviceBrand')}
-                    modelError={problemText('deviceModel')}
-                    imeiError={problemText('deviceImei')}
-                    lockError={problemText('screenLock')}
-                    testID={`${testID}.device`}
-                  />
-                ) : (
-                  <Text style={repairStyles.muted}>{tn('repair.correct.claimDevice')}</Text>
-                )}
-              </Section>
+              {/* The slip signed at a handover (since taken back) names this customer and phone. */}
+              {ticket.returnedAt !== null ? (
+                <View style={repairStyles.gap}>
+                  <Text style={repairStyles.muted}>{tn('repair.correct.handedOverLocked')}</Text>
+                </View>
+              ) : (
+                <>
+                  <Section title={tn(INTAKE_STEP_KEY.customer)}>
+                    <CustomerStep
+                      draft={draft}
+                      update={update}
+                      options={options}
+                      nameError={problemText('customerName')}
+                      phoneError={problemText('customerPhone')}
+                      currentCustomerId={ticket.customerId}
+                      testID={`${testID}.customer`}
+                    />
+                  </Section>
+                  <Section title={tn(INTAKE_STEP_KEY.device)}>
+                    {/* A claim is for its servisan's phone: the rule refuses another one. */}
+                    {ticket.claimOfTicketId === null ? (
+                      <DeviceStep
+                        draft={draft}
+                        update={update}
+                        options={options}
+                        brandError={problemText('deviceBrand')}
+                        modelError={problemText('deviceModel')}
+                        imeiError={problemText('deviceImei')}
+                        lockError={problemText('screenLock')}
+                        testID={`${testID}.device`}
+                      />
+                    ) : (
+                      <Text style={repairStyles.muted}>{tn('repair.correct.claimDevice')}</Text>
+                    )}
+                  </Section>
+                </>
+              )}
               <Section title={tn(INTAKE_STEP_KEY.condition)}>
                 <TextInput
                   label={tn('repair.condition.complaint')}

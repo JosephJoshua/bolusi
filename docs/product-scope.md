@@ -176,17 +176,21 @@ silent edits, and each one names who did it and what it was before.
   never shown, only that it changed. After pickup the signed slip is the record,
   so nothing here can be changed.
 - **Customers are never renamed under other servisans:** a correction renames
-  the customer's record only when this servisan is the only one it names.
-  Otherwise, or when the typed details match another customer, the servisan
-  moves to that customer (found, or made like at intake), and other servisans
-  keep their own.
+  the customer's record only when this servisan is the only one it names and it
+  was never handed over. Otherwise, or when the typed details match another
+  customer, the servisan moves to that customer (found, or made like at intake),
+  and other servisans keep their own. The history must name the customer it
+  moves to.
 - **Warranty claims keep their phone:** a claim's brand, model and IMEI cannot
   change, and a handover with a claim on it cannot be taken back.
-- **Taking a handover back is an owner's** (the cancel permission): for a phone
-  marked as handed over by mistake that is still in the store. A reason is
-  required. The handover photo and signature stop counting, the warranty has
-  not started, and payments stay; a payment booked to the wrong servisan is
-  cancelled in Kas under its own rules.
+- **Taking a handover back is an owner's decision** (the cancel permission; a
+  manager only within the cancel limit, against what the servisan charged): for
+  a phone marked as handed over by mistake that is still in the store, within a
+  day of the first handover. A reason is required. The handover photo and
+  signature stop counting and payments stay; a payment booked to the wrong
+  servisan is cancelled in Kas under its own rules. The warranty still counts
+  from the first handover, the servisan can no longer be cancelled, and its
+  customer, brand, model and IMEI stay as on the signed slip.
 - **A mistyped cash move is voided by an owner** (adjust cash) with a reason,
   until a later count of the drawer was settled. The void dates back to the move,
   so a count taken after it reads as if the move never happened.

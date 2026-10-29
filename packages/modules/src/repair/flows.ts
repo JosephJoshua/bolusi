@@ -26,6 +26,7 @@ import {
   type RepairOutcome,
   type SlipKind,
   type WorkPhotoStage,
+  HANDOVER_UNDO_WINDOW_MS,
 } from './constants.js';
 import {
   readyDays,
@@ -259,9 +260,13 @@ export type TicketAction =
  * button never leads to a refusal the user could have been spared; the command stays the authority.
  */
 export function ticketActions(
-  ticket: Pick<TicketSummaryRow, 'outcome' | 'location' | 'technicianId' | 'pendingProposals'>,
+  ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'returnedAt'
+  >,
   can: RepairAbilities,
   userId: string,
+  now: number = Date.now(),
 ): TicketAction[] {
   const actions: TicketAction[] = [];
   const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
@@ -295,12 +300,24 @@ export function ticketActions(
   // What intake wrote down is put right while the phone is here; after pickup the signed slip is
   // the record. Taking a handover back is an owner's call, like cancelling.
   if (ticket.location === 'in_store' && can.intake) actions.push('correctDetails');
-  if (open && can.cancel) actions.push('cancel');
-  if (ticket.location === 'returned' && can.cancel) actions.push('undoHandover');
+  // A handover taken back was charged: it goes home again, never cancelled. Taking one back is for
+  // a day after the first handover only.
+  if (open && can.cancel && ticket.returnedAt === null) actions.push('cancel');
+  if (ticket.location === 'returned' && can.cancel && undoableHandover(ticket, now)) {
+    actions.push('undoHandover');
+  }
   return actions;
 }
 
 /** The actions kept apart at the end of a servisan, below everything: final, or taking one back. */
+/** Mirrors the handover-undo rule's window, counted from the first handover. */
+export function undoableHandover(
+  ticket: Pick<TicketDetailRow, 'returnedAt'>,
+  now: number,
+): boolean {
+  return ticket.returnedAt !== null && now - ticket.returnedAt <= HANDOVER_UNDO_WINDOW_MS;
+}
+
 export const FINAL_ACTIONS: ReadonlySet<TicketAction> = new Set(['cancel', 'undoHandover']);
 
 /** Actions that change one fact, offered beside it (the technician, the price), never in a row. */
@@ -712,12 +729,13 @@ export function staleStep(
   step: TicketStep,
   ticket: Pick<
     TicketDetailRow,
-    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'quoteLines'
+    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'quoteLines' | 'returnedAt'
   >,
   can: RepairAbilities,
   userId: string,
+  now: number = Date.now(),
 ): StaleStep | null {
-  const actions = ticketActions(ticket, can, userId);
+  const actions = ticketActions(ticket, can, userId, now);
   const line =
     step.kind === 'proposal' ? ticket.quoteLines.find((row) => row.id === step.lineId) : undefined;
   const lineOpen = step.kind !== 'proposal' || line?.status === 'proposed';

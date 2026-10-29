@@ -680,7 +680,11 @@
     "notReturned": "HP ini belum diserahkan.",
     "handoverHasClaim": "Sudah ada klaim garansi untuk servisan ini, jadi penyerahannya tidak bisa dibatalkan.",
     "claimSamePhone": "Klaim garansi harus untuk HP yang sama. Merek, tipe dan IMEI-nya tidak bisa diubah.",
-    "nothingChanged": "Belum ada yang diubah."
+    "nothingChanged": "Belum ada yang diubah.",
+    "undoTooLate": "Penyerahan ini sudah lebih dari sehari, jadi tidak bisa dibatalkan.",
+    "handedOverBefore": "Servisan ini sudah pernah diserahkan. Pelanggan dan HP-nya tidak bisa diubah, dan servisannya tidak bisa dibatalkan.",
+    "customerShared": "Pelanggan ini punya servisan lain. Coba ubah lagi.",
+    "customerMismatch": "Data pelanggan tidak cocok. Coba lagi."
   },
   "paper": {
     "title": "Kertas nota",
@@ -803,7 +807,8 @@
     "about": "Perubahan dicatat di riwayat, lengkap dengan data sebelumnya.",
     "reason": "Kenapa diubah? (opsional)",
     "save": "Simpan perubahan",
-    "claimDevice": "Ini klaim garansi, jadi HP-nya tetap sama dengan servisan asal."
+    "claimDevice": "Ini klaim garansi, jadi HP-nya tetap sama dengan servisan asal.",
+    "handedOverLocked": "Servisan ini sudah pernah diserahkan, jadi pelanggan dan HP-nya tidak bisa diubah."
   },
   "undoHandover": {
     "title": "Batalkan penyerahan?",

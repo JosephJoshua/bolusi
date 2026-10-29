@@ -667,6 +667,7 @@ export function CorrectDetailsDialog({
   const problemText = (problem: IntakeProblem): string | undefined =>
     showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || reason.trim() !== '';
+  const handedOver = ticket.returnedAt !== null;
 
   const submit = (): void => {
     if (options === null) return;
@@ -721,37 +722,48 @@ export function CorrectDetailsDialog({
           {() =>
             options === null ? null : (
               <div className="flex flex-col gap-6 @container">
-                <section className="flex flex-col gap-3">
-                  <h3 className="text-heading font-semibold text-text">
-                    {tn(INTAKE_STEP_KEY.customer)}
-                  </h3>
-                  <CustomerFields
-                    draft={draft}
-                    update={update}
-                    nameError={problemText('customerName')}
-                    phoneError={problemText('customerPhone')}
-                    currentCustomerId={ticket.customerId}
-                  />
-                </section>
-                <section className="flex flex-col gap-3">
-                  <h3 className="text-heading font-semibold text-text">
-                    {tn(INTAKE_STEP_KEY.device)}
-                  </h3>
-                  {/* A claim is for its servisan's phone: the rule refuses another one. */}
-                  {ticket.claimOfTicketId === null ? (
-                    <DeviceFields
-                      draft={draft}
-                      update={update}
-                      options={options}
-                      brandError={problemText('deviceBrand')}
-                      modelError={problemText('deviceModel')}
-                      imeiError={problemText('deviceImei')}
-                      lockError={problemText('screenLock')}
-                    />
-                  ) : (
-                    <p className="text-body text-text-muted">{tn('repair.correct.claimDevice')}</p>
-                  )}
-                </section>
+                {/* The slip signed at a handover (since taken back) names this customer and phone. */}
+                {handedOver ? (
+                  <p className="text-body text-text-muted">
+                    {tn('repair.correct.handedOverLocked')}
+                  </p>
+                ) : (
+                  <>
+                    <section className="flex flex-col gap-3">
+                      <h3 className="text-heading font-semibold text-text">
+                        {tn(INTAKE_STEP_KEY.customer)}
+                      </h3>
+                      <CustomerFields
+                        draft={draft}
+                        update={update}
+                        nameError={problemText('customerName')}
+                        phoneError={problemText('customerPhone')}
+                        currentCustomerId={ticket.customerId}
+                      />
+                    </section>
+                    <section className="flex flex-col gap-3">
+                      <h3 className="text-heading font-semibold text-text">
+                        {tn(INTAKE_STEP_KEY.device)}
+                      </h3>
+                      {/* A claim is for its servisan's phone: the rule refuses another one. */}
+                      {ticket.claimOfTicketId === null ? (
+                        <DeviceFields
+                          draft={draft}
+                          update={update}
+                          options={options}
+                          brandError={problemText('deviceBrand')}
+                          modelError={problemText('deviceModel')}
+                          imeiError={problemText('deviceImei')}
+                          lockError={problemText('screenLock')}
+                        />
+                      ) : (
+                        <p className="text-body text-text-muted">
+                          {tn('repair.correct.claimDevice')}
+                        </p>
+                      )}
+                    </section>
+                  </>
+                )}
                 <section className="flex flex-col gap-4">
                   <h3 className="text-heading font-semibold text-text">
                     {tn(INTAKE_STEP_KEY.condition)}

@@ -680,7 +680,11 @@
     "notReturned": "This phone hasn’t been handed over.",
     "handoverHasClaim": "A warranty claim names this servisan, so its handover can’t be undone.",
     "claimSamePhone": "A warranty claim is for the same phone. Its brand, model and IMEI can’t change.",
-    "nothingChanged": "Nothing has changed yet."
+    "nothingChanged": "Nothing has changed yet.",
+    "undoTooLate": "This handover was more than a day ago, so it can’t be undone.",
+    "handedOverBefore": "This servisan was handed over before. Its customer and phone can’t change, and it can’t be cancelled.",
+    "customerShared": "This customer has other servisans. Try the change again.",
+    "customerMismatch": "The customer details don’t match. Try again."
   },
   "paper": {
     "title": "Slip paper",
@@ -803,7 +807,8 @@
     "about": "The change is kept in the history, with what it was before.",
     "reason": "Why the change? (optional)",
     "save": "Save changes",
-    "claimDevice": "This is a warranty claim, so the phone stays the one from the original servisan."
+    "claimDevice": "This is a warranty claim, so the phone stays the one from the original servisan.",
+    "handedOverLocked": "This servisan was handed over before, so its customer and phone can’t change."
   },
   "undoHandover": {
     "title": "Undo this handover?",

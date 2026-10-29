@@ -277,7 +277,7 @@ export function TicketDetail({
         ? downPaymentStale(ticket, can, step.mode)
         : step.kind === 'repairTypes'
           ? repairTypesStale(ticket, can)
-          : staleStep(step, ticket, can, runtime.userId);
+          : staleStep(step, ticket, can, runtime.userId, now());
   const stepProps = {
     chrome,
     ticketId,
@@ -468,7 +468,7 @@ export function TicketDetail({
   // The next step is the bottom action, in the thumb zone like every other flow; its one real
   // alternative sits under the summary with the rarer moves behind "Lainnya", and cancelling is kept
   // apart at the end so it is never hit by habit.
-  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
+  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId, now());
   const layout =
     ticket === undefined
       ? { next: null, alternative: null, more: [] }

@@ -22,7 +22,7 @@ import {
   type RepairOutcome,
 } from './constants.js';
 import { normalizePhone } from './contact.js';
-import { partsInWork } from './flows.js';
+import { partsInWork, undoableHandover } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -301,6 +301,8 @@ function ticket(spec: {
   returnedBy?: string;
   /** Hours since it was marked repaired; a cancel is ready to collect when it was cancelled. */
   readyHoursAgo?: number;
+  /** When it went home, for a returned one; else 40 hours after intake. */
+  returnedHoursAgo?: number;
   /** Repair type ids from the default list. */
   repairTypes?: readonly string[];
 }): TicketDetailRow {
@@ -360,7 +362,12 @@ function ticket(spec: {
     createdByName: 'Siti Rahayu',
     returnedBy: spec.returnedBy ?? null,
     returnedByName: spec.returnedBy === undefined ? null : (NAMES.get(spec.returnedBy) ?? null),
-    returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
+    returnedAt:
+      spec.returnedBy === undefined
+        ? null
+        : spec.returnedHoursAgo === undefined
+          ? createdAt + 40 * HOUR
+          : HARNESS_NOW - spec.returnedHoursAgo * HOUR,
     downPayment: spec.downPayment ?? null,
     slipPrints: { intake: 1, handover: 0 },
     quoteLines: spec.lines,
@@ -561,6 +568,8 @@ function seedTickets(): TicketDetailRow[] {
       readyHoursAgo: 7 * 24,
       location: 'returned',
       returnedBy: 'u-siti',
+      // Picked up this morning: recent enough that an owner can still take the handover back.
+      returnedHoursAgo: 2,
       extraPhotos: [photoRow('before:m12'), photoRow('after:m13')],
     }),
   ].map(withTotals);
@@ -1188,6 +1197,7 @@ export function demoRepairRuntime(
     },
     cancelTicket: (input) => {
       const t = find(String(input['ticketId']));
+      if (t.returnedAt !== null) throw REPAIR_REFUSALS.refuse('handedOverBefore');
       return update(t.id, 'repair.ticket_cancelled', {
         outcome: 'cancelled',
         outcomeNote: String(input['reason']),
@@ -1307,7 +1317,7 @@ export function demoRepairRuntime(
           location: 'returned',
           returnedBy: actor.userId,
           returnedByName: actor.name,
-          returnedAt: HARNESS_NOW,
+          returnedAt: t.returnedAt ?? HARNESS_NOW,
           photos: [
             ...t.photos,
             photoRow('handover', input['handoverPhoto'] as MediaRef),
@@ -1320,6 +1330,7 @@ export function demoRepairRuntime(
     undoHandover: (input) => {
       const t = find(String(input['ticketId']));
       if (t.location !== 'returned') throw REPAIR_REFUSALS.refuse('notReturned');
+      if (!undoableHandover(t, HARNESS_NOW)) throw REPAIR_REFUSALS.refuse('undoTooLate');
       return update(
         t.id,
         'repair.handover_reversed',
@@ -1327,7 +1338,6 @@ export function demoRepairRuntime(
           location: 'in_store',
           returnedBy: null,
           returnedByName: null,
-          returnedAt: null,
           photos: t.photos.filter((p) => p.slot !== 'handover' && p.slot !== 'signature'),
         },
         { reason: String(input['reason']) },
@@ -1337,6 +1347,10 @@ export function demoRepairRuntime(
     correctTicketDetails: (input) => {
       const t = find(String(input['ticketId']));
       if (t.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
+      const handedOver = t.returnedAt !== null;
+      if (handedOver && input['customer'] !== undefined) {
+        throw REPAIR_REFUSALS.refuse('handedOverBefore');
+      }
       const given = input['customer'] as
         { name: string; phone: string | null } | { customerId: string } | undefined;
       // A picked customer is known by their other servisans here.
@@ -1380,6 +1394,10 @@ export function demoRepairRuntime(
         changes.push({ field: 'peripherals' });
       }
       if (changes.length === 0) throw REPAIR_REFUSALS.refuse('nothingChanged');
+      const phoneChanged = changes.some((c) => ['brand', 'model', 'imei'].includes(c.field));
+      if (phoneChanged && (handedOver || t.claimOfTicketId !== null)) {
+        throw REPAIR_REFUSALS.refuse(handedOver ? 'handedOverBefore' : 'claimSamePhone');
+      }
       return update(
         t.id,
         'repair.ticket_details_corrected',

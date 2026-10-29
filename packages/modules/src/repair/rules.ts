@@ -15,6 +15,7 @@ import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } f
 import type { SignedOperation } from '@bolusi/schemas';
 
 import {
+  HANDOVER_UNDO_WINDOW_MS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
@@ -114,6 +115,10 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'handoverHasClaim',
   'claimSamePhone',
   'nothingChanged',
+  'undoTooLate',
+  'handedOverBefore',
+  'customerShared',
+  'customerMismatch',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -261,8 +266,11 @@ export interface TicketState {
   readonly location: DeviceLocation;
   readonly technicianId: string | null;
   readonly quoteTotal: number;
+  readonly cancelFee: number | null;
   /** The servisan this one is a warranty claim on; null for an ordinary one. */
   readonly claimOfTicketId: string | null;
+  /** When it was first handed over; kept when a handover is taken back. */
+  readonly returnedAt: number | null;
 }
 
 export function invalidTransition(
@@ -367,7 +375,9 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
       'location',
       'technicianId',
       'quoteTotal',
+      'cancelFee',
       'claimOfTicketId',
+      'returnedAt',
     ])
     .where('id', '=', op.entityId)
     .where('tenantId', '=', op.tenantId)
@@ -381,7 +391,9 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
     location: row.location as DeviceLocation,
     technicianId: row.technicianId,
     quoteTotal: Number(row.quoteTotal),
+    cancelFee: row.cancelFee === null ? null : Number(row.cancelFee),
     claimOfTicketId: row.claimOfTicketId,
+    returnedAt: row.returnedAt === null ? null : Number(row.returnedAt),
   };
 }
 
@@ -544,21 +556,37 @@ export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
   if (!(await customerExists(db, op, op.entityId))) {
     throw notFound(REPAIR_CUSTOMER_ENTITY, op.entityId);
   }
+  await requireRenamable(db, op, op.entityId);
+};
+
+/**
+ * A customer's own record is renamed only while it names one servisan, still in the store, and
+ * never handed over: a rename would otherwise rewrite who a signed slip or a debt belongs to. A
+ * servisan opened elsewhere while offline counts too, once it syncs.
+ */
+async function requireRenamable(db: Db, op: SignedOperation, customerId: string): Promise<void> {
   const tickets = await db
     .selectFrom('repairTickets')
-    .select('location')
-    .where('customerId', '=', op.entityId)
+    .select(['location', 'returnedAt'])
+    .where('customerId', '=', customerId)
     .where('tenantId', '=', op.tenantId)
     .where('storeId', '=', storeOf(op))
     .execute();
-  if (tickets.length > 0 && tickets.every((ticket) => ticket.location === 'returned')) {
+  if (tickets.length > 1) {
+    throw refuse('customerShared', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: customerId },
+      message: 'the customer has more than one servisan',
+    });
+  }
+  if (tickets.some((ticket) => ticket.location === 'returned' || ticket.returnedAt !== null)) {
     throw refuse('returned', {
       code: 'INVALID_TRANSITION',
       details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: op.entityId },
-      message: 'every servisan of this customer has gone home',
+      message: 'a servisan of this customer was handed over',
     });
   }
-};
+}
 
 /**
  * The repair types of an open servisan, set after the diagnosis: by the counter, who took it in, or
@@ -841,6 +869,10 @@ export const markedRepairedRule: Rule = async (op, { db }) => {
 export const ticketCancelledRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
   requireOpen(ticket, op.type);
+  // A handover taken back was charged and paid for: it goes home again, it is not cancelled.
+  if (ticket.returnedAt !== null) {
+    throw invalidTransition(ticket, op.type, 'handedOverBefore', 'it was handed over before');
+  }
   // v1, from before fees, charged nothing and named no fee.
   const fee = payloadOf<{ fee?: number }>(op).fee;
   if (fee === undefined) return;
@@ -957,11 +989,19 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
  * Taking a handover back (owner decision): only one that happened, and not once a warranty claim
  * was opened on it, since that claim already counts from this pickup.
  */
-export const handoverReversedRule: Rule = async (op, { db }) => {
+export const handoverReversedRule: Rule = async (op, ctx) => {
+  const { db } = ctx;
   const ticket = await loadTicket(db, op);
   if (ticket.location !== 'returned') {
     throw invalidTransition(ticket, op.type, 'notReturned', 'the phone has not been handed over');
   }
+  // Counted from the first handover, so taking it back again and again never stretches it.
+  if (ticket.returnedAt === null || op.timestamp - ticket.returnedAt > HANDOVER_UNDO_WINDOW_MS) {
+    throw invalidTransition(ticket, op.type, 'undoTooLate', 'the handover was too long ago');
+  }
+  // What went home is at stake: a limited role (a manager) only within its cancel limit.
+  const owed = ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, owed);
   const claim = await db
     .selectFrom('repairTickets')
     .select('id')
@@ -992,10 +1032,44 @@ export const ticketDetailsCorrectedRule: Rule = async (op, { db }) => {
       details: { field: 'device', issue: 'nothing to correct' },
     });
   }
-  if (payload.customerId !== undefined && !(await customerExists(db, op, payload.customerId))) {
-    throw notFound(REPAIR_CUSTOMER_ENTITY, payload.customerId);
+  // After a handover (since taken back) the slip the customer signed names them and that phone.
+  const handedOver = ticket.returnedAt !== null;
+  if (handedOver && (payload.customer !== undefined || payload.customerId !== undefined)) {
+    throw invalidTransition(ticket, op.type, 'handedOverBefore', 'it was handed over before');
   }
-  if (ticket.claimOfTicketId !== null && payload.device !== undefined) {
+  if (payload.customerId !== undefined) {
+    // The history's "now" must be the customer the servisan moves to.
+    const target = await db
+      .selectFrom('repairCustomers')
+      .select(['name', 'phone'])
+      .where('id', '=', payload.customerId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirst();
+    if (target === undefined) throw notFound(REPAIR_CUSTOMER_ENTITY, payload.customerId);
+    if (
+      payload.customer === undefined ||
+      payload.customer.name !== target.name ||
+      payload.customer.phone !== target.phone
+    ) {
+      throw refuse('customerMismatch', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'customer', issue: 'not the customer it moves to' },
+      });
+    }
+  } else if (payload.customer !== undefined) {
+    // Without a move the servisan's customer is renamed in place, under the same rule as a rename.
+    const row = await db
+      .selectFrom('repairTickets')
+      .select('customerId')
+      .where('id', '=', op.entityId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirstOrThrow();
+    await requireRenamable(db, op, row.customerId);
+  }
+  const lockedPhone = ticket.claimOfTicketId !== null || handedOver;
+  if (lockedPhone && payload.device !== undefined) {
     const row = await db
       .selectFrom('repairTickets')
       .select(['deviceBrand', 'deviceModel', 'deviceImei'])
@@ -1008,9 +1082,9 @@ export const ticketDetailsCorrectedRule: Rule = async (op, { db }) => {
       row.deviceModel !== payload.device.model ||
       row.deviceImei !== payload.device.imei
     ) {
-      throw refuse('claimSamePhone', {
+      throw refuse(handedOver ? 'handedOverBefore' : 'claimSamePhone', {
         code: 'VALIDATION_FAILED',
-        details: { field: 'device', issue: "a claim is for its servisan's phone" },
+        details: { field: 'device', issue: 'the phone is the one on the signed slip' },
       });
     }
   }

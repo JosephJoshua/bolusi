@@ -128,6 +128,8 @@ export interface RepairHarness {
   video(n: number): VideoRef;
   /** Moves the device's clock on, so changes after it are signed that much later. */
   advance(ms: number): void;
+  /** The device's clock now, for checks that mirror a rule's time window. */
+  now(): number;
   close(): Promise<void>;
 }
 
@@ -406,6 +408,7 @@ export async function openRepairHarness(
     advance: (ms: number): void => {
       clock.value += ms;
     },
+    now: (): number => clock.value,
     photo,
     video: (n: number): VideoRef => ({
       ...photo(n),

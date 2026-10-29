@@ -500,7 +500,8 @@ describe('putting a mistake right', () => {
     expect(counter.query('repair.ticket.action.correctDetails')).toBeNull();
     counter.unmount();
 
-    const owner = await mount(h, h.storeOwnerId);
+    // On the device's clock: a handover is taken back only within a day of it.
+    const owner = await mount(h, h.storeOwnerId, { now: () => h!.now() });
     await press(owner, 'repair.board.views.returned');
     await press(owner, `repair.board.row.${ticketId}`);
     await press(owner, 'repair.ticket.action.undoHandover');

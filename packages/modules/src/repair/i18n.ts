@@ -684,6 +684,11 @@ export const REPAIR_KEYS = [
   'repair.changed.only',
   'repair.changed.empty',
   'repair.price.newTotal',
+  'repair.refusal.undoTooLate',
+  'repair.refusal.handedOverBefore',
+  'repair.refusal.customerShared',
+  'repair.refusal.customerMismatch',
+  'repair.correct.handedOverLocked',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];

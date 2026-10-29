@@ -11,7 +11,7 @@
 // returning a device, a proposal approved and declined at once). Commands refuse those locally;
 // the fold must still accept whatever the server accepted, and the declared conflict keys surface
 // the collision for review.
-import { sql } from 'kysely';
+import { sql, type RawBuilder } from 'kysely';
 
 import {
   canonicalizeJcs,
@@ -355,7 +355,7 @@ async function updateTicket(
     location: DeviceLocation;
     technicianId: string;
     returnedBy: string;
-    returnedAt: number;
+    returnedAt: number | RawBuilder<number>;
     cancelFee: number | null;
     cancelStandardFee: number | null;
     cancelledBy: string;
@@ -798,7 +798,8 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
   await updateTicket(db, op, {
     location: 'returned',
     returnedBy: op.userId,
-    returnedAt: op.timestamp,
+    // A handover taken back and made again keeps the first one's time (handover_reversed).
+    returnedAt: sql<number>`coalesce(returned_at, ${op.timestamp})`,
   });
   await insertPhotos(db, op, [
     ['handover', payload.handoverPhoto],
@@ -820,9 +821,10 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
  */
 export const handoverReversedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { reason } = payloadOf<{ reason: string }>(op);
+  // `returnedAt` stays: the warranty counts from the first handover, and so does the undo window.
   await db
     .updateTable('repairTickets')
-    .set({ location: 'in_store', returnedBy: null, returnedAt: null, updatedAt: op.timestamp })
+    .set({ location: 'in_store', returnedBy: null, updatedAt: op.timestamp })
     .where('id', '=', op.entityId)
     .where('storeId', '=', storeIdOf(op))
     .execute();
@@ -892,6 +894,21 @@ export const ticketDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> = 
     payload.peripherals === undefined ? undefined : canonicalJson(payload.peripherals);
   if (peripherals !== undefined && peripherals !== ticket.peripheralsJson) {
     changes.push({ field: 'peripherals' });
+  }
+  // Without a move, the servisan's own customer is renamed: the rule allowed it only for a
+  // customer this servisan alone names.
+  if (payload.customer !== undefined && payload.customerId === undefined) {
+    await db
+      .updateTable('repairCustomers')
+      .set({
+        name: payload.customer.name,
+        phone: payload.customer.phone,
+        updatedBy: op.userId,
+        updatedAt: op.timestamp,
+      })
+      .where('id', '=', ticket.customerId)
+      .where('storeId', '=', storeIdOf(op))
+      .execute();
   }
   await db
     .updateTable('repairTickets')

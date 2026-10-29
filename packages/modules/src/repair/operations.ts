@@ -388,10 +388,10 @@ export const handoverReversedPayload = z
 
 /**
  * What intake wrote down, corrected while the phone is in the store: only the parts that changed.
- * `customer` is the name and number the servisan now names, kept here so its history says what
- * they were and what they are now. With `customerId` the servisan moves to that customer (intake
- * picked the wrong person, or a shared record must not be renamed); without it the customer's own
- * record is corrected by the `customer_details_corrected` op after this one.
+ * `customer` is the name and number the servisan names from now on. With `customerId` the
+ * servisan moves to that customer, whose record must read the same (intake picked the wrong
+ * person, or a shared record must not be renamed); without it the servisan's own customer, named
+ * by no other servisan, is renamed to it.
  */
 export const ticketDetailsCorrectedPayload = z
   .object({

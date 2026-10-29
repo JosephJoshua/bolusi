@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
+import { HANDOVER_UNDO_WINDOW_MS, REPAIR_OP } from '../src/repair/constants.js';
 import { REPAIR_DOCUMENT_KIND } from '../src/repair/money-document.js';
 import { maxTicketCounter } from '../src/repair/queries.js';
 
@@ -913,6 +914,47 @@ describe('correcting a saved servisan', () => {
     );
   });
 
+  test('a customer with two servisans is never renamed in place', async () => {
+    h = await openRepairHarness(38);
+    const first = await open(h);
+    await open(h, { customer: { customerId: first.customerId } });
+    await expectCode(
+      h.run(
+        'correctCustomerDetails',
+        { customerId: first.customerId, name: 'Orang Lain', phone: null },
+        h.cashierId,
+      ),
+      'INVALID_TRANSITION',
+      'customerShared',
+    );
+  });
+
+  test("a move's history must name the customer it moves to", async () => {
+    h = await openRepairHarness(39);
+    const mine = await open(h);
+    const other = await open(h, { customer: { name: 'Mama Wenda', phone: null } });
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { customerId: other.customerId } },
+      h.cashierId,
+    );
+    const moved = (await h.ownOps()).findLast(
+      (op) => op.type === REPAIR_OP.ticketDetailsCorrected,
+    )!;
+    const payload = moved.payload as Record<string, unknown>;
+    // A crafted change claiming a different "now" than the record it points at is refused.
+    const forged = {
+      ...moved,
+      payload: { ...payload, customer: { name: 'Orang Lain', phone: '081311112222' } },
+    };
+    await expect(h.checkRule(moved)).resolves.toBeUndefined();
+    const refused = await h.checkRule(forged).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(refusalKeyOf(refused)).toBe('repair.refusal.customerMismatch');
+  });
+
   test("a warranty claim keeps its servisan's phone", async () => {
     h = await openRepairHarness(32);
     const { ticketId } = await open(h);
@@ -977,7 +1019,7 @@ describe('undoing a handover', () => {
     const wrongSignature = signatureOf(await ticket(h, ticketId));
     await h.run('undoHandover', reason, h.ownerId);
     let t = await ticket(h, ticketId);
-    expect(t).toMatchObject({ location: 'in_store', returnedAt: null, returnedBy: null });
+    expect(t).toMatchObject({ location: 'in_store', returnedBy: null });
     expect(t.photos.map((p: { slot: string }) => p.slot)).not.toContain('signature');
     expect(t.events.at(-1)).toMatchObject({
       kind: 'repair.handover_reversed',
@@ -999,6 +1041,81 @@ describe('undoing a handover', () => {
     expect(money.rows[0]).toMatchObject({ charged: t.quoteTotal, balance: 0 });
     expect(signatureOf(t)).toEqual(expect.any(String));
     expect(signatureOf(t)).not.toBe(wrongSignature);
+  });
+
+  test('only within a day of the first handover, and a manager only within the cancel limit', async () => {
+    h = await openRepairHarness(36);
+    const handedOver = async (amount: number) => {
+      const { ticketId } = await open(h!, {
+        quoteLines: [{ kind: 'labour', description: 'Ganti konektor', amount }],
+      });
+      await h!.run('startWork', { ticketId, beforePhotos: [h!.photo(20)] }, h!.technicianId);
+      await h!.run('markRepaired', { ticketId, afterPhotos: [h!.photo(21)] }, h!.technicianId);
+      await h!.run('returnDevice', (await paidHandover(h!, ticketId)) as never, h!.cashierId);
+      return ticketId;
+    };
+    const reason = (ticketId: string) => ({ ticketId, reason: 'Salah servisan' });
+    const dear = await handedOver(750_000);
+    await expectCode(h.run('undoHandover', reason(dear), h.managerId), 'PERMISSION_DENIED');
+    const cheap = await handedOver(40_000);
+    await h.run('undoHandover', reason(cheap), h.managerId);
+
+    const firstHandover = (await ticket(h, cheap)).returnedAt;
+    expect(firstHandover).toEqual(expect.any(Number));
+    h.advance(HANDOVER_UNDO_WINDOW_MS + 1);
+    await expectCode(
+      h.run('undoHandover', reason(dear), h.ownerId),
+      'INVALID_TRANSITION',
+      'undoTooLate',
+    );
+    // Handed over properly later, the warranty still counts from the first handover, and taking
+    // it back again does not restart the window.
+    await h.run('returnDevice', (await paidHandover(h, cheap, {}, [9, 10])) as never, h.cashierId);
+    expect((await ticket(h, cheap)).returnedAt).toBe(firstHandover);
+    await expectCode(
+      h.run('undoHandover', reason(cheap), h.ownerId),
+      'INVALID_TRANSITION',
+      'undoTooLate',
+    );
+  });
+
+  test('a handover taken back is never cancelled, nor moved to another customer or phone', async () => {
+    h = await openRepairHarness(37);
+    const { ticketId } = await open(h);
+    await open(h, { customer: { name: 'Mama Wenda', phone: '0813 1111 2222' } });
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
+    await h.run('undoHandover', { ticketId, reason: 'Salah servisan' }, h.ownerId);
+
+    await expectCode(
+      h.run('cancelTicket', { ticketId, reason: 'Batal' }, h.ownerId),
+      'INVALID_TRANSITION',
+      'handedOverBefore',
+    );
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        { ticketId, customer: { name: 'Mama Wenda', phone: '0813 1111 2222' } },
+        h.cashierId,
+      ),
+      'INVALID_TRANSITION',
+      'handedOverBefore',
+    );
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        {
+          ticketId,
+          device: { brand: 'Xiaomi', model: 'Redmi 12', color: 'Hitam', imei: '350000000000006' },
+        },
+        h.cashierId,
+      ),
+      'VALIDATION_FAILED',
+      'handedOverBefore',
+    );
+    // Its colour or complaint can still be put right.
+    await h.run('correctTicketDetails', { ticketId, complaint: 'Layar bergaris' }, h.cashierId);
   });
 });
 

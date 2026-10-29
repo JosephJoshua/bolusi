@@ -960,7 +960,6 @@ export async function correctTicketDetailsHandler(
   // The customer's own record is corrected only when this servisan is all it names: another
   // servisan of theirs would be renamed too, and intake may have picked the wrong person. Then the
   // servisan moves to the customer the details name, found or made like at intake.
-  let renameRecord = false;
   if (customerChanged) {
     changes['customer'] = customer;
     const known = await findSameCustomer(ctx, customer);
@@ -980,8 +979,6 @@ export async function correctTicketDetailsHandler(
           }),
         );
       }
-    } else {
-      renameRecord = true;
     }
   }
   if (input.device !== undefined) {
@@ -1023,8 +1020,10 @@ export async function correctTicketDetailsHandler(
       reason: input.reason,
     }),
   );
-  // After the servisan's entry, so that entry reads the details as they were.
-  if (renameRecord && customer !== undefined) {
+  // Without a move the servisan's entry renames its customer itself (its applier), so its history
+  // cannot say one thing and do another. The customer's own entry after it says the same, so the
+  // devices' customer search picks up the new name and number.
+  if (customerChanged && changes['customerId'] === undefined) {
     ops.push(
       ctx.op({
         type: REPAIR_OP.customerDetailsCorrected,

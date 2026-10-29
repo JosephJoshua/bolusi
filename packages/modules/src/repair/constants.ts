@@ -178,6 +178,12 @@ export function parseUncollectedDays(text: string): number | null {
 }
 
 /** Handover evidence slots. */
+/**
+ * How long after the first handover an owner may still take it back: the same working day's
+ * mistake, not a way to bring back a phone that went home weeks ago.
+ */
+export const HANDOVER_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export const HANDOVER_PHOTO_SLOTS = ['handover', 'signature'] as const;
 export type HandoverPhotoSlot = (typeof HANDOVER_PHOTO_SLOTS)[number];
 
