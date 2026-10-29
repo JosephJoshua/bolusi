@@ -11,11 +11,16 @@ import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { forgetShownQrs } from '@bolusi/modules/money';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
 
 beforeEach(() => {
+  // The demo's payments are a few hours old, so "today" must not have just begun: run at noon.
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+  vi.setSystemTime(noon);
   window.localStorage.clear();
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
@@ -23,6 +28,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   // Each test opens fresh demo data: QRs shown in one are not the next one's.
   forgetShownQrs();
 });
