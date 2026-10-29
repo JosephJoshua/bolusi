@@ -26,7 +26,12 @@ export type NewPinEntry =
    * Awaiting the new PIN. `problem` drives the one-shot message about the last try: the repeat did
    * not match, or the PIN was too easy to guess (`weakPin`).
    */
-  | { readonly kind: 'first'; readonly problem: NewPinProblem | null }
+  | {
+      readonly kind: 'first';
+      readonly problem: NewPinProblem | null;
+      /** Easy PINs refused in a row, so each refusal clears the pad again (`newPinPadKey`). */
+      readonly refusals?: number;
+    }
   /** Awaiting the repeat of `first`. */
   | { readonly kind: 'repeat'; readonly first: string }
   /** The repeat equalled `first` — the caller may now submit `pin`. Terminal. */
@@ -49,7 +54,9 @@ export const NEW_PIN_START: NewPinEntry = { kind: 'first', problem: null };
 export function advanceNewPin(entry: NewPinEntry, pin: string): NewPinEntry {
   switch (entry.kind) {
     case 'first':
-      return weakPin(pin) ? { kind: 'first', problem: 'weak' } : { kind: 'repeat', first: pin };
+      return weakPin(pin)
+        ? { kind: 'first', problem: 'weak', refusals: (entry.refusals ?? 0) + 1 }
+        : { kind: 'repeat', first: pin };
     case 'repeat':
       // The ONLY producer of `matched`, and it is gated on equality. Break this and a mismatched
       // confirmation would submit — new-pin.test.ts exercises exactly the unequal case.
@@ -85,4 +92,14 @@ export function newPinFeedbackKey(
 /** The pad's state for an entry: red after a refused try, otherwise ready for digits. */
 export function newPinPadState(entry: NewPinEntry): 'entry' | 'error' {
   return entry.kind === 'first' && entry.problem !== null ? 'error' : 'entry';
+}
+
+/**
+ * A key for the pad that changes with every step and every refusal, so the screen remounts the pad
+ * and its dots clear: a second easy PIN in a row must not leave six red dots that take no digits.
+ */
+export function newPinPadKey(entry: NewPinEntry): string {
+  return entry.kind === 'first'
+    ? `first-${String(entry.problem)}-${entry.refusals ?? 0}`
+    : entry.kind;
 }

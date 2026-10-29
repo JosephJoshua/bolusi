@@ -261,7 +261,7 @@
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada.",
     "ownershipVideo": "Video kepemilikan belum direkam.",
     "customerPhone": "Nomor HP-nya belum benar. Cek lagi angkanya.",
-    "deviceImei": "IMEI-nya belum benar. IMEI ada 15 angka, cek di *#06#."
+    "deviceImei": "IMEI-nya belum benar. Cocokkan dengan 15 angka di *#06#."
   },
   "ready": {
     "today": "Hari ini",

@@ -28,10 +28,10 @@ describe('customer phone numbers', () => {
   });
 
   test('that cannot be dialled are caught', () => {
-    for (const typed of ['0812345', '08123456789012345', '12345678', '+1 555 0100']) {
-      expect(phoneInvalid(typed)).toBe(true);
+    for (const typed of ['0812345', '081234567', '08123456789012345', '12345678', '+1 555 0100']) {
+      expect(phoneInvalid(typed), typed).toBe(true);
     }
-    for (const typed of ['', '0812-3456-7890', '0967 531234', '+61 412 345 678']) {
+    for (const typed of ['', '0812-3456-7890', '0967 531234', '0951 32154', '+61 412 345 678']) {
       expect(phoneInvalid(typed)).toBe(false);
     }
   });

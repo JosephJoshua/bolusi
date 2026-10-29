@@ -550,6 +550,12 @@ describe('cancelling (owners only)', () => {
     expect(screen.all('repair.cancel.primary')[0]!.props['disabled']).toBe(true);
 
     await press(screen, 'repair.cancel.changeFee');
+    // Grouped like every amount, and a 0 typed past turns into the amount, not "015000".
+    const feeValue = (): unknown => screen.get('repair.cancel.feeInput.field').props['value'];
+    expect(feeValue()).toBe('50.000');
+    type(screen, 'repair.cancel.feeInput', '015000');
+    await settle();
+    expect(feeValue()).toBe('15.000');
     type(screen, 'repair.cancel.feeInput', '20.000');
     await settle();
     expect(text(screen, 'repair.cancel.feeAmount')).toContain('20.000');

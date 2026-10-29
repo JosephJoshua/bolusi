@@ -17,6 +17,7 @@ import {
   newPinPadState,
   newPinPromptKey,
   type NewPinEntry,
+  newPinPadKey,
 } from '@bolusi/device/models/pin/new-pin';
 import type { SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { Avatar, Button, PinPad } from '@bolusi/ui-web';
@@ -223,7 +224,7 @@ export function FirstPinScreen({
         {t(newPinPromptKey(entry))}
       </h1>
       <PinPad
-        key={entry.kind === 'first' ? (entry.problem ?? entry.kind) : entry.kind}
+        key={newPinPadKey(entry)}
         state={saving ? 'busy' : newPinPadState(entry)}
         onComplete={complete}
         label={t(newPinPromptKey(entry))}

@@ -329,7 +329,7 @@ export function CancelStep({
                   <TextButton
                     label={tn('repair.cancel.changeFee')}
                     accessibilityLabel={tn('repair.cancel.changeFeeLabel')}
-                    onPress={() => setFeeText(String(standard ?? 0))}
+                    onPress={() => setFeeText(groupedAmount(String(standard ?? 0)))}
                     testID={`${testID}.changeFee`}
                   />
                 </View>
@@ -358,7 +358,7 @@ export function CancelStep({
             label={tn('repair.cancel.feeInput')}
             value={feeText}
             onChangeText={(text) => {
-              if (acceptsRupiahText(text)) setFeeText(text);
+              if (acceptsRupiahText(text)) setFeeText(groupedAmount(text));
             }}
             keyboardType="number-pad"
             selectTextOnFocus

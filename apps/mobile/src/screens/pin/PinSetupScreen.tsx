@@ -22,6 +22,7 @@ import {
   newPinPadState,
   newPinPromptKey,
   type NewPinEntry,
+  newPinPadKey,
 } from '@bolusi/device/models/pin/new-pin';
 import { PinEntry } from './PinEntry.js';
 
@@ -117,7 +118,7 @@ export function PinSetupScreen({
               : { kind: 'entering', entry: next, failed: false },
           );
         }}
-        padKey={entry === null ? 'saving' : `${entry.kind}-${newPinPadState(entry)}`}
+        padKey={entry === null ? 'saving' : newPinPadKey(entry)}
         backspaceLabel={t('core.action.delete')}
         testID="pin-setup"
       />

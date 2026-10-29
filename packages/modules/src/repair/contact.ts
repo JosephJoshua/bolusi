@@ -26,10 +26,15 @@ export function normalizePhone(text: string): string | null {
   return digits;
 }
 
-/** True when a typed number cannot be called or sent a WhatsApp: too short, too long or no area. */
+/**
+ * True when a typed number cannot be called or sent a WhatsApp: too short, too long or no area. A
+ * mobile number (08…) has at least 10 digits; a 9-digit one is a landline with its area code.
+ */
 export function phoneInvalid(text: string): boolean {
   const phone = normalizePhone(text);
-  return phone !== null && whatsAppNumber(phone) === null;
+  if (phone === null) return false;
+  if (phone.startsWith('08') && phone.length < 10) return true;
+  return whatsAppNumber(phone) === null;
 }
 
 /**

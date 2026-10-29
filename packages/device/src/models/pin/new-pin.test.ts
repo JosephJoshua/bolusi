@@ -4,6 +4,7 @@ import {
   advanceNewPin,
   NEW_PIN_START,
   newPinFeedbackKey,
+  newPinPadKey,
   newPinPadState,
   newPinPromptKey,
   type NewPinEntry,
@@ -13,10 +14,18 @@ describe('advanceNewPin — a new PIN is submittable ONLY after an equal repeat 
   test('a PIN anyone would guess is refused before the repeat, with its own message', () => {
     for (const pin of ['111111', '123456', '987654', '121212', '123123', '147258']) {
       const entry = advanceNewPin(NEW_PIN_START, pin);
-      expect(entry).toEqual({ kind: 'first', problem: 'weak' });
+      expect(entry).toEqual({ kind: 'first', problem: 'weak', refusals: 1 });
       expect(newPinFeedbackKey(entry)).toBe('auth.pin.setup.weak');
       expect(newPinPadState(entry)).toBe('error');
     }
+  });
+
+  test('each refusal in a row gives the pad a new key, so it clears every time', () => {
+    const once = advanceNewPin(NEW_PIN_START, '111111');
+    const twice = advanceNewPin(once, '123456');
+    expect(new Set([NEW_PIN_START, once, twice].map(newPinPadKey)).size).toBe(3);
+    const mismatch = advanceNewPin({ kind: 'repeat', first: '135790' }, '024680');
+    expect(newPinPadKey(advanceNewPin(mismatch, '111111'))).not.toBe(newPinPadKey(mismatch));
   });
 
   test('the first entry is captured and the repeat is requested', () => {
