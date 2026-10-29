@@ -32,7 +32,7 @@ import {
 } from '@bolusi/core';
 import type { ClientDb } from '@bolusi/db-client';
 
-import { SYNC_REQUEST_TIMEOUT_MS, toTransportError, withDeadline } from './transport.js';
+import { BUNDLE_REQUEST_TIMEOUT_MS, toTransportError, withDeadline } from './transport.js';
 
 /**
  * `meta_kv` key holding the last bundle ETag (api/02-auth §5.2 — SHA-256 of the RFC 8785
@@ -98,7 +98,7 @@ export function createFetchBundleRefresh(config: BundleRefreshConfig): BundleRef
       const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
       if (etag !== null) headers['If-None-Match'] = etag;
 
-      const body = await withDeadline(SYNC_REQUEST_TIMEOUT_MS, async (signal) => {
+      const body = await withDeadline(BUNDLE_REQUEST_TIMEOUT_MS, async (signal) => {
         const response = await doFetch(`${config.baseUrl}/v1/devices/me/bundle`, {
           method: 'GET',
           headers,

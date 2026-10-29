@@ -8,7 +8,7 @@ import { SyncTransportError } from '@bolusi/core';
 import type { PullRequest, PushRequest } from '@bolusi/schemas';
 import { describe, expect, test, vi } from 'vitest';
 
-import { createFetchSyncTransport } from './transport.js';
+import { createFetchSyncTransport, SYNC_REQUEST_TIMEOUT_MS } from './transport.js';
 
 const PUSH: PushRequest = { deviceId: 'device-1', ops: [] };
 // api/01 §4's real shape: no deviceId (the token identifies the device), and
@@ -41,11 +41,17 @@ describe('a server that never answers', () => {
         return new Promise<Response>(() => undefined);
       });
       const pushing = transport(hung as unknown as typeof fetch).push(PUSH);
+      let settled = false;
       const outcome = pushing.then(
         () => null,
         (error: unknown) => error,
       );
-      await vi.advanceTimersByTimeAsync(60_000);
+      void outcome.then(() => (settled = true));
+      // Half a minute, not more: the counter is watching "Sedang mengirim" meanwhile.
+      expect(SYNC_REQUEST_TIMEOUT_MS).toBeLessThanOrEqual(30_000);
+      await vi.advanceTimersByTimeAsync(SYNC_REQUEST_TIMEOUT_MS - 1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
       const error = await outcome;
       expect(error).toBeInstanceOf(SyncTransportError);
       expect(error).toMatchObject({ code: null, status: null });

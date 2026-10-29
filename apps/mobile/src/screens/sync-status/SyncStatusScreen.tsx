@@ -303,12 +303,15 @@ export function SyncStatusScreen({
 
       {input.manualSyncError !== null ? (
         // §8.4 item 3: inline, never modal — the backoff continues in the background regardless. The
-        // raw code rides beneath the message so a shop owner has something to quote to support.
+        // raw code rides beneath the message so a shop owner has something to quote to support; a
+        // plain connection problem has nothing to quote, so it shows the message alone.
         <View style={styles.inlineError} testID="sync-manual-error">
           <Text style={styles.inlineErrorText}>{translateErrorCode(input.manualSyncError)}</Text>
-          <Text style={styles.meta} testID="sync-manual-error-code">
-            {input.manualSyncError}
-          </Text>
+          {input.manualSyncError === 'NETWORK' ? null : (
+            <Text style={styles.meta} testID="sync-manual-error-code">
+              {input.manualSyncError}
+            </Text>
+          )}
         </View>
       ) : null}
 

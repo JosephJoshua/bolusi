@@ -277,6 +277,8 @@ describe('the chip and title are witnessed together on the pending-media screen 
         renderSync({ manualSyncError: 'AUTH_TOKEN_INVALID' }).get('sync-manual-error-code'),
       ).join(''),
     ).toBe('AUTH_TOKEN_INVALID');
+    // A plain connection problem has nothing to quote, so no bare "NETWORK" sits under the message.
+    expect(renderSync({ manualSyncError: 'NETWORK' }).query('sync-manual-error-code')).toBeNull();
 
     // …and the whole block is absent when the last manual sync did not fail.
     expect(renderSync().query('sync-manual-error')).toBeNull();

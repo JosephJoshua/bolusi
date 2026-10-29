@@ -28,9 +28,13 @@ export interface SyncTransportConfig {
 /**
  * A server that accepts the connection and never answers (a hung process, a captive portal) would
  * otherwise hold the loop's one in-flight sync forever: no backoff, no retry, and a status line that
- * never learns anything went wrong. A batch is capped at 1 MiB, so a minute is room for bad 3G.
+ * never learns anything went wrong. A batch is capped at 1 MiB, which bad 3G (about 50 KB/s) moves
+ * in about 20 s; much longer leaves the counter watching "Sedang mengirim" for nothing.
  */
-export const SYNC_REQUEST_TIMEOUT_MS = 60_000;
+export const SYNC_REQUEST_TIMEOUT_MS = 30_000;
+
+/** The device bundle (the store's settings and directory) is larger and fetched rarely. */
+export const BUNDLE_REQUEST_TIMEOUT_MS = 60_000;
 
 /**
  * Run one request, body included, against a deadline. Past it the request is aborted and fails as
