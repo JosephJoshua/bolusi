@@ -22,8 +22,9 @@
       "title": "Buat PIN baru",
       "repeat": "Ulangi PIN baru",
       "mismatch": "PIN tidak sama. Buat lagi dari awal.",
+      "weak": "PIN ini terlalu gampang ditebak. Pilih angka lain.",
       "screenTitle": "Buat PIN",
-      "hint": "6 angka. Jangan pakai tanggal lahir.",
+      "hint": "6 angka. Jangan pakai tanggal lahir atau 123456.",
       "failed": "PIN belum bisa dibuat. Coba lagi."
     },
     "change": {
@@ -232,7 +233,7 @@
       "cameraPhone": "Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.",
       "signatureScreen": "Pelanggan tanda tangan langsung di layar sentuh ini.",
       "signaturePhone": "Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.",
-      "doneTitle": "Komputer siap dipakai",
+      "doneTitle": "Komputer ini siap",
       "donePrinter": "Printer",
       "donePaper": "Kertas",
       "donePhotos": "Foto",
@@ -246,7 +247,25 @@
       "printerReminder": "Printer belum dipilih",
       "printerGone": "Printer tidak ditemukan",
       "printerReminderHint": "Nota belum bisa dicetak dari komputer ini."
-    }
+    },
+    "startup": {
+      "label": "Buka saat Windows menyala",
+      "caption": "Bolusi langsung terbuka begitu komputer dinyalakan."
+    },
+    "media": {
+      "title": "Kamera dan mikrofon",
+      "caption": "Dipakai untuk foto dan video kepemilikan di komputer ini.",
+      "camera": "Kamera",
+      "microphone": "Mikrofon",
+      "unnamedCamera": "Kamera {number}",
+      "unnamedMicrophone": "Mikrofon {number}",
+      "level": "Suara mikrofon",
+      "hint": "Coba bicara, garisnya ikut bergerak.",
+      "micNone": "Mikrofon tidak ditemukan. Video kepemilikan butuh suara pelanggan.",
+      "micDenied": "Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.",
+      "micFailed": "Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon."
+    },
+    "idleLocked": "Terkunci karena lama tidak dipakai. Isian servisan baru tetap tersimpan."
   },
   "limits": {
     "title": "Batas wewenang",
@@ -270,6 +289,42 @@
       "lastOwner": "Harus tetap ada satu pemilik utama.",
       "rateLimited": "Sudah terlalu banyak perubahan hari ini. Coba lagi besok.",
       "unexpected": "Batasnya belum tersimpan. Coba lagi sebentar lagi."
+    }
+  },
+  "setup": {
+    "title": "Siapkan HP ini",
+    "step": "Langkah {step} dari {total}",
+    "permissionsTitle": "Izin HP",
+    "camera": "Kamera",
+    "cameraWhy": "Untuk foto HP pelanggan dan scan kode QR.",
+    "notifications": "Notifikasi",
+    "notificationsWhy": "Kabar kalau ada servisan yang perlu dicek.",
+    "allow": "Izinkan",
+    "allowed": "Diizinkan",
+    "notAllowed": "Belum diizinkan",
+    "openSettings": "Buka pengaturan",
+    "blockedHint": "Izinnya ditolak. Nyalakan lewat pengaturan HP.",
+    "paperTitle": "Kertas nota",
+    "next": "Lanjut",
+    "later": "Nanti saja",
+    "doneTitle": "HP ini siap",
+    "start": "Mulai",
+    "reopen": "Panduan persiapan",
+    "reopenSummary": "Izin HP, kertas nota, dan halaman uji"
+  },
+  "rename": {
+    "titlePhone": "Ganti nama HP",
+    "titlePc": "Ganti nama komputer",
+    "hint": "Pakai nama yang mudah dikenali di toko.",
+    "problem": {
+      "nameMissing": "Isi namanya dulu.",
+      "nameTooLong": "Maksimal 64 karakter."
+    },
+    "failure": {
+      "offline": "Butuh internet untuk ganti nama. Sambungkan HP, lalu ulangi.",
+      "denied": "Hanya pemilik toko yang bisa ganti nama perangkat.",
+      "rateLimited": "Terlalu banyak percobaan. Coba lagi nanti.",
+      "unexpected": "Namanya belum tersimpan. Coba lagi sebentar lagi."
     }
   },
   "roles": {

@@ -78,6 +78,11 @@ export interface TextInputProps {
    * `textAlignVertical` and heights rather than `numberOfLines`.
    */
   readonly multiline?: boolean | undefined;
+  /**
+   * Selects what the field holds when it gets focus, so typing replaces it. For amounts: a tap
+   * leaves the caret where it lands, and 50000 typed before a "0" would make 500.000.
+   */
+  readonly selectTextOnFocus?: boolean | undefined;
   /** The most characters the field takes: what its command accepts, so typing past it is stopped. */
   readonly maxLength?: number | undefined;
   /**
@@ -144,6 +149,7 @@ export function TextInput({
   revealLabels,
   autoFocus = false,
   multiline = false,
+  selectTextOnFocus = false,
   maxLength,
   revealOnFocus = 'into-view',
   onBlur,
@@ -189,6 +195,7 @@ export function TextInput({
           autoCapitalize={autoCapitalize}
           autoFocus={autoFocus}
           multiline={effectiveMultiline}
+          selectTextOnFocus={selectTextOnFocus}
           maxLength={maxLength}
           onSubmitEditing={onSubmitEditing}
           returnKeyType={onSubmitEditing === undefined ? undefined : 'done'}

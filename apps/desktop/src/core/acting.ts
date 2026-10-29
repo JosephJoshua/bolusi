@@ -24,3 +24,13 @@ export function actingStaffAdmin(
   if (!current.snapshot().canManageStaff) throw new StaffAdminError('denied');
   return current;
 }
+
+/** The same, for renaming this PC: only someone who may register devices here. */
+export function actingDeviceAdmin(
+  session: AppSessionController | null,
+  userId: string,
+): AppSessionController {
+  const current = actingSession(session, userId);
+  if (!current.snapshot().canRenameDevice) throw new StaffAdminError('denied');
+  return current;
+}

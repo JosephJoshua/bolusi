@@ -96,6 +96,20 @@ describe('the staff wire', () => {
       body: { storeId: 's-1', roleId: 'r-m', priceDrop: 50_000, refund: 0, credit: 100_000 },
     });
   });
+
+  test('renameDevice patches this device’s name', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(200, { deviceId: 'd-1', deviceName: 'Kasir' }));
+    await admin(doFetch as unknown as typeof fetch).renameDevice({
+      actingUserId: 'u-owner',
+      name: 'Kasir',
+    });
+    expect(sent(doFetch)).toMatchObject({
+      url: 'https://api.example.com/v1/devices/me',
+      method: 'PATCH',
+      headers: { 'X-Acting-User': 'u-owner' },
+      body: { deviceName: 'Kasir' },
+    });
+  });
 });
 
 describe('failures', () => {

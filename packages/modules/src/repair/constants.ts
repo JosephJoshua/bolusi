@@ -46,6 +46,10 @@ export const REPAIR_OP = {
   quoteChanged: 'repair.quote_changed',
   quoteProposalDeclined: 'repair.quote_proposal_declined',
   deviceReturned: 'repair.device_returned',
+  /** An owner takes back a handover recorded by mistake: the phone is still in the store. */
+  handoverReversed: 'repair.handover_reversed',
+  /** The counter corrects what intake wrote down about the phone or the customer. */
+  ticketDetailsCorrected: 'repair.ticket_details_corrected',
   intakeOptionsChanged: 'repair.intake_options_changed',
   storeIntakeOptionsChanged: 'repair.store_intake_options_changed',
   storeCancelFeesChanged: 'repair.store_cancel_fees_changed',
@@ -174,6 +178,12 @@ export function parseUncollectedDays(text: string): number | null {
 }
 
 /** Handover evidence slots. */
+/**
+ * How long after the first handover an owner may still take it back: the same working day's
+ * mistake, not a way to bring back a phone that went home weeks ago.
+ */
+export const HANDOVER_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export const HANDOVER_PHOTO_SLOTS = ['handover', 'signature'] as const;
 export type HandoverPhotoSlot = (typeof HANDOVER_PHOTO_SLOTS)[number];
 
@@ -206,6 +216,7 @@ export const REPAIR_CONFLICT_KEY = {
   customer: 'repair_customer.details',
   downPayment: 'repair_ticket.down_payment',
   repairTypes: 'repair_ticket.repair_types',
+  details: 'repair_ticket.details',
 } as const;
 
 /** The servisan decisions an owner may hand out through an approval request (approval-kinds.ts). */

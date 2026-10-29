@@ -140,6 +140,7 @@ export type ChangeFeedbackKey =
   | 'core.errors.PIN_RATE_LIMITED'
   | 'core.errors.UNEXPECTED'
   | 'auth.pin.setup.mismatch'
+  | 'auth.pin.setup.weak'
   | 'auth.pin.setup.hint';
 
 export function changeFeedbackKey(phase: ChangePinPhase): ChangeFeedbackKey | null {

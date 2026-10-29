@@ -51,7 +51,11 @@ import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstra
 import { MEDIA_DRAIN_TASK } from '@bolusi/device/media/background-task';
 import type { MediaClient } from '@bolusi/device/media/client';
 import { createMediaClientForApp } from './src/media/native.js';
-import { createExpoCapturePlatform, createExpoScanPlatform } from './src/media/native-capture.js';
+import {
+  createExpoCapturePlatform,
+  createExpoScanPlatform,
+  expoCameraPermission,
+} from './src/media/native-capture.js';
 import { createExpoVideoPlatform } from './src/media/native-video.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
@@ -612,6 +616,7 @@ function buildRootProps(): RootProps {
     capturePlatform: createExpoCapturePlatform(),
     scanPlatform: createExpoScanPlatform(),
     videoPlatform: createExpoVideoPlatform(),
+    cameraPermission: expoCameraPermission,
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process

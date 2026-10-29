@@ -158,6 +158,7 @@ function FeesForm({
               setText((current) => ({ ...current, [key]: next.replace(/\D/g, '') }));
             }}
             keyboardType="number-pad"
+            selectTextOnFocus
             testID={`${testID}.${key}`}
           />
         </View>

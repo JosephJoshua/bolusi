@@ -418,6 +418,68 @@ describe('refunds and voids are guarded', () => {
 });
 
 describe('the drawer', () => {
+  test('an owner cancels a cash move typed wrong, and a later count reads right again', async () => {
+    h = await openRepairHarness(531);
+    const drawer = async () => (await h!.moneyQuery('cashDrawer', {}, h!.cashierId)).rows[0];
+    await h.money('moveCash', { kind: 'float', amount: 500_000, reason: 'Kembalian' }, h.cashierId);
+    const { entryId: wrong } = (await h.money(
+      'moveCash',
+      { kind: 'float', amount: 5_000_000, reason: 'Kembalian' },
+      h.cashierId,
+    )) as { entryId: string };
+    const { entryId: countId } = (await h.money(
+      'countCash',
+      { counted: 500_000, note: '' },
+      h.cashierId,
+    )) as { entryId: string };
+    expect((await drawer()).counts[0]).toMatchObject({ id: countId, difference: -5_000_000 });
+
+    const cancel = { entryId: wrong, reason: 'Salah ketik, harusnya tidak ada' };
+    await expectRefused(h.money('voidCashMove', cancel, h.cashierId), 'PERMISSION_DENIED');
+    await h.money('voidCashMove', cancel, h.storeOwnerId);
+    const after = await drawer();
+    expect(after.expected).toBe(500_000);
+    // As if it was never recorded: no shortage to settle, nothing that reads like theft.
+    expect(after.counts[0]).toMatchObject({ id: countId, expected: 500_000, difference: 0 });
+    await expectRefused(
+      h.money('voidCashMove', cancel, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'alreadyVoided',
+    );
+    await expectBalancedBooks(h);
+  });
+
+  test('a cash move is not cancelled once a later count was settled, nor is a payment this way', async () => {
+    h = await openRepairHarness(532);
+    const document = await openTicket(h);
+    const { entryIds } = (await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 100_000 }] },
+      h.cashierId,
+    )) as { entryIds: string[] };
+    await expectRefused(
+      h.money('voidCashMove', { entryId: entryIds[0]!, reason: 'x' }, h.storeOwnerId),
+      'ENTITY_NOT_FOUND',
+      'cashMoveNotFound',
+    );
+    const { entryId: move } = (await h.money(
+      'moveCash',
+      { kind: 'expense', amount: 20_000, reason: 'Bensin' },
+      h.cashierId,
+    )) as { entryId: string };
+    const { entryId: countId } = (await h.money(
+      'countCash',
+      { counted: 70_000, note: '' },
+      h.cashierId,
+    )) as { entryId: string };
+    await h.money('adjustCash', { amount: -10_000, countId, reason: 'Kurang' }, h.storeOwnerId);
+    await expectRefused(
+      h.money('voidCashMove', { entryId: move, reason: 'Salah' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'laterCountSettled',
+    );
+  });
+
   test('a count shows the difference against the book, and only an owner settles it', async () => {
     h = await openRepairHarness(509);
     const document = await openTicket(h);

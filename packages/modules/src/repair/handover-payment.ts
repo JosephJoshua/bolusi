@@ -199,3 +199,14 @@ export function payLaterHintKey(payment: Pick<HandoverPayment, 'access' | 'unpai
   // Theirs to do, or approved: only the reason is missing.
   return 'repair.hint.reason';
 }
+
+/** What the counter must hand back before the phone goes (`useHandoverRefunds`), or null. */
+export function giveBackText(
+  refunds: readonly { readonly label: string; readonly amount: number }[],
+): string | null {
+  if (refunds.length === 0) return null;
+  const parts = refunds.map((refund) =>
+    tn('repair.handover.giveBackVia', { amount: formatMoney(refund.amount), method: refund.label }),
+  );
+  return tn('repair.handover.giveBack', { refunds: parts.join(', ') });
+}

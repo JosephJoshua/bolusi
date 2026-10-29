@@ -22,8 +22,9 @@
       "title": "Create a new PIN",
       "repeat": "Repeat the new PIN",
       "mismatch": "The PINs don’t match. Start again.",
+      "weak": "That PIN is too easy to guess. Choose other digits.",
       "screenTitle": "Create PIN",
-      "hint": "6 digits. Avoid your birthday.",
+      "hint": "6 digits. Avoid your birthday or 123456.",
       "failed": "The PIN couldn’t be saved. Try again."
     },
     "change": {
@@ -246,7 +247,25 @@
       "printerReminder": "No printer chosen",
       "printerGone": "Printer not found",
       "printerReminderHint": "Slips cannot be printed from this computer yet."
-    }
+    },
+    "startup": {
+      "label": "Open when Windows starts",
+      "caption": "Bolusi opens as soon as the computer is switched on."
+    },
+    "media": {
+      "title": "Camera and microphone",
+      "caption": "Used for photos and ownership videos on this computer.",
+      "camera": "Camera",
+      "microphone": "Microphone",
+      "unnamedCamera": "Camera {number}",
+      "unnamedMicrophone": "Microphone {number}",
+      "level": "Microphone level",
+      "hint": "Say something, the bar should move.",
+      "micNone": "No microphone found. Ownership videos need the customer’s voice.",
+      "micDenied": "The microphone isn’t allowed yet. Allow it in Windows Settings › Privacy › Microphone.",
+      "micFailed": "The microphone won’t start. Close other apps that use it."
+    },
+    "idleLocked": "Locked after a while unused. Unsaved intakes are kept."
   },
   "limits": {
     "title": "Limits",
@@ -270,6 +289,42 @@
       "lastOwner": "There must always be one main owner.",
       "rateLimited": "Too many changes today. Try again tomorrow.",
       "unexpected": "The limits weren’t saved. Try again in a moment."
+    }
+  },
+  "setup": {
+    "title": "Set up this phone",
+    "step": "Step {step} of {total}",
+    "permissionsTitle": "Phone permissions",
+    "camera": "Camera",
+    "cameraWhy": "For photos of customers’ phones and scanning QR codes.",
+    "notifications": "Notifications",
+    "notificationsWhy": "Word when a repair needs checking.",
+    "allow": "Allow",
+    "allowed": "Allowed",
+    "notAllowed": "Not allowed",
+    "openSettings": "Open settings",
+    "blockedHint": "Permission was refused. Turn it on in the phone’s settings.",
+    "paperTitle": "Slip paper",
+    "next": "Next",
+    "later": "Later",
+    "doneTitle": "This phone is ready",
+    "start": "Start",
+    "reopen": "Setup guide",
+    "reopenSummary": "Phone permissions, slip paper and a test page"
+  },
+  "rename": {
+    "titlePhone": "Rename this phone",
+    "titlePc": "Rename this computer",
+    "hint": "Use a name people in the store will recognise.",
+    "problem": {
+      "nameMissing": "Enter a name first.",
+      "nameTooLong": "64 characters at most."
+    },
+    "failure": {
+      "offline": "Renaming needs internet. Connect this phone, then try again.",
+      "denied": "Only a store owner can rename a device.",
+      "rateLimited": "Too many tries. Try again later.",
+      "unexpected": "The name wasn’t saved. Try again in a moment."
     }
   },
   "roles": {

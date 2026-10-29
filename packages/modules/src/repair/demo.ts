@@ -14,7 +14,7 @@ import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import { demoApprovals } from '../approvals/demo.js';
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
-import { MONEY_PERMISSION } from '../money/constants.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
 import { demoMoneyLedger, demoQris } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
@@ -23,7 +23,8 @@ import {
   ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
-import { partsInWork } from './flows.js';
+import { normalizePhone } from './contact.js';
+import { partsInWork, undoableHandover } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -39,8 +40,10 @@ import {
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { refundsFor } from './commands.js';
 import { amountOwed } from './flows.js';
-import { REPAIR_REFUSALS, claimProblem } from './rules.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
+import { REPAIR_REFUSALS, claimProblem, freeHandoverNeedsOwner } from './rules.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -302,6 +305,8 @@ function ticket(spec: {
   returnedBy?: string;
   /** Hours since it was marked repaired; a cancel is ready to collect when it was cancelled. */
   readyHoursAgo?: number;
+  /** When it went home, for a returned one; else 40 hours after intake. */
+  returnedHoursAgo?: number;
   /** Repair type ids from the default list. */
   repairTypes?: readonly string[];
 }): TicketDetailRow {
@@ -315,7 +320,7 @@ function ticket(spec: {
     deviceBrand: spec.brand,
     deviceModel: spec.model,
     deviceColor: spec.color,
-    deviceImei: '356789104455667',
+    deviceImei: '356789104455660',
     complaint: spec.complaint,
     outcome: spec.outcome,
     location: spec.location ?? 'in_store',
@@ -361,8 +366,14 @@ function ticket(spec: {
     createdByName: 'Siti Rahayu',
     returnedBy: spec.returnedBy ?? null,
     returnedByName: spec.returnedBy === undefined ? null : (NAMES.get(spec.returnedBy) ?? null),
-    returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
+    returnedAt:
+      spec.returnedBy === undefined
+        ? null
+        : spec.returnedHoursAgo === undefined
+          ? createdAt + 40 * HOUR
+          : HARNESS_NOW - spec.returnedHoursAgo * HOUR,
     downPayment: spec.downPayment ?? null,
+    reduced: 0,
     slipPrints: { intake: 1, handover: 0 },
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
@@ -562,6 +573,8 @@ function seedTickets(): TicketDetailRow[] {
       readyHoursAgo: 7 * 24,
       location: 'returned',
       returnedBy: 'u-siti',
+      // Picked up this morning: recent enough that an owner can still take the handover back.
+      returnedHoursAgo: 2,
       extraPhotos: [photoRow('before:m12'), photoRow('after:m13')],
     }),
   ].map(withTotals);
@@ -863,10 +876,13 @@ export function demoRepairRuntime(
   ) => {
     // The one rule every step but the handover shares (repair rules.ts): a change that raced a
     // cancel or a handover on another device is refused with its own reason, as on a phone.
+    // Taking a handover back and correcting a cancelled servisan's details check their own.
     const current = find(ticketId);
-    if (kind !== 'repair.device_returned') {
+    if (kind !== 'repair.device_returned' && kind !== 'repair.handover_reversed') {
       if (current.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
-      if (current.outcome === 'cancelled') throw REPAIR_REFUSALS.refuse('cancelled');
+      if (current.outcome === 'cancelled' && kind !== 'repair.ticket_details_corrected') {
+        throw REPAIR_REFUSALS.refuse('cancelled');
+      }
     }
     tickets = tickets.map((t) =>
       t.id === ticketId
@@ -1186,6 +1202,7 @@ export function demoRepairRuntime(
     },
     cancelTicket: (input) => {
       const t = find(String(input['ticketId']));
+      if (t.returnedAt !== null) throw REPAIR_REFUSALS.refuse('handedOverBefore');
       return update(t.id, 'repair.ticket_cancelled', {
         outcome: 'cancelled',
         outcomeNote: String(input['reason']),
@@ -1285,6 +1302,9 @@ export function demoRepairRuntime(
     },
     returnDevice: (input) => {
       const t = find(String(input['ticketId']));
+      if (freeHandoverNeedsOwner(t) && !permitted.has(P.warrantyException)) {
+        throw REPAIR_REFUSALS.refuse('freeHandoverOwnerOnly');
+      }
       const paidNow = ((input['payments'] as { amount: number }[] | undefined) ?? []).reduce(
         (sum, payment) => sum + payment.amount,
         0,
@@ -1294,6 +1314,7 @@ export function demoRepairRuntime(
       const note = String(input['note'] ?? '');
       const problem = handoverProblem(checklist, t.peripherals, note);
       if (problem !== null) throw REPAIR_REFUSALS.refuse(problem);
+      settleInLedger(t, (input['payments'] as { account: string; amount: number }[]) ?? []);
       return update(
         t.id,
         'repair.device_returned',
@@ -1302,7 +1323,7 @@ export function demoRepairRuntime(
           location: 'returned',
           returnedBy: actor.userId,
           returnedByName: actor.name,
-          returnedAt: HARNESS_NOW,
+          returnedAt: t.returnedAt ?? HARNESS_NOW,
           photos: [
             ...t.photos,
             photoRow('handover', input['handoverPhoto'] as MediaRef),
@@ -1310,6 +1331,98 @@ export function demoRepairRuntime(
           ],
         },
         { note, checklist },
+      );
+    },
+    undoHandover: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location !== 'returned') throw REPAIR_REFUSALS.refuse('notReturned');
+      if (!undoableHandover(t, HARNESS_NOW)) throw REPAIR_REFUSALS.refuse('undoTooLate');
+      return update(
+        t.id,
+        'repair.handover_reversed',
+        {
+          location: 'in_store',
+          returnedBy: null,
+          returnedByName: null,
+          photos: t.photos.filter((p) => p.slot !== 'handover' && p.slot !== 'signature'),
+        },
+        { reason: String(input['reason']) },
+      );
+    },
+    // The demo keeps one record per servisan: the customer's name and number change on it.
+    correctTicketDetails: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
+      const handedOver = t.returnedAt !== null;
+      if (handedOver && input['customer'] !== undefined) {
+        throw REPAIR_REFUSALS.refuse('handedOverBefore');
+      }
+      const given = input['customer'] as
+        { name: string; phone: string | null } | { customerId: string } | undefined;
+      // A picked customer is known by their other servisans here.
+      const picked =
+        given !== undefined && 'customerId' in given
+          ? tickets.find((other) => other.customerId === given.customerId)
+          : undefined;
+      const customer =
+        picked !== undefined
+          ? { name: picked.customerName, phone: picked.customerPhone }
+          : given !== undefined && 'name' in given
+            ? given
+            : undefined;
+      const device = input['device'] as
+        { brand: string; model: string; color?: string; imei?: string | null } | undefined;
+      const changes: { field: string; from?: string | null; to?: string | null }[] = [];
+      const note = (field: string, from: string | null, to: string | null): void => {
+        if (from !== to) changes.push({ field, from, to });
+      };
+      const phone = customer?.phone == null ? null : normalizePhone(customer.phone);
+      if (customer !== undefined) {
+        note('customerName', t.customerName, customer.name);
+        note('customerPhone', t.customerPhone, phone);
+      }
+      if (device !== undefined) {
+        note('brand', t.deviceBrand, device.brand);
+        note('model', t.deviceModel, device.model);
+        note('color', t.deviceColor, device.color ?? '');
+        note('imei', t.deviceImei, device.imei ?? null);
+      }
+      const passcode = input['passcode'] as string | null | undefined;
+      if (passcode !== undefined && passcode !== t.devicePasscode)
+        changes.push({ field: 'passcode' });
+      const complaint = input['complaint'] as string | undefined;
+      if (complaint !== undefined) note('complaint', t.complaint, complaint);
+      const peripherals = input['peripherals'] as TicketDetailRow['peripherals'] | undefined;
+      if (
+        peripherals !== undefined &&
+        JSON.stringify(peripherals) !== JSON.stringify(t.peripherals)
+      ) {
+        changes.push({ field: 'peripherals' });
+      }
+      if (changes.length === 0) throw REPAIR_REFUSALS.refuse('nothingChanged');
+      const phoneChanged = changes.some((c) => ['brand', 'model', 'imei'].includes(c.field));
+      if (phoneChanged && (handedOver || t.claimOfTicketId !== null)) {
+        throw REPAIR_REFUSALS.refuse(handedOver ? 'handedOverBefore' : 'claimSamePhone');
+      }
+      return update(
+        t.id,
+        'repair.ticket_details_corrected',
+        {
+          ...(customer === undefined ? {} : { customerName: customer.name, customerPhone: phone }),
+          ...(picked === undefined ? {} : { customerId: picked.customerId }),
+          ...(device === undefined
+            ? {}
+            : {
+                deviceBrand: device.brand,
+                deviceModel: device.model,
+                deviceColor: device.color ?? '',
+                deviceImei: device.imei ?? null,
+              }),
+          ...(passcode === undefined ? {} : { devicePasscode: passcode }),
+          ...(complaint === undefined ? {} : { complaint }),
+          ...(peripherals === undefined ? {} : { peripherals }),
+        },
+        { changes, reason: String(input['reason'] ?? '') },
       );
     },
   };
@@ -1446,6 +1559,7 @@ export function demoRepairRuntime(
       now,
       accounts: DEMO_ACCOUNTS,
       actor: () => actor.userId,
+      mayRefund: () => permitted.has(MONEY_PERMISSION.refund),
       debt:
         unpaid === undefined
           ? undefined
@@ -1475,6 +1589,70 @@ export function demoRepairRuntime(
       }
     },
   });
+  /**
+   * The handover as the ledger records it: the charge, a DP taken by hand before it (in cash) and
+   * what was paid now, so money can go back or the bill come down afterwards.
+   */
+  function settleInLedger(
+    t: TicketDetailRow,
+    payments: readonly { readonly account: string; readonly amount: number }[],
+    at?: number,
+  ): void {
+    const document = { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber };
+    const owed = amountOwed(t);
+    if ((ledger.documentMoney(t.id)?.charged ?? 0) > 0) return;
+    if (owed > 0) ledger.recordCharge({ document, amount: owed, at });
+    const byHand = (t.downPayment ?? 0) - (ledger.documentMoney(t.id)?.paid ?? 0);
+    const all = byHand > 0 ? [{ account: CASH_ACCOUNT, amount: byHand }, ...payments] : payments;
+    all.forEach((payment, n) => {
+      ledger.recordPayment({ id: `m-${t.id}-${String(n)}`, document, ...payment, at });
+    });
+    // As the real handover: what was paid beyond the bill goes back through how it came in.
+    const money = ledger.documentMoney(t.id);
+    if (money === null || money.balance >= 0) return;
+    for (const refund of refundsFor(money, -money.balance)) {
+      void ledger.run('refund', {
+        document,
+        ...refund,
+        reason: 'Dikembalikan saat diambil',
+        reference: null,
+      });
+    }
+  }
+  // What went home before today was paid in full at the counter, except the one debt.
+  tickets = tickets.map((t) => {
+    if (t.location !== 'returned' || t.id === unpaid?.id || amountOwed(t) <= 0) return t;
+    const paidUp = { ...t, downPayment: amountOwed(t) };
+    settleInLedger(paidUp, [], t.returnedAt ?? t.createdAt);
+    return paidUp;
+  });
+  // A DP still waiting at the counter is in the ledger as the cash it came in as, so a handover
+  // shows what goes back through what, as on a real device.
+  for (const t of tickets) {
+    if (t.location === 'returned' || (t.downPayment ?? 0) <= 0) continue;
+    if ((ledger.documentMoney(t.id)?.paid ?? 0) > 0) continue;
+    ledger.recordPayment({
+      id: `m-${t.id}-dp`,
+      document: { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber },
+      account: CASH_ACCOUNT,
+      amount: t.downPayment!,
+      at: t.createdAt,
+    });
+  }
+  /** A servisan's money as the ledger has it now: Kas and refunds change it after pickup. */
+  function syncTicketMoney(documentId: string): void {
+    const recorded = ledger.documentMoney(documentId);
+    if (recorded === null || recorded.charged === 0) return;
+    tickets = tickets.map((t) =>
+      t.id === documentId
+        ? {
+            ...t,
+            downPayment: recorded.paid === 0 ? null : recorded.paid,
+            reduced: recorded.reduced,
+          }
+        : t,
+    );
+  }
   // Everyone asks for and answers approvals; the decision's own permission says what.
   let permitted = new Set<string>([...actor.permissions, APPROVAL_PERMISSION.use]);
   const approvals = demoApprovals({
@@ -1594,7 +1772,14 @@ export function demoRepairRuntime(
         return ledger.query(name, input);
       },
       qris,
-      run: (name: string, input: Input) => ledger.run(name, input),
+      run: async (name: string, input: Input) => {
+        const result = await ledger.run(name, input);
+        const document = input['document'] as { readonly id: string } | undefined;
+        if (document !== undefined) syncTicketMoney(document.id);
+        else if (name === 'voidPayment') tickets.forEach((t) => syncTicketMoney(t.id));
+        notify();
+        return result;
+      },
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
       limitOf: (id: string) => demoLimitOf(actor, permitted, id),

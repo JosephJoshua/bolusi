@@ -53,6 +53,7 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
+  cancelRefund,
 } from '../flows.js';
 import {
   FlowScreen,
@@ -76,7 +77,7 @@ import {
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
-interface StepProps {
+export interface StepProps {
   readonly chrome: RepairChrome;
   readonly ticketId: string;
   /** Set once the ticket changed elsewhere and this step can no longer finish. */
@@ -269,12 +270,15 @@ export function CancelStep({
   stale,
   workStarted,
   claimOf,
+  downPayment,
   onDone,
   onAsked,
   onCancel,
   testID = 'repair.cancel',
 }: StepProps & {
   readonly workStarted: boolean;
+  /** Paid in so far: what is above the fee goes back at pickup. */
+  readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
   readonly claimOf: string | null;
   readonly onAsked: () => void;
@@ -342,7 +346,9 @@ export function CancelStep({
       testID={testID}
     >
       <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
-        {tn('repair.cancel.consequence')}
+        {cancelRefund(downPayment, fee) > 0
+          ? tn('repair.cancel.refundsDp', { amount: formatMoney(cancelRefund(downPayment, fee)) })
+          : tn('repair.cancel.consequence')}
       </Text>
       {asking ? (
         <Text style={[repairStyles.caption, styles.consequence]} testID={`${testID}.asks`}>
@@ -396,6 +402,7 @@ export function CancelStep({
               if (acceptsRupiahText(text)) setFeeText(groupedAmount(text));
             }}
             keyboardType="number-pad"
+            selectTextOnFocus
             autoFocus
             testID={`${testID}.feeInput`}
           />
@@ -420,6 +427,66 @@ export function CancelStep({
           </Text>
         ) : null}
       </View>
+    </FlowScreen>
+  );
+}
+
+// ── undo a handover (owners) ──────────────────────────────────────────────────────────────────
+
+/** Take back a handover recorded by mistake: the phone is in the store again. A reason is required. */
+export function UndoHandoverStep({
+  chrome,
+  ticketId,
+  stale,
+  onDone,
+  onCancel,
+  onRegisterDiscardGuard,
+  testID = 'repair.undoHandover',
+}: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [reason, setReason] = useState('');
+  const complete = reason.trim() !== '';
+  const discard = useDiscardConfirm({
+    dirty: stale === null && complete,
+    onRegisterDiscardGuard,
+    testID,
+  });
+  const submit = (): void => {
+    if (!complete) return;
+    void runner
+      .run(() => runtime.run('undoHandover', { ticketId, reason }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tn('repair.undoHandover.title')}
+      onBack={() => discard.requestLeave(onCancel)}
+      primaryLabel={tn('repair.action.undoHandover')}
+      primaryVariant="destructive"
+      onPrimary={submit}
+      primaryDisabled={!complete}
+      primaryHint={tn('repair.hint.reason')}
+      overlay={discard.overlay}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      stale={stale}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.explain`}>
+        {tn('repair.undoHandover.explain')}
+      </Text>
+      <TextInput
+        label={tn('repair.undoHandover.reason')}
+        value={reason}
+        onChangeText={setReason}
+        multiline
+        testID={`${testID}.reason`}
+      />
     </FlowScreen>
   );
 }
@@ -530,6 +597,7 @@ export function DownPaymentStep({
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           autoFocus
           errorMessage={aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
           testID={`${testID}.amount`}
@@ -875,6 +943,7 @@ export function PriceChangeStep({
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           testID={`${testID}.amount`}
         />
         {amount === null ? null : (
@@ -921,11 +990,14 @@ export function ProposalStep({
   ticketId,
   stale,
   line,
+  total,
   onDone,
   onCancel,
   testID = 'repair.proposal',
 }: StepProps & {
   readonly line: QuoteLineRow;
+  /** The agreed total now, so the change reads as what the customer will pay. */
+  readonly total: number;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -977,6 +1049,13 @@ export function ProposalStep({
         <Text style={styles.proposalDescription}>{line.description}</Text>
         <Text style={styles.proposalAmount} testID={`${testID}.amount`}>
           {formatMoney(line.amount)}
+        </Text>
+        {/* An extra zero shows here, where the customer hears it: 1.500.000 → 3.500.000. */}
+        <Text style={repairStyles.body} testID={`${testID}.newTotal`}>
+          {tn('repair.price.newTotal', {
+            from: formatMoney(total),
+            to: formatMoney(total + line.amount),
+          })}
         </Text>
         {line.reason === null ? null : (
           <>

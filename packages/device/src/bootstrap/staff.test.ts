@@ -11,6 +11,7 @@ function port(): StaffAdminPort {
     update: vi.fn(() => Promise.resolve()),
     setActive: vi.fn(() => Promise.resolve()),
     setLimits: vi.fn(() => Promise.resolve()),
+    renameDevice: vi.fn(() => Promise.resolve()),
     createRole: vi.fn(() => Promise.resolve({ roleId: 'r-new' })),
     updateRole: vi.fn(() => Promise.resolve()),
     deleteRole: vi.fn(() => Promise.resolve()),

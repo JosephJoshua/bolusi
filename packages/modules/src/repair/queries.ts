@@ -42,7 +42,7 @@ import {
   type RecordedRepairType,
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
-import { paidOnDocumentSql } from '../money/queries.js';
+import { paidOnDocumentSql, reducedOnDocumentSql } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
@@ -95,6 +95,8 @@ export interface TicketSummaryRow {
    * before handover. Null when nothing was.
    */
   readonly downPayment: number | null;
+  /** What an owner took off the bill after it was charged (the money ledger); 0 when nothing. */
+  readonly reduced: number;
   /** When the phone was last ready to collect (repaired or cancelled); null while worked on. */
   readonly readyAt: number | null;
 }
@@ -212,6 +214,7 @@ function summaryQuery(qctx: Qctx) {
       't.cancelledBy',
       't.cancelledAt',
       paidOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('downPayment'),
+      reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('reduced'),
       't.readyAt',
       eb
         .selectFrom('repairQuoteLines as l')
@@ -255,6 +258,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
     downPayment:
       row.downPayment === null || Number(row.downPayment) === 0 ? null : Number(row.downPayment),
+    reduced: Number(row.reduced ?? 0),
     readyAt: row.readyAt === null ? null : Number(row.readyAt),
   };
 }
@@ -395,8 +399,9 @@ function filteredSummaries(qctx: Qctx, filter: TicketFilter, cancelledOnly: bool
 /** The ORDER BY column behind each column sort, with the ticket id as the tie-breaker. */
 const SORT_COLUMN = {
   number: sql.ref('t.ticketNumber'),
-  // What the customer owes: a cancelled servisan's fee, never its repair price.
-  total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end`,
+  // What the customer owes: a cancelled servisan's fee, never its repair price, less what an owner
+  // took off it.
+  total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end - coalesce(${reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId')}, 0)`,
   readyBy: sql.ref('t.estimatedReadyAt'),
   createdAt: sql.ref('t.createdAt'),
   cancelledAt: sql.ref('t.cancelledAt'),

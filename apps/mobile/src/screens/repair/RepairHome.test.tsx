@@ -3,8 +3,11 @@
 // cashier decides, the handover, live updates from a colleague, and the intake kept across a lock.
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
+import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
+import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
 import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
-import { tn } from '@bolusi/modules/repair/screens';
+import { PrinterProblem, type RepairPrinting, tn } from '@bolusi/modules/repair/screens';
 import { color } from '@bolusi/ui';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -12,6 +15,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { __windowMetrics } from '../../../test/doubles/react-native.js';
 
 import {
+  accessoriesBack,
   ensureRepairCatalog,
   intake,
   openRepairScreenHarness,
@@ -52,6 +56,7 @@ async function mount(
   props: Partial<Parameters<typeof RepairHome>[0]> = {},
 ): Promise<RenderResult> {
   ensureRepairCatalog();
+  registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
   const screen = render(
     <RepairHome
       runtime={repairRuntimeFor(harness, userId)}
@@ -399,6 +404,28 @@ describe('price changes and handover', () => {
     expect(text(screen, 'repair.handover.total')).not.toContain('750.000');
   });
 
+  // Android QA: a cancelled servisan's DP went back through the account it came in by without the
+  // counter being told; now the cancel form and the handover both say what goes back, and how.
+  test('a DP above the cancel fee is said to go back, and the handover says through what', async () => {
+    h = await openRepairScreenHarness(5307);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 90_000 }, h.cashierId);
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, 'repair.ticket.action.cancel');
+    expect(text(owner, 'repair.cancel.consequence')).toContain('80.000');
+    owner.unmount();
+
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.handover');
+    expect(text(screen, 'repair.handover.giveBack')).toContain('80.000 lewat Tunai');
+  });
+
   test('leaving the handover after taking a photo asks first', async () => {
     h = await openRepairScreenHarness(5306);
     const ticketId = await openTicket(h);
@@ -608,6 +635,73 @@ describe('a down payment fix (owners; the counter asks)', () => {
   });
 });
 
+describe('putting a mistake right', () => {
+  test('the counter corrects the number and the IMEI after saving; the history keeps both', async () => {
+    h = await openRepairScreenHarness(5510);
+    const ticketId = await openTicket(h);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.correctDetails');
+    type(screen, 'repair.correct.customer.phone', '0813 1111 2222');
+    type(screen, 'repair.correct.device.imei', '1234');
+    await settle();
+    await press(screen, 'repair.correct.primary');
+    // A wrong IMEI is caught as at intake; nothing is saved.
+    expect(screen.query('repair.correct.device.imei.error')).not.toBeNull();
+    expect((await ticketRow(h, ticketId)).customerPhone).toBe('081244556677');
+    type(screen, 'repair.correct.device.imei', '356789104455660');
+    type(screen, 'repair.correct.reason', 'Salah ketik');
+    await settle();
+    await press(screen, 'repair.correct.primary');
+
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket).toMatchObject({ customerPhone: '081311112222', deviceImei: '356789104455660' });
+    expect(text(screen, 'repair.ticket.timeline')).toContain(
+      'No. HP: 0812-4455-6677 → 0813-1111-2222',
+    );
+  });
+
+  test('only an owner takes a handover back, with a reason; the phone is then in the store', async () => {
+    h = await openRepairScreenHarness(5511);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
+    await h.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: h.photo(64),
+        signature: h.photo(65),
+        checklist: ['charger', 'case'].map((item) => ({
+          kind: 'accessory',
+          item,
+          label: null,
+          done: true,
+        })),
+      },
+      h.cashierId,
+    );
+    const counter = await mount(h, h.cashierId);
+    await press(counter, 'repair.board.views.returned');
+    await press(counter, `repair.board.row.${ticketId}`);
+    expect(counter.query('repair.ticket.action.undoHandover')).toBeNull();
+    expect(counter.query('repair.ticket.action.correctDetails')).toBeNull();
+    counter.unmount();
+
+    // On the device's clock: a handover is taken back only within a day of it.
+    const owner = await mount(h, h.storeOwnerId, { now: () => h!.now() });
+    await press(owner, 'repair.board.views.returned');
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, 'repair.ticket.action.undoHandover');
+    expect(owner.all('repair.undoHandover.primary')[0]!.props['disabled']).toBe(true);
+    type(owner, 'repair.undoHandover.reason', 'Salah servisan, HP masih di rak');
+    await settle();
+    await press(owner, 'repair.undoHandover.primary');
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket.location).toBe('in_store');
+    expect(ticket.photos.map((p: { slot: string }) => p.slot)).not.toContain('signature');
+  });
+});
+
 describe('cancelling (owners; the counter asks)', () => {
   test('the counter asks an owner to cancel, and the owner’s yes cancels it at the asked fee', async () => {
     h = await openRepairScreenHarness(5501);
@@ -668,6 +762,12 @@ describe('cancelling (owners; the counter asks)', () => {
     expect(screen.all('repair.cancel.primary')[0]!.props['disabled']).toBe(true);
 
     await press(screen, 'repair.cancel.changeFee');
+    // Grouped like every amount, and a 0 typed past turns into the amount, not "015000".
+    const feeValue = (): unknown => screen.get('repair.cancel.feeInput.field').props['value'];
+    expect(feeValue()).toBe('50.000');
+    type(screen, 'repair.cancel.feeInput', '015000');
+    await settle();
+    expect(feeValue()).toBe('15.000');
     type(screen, 'repair.cancel.feeInput', '20.000');
     await settle();
     expect(text(screen, 'repair.cancel.feeAmount')).toContain('20.000');
@@ -1392,10 +1492,92 @@ describe('on a tablet', () => {
   });
 });
 
+describe('printing a slip', () => {
+  // Android QA once saw Cetak spin with no dialog, then every print fail until restart. The port now
+  // gives up on a hung print call as `stuck`; the step says so and the next tap prints.
+  test('a print that got stuck says to try again, and the retry prints', async () => {
+    h = await openRepairScreenHarness(5301);
+    const ticketId = await openTicket(h);
+    const output = vi
+      .fn<RepairPrinting['output']>()
+      .mockRejectedValueOnce(new PrinterProblem('stuck'))
+      .mockResolvedValueOnce('unconfirmed');
+    const printing: RepairPrinting = {
+      storeName: async () => 'Bolusi Sorong',
+      userName: async () => null,
+      readPaper: async () => null,
+      writePaper: async () => undefined,
+      output,
+      imageDataUri: async () => null,
+    };
+    const screen = await mount(h, h.cashierId, {
+      runtime: { ...repairRuntimeFor(h, h.cashierId), printing },
+    });
+    await press(screen, `repair.board.row.${ticketId}`);
+    if (screen.query('repair.ticket.more.open') !== null)
+      await press(screen, 'repair.ticket.more.open');
+    await press(screen, 'repair.ticket.action.print');
+
+    await press(screen, 'repair.print.primary');
+    expect(text(screen, 'repair.print.notice')).toBe('Notanya belum bisa disiapkan. Coba lagi.');
+    expect(screen.query('repair.print.error')).toBeNull();
+    expect(screen.all('repair.print.primary')[0]!.props['disabled']).not.toBe(true);
+
+    await press(screen, 'repair.print.primary');
+    expect(output).toHaveBeenCalledTimes(2);
+    expect(screen.query('repair.print.notice')).toBeNull();
+    expect(screen.query('repair.print.ask')).not.toBeNull();
+  });
+});
+
 describe('listPaneWidth', () => {
   test('gives the board a phone width and the ticket the rest', () => {
     expect(listPaneWidth(840)).toBe(340);
     expect(listPaneWidth(960)).toBe(384);
     expect(listPaneWidth(1280)).toBe(420);
+  });
+});
+
+describe('money once the phone went home', () => {
+  test('an owner gives part of a paid bill back from the servisan; the counter cannot', async () => {
+    h = await openRepairScreenHarness(5701);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: h.photo(7),
+        signature: h.photo(8),
+        payments: [{ account: 'cash', amount: 750_000 }],
+        checklist: accessoriesBack(),
+      },
+      h.cashierId,
+    );
+    const counter = await mount(h, h.cashierId);
+    await press(counter, 'repair.board.views.returned');
+    await press(counter, `repair.board.row.${ticketId}`);
+    expect(counter.query('repair.ticket.refund')).toBeNull();
+    expect(counter.query('repair.ticket.reduce')).toBeNull();
+    counter.unmount();
+
+    const screen = await mount(h, h.ownerId);
+    await press(screen, 'repair.board.views.returned');
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(screen.query('repair.ticket.reduce')).toBeNull();
+    await press(screen, 'repair.ticket.refund');
+    expect(text(screen, 'money.refund.paid')).toContain('Rp 750.000');
+    type(screen, 'money.refund.amount', '50000');
+    await settle();
+    expect(text(screen, 'money.refund.lowersBill')).toBe('Tagihan juga turun Rp 50.000.');
+    type(screen, 'money.refund.reason', 'Garansi kaca');
+    await settle();
+    await press(screen, 'money.refund.primary');
+
+    expect(text(screen, 'repair.ticket.done')).toContain('Uang sudah dikembalikan.');
+    expect(text(screen, 'repair.ticket.reduced')).toBe('-Rp 50.000');
+    expect(text(screen, 'repair.ticket.downPayment')).toBe('-Rp 700.000');
+    expect(text(screen, 'repair.ticket.balance')).toBe('Rp 0');
   });
 });

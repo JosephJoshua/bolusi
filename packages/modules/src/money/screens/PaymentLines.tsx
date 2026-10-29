@@ -118,6 +118,7 @@ export function PaymentLines({
               value={digitsText(line.amount)}
               onChangeText={digits(line.key, 'amount')}
               keyboardType="number-pad"
+              selectTextOnFocus
               testID={`${id}.amount`}
             />
             {kind === 'cash' ? (
@@ -127,6 +128,7 @@ export function PaymentLines({
                   value={digitsText(line.tendered)}
                   onChangeText={digits(line.key, 'tendered')}
                   keyboardType="number-pad"
+                  selectTextOnFocus
                   errorMessage={
                     problem === 'tendered' ? tm('money.pay.problem.tendered') : undefined
                   }

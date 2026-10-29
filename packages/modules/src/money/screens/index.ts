@@ -8,9 +8,17 @@ export {
   type MoneyStore,
 } from '../runtime.js';
 export { KasBoard, type KasBoardProps } from './Kas.js';
-export { CountCashStep, MoveCashStep, ReceiveDebtStep, SettleCountStep } from './KasSteps.js';
+export {
+  CountCashStep,
+  MoveCashStep,
+  ReceiveDebtStep,
+  ReduceChargeStep,
+  RefundStep,
+  SettleCountStep,
+} from './KasSteps.js';
 export type { CashCountRow, OpenBalanceRow } from '../queries.js';
 export type { NamedBalance } from '../kas.js';
+export { targetOf, type MoneyTarget } from '../refund.js';
 export { KasHistory, VoidPaymentStep } from './KasHistory.js';
 export { PaymentMethodForm, PaymentMethodList, PaymentMethodsSurface } from './PaymentMethods.js';
 export type { MoneyEntryRow, PaymentAccountRow } from '../queries.js';

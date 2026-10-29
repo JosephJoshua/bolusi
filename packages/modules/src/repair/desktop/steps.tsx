@@ -6,6 +6,7 @@ import { formatMoney, t } from '@bolusi/i18n';
 import type { MediaRef } from '@bolusi/schemas';
 import {
   Avatar,
+  Banner,
   Button,
   CaptureTile,
   ConfirmDialog,
@@ -24,7 +25,13 @@ import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
-import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
+import { freeHandoverNeedsOwner } from '../rules.js';
+import {
+  giveBackText,
+  payLaterHintKey,
+  payLaterLines,
+  useHandoverPayment,
+} from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_APPROVAL_KIND,
@@ -37,8 +44,15 @@ import { useDownPaymentAsk } from '../down-payment-ask.js';
 import {
   askedBecauseKey,
   asksApproval,
+  INTAKE_PROBLEM_KEY,
   balanceAfterDownPayment,
   capturedThumbnailRef,
+  correctionDraft,
+  correctionOptions,
+  correctionProblems,
+  toCorrectionInput,
+  type IntakeDraft,
+  type IntakeProblem,
   downPaymentEntry,
   printableSlips,
   priceKinds,
@@ -46,6 +60,7 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
+  cancelRefund,
 } from '../flows.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { ta } from '../../approvals/i18n.js';
@@ -53,6 +68,7 @@ import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../q
 import { tn, type RepairKey } from '../i18n.js';
 import {
   DOWN_PAYMENT_GAP_KEY,
+  INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
   discountLimitHint,
   downPaymentTitleKey,
@@ -62,16 +78,18 @@ import {
   useCancelFees,
   useIntakeOptionSettings,
   useDownPaymentMethod,
+  useHandoverRefunds,
   usePaymentAccounts,
   useTicketQris,
   useRepairQuery,
   useRepairRuntime,
   type RepairPrinting,
 } from '../runtime.js';
-import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
+import { DESK_PAPERS, paperLabel, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { outputSlip } from '../slip-output.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
+import { AccessoryChips, CustomerFields, DeviceFields } from './Intake.js';
 import {
   MoneyField,
   PrinterProblemBanner,
@@ -449,11 +467,14 @@ export function CancelDialog({
   stale,
   workStarted,
   claimOf,
+  downPayment,
   onDone,
   onAsked,
   onClose,
 }: StepDialogProps & {
   readonly workStarted: boolean;
+  /** Paid in so far: what is above the fee goes back at pickup. */
+  readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
   readonly claimOf: string | null;
   readonly onAsked: () => void;
@@ -509,7 +530,13 @@ export function CancelDialog({
     <>
       <StepDialog
         title={tn(holds ? 'repair.action.cancel' : 'repair.approval.askCancel')}
-        description={tn('repair.cancel.consequence')}
+        description={
+          cancelRefund(downPayment, charged) > 0
+            ? tn('repair.cancel.refundsDp', {
+                amount: formatMoney(cancelRefund(downPayment, charged)),
+              })
+            : tn('repair.cancel.consequence')
+        }
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
@@ -605,6 +632,221 @@ export function CancelDialog({
             {tn(askedBecauseKey(holds))}
           </p>
         ) : null}
+      </StepDialog>
+      {leave.confirm}
+    </>
+  );
+}
+
+// ── undo a handover (owners) ────────────────────────────────────────────────────────────────
+
+/** Take back a handover recorded by mistake: the phone is in the store again. A reason is required. */
+export function UndoHandoverDialog({
+  ticketId,
+  stale,
+  onDone,
+  onClose,
+}: StepDialogProps): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [reason, setReason] = useState('');
+  const complete = reason.trim() !== '';
+  const submit = (): void => {
+    if (!complete) return;
+    void runner
+      .run(() => runtime.run('undoHandover', { ticketId, reason }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  const leave = useLeaveGuard(stale === null && complete, onClose);
+  return (
+    <>
+      <StepDialog
+        title={tn('repair.undoHandover.title')}
+        description={tn('repair.undoHandover.explain')}
+        runner={runner}
+        stale={stale}
+        onRequestClose={leave.requestClose}
+        size="sm"
+        testId="repair.desk.undoHandover"
+        footer={
+          <>
+            <CancelButton onClick={leave.requestClose} />
+            <Button
+              label={tn('repair.action.undoHandover')}
+              variant="danger"
+              onClick={submit}
+              busy={runner.busy}
+              disabled={!complete || stale !== null}
+              data-testid="repair.desk.undoHandover.submit"
+            />
+          </>
+        }
+      >
+        <TextArea
+          label={tn('repair.undoHandover.reason')}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          autoFocus
+          data-testid="repair.desk.undoHandover.reason"
+        />
+      </StepDialog>
+      {leave.confirm}
+    </>
+  );
+}
+
+// ── correct what intake wrote down ──────────────────────────────────────────────────────────
+
+/**
+ * Put right the customer, the phone, the complaint or what was left with it, in intake's own
+ * fields. Only what differs is saved, and the history keeps what it was.
+ */
+export function CorrectDetailsDialog({
+  ticket,
+  stale,
+  onDone,
+  onClose,
+}: Omit<StepDialogProps, 'ticketId'> & { readonly ticket: TicketDetailRow }): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const settings = useIntakeOptionSettings();
+  const [initial] = useState(() => correctionDraft(ticket));
+  const [draft, setDraft] = useState(initial);
+  const [reason, setReason] = useState('');
+  const [showProblems, setShowProblems] = useState(false);
+  const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
+  const options =
+    settings.status === 'ready'
+      ? correctionOptions(storeIntakeOptions(settings.data), ticket)
+      : null;
+  const problems = options === null ? [] : correctionProblems(draft, options);
+  const problemText = (problem: IntakeProblem): string | undefined =>
+    showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || reason.trim() !== '';
+  const handedOver = ticket.returnedAt !== null;
+
+  const submit = (): void => {
+    if (options === null) return;
+    if (problems.length > 0) {
+      setShowProblems(true);
+      // The first field to fix may be below the fold of the dialog: take the counter to it.
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>('[data-testid="repair.desk.correct"] [aria-invalid="true"]')
+          ?.focus(),
+      );
+      return;
+    }
+    if (JSON.stringify(draft) === JSON.stringify(initial)) {
+      onClose();
+      return;
+    }
+    void runner
+      .run(() =>
+        runtime.run('correctTicketDetails', toCorrectionInput(ticket, draft, options, reason)),
+      )
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  const leave = useLeaveGuard(stale === null && dirty, onClose);
+  return (
+    <>
+      <StepDialog
+        title={tn('repair.correct.title')}
+        description={tn('repair.correct.about')}
+        runner={runner}
+        stale={stale}
+        onRequestClose={leave.requestClose}
+        size="lg"
+        testId="repair.desk.correct"
+        footer={
+          <>
+            <CancelButton onClick={leave.requestClose} />
+            <Button
+              label={tn('repair.correct.save')}
+              variant="primary"
+              onClick={submit}
+              busy={runner.busy}
+              disabled={stale !== null || options === null}
+              data-testid="repair.desk.correct.submit"
+            />
+          </>
+        }
+      >
+        <QueryPanel query={settings} onRetry={() => undefined}>
+          {() =>
+            options === null ? null : (
+              <div className="flex flex-col gap-6 @container">
+                {/* The slip signed at a handover (since taken back) names this customer and phone. */}
+                {handedOver ? (
+                  <p className="text-body text-text-muted">
+                    {tn('repair.correct.handedOverLocked')}
+                  </p>
+                ) : (
+                  <>
+                    <section className="flex flex-col gap-3">
+                      <h3 className="text-heading font-semibold text-text">
+                        {tn(INTAKE_STEP_KEY.customer)}
+                      </h3>
+                      <CustomerFields
+                        draft={draft}
+                        update={update}
+                        nameError={problemText('customerName')}
+                        phoneError={problemText('customerPhone')}
+                        currentCustomerId={ticket.customerId}
+                      />
+                    </section>
+                    <section className="flex flex-col gap-3">
+                      <h3 className="text-heading font-semibold text-text">
+                        {tn(INTAKE_STEP_KEY.device)}
+                      </h3>
+                      {/* A claim is for its servisan's phone: the rule refuses another one. */}
+                      {ticket.claimOfTicketId === null ? (
+                        <DeviceFields
+                          draft={draft}
+                          update={update}
+                          options={options}
+                          brandError={problemText('deviceBrand')}
+                          modelError={problemText('deviceModel')}
+                          imeiError={problemText('deviceImei')}
+                          lockError={problemText('screenLock')}
+                        />
+                      ) : (
+                        <p className="text-body text-text-muted">
+                          {tn('repair.correct.claimDevice')}
+                        </p>
+                      )}
+                    </section>
+                  </>
+                )}
+                <section className="flex flex-col gap-4">
+                  <h3 className="text-heading font-semibold text-text">
+                    {tn(INTAKE_STEP_KEY.condition)}
+                  </h3>
+                  <TextArea
+                    label={tn('repair.condition.complaint')}
+                    value={draft.complaint}
+                    onChange={(event) => update({ complaint: event.target.value })}
+                    error={problemText('complaint')}
+                    rows={2}
+                    data-testid="repair.desk.correct.complaint"
+                  />
+                  <AccessoryChips draft={draft} update={update} accessories={options.accessories} />
+                </section>
+                <TextField
+                  label={tn('repair.correct.reason')}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  maxLength={500}
+                  data-testid="repair.desk.correct.reason"
+                />
+              </div>
+            )
+          }
+        </QueryPanel>
       </StepDialog>
       {leave.confirm}
     </>
@@ -868,9 +1110,14 @@ export function ProposalDialog({
   ticketId,
   stale,
   line,
+  total,
   onDone,
   onClose,
-}: StepDialogProps & { readonly line: QuoteLineRow }): React.JSX.Element {
+}: StepDialogProps & {
+  readonly line: QuoteLineRow;
+  /** The agreed total now, so the change reads as what the customer will pay. */
+  readonly total: number;
+}): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [note, setNote] = useState('');
@@ -932,6 +1179,16 @@ export function ProposalDialog({
           >
             {formatMoney(line.amount)}
           </p>
+          {/* An extra zero shows here, where the customer hears it: 1.500.000 → 3.500.000. */}
+          <p
+            className="tabular mt-1 text-body text-text"
+            data-testid="repair.desk.proposal.newTotal"
+          >
+            {tn('repair.price.newTotal', {
+              from: formatMoney(total),
+              to: formatMoney(total + line.amount),
+            })}
+          </p>
           {line.reason === null ? null : (
             <>
               <p className="mt-3 text-small text-text-muted">{tn('repair.price.changeReason')}</p>
@@ -975,7 +1232,16 @@ export function HandoverDialog({
   onClose,
 }: StepDialogProps & {
   /** What the checklist is made of: whether it was repaired, and what was left with it. */
-  readonly ticket: Pick<TicketDetailRow, 'outcome' | 'peripherals' | 'ticketNumber'>;
+  readonly ticket: Pick<
+    TicketDetailRow,
+    | 'outcome'
+    | 'peripherals'
+    | 'quoteTotal'
+    | 'claimOfTicketId'
+    | 'ticketNumber'
+    | 'deviceBrand'
+    | 'deviceModel'
+  >;
   readonly customerName: string;
   /** What the customer pays in all: the price, or a cancelled servisan's fee. */
   readonly amount: number;
@@ -993,6 +1259,9 @@ export function HandoverDialog({
   const accounts = loadedAccounts ?? [];
   const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
+  const giveBack = giveBackText(
+    useHandoverRefunds(ticketId, balance.kind === 'refund' ? balance.amount : 0, accounts),
+  );
   const qris = useTicketQris(ticketId, ticket.ticketNumber);
   const payment = useHandoverPayment(ticketId, due, accounts, qris);
   const { settled } = payment;
@@ -1018,7 +1287,10 @@ export function HandoverDialog({
     });
   };
   const captured = photo !== null && signature !== null;
-  const complete = captured && settled && loadedAccounts !== null && checks.ready(note);
+  const ownerNeeded =
+    freeHandoverNeedsOwner(ticket) && !runtime.hasPermission(REPAIR_PERMISSION.warrantyException);
+  const complete =
+    !ownerNeeded && captured && settled && loadedAccounts !== null && checks.ready(note);
   const submit = (): void => {
     if (!complete || photo === null || signature === null) return;
     void runner
@@ -1041,6 +1313,12 @@ export function HandoverDialog({
     <>
       <StepDialog
         title={tn('repair.action.handover')}
+        // Which phone it is, as the phone app shows it: a customer with two ready names both.
+        description={
+          <span data-testid="repair.desk.handover.phone">
+            {`${ticket.deviceBrand} ${ticket.deviceModel} · ${ticket.ticketNumber}`}
+          </span>
+        }
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
@@ -1050,13 +1328,15 @@ export function HandoverDialog({
             {complete ? null : (
               <p className="mr-auto text-small text-text-muted">
                 {tn(
-                  payment.qris.pending > 0
-                    ? 'repair.hint.handoverQris'
-                    : !settled
-                      ? payLaterHintKey(payment)
-                      : checks.loaded && !checks.ready(note)
-                        ? 'repair.hint.handoverChecks'
-                        : 'repair.hint.handover',
+                  ownerNeeded
+                    ? 'repair.hint.handoverFree'
+                    : payment.qris.pending > 0
+                      ? 'repair.hint.handoverQris'
+                      : !settled
+                        ? payLaterHintKey(payment)
+                        : checks.loaded && !checks.ready(note)
+                          ? 'repair.hint.handoverChecks'
+                          : 'repair.hint.handover',
                 )}
               </p>
             )}
@@ -1107,6 +1387,11 @@ export function HandoverDialog({
         {cancelled ? (
           <p className="mt-2 text-small text-text-muted">{tn('repair.handover.cancelled')}</p>
         ) : null}
+        {giveBack === null || stale !== null ? null : (
+          <div className="mt-3" data-testid="repair.desk.handover.giveBack">
+            <Banner tone="info" message={giveBack} />
+          </div>
+        )}
         {checks.lines.length === 0 || stale !== null ? null : (
           <section className="mt-4" data-testid="repair.desk.handover.checks">
             <h3 className="mb-2 text-body font-semibold text-text">
@@ -1436,7 +1721,7 @@ export function PrintDialog({
   const slips = printableSlips(ticket);
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
-  const [paper] = useDevicePaper(printing, DESK_PAPERS);
+  const { paper } = useDevicePaper(printing, DESK_PAPERS);
   const { state: printers } = useDevicePrinters(printing.printers);
   const [problem, catchProblem, clearProblem] = usePrinterProblem();
   const [asking, setAsking] = useState(false);
@@ -1514,10 +1799,10 @@ export function PrintDialog({
             {paper === null ? null : (
               <p className="mt-1 text-small text-text-muted" data-testid={`${testId}.paper`}>
                 {printer === null
-                  ? tn('repair.print.onPaper', { paper: tn(PAPER_KEY[paper]) })
+                  ? tn('repair.print.onPaper', { paper: paperLabel(paper) })
                   : tn('repair.print.onPrinter', {
                       printer: printer.label,
-                      paper: tn(PAPER_KEY[paper]),
+                      paper: paperLabel(paper),
                     })}
               </p>
             )}
