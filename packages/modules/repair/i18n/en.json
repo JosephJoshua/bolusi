@@ -438,7 +438,8 @@
     "received": "Received {date}",
     "readyBy": "Ready by {date}",
     "returned": "Collected {date}",
-    "reprint": "{count, plural, =1 {Reprint} other {Reprint no. #}}",
+    "reprint": "Reprint no. {count}",
+    "reprintFirst": "Reprint",
     "printed": "Printed {date}",
     "printedBy": "Printed {date} by {name}",
     "field": {

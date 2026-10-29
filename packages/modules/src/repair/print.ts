@@ -62,6 +62,13 @@ function deviceName(ticket: TicketDetailRow): string {
   return color === '' ? name : `${name} (${color})`;
 }
 
+/** Nothing on a first print; the first reprint is just "Cetak ulang", later ones are numbered. */
+function reprintLabel(earlierPrints: number): string[] {
+  if (earlierPrints === 0) return [];
+  if (earlierPrints === 1) return [tn('repair.slip.reprintFirst')];
+  return [tn('repair.slip.reprint', { count: earlierPrints })];
+}
+
 function common(
   ticket: TicketDetailRow,
   ctx: SlipContext,
@@ -84,10 +91,7 @@ function common(
     title,
     reference: ticket.ticketNumber,
     // The print log counts earlier prints, so it is also which reprint this one is.
-    meta:
-      ticket.slipPrints[slip] > 0
-        ? [...meta, tn('repair.slip.reprint', { count: ticket.slipPrints[slip] })]
-        : meta,
+    meta: [...meta, ...reprintLabel(ticket.slipPrints[slip])],
     ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
     plyNote: tn('repair.slip.plyNote'),
