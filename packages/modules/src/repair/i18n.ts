@@ -477,6 +477,7 @@ export const REPAIR_KEYS = [
   'repair.print.problem.noPrinter',
   'repair.print.problem.printerMissing',
   'repair.print.problem.failed',
+  'repair.print.problem.stuck',
   'repair.downPayment.recordTitle',
   'repair.downPayment.correctTitle',
   'repair.downPayment.change',
