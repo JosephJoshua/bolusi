@@ -345,7 +345,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
       reduced +
       (await voidedOffDocument(db, store, {
         ...document,
-        voiding: change.voiding === undefined ? null : { ...change.voiding, at: op.timestamp },
+        voiding: change.voiding === undefined ? [] : [{ ...change.voiding, at: op.timestamp }],
         owed: balance,
       })) +
       refundsCounted
@@ -686,6 +686,36 @@ async function requireReplaceable(
 }
 
 /**
+ * What voiding `voiding` (and recording `paying` in place of one) at `at` would leave taken off a
+ * document, as the last of those voids is judged against the refund limit (`takenOffDocument`):
+ * its charge reductions and the voids. Refunds are left out, so it holds only for documents
+ * without any (a down payment fix is refused once one is paid).
+ */
+export async function takenOffByVoids(
+  db: Db,
+  storeId: string,
+  document: { readonly kind: string; readonly id: string },
+  change: {
+    readonly voiding: readonly { readonly id: string; readonly amount: number }[];
+    readonly paying?: { readonly replaces: string; readonly amount: number };
+    readonly at: number;
+  },
+): Promise<number> {
+  const voided = change.voiding.reduce((sum, { amount }) => sum + amount, 0);
+  const owed =
+    (await documentBalance(db, storeId, document)) + voided - (change.paying?.amount ?? 0);
+  return (
+    (await documentTotal(db, storeId, document, 'charge_reduced')) +
+    (await voidedOffDocument(db, storeId, {
+      ...document,
+      voiding: change.voiding.map((entry) => ({ ...entry, at: change.at })),
+      ...(change.paying === undefined ? {} : { paying: { ...change.paying, at: change.at } }),
+      owed,
+    }))
+  );
+}
+
+/**
  * The money voids took off a document, the void being judged (if any) included. Before the document
  * is charged, a payment voided after one was recorded in its place counts only beyond what that one
  * holds. Once charged, a void made since counts only beyond the live payments recorded after it (a
@@ -699,11 +729,18 @@ async function voidedOffDocument(
   document: {
     readonly kind: string;
     readonly id: string;
-    readonly voiding: { readonly id: string; readonly amount: number; readonly at: number } | null;
+    /** The payments being voided now. */
+    readonly voiding: readonly {
+      readonly id: string;
+      readonly amount: number;
+      readonly at: number;
+    }[];
+    /** A payment about to be recorded in place of one (a down payment fix asked, not yet made). */
+    readonly paying?: { readonly replaces: string; readonly amount: number; readonly at: number };
     readonly owed: number;
   },
 ): Promise<number> {
-  const payments = await db
+  const recorded = await db
     .selectFrom('moneyEntries')
     .select(['id', 'amount', 'voidedBy', 'voidedAt', 'createdAt', 'relatedEntryId'])
     .where('storeId', '=', storeId)
@@ -711,11 +748,27 @@ async function voidedOffDocument(
     .where('documentKind', '=', document.kind)
     .where('documentId', '=', document.id)
     .execute();
+  const { paying } = document;
+  const payments = [
+    ...recorded,
+    ...(paying === undefined
+      ? []
+      : [
+          {
+            id: '',
+            amount: paying.amount,
+            voidedBy: null,
+            voidedAt: null,
+            createdAt: paying.at,
+            relatedEntryId: paying.replaces,
+          },
+        ]),
+  ];
   const voided = [
     ...payments
       .filter((row) => row.voidedBy !== null)
       .map((row) => ({ id: row.id, amount: Number(row.amount), at: Number(row.voidedAt) })),
-    ...(document.voiding === null ? [] : [document.voiding]),
+    ...document.voiding,
   ];
   const total = voided.reduce((sum, { amount }) => sum + amount, 0);
   const billed = await db

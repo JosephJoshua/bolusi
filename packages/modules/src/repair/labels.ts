@@ -1,7 +1,7 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
-import { formatDate, formatPhone } from '@bolusi/i18n';
+import { formatDate, formatMoney, formatPhone } from '@bolusi/i18n';
 
 import type { DetailChange } from './applier.js';
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
@@ -324,4 +324,17 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
     }
   }
   return lines.length === 0 ? null : lines.join('\n');
+}
+
+/** A limited role's discount limit, or what is left of it once the servisan has discounts. */
+export function discountLimitHint(limit: number, discounted: number): string {
+  return discounted === 0
+    ? tn('repair.hint.discountLimit', { amount: formatMoney(limit) })
+    : tn('repair.hint.discountLeft', { amount: formatMoney(Math.max(0, limit - discounted)) });
+}
+
+/** A down payment step's title: recording one, fixing one, or asking an owner to fix it. */
+export function downPaymentTitleKey(mode: 'record' | 'correct', holds: boolean): RepairKey {
+  if (mode === 'record') return 'repair.downPayment.recordTitle';
+  return holds ? 'repair.downPayment.correctTitle' : 'repair.downPayment.askTitle';
 }

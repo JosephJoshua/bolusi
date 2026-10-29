@@ -10,6 +10,7 @@ import { QuantityStepper } from '../src/components/QuantityStepper.js';
 import { SegmentedControl } from '../src/components/SegmentedControl.js';
 import { StepHeader } from '../src/components/StepHeader.js';
 import { ToggleChip } from '../src/components/ToggleChip.js';
+import { size } from '../src/tokens.js';
 import { fire, render, textsIn } from './render.js';
 
 describe('SegmentedControl', () => {
@@ -134,6 +135,18 @@ describe('ToggleChip', () => {
     expect(on.get('c').props['accessibilityState']).toEqual({ checked: true });
     expect(on.query('c.check')).not.toBeNull();
     expect(off.query('c.check')).toBeNull();
+  });
+
+  test('keeps its width when toggled: the check takes room the label is padded with', () => {
+    const style = (selected: boolean) =>
+      StyleSheet.flatten(
+        render(<ToggleChip testID="c" label="Casing" selected={selected} onToggle={vi.fn()} />).get(
+          'c',
+        ).props['style'],
+      ) as { paddingHorizontal: number; gap: number };
+    const off = style(false);
+    const on = style(true);
+    expect(2 * off.paddingHorizontal).toBe(2 * on.paddingHorizontal + size.iconChip + on.gap);
   });
 });
 

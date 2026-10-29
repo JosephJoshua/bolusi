@@ -531,6 +531,7 @@ describe('Riwayat', () => {
 
     await press(screen, row);
     expect(text(screen, 'money.void.amount')).toBe('Rp 200.000');
+    expect(screen.query('money.void.limit')).toBeNull();
     expect(screen.all('money.void.primary')[0]!.props['disabled']).toBe(true);
     type(screen, 'money.void.reason', 'Salah metode');
     await settle();
@@ -540,6 +541,21 @@ describe('Riwayat', () => {
     expect(text(screen, row)).toContain('Dibatalkan: Salah metode');
     await press(screen, 'money.history.back');
     expect(text(screen, 'money.kas.expected')).toBe('Rp 0');
+  });
+
+  test('a manager sees their cancel limit before cancelling a payment', async () => {
+    h = await openRepairScreenHarness(5415);
+    const entryId = await paid(h);
+    const screen = await mount(h, h.managerId);
+    await press(screen, 'money.kas.history');
+    await press(screen, `money.history.entry.${entryId}`);
+    // The manager's refund limit in the harness, which voids count against too.
+    expect(text(screen, 'money.void.limit')).toBe('Batas pembatalanmu Rp 30.000 per servisan.');
+    // Rp 200.000 is beyond it: refused before any reason is typed, not after submitting.
+    type(screen, 'money.void.reason', 'Salah metode');
+    await settle();
+    expect(screen.all('money.void.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(screen, 'money.void.primaryHint')).toBe('Melebihi batasmu. Minta pemilik toko.');
   });
 
   test('the counter reads the records but cannot cancel one', async () => {

@@ -36,9 +36,11 @@
 // site. The cast lives ONCE here now, in the manifests' home, rather than per element in two apps.
 import { authModule, platformModule, type AnyModuleDefinition } from '@bolusi/core';
 
+import { createApprovalsModule, type ApprovalsModule } from './approvals/manifest.js';
 import { defineInventoryModule, type InventoryModule } from './inventory/index.js';
 import { createMoneyModule } from './money/manifest.js';
 import { notesModule } from './notes/manifest.js';
+import { repairApprovalKinds } from './repair/approval-kinds.js';
 import { repairModule } from './repair/manifest.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './repair/money-document.js';
 import { repairPartUse } from './repair/part-use.js';
@@ -58,8 +60,14 @@ export const inventoryModule: InventoryModule = defineInventoryModule({
 export const moneyModule = createMoneyModule({ [REPAIR_DOCUMENT_KIND]: repairMoneyDocument });
 
 /**
+ * Approval requests, for the decisions each module lets an owner hand out. A module with such
+ * decisions adds its kinds here.
+ */
+export const approvalsModule: ApprovalsModule = createApprovalsModule({ ...repairApprovalKinds });
+
+/**
  * The modules every Bolusi build registers — the ONE list `SERVER_MODULES` and `CLIENT_MODULES`
- * both are (04 §1/§3/§4; 02 §3.2). Order is `platform`, `notes`, `repair`, `inventory`, `money`, `auth`; a registration list's
+ * both are (04 §1/§3/§4; 02 §3.2). Order is `platform`, `notes`, `repair`, `inventory`, `money`, `approvals`, `auth`; a registration list's
  * failure mode is a silent omission, so the count is guarded in `index.test.ts` (T-14) and folded
  * on the real push path (server) and real bootstrap (client) — an empty list would fold nothing.
  */
@@ -69,6 +77,7 @@ export const ALL_MODULES = [
   repairModule,
   inventoryModule,
   moneyModule,
+  approvalsModule,
   authModule,
 ] as unknown as readonly AnyModuleDefinition<never>[];
 export * from './role-abilities.js';

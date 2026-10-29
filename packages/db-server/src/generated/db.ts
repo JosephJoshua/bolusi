@@ -23,6 +23,25 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
+export interface ApprovalRequests {
+  amount: Int8;
+  basis: string;
+  decidedAt: Int8 | null;
+  decidedBy: string | null;
+  id: string;
+  inputJson: string;
+  kind: string;
+  note: string | null;
+  reason: string;
+  requestedAt: Int8;
+  requestedBy: string;
+  status: string;
+  storeId: string;
+  targetId: string;
+  targetType: string;
+  tenantId: string;
+}
+
 export interface AuthPermissionDenials {
   deviceId: string;
   id: string;
@@ -670,6 +689,7 @@ export interface UserStores {
 }
 
 export interface DB {
+  approvalRequests: ApprovalRequests;
   authPermissionDenials: AuthPermissionDenials;
   authSessions: AuthSessions;
   conflicts: Conflicts;

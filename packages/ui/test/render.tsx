@@ -99,3 +99,22 @@ export function a11yStringsIn(node: TestInstance): string[] {
   visit(node);
   return out;
 }
+
+/**
+ * Poll `predicate` on real timers inside `act`, up to `timeoutMs`. Returns whether it became true —
+ * never throws, so a caller asserting the NEGATIVE case (a wrong PIN must NOT open a session) waits
+ * the full budget and then asserts, rather than being handed a pass by a helper that gave up early.
+ */
+export async function waitUntil(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 5000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await predicate()) return true;
+    if (Date.now() >= deadline) return false;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+}

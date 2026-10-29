@@ -697,6 +697,85 @@ describe('a phone goes home paid', () => {
   });
 });
 
+describe('Bayar nanti', () => {
+  test('the counter leaves a debt only with an owner’s approved Bayar nanti that covers it', async () => {
+    const { world, builder } = await setupWorld(3380, 'none');
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId: testId(3381),
+      roleName: 'cashier',
+      permissionIds: ['repair.read', 'repair.handover', 'money.read', 'money.receive'],
+    });
+    await db
+      .updateTable('repairTickets')
+      .set({ outcome: 'repaired' })
+      .where('id', '=', TICKET)
+      .execute();
+    const permit = async (id: string, amount: number) =>
+      db
+        .insertInto('approvalRequests')
+        .values({
+          id,
+          tenantId: world.tenantId,
+          storeId: world.storeId,
+          kind: 'repair.payLater',
+          targetType: 'repair_ticket',
+          targetId: TICKET,
+          inputJson: JSON.stringify({ ticketId: TICKET }),
+          amount: BigInt(amount),
+          reason: 'Gajian Jumat',
+          basis: 'x',
+          requestedBy: world.userId,
+          requestedAt: BigInt(NOW),
+          status: 'approved',
+          decidedBy: testId(3382),
+          decidedAt: BigInt(NOW),
+          note: null,
+        })
+        .execute();
+    const charge = builder.append({
+      type: 'money.charge_recorded',
+      entityType: 'money_entry',
+      entityId: '01920000-0000-7000-8000-0000000e0d01',
+      payload: {
+        document: { kind: 'repair.ticket', id: TICKET, label: 'SEED-0001' },
+        amount: 650_000,
+        account: 'service_revenue',
+      },
+    });
+    const handover = () =>
+      ticketOp(
+        builder,
+        'repair.device_returned',
+        {
+          handoverPhoto: photo(world, 7),
+          signature: photo(world, 8),
+          note: '',
+          unpaidReason: 'Gajian Jumat',
+          checklist: [],
+        },
+        { schemaVersion: 3 },
+      );
+
+    // Approved for less than is left: refused like no approval at all.
+    await permit('01920000-0000-7000-8000-0000000e0d10', 600_000);
+    const first = await push(world, [charge, handover()]);
+    expect(first.results.map((r) => r.status)).toEqual(['accepted', 'rejected']);
+    expect(first.results[1]).toMatchObject({ reason: 'repair.refusal.unpaidOwnerOnly' });
+
+    await permit('01920000-0000-7000-8000-0000000e0d11', 650_000);
+    const second = await push(world, [handover()]);
+    expect(second.results[0]).toMatchObject({ status: 'accepted' });
+    const row = await db
+      .selectFrom('repairTickets')
+      .select('location')
+      .where('id', '=', TICKET)
+      .executeTakeFirst();
+    expect(row?.location).toBe('returned');
+  });
+});
+
 describe('a pushed op stamped in the future is refused', () => {
   test('beyond the margin: CLOCK_AHEAD with a device alarm, and the next op still syncs', async () => {
     const { world, builder } = await setupWorld(3310);

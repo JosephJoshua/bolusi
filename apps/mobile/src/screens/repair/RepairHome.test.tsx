@@ -7,7 +7,7 @@ import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
 import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
-import { PrinterProblem, type RepairPrinting } from '@bolusi/modules/repair/screens';
+import { PrinterProblem, type RepairPrinting, tn } from '@bolusi/modules/repair/screens';
 import { color } from '@bolusi/ui';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -30,6 +30,7 @@ import {
   USER_NAMES,
   type RepairHarness,
   type RenderResult,
+  waitUntil,
 } from '../../../test/repair-support.js';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
@@ -476,6 +477,168 @@ describe('price changes and handover', () => {
   });
 });
 
+describe('Bayar nanti (owners; the counter asks)', () => {
+  test('the counter asks at handover, and once an owner approves, hands the phone over unpaid', async () => {
+    h = await openRepairScreenHarness(5521);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(70)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(71)] }, h.technicianId);
+    const checks = [
+      'check.customerTried',
+      'check.repairWorks',
+      'accessory.charger',
+      'accessory.case',
+    ];
+
+    const counter = await mount(h, h.cashierId);
+    await press(counter, 'repair.board.views.pickup');
+    await press(counter, `repair.board.row.${ticketId}`);
+    await press(counter, 'repair.ticket.action.handover');
+    await press(counter, 'repair.handover.payLater');
+    expect(text(counter, 'repair.handover.asks')).toBe(tn('repair.approval.needsApproval'));
+    // Not theirs at all, so no limit to show.
+    expect(counter.query('repair.handover.limit')).toBeNull();
+    // Asking needs the reason, which the owner reads.
+    expect(counter.all('repair.handover.askPayLater')[0]!.props['disabled']).toBe(true);
+    type(counter, 'repair.handover.unpaidReason', 'Gajian Jumat');
+    await settle();
+    await press(counter, 'repair.handover.askPayLater');
+    // Read live: the request shows as it lands.
+    expect(await waitUntil(() => counter.query('repair.handover.waiting') !== null)).toBe(true);
+    expect(text(counter, 'repair.handover.primaryHint')).toBe(tn('repair.hint.payLaterWaiting'));
+    counter.unmount();
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, 'repair.board.views.approvals');
+    await press(owner, `repair.board.row.${ticketId}`);
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.storeOwnerId)
+    ).rows;
+    expect(request).toMatchObject({ status: 'waiting', amount: 750_000, reason: 'Gajian Jumat' });
+    await press(owner, `repair.ticket.approvals.${request!.id}`);
+    await press(owner, 'repair.ticket.approval.primary');
+    // Approving lets the counter do it; the phone is still in the store.
+    expect((await ticketRow(h, ticketId)).location).toBe('in_store');
+    owner.unmount();
+
+    const back = await mount(h, h.cashierId);
+    await press(back, 'repair.board.views.pickup');
+    await press(back, `repair.board.row.${ticketId}`);
+    await press(back, 'repair.ticket.action.handover');
+    await press(back, 'repair.handover.payLater');
+    expect(await waitUntil(() => back.query('repair.handover.permitted') !== null)).toBe(true);
+    type(back, 'repair.handover.unpaidReason', 'Gajian Jumat');
+    await press(back, 'repair.handover.photo.press');
+    await press(back, 'repair.handover.signature.press');
+    for (const line of checks) await press(back, `repair.handover.check.${line}`);
+    await settle();
+    await press(back, 'repair.handover.primary');
+    expect((await ticketRow(h, ticketId)).location).toBe('returned');
+  });
+});
+
+describe('a down payment fix (owners; the counter asks)', () => {
+  test('the counter asks to fix a DP, and the owner’s yes fixes it', async () => {
+    h = await openRepairScreenHarness(5531);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
+
+    const counter = await mount(h, h.cashierId);
+    await press(counter, `repair.board.row.${ticketId}`);
+    await press(counter, 'repair.ticket.downPayment.correct');
+    type(counter, 'repair.downPayment.amount', '80.000');
+    type(counter, 'repair.downPayment.reason', 'Salah ketik');
+    await settle();
+    expect(text(counter, 'repair.downPayment.asks')).toBe(tn('repair.approval.needsApproval'));
+    await press(counter, 'repair.downPayment.primary');
+    expect((await ticketRow(h, ticketId)).downPayment).toBe(100_000);
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.cashierId)
+    ).rows;
+    expect(request).toMatchObject({ kind: 'repair.downPayment', amount: 20_000 });
+    counter.unmount();
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, 'repair.board.views.approvals');
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, `repair.ticket.approvals.${request!.id}`);
+    await press(owner, 'repair.ticket.approval.primary');
+    expect((await ticketRow(h, ticketId)).downPayment).toBe(80_000);
+  });
+
+  test('a manager cannot approve a DP fix beyond their limit; the asker sees the answer and its note', async () => {
+    h = await openRepairScreenHarness(5532);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
+
+    const counter = await mount(h, h.cashierId);
+    await press(counter, `repair.board.row.${ticketId}`);
+    await press(counter, 'repair.ticket.downPayment.correct');
+    type(counter, 'repair.downPayment.amount', '40.000');
+    type(counter, 'repair.downPayment.reason', 'Salah ketik');
+    await settle();
+    await press(counter, 'repair.downPayment.primary');
+    expect(text(counter, 'repair.ticket.done')).toBe(
+      'Permintaan dibuat. Pemilik toko akan memutuskan.',
+    );
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.cashierId)
+    ).rows;
+
+    // Rp 60.000 off is beyond the manager's Rp 30.000: only rejecting is offered.
+    const manager = await mount(h, h.managerId);
+    await press(manager, 'repair.board.views.approvals');
+    await press(manager, `repair.board.row.${ticketId}`);
+    await press(manager, `repair.ticket.approvals.${request!.id}`);
+    expect(manager.all('repair.ticket.approval.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(manager, 'repair.ticket.approval.primaryHint')).toMatch(
+      /^Di atas batasmu Rp\s?30\.000\. Hanya pemilik toko yang bisa menyetujui\.$/,
+    );
+    type(manager, 'repair.ticket.approval.note', 'Pakai nota DP yang asli');
+    await settle();
+    await press(manager, 'repair.ticket.approval.reject');
+    manager.unmount();
+
+    // The asker's notice goes once it is answered, and the answer carries the note.
+    await waitUntil(() => counter.query('repair.ticket.done') === null);
+    expect(text(counter, `repair.ticket.approvals.${request!.id}`)).toContain(
+      'Pakai nota DP yang asli',
+    );
+    expect((await ticketRow(h, ticketId)).downPayment).toBe(100_000);
+  });
+
+  test('a manager’s DP fix counts earlier fixes on the servisan, and says so', async () => {
+    h = await openRepairScreenHarness(5533);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 80_000, reason: 'Salah ketik' },
+      h.storeOwnerId,
+    );
+
+    // 80.000 to 70.000 is Rp 10.000 now, Rp 30.000 with the owner's earlier fix: still within.
+    const manager = await mount(h, h.managerId);
+    await press(manager, `repair.board.row.${ticketId}`);
+    await press(manager, 'repair.ticket.downPayment.correct');
+    // Said as soon as the amount is typed, before any reason.
+    type(manager, 'repair.downPayment.amount', '70.000');
+    await settle();
+    expect(text(manager, 'repair.downPayment.withEarlier')).toMatch(
+      /^Bersama perubahan DP sebelumnya, totalnya Rp\s?30\.000\.$/,
+    );
+    expect(manager.query('repair.downPayment.asks')).toBeNull();
+    // One more rupiah off and it goes to an owner.
+    type(manager, 'repair.downPayment.amount', '69.000');
+    await settle();
+    expect(manager.query('repair.downPayment.asks')).not.toBeNull();
+    expect(text(manager, 'repair.downPayment.primary')).toBe('Minta persetujuan');
+    type(manager, 'repair.downPayment.reason', 'Salah ketik lagi');
+    await settle();
+    expect(manager.query('repair.downPayment.asks')).not.toBeNull();
+  });
+});
+
 describe('putting a mistake right', () => {
   test('the counter corrects the number and the IMEI after saving; the history keeps both', async () => {
     h = await openRepairScreenHarness(5510);
@@ -543,9 +706,10 @@ describe('putting a mistake right', () => {
   });
 });
 
-describe('cancelling (owners only)', () => {
-  test('the counter is never offered a cancel; a store owner is, also on a repaired phone', async () => {
+describe('cancelling (owners; the counter asks)', () => {
+  test('the counter asks an owner to cancel, and the owner’s yes cancels it at the asked fee', async () => {
     h = await openRepairScreenHarness(5501);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
     const ticketId = await openTicket(h);
     await h.run('startWork', { ticketId, beforePhotos: [h.photo(60)] }, h.technicianId);
     await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(61)] }, h.technicianId);
@@ -554,13 +718,37 @@ describe('cancelling (owners only)', () => {
     await press(counter, `repair.board.views.pickup`);
     await press(counter, `repair.board.row.${ticketId}`);
     expect(counter.query('repair.ticket.action.handover')).not.toBeNull();
-    expect(counter.query('repair.ticket.action.cancel')).toBeNull();
     expect(counter.query('repair.board.views.cancelled')).toBeNull();
+    await press(counter, 'repair.ticket.action.cancel');
+    expect(text(counter, 'repair.cancel.asks')).toBe(tn('repair.approval.needsApproval'));
+    await press(counter, 'repair.cancel.changeFee');
+    type(counter, 'repair.cancel.feeInput', '20.000');
+    type(counter, 'repair.cancel.reason', 'Pelanggan tidak jadi');
+    await settle();
+    await press(counter, 'repair.cancel.primary');
+    // Asked, not cancelled: the request shows on the servisan, waiting.
+    expect((await ticketRow(h, ticketId)).outcome).toBe('repaired');
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.cashierId)
+    ).rows;
+    expect(request).toMatchObject({ status: 'waiting', amount: 30_000 });
+    expect(counter.query(`repair.ticket.approvals.${request!.id}`)).not.toBeNull();
+    counter.unmount();
 
+    // The owner finds it under its own view, and approves it from the servisan.
     const owner = await mount(h, h.storeOwnerId);
-    await press(owner, `repair.board.views.pickup`);
+    await press(owner, 'repair.board.views.approvals');
+    expect(owner.query(`repair.board.row.${ticketId}.approvalWaiting`)).not.toBeNull();
     await press(owner, `repair.board.row.${ticketId}`);
-    expect(owner.query('repair.ticket.action.cancel')).not.toBeNull();
+    await press(owner, `repair.ticket.approvals.${request!.id}`);
+    await press(owner, 'repair.ticket.approval.primary');
+    expect(await ticketRow(h, ticketId)).toMatchObject({
+      outcome: 'cancelled',
+      cancelFee: 20_000,
+      cancelledBy: h.storeOwnerId,
+    });
+    // Nothing waits any more, so the view goes and the board returns to its usual queue.
+    expect(owner.query('repair.board.views.approvals')).toBeNull();
   });
 
   test('the store’s after-work fee is filled in; a changed fee asks why and both are recorded', async () => {
@@ -600,6 +788,55 @@ describe('cancelling (owners only)', () => {
       cancelledBy: h.storeOwnerId,
     });
     expect(text(screen, 'repair.ticket.cancelFee')).toContain('20.000');
+  });
+
+  test('a manager sees how far below the store fee they may cancel before changing it', async () => {
+    h = await openRepairScreenHarness(5508);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+
+    const screen = await mount(h, h.managerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    expect(screen.query('repair.cancel.limit')).toBeNull();
+    await press(screen, 'repair.cancel.changeFee');
+    // The manager's limit is Rp 50.000, but a fee of Rp 10.000 can only be cut by that much.
+    expect(text(screen, 'repair.cancel.limit')).toMatch(
+      /^Kamu bisa memotong biaya sampai Rp\s?10\.000\.$/,
+    );
+  });
+
+  test('a manager’s room to cut the fee counts the discounts already on the servisan', async () => {
+    h = await openRepairScreenHarness(5509);
+    await h.run('setCancelFees', { beforeWork: 50_000, afterWork: 80_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run(
+      'changeQuote',
+      {
+        ticketId,
+        kind: 'discount',
+        description: 'Diskon langganan',
+        amount: -30_000,
+        reason: 'Pelanggan langganan',
+        customerAgreed: true,
+      },
+      h.storeOwnerId,
+    );
+
+    const screen = await mount(h, h.managerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    await press(screen, 'repair.cancel.changeFee');
+    // Rp 50.000 less the Rp 30.000 discount leaves Rp 20.000 to cut.
+    expect(text(screen, 'repair.cancel.limit')).toMatch(
+      /^Kamu bisa memotong biaya sampai Rp\s?20\.000\.$/,
+    );
+    type(screen, 'repair.cancel.feeInput', '30.000');
+    await settle();
+    expect(screen.query('repair.cancel.asks')).toBeNull();
+    type(screen, 'repair.cancel.feeInput', '29.000');
+    await settle();
+    expect(text(screen, 'repair.cancel.asks')).toBe(tn('repair.approval.overLimit'));
   });
 
   test('the owners’ cancelled view shows who cancelled, why, the fee, and a changed fee', async () => {
@@ -677,17 +914,44 @@ describe('changing the price', () => {
   });
 });
 
-describe('discounts (owners only)', () => {
-  test('only an owner is offered a discount when changing the price', async () => {
+describe('discounts (owners; the counter asks)', () => {
+  test('the counter asks for a discount, which an owner approves for the customer to confirm', async () => {
     h = await openRepairScreenHarness(5601);
     const ticketId = await openTicket(h);
 
     const counter = await mount(h, h.cashierId);
     await press(counter, `repair.board.row.${ticketId}`);
     await press(counter, 'repair.ticket.action.changePrice');
-    expect(counter.query('repair.price.change.kind.part')).not.toBeNull();
-    expect(counter.query('repair.price.change.kind.discount')).toBeNull();
+    await press(counter, 'repair.price.change.kind.discount');
+    // Asking skips the customer's answer, which comes once an owner approves.
+    expect(text(counter, 'repair.price.change.asks')).toBe(tn('repair.approval.needsApproval'));
+    expect(counter.query('repair.price.change.question')).toBeNull();
+    expect(counter.query('repair.price.change.unconfirmed')).toBeNull();
+    type(counter, 'repair.price.change.description', 'Pelanggan langganan');
+    type(counter, 'repair.price.change.amount', '30000');
+    type(counter, 'repair.price.change.reason', 'Langganan');
+    await press(counter, 'repair.price.change.primary');
+    expect((await ticketRow(h, ticketId)).quoteTotal).toBe(750_000);
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.cashierId)
+    ).rows;
+    expect(request).toMatchObject({ status: 'waiting', amount: 30_000, mine: true });
     counter.unmount();
+
+    const approver = await mount(h, h.storeOwnerId);
+    await press(approver, 'repair.board.views.approvals');
+    await press(approver, `repair.board.row.${ticketId}`);
+    await press(approver, `repair.ticket.approvals.${request!.id}`);
+    await press(approver, 'repair.ticket.approval.primary');
+    const approved = await ticketRow(h, ticketId);
+    expect(approved.quoteTotal).toBe(750_000);
+    expect(approved.pendingProposals).toBe(1);
+    approver.unmount();
+  });
+
+  test('an owner gives a discount directly', async () => {
+    h = await openRepairScreenHarness(5603);
+    const ticketId = await openTicket(h);
 
     const owner = await mount(h, h.storeOwnerId);
     await press(owner, `repair.board.row.${ticketId}`);

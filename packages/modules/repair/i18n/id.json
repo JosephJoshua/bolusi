@@ -64,9 +64,11 @@
     "emptyHint": "Servisan yang masuk akan muncul di sini.",
     "noMatches": "Servisan tidak ditemukan. Coba kata lain.",
     "priceChangeWaiting": "Harga perlu dikonfirmasi",
+    "approvalWaiting": "Menunggu persetujuan",
     "searchHint": "Cari nama, no. HP, no. servisan",
     "title": "Servisan",
     "view": {
+      "approvals": "Persetujuan ({count})",
       "active": "Aktif",
       "mine": "Tugasku",
       "pickup": "Siap diambil",
@@ -162,7 +164,12 @@
     "accessoryBack": "{name} dikembalikan",
     "noteNeeded": "Catatan",
     "checked": "Dicek: {items}",
-    "unchecked": "Belum: {items}"
+    "unchecked": "Belum: {items}",
+    "payLaterLimit": "Batas bayar nantimu {amount}.",
+    "payLaterPermitted": "Disetujui {name}.",
+    "payLaterWaiting": "Menunggu persetujuan pemilik toko.",
+    "payLaterRejected": "Ditolak {name}.",
+    "payLaterRejectedNote": "Ditolak {name}: {note}"
   },
   "intake": {
     "discard": "Buang",
@@ -332,7 +339,13 @@
     "handoverFree": "Servisan gratis. Minta pemilik untuk menyerahkannya.",
     "handoverPayment": "Lengkapi pembayarannya dulu.",
     "discountLimit": "Batas diskonmu {amount} per servisan.",
+    "discountLeft": "Sisa batas diskonmu {amount} untuk servisan ini.",
     "handoverChecks": "Centang semua, atau tulis kenapa belum.",
+    "payLaterWaiting": "Tunggu disetujui, atau bayar sekarang.",
+    "payLaterAsk": "Minta persetujuan, atau bayar sekarang.",
+    "downPaymentLimit": "Kamu bisa mengurangi uang masuk sampai {amount}.",
+    "cancelLimit": "Kamu bisa memotong biaya sampai {amount}.",
+    "downPaymentWithEarlier": "Bersama perubahan DP sebelumnya, totalnya {amount}.",
     "handoverQris": "Tunggu QRIS masuk. Pastikan internet nyala."
   },
   "discardPhotos": {
@@ -437,7 +450,7 @@
   "fees": {
     "title": "Biaya pembatalan",
     "summary": "Sebelum dan sesudah mulai dikerjakan",
-    "intro": "Dibayar pelanggan kalau servisannya dibatalkan. Saat membatalkan, pemilik masih bisa mengubahnya.",
+    "intro": "Dibayar pelanggan kalau servisannya dibatalkan. Saat membatalkan, biayanya masih bisa diubah.",
     "beforeWork": "Belum mulai dikerjakan",
     "afterWork": "Sudah mulai dikerjakan",
     "save": "Simpan",
@@ -543,7 +556,8 @@
     "current": "DP tercatat",
     "ofTotal": "Total biaya {amount}",
     "reason": "Alasan perubahan",
-    "removeHint": "Isi 0 kalau DP-nya batal."
+    "removeHint": "Isi 0 kalau DP-nya batal.",
+    "askTitle": "Minta ubah DP"
   },
   "printSettings": {
     "title": "Tampilan nota",
@@ -799,6 +813,18 @@
     "noCamera": "Rekam lewat HP toko: buka servisan ini di HP.",
     "label": "Video",
     "expired": "Video kepemilikan sudah terhapus. Rekam ulang, ya."
+  },
+  "approval": {
+    "discountAfter": "Setelah disetujui, diskon ini masih perlu konfirmasi pelanggan.",
+    "cancelBelow": "{amount} di bawah biaya biasa toko.",
+    "cancelStoreFee": "Biaya pembatalan biasa toko.",
+    "askCancel": "Minta pembatalan",
+    "needsApproval": "Perlu persetujuan pemilik toko.",
+    "overLimit": "Melebihi batasmu, jadi perlu persetujuan.",
+    "payLaterDebt": "Sisa yang dibayar nanti",
+    "payLaterAfter": "Setelah disetujui, kasir bisa menyerahkan HP tanpa pelunasan.",
+    "downPaymentNew": "DP yang benar",
+    "downPaymentTakenOff": "Total pengurangan uang masuk di servisan ini {amount}."
   },
   "basics": {
     "title": "Lengkapi data toko",

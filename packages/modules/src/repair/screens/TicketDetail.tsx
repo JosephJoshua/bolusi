@@ -30,6 +30,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
+import { ApprovalSection, ApprovalStep } from '../../approvals/screens/ApprovalViews.js';
+import { ta } from '../../approvals/i18n.js';
+import type { ApprovalRow } from '../../approvals/queries.js';
+import { describeRepairApproval } from '../approval-copy.js';
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import {
   MESSAGE_ACTION_KEY,
@@ -50,6 +54,7 @@ import {
 import { tn, type RepairKey } from '../i18n.js';
 import {
   actionKey,
+  downPaymentTitleKey,
   eventNote,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
@@ -57,6 +62,7 @@ import {
   warrantyLine,
 } from '../labels.js';
 import {
+  discountsStanding,
   amountOwed,
   arrangeTicketActions,
   CONTEXTUAL_ACTIONS,
@@ -85,6 +91,7 @@ import {
   type TicketAction,
   type TicketStep,
 } from '../flows.js';
+import { useClearAskedNotice } from '../asked-notice.js';
 import {
   ActionErrorBanner,
   DownPaymentRows,
@@ -101,6 +108,7 @@ import {
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { TicketVideoSection } from './video.js';
 import {
+  readApprovals,
   moneyRuntimeOf,
   useRepairQuery,
   useRepairRuntime,
@@ -159,6 +167,7 @@ type Step =
   | { readonly kind: 'print' }
   | { readonly kind: 'takePart' }
   | { readonly kind: 'putBackPart'; readonly part: UsedPartRow }
+  | { readonly kind: 'approval'; readonly requestId: string }
   | { readonly kind: 'refund' }
   | { readonly kind: 'reduce' };
 
@@ -186,6 +195,8 @@ export interface TicketDetailProps {
 interface LoadedTicket {
   readonly ticket: TicketDetailRow | undefined;
   readonly statuses: EntitySyncStatuses;
+  /** The approval requests on it (a discount or a cancel asked of an owner), newest first. */
+  readonly approvals: readonly ApprovalRow[];
 }
 
 export function TicketDetail({
@@ -224,9 +235,18 @@ export function TicketDetail({
   const query = useRepairQuery<LoadedTicket>(
     async (rt) => {
       const page = await rt.query('getTicket', { ticketId });
-      return { ticket: page.rows[0], statuses: await rt.ticketSyncStatuses([ticketId]) };
+      return {
+        ticket: page.rows[0],
+        statuses: await rt.ticketSyncStatuses([ticketId]),
+        approvals: await readApprovals(rt, ticketId),
+      };
     },
     `ticket:${ticketId}:${String(reloadNonce)}`,
+  );
+  useClearAskedNotice(
+    done,
+    () => setDone(null),
+    query.status === 'ready' ? query.data.approvals : undefined,
   );
 
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
@@ -282,6 +302,7 @@ export function TicketDetail({
     step.kind === 'print' ||
     step.kind === 'takePart' ||
     step.kind === 'putBackPart' ||
+    step.kind === 'approval' ||
     step.kind === 'refund' ||
     step.kind === 'reduce' ||
     ticket === undefined
@@ -291,6 +312,11 @@ export function TicketDetail({
         : step.kind === 'repairTypes'
           ? repairTypesStale(ticket, can)
           : staleStep(step, ticket, can, runtime.userId, now());
+  // A step that asked an owner instead (a discount, a cancel or a DP fix beyond this person) says so.
+  const asked = (): void => {
+    closeStep();
+    setDone(ta('approvals.done.asked'));
+  };
   const stepProps = {
     chrome,
     ticketId,
@@ -342,15 +368,30 @@ export function TicketDetail({
           {...stepProps}
           workStarted={ticket?.workStarted ?? false}
           claimOf={ticket?.claimOfTicketId ?? null}
+          onAsked={asked}
           downPayment={ticket?.downPayment ?? 0}
+          discounted={discountsStanding(ticket?.quoteLines ?? [])}
         />
       );
     case 'assign':
       return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
     case 'changePrice':
-      return <PriceChangeStep {...stepProps} mode="change" />;
+      return (
+        <PriceChangeStep
+          {...stepProps}
+          mode="change"
+          discounted={discountsStanding(ticket?.quoteLines ?? [])}
+          onAsked={asked}
+        />
+      );
     case 'proposePrice':
-      return <PriceChangeStep {...stepProps} mode="propose" />;
+      return (
+        <PriceChangeStep
+          {...stepProps}
+          mode="propose"
+          discounted={discountsStanding(ticket?.quoteLines ?? [])}
+        />
+      );
     case 'proposal':
       return (
         <ProposalStep
@@ -370,6 +411,7 @@ export function TicketDetail({
             closeStep();
             setDone(tn('repair.done.downPayment'));
           }}
+          onAsked={asked}
         />
       );
     case 'repairTypes':
@@ -428,6 +470,27 @@ export function TicketDetail({
             />
           )}
         </InventoryRuntimeProvider>
+      );
+    }
+    case 'approval': {
+      const request =
+        query.status === 'ready'
+          ? query.data.approvals.find((row) => row.id === step.requestId)
+          : undefined;
+      if (request === undefined) break;
+      return (
+        <ApprovalStep
+          chrome={chrome}
+          port={runtime.approvals}
+          request={request}
+          description={describeRepairApproval(request)}
+          onCancel={closeStep}
+          onDone={(notice) => {
+            closeStep();
+            setDone(notice);
+          }}
+          testID={`${testID}.approval`}
+        />
       );
     }
     case 'refund':
@@ -524,8 +587,11 @@ export function TicketDetail({
     setMessageFailed(false);
     Linking.openURL(url).catch(() => setMessageFailed(true));
   };
+  // The counter's "cancel" asks an owner to cancel.
   const label = (action: TicketAction): string =>
-    tn(actionKey(action, ticket?.technicianId ?? null));
+    action === 'cancel' && !can.cancel
+      ? tn('repair.approval.askCancel')
+      : tn(actionKey(action, ticket?.technicianId ?? null));
 
   // One banner at a time, in the fixed slot so it shows wherever the user has scrolled: a refusal of
   // what they just did (WhatsApp not opening included; dismissing it shows what it covered), then a
@@ -613,7 +679,7 @@ export function TicketDetail({
         onRetry={() => setReloadNonce((n) => n + 1)}
         testID={testID}
       >
-        {(data) => (data.ticket === undefined ? null : renderTicket(data.ticket))}
+        {(data) => (data.ticket === undefined ? null : renderTicket(data.ticket, data.approvals))}
       </QueryView>
     </AppShell>
   );
@@ -640,7 +706,10 @@ export function TicketDetail({
     ];
   }
 
-  function renderTicket(row: TicketDetailRow): React.JSX.Element {
+  function renderTicket(
+    row: TicketDetailRow,
+    approvals: readonly ApprovalRow[],
+  ): React.JSX.Element {
     const lock = row.devicePasscode === null ? null : decodeScreenLock(row.devicePasscode);
     const device = [row.deviceBrand, row.deviceModel, row.deviceColor]
       .filter((s) => s !== '')
@@ -722,6 +791,13 @@ export function TicketDetail({
             </View>
           </View>
         </Card>
+
+        <ApprovalSection
+          rows={approvals}
+          describe={describeRepairApproval}
+          onOpen={(request) => setStep({ kind: 'approval', requestId: request.id })}
+          testID={`${testID}.approvals`}
+        />
 
         <View style={styles.facts}>
           <FactGrid>
@@ -1011,7 +1087,7 @@ export function TicketDetail({
             paymentAction === 'correct' ? (
               <TextButton
                 label={tn('repair.downPayment.change')}
-                accessibilityLabel={tn('repair.downPayment.correctTitle')}
+                accessibilityLabel={tn(downPaymentTitleKey('correct', can.correctDownPayment))}
                 onPress={() => setStep({ kind: 'downPayment', mode: 'correct' })}
                 disabled={runner.busy}
                 testID={`${testID}.downPayment.correct`}

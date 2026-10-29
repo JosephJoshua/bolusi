@@ -8,6 +8,9 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
+import type { ApprovalsPort } from '../approvals/runtime.js';
+import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import type { ApprovalRow } from '../approvals/queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
@@ -123,6 +126,8 @@ export interface RepairTechnician {
 export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSource {
   /** The money ledger: payment methods, a servisan's payments, and taking money at handover. */
   readonly money: MoneyPort;
+  /** Approval requests: asking an owner for a discount or a cancel, and answering them. */
+  readonly approvals: ApprovalsPort;
   /** Op sync statuses per ticket id (design-system §3.5); an absent ticket is all-synced. */
   ticketSyncStatuses(ticketIds: readonly string[]): Promise<EntitySyncStatuses>;
   /** Active colleagues who hold `repair.work` in this store, by name. */
@@ -406,4 +411,17 @@ export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
     // The key is the photo's identity; a new object for the same photo must not reload it.
   }, [key]);
   return loaded !== null && loaded.key === key ? loaded.uri : null;
+}
+
+/**
+ * The approval requests a screen shows: a servisan's (`targetId`), or the ones waiting on this
+ * user. None for someone without approvals, so their board and servisan still read.
+ */
+export async function readApprovals(
+  runtime: RepairRuntime,
+  targetId?: string,
+): Promise<readonly ApprovalRow[]> {
+  if (!runtime.approvals.hasPermission(APPROVAL_PERMISSION.use)) return [];
+  const input = targetId === undefined ? {} : { targetId };
+  return (await runtime.approvals.query('approvalRequests', input)).rows;
 }

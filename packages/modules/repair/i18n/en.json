@@ -64,9 +64,11 @@
     "emptyHint": "Repairs you take in or work on appear here.",
     "noMatches": "No repair matches that search.",
     "priceChangeWaiting": "Price needs confirming",
+    "approvalWaiting": "Awaiting approval",
     "searchHint": "Name, phone, ticket, IMEI, model",
     "title": "Repairs",
     "view": {
+      "approvals": "Approvals ({count})",
       "active": "In progress",
       "mine": "Mine",
       "pickup": "Ready for pickup",
@@ -162,7 +164,12 @@
     "accessoryBack": "{name} returned",
     "noteNeeded": "Note",
     "checked": "Checked: {items}",
-    "unchecked": "Not done: {items}"
+    "unchecked": "Not done: {items}",
+    "payLaterLimit": "Your pay-later limit is {amount}.",
+    "payLaterPermitted": "Approved by {name}.",
+    "payLaterWaiting": "Waiting for the store owner’s approval.",
+    "payLaterRejected": "Rejected by {name}.",
+    "payLaterRejectedNote": "Rejected by {name}: {note}"
   },
   "intake": {
     "discard": "Discard intake",
@@ -332,7 +339,13 @@
     "handoverFree": "This servisan is free. Ask an owner to hand it over.",
     "handoverPayment": "Complete the payment first.",
     "discountLimit": "Your discount limit is {amount} per servisan.",
+    "discountLeft": "{amount} of your discount limit is left on this repair.",
     "handoverChecks": "Tick everything, or write why not.",
+    "payLaterWaiting": "Wait for approval, or pay now.",
+    "payLaterAsk": "Ask for approval, or pay now.",
+    "downPaymentLimit": "You can take up to {amount} off the money taken in.",
+    "cancelLimit": "You can cut the fee by up to {amount}.",
+    "downPaymentWithEarlier": "With earlier DP changes, that’s {amount} in total.",
     "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
   },
   "discardPhotos": {
@@ -437,7 +450,7 @@
   "fees": {
     "title": "Cancellation fees",
     "summary": "Before and after work starts",
-    "intro": "What the customer pays when a repair is cancelled. Owners can still change it when cancelling.",
+    "intro": "What the customer pays when a repair is cancelled. It can still be changed when cancelling.",
     "beforeWork": "Work hasn’t started",
     "afterWork": "Work has started",
     "save": "Save",
@@ -543,7 +556,8 @@
     "current": "Recorded down payment",
     "ofTotal": "Total {amount}",
     "reason": "Reason for the change",
-    "removeHint": "Enter 0 if the down payment is void."
+    "removeHint": "Enter 0 if the down payment is void.",
+    "askTitle": "Ask to change the down payment"
   },
   "printSettings": {
     "title": "Slip details",
@@ -799,6 +813,18 @@
     "noCamera": "Record it on a store phone: open this servisan there.",
     "label": "Video",
     "expired": "The ownership video was deleted. Record it again."
+  },
+  "approval": {
+    "discountAfter": "Once approved, the customer still has to confirm this discount.",
+    "cancelBelow": "{amount} below the store’s usual fee.",
+    "cancelStoreFee": "The store’s usual cancellation fee.",
+    "askCancel": "Ask to cancel",
+    "needsApproval": "Needs the store owner’s approval.",
+    "overLimit": "Above your limit, so it needs approval.",
+    "payLaterDebt": "Left to pay later",
+    "payLaterAfter": "Once approved, the counter can hand the phone over unpaid.",
+    "downPaymentNew": "Correct down payment",
+    "downPaymentTakenOff": "Takes {amount} in total off the money taken in on this repair."
   },
   "basics": {
     "title": "Finish the store details",

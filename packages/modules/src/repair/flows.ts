@@ -9,6 +9,7 @@ import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
 import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
+import type { ApprovalRow } from '../approvals/queries.js';
 import type { MoneyTarget } from '../money/refund.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
 import type { CorrectTicketDetailsInput, OpenTicketInput } from './commands.js';
@@ -39,6 +40,7 @@ import {
 import { SCREEN_LOCK_KINDS, decodeScreenLock, encodeScreenLock } from './screen-lock.js';
 import type {
   ListTicketsInput,
+  QuoteLineRow,
   TicketDetailRow,
   TicketPhotoRow,
   TicketSummaryRow,
@@ -47,6 +49,7 @@ import type {
 // ── board ─────────────────────────────────────────────────────────────────────────────────────
 
 export const BOARD_VIEWS = [
+  'approvals',
   'active',
   'mine',
   'unassigned',
@@ -59,10 +62,12 @@ export type BoardView = (typeof BOARD_VIEWS)[number];
 
 /**
  * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
- * nobody collected are for the counter and owners, who call the customer.
+ * nobody collected are for the counter and owners, who call the customer. Servisan with requests
+ * this user can approve lead while there are any (`waitingApprovals`).
  */
-export function boardViews(can: RepairAbilities): readonly BoardView[] {
+export function boardViews(can: RepairAbilities, waitingApprovals = 0): readonly BoardView[] {
   return BOARD_VIEWS.filter((view) => {
+    if (view === 'approvals') return waitingApprovals > 0;
     if (view === 'cancelled') return can.cancel;
     if (view === 'uncollected') return flagsUncollected(can);
     return true;
@@ -108,16 +113,23 @@ export function uncollectedDays(
   return Math.floor((now - ticket.readyAt) / DAY_MS);
 }
 
+/** The most servisan the approvals view lists at once (`listTickets` takes up to 100 ids). */
+export const APPROVALS_VIEW_MAX = 100;
+
 /**
  * The `listTickets` filter behind each board view. `readyBefore` is the not-collected cut-off
- * (`uncollectedBefore`), which only that view reads.
+ * (`uncollectedBefore`), and `approvalIds` the servisan waiting on this user's approval; each is
+ * read by its own view only. The approvals view is offered only while it has some.
  */
 export function boardFilter(
   view: BoardView,
   userId: string,
   readyBefore: number,
+  approvalIds: readonly string[] = [],
 ): ListTicketsInput['filter'] {
   switch (view) {
+    case 'approvals':
+      return { ids: approvalIds.slice(0, APPROVALS_VIEW_MAX) };
     case 'active':
       return { outcomes: [...IN_PROGRESS], location: 'in_store' };
     case 'mine':
@@ -303,8 +315,9 @@ export function ticketActions(
   // the record. Taking a handover back is an owner's call, like cancelling.
   if (ticket.location === 'in_store' && can.intake) actions.push('correctDetails');
   // A handover taken back was charged: it goes home again, never cancelled. Taking one back is for
-  // a day after the first handover only.
-  if (open && can.cancel && ticket.returnedAt === null) actions.push('cancel');
+  // a day after the first handover only. The counter, who cannot cancel, asks an owner to (an
+  // approval request).
+  if (open && (can.cancel || can.intake) && ticket.returnedAt === null) actions.push('cancel');
   if (ticket.location === 'returned' && can.cancel && undoableHandover(ticket, now)) {
     actions.push('undoHandover');
   }
@@ -388,7 +401,8 @@ export function arrangeTicketActions(
 /**
  * What this user may do about the down payment, shown beside it. Mirrors the commands: anyone at
  * the counter records one while the servisan is open and none is recorded; only an owner
- * changes one already recorded, since a lower figure is how cash would go missing.
+ * changes one already recorded, since a lower figure is how cash would go missing, and the counter
+ * asks one to.
  */
 export function downPaymentAction(
   ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
@@ -396,7 +410,8 @@ export function downPaymentAction(
 ): 'record' | 'correct' | null {
   // Once the phone is back with its owner the DP is part of the bill it paid, not a figure to edit.
   if (ticket.location === 'returned') return null;
-  if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
+  // The counter asks an owner to fix it (repair approval-kinds.ts).
+  if (ticket.downPayment !== null) return can.correctDownPayment || can.intake ? 'correct' : null;
   const open = ticket.outcome !== 'cancelled';
   return can.intake && open ? 'record' : null;
 }
@@ -868,6 +883,69 @@ export type PriceKind = (typeof PRICE_KINDS)[number];
 /** The kinds a user may add: a discount lowers the price, so only those who may discount see it. */
 export function priceKinds(discount: boolean): readonly PriceKind[] {
   return PRICE_KINDS.filter((kind) => kind !== 'discount' || discount);
+}
+
+/**
+ * Whether a discount or a cancel goes to an owner instead: this user may not do it at all, or it
+ * is beyond their limit (`limit` as `ModulePort.limitOf` gives it, null when not limited).
+ */
+export function asksApproval(holds: boolean, limit: number | null, amount: number): boolean {
+  return !holds || (limit !== null && amount > limit);
+}
+
+/**
+ * What the discounts still standing on a servisan take off (all but declined ones): a discount
+ * limit is per servisan, so they count with the next one (repair rules, `discountsStanding`).
+ */
+export function discountsStanding(
+  lines: readonly Pick<QuoteLineRow, 'amount' | 'status'>[],
+): number {
+  return lines.reduce(
+    (sum, line) => (line.amount < 0 && line.status !== 'declined' ? sum - line.amount : sum),
+    0,
+  );
+}
+
+/** Why it is asked: the user may not do it, or it is beyond their limit. */
+export function askedBecauseKey(holds: boolean): RepairKey {
+  return holds ? 'repair.approval.overLimit' : 'repair.approval.needsApproval';
+}
+
+/**
+ * Whether the counter may let the phone go unpaid now ("Bayar nanti"), and if not, where asking
+ * stands. `requests` are the servisan's Bayar nanti requests, newest first.
+ * - `own`: they may, within their limit;
+ * - `permitted`: an owner approved it for at least what is due (`by` names them);
+ * - `waiting`: they asked, and the answer has not come;
+ * - `ask`: they may ask (`rejected` is the last answer when it was no);
+ * - `none`: they can neither do it nor ask.
+ */
+export type PayLaterAccess =
+  | { readonly kind: 'own' }
+  | { readonly kind: 'permitted'; readonly by: string | null }
+  | { readonly kind: 'waiting' }
+  | { readonly kind: 'ask'; readonly because: RepairKey; readonly rejected: ApprovalRow | null }
+  | { readonly kind: 'none' };
+
+export function payLaterAccess(args: {
+  readonly holds: boolean;
+  readonly limit: number | null;
+  readonly canAsk: boolean;
+  readonly due: number;
+  readonly requests: readonly ApprovalRow[];
+}): PayLaterAccess {
+  const { holds, limit, canAsk, due, requests } = args;
+  const permit = requests.find((row) => row.status === 'approved' && row.amount >= due);
+  if (permit !== undefined) return { kind: 'permitted', by: permit.decidedByName };
+  if (!asksApproval(holds, limit, due)) return { kind: 'own' };
+  if (!canAsk) return { kind: 'none' };
+  if (requests.some((row) => row.status === 'waiting')) return { kind: 'waiting' };
+  const last = requests[0];
+  return {
+    kind: 'ask',
+    because: askedBecauseKey(holds),
+    rejected: last?.status === 'rejected' ? last : null,
+  };
 }
 
 /**

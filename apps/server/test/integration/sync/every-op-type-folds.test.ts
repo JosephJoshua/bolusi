@@ -21,7 +21,7 @@ import { resolveDeps, SERVER_MODULES } from '../../../src/deps.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { grantRole, seedWorld } from '../oplog/helpers.js';
+import { grantRole, seedUser, seedWorld } from '../oplog/helpers.js';
 
 /** Built by the server itself (conflict detection); a device that pushes it is refused. */
 const SERVER_WRITTEN = new Set(['platform.conflict_detected']);
@@ -72,6 +72,9 @@ afterEach(async () => {
 
 const id = (n: number): string =>
   `01920000-0000-7000-8000-0000000c${n.toString(16).padStart(4, '0')}`;
+
+/** A colleague who asks for approvals; only someone else may answer them. */
+const ASKER = id(0x5ff);
 
 /** One legal journey per module, in push order, touching every op type a device can push. */
 function journey(world: ChainWorld): OpSpec[] {
@@ -198,6 +201,63 @@ function journey(world: ChainWorld): OpSpec[] {
       ],
     },
   });
+  /** Discount requests on the open second servisan: one line (650.000) until the third applies. */
+  const approvals = (): OpSpec[] => {
+    const line = {
+      ticketId: cancelledTicket,
+      kind: 'discount',
+      description: 'Diskon langganan',
+      amount: -10_000,
+      reason: 'Langganan',
+      customerAgreed: false,
+    };
+    const asked = (n: number): OpSpec => ({
+      type: 'approvals.request_made',
+      entityType: 'approval_request',
+      entityId: id(n),
+      userId: ASKER,
+      payload: {
+        kind: 'repair.discount',
+        target: { entityType: 'repair_ticket', entityId: cancelledTicket },
+        input: line,
+        amount: 10_000,
+        reason: 'Langganan',
+        basis: 'received|in_store|650000|1',
+      },
+    });
+    const answered = (type: string, n: number, userId = world.userId): OpSpec => ({
+      type,
+      entityType: 'approval_request',
+      entityId: id(n),
+      userId,
+      payload: type === 'approvals.request_withdrawn' ? {} : { note: null },
+    });
+    return [
+      asked(0x500),
+      answered('approvals.request_rejected', 0x500),
+      asked(0x501),
+      answered('approvals.request_withdrawn', 0x501, ASKER),
+      asked(0x502),
+      answered('approvals.request_approved', 0x502),
+      // The decision, as the approver's, on a line named after the request.
+      {
+        type: 'repair.quote_changed',
+        entityType: 'repair_ticket',
+        entityId: cancelledTicket,
+        schemaVersion: 2,
+        payload: {
+          lineId: id(0x502),
+          kind: 'discount',
+          description: 'Diskon langganan',
+          amount: -10_000,
+          reason: 'Langganan',
+          customerAgreed: false,
+          fromProposal: false,
+          waitsForCustomer: true,
+        },
+      },
+    ];
+  };
   const onTicket = (type: string, payload: Record<string, unknown>): OpSpec => ({
     type,
     entityType: 'repair_ticket',
@@ -391,6 +451,29 @@ function journey(world: ChainWorld): OpSpec[] {
       reference: null,
       tendered: 150_000,
     }),
+    // A DP fix asked against that payment (read on Postgres the way the device reads it), then
+    // taken back.
+    {
+      type: 'approvals.request_made',
+      entityType: 'approval_request',
+      entityId: id(0x503),
+      userId: ASKER,
+      payload: {
+        kind: 'repair.downPayment',
+        target: { entityType: 'repair_ticket', entityId: ticket },
+        input: { ticketId: ticket, amount: 80_000, reason: 'Salah ketik', reference: null },
+        amount: 20_000,
+        reason: 'Salah ketik',
+        basis: `repaired|in_store|600000|3|${id(0x402)}`,
+      },
+    },
+    {
+      type: 'approvals.request_withdrawn',
+      entityType: 'approval_request',
+      entityId: id(0x503),
+      userId: ASKER,
+      payload: {},
+    },
     money('money.charge_recorded', 0x403, {
       document,
       amount: 600_000,
@@ -466,6 +549,8 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId: cancelledTicket,
       payload: { technicianId: world.userId },
     },
+    // approvals: a colleague asks for a discount three times; it is rejected, withdrawn, approved
+    ...approvals(),
     {
       type: 'repair.ticket_cancelled',
       entityType: 'repair_ticket',
@@ -537,6 +622,14 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
     roleId: id(7),
     roleName: 'store_owner',
     permissionIds: SERVER_MODULES.flatMap((module) => Object.keys(module.permissions ?? {})),
+  });
+  await seedUser(db, world.tenantId, ASKER);
+  await grantRole(db, {
+    tenantId: world.tenantId,
+    userId: ASKER,
+    roleId: id(0x5fe),
+    roleName: 'cashier',
+    permissionIds: ['approvals.use', 'repair.read', 'repair.quote_change', 'repair.intake'],
   });
   // Conflicts are recorded only by the server, so the one the journey acknowledges is seeded.
   await db

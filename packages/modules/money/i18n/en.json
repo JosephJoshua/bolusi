@@ -149,6 +149,7 @@
     "hint": "Enter the reason.",
     "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
     "reason": "Reason",
+    "limit": "Your cancel limit is {amount} per repair.",
     "cashTitle": "Cancel cash record",
     "cashSave": "Cancel record",
     "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts."

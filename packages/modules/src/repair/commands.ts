@@ -1083,6 +1083,22 @@ export async function recordDownPaymentHandler(
   };
 }
 
+/**
+ * The payment a down payment fix records its new one in place of: the largest live one through the
+ * same account (`correctDownPaymentHandler`, and what an approval of the fix counts).
+ */
+export function replacedPayment<
+  Entry extends { readonly account: string | null; readonly amount: number },
+>(live: readonly Entry[], account: string): Entry | undefined {
+  return live
+    .filter((entry) => entry.account === account)
+    .reduce<Entry | undefined>(
+      (largest, entry) =>
+        largest === undefined || entry.amount > largest.amount ? entry : largest,
+      undefined,
+    );
+}
+
 export const correctDownPaymentInput = z
   .object({
     ticketId: z.string().min(1),
@@ -1128,13 +1144,7 @@ export async function correctDownPaymentHandler(
         : { account: input.account, reference: input.reference };
     // Recorded first, in place of the largest payment through the same account, so a limited
     // role's refund limit counts only what the DP went down by there.
-    const replaced = live
-      .filter((entry) => entry.account === method.account)
-      .reduce<(typeof live)[number] | undefined>(
-        (largest, entry) =>
-          largest === undefined || entry.amount > largest.amount ? entry : largest,
-        undefined,
-      );
+    const replaced = replacedPayment(live, method.account);
     ops.push(
       paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
         ...method,

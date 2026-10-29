@@ -1,7 +1,9 @@
 /**
  * ToggleChip — an on/off choice among many that can be picked together (what came in with the
  * device: SIM tray, case, charger). A selected chip shows a check icon as well as the fill, so it
- * reads without colour (§6.3), and announces itself as `checked`.
+ * reads without colour (§6.3), and announces itself as `checked`. The check takes the room the
+ * unselected chip pads its label with, so toggling never changes its width and a row of chips
+ * stays put.
  */
 import { Text } from '../text.js';
 import { Pressable, StyleSheet } from 'react-native';
@@ -17,12 +19,14 @@ export interface ToggleChipProps {
   readonly testID?: string | undefined;
 }
 
+// What the check adds beside the label, split over both sides while it is hidden.
+const CHECK_ROOM = (size.iconChip + space.xs) / 2;
+
 const styles = StyleSheet.create({
   chip: {
     // Sized to its label: in a column it would otherwise stretch into something that reads as a field.
     alignSelf: 'flex-start',
     minHeight: touch.min,
-    paddingHorizontal: space.md,
     borderRadius: radius.full,
     borderWidth: border.hairline,
     flexDirection: 'row',
@@ -48,6 +52,7 @@ export function ToggleChip({
       style={[
         styles.chip,
         {
+          paddingHorizontal: selected ? space.md : space.md + CHECK_ROOM,
           backgroundColor: selected ? color.infoBg : color.surface,
           borderColor: selected ? color.primary : color.border,
         },

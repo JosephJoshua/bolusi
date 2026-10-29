@@ -149,6 +149,7 @@
     "hint": "Isi alasannya.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
     "reason": "Alasan",
+    "limit": "Batas pembatalanmu {amount} per servisan.",
     "cashTitle": "Batalkan catatan kas",
     "cashSave": "Batalkan catatan",
     "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya."

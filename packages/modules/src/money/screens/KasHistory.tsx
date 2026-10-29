@@ -12,7 +12,7 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
-import { MAX_REASON } from '../constants.js';
+import { MAX_REASON, MONEY_PERMISSION } from '../constants.js';
 import { tm } from '../i18n.js';
 import { shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
@@ -159,6 +159,11 @@ export function VoidPaymentStep({
   );
   const [reason, setReason] = useState('');
   const kind = voidKind(entry);
+  // A limited role (a manager) sees what it may cancel of a payment before the server refuses it.
+  const limit =
+    kind.command === 'voidPayment' ? runtime.limitOf(MONEY_PERMISSION.voidPayment) : null;
+  // A void counts in full against that limit (with any earlier ones on the same servisan).
+  const beyond = limit !== null && entry.amount > limit;
   const discard = useDiscardConfirm({
     dirty: reason.trim() !== '',
     copy: {
@@ -176,7 +181,7 @@ export function VoidPaymentStep({
   );
 
   const submit = (): void => {
-    if (reason.trim() === '') return;
+    if (reason.trim() === '' || beyond) return;
     void runner
       .run(() => runtime.run(kind.command, { entryId: entry.id, reason }))
       .then((result) => {
@@ -193,8 +198,8 @@ export function VoidPaymentStep({
       primaryLabel={tm(kind.save)}
       primaryVariant="destructive"
       onPrimary={submit}
-      primaryDisabled={reason.trim() === ''}
-      primaryHint={tm('money.void.hint')}
+      primaryDisabled={reason.trim() === '' || beyond}
+      primaryHint={tm(beyond ? 'money.refusal.overLimit' : 'money.void.hint')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -209,6 +214,11 @@ export function VoidPaymentStep({
           .join(' · ')}
       </Text>
       <Text style={styles.body}>{tm(kind.explain)}</Text>
+      {limit === null ? null : (
+        <Text style={styles.muted} testID={`${testID}.limit`}>
+          {tm('money.void.limit', { amount: formatMoney(limit) })}
+        </Text>
+      )}
       <View style={styles.gap}>
         <TextInput
           label={tm('money.void.reason')}

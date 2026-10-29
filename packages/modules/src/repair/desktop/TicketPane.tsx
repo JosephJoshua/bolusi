@@ -48,6 +48,7 @@ import {
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import {
+  discountsStanding,
   amountOwed,
   arrangeTicketActions,
   balanceAfterDownPayment,
@@ -76,10 +77,16 @@ import {
   type StaleStep,
   type TicketStep,
 } from '../flows.js';
+import { useClearAskedNotice } from '../asked-notice.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
+import { ApprovalDialog, ApprovalSection } from '../../approvals/desktop/ApprovalViews.js';
+import { ta } from '../../approvals/i18n.js';
+import type { ApprovalRow } from '../../approvals/queries.js';
+import { describeRepairApproval } from '../approval-copy.js';
 import {
   actionKey,
+  downPaymentTitleKey,
   eventNote,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
@@ -87,6 +94,7 @@ import {
   warrantyLine,
 } from '../labels.js';
 import {
+  readApprovals,
   moneyRuntimeOf,
   useRepairQuery,
   useRepairRuntime,
@@ -133,12 +141,14 @@ type Step =
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
   | { readonly kind: 'repairTypes' }
   | { readonly kind: 'print' }
+  | { readonly kind: 'approval'; readonly requestId: string }
   | { readonly kind: 'refund' }
   | { readonly kind: 'reduce' };
 
 interface LoadedTicket {
   readonly ticket: TicketDetailRow | undefined;
   readonly statuses: EntitySyncStatuses;
+  readonly approvals: readonly ApprovalRow[];
 }
 
 export interface TicketPaneProps {
@@ -169,15 +179,26 @@ export function TicketPane({
   const runner = useActionRunner();
   const printing = runtime.printing;
   const [step, setStep] = useState<Step>({ kind: 'none' });
-  const [done, setDone] = useState<RepairKey | null>(null);
+  // What just happened, in words: a repair step's, or an approval's.
+  const [done, setDone] = useState<string | null>(null);
+  const say = (key: RepairKey | undefined): void => setDone(key === undefined ? null : tn(key));
   const [reloadNonce, setReloadNonce] = useState(0);
 
   const query = useRepairQuery<LoadedTicket>(
     async (rt) => {
       const page = await rt.query('getTicket', { ticketId });
-      return { ticket: page.rows[0], statuses: await rt.ticketSyncStatuses([ticketId]) };
+      return {
+        ticket: page.rows[0],
+        statuses: await rt.ticketSyncStatuses([ticketId]),
+        approvals: await readApprovals(rt, ticketId),
+      };
     },
     `desk.ticket:${ticketId}:${String(reloadNonce)}`,
+  );
+  useClearAskedNotice(
+    done,
+    () => setDone(null),
+    query.status === 'ready' ? query.data.approvals : undefined,
   );
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
   // An open step outlives a failed re-read: it keeps the last good ticket, so photos taken and
@@ -190,6 +211,7 @@ export function TicketPane({
   const stale: StaleStep | null =
     step.kind === 'none' ||
     step.kind === 'print' ||
+    step.kind === 'approval' ||
     step.kind === 'refund' ||
     step.kind === 'reduce' ||
     ticket === undefined
@@ -203,7 +225,12 @@ export function TicketPane({
   const closeStep = (): void => setStep({ kind: 'none' });
   const finishStep = (said: RepairKey | undefined): void => {
     closeStep();
-    setDone(said ?? null);
+    say(said);
+  };
+  // A request sent instead of the step: it waits on an owner, and says so.
+  const asked = (): void => {
+    closeStep();
+    setDone(ta('approvals.done.asked'));
   };
 
   const perform = (action: TicketAction, row: TicketDetailRow): void => {
@@ -223,14 +250,14 @@ export function TicketPane({
           void runner
             .run(() => runtime.run('startWork', { ticketId }))
             .then((result) => {
-              if (result !== undefined) setDone(DONE_KEY[action] ?? null);
+              if (result !== undefined) say(DONE_KEY[action]);
             });
         return;
       case 'claim':
         void runner
           .run(() => runtime.run('claimTicket', { ticketId }))
           .then((result) => {
-            if (result !== undefined) setDone(DONE_KEY.claim ?? null);
+            if (result !== undefined) say(DONE_KEY.claim);
           });
         return;
       case 'markRepaired':
@@ -265,7 +292,9 @@ export function TicketPane({
   };
 
   const label = (action: TicketAction): string =>
-    tn(actionKey(action, ticket?.technicianId ?? null));
+    action === 'cancel' && !can.cancel
+      ? tn('repair.approval.askCancel')
+      : tn(actionKey(action, ticket?.technicianId ?? null));
 
   // The next step leads; a correction stays beside what it corrects (the price, the technician).
   const layout =
@@ -319,7 +348,7 @@ export function TicketPane({
     ) : done !== null ? (
       <Banner
         tone="success"
-        message={tn(done)}
+        message={done}
         onDismiss={() => setDone(null)}
         dismissLabel={t('core.action.close')}
       />
@@ -519,6 +548,18 @@ export function TicketPane({
           </div>
         </div>
 
+        {query.status === 'ready' ? (
+          <ApprovalSection
+            rows={query.data.approvals}
+            describe={describeRepairApproval}
+            onOpen={(request) => {
+              setDone(null);
+              setStep({ kind: 'approval', requestId: request.id });
+            }}
+            testId="repair.desk.ticket.approvals"
+          />
+        ) : null}
+
         <FactGrid>
           {renderRepairTypes(row)}
           {renderClaimLinks(row)}
@@ -687,6 +728,7 @@ export function TicketPane({
           reduced={row.reduced}
           paidLabel={paidLabelKey(row)}
           action={downPaymentAction(row, can)}
+          correctLabel={tn(downPaymentTitleKey('correct', can.correctDownPayment))}
           disabled={runner.busy}
           onAction={(mode) => {
             setDone(null);
@@ -886,6 +928,26 @@ export function TicketPane({
     switch (step.kind) {
       case 'none':
         return null;
+      case 'approval': {
+        const request =
+          query.status === 'ready'
+            ? query.data.approvals.find((candidate) => candidate.id === step.requestId)
+            : undefined;
+        if (request === undefined) return null;
+        return (
+          <ApprovalDialog
+            port={runtime.approvals}
+            request={request}
+            description={describeRepairApproval(request)}
+            onClose={closeStep}
+            onDone={(notice) => {
+              closeStep();
+              setDone(notice);
+            }}
+            testId="repair.desk.approval"
+          />
+        );
+      }
       case 'before':
       case 'after':
         return (
@@ -904,7 +966,9 @@ export function TicketPane({
             workStarted={row.workStarted}
             claimOf={row.claimOfTicketId}
             downPayment={row.downPayment ?? 0}
+            discounted={discountsStanding(row.quoteLines)}
             onDone={() => finishStep(undefined)}
+            onAsked={asked}
           />
         );
       case 'undoHandover':
@@ -929,10 +993,23 @@ export function TicketPane({
           />
         );
       case 'changePrice':
-        return <PriceChangeDialog {...common} mode="change" onDone={() => finishStep(undefined)} />;
+        return (
+          <PriceChangeDialog
+            {...common}
+            mode="change"
+            discounted={discountsStanding(row.quoteLines)}
+            onDone={() => finishStep(undefined)}
+            onAsked={asked}
+          />
+        );
       case 'proposePrice':
         return (
-          <PriceChangeDialog {...common} mode="propose" onDone={() => finishStep(undefined)} />
+          <PriceChangeDialog
+            {...common}
+            mode="propose"
+            discounted={discountsStanding(row.quoteLines)}
+            onDone={() => finishStep(undefined)}
+          />
         );
       case 'proposal':
         return (
@@ -951,6 +1028,7 @@ export function TicketPane({
             current={row.downPayment}
             total={amountOwed(row)}
             onDone={() => finishStep('repair.done.downPayment')}
+            onAsked={asked}
           />
         );
       case 'repairTypes':
@@ -1264,6 +1342,7 @@ function DownPaymentLines({
   reduced,
   paidLabel,
   action,
+  correctLabel,
   disabled,
   onAction,
 }: {
@@ -1274,6 +1353,8 @@ function DownPaymentLines({
   readonly reduced: number;
   readonly paidLabel: RepairKey;
   readonly action: 'record' | 'correct' | null;
+  /** "Ubah DP", or for the counter, asking an owner to. */
+  readonly correctLabel: string;
   readonly disabled: boolean;
   readonly onAction: (mode: 'record' | 'correct') => void;
 }): React.JSX.Element | null {
@@ -1311,10 +1392,10 @@ function DownPaymentLines({
           <dt className="flex items-center gap-2">
             {tn(paidLabel)}
             {action === 'correct' ? (
-              <Tooltip label={tn('repair.downPayment.correctTitle')}>
+              <Tooltip label={correctLabel}>
                 <Button
                   label={tn('repair.downPayment.change')}
-                  aria-label={tn('repair.downPayment.correctTitle')}
+                  aria-label={correctLabel}
                   variant="text"
                   size="sm"
                   className="-my-1"
