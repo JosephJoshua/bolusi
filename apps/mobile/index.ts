@@ -619,7 +619,14 @@ function buildRootProps(): RootProps {
     videoPlatform: createExpoVideoPlatform(),
     cameraPermission: expoCameraPermission,
     localeStore: fileLocaleStore,
-    hideSplash: () => void SplashScreen.hideAsync().catch(() => {}),
+    // Synchronous, so the splash lets go on this frame even while loading keeps the JS thread busy.
+    hideSplash: () => {
+      try {
+        SplashScreen.hide();
+      } catch {
+        // No splash to hide (already gone): nothing to do.
+      }
+    },
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process
     // facts, not DB values); the deviceId + names come from meta_kv.
@@ -641,4 +648,7 @@ function Bootstrapped(): React.JSX.Element | null {
 lockPhonesToPortrait();
 // The splash stays until the opening cover (BrandIntro) is drawn over it, so no blank frame shows.
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+// The cover is the splash's exact twin, so the splash goes at once rather than with its default
+// 400 ms fade, which kept it on top of the cover's whole intro on Android.
+SplashScreen.setOptions({ duration: 0, fade: false });
 registerRootComponent(Bootstrapped);
