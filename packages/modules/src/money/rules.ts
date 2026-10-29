@@ -53,6 +53,8 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'countSuperseded',
   'differenceChanged',
   'overLimit',
+  'cashMoveNotFound',
+  'laterCountSettled',
 ] as const);
 const { refuse } = MONEY_REFUSALS;
 
@@ -460,6 +462,43 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
   };
 
   /**
+   * An owner cancels a cash move typed wrong. Not once a count after it was settled: that owner
+   * already put the book right for it, and taking the move away would open the difference again.
+   */
+  const cashMoveVoidedRule: Rule = async (op, { db }) => {
+    const entry = await db
+      .selectFrom('moneyEntries')
+      .select(['id', 'kind', 'voidedBy', 'createdAt'])
+      .where('id', '=', op.entityId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirst();
+    if (entry === undefined || entry.kind !== 'cash_moved') {
+      throw refuse('cashMoveNotFound', {
+        code: 'ENTITY_NOT_FOUND',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
+    if (entry.voidedBy !== null) {
+      throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
+    }
+    const settled = await db
+      .selectFrom('moneyEntries as a')
+      .innerJoin('moneyEntries as c', 'c.id', 'a.relatedEntryId')
+      .select('a.id')
+      .where('a.storeId', '=', storeOf(op))
+      .where('a.kind', '=', 'cash_adjusted')
+      .where('c.kind', '=', 'cash_counted')
+      .where('c.createdAt', '>', entry.createdAt)
+      .executeTakeFirst();
+    if (settled !== undefined) {
+      throw refuse('laterCountSettled', {
+        code: 'INVALID_TRANSITION',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
+  };
+
+  /**
    * Money back to a customer. The counter may return what the customer paid beyond their charges,
    * through the account they paid with (the change of an overpayment, or a cancelled servisan's DP
    * less its fee), and only once the document is charged in full, so a DP on an unfinished
@@ -595,6 +634,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     chargeReducedRule,
     paymentReceivedRule,
     paymentVoidedRule,
+    cashMoveVoidedRule,
     refundPaidRule,
     cashMovedRule,
     cashCountedRule,

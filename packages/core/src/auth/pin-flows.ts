@@ -31,7 +31,7 @@ import { PIN_KDF_BOUNDS } from './constants.js';
 import { clearLockout, resetForNewVerifier } from './lockout.js';
 import { AUTH_ENTITY, AUTH_OP, AUTH_PERMISSION } from './operations.js';
 import {
-  assertPinFormat,
+  assertNewPin,
   attemptLockKey,
   verifyPin,
   withAttemptLock,
@@ -298,7 +298,7 @@ export async function setFirstPin<DB>(
   // Serialized, so two quick taps cannot both pass the checks below and emit two first PINs. Not the
   // attempt lock: `emitVerifierChange` takes that one inside, and it does not nest.
   const run = firstPinChain.then(async () => {
-    assertPinFormat(input.pin);
+    assertNewPin(input.pin);
     // Only a user with NO PIN yet. Without this, anyone at the counter could replace a colleague's PIN
     // through the first-PIN path and sign in as them; an existing PIN changes only via `changePin`
     // (knowing the current one) or an owner's `resetPin`.
@@ -348,7 +348,7 @@ export async function changePin<DB>(
   deps: PinFlowDeps<DB>,
   input: { readonly userId: string; readonly currentPin: string; readonly newPin: string },
 ): Promise<PendingVerifier> {
-  assertPinFormat(input.newPin);
+  assertNewPin(input.newPin);
   const verified = await verifyPin(
     {
       db: deps.db,
@@ -388,7 +388,7 @@ export async function resetPin<DB>(
   deps: PinFlowDeps<DB>,
   input: { readonly actorUserId: string; readonly targetUserId: string; readonly newPin: string },
 ): Promise<PendingVerifier> {
-  assertPinFormat(input.newPin);
+  assertNewPin(input.newPin);
   if (!(await userInDirectory(deps.db, input.targetUserId))) {
     return deps.runtime.denyRestriction(
       input.actorUserId,

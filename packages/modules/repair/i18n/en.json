@@ -22,7 +22,9 @@
     "slipPrinted": "Slip printed",
     "storePrintSettingsChanged": "Slip details changed",
     "storeUncollectedDaysChanged": "Not-collected limit changed",
-    "ticketRepairTypesChanged": "Repair type changed"
+    "ticketRepairTypesChanged": "Repair type changed",
+    "handoverReversed": "Handover undone",
+    "ticketDetailsCorrected": "Details corrected"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -50,7 +52,9 @@
     "applyUnconfirmed": "Not yet",
     "agreedYes": "Yes",
     "takeOver": "Take over",
-    "more": "More"
+    "more": "More",
+    "correctDetails": "Edit details",
+    "undoHandover": "Undo handover"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -79,6 +83,7 @@
     "waited": "Not collected for {days} days"
   },
   "cancel": {
+    "refundsDp": "At pickup, the customer gets {amount} of the DP back.",
     "reason": "Why is it cancelled?",
     "consequence": "The customer only pays the cancellation fee when collecting the phone.",
     "fee": "Cancellation fee",
@@ -138,6 +143,8 @@
     "watch": "Smartwatch"
   },
   "handover": {
+    "giveBack": "Give {refunds} back to the customer.",
+    "giveBackVia": "{amount} through {method}",
     "note": "Note (optional)",
     "photo": "Handover photo",
     "sign": "Customer signs",
@@ -240,7 +247,10 @@
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Refunded"
+    "refund": "Refunded",
+    "newTotal": "Total becomes {from} → {to}",
+    "reduced": "Taken off",
+    "owedBack": "Overpaid"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -254,7 +264,9 @@
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentReference": "Enter the approval code from the EDC machine.",
     "screenLock": "Enter the screen lock, or choose None.",
-    "ownershipVideo": "The ownership video isn’t recorded yet."
+    "ownershipVideo": "The ownership video isn’t recorded yet.",
+    "customerPhone": "This phone number doesn’t look right. Check the digits.",
+    "deviceImei": "This IMEI isn’t right. Check it against the 15 digits *#06# shows."
   },
   "ready": {
     "today": "Today",
@@ -297,7 +309,11 @@
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved.",
-    "repairTypes": "Repair type saved."
+    "repairTypes": "Repair type saved.",
+    "corrected": "Servisan details saved.",
+    "handoverUndone": "Handover undone. The phone is back in the store.",
+    "refund": "Money given back.",
+    "reduce": "Bill lowered."
   },
   "passcode": {
     "show": "Show",
@@ -439,6 +455,7 @@
     "readyBy": "Ready by {date}",
     "returned": "Collected {date}",
     "reprint": "Reprint no. {count}",
+    "reprintFirst": "Reprint",
     "printed": "Printed {date}",
     "printedBy": "Printed {date} by {name}",
     "field": {
@@ -494,7 +511,7 @@
     "handover": "Repair bill",
     "intakeAbout": "Proof the store received the phone.",
     "handoverAbout": "The bill and proof of pickup.",
-    "reprint": "Printed {count} times already.",
+    "reprint": "{count, plural, one {Printed once already.} other {Printed # times already.}}",
     "paper": "Paper",
     "paperHalf": "Half form",
     "paperFull": "Full form",
@@ -505,7 +522,8 @@
     "problem": {
       "noPrinter": "Choose a printer in Settings first.",
       "printerMissing": "Printer not found. Check its cable and power, or choose another printer in Settings.",
-      "failed": "Couldn’t print. Check the printer, then try again."
+      "failed": "Couldn’t print. Check the printer, then try again.",
+      "stuck": "Couldn’t get the slip ready. Try again."
     },
     "paperCustom": "Other size",
     "paperSize": "{width} × {height} mm",
@@ -667,7 +685,15 @@
     "overLimit": "Over your limit. Ask a store owner.",
     "handoverAccessories": "An accessory is missing from the handover list.",
     "handoverNoteNeeded": "Something isn’t ticked. Write a note first.",
-    "ownershipVideoNeeded": "Record the ownership video first."
+    "ownershipVideoNeeded": "Record the ownership video first.",
+    "notReturned": "This phone hasn’t been handed over.",
+    "handoverHasClaim": "A warranty claim names this servisan, so its handover can’t be undone.",
+    "claimSamePhone": "A warranty claim is for the same phone. Its brand, model and IMEI can’t change.",
+    "nothingChanged": "Nothing has changed yet.",
+    "undoTooLate": "This handover was more than a day ago, so it can’t be undone.",
+    "handedOverBefore": "This servisan was handed over before. Its customer and phone can’t change, and it can’t be cancelled.",
+    "customerShared": "This customer has other servisans. Try the change again.",
+    "customerMismatch": "The customer details don’t match. Try again."
   },
   "paper": {
     "title": "Slip paper",
@@ -784,5 +810,23 @@
     "termsSummary": "Still the default terms",
     "paymentMethods": "Payment methods",
     "paymentMethodsSummary": "Cash only so far"
+  },
+  "correct": {
+    "title": "Edit servisan details",
+    "about": "The change is kept in the history, with what it was before.",
+    "reason": "Why the change? (optional)",
+    "save": "Save changes",
+    "claimDevice": "This is a warranty claim, so the phone stays the one from the original servisan.",
+    "handedOverLocked": "This servisan was handed over before, so its customer and phone can’t change."
+  },
+  "undoHandover": {
+    "title": "Undo this handover?",
+    "explain": "The phone is recorded as back in the store and can be handed over again. Payments stay recorded. If a payment went to the wrong servisan, cancel it in Kas.",
+    "reason": "Why undo it?"
+  },
+  "changed": {
+    "line": "{field}: {from} → {to}",
+    "only": "{field} changed",
+    "empty": "empty"
   }
 }

@@ -314,6 +314,7 @@ function LimitsForm({
                   setText((current) => ({ ...current, [kind]: next.replace(/\D/g, '') }));
                 }}
                 keyboardType="number-pad"
+                selectTextOnFocus
                 errorMessage={attempted && text[kind] === '' ? t('auth.limits.missing') : undefined}
                 disabled={busy}
                 testID={`limits-${kind}`}

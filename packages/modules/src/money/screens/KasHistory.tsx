@@ -12,10 +12,10 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
-import { MAX_REASON, MONEY_PERMISSION } from '../constants.js';
+import { MAX_REASON } from '../constants.js';
 import { tm } from '../i18n.js';
 import { shiftDay, useDayRecords } from '../day-records.js';
-import { accountLabel, dayStart, historyLine, voidable } from '../kas.js';
+import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
@@ -43,7 +43,7 @@ export function KasHistory({
   testID = 'money.history',
 }: KasHistoryProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const mayVoid = runtime.hasPermission(MONEY_PERMISSION.voidPayment);
+  const can = voidAbilities((id) => runtime.hasPermission(id));
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const today = dayStart(now());
@@ -105,7 +105,7 @@ export function KasHistory({
                     detail={[formatTime(entry.createdAt), ...line.details].join(' · ')}
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
-                    onPress={mayVoid && voidable(entry) ? () => onVoid(entry) : undefined}
+                    onPress={voidable(entry, can) ? () => onVoid(entry) : undefined}
                     testID={`${testID}.entry.${entry.id}`}
                   />
                 );
@@ -158,6 +158,7 @@ export function VoidPaymentStep({
     'accounts',
   );
   const [reason, setReason] = useState('');
+  const kind = voidKind(entry);
   const discard = useDiscardConfirm({
     dirty: reason.trim() !== '',
     copy: {
@@ -177,7 +178,7 @@ export function VoidPaymentStep({
   const submit = (): void => {
     if (reason.trim() === '') return;
     void runner
-      .run(() => runtime.run('voidPayment', { entryId: entry.id, reason }))
+      .run(() => runtime.run(kind.command, { entryId: entry.id, reason }))
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -186,10 +187,10 @@ export function VoidPaymentStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tm('money.void.title')}
+      title={tm(kind.title)}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
-      primaryLabel={tm('money.void.save')}
+      primaryLabel={tm(kind.save)}
       primaryVariant="destructive"
       onPrimary={submit}
       primaryDisabled={reason.trim() === ''}
@@ -207,7 +208,7 @@ export function VoidPaymentStep({
           .filter((part) => part !== null && part !== '')
           .join(' · ')}
       </Text>
-      <Text style={styles.body}>{tm('money.void.explain')}</Text>
+      <Text style={styles.body}>{tm(kind.explain)}</Text>
       <View style={styles.gap}>
         <TextInput
           label={tm('money.void.reason')}

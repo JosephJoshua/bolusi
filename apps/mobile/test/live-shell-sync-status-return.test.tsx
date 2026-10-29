@@ -131,7 +131,7 @@ async function openStepWithTyping(): Promise<RenderResult> {
   const { target, mounted, repair } = await signedIn();
   const opened = (await repair.run('openTicket', {
     customer: { name: 'Yohanis Wenda', phone: '0812-4455-6677' },
-    device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455667' },
+    device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455660' },
     complaint: 'Baterai cepat habis',
     checklist: [],
     peripherals: [],

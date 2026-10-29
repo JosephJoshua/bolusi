@@ -9,7 +9,8 @@
     "refundPaid": "Uang dikembalikan",
     "cashMoved": "Kas keluar/masuk",
     "cashCounted": "Tutup kas",
-    "cashAdjusted": "Selisih kas diselesaikan"
+    "cashAdjusted": "Selisih kas diselesaikan",
+    "cashMoveVoided": "Catatan kas dibatalkan"
   },
   "refusal": {
     "alreadyRecorded": "Catatan ini sudah ada.",
@@ -32,7 +33,9 @@
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
     "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
-    "overLimit": "Melebihi batasmu. Minta pemilik toko."
+    "overLimit": "Melebihi batasmu. Minta pemilik toko.",
+    "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
+    "laterCountSettled": "Selisih hitungan kas sesudahnya sudah diselesaikan, jadi catatan ini tidak bisa dibatalkan lagi."
   },
   "method": {
     "cash": "Tunai"
@@ -137,14 +140,18 @@
       "time": "Waktu",
       "record": "Catatan"
     },
-    "voidLabel": "Batalkan pembayaran {amount} pukul {time}"
+    "voidLabel": "Batalkan pembayaran {amount} pukul {time}",
+    "voidCashLabel": "Batalkan catatan kas {amount} pukul {time}"
   },
   "void": {
     "title": "Batalkan pembayaran",
     "save": "Batalkan pembayaran",
     "hint": "Isi alasannya.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
-    "reason": "Alasan"
+    "reason": "Alasan",
+    "cashTitle": "Batalkan catatan kas",
+    "cashSave": "Batalkan catatan",
+    "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya."
   },
   "kind": {
     "qris": "QRIS",
@@ -227,5 +234,45 @@
     "cancel": "Batal",
     "unresolved": "QR {amount} tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar.",
     "unresolvedMany": "{count} QR tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
+  },
+  "refund": {
+    "limit": "Batas pengembalianmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
+    "title": "Kembalikan uang",
+    "action": "Kembalikan",
+    "credit": "Lebih bayar",
+    "paid": "Sudah dibayar",
+    "method": "Kembalikan lewat",
+    "amount": "Jumlah",
+    "reason": "Alasan",
+    "reference": "No. referensi (opsional)",
+    "save": "Kembalikan {amount}",
+    "saveEmpty": "Kembalikan",
+    "tooMuch": "Paling banyak {amount} lewat metode ini.",
+    "lowersBill": "Tagihan juga turun {amount}.",
+    "nothing": "Belum ada pembayaran yang bisa dikembalikan.",
+    "hint": {
+      "method": "Pilih metodenya dulu.",
+      "amount": "Isi jumlahnya dulu.",
+      "reason": "Tulis alasannya dulu."
+    }
+  },
+  "reduce": {
+    "limit": "Batas potonganmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
+    "title": "Kurangi tagihan",
+    "action": "Kurangi tagihan",
+    "owed": "Sisa bayar",
+    "amount": "Potongan",
+    "after": "Sisa jadi",
+    "becomesCredit": "Jadi lebih bayar {amount}. Kembalikan ke pelanggan.",
+    "reason": "Alasan",
+    "save": "Kurangi {amount}",
+    "saveEmpty": "Kurangi",
+    "tooMuch": "Paling banyak {amount}.",
+    "hint": {
+      "amount": "Isi potongannya dulu.",
+      "reason": "Tulis alasannya dulu."
+    }
   }
 }

@@ -120,6 +120,8 @@ export interface RepairHarness {
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Whether `userId` holds `permission` here, as the screens ask it. */
+  hasPermission(userId: string, permission: string): boolean;
   /** Every op this device appended, in seq order (for replaying onto another harness). */
   ownOps(): Promise<SignedOperation[]>;
   deliverPulled(op: SignedOperation, arrivalSeq: number): Promise<void>;
@@ -128,6 +130,8 @@ export interface RepairHarness {
   video(n: number): VideoRef;
   /** Moves the device's clock on, so changes after it are signed that much later. */
   advance(ms: number): void;
+  /** The device's clock now, for checks that mirror a rule's time window. */
+  now(): number;
   close(): Promise<void>;
 }
 
@@ -379,6 +383,8 @@ export async function openRepairHarness(
         deviceId,
       })) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    hasPermission: (userId, permission) =>
+      runtime.commands.createContext(userId).colleagueHasPermission(userId, permission),
     ownOps: async () => {
       const rows = await db
         .selectFrom('operations')
@@ -406,6 +412,7 @@ export async function openRepairHarness(
     advance: (ms: number): void => {
       clock.value += ms;
     },
+    now: (): number => clock.value,
     photo,
     video: (n: number): VideoRef => ({
       ...photo(n),
@@ -437,7 +444,7 @@ export function accessoriesBack(
 export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}) {
   return {
     customer: { name: 'Yohanis Wenda', phone: '0812-4455-6677' },
-    device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455667' },
+    device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455660' },
     complaint: 'Layar retak, sentuhan tidak responsif',
     checklist: [
       { item: 'screen', label: null, state: 'issue', note: 'retak kiri atas' },

@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
+import type { DocumentMoney } from '../src/money/queries.js';
+import { withinRefundLimit } from '../src/money/refund.js';
 import {
   accessoriesBack,
   intake,
@@ -268,6 +270,26 @@ describe('refunds and voids', () => {
     // Earlier refunds on the servisan count.
     await expectOverLimit(refund(1, h.managerId), 'money');
     await refund(10_000, h.storeOwnerId);
+  });
+
+  // What the refund step lets a manager type is what the server lets through (Android QA, #90).
+  test('the most a manager is offered to give back is the most the server accepts', async () => {
+    h = await openRepairHarness(9404);
+    const ticketId = await openTicket(h, { downPayment: 100_000 });
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    const money = async () =>
+      (await h!.moneyQuery('documentMoney', { kind: 'repair.ticket', id: ticketId }, h!.managerId))
+        .rows[0] as unknown as DocumentMoney;
+    const most = withinRefundLimit(await money(), 100_000, MANAGER_LIMITS.refund);
+    expect(most).toBe(MANAGER_LIMITS.refund);
+    const refund = (amount: number) =>
+      h!.money('refund', { document, account: 'cash', amount, reason: 'Batal' }, h!.managerId);
+    await expectOverLimit(refund(most + 1), 'money');
+    await refund(most - 10_000);
+    const rest = withinRefundLimit(await money(), 100_000 - most + 10_000, MANAGER_LIMITS.refund);
+    expect(rest).toBe(10_000);
+    await expectOverLimit(refund(rest + 1), 'money');
+    await refund(rest);
   });
 
   test('a DP correction counts only what the DP went down by', async () => {

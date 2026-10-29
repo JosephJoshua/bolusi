@@ -13,6 +13,8 @@ import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { HandoverQris } from './handover-payment.js';
+import { refundsFor } from './commands.js';
+import { paymentMethods } from '../money/payment-entry.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { repairModule } from './manifest.js';
 import {
@@ -44,8 +46,11 @@ export interface SlipOutput {
   readonly paper: PaperSettings;
 }
 
-/** Why a print did not go out: no printer picked yet, the picked one is gone, or it refused the job. */
-export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed';
+/**
+ * Why a print did not go out: no printer picked yet, the picked one is gone, it refused the job, or
+ * the phone's print dialog or PDF never got ready (the system's print call hung).
+ */
+export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed' | 'stuck';
 
 /** Thrown by `RepairPrinting.output` when the job did not reach the printer. */
 export class PrinterProblem extends Error {
@@ -281,6 +286,30 @@ export function useTicketQris(ticketId: string, ticketNumber: string | null): Ha
     recorded,
     newId: () => runtime.money.newId(),
   };
+}
+
+/**
+ * What the counter hands back at a handover that leaves the customer in credit (a cancelled
+ * servisan's DP above its fee), method by method: the same split `returnDevice` records, so the
+ * counter knows to give cash from the drawer or send a transfer back before the phone goes.
+ */
+export function useHandoverRefunds(
+  ticketId: string,
+  credit: number,
+  accounts: readonly PaymentAccountRow[],
+): readonly { readonly account: string; readonly label: string; readonly amount: number }[] {
+  const money = useRepairQuery(
+    async (rt) =>
+      (await rt.money.query('documentMoney', { kind: REPAIR_DOCUMENT_KIND, id: ticketId }))
+        .rows[0] ?? null,
+    `handoverRefunds:${ticketId}`,
+  );
+  if (credit <= 0 || money.status !== 'ready' || money.data === null) return [];
+  const methods = paymentMethods(accounts);
+  return refundsFor(money.data, credit).map((refund) => ({
+    ...refund,
+    label: methods.find((method) => method.account === refund.account)?.label ?? refund.account,
+  }));
 }
 
 export interface PaymentMethodChoice {

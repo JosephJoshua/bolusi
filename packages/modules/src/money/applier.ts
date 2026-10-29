@@ -111,6 +111,7 @@ async function insertLines(
   postings: readonly Posting[],
   document: MoneyDocument | null,
   idPrefix: string,
+  at: number = op.timestamp,
 ): Promise<void> {
   if (postings.length === 0) return;
   await db
@@ -126,7 +127,7 @@ async function insertLines(
         documentId: document?.id ?? null,
         debit: p.debit,
         credit: p.credit,
-        at: op.timestamp,
+        at,
       })),
     )
     .execute();
@@ -193,32 +194,52 @@ export const entryRecordedApplier: ProjectionApplier<MoneyDatabase> = async (db,
  * A payment cancelled: the entry is marked and its lines reversed. A second void of the same
  * payment (two owners, offline) changes nothing; the first stands.
  */
-export const paymentVoidedApplier: ProjectionApplier<MoneyDatabase> = async (db, op) => {
-  const { reason } = payloadOf<{ reason: string }>(op);
-  const entry = await db
-    .selectFrom('moneyEntries')
-    .selectAll()
-    .where('id', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
-    .executeTakeFirst();
-  if (entry === undefined || entry.voidedBy !== null || entry.kind !== 'payment_received') return;
-  await db
-    .updateTable('moneyEntries')
-    .set({ voidedBy: op.userId, voidedAt: op.timestamp, voidReason: reason })
-    .where('id', '=', op.entityId)
-    .execute();
-  const postings = postingsFor({
-    kind: 'payment_received',
-    amount: Number(entry.amount),
-    account: entry.account,
-    subKind: null,
-  });
-  const document =
-    entry.documentKind === null || entry.documentId === null
-      ? null
-      : { kind: entry.documentKind, id: entry.documentId, label: entry.documentLabel ?? '' };
-  await insertLines(db, op, reversalOf(postings), document, `${op.entityId}:void`);
-};
+/**
+ * A record cancelled by an owner: marked voided, and its lines reversed. A payment's reversal is
+ * dated now, when the customer's balance went back up. A cash move's is dated with the move, as if
+ * it was never recorded, so a count made after the mistake reads right again.
+ */
+function voidedApplier(
+  kind: 'payment_received' | 'cash_moved',
+  datedWith: 'void' | 'entry',
+): ProjectionApplier<MoneyDatabase> {
+  return async (db, op) => {
+    const { reason } = payloadOf<{ reason: string }>(op);
+    const entry = await db
+      .selectFrom('moneyEntries')
+      .selectAll()
+      .where('id', '=', op.entityId)
+      .where('storeId', '=', storeIdOf(op))
+      .executeTakeFirst();
+    if (entry === undefined || entry.voidedBy !== null || entry.kind !== kind) return;
+    await db
+      .updateTable('moneyEntries')
+      .set({ voidedBy: op.userId, voidedAt: op.timestamp, voidReason: reason })
+      .where('id', '=', op.entityId)
+      .execute();
+    const postings = postingsFor({
+      kind,
+      amount: Number(entry.amount),
+      account: entry.account,
+      subKind: entry.subKind,
+    });
+    const document =
+      entry.documentKind === null || entry.documentId === null
+        ? null
+        : { kind: entry.documentKind, id: entry.documentId, label: entry.documentLabel ?? '' };
+    await insertLines(
+      db,
+      op,
+      reversalOf(postings),
+      document,
+      `${op.entityId}:void`,
+      datedWith === 'entry' ? Number(entry.createdAt) : op.timestamp,
+    );
+  };
+}
+
+export const paymentVoidedApplier = voidedApplier('payment_received', 'void');
+export const cashMoveVoidedApplier = voidedApplier('cash_moved', 'entry');
 
 /** A store's own account, or a central one: the latest save is the account. */
 export const accountSavedApplier: ProjectionApplier<MoneyDatabase> = async (db, op) => {
