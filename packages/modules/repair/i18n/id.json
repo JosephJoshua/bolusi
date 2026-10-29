@@ -506,7 +506,14 @@
       "noPrinter": "Pilih printernya dulu di Pengaturan.",
       "printerMissing": "Printernya tidak ditemukan. Cek kabel dan dayanya, atau pilih printer lain di Pengaturan.",
       "failed": "Belum bisa mencetak. Cek printernya, lalu coba lagi."
-    }
+    },
+    "paperCustom": "Ukuran lain",
+    "paperSize": "{width} × {height} mm",
+    "paperWidth": "Lebar (mm)",
+    "paperHeight": "Tinggi (mm)",
+    "paperContinuous": "Kertas continuous",
+    "paperContinuousHint": "Berlubang di kedua sisi, untuk printer dot-matrix.",
+    "paperRange": "Lebar {minWidth}–{maxWidth} mm, tinggi {minHeight}–{maxHeight} mm."
   },
   "downPayment": {
     "recordTitle": "Catat DP",
@@ -766,5 +773,16 @@
     "noCamera": "Rekam lewat HP toko: buka servisan ini di HP.",
     "label": "Video",
     "expired": "Video kepemilikan sudah terhapus. Rekam ulang, ya."
+  },
+  "basics": {
+    "title": "Lengkapi data toko",
+    "slipHeader": "Alamat dan nomor toko",
+    "slipHeaderSummary": "Belum ada di nota",
+    "logo": "Logo toko",
+    "logoSummary": "Belum ada di nota",
+    "terms": "Ketentuan di nota",
+    "termsSummary": "Masih ketentuan bawaan",
+    "paymentMethods": "Metode pembayaran",
+    "paymentMethodsSummary": "Baru tunai"
   }
 }
