@@ -27,6 +27,17 @@ export interface AppUpdaterDeps {
   readonly onError?: (error: unknown) => void;
 }
 
+/** What "Cek pembaruan" found: a restart into a new version, or nothing newer yet. */
+export type UpdateCheckResult = 'restarting' | 'none';
+
+/** Fetch a newer update now and restart into it; the person asked, so nobody is mid-task. */
+export async function updateNow(updates: UpdatesPort): Promise<UpdateCheckResult> {
+  if (!updates.pending()) await updates.downloadNewer();
+  if (!updates.pending()) return 'none';
+  await updates.reload();
+  return 'restarting';
+}
+
 /** Start watching for breaks; returns the stop. */
 export function startAppUpdates(deps: AppUpdaterDeps): () => void {
   if (!deps.updates.isEnabled) return () => undefined;

@@ -37,8 +37,8 @@ releases and updates with the same `BOLUSI_API_URL`, or their fingerprints diffe
 
 Release the server before an app that sends a new change type or a new `schemaVersion`:
 the server keeps every older version, so older apps keep syncing. A device that pulls a
-change it cannot read stops pulling (pushing goes on) and its sync status says to update
-the app (`APP_UPDATE_REQUIRED`, `docs/architecture.md`).
+change it cannot read stops pulling (pushing goes on, newer data from every device waits) and its sync status says to update
+the app, with "Cek pembaruan" on phones (`APP_UPDATE_REQUIRED`, `docs/architecture.md`).
 
 ## One-time setup
 

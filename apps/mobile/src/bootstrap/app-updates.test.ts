@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import type { AppStatus } from '@bolusi/device/bootstrap/triggers';
 
-import { BREAK_MS, startAppUpdates, type UpdatesPort } from './app-updates.js';
+import { BREAK_MS, startAppUpdates, updateNow, type UpdatesPort } from './app-updates.js';
 
 function harness(options: { enabled?: boolean; pending?: boolean; start?: AppStatus } = {}) {
   let now = 0;
@@ -92,5 +92,43 @@ describe('over-the-air updates on a phone', () => {
   test('development and test builds never look for updates', () => {
     const h = harness({ enabled: false, pending: true });
     expect(h.listening()).toBe(false);
+  });
+});
+
+describe('"Cek pembaruan"', () => {
+  const port = (pendingAfterDownload: boolean, pendingAtStart = false) => {
+    let pending = pendingAtStart;
+    return {
+      isEnabled: true,
+      pending: () => pending,
+      downloadNewer: vi.fn(() => {
+        pending = pendingAfterDownload;
+        return Promise.resolve();
+      }),
+      reload: vi.fn(() => Promise.resolve()),
+    } satisfies UpdatesPort;
+  };
+
+  test('downloads a newer update and restarts into it', async () => {
+    const updates = port(true);
+    expect(await updateNow(updates)).toBe('restarting');
+    expect(updates.reload).toHaveBeenCalledOnce();
+  });
+
+  test('an update already downloaded restarts without asking the server again', async () => {
+    const updates = port(true, true);
+    expect(await updateNow(updates)).toBe('restarting');
+    expect(updates.downloadNewer).not.toHaveBeenCalled();
+  });
+
+  test('nothing newer leaves the app running', async () => {
+    const updates = port(false);
+    expect(await updateNow(updates)).toBe('none');
+    expect(updates.reload).not.toHaveBeenCalled();
+  });
+
+  test('a failed check is reported, not swallowed', async () => {
+    const updates = { ...port(false), downloadNewer: () => Promise.reject(new Error('offline')) };
+    await expect(updateNow(updates)).rejects.toThrow('offline');
   });
 });

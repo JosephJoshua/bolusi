@@ -11,7 +11,7 @@
 //
 // The assertion reads the button's public `disabled` prop, never its label — T-4. This mirrors
 // `EnrollmentScreen.test.tsx`'s `enroll-bind` disabled check.
-import { type SyncLoopState, type SyncState } from '@bolusi/core';
+import { APP_UPDATE_REQUIRED_ERROR_CODE, type SyncLoopState, type SyncState } from '@bolusi/core';
 import {
   formatDate,
   formatRelative,
@@ -19,6 +19,7 @@ import {
   t,
   translateRejectionCode,
 } from '@bolusi/i18n';
+import { act } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
@@ -497,5 +498,50 @@ describe('a phone the server no longer recognises', () => {
     const screen = renderSync();
     expect(screen.query('sync-unrecognised')).toBeNull();
     expect(screen.query('sync-reenroll')).toBeNull();
+  });
+});
+
+describe('a change from a newer app holds the pull', () => {
+  const waiting = { state: state({ lastSyncError: APP_UPDATE_REQUIRED_ERROR_CODE }) };
+  const renderWaiting = (onCheckForUpdate?: () => Promise<'restarting' | 'none'>) =>
+    render(
+      <SyncStatusScreen
+        input={input(waiting)}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onSyncNow={vi.fn()}
+        onOpenRejected={vi.fn()}
+        onRetryMedia={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onReenroll={vi.fn()}
+        onCheckForUpdate={onCheckForUpdate}
+        expandedRejectedOpId={null}
+      />,
+    );
+  const settle = () => act(() => Promise.resolve());
+
+  test('offers to check for the update, and says when there is none yet', async () => {
+    const check = vi.fn(() => Promise.resolve('none' as const));
+    const screen = renderWaiting(check);
+    expect(textsIn(screen.get('sync-update-needed'))).toContain(t('sync.updateNeeded.title'));
+    fire(screen.get('sync-update-check'), 'onPress');
+    expect(screen.get('sync-update-check').props['disabled']).toBe(true);
+    await settle();
+    expect(check).toHaveBeenCalledOnce();
+    expect(textsIn(screen.get('sync-update-result'))).toContain(t('sync.updateNeeded.none'));
+    expect(screen.get('sync-update-check').props['disabled']).toBe(false);
+  });
+
+  test('a failed check says to try again', async () => {
+    const screen = renderWaiting(() => Promise.reject(new Error('offline')));
+    fire(screen.get('sync-update-check'), 'onPress');
+    await settle();
+    expect(textsIn(screen.get('sync-update-result'))).toContain(t('sync.updateNeeded.failed'));
+  });
+
+  test('a build without over-the-air updates only explains', () => {
+    const screen = renderWaiting();
+    expect(screen.query('sync-update-needed')).not.toBeNull();
+    expect(screen.query('sync-update-check')).toBeNull();
   });
 });

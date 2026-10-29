@@ -58,7 +58,7 @@ import { createFetchMediaTransport } from '@bolusi/device/media/transport';
 import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
 import { createPhonePhotoLoader } from '@bolusi/device/media/phone-photos';
 import { appStatePort } from './src/ports/app-state.js';
-import { startAppUpdates } from './src/bootstrap/app-updates.js';
+import { startAppUpdates, updateNow } from './src/bootstrap/app-updates.js';
 import { expoUpdatesPort } from './src/ports/updates.js';
 import { expoPrintPlatform } from './src/ports/print.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
@@ -569,6 +569,7 @@ let rootProps: RootProps | null = null;
 
 function buildRootProps(): RootProps {
   return {
+    checkForUpdate: expoUpdatesPort.isEnabled ? () => updateNow(expoUpdatesPort) : undefined,
     boot: foregroundBoot,
     createSync,
     createEnrollment,

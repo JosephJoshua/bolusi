@@ -489,7 +489,11 @@ const source = {
       },
       updateNeeded: {
         title: 'Perbarui aplikasi',
-        body: 'Perangkat lain sudah pakai versi baru. Data darinya baru masuk setelah aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron.',
+        body: 'Perangkat lain sudah pakai versi baru. Data baru dari perangkat lain tertahan sampai aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron.',
+        check: 'Cek pembaruan',
+        checking: 'Mengecek pembaruan…',
+        none: 'Belum ada pembaruan untuk HP ini. Coba lagi nanti.',
+        failed: 'Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.',
       },
     },
     conflict: {
@@ -1098,7 +1102,11 @@ export const resources = {
         },
         updateNeeded: {
           title: 'Update the app',
-          body: 'Another device runs a newer version. Its changes arrive once this app is updated. Changes made here still sync.',
+          body: 'Another device runs a newer version. New data from other devices waits until this app is updated. Changes made here still sync.',
+          check: 'Check for updates',
+          checking: 'Checking for updates…',
+          none: 'No update for this phone yet. Try again later.',
+          failed: 'Couldn’t check for updates. Check the connection, then try again.',
         },
       },
       conflict: {

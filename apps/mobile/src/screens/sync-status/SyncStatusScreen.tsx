@@ -57,6 +57,8 @@ import {
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import type { UpdateCheckResult } from '../../bootstrap/app-updates.js';
+
 import { syncChipAccessibilityLabels } from './chip-a11y.js';
 import {
   bannerCauses,
@@ -89,6 +91,11 @@ export interface SyncStatusScreenProps {
   /** Open device setup to register this phone again (offered only when the server forgot it). */
   readonly onReenroll: () => void;
   /**
+   * Fetch and restart into a newer app version, offered while a change from a newer app holds the
+   * pull. Absent in builds without over-the-air updates; the section then only explains.
+   */
+  readonly onCheckForUpdate?: (() => Promise<UpdateCheckResult>) | undefined;
+  /**
    * The refused change whose detail sheet is open, or `null`. The row already says what happened and
    * what to do (`core.rejection.<CODE>`, 07-i18n §10.2); the sheet adds which change it was, when, and
    * the server's own words as collapsed technical detail (07-i18n §4.3).
@@ -108,6 +115,7 @@ export function SyncStatusScreen({
   onRetryMedia,
   onOpenSwitcher,
   onReenroll,
+  onCheckForUpdate,
   expandedRejectedOpId,
 }: SyncStatusScreenProps): React.JSX.Element {
   const level = staleness(input);
@@ -134,6 +142,15 @@ export function SyncStatusScreen({
   const hasWaiting = input.pendingOperationCount > 0 || waitingPhotos > 0;
   const openRejected = input.rejected.find((row) => row.opId === expandedRejectedOpId) ?? null;
   const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
+  const [updateCheck, setUpdateCheck] = useState<'idle' | 'checking' | 'none' | 'failed'>('idle');
+  const checkForUpdate = (): void => {
+    if (onCheckForUpdate === undefined) return;
+    setUpdateCheck('checking');
+    onCheckForUpdate().then(
+      (result) => setUpdateCheck(result === 'none' ? 'none' : 'checking'),
+      () => setUpdateCheck('failed'),
+    );
+  };
   const rejectedHidden = input.rejected.length - rejectedShown;
   const { icon, tone } = HERO[titleState];
 
@@ -341,6 +358,26 @@ export function SyncStatusScreen({
         <View style={styles.section} testID="sync-update-needed">
           <Text style={styles.sectionTitle}>{t('sync.updateNeeded.title')}</Text>
           <Text style={styles.sectionText}>{t('sync.updateNeeded.body')}</Text>
+          {updateCheck === 'none' || updateCheck === 'failed' ? (
+            <Text style={styles.sectionText} testID="sync-update-result">
+              {t(updateCheck === 'none' ? 'sync.updateNeeded.none' : 'sync.updateNeeded.failed')}
+            </Text>
+          ) : null}
+          {onCheckForUpdate === undefined ? null : (
+            <View style={styles.sectionAction}>
+              <TextButton
+                label={t(
+                  updateCheck === 'checking'
+                    ? 'sync.updateNeeded.checking'
+                    : 'sync.updateNeeded.check',
+                )}
+                icon="retry"
+                onPress={checkForUpdate}
+                disabled={updateCheck === 'checking'}
+                testID="sync-update-check"
+              />
+            </View>
+          )}
         </View>
       ) : null}
 

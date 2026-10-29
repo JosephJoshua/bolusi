@@ -68,6 +68,10 @@
   },
   "updateNeeded": {
     "title": "Update the app",
-    "body": "Another device runs a newer version. Its changes arrive once this app is updated. Changes made here still sync."
+    "body": "Another device runs a newer version. New data from other devices waits until this app is updated. Changes made here still sync.",
+    "check": "Check for updates",
+    "checking": "Checking for updates…",
+    "none": "No update for this phone yet. Try again later.",
+    "failed": "Couldn’t check for updates. Check the connection, then try again."
   }
 }
