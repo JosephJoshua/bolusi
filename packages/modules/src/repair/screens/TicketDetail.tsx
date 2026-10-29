@@ -87,6 +87,7 @@ import {
   type TicketAction,
   type TicketStep,
 } from '../flows.js';
+import { useClearAskedNotice } from '../asked-notice.js';
 import {
   ActionErrorBanner,
   DownPaymentRows,
@@ -225,6 +226,11 @@ export function TicketDetail({
       };
     },
     `ticket:${ticketId}:${String(reloadNonce)}`,
+  );
+  useClearAskedNotice(
+    done,
+    () => setDone(null),
+    query.status === 'ready' ? query.data.approvals : undefined,
   );
 
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;

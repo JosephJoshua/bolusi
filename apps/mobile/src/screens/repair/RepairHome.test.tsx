@@ -538,6 +538,74 @@ describe('a down payment fix (owners; the counter asks)', () => {
     await press(owner, 'repair.ticket.approval.primary');
     expect((await ticketRow(h, ticketId)).downPayment).toBe(80_000);
   });
+
+  test('a manager cannot approve a DP fix beyond their limit; the asker sees the answer and its note', async () => {
+    h = await openRepairScreenHarness(5532);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
+
+    const counter = await mount(h, h.cashierId);
+    await press(counter, `repair.board.row.${ticketId}`);
+    await press(counter, 'repair.ticket.downPayment.correct');
+    type(counter, 'repair.downPayment.amount', '40.000');
+    type(counter, 'repair.downPayment.reason', 'Salah ketik');
+    await settle();
+    await press(counter, 'repair.downPayment.primary');
+    expect(text(counter, 'repair.ticket.done')).toBe(
+      'Permintaan dibuat. Pemilik toko akan memutuskan.',
+    );
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.cashierId)
+    ).rows;
+
+    // Rp 60.000 off is beyond the manager's Rp 30.000: only rejecting is offered.
+    const manager = await mount(h, h.managerId);
+    await press(manager, 'repair.board.views.approvals');
+    await press(manager, `repair.board.row.${ticketId}`);
+    await press(manager, `repair.ticket.approvals.${request!.id}`);
+    expect(manager.all('repair.ticket.approval.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(manager, 'repair.ticket.approval.primaryHint')).toMatch(
+      /^Di atas batasmu Rp\s?30\.000\. Hanya pemilik toko yang bisa menyetujui\.$/,
+    );
+    type(manager, 'repair.ticket.approval.note', 'Pakai nota DP yang asli');
+    await settle();
+    await press(manager, 'repair.ticket.approval.reject');
+    manager.unmount();
+
+    // The asker's notice goes once it is answered, and the answer carries the note.
+    await waitUntil(() => counter.query('repair.ticket.done') === null);
+    expect(text(counter, `repair.ticket.approvals.${request!.id}`)).toContain(
+      'Pakai nota DP yang asli',
+    );
+    expect((await ticketRow(h, ticketId)).downPayment).toBe(100_000);
+  });
+
+  test('a manager’s DP fix counts earlier fixes on the servisan, and says so', async () => {
+    h = await openRepairScreenHarness(5533);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 80_000, reason: 'Salah ketik' },
+      h.storeOwnerId,
+    );
+
+    // 80.000 to 70.000 is Rp 10.000 now, Rp 30.000 with the owner's earlier fix: still within.
+    const manager = await mount(h, h.managerId);
+    await press(manager, `repair.board.row.${ticketId}`);
+    await press(manager, 'repair.ticket.downPayment.correct');
+    type(manager, 'repair.downPayment.amount', '70.000');
+    type(manager, 'repair.downPayment.reason', 'Salah ketik lagi');
+    await settle();
+    expect(text(manager, 'repair.downPayment.withEarlier')).toMatch(
+      /^Bersama perubahan DP sebelumnya, totalnya Rp\s?30\.000\.$/,
+    );
+    expect(manager.query('repair.downPayment.asks')).toBeNull();
+    // One more rupiah off and it goes to an owner.
+    type(manager, 'repair.downPayment.amount', '69.000');
+    await settle();
+    expect(manager.query('repair.downPayment.asks')).not.toBeNull();
+  });
 });
 
 describe('cancelling (owners; the counter asks)', () => {

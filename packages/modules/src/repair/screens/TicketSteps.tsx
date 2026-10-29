@@ -364,7 +364,7 @@ export function CancelStep({
                   <TextButton
                     label={tn('repair.cancel.changeFee')}
                     accessibilityLabel={tn('repair.cancel.changeFeeLabel')}
-                    onPress={() => setFeeText(String(standard ?? 0))}
+                    onPress={() => setFeeText(groupedAmount(String(standard ?? 0)))}
                     testID={`${testID}.changeFee`}
                   />
                 </View>
@@ -393,7 +393,7 @@ export function CancelStep({
             label={tn('repair.cancel.feeInput')}
             value={feeText}
             onChangeText={(text) => {
-              if (acceptsRupiahText(text)) setFeeText(text);
+              if (acceptsRupiahText(text)) setFeeText(groupedAmount(text));
             }}
             keyboardType="number-pad"
             autoFocus
@@ -473,7 +473,7 @@ export function DownPaymentStep({
     correcting && complete && amount !== null
       ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
       : null;
-  const ask = useDownPaymentAsk(fix);
+  const ask = useDownPaymentAsk(fix, current ?? 0);
   const asking = correcting && ask.asking;
 
   const submit = (): void => {
@@ -562,6 +562,11 @@ export function DownPaymentStep({
           {ask.limit === null ? null : (
             <Text style={repairStyles.caption} testID={`${testID}.limit`}>
               {tn('repair.hint.downPaymentLimit', { amount: formatMoney(ask.limit) })}
+            </Text>
+          )}
+          {ask.withEarlier === null ? null : (
+            <Text style={repairStyles.caption} testID={`${testID}.withEarlier`}>
+              {tn('repair.hint.downPaymentWithEarlier', { amount: formatMoney(ask.withEarlier) })}
             </Text>
           )}
           {asking ? (

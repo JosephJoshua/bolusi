@@ -37,6 +37,12 @@ export interface ApprovalRow {
   readonly mine: boolean;
   /** Whether the caller may approve or reject it now. */
   readonly canDecide: boolean;
+  /**
+   * What approving counts against the approver's limit on `limitedBy`, as the rules count it, so a
+   * limited approver sees up front that it is beyond them. Read only while the caller may decide.
+   */
+  readonly counted: number;
+  readonly limitedBy: string | null;
 }
 
 function storeOf(qctx: Qctx): string {
@@ -73,9 +79,9 @@ async function rowsOf(
     const kind = kinds[row.kind];
     const input = JSON.parse(row.inputJson) as Record<string, unknown>;
     let status = row.status as ApprovalStatus | 'closed';
+    const parsed = kind?.input.safeParse(input);
     if (status === 'waiting') {
       // Closed exactly when approving would be refused as changed: another basis or amount.
-      const parsed = kind?.input.safeParse(input);
       const now =
         kind === undefined || parsed?.success !== true
           ? null
@@ -86,6 +92,16 @@ async function rowsOf(
       if (now?.basis !== row.basis || now.amount !== Number(row.amount)) status = 'closed';
     }
     const mine = row.requestedBy === qctx.userId;
+    const canDecide =
+      status === 'waiting' &&
+      !mine &&
+      kind !== undefined &&
+      qctx.hasPermission(kind.permission) &&
+      qctx.hasPermission(kind.commandPermission);
+    const counted =
+      !canDecide || kind?.counted === undefined || parsed?.success !== true
+        ? Number(row.amount)
+        : await kind.counted(asNever(qctx), scopeOf(qctx), parsed.data as never);
     out.push({
       id: row.id,
       kind: row.kind,
@@ -103,12 +119,9 @@ async function rowsOf(
       decidedAt: row.decidedAt === null ? null : Number(row.decidedAt),
       note: row.note,
       mine,
-      canDecide:
-        status === 'waiting' &&
-        !mine &&
-        kind !== undefined &&
-        qctx.hasPermission(kind.permission) &&
-        qctx.hasPermission(kind.commandPermission),
+      canDecide,
+      counted,
+      limitedBy: kind === undefined ? null : (kind.limitPermission ?? kind.permission),
     });
   }
   return out;

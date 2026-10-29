@@ -1,7 +1,7 @@
 // The PC's approval pieces: the requests on a record (a servisan's pane), and the dialog that
 // answers one (approve or reject, with a note) or takes it back. What a request is about reads in
 // its own module's words, handed in as an `ApprovalDescription`.
-import { formatDateTime, t } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, t } from '@bolusi/i18n';
 import { Button, Chip, ConfirmDialog, Dialog, Section, TextField } from '@bolusi/ui-web';
 import { CircleCheck, CircleX, Clock, Undo2, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { useActionRunner } from '../../screen-kit/index.js';
 import { ActionError } from '../../screen-kit/desktop/index.js';
 import {
+  approvalBeyondLimit,
   APPROVAL_STATUS_TONE,
   approvalActionable,
   approvalByLine,
@@ -113,6 +114,7 @@ export function ApprovalDialog({
   const [note, setNote] = useState('');
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const decides = request.canDecide && request.status === 'waiting';
+  const beyond = decides ? approvalBeyondLimit(request, port.limitOf) : null;
   const withdraws = request.mine && request.status === 'waiting';
 
   const act = (
@@ -147,9 +149,19 @@ export function ApprovalDialog({
         footer={
           decides ? (
             <>
-              <p id={`${testId}.question`} className="mr-auto text-body font-semibold text-text">
-                {ta('approvals.step.question')}
-              </p>
+              {beyond === null ? (
+                <p id={`${testId}.question`} className="mr-auto text-body font-semibold text-text">
+                  {ta('approvals.step.question')}
+                </p>
+              ) : (
+                <p
+                  id={`${testId}.question`}
+                  className="mr-auto text-small text-text-muted"
+                  data-testid={`${testId}.beyondLimit`}
+                >
+                  {ta('approvals.step.beyondLimit', { amount: formatMoney(beyond) })}
+                </p>
+              )}
               <Button
                 label={ta('approvals.action.reject')}
                 onClick={() => act('rejectRequest', 'approvals.done.rejected')}
@@ -162,6 +174,7 @@ export function ApprovalDialog({
                 variant="primary"
                 onClick={() => act('approveRequest', 'approvals.done.approved')}
                 aria-describedby={`${testId}.question`}
+                disabled={beyond !== null}
                 busy={runner.busy}
                 data-testid={`${testId}.approve`}
               />

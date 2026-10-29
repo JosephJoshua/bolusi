@@ -1,7 +1,7 @@
 // The phone's approval pieces: the requests on a record (a servisan's page), and the full-screen
 // step that answers one (approve or reject, with a note) or takes it back. What a request is
 // about reads in its own module's words, handed in as a `ApprovalDescription`.
-import { formatDateTime } from '@bolusi/i18n';
+import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import {
   Chip,
   ConfirmSheet,
@@ -23,6 +23,7 @@ import { FlowScreen, Section, type ScreenChrome } from '../../screen-kit/screens
 import {
   APPROVAL_STATUS_TONE,
   approvalActionable,
+  approvalBeyondLimit,
   approvalByLine,
   approvalStatusLabel,
   type ApprovalDescription,
@@ -124,6 +125,7 @@ export function ApprovalStep({
   const [note, setNote] = useState('');
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const decides = request.canDecide && request.status === 'waiting';
+  const beyond = decides ? approvalBeyondLimit(request, port.limitOf) : null;
 
   const act = (
     command: 'approveRequest' | 'rejectRequest' | 'withdrawRequest',
@@ -148,6 +150,12 @@ export function ApprovalStep({
       question={decides ? ta('approvals.step.question') : undefined}
       primaryLabel={decides ? ta('approvals.action.approve') : undefined}
       onPrimary={decides ? () => act('approveRequest', 'approvals.done.approved') : undefined}
+      primaryDisabled={beyond !== null}
+      primaryHint={
+        beyond === null
+          ? undefined
+          : ta('approvals.step.beyondLimit', { amount: formatMoney(beyond) })
+      }
       secondary={
         decides
           ? {

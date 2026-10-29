@@ -38,13 +38,15 @@
   "row": {
     "askedBy": "{name}: {reason}",
     "answeredBy": "{status} by {name}",
+    "answeredNote": "{status} by {name}: {note}",
     "withdrawn": "Withdrawn by the person who asked"
   },
   "step": {
     "title": "Approval request",
     "askedBy": "Asked by {name} · {time}",
     "question": "Approve this request?",
-    "note": "Note (optional)"
+    "note": "Note (optional)",
+    "beyondLimit": "Above your limit of {amount}. Only the store owner can approve it."
   },
   "action": {
     "ask": "Ask for approval",
@@ -59,7 +61,7 @@
     "message": "The store owner will not need to decide it."
   },
   "done": {
-    "asked": "Request sent. The store owner will decide.",
+    "asked": "Request made. The store owner will decide.",
     "approved": "Approved and recorded.",
     "rejected": "Request rejected.",
     "withdrawn": "Request withdrawn."

@@ -13,6 +13,8 @@ type Input = Readonly<Record<string, unknown>>;
 export interface DemoApprovalKind {
   readonly permission: string;
   readonly commandPermission: string;
+  /** The limit an approver is held to, when not `permission`'s own. */
+  readonly limitPermission?: string;
   readonly amount: (input: Input) => number;
   readonly targetId: (input: Input) => string;
   readonly apply: (input: Input) => unknown;
@@ -111,6 +113,8 @@ export function demoApprovals(options: {
         !mine &&
         me.can(kind.permission) &&
         me.can(kind.commandPermission),
+      counted: request.amount,
+      limitedBy: kind.limitPermission ?? kind.permission,
     };
   };
   const find = (id: string): DemoRequest => {

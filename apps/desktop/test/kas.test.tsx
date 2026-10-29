@@ -234,7 +234,13 @@ describe('Kas on the PC', () => {
     fireEvent.click(voidButton!);
     await screen.findByTestId('money.desk.void');
     expect(byTestId('money.desk.void.limit').textContent).toBe(
-      'Batas pembatalanmu Rp 30.000 per transaksi. Lebih dari itu, minta pemilik toko.',
+      'Batas pembatalanmu Rp 30.000 per transaksi.',
+    );
+    // Every payment today is beyond it: refused up front, not after submitting.
+    fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
+    expect(byTestId('money.desk.void.submit')).toHaveProperty('disabled', true);
+    expect(byTestId('money.desk.void.hint').textContent).toBe(
+      'Melebihi batasmu. Minta pemilik toko.',
     );
   });
 

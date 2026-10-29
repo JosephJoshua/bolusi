@@ -328,6 +328,7 @@
     "payLaterAsk": "Ask for approval, or pay now.",
     "downPaymentLimit": "You can take up to {amount} off the money taken in.",
     "cancelLimit": "You can cut the fee by up to {amount}.",
+    "downPaymentWithEarlier": "With earlier DP changes, that’s {amount} in total.",
     "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
   },
   "discardPhotos": {
@@ -432,7 +433,7 @@
   "fees": {
     "title": "Cancellation fees",
     "summary": "Before and after work starts",
-    "intro": "What the customer pays when a repair is cancelled. Owners can still change it when cancelling.",
+    "intro": "What the customer pays when a repair is cancelled. It can still be changed when cancelling.",
     "beforeWork": "Work hasn’t started",
     "afterWork": "Work has started",
     "save": "Save",
@@ -788,6 +789,6 @@
     "payLaterDebt": "Left to pay later",
     "payLaterAfter": "Once approved, the counter can hand the phone over unpaid.",
     "downPaymentNew": "Correct down payment",
-    "downPaymentTakenOff": "Takes {amount} off the money taken in."
+    "downPaymentTakenOff": "Takes {amount} in total off the money taken in on this repair."
   }
 }

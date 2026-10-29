@@ -160,6 +160,7 @@ export const REPAIR_KEYS = [
   'repair.hint.payLaterAsk',
   'repair.hint.downPaymentLimit',
   'repair.hint.cancelLimit',
+  'repair.hint.downPaymentWithEarlier',
   'repair.hint.reason',
   'repair.hint.downPayment',
   'repair.hint.downPaymentCorrect',

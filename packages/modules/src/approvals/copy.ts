@@ -33,10 +33,27 @@ export function approvalByLine(row: ApprovalRow): string {
     return ta('approvals.row.askedBy', { name: row.requestedByName ?? '–', reason: row.reason });
   }
   if (row.status === 'withdrawn') return ta('approvals.row.withdrawn');
-  return ta('approvals.row.answeredBy', {
+  const answered = {
     status: approvalStatusLabel(row.status),
     name: row.decidedByName ?? '–',
-  });
+  };
+  // The approver's note goes back to whoever asked.
+  return row.note === null
+    ? ta('approvals.row.answeredBy', answered)
+    : ta('approvals.row.answeredNote', { ...answered, note: row.note });
+}
+
+/**
+ * The caller's limit when approving this request is beyond it (a manager), else null: the rules
+ * would refuse it, so only rejecting is offered.
+ */
+export function approvalBeyondLimit(
+  row: ApprovalRow,
+  limitOf: (permissionId: string) => number | null,
+): number | null {
+  if (!row.canDecide || row.limitedBy === null) return null;
+  const limit = limitOf(row.limitedBy);
+  return limit !== null && row.counted > limit ? limit : null;
 }
 
 /** A row opens when there is something to do with it: answer it, or take it back. */

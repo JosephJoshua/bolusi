@@ -1511,6 +1511,7 @@ export function demoRepairRuntime(
       'repair.downPayment': {
         permission: P.correctDownPayment,
         commandPermission: P.correctDownPayment,
+        limitPermission: MONEY_PERMISSION.voidPayment,
         amount: (input) =>
           Math.max(0, (find(String(input['ticketId'])).downPayment ?? 0) - Number(input['amount'])),
         targetId: (input) => String(input['ticketId']),

@@ -263,7 +263,7 @@ describe('counter app over demo data', () => {
       target: { value: 'Pelanggan tidak jadi' },
     });
     fireEvent.click(byTestId('repair.desk.cancel.submit'));
-    await screen.findByText('Permintaan dikirim. Pemilik toko akan memutuskan.');
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
     expect(byTestId('repair.desk.ticket.approvals').textContent).toContain('Menunggu');
   });
 
@@ -319,7 +319,7 @@ describe('counter app over demo data', () => {
     );
     expect(screen.queryByTestId('repair.desk.price.change.agreed')).toBeNull();
     fireEvent.click(byTestId('repair.desk.price.change.submit'));
-    await screen.findByText('Permintaan dikirim. Pemilik toko akan memutuskan.');
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
   });
 
   it('shows a manager how far below the store fee they may cancel', async () => {

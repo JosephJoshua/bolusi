@@ -38,13 +38,15 @@
   "row": {
     "askedBy": "{name}: {reason}",
     "answeredBy": "{status} oleh {name}",
+    "answeredNote": "{status} oleh {name}: {note}",
     "withdrawn": "Ditarik oleh yang meminta"
   },
   "step": {
     "title": "Permintaan persetujuan",
     "askedBy": "Diminta {name} · {time}",
     "question": "Setujui permintaan ini?",
-    "note": "Catatan (opsional)"
+    "note": "Catatan (opsional)",
+    "beyondLimit": "Di atas batasmu {amount}. Hanya pemilik toko yang bisa menyetujui."
   },
   "action": {
     "ask": "Minta persetujuan",
@@ -59,7 +61,7 @@
     "message": "Pemilik toko tidak perlu memutuskannya lagi."
   },
   "done": {
-    "asked": "Permintaan dikirim. Pemilik toko akan memutuskan.",
+    "asked": "Permintaan dibuat. Pemilik toko akan memutuskan.",
     "approved": "Disetujui dan sudah dicatat.",
     "rejected": "Permintaan ditolak.",
     "withdrawn": "Permintaan ditarik."

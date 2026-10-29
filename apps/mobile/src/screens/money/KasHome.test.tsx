@@ -396,9 +396,12 @@ describe('Riwayat', () => {
     await press(screen, 'money.kas.history');
     await press(screen, `money.history.entry.${entryId}`);
     // The manager's refund limit in the harness, which voids count against too.
-    expect(text(screen, 'money.void.limit')).toBe(
-      'Batas pembatalanmu Rp 30.000 per transaksi. Lebih dari itu, minta pemilik toko.',
-    );
+    expect(text(screen, 'money.void.limit')).toBe('Batas pembatalanmu Rp 30.000 per transaksi.');
+    // Rp 200.000 is beyond it: refused before any reason is typed, not after submitting.
+    type(screen, 'money.void.reason', 'Salah metode');
+    await settle();
+    expect(screen.all('money.void.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(screen, 'money.void.primaryHint')).toBe('Melebihi batasmu. Minta pemilik toko.');
   });
 
   test('the counter reads the records but cannot cancel one', async () => {

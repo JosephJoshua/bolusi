@@ -403,10 +403,12 @@ export function VoidPaymentDialog({
   const [reason, setReason] = useState('');
   // A limited role (a manager) sees what it may cancel before the server refuses it.
   const limit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
+  // A void counts in full against that limit (with any earlier ones on the same servisan).
+  const beyond = limit !== null && entry.amount > limit;
   const testId = 'money.desk.void';
 
   const submit = (): void => {
-    if (reason.trim() === '') return;
+    if (reason.trim() === '' || beyond) return;
     void runner
       .run(() => runtime.run('voidPayment', { entryId: entry.id, reason }))
       .then((result) => {
@@ -422,7 +424,8 @@ export function VoidPaymentDialog({
       onClose={onClose}
       submitLabel={tm('money.void.save')}
       onSubmit={submit}
-      submitDisabled={reason.trim() === ''}
+      submitDisabled={reason.trim() === '' || beyond}
+      hint={beyond ? tm('money.refusal.overLimit') : null}
       destructive
       testId={testId}
     >

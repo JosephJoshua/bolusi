@@ -74,6 +74,7 @@ import {
   type StaleStep,
   type TicketStep,
 } from '../flows.js';
+import { useClearAskedNotice } from '../asked-notice.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { ApprovalDialog, ApprovalSection } from '../../approvals/desktop/ApprovalViews.js';
@@ -180,6 +181,11 @@ export function TicketPane({
       };
     },
     `desk.ticket:${ticketId}:${String(reloadNonce)}`,
+  );
+  useClearAskedNotice(
+    done,
+    () => setDone(null),
+    query.status === 'ready' ? query.data.approvals : undefined,
   );
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
   // An open step outlives a failed re-read: it keeps the last good ticket, so photos taken and

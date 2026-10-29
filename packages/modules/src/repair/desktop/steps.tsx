@@ -1285,7 +1285,7 @@ export function DownPaymentDialog({
     correcting && gap === null && amount !== null && loadedAccounts !== null
       ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
       : null;
-  const ask = useDownPaymentAsk(fix);
+  const ask = useDownPaymentAsk(fix, current ?? 0);
   const asking = correcting && ask.asking;
 
   const submit = (): void => {
@@ -1392,6 +1392,11 @@ export function DownPaymentDialog({
               {tn('repair.hint.downPaymentLimit', { amount: formatMoney(ask.limit) })}
             </p>
           ) : null}
+          {ask.withEarlier === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.withEarlier`}>
+              {tn('repair.hint.downPaymentWithEarlier', { amount: formatMoney(ask.withEarlier) })}
+            </p>
+          )}
           {asking ? (
             <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
               {tn(ask.because)}
