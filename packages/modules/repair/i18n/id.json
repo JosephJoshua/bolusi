@@ -450,6 +450,7 @@
     "readyBy": "Estimasi selesai {date}",
     "returned": "Diambil {date}",
     "reprint": "Cetak ulang ke-{count}",
+    "reprintFirst": "Cetak ulang",
     "printed": "Dicetak {date}",
     "printedBy": "Dicetak {date} oleh {name}",
     "field": {

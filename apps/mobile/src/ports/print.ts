@@ -8,7 +8,13 @@ import { Platform } from 'react-native';
 import type { PrintPlatform } from '@bolusi/device/bootstrap/repair-printing';
 import type { SlipOutput } from '@bolusi/modules/repair/screens';
 
-/** expo-print sizes the page in points (72 per inch). The HTML's own @page rule matches it. */
+/**
+ * expo-print sizes the page in points (72 per inch). The HTML's own @page rule matches it. iOS
+ * picks the printer's paper from the PDF's page; Android's dialog opens on it only through our
+ * patch (patches/expo-print@57.0.2.patch), since stock expo-print leaves it on the locale default.
+ * expo-print ships a prebuilt Android library, so package.json's expo.autolinking builds it from
+ * the patched source instead.
+ */
 function pageSize(slip: SlipOutput): { width: number; height: number } {
   const points = (mm: number): number => Math.round((mm / 25.4) * 72);
   return { width: points(slip.paper.widthMm), height: points(slip.paper.heightMm) };

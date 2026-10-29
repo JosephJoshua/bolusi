@@ -346,6 +346,7 @@ export const REPAIR_KEYS = [
   'repair.slip.readyBy',
   'repair.slip.received',
   'repair.slip.reprint',
+  'repair.slip.reprintFirst',
   'repair.slip.returned',
   'repair.slip.section.complaint',
   'repair.slip.section.condition',

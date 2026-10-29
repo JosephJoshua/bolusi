@@ -88,7 +88,8 @@ describe('outputSlip', () => {
     });
     await outputSlip(runtime, printing, detail, 'intake', DESK_PAPERS, 'print');
     const second = output.mock.calls[1]![0].document;
-    expect(second.meta).toContain(`Cetak ulang ke-${before + 2}`);
+    // The lost log still counts: this is the reprint after `before + 1` earlier prints.
+    expect(second.meta).toContain(before === 0 ? 'Cetak ulang' : `Cetak ulang ke-${before + 1}`);
   });
 
   it('prints the logo as dots on a dot-matrix only when the store asked for it', async () => {

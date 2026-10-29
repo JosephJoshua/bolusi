@@ -59,7 +59,10 @@
       "better-sqlite3",
       "electron",
       "esbuild"
-    ]
+    ],
+    "patchedDependencies": {
+      "expo-print@57.0.2": "patches/expo-print@57.0.2.patch"
+    }
   },
   "lint-staged": {
     "*": "prettier --ignore-unknown --write"

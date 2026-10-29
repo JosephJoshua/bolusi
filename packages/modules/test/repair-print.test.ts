@@ -52,7 +52,9 @@ describe('intake slip', () => {
         ctx,
       ),
     );
-    expect(text).toContain('Cetak ulang ke-2');
+    // One earlier print: this is the first reprint, not the second.
+    expect(text).toContain('Cetak ulang');
+    expect(text).not.toContain('Cetak ulang ke-');
     expect(text).toMatch(/DP\s+-Rp 200\.000/);
     expect(text).toMatch(/Sisa bayar\s+Rp 750\.000/);
   });
@@ -82,6 +84,14 @@ describe('intake slip', () => {
     const cancelledText = allText(intakeSlip(cancelled, ctx));
     expect(cancelledText).toMatch(/Sudah dibayar\s+-Rp 50\.000/);
     expect(cancelledText).not.toContain('Sisa bayar');
+  });
+
+  it('numbers the reprints after the first by how many came before', () => {
+    const slip = (intake: number) =>
+      allText(intakeSlip(sampleTicket({ slipPrints: { intake, handover: 0 } }), ctx));
+    expect(slip(0)).not.toContain('Cetak ulang');
+    expect(slip(2)).toContain('Cetak ulang ke-2');
+    expect(slip(3)).toContain('Cetak ulang ke-3');
   });
 
   it('prints the store terms one per line instead of the default ones', () => {

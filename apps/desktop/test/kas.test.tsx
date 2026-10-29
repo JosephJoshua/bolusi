@@ -16,10 +16,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/renderer/App.js';
 
 beforeEach(() => {
-  // The demo's payments are hours old; at noon they all fall today, whatever time the suite runs.
+  // The demo's payments are a few hours old, so "today" must not have just begun: run at noon.
   const noon = new Date();
   noon.setHours(12, 0, 0, 0);
-  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
   vi.setSystemTime(noon);
   window.localStorage.clear();
   initI18n({ locale: 'id' });
