@@ -589,6 +589,11 @@ export function balanceAfterDownPayment(
     : { kind: 'due', amount: total - downPayment };
 }
 
+/** What a cancelled servisan's customer gets back at pickup: the DP above the fee, if any. */
+export function cancelRefund(downPayment: number, fee: number | null): number {
+  return fee === null ? 0 : Math.max(0, downPayment - fee);
+}
+
 // ── an open step after the ticket changed ────────────────────────────────────────────────────
 
 /**

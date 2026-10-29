@@ -402,6 +402,28 @@ describe('price changes and handover', () => {
     expect(text(screen, 'repair.handover.total')).not.toContain('750.000');
   });
 
+  // Android QA: a cancelled servisan's DP went back through the account it came in by without the
+  // counter being told; now the cancel form and the handover both say what goes back, and how.
+  test('a DP above the cancel fee is said to go back, and the handover says through what', async () => {
+    h = await openRepairScreenHarness(5307);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 90_000 }, h.cashierId);
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, 'repair.ticket.action.cancel');
+    expect(text(owner, 'repair.cancel.consequence')).toContain('80.000');
+    owner.unmount();
+
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.handover');
+    expect(text(screen, 'repair.handover.giveBack')).toContain('80.000 lewat Tunai');
+  });
+
   test('leaving the handover after taking a photo asks first', async () => {
     h = await openRepairScreenHarness(5306);
     const ticketId = await openTicket(h);

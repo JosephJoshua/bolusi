@@ -315,6 +315,7 @@ export function TicketDetail({
           {...stepProps}
           workStarted={ticket?.workStarted ?? false}
           claimOf={ticket?.claimOfTicketId ?? null}
+          downPayment={ticket?.downPayment ?? 0}
         />
       );
     case 'assign':

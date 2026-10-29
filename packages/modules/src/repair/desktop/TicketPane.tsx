@@ -889,6 +889,7 @@ export function TicketPane({
             {...common}
             workStarted={row.workStarted}
             claimOf={row.claimOfTicketId}
+            downPayment={row.downPayment ?? 0}
             onDone={() => finishStep(undefined)}
           />
         );

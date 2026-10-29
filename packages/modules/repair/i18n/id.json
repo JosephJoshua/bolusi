@@ -79,6 +79,7 @@
     "waited": "{days} hari belum diambil"
   },
   "cancel": {
+    "refundsDp": "Saat ambil HP, pelanggan dapat kembali {amount} dari DP.",
     "reason": "Kenapa dibatalkan?",
     "consequence": "Pelanggan cukup bayar biaya pembatalan saat ambil HP.",
     "fee": "Biaya pembatalan",
@@ -138,6 +139,8 @@
     "watch": "Jam tangan"
   },
   "handover": {
+    "giveBack": "Kembalikan {refunds} ke pelanggan.",
+    "giveBackVia": "{amount} lewat {method}",
     "note": "Catatan (opsional)",
     "photo": "Foto serah terima",
     "sign": "Minta tanda tangan",

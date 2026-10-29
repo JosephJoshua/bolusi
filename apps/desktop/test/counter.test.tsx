@@ -350,6 +350,17 @@ describe('counter app over demo data', () => {
     );
   });
 
+  it('says what goes back, and through what, when a cancelled servisan’s DP was above its fee', async () => {
+    renderApp();
+    await showView('pickup');
+    await openTicket('Daniel Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
+    await screen.findByTestId('repair.desk.handover');
+    await waitFor(() =>
+      expect(byTestId('repair.desk.handover.giveBack').textContent).toContain('50.000 lewat'),
+    );
+  });
+
   it('hands a phone back only once the rest is paid, with the change shown', async () => {
     renderApp();
     await showView('pickup');

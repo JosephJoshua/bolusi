@@ -1515,6 +1515,19 @@ export function demoRepairRuntime(
     settleInLedger(paidUp, [], t.returnedAt ?? t.createdAt);
     return paidUp;
   });
+  // A DP still waiting at the counter is in the ledger as the cash it came in as, so a handover
+  // shows what goes back through what, as on a real device.
+  for (const t of tickets) {
+    if (t.location === 'returned' || (t.downPayment ?? 0) <= 0) continue;
+    if ((ledger.documentMoney(t.id)?.paid ?? 0) > 0) continue;
+    ledger.recordPayment({
+      id: `m-${t.id}-dp`,
+      document: { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber },
+      account: CASH_ACCOUNT,
+      amount: t.downPayment!,
+      at: t.createdAt,
+    });
+  }
   /** A servisan's money as the ledger has it now: Kas and refunds change it after pickup. */
   function syncTicketMoney(documentId: string): void {
     const recorded = ledger.documentMoney(documentId);

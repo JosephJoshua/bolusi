@@ -79,6 +79,7 @@
     "waited": "Not collected for {days} days"
   },
   "cancel": {
+    "refundsDp": "At pickup, the customer gets {amount} of the DP back.",
     "reason": "Why is it cancelled?",
     "consequence": "The customer only pays the cancellation fee when collecting the phone.",
     "fee": "Cancellation fee",
@@ -138,6 +139,8 @@
     "watch": "Smartwatch"
   },
   "handover": {
+    "giveBack": "Give {refunds} back to the customer.",
+    "giveBackVia": "{amount} through {method}",
     "note": "Note (optional)",
     "photo": "Handover photo",
     "sign": "Customer signs",

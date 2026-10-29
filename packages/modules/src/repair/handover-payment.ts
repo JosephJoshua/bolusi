@@ -2,6 +2,7 @@
 // lines for what is due, or (an owner only) "Bayar nanti" with a reason, which leaves a debt. A
 // QRIS line on a method connected to Xendit is paid by its QR (money/qris-hooks.ts); the handover
 // then waits for that payment to sync, since the ledger must show the phone paid in full.
+import { formatMoney } from '@bolusi/i18n';
 import { useRef, useState } from 'react';
 
 import {
@@ -83,4 +84,15 @@ export function useHandoverPayment(
       refundReason: tn('repair.handover.refundReason'),
     },
   };
+}
+
+/** What the counter must hand back before the phone goes (`useHandoverRefunds`), or null. */
+export function giveBackText(
+  refunds: readonly { readonly label: string; readonly amount: number }[],
+): string | null {
+  if (refunds.length === 0) return null;
+  const parts = refunds.map((refund) =>
+    tn('repair.handover.giveBackVia', { amount: formatMoney(refund.amount), method: refund.label }),
+  );
+  return tn('repair.handover.giveBack', { refunds: parts.join(', ') });
 }
