@@ -64,6 +64,8 @@ import {
   repairAbilities,
   staleStep,
   ticketActions,
+  ticketMoneyActions,
+  ticketMoneyTarget,
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
@@ -86,6 +88,7 @@ import {
   warrantyLine,
 } from '../labels.js';
 import {
+  moneyRuntimeOf,
   useRepairQuery,
   useRepairRuntime,
   useStoreDisplayName,
@@ -94,6 +97,9 @@ import {
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
+import { tm } from '../../money/i18n.js';
+import { ReduceChargeDialog, RefundDialog } from '../../money/desktop/KasDialogs.js';
+import { MoneyRuntimeProvider } from '../../money/runtime.js';
 import { CatalogPhoto, DeviceSpecs, StatusChip, photoLabels, usePhotoState } from './parts.js';
 import {
   AssignDialog,
@@ -125,7 +131,9 @@ type Step =
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
   | { readonly kind: 'repairTypes' }
-  | { readonly kind: 'print' };
+  | { readonly kind: 'print' }
+  | { readonly kind: 'refund' }
+  | { readonly kind: 'reduce' };
 
 interface LoadedTicket {
   readonly ticket: TicketDetailRow | undefined;
@@ -155,6 +163,8 @@ export function TicketPane({
 }: TicketPaneProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  // Money back to the customer and a lowered bill are the ledger's dialogs, over repair's port.
+  const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
   const printing = runtime.printing;
   const [step, setStep] = useState<Step>({ kind: 'none' });
@@ -177,7 +187,11 @@ export function TicketPane({
   const statuses = query.status === 'ready' ? (query.data.statuses[ticketId] ?? []) : [];
   const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
   const stale: StaleStep | null =
-    step.kind === 'none' || step.kind === 'print' || ticket === undefined
+    step.kind === 'none' ||
+    step.kind === 'print' ||
+    step.kind === 'refund' ||
+    step.kind === 'reduce' ||
+    ticket === undefined
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
@@ -574,6 +588,7 @@ export function TicketPane({
     const pending = row.quoteLines.filter((line) => line.status === 'proposed');
     const deciding = actions.includes('decidePrice');
     const cancelled = row.outcome === 'cancelled';
+    const moneyActions = ticketMoneyActions(row, runtime.hasPermission);
     return (
       <Section
         title={tn('repair.ticket.price')}
@@ -657,7 +672,7 @@ export function TicketPane({
         ) : null}
         <DownPaymentLines
           total={amountOwed(row)}
-          reduced={row.chargeReduced}
+          reduced={row.reduced}
           downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
           returned={row.location === 'returned'}
@@ -668,6 +683,36 @@ export function TicketPane({
             setStep({ kind: 'downPayment', mode });
           }}
         />
+        {moneyActions.refund || moneyActions.reduce ? (
+          <div className="-ml-2 flex flex-wrap gap-2">
+            {moneyActions.refund ? (
+              <Button
+                label={tm('money.refund.title')}
+                variant="text"
+                size="sm"
+                onClick={() => {
+                  setDone(null);
+                  setStep({ kind: 'refund' });
+                }}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.refund"
+              />
+            ) : null}
+            {moneyActions.reduce ? (
+              <Button
+                label={tm('money.reduce.action')}
+                variant="text"
+                size="sm"
+                onClick={() => {
+                  setDone(null);
+                  setStep({ kind: 'reduce' });
+                }}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.reduce"
+              />
+            ) : null}
+          </div>
+        ) : null}
         {!deciding || pending.length === 0 ? null : (
           <p className="flex items-center gap-1 text-small font-semibold text-warning">
             <TriangleAlert size={14} aria-hidden />
@@ -848,6 +893,7 @@ export function TicketPane({
             {...common}
             workStarted={row.workStarted}
             claimOf={row.claimOfTicketId}
+            downPayment={row.downPayment ?? 0}
             onDone={() => finishStep(undefined)}
           />
         );
@@ -891,6 +937,24 @@ export function TicketPane({
             onDone={() => finishStep('repair.done.repairTypes')}
           />
         );
+      case 'refund':
+      case 'reduce': {
+        const props = {
+          target: ticketMoneyTarget(row),
+          onClose: closeStep,
+          onDone: () =>
+            finishStep(step.kind === 'refund' ? 'repair.done.refund' : 'repair.done.reduce'),
+        };
+        return (
+          <MoneyRuntimeProvider runtime={money}>
+            {step.kind === 'refund' ? (
+              <RefundDialog {...props} />
+            ) : (
+              <ReduceChargeDialog {...props} />
+            )}
+          </MoneyRuntimeProvider>
+        );
+      }
       case 'print':
         if (printing === undefined) return null;
         return (
@@ -1177,12 +1241,13 @@ function DownPaymentLines({
   disabled,
   onAction,
 }: {
+  /** What is owed, already less `reduced`. */
   readonly total: number;
-  /** What an owner took off the charge, which comes off the total first. */
+  /** What an owner took off the bill, shown above what was paid. */
   readonly reduced: number;
   readonly downPayment: number | null;
   readonly paidLabel: RepairKey;
-  /** The phone went home: what goes back was given back. */
+  /** The phone went home: what is left to give back is still owed. */
   readonly returned: boolean;
   readonly action: 'record' | 'correct' | null;
   readonly disabled: boolean;
@@ -1203,7 +1268,7 @@ function DownPaymentLines({
     ) : null;
   const paid = downPayment ?? 0;
   if (paid === 0 && reduced === 0) return record;
-  const balance = balanceAfterDownPayment(total - reduced, paid);
+  const balance = balanceAfterDownPayment(total, paid);
   const paidText = paidRow(paid, paidLabel);
   return (
     <>

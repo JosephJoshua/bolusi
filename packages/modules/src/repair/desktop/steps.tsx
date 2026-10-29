@@ -47,6 +47,7 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
+  cancelRefund,
 } from '../flows.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
@@ -448,10 +449,13 @@ export function CancelDialog({
   stale,
   workStarted,
   claimOf,
+  downPayment,
   onDone,
   onClose,
 }: StepDialogProps & {
   readonly workStarted: boolean;
+  /** Paid in so far: what is above the fee goes back at pickup. */
+  readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
   readonly claimOf: string | null;
 }): React.JSX.Element {
@@ -494,7 +498,13 @@ export function CancelDialog({
     <>
       <StepDialog
         title={tn('repair.action.cancel')}
-        description={tn('repair.cancel.consequence')}
+        description={
+          cancelRefund(downPayment, charged) > 0
+            ? tn('repair.cancel.refundsDp', {
+                amount: formatMoney(cancelRefund(downPayment, charged)),
+              })
+            : tn('repair.cancel.consequence')
+        }
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
@@ -926,7 +936,7 @@ export function HandoverDialog({
     | 'peripherals'
     | 'quoteTotal'
     | 'cancelFee'
-    | 'chargeReduced'
+    | 'reduced'
     | 'downPayment'
     | 'refunds'
     | 'claimOfTicketId'
@@ -943,9 +953,9 @@ export function HandoverDialog({
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
   const cancelled = ticket.outcome === 'cancelled';
-  /** What the customer pays in all: the price, or a cancelled servisan's fee. */
-  const amount = amountOwed(ticket);
-  const { downPayment, chargeReduced: reduced } = ticket;
+  const { downPayment, reduced } = ticket;
+  /** The price, or a cancelled servisan's fee, before any reduction (shown beneath it). */
+  const amount = amountOwed(ticket) + reduced;
   const balance = ticketBalance(ticket);
   const split = balance.kind === 'refund' ? ticket.refunds : [];
   const due = balance.kind === 'due' ? balance.amount : 0;

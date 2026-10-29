@@ -44,6 +44,7 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
+  cancelRefund,
 } from '../flows.js';
 import {
   FlowScreen,
@@ -266,12 +267,15 @@ export function CancelStep({
   stale,
   workStarted,
   claimOf,
+  downPayment,
   onDone,
   onCancel,
   onRegisterDiscardGuard,
   testID = 'repair.cancel',
 }: StepProps & {
   readonly workStarted: boolean;
+  /** Paid in so far: what is above the fee goes back at pickup. */
+  readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
   readonly claimOf: string | null;
   readonly testID?: string | undefined;
@@ -333,7 +337,9 @@ export function CancelStep({
       testID={testID}
     >
       <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
-        {tn('repair.cancel.consequence')}
+        {cancelRefund(downPayment, fee) > 0
+          ? tn('repair.cancel.refundsDp', { amount: formatMoney(cancelRefund(downPayment, fee)) })
+          : tn('repair.cancel.consequence')}
       </Text>
       <QueryView
         query={fees}

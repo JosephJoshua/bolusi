@@ -395,6 +395,122 @@ describe('what customers owe', () => {
   });
 });
 
+describe('money back and lowered bills', () => {
+  async function handedOver(
+    harness: RepairHarness,
+    payments: readonly { account: string; amount: number }[],
+  ): Promise<string> {
+    const { ticketId } = (await harness.run('openTicket', intake(harness), harness.cashierId)) as {
+      ticketId: string;
+    };
+    await harness.run(
+      'startWork',
+      { ticketId, beforePhotos: [harness.photo(20)] },
+      harness.technicianId,
+    );
+    await harness.run(
+      'markRepaired',
+      { ticketId, afterPhotos: [harness.photo(21)] },
+      harness.technicianId,
+    );
+    await harness.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: harness.photo(7),
+        signature: harness.photo(8),
+        payments: [...payments],
+        ...(payments.length === 0 ? { unpaidReason: 'Bayar Jumat' } : {}),
+        checklist: accessoriesBack(),
+      },
+      harness.ownerId,
+    );
+    return ticketId;
+  }
+
+  test('the counter gives back a bill paid twice, through the drawer it came into', async () => {
+    h = await openRepairScreenHarness(5410);
+    const ticketId = await handedOver(h, [{ account: 'cash', amount: 750_000 }]);
+    // A second counter, offline, took part of the same bill again.
+    await h.money(
+      'receivePayments',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        payments: [{ account: 'cash', amount: 100_000 }],
+      },
+      h.cashierId,
+    );
+    const screen = await mount(h, h.cashierId);
+    expect(text(screen, `money.kas.owedBack.${ticketId}.value`)).toBe('Rp 100.000');
+    const drawer = text(screen, 'money.kas.expected');
+    expect(drawer).toBe('Rp 850.000');
+
+    await press(screen, `money.kas.owedBack.${ticketId}`);
+    expect(text(screen, 'money.refund.credit')).toContain('Rp 100.000');
+    // What was paid in all is the owner's to see and give back.
+    expect(screen.all('money.refund.paid')).toEqual([]);
+    expect(text(screen, 'money.refund.primary')).toContain('Kembalikan Rp 100.000');
+    expect(screen.all('money.refund.primary')[0]!.props['disabled']).toBe(true);
+    type(screen, 'money.refund.amount', '150000');
+    await settle();
+    expect(text(screen, 'money.refund')).toContain('Paling banyak Rp 100.000');
+    type(screen, 'money.refund.amount', '100000');
+    type(screen, 'money.refund.reason', 'Bayar dua kali');
+    await settle();
+    await press(screen, 'money.refund.primary');
+
+    expect(screen.all(`money.kas.owedBack.${ticketId}`)).toEqual([]);
+    expect(text(screen, 'money.kas.expected')).toBe('Rp 750.000');
+  });
+
+  test('an owner lowers a debt from taking its payment', async () => {
+    h = await openRepairScreenHarness(5411);
+    const ticketId = await handedOver(h, []);
+    const counter = await mount(h, h.cashierId);
+    await press(counter, `money.kas.owed.${ticketId}`);
+    expect(counter.all('money.receive.reduce')).toEqual([]);
+    counter.unmount();
+
+    const screen = await mount(h, h.ownerId);
+    await press(screen, `money.kas.owed.${ticketId}`);
+    // A payment half typed is not dropped without asking.
+    type(screen, 'money.receive.pay.line0.amount', '300000');
+    await settle();
+    await press(screen, 'money.receive.reduce');
+    expect(screen.query('money.receive.discard')).not.toBeNull();
+    await press(screen, 'money.receive.discard.confirm');
+    expect(text(screen, 'money.reduce.owed')).toContain('Rp 750.000');
+    type(screen, 'money.reduce.amount', '100000');
+    await settle();
+    expect(text(screen, 'money.reduce.after')).toContain('Rp 650.000');
+    expect(screen.all('money.reduce.primary')[0]!.props['disabled']).toBe(true);
+    type(screen, 'money.reduce.reason', 'Pelanggan lama');
+    await settle();
+    await press(screen, 'money.reduce.primary');
+
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 650.000');
+  });
+
+  // Android QA (#90): a manager over their limit only learned it when the save was refused.
+  test('a manager sees their limit and cannot take more off a bill than it allows', async () => {
+    h = await openRepairScreenHarness(5413);
+    const ticketId = await handedOver(h, []);
+    const screen = await mount(h, h.managerId);
+    await press(screen, `money.kas.owed.${ticketId}`);
+    await press(screen, 'money.receive.reduce');
+    expect(text(screen, 'money.reduce.limit')).toContain('Rp 30.000');
+    type(screen, 'money.reduce.amount', '40000');
+    type(screen, 'money.reduce.reason', 'Pelanggan lama');
+    await settle();
+    expect(text(screen, 'money.reduce')).toContain('Melebihi batasmu. Paling banyak Rp 30.000.');
+    expect(screen.all('money.reduce.primary')[0]!.props['disabled']).toBe(true);
+    type(screen, 'money.reduce.amount', '30000');
+    await settle();
+    await press(screen, 'money.reduce.primary');
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 720.000');
+  });
+});
+
 describe('Riwayat', () => {
   async function paid(harness: RepairHarness, amount = 200_000): Promise<string> {
     const { ticketId, ticketNumber } = (await harness.run(

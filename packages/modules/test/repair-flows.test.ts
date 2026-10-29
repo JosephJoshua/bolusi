@@ -269,6 +269,7 @@ describe('ticket actions', () => {
       location: 'in_store' as const,
       technicianId: null,
       pendingProposals: 0,
+      reduced: 0,
       ...ticket,
     });
 
@@ -318,6 +319,7 @@ describe('ticket actions', () => {
         location: 'in_store' as const,
         technicianId: null,
         pendingProposals: 0,
+        reduced: 0,
         ...ticket,
       };
       return arrangeTicketActions(ticketActions(row, can, userId), row, userId);
@@ -412,7 +414,7 @@ describe('down payment and slips', () => {
     initI18n({ locale: 'id' });
     registerRepairCatalog({ id: idCatalog, en: enCatalog });
     // What a handover gave back is already off what was paid, so whatever is left is owed.
-    expect(tn(balanceLabelKey('refund', true))).toBe('Perlu dikembalikan');
+    expect(tn(balanceLabelKey('refund', true))).toBe('Lebih bayar');
     expect(tn(balanceLabelKey('refund', false))).toBe('Kembalikan');
     expect(tn(balanceLabelKey('due', true))).toBe('Sisa bayar');
   });

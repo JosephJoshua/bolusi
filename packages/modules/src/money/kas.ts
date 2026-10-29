@@ -33,10 +33,23 @@ export interface MoneyIn {
   readonly total: number;
 }
 
+/** The drawer first, then the rest by size. */
+function byMethodOrder(totals: Map<string, number>): MethodTotal[] {
+  return [...totals]
+    .map(([account, amount]) => ({ account, amount }))
+    .filter((total) => total.amount !== 0)
+    .sort(
+      (a, b) =>
+        Number(b.account === CASH_ACCOUNT) - Number(a.account === CASH_ACCOUNT) ||
+        b.amount - a.amount ||
+        a.account.localeCompare(b.account),
+    );
+}
+
 /**
- * Money in through each method over the records given (payments that still count), the drawer
- * first, then the rest by size; what was handed back is its own figure, so a refund of an earlier
- * day's payment never shows as a method's negative money in.
+ * Money in through each method over the records given (payments that still count); what was
+ * handed back is its own figure, so a refund of an earlier day's payment never shows as a method's
+ * negative money in.
  */
 export function moneyIn(entries: readonly MoneyEntryRow[]): MoneyIn {
   const totals = new Map<string, number>();
@@ -48,17 +61,25 @@ export function moneyIn(entries: readonly MoneyEntryRow[]): MoneyIn {
     }
     if (entry.kind === 'refund_paid') refunded += entry.amount;
   }
-  const methods = [...totals]
-    .map(([account, amount]) => ({ account, amount }))
-    .filter((total) => total.amount !== 0)
-    .sort(
-      (a, b) =>
-        Number(b.account === CASH_ACCOUNT) - Number(a.account === CASH_ACCOUNT) ||
-        b.amount - a.amount ||
-        a.account.localeCompare(b.account),
-    );
+  const methods = byMethodOrder(totals);
   const paid = methods.reduce((sum, method) => sum + method.amount, 0);
   return { methods, refunded, total: paid - refunded };
+}
+
+/** What is still in through each method on one document: its payments less what went back. */
+export function moneyInByMethod(entries: readonly MoneyEntryRow[]): MethodTotal[] {
+  const totals = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.account === null) continue;
+    const amount =
+      entry.kind === 'payment_received' && entry.voidedAt === null
+        ? entry.amount
+        : entry.kind === 'refund_paid'
+          ? -entry.amount
+          : 0;
+    if (amount !== 0) totals.set(entry.account, (totals.get(entry.account) ?? 0) + amount);
+  }
+  return byMethodOrder(totals);
 }
 
 /** How each move reads, in the order the counter is offered them. */

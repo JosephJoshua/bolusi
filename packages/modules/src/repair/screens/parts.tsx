@@ -251,10 +251,10 @@ export function Field({
 export { Fact, FactGrid };
 
 /**
- * Under a total: the down payment taken off it, then what the customer still pays, or what the
- * store gives back when the down payment was more, through each method it goes back by when
- * `refunds` says. An owner's reduction comes off the total first. Nothing when no down payment was
- * taken and nothing was taken off. `action` sits beside the down payment, the one thing it changes.
+ * Under a total: what an owner took off it, the down payment taken off it, then what the customer
+ * still pays, or what the store gives back when they paid more, through each method it goes back
+ * by when `refunds` says. Nothing when neither was taken. `total` is what is owed, already less
+ * `reduced`. `action` sits beside the down payment, the one thing it changes.
  */
 export function DownPaymentRows({
   total,
@@ -267,21 +267,21 @@ export function DownPaymentRows({
   testID,
 }: {
   readonly total: number;
-  /** What an owner took off the charge (`TicketDetailRow.chargeReduced`). */
+  /** What an owner took off the bill (`TicketSummaryRow.reduced`), shown above what was paid. */
   readonly reduced?: number;
   readonly downPayment: number | null;
   /** What goes back through each method (`TicketDetailRow.refunds`). */
   readonly refunds?: readonly TicketRefund[];
   /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
   readonly paidLabel?: RepairKey;
-  /** The phone went home: what goes back was given back. */
+  /** The phone went home: what is left to give back is still owed. */
   readonly returned?: boolean;
   readonly action?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element | null {
   const paid = downPayment ?? 0;
   if (paid === 0 && reduced === 0) return null;
-  const balance = balanceAfterDownPayment(total - reduced, paid);
+  const balance = balanceAfterDownPayment(total, paid);
   const split = balance.kind === 'refund' ? refunds : [];
   const paidText = paidRow(paid, paidLabel);
   return (

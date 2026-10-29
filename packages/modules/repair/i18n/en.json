@@ -81,6 +81,7 @@
     "waited": "Not collected for {days} days"
   },
   "cancel": {
+    "refundsDp": "At pickup, the customer gets {amount} of the DP back.",
     "reason": "Why is it cancelled?",
     "consequence": "The customer only pays the cancellation fee when collecting the phone.",
     "fee": "Cancellation fee",
@@ -241,12 +242,12 @@
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Still to give back",
     "refundDue": "To give back",
     "refundVia": "Give back by {method}",
     "refundCash": "Give back in cash",
-    "reduced": "Reduction",
-    "givenBack": "Given back"
+    "reduced": "Taken off",
+    "givenBack": "Given back",
+    "owedBack": "Overpaid"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -303,7 +304,9 @@
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved.",
-    "repairTypes": "Repair type saved."
+    "repairTypes": "Repair type saved.",
+    "refund": "Money given back.",
+    "reduce": "Bill lowered."
   },
   "passcode": {
     "show": "Show",
@@ -473,7 +476,6 @@
     "downPayment": "Down payment",
     "paid": "Paid",
     "balance": "Balance due",
-    "reduced": "Reduction",
     "sign": {
       "customer": "Customer",
       "customerPickup": "Customer, phone received",
@@ -488,7 +490,7 @@
       "intake": "Bring this receipt to collect the phone.\nThe price is an estimate. The store checks with you before it goes up.\nThe store is not responsible for lost data.\nThe store is not responsible for a phone left 30 days after you are told.",
       "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and parts only. Bring this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
     },
-    "refund": "Refund",
+    "refund": "Still to give back",
     "refundVia": "Refunded by {method}",
     "refundCash": "Refunded in cash"
   },

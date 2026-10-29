@@ -113,6 +113,22 @@ export function paidOnDocumentSql(
   )`;
 }
 
+/** What was taken off each listed document's charges (an owner lowering a bill), as above. */
+export function reducedOnDocumentSql(
+  documentKind: string,
+  documentId: string,
+  storeId: string,
+): RawBuilder<number | string | null> {
+  return sql<number | string | null>`(
+    SELECT SUM(me.amount)
+    FROM money_entries me
+    WHERE me.document_kind = ${documentKind}
+      AND me.document_id = ${sql.ref(documentId)}
+      AND me.store_id = ${sql.ref(storeId)}
+      AND me.kind = 'charge_reduced'
+  )`;
+}
+
 // ── documentMoney (one document's charges, payments and refunds) ───────────────────────────────
 
 export interface MoneyEntryRow {

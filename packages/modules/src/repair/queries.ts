@@ -42,10 +42,10 @@ import {
   type RecordedRepairType,
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
-import { paidOnDocumentSql } from '../money/queries.js';
+import { paidOnDocumentSql, reducedOnDocumentSql } from '../money/queries.js';
 import { CASH_ACCOUNT, paymentAccountIdOf } from '../money/constants.js';
 import { refundSplit } from '../money/rules.js';
-import { ticketBill } from './flows.js';
+import { amountOwed } from './flows.js';
 import type { MoneyDatabase } from '../money/schema.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
@@ -99,6 +99,8 @@ export interface TicketSummaryRow {
    * before handover. Null when nothing was.
    */
   readonly downPayment: number | null;
+  /** What an owner took off the bill after it was charged (the money ledger); 0 when nothing. */
+  readonly reduced: number;
   /** When the phone was last ready to collect (repaired or cancelled); null while worked on. */
   readonly readyAt: number | null;
 }
@@ -187,8 +189,6 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly workStarted: boolean;
   /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
   readonly slipPrints: Readonly<Record<SlipKind, number>>;
-  /** What an owner took off the charge on the money ledger, so the bill matches it; 0 when nothing. */
-  readonly chargeReduced: number;
   /**
    * What goes back to the customer at handover, through each method that overpaid
    * (`refundSplit`), as the handover records it; empty when nothing does or once handed back.
@@ -230,6 +230,7 @@ function summaryQuery(qctx: Qctx) {
       't.cancelledBy',
       't.cancelledAt',
       paidOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('downPayment'),
+      reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('reduced'),
       't.readyAt',
       eb
         .selectFrom('repairQuoteLines as l')
@@ -273,6 +274,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
     downPayment:
       row.downPayment === null || Number(row.downPayment) === 0 ? null : Number(row.downPayment),
+    reduced: Number(row.reduced ?? 0),
     readyAt: row.readyAt === null ? null : Number(row.readyAt),
   };
 }
@@ -413,8 +415,9 @@ function filteredSummaries(qctx: Qctx, filter: TicketFilter, cancelledOnly: bool
 /** The ORDER BY column behind each column sort, with the ticket id as the tie-breaker. */
 const SORT_COLUMN = {
   number: sql.ref('t.ticketNumber'),
-  // What the customer owes: a cancelled servisan's fee, never its repair price.
-  total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end`,
+  // What the customer owes: a cancelled servisan's fee, never its repair price, less what an owner
+  // took off it.
+  total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end - coalesce(${reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId')}, 0)`,
   readyBy: sql.ref('t.estimatedReadyAt'),
   createdAt: sql.ref('t.createdAt'),
   cancelledAt: sql.ref('t.cancelledAt'),
@@ -653,13 +656,10 @@ function intakePhotoAngles(json: string | null): readonly IntakePhotoAngle[] {
 }
 
 /**
- * What an owner took off a servisan's charge, and what its handover would give back through each
- * method: what was paid beyond the bill (`ticketBill`), split as `returnDevice` records it.
+ * What a servisan's handover would give back through each method: what was paid beyond the bill
+ * (`amountOwed`), split as `returnDevice` records it.
  */
-async function ticketMoney(
-  qctx: Qctx,
-  ticket: TicketSummaryRow,
-): Promise<{ chargeReduced: number; refunds: TicketRefund[] }> {
+async function ticketRefunds(qctx: Qctx, ticket: TicketSummaryRow): Promise<TicketRefund[]> {
   const db = qctx.db as unknown as Kysely<MoneyDatabase>;
   const entries = (
     await db
@@ -672,10 +672,7 @@ async function ticketMoney(
       .orderBy('id')
       .execute()
   ).map((entry) => ({ ...entry, amount: Number(entry.amount) }));
-  const chargeReduced = entries
-    .filter((entry) => entry.kind === 'charge_reduced')
-    .reduce((sum, entry) => sum + entry.amount, 0);
-  const bill = ticketBill({ ...ticket, chargeReduced });
+  const bill = amountOwed(ticket);
   const credit = (ticket.downPayment ?? 0) - bill;
   const split =
     ticket.location === 'returned' || credit <= 0 ? [] : refundSplit(entries, credit, bill);
@@ -689,15 +686,12 @@ async function ticketMoney(
           .where('tenantId', '=', qctx.tenantId)
           .where('id', 'in', ids)
           .execute();
-  return {
-    chargeReduced,
-    refunds: split.map((refund) => ({
-      ...refund,
-      name:
-        names.find((row) => row.id === paymentAccountIdOf(refund.account))?.name ??
-        (refund.account === CASH_ACCOUNT ? null : refund.account),
-    })),
-  };
+  return split.map((refund) => ({
+    ...refund,
+    name:
+      names.find((row) => row.id === paymentAccountIdOf(refund.account))?.name ??
+      (refund.account === CASH_ACCOUNT ? null : refund.account),
+  }));
 }
 
 export async function getTicketHandler(
@@ -780,7 +774,7 @@ export async function getTicketHandler(
     detail.createdBy,
     ...events.map((event) => event.actorId),
   ]);
-  const { chargeReduced, refunds } = await ticketMoney(qctx, toSummary(summary, names));
+  const refunds = await ticketRefunds(qctx, toSummary(summary, names));
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -819,7 +813,6 @@ export async function getTicketHandler(
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
         slipPrints,
-        chargeReduced,
         refunds,
         quoteLines: lines.map((line) => ({
           id: line.id,

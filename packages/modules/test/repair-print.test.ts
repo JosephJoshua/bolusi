@@ -135,18 +135,6 @@ describe('handover slip', () => {
     expect(text).toContain('KETENTUAN');
   });
 
-  it('bills what the money ledger charges, less an owner reduction', () => {
-    const text = allText(
-      handoverSlip(
-        { ...repaired, chargeReduced: 150_000, downPayment: 1_000_000 },
-        { ...ctx, handedOverByName: 'Maria Kasir', signature: null },
-      ),
-    );
-    expect(text).toMatch(/Potongan\s+-Rp 150\.000/);
-    expect(text).toMatch(/Total\s+Rp 1\.000\.000/);
-    expect(text).toMatch(/Sisa bayar\s+Rp 0/);
-  });
-
   it('charges only the cancellation fee on a cancelled servisan', () => {
     const cancelled = sampleTicket({
       outcome: 'cancelled',
@@ -183,6 +171,19 @@ describe('handover slip', () => {
     );
     expect(text).toMatch(/Dikembalikan tunai\s+Rp 50\.000/);
     expect(text).toMatch(/Dikembalikan lewat QRIS toko\s+Rp 100\.000/);
+  });
+
+  it('takes what an owner lowered off the bill, so a reprint after a refund owes nothing', () => {
+    const text = allText(
+      handoverSlip(
+        { ...repaired, location: 'returned', reduced: 150_000, downPayment: 1_000_000 },
+        { ...ctx, handedOverByName: null, signature: null },
+      ),
+    );
+    expect(text).toMatch(/Total\s+Rp 1\.150\.000/);
+    expect(text).toMatch(/Potongan\s+-Rp 150\.000/);
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 1\.000\.000/);
+    expect(text).toMatch(/Sisa bayar\s+Rp 0/);
   });
 
   it('prints each repair type’s warranty from the day the phone went home', () => {

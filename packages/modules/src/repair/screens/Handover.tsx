@@ -280,7 +280,8 @@ export function Handover({
                   style={[repairStyles.heading, repairStyles.rowValue]}
                   testID={`${testID}.total`}
                 >
-                  {formatMoney(amountOwed(shown))}
+                  {/* Before any reduction, which the rows below take off. */}
+                  {formatMoney(amountOwed(shown) + shown.reduced)}
                 </Text>
               </View>
               {shown.outcome === 'cancelled' ? (
@@ -290,7 +291,7 @@ export function Handover({
               ) : null}
               <DownPaymentRows
                 total={amountOwed(shown)}
-                reduced={shown.chargeReduced}
+                reduced={shown.reduced}
                 refunds={shown.refunds}
                 downPayment={shown.downPayment}
                 // The DP and anything paid at this counter already (a QR): all of it is paid.

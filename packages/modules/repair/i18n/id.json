@@ -81,6 +81,7 @@
     "waited": "{days} hari belum diambil"
   },
   "cancel": {
+    "refundsDp": "Saat ambil HP, pelanggan dapat kembali {amount} dari DP.",
     "reason": "Kenapa dibatalkan?",
     "consequence": "Pelanggan cukup bayar biaya pembatalan saat ambil HP.",
     "fee": "Biaya pembatalan",
@@ -241,12 +242,12 @@
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Perlu dikembalikan",
     "refundDue": "Kembalikan",
     "refundVia": "Kembalikan lewat {method}",
     "refundCash": "Kembalikan tunai",
     "reduced": "Potongan",
-    "givenBack": "Sudah dikembalikan"
+    "givenBack": "Sudah dikembalikan",
+    "owedBack": "Lebih bayar"
   },
   "problem": {
     "complaint": "Keluhan belum diisi.",
@@ -303,7 +304,9 @@
     "printed": "Nota dicetak.",
     "shared": "PDF nota sudah dikirim.",
     "downPayment": "DP tersimpan.",
-    "repairTypes": "Jenis servisan disimpan."
+    "repairTypes": "Jenis servisan disimpan.",
+    "refund": "Uang sudah dikembalikan.",
+    "reduce": "Tagihan sudah dikurangi."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -473,7 +476,6 @@
     "downPayment": "DP",
     "paid": "Sudah dibayar",
     "balance": "Sisa bayar",
-    "reduced": "Potongan",
     "sign": {
       "customer": "Pelanggan",
       "customerPickup": "Pelanggan, HP sudah diterima",
@@ -488,7 +490,7 @@
       "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
       "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
     },
-    "refund": "Dikembalikan",
+    "refund": "Perlu dikembalikan",
     "refundVia": "Dikembalikan lewat {method}",
     "refundCash": "Dikembalikan tunai"
   },
