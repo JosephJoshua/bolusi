@@ -1,29 +1,29 @@
 {
   "chip": {
-    "pending": "Not sent yet",
+    "pending": "Not synced yet",
     "rejected": "Rejected"
   },
   "status": {
     "upToDate": "Your data is safe on the server.",
-    "syncing": "Sending changes to the server.",
-    "pending": "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
-    "pendingMedia": "{count, plural, one {# photo not sent yet} other {# photos not sent yet}}",
-    "photosPending": "Changes are sent. The photos will follow.",
+    "syncing": "Saving your data to the server.",
+    "pending": "{count, plural, one {# change not synced yet} other {# changes not synced yet}}",
+    "pendingMedia": "{count, plural, one {# photo or video not synced yet} other {# photos and videos not synced yet}}",
+    "photosPending": "Changes are synced. Photos and videos will follow.",
     "attentionReassurance": "See the list below.",
-    "offline": "Changes are saved on this phone and sent once you’re connected.",
+    "offline": "Changes are saved on this phone and synced once you’re connected.",
     "reconnected": "Back online",
     "lastSynced": "Last connected {relative}",
-    "titleSynced": "Everything is sent",
-    "titlePending": "Some changes aren’t sent yet",
-    "titleSyncing": "Sending",
+    "titleSynced": "Everything is synced",
+    "titlePending": "Some changes aren’t synced yet",
+    "titleSyncing": "Syncing",
     "titleOffline": "No connection",
     "titleAttention": "Something needs a look",
-    "titlePhotosPending": "Photos and videos aren’t sent yet",
+    "titlePhotosPending": "Photos and videos aren’t synced yet",
     "screenTitle": "Sync status",
-    "savedHere": "{count, plural, one {# change is saved on this phone and will be sent automatically.} other {# changes are saved on this phone and will be sent automatically.}}",
+    "savedHere": "{count, plural, one {# change is saved on this phone and will be synced automatically.} other {# changes are saved on this phone and will be synced automatically.}}",
     "changesLabel": "Changes",
     "photosLabel": "Photos & videos",
-    "waitingCount": "{count} not sent yet"
+    "waitingCount": "{count} not synced yet"
   },
   "banner": {
     "warning": "Last connected {relative}. This may not be the latest data.",
@@ -44,7 +44,7 @@
     "body": "Some changes from another device failed checks and are hidden. Tell the store owner."
   },
   "action": {
-    "syncNow": "Send now",
+    "syncNow": "Sync now",
     "pullToRefresh": "Pull to refresh"
   },
   "firstSync": {
@@ -60,8 +60,8 @@
     "retry": "Send photos again"
   },
   "pc": {
-    "savedHere": "{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}",
-    "offline": "Changes are saved on this computer and sent when it is online.",
+    "savedHere": "{count, plural, one {# change is saved on this computer and will be synced automatically.} other {# changes are saved on this computer and will be synced automatically.}}",
+    "offline": "Changes are saved on this computer and synced when it is online.",
     "mediaFailed": "{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}",
     "rejectedExplain": "Also undone on this computer. Redo them if they’re still needed.",
     "rejectedBanner": "{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}"

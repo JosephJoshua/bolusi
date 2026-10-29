@@ -1,4 +1,4 @@
-// Whether this PC's work has reached the server: a quiet line in the title bar, and a panel with the detail and "Kirim sekarang". The phone's sync status rules decide every word
+// Whether this PC's work has reached the server: a quiet line in the title bar, and a panel with the detail and "Sinkronkan sekarang". The phone's sync status rules decide every word
 // (shared model); only the layout is the PC's.
 import { formatRelative, t, translateOpType, translateRejection } from '@bolusi/i18n';
 import {

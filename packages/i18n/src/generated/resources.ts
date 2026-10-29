@@ -73,7 +73,7 @@ const source = {
         NETWORK: 'Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini.',
         MEDIA_NOT_FOUND: 'Foto belum ada di server. Aplikasi akan mencoba lagi.',
         MEDIA_IMMUTABLE:
-          'Foto yang sudah terkirim tidak bisa diganti. Ambil foto baru kalau perlu koreksi.',
+          'Foto yang sudah tersinkron tidak bisa diganti. Ambil foto baru kalau perlu koreksi.',
         INIT_MISMATCH: 'Data foto ini tidak cocok dengan yang ada di server. Ambil foto baru.',
         MEDIA_TOO_LARGE: 'Foto ini terlalu besar untuk dikirim. Laporkan masalah ini.',
         CHUNK_TOO_LARGE: 'Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.',
@@ -274,8 +274,8 @@ const source = {
         discard: 'Batalkan',
         keepEditing: 'Lanjut isi',
         otherStore: 'HP ini berisi data toko lain. Masuk pakai akun pemilik toko itu.',
-        unsyncedTitle: 'Perubahan yang belum terkirim',
-        unsyncedBody: 'Dikirim setelah HP ini terdaftar, tetap atas nama yang membuatnya.',
+        unsyncedTitle: 'Perubahan yang belum tersinkron',
+        unsyncedBody: 'Disinkronkan setelah HP ini terdaftar, tetap atas nama yang membuatnya.',
         unsyncedCount: '{count} perubahan',
         formerStaff: 'Karyawan lama',
       },
@@ -344,7 +344,7 @@ const source = {
         deactivate: 'Nonaktifkan karyawan',
         deactivateTitle: 'Nonaktifkan {name}?',
         deactivateBody:
-          'Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum terkirim akan ditolak. Riwayat kerjanya tetap ada.',
+          'Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum tersinkron akan ditolak. Riwayat kerjanya tetap ada.',
         deactivateConfirm: 'Nonaktifkan',
         inactiveBody: 'Dia tidak bisa masuk sampai diaktifkan lagi.',
         reactivate: 'Aktifkan lagi',
@@ -379,7 +379,8 @@ const source = {
           body: 'Server tidak mengenali komputer ini lagi. Semua perubahan tetap aman di sini sampai pemilik mendaftarkannya ulang.',
           action: 'Daftarkan ulang komputer ini',
         },
-        unsyncedBody: 'Dikirim setelah komputer ini terdaftar, tetap atas nama yang membuatnya.',
+        unsyncedBody:
+          'Disinkronkan setelah komputer ini terdaftar, tetap atas nama yang membuatnya.',
         settings: {
           account: 'Akun',
           pinTitle: 'PIN',
@@ -545,28 +546,28 @@ const source = {
       },
     },
     sync: {
-      chip: { pending: 'Belum terkirim', rejected: 'Ditolak' },
+      chip: { pending: 'Belum tersinkron', rejected: 'Ditolak' },
       status: {
         upToDate: 'Datanya aman di server.',
-        syncing: 'Sedang mengirim perubahan ke server.',
-        pending: '{count} perubahan belum terkirim',
-        pendingMedia: '{count} foto belum terkirim',
-        photosPending: 'Perubahan sudah terkirim. Fotonya menyusul.',
+        syncing: 'Datanya sedang disimpan ke server.',
+        pending: '{count} perubahan belum tersinkron',
+        pendingMedia: '{count} foto & video belum tersinkron',
+        photosPending: 'Perubahan sudah tersinkron. Foto & videonya menyusul.',
         attentionReassurance: 'Cek daftarnya di bawah.',
-        offline: 'Perubahan tersimpan di HP ini dan dikirim saat ada koneksi.',
+        offline: 'Perubahan tersimpan di HP ini dan disinkronkan saat ada koneksi.',
         reconnected: 'Terhubung kembali',
         lastSynced: 'Terakhir terhubung {relative}',
-        titleSynced: 'Semua sudah terkirim',
-        titlePending: 'Ada yang belum terkirim',
-        titleSyncing: 'Sedang mengirim',
+        titleSynced: 'Semua sudah tersinkron',
+        titlePending: 'Ada yang belum tersinkron',
+        titleSyncing: 'Sedang menyinkronkan',
         titleOffline: 'Tidak ada koneksi',
         titleAttention: 'Ada yang perlu dicek',
-        titlePhotosPending: 'Foto & video belum terkirim',
+        titlePhotosPending: 'Foto & video belum tersinkron',
         screenTitle: 'Status data',
-        savedHere: '{count} perubahan tersimpan di HP ini dan akan dikirim otomatis.',
+        savedHere: '{count} perubahan tersimpan di HP ini dan akan disinkronkan otomatis.',
         changesLabel: 'Perubahan',
         photosLabel: 'Foto & video',
-        waitingCount: '{count} belum terkirim',
+        waitingCount: '{count} belum tersinkron',
       },
       banner: {
         warning: 'Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.',
@@ -586,7 +587,7 @@ const source = {
         title: 'Perubahan ditahan',
         body: 'Beberapa perubahan dari HP lain gagal diperiksa, jadi belum tampil. Kabari pemilik toko.',
       },
-      action: { syncNow: 'Kirim sekarang', pullToRefresh: 'Tarik untuk memperbarui' },
+      action: { syncNow: 'Sinkronkan sekarang', pullToRefresh: 'Tarik untuk memperbarui' },
       firstSync: {
         title: 'Menyiapkan data toko',
         progress: 'Riwayat sampai {date} · {percent}%',
@@ -600,8 +601,8 @@ const source = {
         retry: 'Kirim ulang foto',
       },
       pc: {
-        savedHere: '{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.',
-        offline: 'Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.',
+        savedHere: '{count} perubahan tersimpan di komputer ini dan akan disinkronkan otomatis.',
+        offline: 'Perubahan tersimpan di komputer ini dan disinkronkan saat ada koneksi.',
         mediaFailed: '{count} foto belum bisa dikirim. Fotonya aman di komputer ini.',
         rejectedExplain: 'Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.',
         rejectedBanner: '{count} perubahan ditolak server.',
@@ -621,9 +622,9 @@ const source = {
     },
     media: {
       status: {
-        pending: 'Menunggu dikirim',
+        pending: 'Belum tersinkron',
         uploading: 'Mengirim foto…',
-        uploaded: 'Foto terkirim',
+        uploaded: 'Foto tersinkron',
         failed: 'Gagal mengirim. Ketuk untuk coba lagi.',
         waitingForConnection: 'Menunggu koneksi',
       },
@@ -642,9 +643,9 @@ const source = {
           'Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera dan Mikrofon.',
       },
       storage: {
-        lowWarning: 'Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.',
+        lowWarning: 'Penyimpanan mulai menipis. Foto lama yang sudah tersinkron akan dibersihkan.',
         lowCritical:
-          'Penyimpanan hampir habis. Semua foto yang sudah terkirim dibersihkan sekarang. Foto yang belum terkirim tetap aman.',
+          'Penyimpanan hampir habis. Semua foto yang sudah tersinkron dibersihkan sekarang. Foto yang belum tersinkron tetap aman.',
       },
       capture: {
         refusedTitle: 'Penyimpanan penuh',
@@ -662,7 +663,7 @@ const source = {
         refusedBody:
           'Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
         unavailableTitle: 'Video belum ada di HP ini',
-        unavailableBody: 'Videonya belum terkirim dari HP yang merekam. Coba lagi nanti.',
+        unavailableBody: 'Videonya belum tersinkron dari HP yang merekam. Coba lagi nanti.',
         tooLarge: 'Videonya terlalu besar. Rekam ulang lebih singkat.',
       },
     },
@@ -780,7 +781,7 @@ export const resources = {
           NETWORK: 'Connection problem. Your changes are still saved on this device.',
           MEDIA_NOT_FOUND: 'The photo isn’t on the server yet. The app will try again.',
           MEDIA_IMMUTABLE:
-            'A photo that has been sent can’t be replaced. Take a new photo if a correction is needed.',
+            'A photo that has been synced can’t be replaced. Take a new photo if a correction is needed.',
           INIT_MISMATCH: 'This photo’s details don’t match the server’s. Take a new photo.',
           MEDIA_TOO_LARGE: 'This photo is too large to send. Please report this.',
           CHUNK_TOO_LARGE:
@@ -986,9 +987,9 @@ export const resources = {
           keepEditing: 'Keep going',
           otherStore:
             'This phone holds another store’s data. Sign in with that store’s owner account.',
-          unsyncedTitle: 'Changes not sent yet',
+          unsyncedTitle: 'Changes not synced yet',
           unsyncedBody:
-            'Sent once this phone is registered, still under the name of whoever made them.',
+            'Synced once this phone is registered, still under the name of whoever made them.',
           unsyncedCount: '{count, plural, one {# change} other {# changes}}',
           formerStaff: 'Former employee',
         },
@@ -1058,7 +1059,7 @@ export const resources = {
           deactivate: 'Deactivate',
           deactivateTitle: 'Deactivate {name}?',
           deactivateBody:
-            'They can no longer sign in, and changes from their phone that haven’t been sent yet will be refused. Their work history stays.',
+            'They can no longer sign in, and changes from their phone that haven’t been synced yet will be refused. Their work history stays.',
           deactivateConfirm: 'Deactivate',
           inactiveBody: 'They can’t sign in until reactivated.',
           reactivate: 'Reactivate',
@@ -1095,7 +1096,7 @@ export const resources = {
             action: 'Register this computer again',
           },
           unsyncedBody:
-            'Sent once this computer is registered, still under the name of whoever made them.',
+            'Synced once this computer is registered, still under the name of whoever made them.',
           settings: {
             account: 'Account',
             pinTitle: 'PIN',
@@ -1262,29 +1263,31 @@ export const resources = {
         },
       },
       sync: {
-        chip: { pending: 'Not sent yet', rejected: 'Rejected' },
+        chip: { pending: 'Not synced yet', rejected: 'Rejected' },
         status: {
           upToDate: 'Your data is safe on the server.',
-          syncing: 'Sending changes to the server.',
-          pending: '{count, plural, one {# change not sent yet} other {# changes not sent yet}}',
-          pendingMedia: '{count, plural, one {# photo not sent yet} other {# photos not sent yet}}',
-          photosPending: 'Changes are sent. The photos will follow.',
+          syncing: 'Saving your data to the server.',
+          pending:
+            '{count, plural, one {# change not synced yet} other {# changes not synced yet}}',
+          pendingMedia:
+            '{count, plural, one {# photo or video not synced yet} other {# photos and videos not synced yet}}',
+          photosPending: 'Changes are synced. Photos and videos will follow.',
           attentionReassurance: 'See the list below.',
-          offline: 'Changes are saved on this phone and sent once you’re connected.',
+          offline: 'Changes are saved on this phone and synced once you’re connected.',
           reconnected: 'Back online',
           lastSynced: 'Last connected {relative}',
-          titleSynced: 'Everything is sent',
-          titlePending: 'Some changes aren’t sent yet',
-          titleSyncing: 'Sending',
+          titleSynced: 'Everything is synced',
+          titlePending: 'Some changes aren’t synced yet',
+          titleSyncing: 'Syncing',
           titleOffline: 'No connection',
           titleAttention: 'Something needs a look',
-          titlePhotosPending: 'Photos and videos aren’t sent yet',
+          titlePhotosPending: 'Photos and videos aren’t synced yet',
           screenTitle: 'Sync status',
           savedHere:
-            '{count, plural, one {# change is saved on this phone and will be sent automatically.} other {# changes are saved on this phone and will be sent automatically.}}',
+            '{count, plural, one {# change is saved on this phone and will be synced automatically.} other {# changes are saved on this phone and will be synced automatically.}}',
           changesLabel: 'Changes',
           photosLabel: 'Photos & videos',
-          waitingCount: '{count} not sent yet',
+          waitingCount: '{count} not synced yet',
         },
         banner: {
           warning: 'Last connected {relative}. This may not be the latest data.',
@@ -1305,7 +1308,7 @@ export const resources = {
           title: 'Changes on hold',
           body: 'Some changes from another device failed checks and are hidden. Tell the store owner.',
         },
-        action: { syncNow: 'Send now', pullToRefresh: 'Pull to refresh' },
+        action: { syncNow: 'Sync now', pullToRefresh: 'Pull to refresh' },
         firstSync: {
           title: 'Setting up store data',
           progress: 'History through {date} · {percent}%',
@@ -1322,8 +1325,8 @@ export const resources = {
         },
         pc: {
           savedHere:
-            '{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}',
-          offline: 'Changes are saved on this computer and sent when it is online.',
+            '{count, plural, one {# change is saved on this computer and will be synced automatically.} other {# changes are saved on this computer and will be synced automatically.}}',
+          offline: 'Changes are saved on this computer and synced when it is online.',
           mediaFailed:
             '{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}',
           rejectedExplain: 'Also undone on this computer. Redo them if they’re still needed.',
@@ -1349,9 +1352,9 @@ export const resources = {
       },
       media: {
         status: {
-          pending: 'Waiting to send',
+          pending: 'Not synced yet',
           uploading: 'Sending photo…',
-          uploaded: 'Photo sent',
+          uploaded: 'Photo synced',
           failed: 'Sending failed. Tap to try again.',
           waitingForConnection: 'Waiting for connection',
         },
@@ -1372,9 +1375,9 @@ export const resources = {
         },
         storage: {
           lowWarning:
-            'Storage is getting low. Old photos that have already been sent will be cleaned up.',
+            'Storage is getting low. Old photos that have already been synced will be cleaned up.',
           lowCritical:
-            'Storage is nearly full. Every photo that has been sent is being cleaned up now. Photos that haven’t been sent yet are kept.',
+            'Storage is nearly full. Every photo that has been synced is being cleaned up now. Photos that haven’t been synced yet are kept.',
         },
         capture: {
           refusedTitle: 'Storage full',
@@ -1395,7 +1398,8 @@ export const resources = {
           refusedBody:
             'Can’t record because storage is almost full. Free up space, then try again.',
           unavailableTitle: 'The video isn’t on this phone yet',
-          unavailableBody: 'It hasn’t been sent from the phone that recorded it. Try again later.',
+          unavailableBody:
+            'It hasn’t been synced from the phone that recorded it. Try again later.',
           tooLarge: 'The video is too big. Record a shorter one.',
         },
       },

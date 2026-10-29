@@ -114,7 +114,7 @@ describe('Button (§3.1)', () => {
 });
 
 describe('sync chips (§3.5)', () => {
-  const labels = { pendingLabel: 'Belum terkirim', rejectedLabel: 'Ditolak' };
+  const labels = { pendingLabel: 'Belum tersinkron', rejectedLabel: 'Ditolak' };
 
   test('all synced renders nothing — the silent default', () => {
     const r = render(

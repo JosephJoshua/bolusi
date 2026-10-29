@@ -1,8 +1,8 @@
 {
   "status": {
-    "pending": "Waiting to send",
+    "pending": "Not synced yet",
     "uploading": "Sending photo…",
-    "uploaded": "Photo sent",
+    "uploaded": "Photo synced",
     "failed": "Sending failed. Tap to try again.",
     "waitingForConnection": "Waiting for connection"
   },
@@ -20,8 +20,8 @@
     "videoDeniedBody": "Open the phone’s Settings, find this app, then turn on Camera and Microphone."
   },
   "storage": {
-    "lowWarning": "Storage is getting low. Old photos that have already been sent will be cleaned up.",
-    "lowCritical": "Storage is nearly full. Every photo that has been sent is being cleaned up now. Photos that haven’t been sent yet are kept."
+    "lowWarning": "Storage is getting low. Old photos that have already been synced will be cleaned up.",
+    "lowCritical": "Storage is nearly full. Every photo that has been synced is being cleaned up now. Photos that haven’t been synced yet are kept."
   },
   "capture": {
     "refusedTitle": "Storage full",
@@ -42,7 +42,7 @@
     "time": "{elapsed} / {max}",
     "refusedBody": "Can’t record because storage is almost full. Free up space, then try again.",
     "unavailableTitle": "The video isn’t on this phone yet",
-    "unavailableBody": "It hasn’t been sent from the phone that recorded it. Try again later.",
+    "unavailableBody": "It hasn’t been synced from the phone that recorded it. Try again later.",
     "tooLarge": "The video is too big. Record a shorter one."
   }
 }

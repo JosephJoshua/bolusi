@@ -1,8 +1,8 @@
 {
   "status": {
-    "pending": "Menunggu dikirim",
+    "pending": "Belum tersinkron",
     "uploading": "Mengirim foto…",
-    "uploaded": "Foto terkirim",
+    "uploaded": "Foto tersinkron",
     "failed": "Gagal mengirim. Ketuk untuk coba lagi.",
     "waitingForConnection": "Menunggu koneksi"
   },
@@ -20,8 +20,8 @@
     "videoDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera dan Mikrofon."
   },
   "storage": {
-    "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.",
-    "lowCritical": "Penyimpanan hampir habis. Semua foto yang sudah terkirim dibersihkan sekarang. Foto yang belum terkirim tetap aman."
+    "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah tersinkron akan dibersihkan.",
+    "lowCritical": "Penyimpanan hampir habis. Semua foto yang sudah tersinkron dibersihkan sekarang. Foto yang belum tersinkron tetap aman."
   },
   "capture": {
     "refusedTitle": "Penyimpanan penuh",
@@ -42,7 +42,7 @@
     "time": "{elapsed} / {max}",
     "refusedBody": "Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.",
     "unavailableTitle": "Video belum ada di HP ini",
-    "unavailableBody": "Videonya belum terkirim dari HP yang merekam. Coba lagi nanti.",
+    "unavailableBody": "Videonya belum tersinkron dari HP yang merekam. Coba lagi nanti.",
     "tooLarge": "Videonya terlalu besar. Rekam ulang lebih singkat."
   }
 }
