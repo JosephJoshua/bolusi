@@ -25,22 +25,30 @@ export interface MethodTotal {
   readonly amount: number;
 }
 
+/** The day's money in: payments by method, what went back, and the net of both. */
+export interface MoneyIn {
+  readonly methods: MethodTotal[];
+  /** Handed back to customers, through any method: its own line, never a negative money in. */
+  readonly refunded: number;
+  readonly total: number;
+}
+
 /**
- * Money in through each method over the records given: payments that still count, less what was
- * handed back through that method. The drawer first, then the rest by size.
+ * Money in through each method over the records given (payments that still count), the drawer
+ * first, then the rest by size; what was handed back is its own figure, so a refund of an earlier
+ * day's payment never shows as a method's negative money in.
  */
-export function moneyInByMethod(entries: readonly MoneyEntryRow[]): MethodTotal[] {
+export function moneyIn(entries: readonly MoneyEntryRow[]): MoneyIn {
   const totals = new Map<string, number>();
-  const add = (account: string, amount: number) =>
-    totals.set(account, (totals.get(account) ?? 0) + amount);
+  let refunded = 0;
   for (const entry of entries) {
     if (entry.account === null) continue;
     if (entry.kind === 'payment_received' && entry.voidedAt === null) {
-      add(entry.account, entry.amount);
+      totals.set(entry.account, (totals.get(entry.account) ?? 0) + entry.amount);
     }
-    if (entry.kind === 'refund_paid') add(entry.account, -entry.amount);
+    if (entry.kind === 'refund_paid') refunded += entry.amount;
   }
-  return [...totals]
+  const methods = [...totals]
     .map(([account, amount]) => ({ account, amount }))
     .filter((total) => total.amount !== 0)
     .sort(
@@ -49,6 +57,8 @@ export function moneyInByMethod(entries: readonly MoneyEntryRow[]): MethodTotal[
         b.amount - a.amount ||
         a.account.localeCompare(b.account),
     );
+  const paid = methods.reduce((sum, method) => sum + method.amount, 0);
+  return { methods, refunded, total: paid - refunded };
 }
 
 /** How each move reads, in the order the counter is offered them. */
@@ -201,7 +211,7 @@ export function historyLine(
         ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
         : reasonText(entry.reason),
     ].filter((part): part is string => part !== null && part !== ''),
-    amount: `${signed < 0 ? '−' : ''}${formatMoney(Math.abs(signed))}`,
+    amount: formatMoney(signed),
     voided,
   };
 }

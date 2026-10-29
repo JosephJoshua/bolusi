@@ -186,7 +186,8 @@ export function PaymentLines({
                   data-testid={`${id}.useQr`}
                 />
               ) : null}
-              {kind === 'cash' && line.tendered !== '' && tendered >= amount && amount > 0 ? (
+              {/* Handed over exactly: no change to give, so nothing to say. */}
+              {kind === 'cash' && line.tendered !== '' && tendered > amount && amount > 0 ? (
                 <p className="text-body text-text" data-testid={`${id}.change`}>
                   <span className="text-text-muted">{tm('money.pay.change')} </span>
                   <span className="tabular font-semibold">{formatMoney(tendered - amount)}</span>

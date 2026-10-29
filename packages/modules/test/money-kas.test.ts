@@ -13,7 +13,7 @@ import {
   cashMoveCheck,
   countToday,
   dayStart,
-  moneyInByMethod,
+  moneyIn,
   differenceToSettle,
   drawerMoves,
   historyLine,
@@ -65,29 +65,39 @@ function count(overrides: Partial<CashCountRow>): CashCountRow {
 }
 
 describe('money in by method', () => {
-  test('payments that still count, less refunds, the drawer first', () => {
-    const totals = moneyInByMethod([
-      entry({ account: 'account:qris', amount: 300_000 }),
-      entry({ account: 'cash', amount: 100_000 }),
-      entry({ account: 'cash', amount: 50_000 }),
-      entry({ kind: 'refund_paid', account: 'cash', amount: 20_000 }),
-      entry({ account: 'account:edc', amount: 900_000, voidedAt: 5 }),
-      entry({ kind: 'charge_recorded', account: null, amount: 750_000 }),
-      entry({ kind: 'cash_moved', subKind: 'expense', account: null, amount: 10_000 }),
-    ]);
-    expect(totals).toEqual([
-      { account: 'cash', amount: 130_000 },
-      { account: 'account:qris', amount: 300_000 },
-    ]);
+  test('payments that still count by method, the drawer first, and what went back on its own', () => {
+    expect(
+      moneyIn([
+        entry({ account: 'account:qris', amount: 300_000 }),
+        entry({ account: 'cash', amount: 100_000 }),
+        entry({ account: 'cash', amount: 50_000 }),
+        entry({ kind: 'refund_paid', account: 'cash', amount: 20_000 }),
+        entry({ account: 'account:edc', amount: 900_000, voidedAt: 5 }),
+        entry({ kind: 'charge_recorded', account: null, amount: 750_000 }),
+        entry({ kind: 'cash_moved', subKind: 'expense', account: null, amount: 10_000 }),
+      ]),
+    ).toEqual({
+      methods: [
+        { account: 'cash', amount: 150_000 },
+        { account: 'account:qris', amount: 300_000 },
+      ],
+      refunded: 20_000,
+      total: 430_000,
+    });
   });
 
-  test('a method whose money all went back is left out', () => {
+  // Round 2 QA, F14: a refund today of an earlier day's QRIS payment read "QRIS -Rp 150.000".
+  test('a refund of an earlier payment is not a negative money in for its method', () => {
     expect(
-      moneyInByMethod([
+      moneyIn([
         entry({ account: 'cash', amount: 50_000 }),
-        entry({ kind: 'refund_paid', account: 'cash', amount: 50_000 }),
+        entry({ kind: 'refund_paid', account: 'account:qris', amount: 150_000 }),
       ]),
-    ).toEqual([]);
+    ).toEqual({
+      methods: [{ account: 'cash', amount: 50_000 }],
+      refunded: 150_000,
+      total: -100_000,
+    });
   });
 });
 
@@ -204,9 +214,11 @@ describe('history', () => {
     );
     expect(expense.label).toBe('money.moveKind.expense');
     expect(expense.details).toEqual(['Bensin']);
-    expect(expense.amount).toBe(`−${formatMoney(25_000)}`);
+    // One minus sign everywhere: the one formatMoney writes (round 2 QA, F14).
+    expect(expense.amount).toBe('-Rp 25.000');
+    expect(expense.amount).toBe(formatMoney(-25_000));
     const refund = historyLine(entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }), []);
-    expect(refund.amount).toBe(`−${formatMoney(20_000)}`);
+    expect(refund.amount).toBe('-Rp 20.000');
     expect(refund.details).toContain('Batal');
     // A handover refund is saved as a code, and older ones in fixed English: both read localized.
     for (const reason of ['handover_refund', 'Returned at handover']) {
@@ -216,7 +228,7 @@ describe('history', () => {
     }
     const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
     expect(short.label).toBe('money.kas.adjusted');
-    expect(short.amount).toBe(`−${formatMoney(5_000)}`);
+    expect(short.amount).toBe('-Rp 5.000');
   });
 
   test('a cancelled payment keeps its customer, servisan and method, and says why', () => {

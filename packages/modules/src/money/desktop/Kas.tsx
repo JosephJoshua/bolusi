@@ -156,7 +156,7 @@ function Today({
   readonly onReceive: (balance: NamedBalance) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const { drawerQuery, drawer, accounts, entriesReady, methods, moves, open, difference, counted } =
+  const { drawerQuery, drawer, accounts, entriesReady, moneyIn, moves, open, difference, counted } =
     day;
   const { may } = day;
   const testId = 'money.desk.kas';
@@ -234,11 +234,11 @@ function Today({
           {entriesReady ? (
             <Section title={tm('money.kas.inToday')} testId={`${testId}.in`}>
               <Card>
-                {methods.length === 0 ? (
+                {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
                   <p className="text-body text-text-muted">{tm('money.kas.nothingIn')}</p>
                 ) : (
                   <>
-                    {methods.map((method) => (
+                    {moneyIn.methods.map((method) => (
                       <Line
                         key={method.account}
                         label={accountLabel(method.account, accounts)}
@@ -246,9 +246,16 @@ function Today({
                         testId={`${testId}.in.${method.account}`}
                       />
                     ))}
+                    {moneyIn.refunded === 0 ? null : (
+                      <Line
+                        label={tm('money.kas.refunded')}
+                        value={formatMoney(-moneyIn.refunded)}
+                        testId={`${testId}.in.refunded`}
+                      />
+                    )}
                     <Line
                       label={tm('money.kas.total')}
-                      value={formatMoney(methods.reduce((sum, method) => sum + method.amount, 0))}
+                      value={formatMoney(moneyIn.total)}
                       strong
                       testId={`${testId}.in.total`}
                     />
@@ -266,7 +273,7 @@ function Today({
                     key={entry.id}
                     label={tm(label)}
                     detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
-                    value={`${delta < 0 ? '−' : '+'}${formatMoney(Math.abs(delta))}`}
+                    value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
                     testId={`${testId}.moves.${entry.id}`}
                   />
                 ))}

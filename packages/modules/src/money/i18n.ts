@@ -72,6 +72,7 @@ export const MONEY_KEYS = [
   'money.kas.difference',
   'money.kas.waitingOwner',
   'money.kas.inToday',
+  'money.kas.refunded',
   'money.kas.nothingIn',
   'money.kas.total',
   'money.kas.movesToday',

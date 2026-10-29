@@ -138,7 +138,8 @@ export function PaymentLines({
                   }
                   testID={`${id}.tendered`}
                 />
-                {line.tendered !== '' && tendered >= amount && amount > 0 ? (
+                {/* Handed over exactly: no change to give, so nothing to say. */}
+                {line.tendered !== '' && tendered > amount && amount > 0 ? (
                   <View style={styles.changeRow}>
                     <Text style={styles.changeLabel}>{tm('money.pay.change')}</Text>
                     <Text style={styles.changeValue} testID={`${id}.change`}>
