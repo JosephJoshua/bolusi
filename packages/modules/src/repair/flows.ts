@@ -485,6 +485,15 @@ export function ticketBalance(
 }
 
 /**
+ * What the last money row under a total is called: what is left to pay, or what goes back, which
+ * is still to be done while the phone is in the store and done once it went home.
+ */
+export function balanceLabelKey(kind: 'due' | 'refund', returned: boolean): RepairKey {
+  if (kind === 'due') return 'repair.price.balance';
+  return returned ? 'repair.price.refund' : 'repair.price.refundDue';
+}
+
+/**
  * What the money already paid on a servisan is called: its DP while the phone is in the store,
  * what was paid in all (DP and the rest) once it went home.
  */

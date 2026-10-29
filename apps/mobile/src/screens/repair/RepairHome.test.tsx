@@ -1079,6 +1079,26 @@ describe('hardware back', () => {
 });
 
 describe('price and assignment details', () => {
+  test('a DP still to go back says so until the phone is handed over', async () => {
+    h = await openRepairScreenHarness(5603);
+    const opened = (await h.run(
+      'openTicket',
+      intake(h, { downPayment: 100_000 }),
+      h.cashierId,
+    )) as { ticketId: string };
+    await h.run(
+      'cancelTicket',
+      { ticketId: opened.ticketId, reason: 'Pelanggan batal', fee: 0 },
+      h.storeOwnerId,
+    );
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${opened.ticketId}`);
+    const rows = text(screen, 'repair.ticket.downPaymentRows');
+    expect(rows).toContain('KembalikanRp 100.000');
+    expect(rows).not.toContain('Dikembalikan');
+  });
+
   // A payment voided after its money was handed back leaves less than nothing paid: the row says
   // it was given back and adds it, instead of showing it as paid and taking it off.
   test('more given back than paid reads as given back, and the rows add up', async () => {

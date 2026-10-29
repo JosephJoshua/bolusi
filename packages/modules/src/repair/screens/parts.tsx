@@ -33,6 +33,7 @@ import { SPEC_FACT_KEY, paidRow, refundLabel, staleStepMessage, statusLabel } fr
 import type { TicketRefund } from '../queries.js';
 import {
   balanceAfterDownPayment,
+  balanceLabelKey,
   statusTone,
   type StaleStep,
   type TicketStatus,
@@ -261,6 +262,7 @@ export function DownPaymentRows({
   downPayment,
   refunds = [],
   paidLabel = 'repair.price.downPayment',
+  returned = false,
   action,
   testID,
 }: {
@@ -272,6 +274,8 @@ export function DownPaymentRows({
   readonly refunds?: readonly TicketRefund[];
   /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
   readonly paidLabel?: RepairKey;
+  /** The phone went home: what goes back was given back. */
+  readonly returned?: boolean;
   readonly action?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element | null {
@@ -304,7 +308,7 @@ export function DownPaymentRows({
       {split.length === 0 ? (
         <View style={[repairStyles.row, styles.paidRow]}>
           <Text style={[styles.balanceLabel, repairStyles.rowText]}>
-            {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+            {tn(balanceLabelKey(balance.kind, returned))}
           </Text>
           <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
             {formatMoney(balance.amount)}

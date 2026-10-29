@@ -285,6 +285,7 @@ export const REPAIR_KEYS = [
   'repair.price.downPaymentInput',
   'repair.price.balance',
   'repair.price.refund',
+  'repair.price.refundDue',
   'repair.price.refundVia',
   'repair.price.refundCash',
   'repair.price.reduced',

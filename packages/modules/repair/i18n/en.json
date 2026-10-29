@@ -240,6 +240,7 @@
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
     "refund": "Refunded",
+    "refundDue": "To give back",
     "refundVia": "Give back by {method}",
     "refundCash": "Give back in cash",
     "reduced": "Reduction",

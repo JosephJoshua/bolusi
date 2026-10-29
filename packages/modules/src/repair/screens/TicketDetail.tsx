@@ -934,6 +934,7 @@ export function TicketDetail({
           reduced={row.chargeReduced}
           downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
+          returned={row.location === 'returned'}
           action={
             paymentAction === 'correct' ? (
               <TextButton

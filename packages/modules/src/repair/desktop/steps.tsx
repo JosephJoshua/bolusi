@@ -37,6 +37,7 @@ import {
 } from '../constants.js';
 import {
   amountOwed,
+  balanceLabelKey,
   ticketBalance,
   capturedThumbnailRef,
   downPaymentEntry,
@@ -1071,7 +1072,7 @@ export function HandoverDialog({
               {split.length === 0 ? (
                 <>
                   <dt className="font-semibold text-text">
-                    {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+                    {tn(balanceLabelKey(balance.kind, false))}
                   </dt>
                   <dd
                     className="tabular text-right font-semibold text-text"

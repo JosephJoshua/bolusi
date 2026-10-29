@@ -51,6 +51,7 @@ import {
   amountOwed,
   arrangeTicketActions,
   balanceAfterDownPayment,
+  balanceLabelKey,
   canSetRepairTypes,
   claimIntakeDraft,
   CONTEXTUAL_ACTIONS,
@@ -659,6 +660,7 @@ export function TicketPane({
           reduced={row.chargeReduced}
           downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
+          returned={row.location === 'returned'}
           action={downPaymentAction(row, can)}
           disabled={runner.busy}
           onAction={(mode) => {
@@ -1170,6 +1172,7 @@ function DownPaymentLines({
   reduced,
   downPayment,
   paidLabel,
+  returned,
   action,
   disabled,
   onAction,
@@ -1179,6 +1182,8 @@ function DownPaymentLines({
   readonly reduced: number;
   readonly downPayment: number | null;
   readonly paidLabel: RepairKey;
+  /** The phone went home: what goes back was given back. */
+  readonly returned: boolean;
   readonly action: 'record' | 'correct' | null;
   readonly disabled: boolean;
   readonly onAction: (mode: 'record' | 'correct') => void;
@@ -1236,7 +1241,7 @@ function DownPaymentLines({
           </div>
         )}
         <div className="flex justify-between gap-4 text-body font-semibold text-text">
-          <dt>{tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}</dt>
+          <dt>{tn(balanceLabelKey(balance.kind, returned))}</dt>
           <dd className="tabular">{formatMoney(balance.amount)}</dd>
         </div>
       </dl>
