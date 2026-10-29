@@ -81,6 +81,7 @@ import {
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
+  paidRow,
   warrantyLine,
 } from '../labels.js';
 import {
@@ -1198,6 +1199,7 @@ function DownPaymentLines({
   const paid = downPayment ?? 0;
   if (paid === 0 && reduced === 0) return record;
   const balance = balanceAfterDownPayment(total - reduced, paid);
+  const paidText = paidRow(paid, paidLabel);
   return (
     <>
       <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
@@ -1212,7 +1214,7 @@ function DownPaymentLines({
         {paid === 0 ? null : (
           <div className="flex items-center justify-between gap-4 text-body text-text-muted">
             <dt className="flex items-center gap-2">
-              {tn(paidLabel)}
+              {paidText.label}
               {action === 'correct' ? (
                 <Tooltip label={tn('repair.downPayment.correctTitle')}>
                   <Button
@@ -1228,7 +1230,9 @@ function DownPaymentLines({
                 </Tooltip>
               ) : null}
             </dt>
-            <dd className="tabular">{formatMoney(-paid)}</dd>
+            <dd className="tabular" data-testid="repair.desk.ticket.paid">
+              {paidText.amount}
+            </dd>
           </div>
         )}
         <div className="flex justify-between gap-4 text-body font-semibold text-text">

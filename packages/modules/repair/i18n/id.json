@@ -242,7 +242,8 @@
     "refund": "Dikembalikan",
     "refundVia": "Kembalikan lewat {method}",
     "refundCash": "Kembalikan tunai",
-    "reduced": "Potongan"
+    "reduced": "Potongan",
+    "givenBack": "Sudah dikembalikan"
   },
   "problem": {
     "complaint": "Keluhan belum diisi.",

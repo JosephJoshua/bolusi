@@ -29,7 +29,7 @@ import {
 } from '../../screen-kit/screens/views.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { SPEC_FACT_KEY, refundLabel, staleStepMessage, statusLabel } from '../labels.js';
+import { SPEC_FACT_KEY, paidRow, refundLabel, staleStepMessage, statusLabel } from '../labels.js';
 import type { TicketRefund } from '../queries.js';
 import {
   balanceAfterDownPayment,
@@ -279,6 +279,7 @@ export function DownPaymentRows({
   if (paid === 0 && reduced === 0) return null;
   const balance = balanceAfterDownPayment(total - reduced, paid);
   const split = balance.kind === 'refund' ? refunds : [];
+  const paidText = paidRow(paid, paidLabel);
   return (
     <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
       {reduced === 0 ? null : (
@@ -292,11 +293,11 @@ export function DownPaymentRows({
       {paid === 0 ? null : (
         <View style={[repairStyles.row, styles.paidRow]}>
           <View style={styles.paidLabel}>
-            <Text style={styles.paidText}>{tn(paidLabel)}</Text>
+            <Text style={styles.paidText}>{paidText.label}</Text>
             {action}
           </View>
           <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
-            {formatMoney(-paid)}
+            {paidText.amount}
           </Text>
         </View>
       )}

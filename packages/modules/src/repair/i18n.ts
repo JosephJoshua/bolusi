@@ -310,6 +310,7 @@ export const REPAIR_KEYS = [
   'repair.slip.downPayment',
   'repair.slip.paid',
   'repair.price.paid',
+  'repair.price.givenBack',
   'repair.slip.estimateTotal',
   'repair.slip.field.accessories',
   'repair.slip.field.cancelReason',

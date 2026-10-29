@@ -242,7 +242,8 @@
     "refund": "Refunded",
     "refundVia": "Give back by {method}",
     "refundCash": "Give back in cash",
-    "reduced": "Reduction"
+    "reduced": "Reduction",
+    "givenBack": "Given back"
   },
   "problem": {
     "complaint": "Enter the complaint.",

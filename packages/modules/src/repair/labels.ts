@@ -333,3 +333,17 @@ export function downPaymentChangeLine(
         method,
       });
 }
+
+/**
+ * The row for what was paid on a servisan, which comes off the total. When more went back than
+ * came in (a payment voided after its money was handed back), the net is negative: it is named
+ * as given back and adds to what is left to pay, so the rows still add up.
+ */
+export function paidRow(
+  paid: number,
+  paidLabel: RepairKey,
+): { readonly label: string; readonly amount: string } {
+  return paid < 0
+    ? { label: tn('repair.price.givenBack'), amount: `+${formatMoney(-paid)}` }
+    : { label: tn(paidLabel), amount: formatMoney(-paid) };
+}

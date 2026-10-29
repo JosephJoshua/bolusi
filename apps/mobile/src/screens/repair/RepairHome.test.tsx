@@ -1079,6 +1079,35 @@ describe('hardware back', () => {
 });
 
 describe('price and assignment details', () => {
+  // A payment voided after its money was handed back leaves less than nothing paid: the row says
+  // it was given back and adds it, instead of showing it as paid and taking it off.
+  test('more given back than paid reads as given back, and the rows add up', async () => {
+    h = await openRepairScreenHarness(5602);
+    const opened = (await h.run(
+      'openTicket',
+      intake(h, { downPayment: 200_000 }),
+      h.cashierId,
+    )) as { ticketId: string };
+    const ticketId = opened.ticketId;
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 200_000, reason: 'Batal servis' },
+      h.storeOwnerId,
+    );
+    const money = (
+      await h.moneyQuery('documentMoney', { kind: 'repair.ticket', id: ticketId }, h.storeOwnerId)
+    ).rows[0] as { entries: { id: string; kind: string }[] };
+    const payment = money.entries.find((entry) => entry.kind === 'payment_received')!;
+    await h.money('voidPayment', { entryId: payment.id, reason: 'Salah catat' }, h.storeOwnerId);
+
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(text(screen, 'repair.ticket.downPaymentRows')).toContain('Sudah dikembalikan');
+    expect(text(screen, 'repair.ticket.downPayment')).toBe('+Rp 200.000');
+    expect(text(screen, 'repair.ticket.balance')).toBe('Rp 950.000');
+  });
+
   test('an amount typed without a description is named instead of silently dropped', async () => {
     h = await openRepairScreenHarness(5601);
     const draft: IntakeDraft = {
