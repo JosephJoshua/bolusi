@@ -6,11 +6,12 @@ import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
 import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
-import { registerRepairCatalog } from '../src/repair/i18n.js';
+import { registerRepairCatalog, tn } from '../src/repair/i18n.js';
 
 import {
   arrangeTicketActions,
   balanceAfterDownPayment,
+  balanceLabelKey,
   downPaymentAction,
   downPaymentEntry,
   printableSlips,
@@ -405,6 +406,15 @@ describe('down payment and slips', () => {
     ]);
     expect(balanceAfterDownPayment(50_000, 100_000)).toEqual({ kind: 'refund', amount: 50_000 });
     expect(balanceAfterDownPayment(50_000, 50_000)).toEqual({ kind: 'due', amount: 0 });
+  });
+
+  test('money to give back on a phone that went home reads as still owed', () => {
+    initI18n({ locale: 'id' });
+    registerRepairCatalog({ id: idCatalog, en: enCatalog });
+    // What a handover gave back is already off what was paid, so whatever is left is owed.
+    expect(tn(balanceLabelKey('refund', true))).toBe('Perlu dikembalikan');
+    expect(tn(balanceLabelKey('refund', false))).toBe('Kembalikan');
+    expect(tn(balanceLabelKey('due', true))).toBe('Sisa bayar');
   });
 });
 

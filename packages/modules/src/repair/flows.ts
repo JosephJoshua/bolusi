@@ -486,8 +486,9 @@ export function ticketBalance(
 }
 
 /**
- * What the last money row under a total is called: what is left to pay, or what goes back, which
- * is still to be done while the phone is in the store and done once it went home.
+ * What the last money row under a total is called: what is left to pay, or what goes back. Refunds
+ * a handover paid out are already off what was paid, so money to give back on a phone that went
+ * home is still owed ("Perlu dikembalikan"), never done.
  */
 export function balanceLabelKey(kind: 'due' | 'refund', returned: boolean): RepairKey {
   if (kind === 'due') return 'repair.price.balance';

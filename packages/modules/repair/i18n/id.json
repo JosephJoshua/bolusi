@@ -241,7 +241,7 @@
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Dikembalikan",
+    "refund": "Perlu dikembalikan",
     "refundDue": "Kembalikan",
     "refundVia": "Kembalikan lewat {method}",
     "refundCash": "Kembalikan tunai",
