@@ -13,6 +13,7 @@ import {
 } from '../index.js';
 import {
   countRows,
+  deliverAppended,
   deliverPulled,
   insertOpRow,
   openProjectionHarness,
@@ -324,6 +325,22 @@ describe('live-query invalidation (§7)', () => {
     expect(untouchedFires).toBe(0);
   });
 
+  test("this device's own change is not marked as another device's", async () => {
+    const changes: (EntityChange | undefined)[] = [];
+    harness.engine.invalidation.subscribe((_tables, change) => changes.push(change));
+    const create = noteOp({
+      id: 'own',
+      entityId: 'n8',
+      type: 'notes.note_created',
+      timestamp: 1000,
+      deviceId: 'd1',
+      seq: 1,
+      payload: { title: 'T', body: 'b0' },
+    });
+    await deliverAppended(harness, [create]);
+    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n8' }]);
+  });
+
   test('each applied op names the entity it changed; a rebuild batch names none', async () => {
     const changes: (EntityChange | undefined)[] = [];
     harness.engine.invalidation.subscribe((_tables, change) => changes.push(change));
@@ -337,7 +354,8 @@ describe('live-query invalidation (§7)', () => {
       payload: { title: 'T', body: 'b0' },
     });
     await deliverPulled(harness, [{ op: create, arrivalSeq: null }]);
-    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n7' }]);
+    // Pulled: another device made it, so a screen may mark it.
+    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n7', remote: true }]);
 
     await harness.engine.rebuild('notes');
     expect(changes.length).toBeGreaterThan(1);

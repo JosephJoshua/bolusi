@@ -42,6 +42,7 @@ export {
   useWipe,
 } from './motion.js';
 export type { EntranceFrom, EntranceOptions, Wipe } from './motion.js';
+export { FRESH_MS, markFresh, useFresh } from './fresh.js';
 export { useChangeDirection } from './direction.js';
 export type { ChangeDirection } from './direction.js';
 export { StepTransition, useStepDirection } from './step-transition.js';
@@ -87,6 +88,7 @@ export type { EmptyStateProps } from './components/EmptyState.js';
 export type { FactProps } from './components/Fact.js';
 export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
 export type { RollingTextProps } from './components/RollingText.js';
+export type { FreshGlowProps } from './components/FreshGlow.js';
 export type { ErrorStateProps } from './components/ErrorState.js';
 export type { IconName, IconProps } from './components/Icon.js';
 export type { ListRowProps } from './components/ListRow.js';

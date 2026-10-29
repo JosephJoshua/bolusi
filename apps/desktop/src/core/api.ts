@@ -52,6 +52,11 @@ export interface CoreState {
   readonly sync: SyncStatusInput | null;
 }
 
+/** The `repairChanged` payload: the record another device just changed, or null. */
+export interface RepairChange {
+  readonly freshId: string;
+}
+
 /** Events the core pushes to the window. */
 export const CORE_EVENTS = {
   state: 'state',

@@ -8,6 +8,7 @@ import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18
 import {
   AppShell,
   Button,
+  FreshGlow,
   Icon,
   LoadingState,
   RollingText,
@@ -236,6 +237,7 @@ export function Row({
   tone = 'text',
   strong = false,
   onPress,
+  freshId,
   testID,
 }: {
   readonly label: string;
@@ -245,10 +247,13 @@ export function Row({
   readonly tone?: 'text' | 'danger' | 'struck' | undefined;
   readonly strong?: boolean | undefined;
   readonly onPress?: (() => void) | undefined;
+  /** The record the row shows: it glows once when another device changes it. */
+  readonly freshId?: string | undefined;
   readonly testID: string;
 }): React.JSX.Element {
   const body: ReactNode = (
     <>
+      {freshId === undefined ? null : <FreshGlow id={freshId} />}
       <View style={styles.rowText}>
         <Text style={strong ? styles.rowLabelStrong : styles.rowLabel}>{label}</Text>
         {detail === undefined || detail === '' ? null : (

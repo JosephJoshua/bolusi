@@ -24,6 +24,11 @@
 export interface EntityChange {
   readonly entityType: string;
   readonly entityId: string;
+  /**
+   * The op came from another device, through a pull. A screen can mark what a colleague just
+   * changed; this device's own changes and re-folds leave it unset.
+   */
+  readonly remote?: boolean;
 }
 
 /**

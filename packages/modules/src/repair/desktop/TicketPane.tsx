@@ -9,6 +9,7 @@ import {
   Chip,
   Fact,
   FactGrid,
+  FreshGlow,
   IconButton,
   Menu,
   PatternPad,
@@ -422,7 +423,9 @@ export function TicketPane({
         ? uncollectedDays(row, uncollectedLimit.data.days, now())
         : null;
     return (
-      <header className="flex flex-col gap-4 border-b border-border px-6 pb-4 pt-4">
+      <header className="relative isolate flex flex-col gap-4 border-b border-border px-6 pb-4 pt-4">
+        {/* The open servisan glows once when another device changes it. */}
+        <FreshGlow id={row.id} />
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span

@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   EmptyState,
+  FreshGlow,
   List,
   SearchField,
   SegmentedControl,
@@ -439,6 +440,7 @@ const TicketRow = memo(function TicketRow({
         },
       ]}
     >
+      <FreshGlow id={row.id} testID={`${testID}.fresh`} />
       <View style={styles.rowBody}>
         <View style={repairStyles.row}>
           <Text style={[styles.customer, repairStyles.rowText]} numberOfLines={1}>

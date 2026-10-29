@@ -246,6 +246,11 @@ Motion explains what changed; it never decorates or makes anyone wait.
 - A money figure that changes while on screen (a balance after a QR payment,
   a total after a price change) uses `RollingText`: a rise rolls in from
   below, a drop from above. Never roll a figure the person is typing.
+- A row or card another device just changed glows once (`FreshGlow`): a soft
+  highlight fading out over a second, the one thing allowed past 220 ms because it
+  shows a change rather than moving anything. Only what is on screen when the change
+  arrives glows; the person's own edits and a catch-up burst (first sync, back
+  online) stay calm.
 
 ## References
 

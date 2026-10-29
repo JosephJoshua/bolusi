@@ -24,6 +24,7 @@ import {
   type RefObject,
 } from 'react';
 
+import { FreshGlow } from './FreshGlow.js';
 import { Skeleton } from './States.js';
 
 declare module '@tanstack/react-table' {
@@ -369,6 +370,7 @@ export function DataTable<T>({
                     transform: `translateY(${String(item.start)}px)`,
                   }}
                 >
+                  <FreshGlow id={row.id} />
                   {selected ? (
                     <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-primary" />
                   ) : null}

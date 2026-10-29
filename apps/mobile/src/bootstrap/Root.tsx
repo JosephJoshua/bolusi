@@ -48,6 +48,7 @@ import { systemClock } from '@bolusi/device/ports/clock';
 import { startLocationWatcher } from '../ports/location.js';
 import { useLatestCallback } from '../hooks/useLatestCallback.js';
 import type { Locale } from '@bolusi/i18n';
+import { markFresh } from '@bolusi/ui/fresh';
 
 import type { Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
 import type { AppEnrollment, EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
@@ -1131,6 +1132,14 @@ export function Root({
     // `syncTick` is the loop/session bump: a pushed batch changes `syncStatus` without writing a
     // projection table, so the invalidation bus alone would leave the counters one push behind.
   }, [app, syncTick]);
+
+  // What a colleague just changed on another device glows once wherever it shows (ui `FreshGlow`).
+  useEffect(() => {
+    if (app === null) return;
+    return app.invalidation.subscribe((_tables, change) => {
+      if (change?.remote === true) markFresh(change.entityId);
+    });
+  }, [app]);
 
   // Render nothing until the locale is resolved AND the data layer is up. One frame of the wrong
   // language on the enrollment screen is the first thing this shop would see every morning
