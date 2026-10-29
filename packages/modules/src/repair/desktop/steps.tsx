@@ -1570,7 +1570,12 @@ export function DownPaymentDialog({
     correcting && gap === null && amount !== null && loadedAccounts !== null
       ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
       : null;
-  const ask = useDownPaymentAsk(fix, current ?? 0);
+  // Whether it goes to an owner shows as soon as the new amount is typed, before the reason.
+  const typedFix =
+    correcting && amount !== null && amount !== current && !aboveTotal && loadedAccounts !== null
+      ? { ticketId, amount, ...chosenMethod(method.account, method.reference, accounts) }
+      : null;
+  const ask = useDownPaymentAsk(typedFix, current ?? 0);
   const asking = correcting && ask.asking;
 
   const submit = (): void => {

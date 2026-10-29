@@ -22,16 +22,20 @@ export interface DownPaymentAsk {
   readonly withEarlier: number | null;
 }
 
-/** `input` is the fix as typed, null until it is complete. */
+/**
+ * `input` is the fix as typed, null until its amount differs from the recorded one. The reason
+ * does not change what is counted, so the limit shows before one is typed.
+ */
 export function useDownPaymentAsk(
-  input: CorrectDownPaymentInput | null,
+  input: Omit<CorrectDownPaymentInput, 'reason'> | null,
   /** The down payment recorded now. */
   current: number,
 ): DownPaymentAsk {
   const runtime = useRepairRuntime();
   const holds = runtime.hasPermission(REPAIR_PERMISSION.correctDownPayment);
   const limit = holds ? runtime.limitOf(MONEY_PERMISSION.voidPayment) : null;
-  const asked = holds && limit !== null && input !== null ? input : null;
+  // The query reads a whole fix; a stand-in reason makes the half-typed one parse.
+  const asked = holds && limit !== null && input !== null ? { ...input, reason: '-' } : null;
   const takenOff = useRepairQuery(
     async (rt) =>
       asked === null

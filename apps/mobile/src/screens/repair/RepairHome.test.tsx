@@ -621,8 +621,8 @@ describe('a down payment fix (owners; the counter asks)', () => {
     const manager = await mount(h, h.managerId);
     await press(manager, `repair.board.row.${ticketId}`);
     await press(manager, 'repair.ticket.downPayment.correct');
+    // Said as soon as the amount is typed, before any reason.
     type(manager, 'repair.downPayment.amount', '70.000');
-    type(manager, 'repair.downPayment.reason', 'Salah ketik lagi');
     await settle();
     expect(text(manager, 'repair.downPayment.withEarlier')).toMatch(
       /^Bersama perubahan DP sebelumnya, totalnya Rp\s?30\.000\.$/,
@@ -630,6 +630,10 @@ describe('a down payment fix (owners; the counter asks)', () => {
     expect(manager.query('repair.downPayment.asks')).toBeNull();
     // One more rupiah off and it goes to an owner.
     type(manager, 'repair.downPayment.amount', '69.000');
+    await settle();
+    expect(manager.query('repair.downPayment.asks')).not.toBeNull();
+    expect(text(manager, 'repair.downPayment.primary')).toBe('Minta persetujuan');
+    type(manager, 'repair.downPayment.reason', 'Salah ketik lagi');
     await settle();
     expect(manager.query('repair.downPayment.asks')).not.toBeNull();
   });

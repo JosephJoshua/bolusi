@@ -478,6 +478,26 @@ describe('counter app over demo data', () => {
     );
   });
 
+  it('tells a manager a DP change goes to an owner as soon as the amount is typed', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Maria Kogoya' }));
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.downPayment.correct'));
+    await screen.findByTestId('repair.desk.downPayment.correct');
+    expect(screen.queryByTestId('repair.desk.downPayment.correct.asks')).toBeNull();
+    // Rp 40.000 off is above her Rp 30.000; no reason typed yet.
+    fireEvent.change(byTestId('repair.desk.downPayment.correct.amount'), {
+      target: { value: '60000' },
+    });
+    await screen.findByTestId('repair.desk.downPayment.correct.asks');
+    expect(byTestId('repair.desk.downPayment.correct.submit').textContent).toBe(
+      'Minta persetujuan',
+    );
+    expect(byTestId('repair.desk.downPayment.correct.submit')).toHaveProperty('disabled', true);
+  });
+
   it('says what goes back, and through what, when a cancelled servisan’s DP was above its fee', async () => {
     renderApp();
     await showView('pickup');
