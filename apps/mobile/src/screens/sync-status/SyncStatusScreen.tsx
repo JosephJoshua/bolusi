@@ -62,6 +62,7 @@ import {
   bannerCauses,
   firstSyncPercent,
   manualSync,
+  manualSyncErrorShown,
   mediaQueue,
   reassuranceMessage,
   relativeLabel,
@@ -117,6 +118,7 @@ export function SyncStatusScreen({
   const sync = manualSync(input);
   const queue = mediaQueue(input);
   const problems = syncProblems(input);
+  const manualError = manualSyncErrorShown(input);
   // The header chip is the five-state, media-blind verdict (design-system §8.1). The headline is that
   // verdict PLUS the `photosPending` distinction the chip cannot carry (task 147).
   const chip = syncChipState(input);
@@ -301,15 +303,15 @@ export function SyncStatusScreen({
         </View>
       ) : null}
 
-      {input.manualSyncError !== null ? (
+      {manualError !== null ? (
         // §8.4 item 3: inline, never modal — the backoff continues in the background regardless. The
         // raw code rides beneath the message so a shop owner has something to quote to support; a
         // plain connection problem has nothing to quote, so it shows the message alone.
         <View style={styles.inlineError} testID="sync-manual-error">
-          <Text style={styles.inlineErrorText}>{translateErrorCode(input.manualSyncError)}</Text>
-          {input.manualSyncError === 'NETWORK' ? null : (
+          <Text style={styles.inlineErrorText}>{translateErrorCode(manualError)}</Text>
+          {manualError === 'NETWORK' ? null : (
             <Text style={styles.meta} testID="sync-manual-error-code">
-              {input.manualSyncError}
+              {manualError}
             </Text>
           )}
         </View>

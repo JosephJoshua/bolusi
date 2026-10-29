@@ -10,6 +10,7 @@ import {
 import {
   firstSyncPercent,
   manualSync,
+  manualSyncErrorShown,
   mediaQueue,
   reassuranceMessage,
   relativeLabel,
@@ -139,6 +140,7 @@ function SyncStatusDialog({
 }): React.JSX.Element {
   const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
   const manual = manualSync(input);
+  const manualError = manualSyncErrorShown(input);
   const waitingPhotos = mediaQueue(input).length;
   const failedPhotos = input.media.filter((row) => row.uploadStatus === 'failed').length;
   return (
@@ -191,9 +193,9 @@ function SyncStatusDialog({
           {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
         </p>
         {/* The answer to "Kirim sekarang" when it did not get through; the loop keeps retrying. */}
-        {input.manualSyncError === null ? null : (
+        {manualError === null ? null : (
           <div data-testid="desktop.sync.manualError">
-            <Banner tone="warning" message={translateErrorCode(input.manualSyncError)} />
+            <Banner tone="warning" message={translateErrorCode(manualError)} />
           </div>
         )}
         {input.firstSync === null ? null : (
