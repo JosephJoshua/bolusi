@@ -315,6 +315,17 @@ export interface RootProps {
   readonly cameraPermission?: PermissionPort | undefined;
 }
 
+/** The longest the data layer waits for the opening hop to start (BrandIntro `onPlaying`). */
+const INTRO_WAIT_MS = 600;
+
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 export function Root({
   localeStore,
   readDeviceInfo,
@@ -348,6 +359,7 @@ export function Root({
   // applier cannot be masked, and a reader can see which of the two things a call site does.
   const [locale, setLocaleState] = useState<Locale | null>(null);
   const [firstScreenShown, setFirstScreenShown] = useState(false);
+  const introPlaying = useRef(deferred()).current;
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   /** The owner this phone's first-run setup waits for (core device-setup.ts), or null. */
@@ -702,6 +714,15 @@ export function Root({
       // a success — and the app boots half-enrolled, throwing AEAD errors deep in the UI. That is the
       // `KNOWN GAP SINCE D22` in recovery.ts, filed as task 160 (a decrypt-probe at boot). Do not read
       // this no-catch as covering the restore case: it covers only a DB that fails to open at all.
+      // The opening hop first: loading holds the JS thread, and the hop must already be running on
+      // the UI thread by then (BrandIntro `onPlaying`). Never more than a moment's wait, and only
+      // where there is a native splash to hand over from (not on web or in tests).
+      if (hideSplash !== undefined) {
+        await Promise.race([
+          introPlaying.promise,
+          new Promise((done) => setTimeout(done, INTRO_WAIT_MS)),
+        ]);
+      }
       const booting = await boot();
 
       // Wire the enrollment caller over the booted app. `onEnrolled` fires AFTER `runEnrollment`
@@ -1116,7 +1137,11 @@ export function Root({
           {content}
         </View>
       )}
-      <BrandIntro ready={content !== null && firstScreenShown} onCovered={hideSplash} />
+      <BrandIntro
+        ready={content !== null && firstScreenShown}
+        onCovered={hideSplash}
+        onPlaying={introPlaying.resolve}
+      />
     </View>
   );
   if (locale === null || app === null || deviceInfo === null) return opening(null);

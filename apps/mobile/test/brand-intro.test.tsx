@@ -2,13 +2,20 @@
 // covers until the app is ready, hides the native splash exactly once, and then gets out of the way.
 // The double lands animations at once, so "gets out of the way" is read as "is gone".
 import { act } from 'react';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { BrandIntro } from '../src/bootstrap/BrandIntro.js';
 import { render } from '../../../packages/ui/test/render.js';
 import { __setReduceMotion } from '../../../packages/ui/test/doubles/react-native.js';
 
-afterEach(() => act(() => __setReduceMotion(false)));
+// The hop starts from a timer once the splash has gone: time is driven by hand.
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  act(() => __setReduceMotion(false));
+  vi.useRealTimers();
+});
 
 describe('BrandIntro', () => {
   test('covers the screen and blocks touches while the app is not ready', () => {
@@ -26,10 +33,29 @@ describe('BrandIntro', () => {
     expect(onCovered).toHaveBeenCalledOnce();
   });
 
+  /** The cover is laid out, the splash goes, and the hop gets going. */
   const draw = (r: ReturnType<typeof render>): void => {
     const layout = r.get('brand-intro').props['onLayout'] as () => void;
     act(() => layout());
+    act(() => vi.advanceTimersByTime(200));
   };
+
+  test('tells the app to start loading only once the hop is running', () => {
+    const onPlaying = vi.fn();
+    const r = render(<BrandIntro ready={false} onPlaying={onPlaying} />);
+    act(() => (r.get('brand-intro').props['onLayout'] as () => void)());
+    expect(onPlaying).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(200));
+    expect(onPlaying).toHaveBeenCalledOnce();
+  });
+
+  test('with reduce motion on, the app may load at once', () => {
+    act(() => __setReduceMotion(true));
+    const onPlaying = vi.fn();
+    const r = render(<BrandIntro ready={false} onPlaying={onPlaying} />);
+    act(() => (r.get('brand-intro').props['onLayout'] as () => void)());
+    expect(onPlaying).toHaveBeenCalledOnce();
+  });
 
   test('the disc hops while the app loads, then the cover goes once the app is ready', () => {
     const r = render(<BrandIntro ready={false} />);
@@ -41,15 +67,10 @@ describe('BrandIntro', () => {
   });
 
   test('a cover that never drew still leaves soon after the app is ready', () => {
-    vi.useFakeTimers();
-    try {
-      const r = render(<BrandIntro ready />);
-      expect(r.query('brand-intro')).not.toBeNull();
-      act(() => vi.advanceTimersByTime(1_000));
-      expect(r.query('brand-intro')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    const r = render(<BrandIntro ready />);
+    expect(r.query('brand-intro')).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(r.query('brand-intro')).toBeNull();
   });
 
   test('stays gone if readiness flickers back', () => {
@@ -86,21 +107,17 @@ describe('BrandIntro', () => {
         double.__answerReduceMotion(false);
         await Promise.resolve();
       });
+      act(() => vi.advanceTimersByTime(200));
       expect(r.query('brand-intro')).toBeNull();
     });
 
     test('never waits long: with no answer it goes after a moment', async () => {
-      vi.useFakeTimers();
-      try {
-        const { Fresh, harness } = await fresh();
-        const r = harness.render(<Fresh ready />);
-        act(() => (r.get('brand-intro').props['onLayout'] as () => void)());
-        expect(r.query('brand-intro')).not.toBeNull();
-        act(() => vi.advanceTimersByTime(400));
-        expect(r.query('brand-intro')).toBeNull();
-      } finally {
-        vi.useRealTimers();
-      }
+      const { Fresh, harness } = await fresh();
+      const r = harness.render(<Fresh ready />);
+      act(() => (r.get('brand-intro').props['onLayout'] as () => void)());
+      expect(r.query('brand-intro')).not.toBeNull();
+      act(() => vi.advanceTimersByTime(400));
+      expect(r.query('brand-intro')).toBeNull();
     });
   });
 });

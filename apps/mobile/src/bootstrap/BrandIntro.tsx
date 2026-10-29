@@ -62,9 +62,24 @@ export interface BrandIntroProps {
   readonly ready: boolean;
   /** Hides the native splash once the cover is drawn over it. Absent on web and in tests. */
   readonly onCovered?: (() => void) | undefined;
+  /**
+   * The hop is running on the UI thread (or there is none to play): the app may start its heavy
+   * loading now. Called once.
+   */
+  readonly onPlaying?: (() => void) | undefined;
 }
 
-export function BrandIntro({ ready, onCovered }: BrandIntroProps): React.JSX.Element | null {
+/** After the next drawn frame, so what was just started has reached the UI thread. */
+function afterFrame(callback: () => void): void {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => callback());
+  else setTimeout(callback, 16);
+}
+
+export function BrandIntro({
+  ready,
+  onCovered,
+  onPlaying,
+}: BrandIntroProps): React.JSX.Element | null {
   const answer = useReducedMotionAnswer();
   const [gaveUp, setGaveUp] = useState(false);
   const still = answer ?? (gaveUp ? true : null);
@@ -82,29 +97,43 @@ export function BrandIntro({ ready, onCovered }: BrandIntroProps): React.JSX.Ele
     return () => clearTimeout(timer);
   }, [covered, still]);
 
-  // The hop plays while the app is still loading, once the native splash has handed over: the UI
-  // thread is free then. Played at "ready" it raced the first screen's mount, which holds the UI
-  // thread on a cheap phone, and Android skipped straight to its end.
+  // Told once; a ref so the effects below need not restart for a new callback.
+  const playing = useRef(onPlaying);
+  playing.current = onPlaying;
+  const toldPlaying = useRef(false);
+  const tellPlaying = (): void => {
+    if (toldPlaying.current) return;
+    toldPlaying.current = true;
+    playing.current?.();
+  };
+
+  // The hop plays once the native splash has handed over, while the app waits to load (Root starts
+  // the database only after `onPlaying`). Loading holds the JS thread and the first screen's mount
+  // holds the UI thread, so a hop started at either moment never reached the screen. Started from
+  // a plain timer, not `Animated.delay`, which is itself JS-timed and would wait out the loading.
   useEffect(() => {
     if (!covered || hopped || still === null) return;
     if (still) {
       setHopped(true);
+      tellPlaying();
       return;
     }
-    const animation = Animated.sequence([
-      // The native splash takes a moment to go after it is told to.
-      Animated.delay(SPLASH_EXIT_MS),
-      Animated.timing(hop, {
-        toValue: 1,
-        duration: HOP_MS,
-        easing: Easing.linear,
-        useNativeDriver: NATIVE_DRIVER,
-      }),
-    ]);
-    animation.start(({ finished }) => {
-      if (finished) setHopped(true);
+    const animation = Animated.timing(hop, {
+      toValue: 1,
+      duration: HOP_MS,
+      easing: Easing.linear,
+      useNativeDriver: NATIVE_DRIVER,
     });
-    return () => animation.stop();
+    const timer = setTimeout(() => {
+      animation.start(({ finished }) => {
+        if (finished) setHopped(true);
+      });
+      afterFrame(tellPlaying);
+    }, SPLASH_EXIT_MS);
+    return () => {
+      clearTimeout(timer);
+      animation.stop();
+    };
   }, [covered, hopped, still, hop]);
 
   // A cover that is somehow never laid out must not hold the app hostage.
