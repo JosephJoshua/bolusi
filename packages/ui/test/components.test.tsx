@@ -19,7 +19,7 @@ import {
   SKELETON_ROW_COUNT,
 } from '../src/components/LoadingState.js';
 import { resolveSyncChip, SyncStatusChip } from '../src/components/SyncStatusChip.js';
-import { dropUnpairedSurrogates, TextInput } from '../src/components/TextInput.js';
+import { dropUnpairedSurrogates, fitWithin, TextInput } from '../src/components/TextInput.js';
 import { UnauthorizedState } from '../src/components/UnauthorizedState.js';
 import { border, color, identityPalette, size, touch } from '../src/tokens.js';
 import { fire, isUnwired, render } from './render.js';
@@ -480,6 +480,28 @@ describe('TextInput (§3.2)', () => {
     fire(r.get('ui.textInput.field'), 'onChangeText', 'HP\u{1F4F1}');
     expect(onChangeText).toHaveBeenLastCalledWith('HP\u{1F4F1}');
     expect(dropUnpairedSurrogates('\uDC00a\uD83D')).toBe('a');
+  });
+
+  test('the length limit leaves out a whole character rather than half of one (flags, families, skin tones)', () => {
+    const a = (n: number) => 'a'.repeat(n);
+    expect(fitWithin(`${a(63)}\u{1F600}`, 64)).toBe(a(63));
+    expect(fitWithin(`${a(62)}\u{1F1EE}\u{1F1E9}`, 64)).toBe(a(62));
+    expect(fitWithin(`${a(61)}\u{1F1EE}\u{1F1E9}`, 64)).toBe(a(61));
+    expect(fitWithin(`\u{1F1EE}\u{1F1E9}\u{1F1EE}\u{1F1E9}`, 6)).toBe('\u{1F1EE}\u{1F1E9}');
+    const family = '\u{1F468}\u200D\u{1F468}\u200D\u{1F466}\u200D\u{1F466}';
+    for (let cut = 60; cut <= 64; cut++) expect(fitWithin(`${a(60)}${family}`, cut)).toBe(a(60));
+    expect(fitWithin(`ab\u{1F44D}\u{1F3FD}`, 5)).toBe('ab');
+    expect(fitWithin('ab\u2764\uFE0F', 3)).toBe('ab');
+    expect(fitWithin('abe\u0301', 3)).toBe('ab');
+    expect(fitWithin('abc', 3)).toBe('abc');
+    expect(fitWithin('abcd', undefined)).toBe('abcd');
+
+    const onChangeText = vi.fn();
+    const r = render(<TextInput {...base} onChangeText={onChangeText} maxLength={6} />);
+    fire(r.get('ui.textInput.field'), 'onChangeText', 'ab\u{1F1EE}\u{1F1E9}');
+    expect(onChangeText).toHaveBeenLastCalledWith('ab\u{1F1EE}\u{1F1E9}');
+    fire(r.get('ui.textInput.field'), 'onChangeText', 'abc\u{1F1EE}\u{1F1E9}');
+    expect(onChangeText).toHaveBeenLastCalledWith('abc');
   });
 
   test('the label is always rendered above the field — never placeholder-as-label', () => {

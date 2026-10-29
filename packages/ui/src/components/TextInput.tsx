@@ -130,9 +130,9 @@ const styles = StyleSheet.create({
 });
 
 /**
- * Drops any UTF-16 surrogate left without its pair. A native `maxLength` counts code units, so it
- * can cut an emoji in half; Postgres cannot store the half left over and the phone refuses to sign
- * an op holding one, so the field never hands it to a screen.
+ * Drops any UTF-16 surrogate left without its pair. Postgres cannot store one and the phone refuses
+ * to sign an op holding one, so the field never hands it to a screen (a keyboard or paste can still
+ * produce one).
  */
 export function dropUnpairedSurrogates(text: string): string {
   let out = '';
@@ -156,6 +156,63 @@ export function dropUnpairedSurrogates(text: string): string {
     out += text[i]!;
   }
   return changed ? out : text;
+}
+
+const ZWJ = 0x200d;
+const MARK = /^\p{M}$/u;
+const isRegionalIndicator = (cp: number): boolean => cp >= 0x1f1e6 && cp <= 0x1f1ff;
+
+/** The code point that ends just before `i` (a surrogate pair counts as one). */
+function codePointBefore(text: string, i: number): number | undefined {
+  if (i <= 0) return undefined;
+  const low = text.charCodeAt(i - 1);
+  if (low >= 0xdc00 && low <= 0xdfff && i >= 2) {
+    const high = text.charCodeAt(i - 2);
+    if (high >= 0xd800 && high <= 0xdbff) return text.codePointAt(i - 2);
+  }
+  return low;
+}
+
+/** Whether cutting `text` at `i` would split one visible character (a grapheme). */
+function splitsCharacter(text: string, i: number): boolean {
+  const unit = text.charCodeAt(i);
+  if (unit >= 0xdc00 && unit <= 0xdfff) return true;
+  const cp = text.codePointAt(i)!;
+  if (
+    cp === ZWJ ||
+    (cp >= 0xfe00 && cp <= 0xfe0f) || // variation selectors (emoji vs text style)
+    (cp >= 0x1f3fb && cp <= 0x1f3ff) || // skin tones
+    (cp >= 0xe0020 && cp <= 0xe007f) || // tag sequences (subdivision flags)
+    MARK.test(String.fromCodePoint(cp))
+  ) {
+    return true;
+  }
+  if (codePointBefore(text, i) === ZWJ) return true;
+  if (isRegionalIndicator(cp)) {
+    // Flags are pairs of regional indicators: an odd run before `i` means `i` is mid-flag.
+    let run = 0;
+    for (let j = i; ;) {
+      const before = codePointBefore(text, j);
+      if (before === undefined || !isRegionalIndicator(before)) break;
+      run++;
+      j -= 2;
+    }
+    return run % 2 === 1;
+  }
+  return false;
+}
+
+/**
+ * Keeps `text` within `max` UTF-16 units without cutting a character in half. RN's native
+ * `maxLength` counts units and cuts wherever the limit falls, leaving a lone flag letter or half an
+ * emoji family, so the limit is enforced here instead: what does not fit whole is left out whole.
+ */
+export function fitWithin(text: string, max: number | undefined): string {
+  const clean = dropUnpairedSurrogates(text);
+  if (max === undefined || clean.length <= max) return clean;
+  let end = max;
+  while (end > 0 && splitsCharacter(clean, end)) end--;
+  return clean.slice(0, end);
 }
 
 export function TextInput({
@@ -207,7 +264,7 @@ export function TextInput({
           accessibilityLabel={label}
           accessibilityState={{ disabled }}
           value={value}
-          onChangeText={(text) => onChangeText(dropUnpairedSurrogates(text))}
+          onChangeText={(text) => onChangeText(fitWithin(text, maxLength))}
           placeholder={placeholder}
           placeholderTextColor={color.textMuted}
           editable={!notEditable}
@@ -218,7 +275,6 @@ export function TextInput({
           autoCapitalize={autoCapitalize}
           autoFocus={autoFocus}
           multiline={effectiveMultiline}
-          maxLength={maxLength}
           onSubmitEditing={onSubmitEditing}
           returnKeyType={onSubmitEditing === undefined ? undefined : 'done'}
           submitBehavior={onSubmitEditing === undefined ? undefined : 'submit'}
