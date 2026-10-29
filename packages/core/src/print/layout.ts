@@ -548,20 +548,29 @@ function pageCapacity(geometry: TextGeometry): number {
   return (geometry.pageLines - BOTTOM_LINES) * lineUnits(geometry);
 }
 
-/** Fill pages with groups, breaking only where the groups allow. */
-function paginate(groups: readonly Group[], geometry: TextGeometry, reference: string): GridPage[] {
+/**
+ * Fill pages with groups, breaking only where the groups allow, once a page holds `fill` (in 1/216
+ * inch); a group kept together that is longer than that may still use the whole form.
+ */
+function fillPages(
+  groups: readonly Group[],
+  geometry: TextGeometry,
+  reference: string,
+  fill: number,
+): GridPage[] {
   const line = lineUnits(geometry);
   const capacity = pageCapacity(geometry);
+  const fresh = (TOP_LINES + 2) * line;
   const top = (): GridRow[] => Array.from({ length: TOP_LINES }, blank);
   const pages: GridRow[][] = [top()];
   let used = TOP_LINES * line;
   const newPage = (): void => {
     const marker = text(padLeft(`${reference} (${pages.length + 1})`, geometry.columns));
     pages.push([...top(), marker, blank()]);
-    used = (TOP_LINES + 2) * line;
+    used = fresh;
   };
-  const place = (row: GridRow): void => {
-    if (used + rowUnits(row, line) > capacity && used > (TOP_LINES + 2) * line) newPage();
+  const place = (row: GridRow, limit: number): void => {
+    if (used + rowUnits(row, line) > limit && used > fresh) newPage();
     (pages[pages.length - 1] as GridRow[]).push(row);
     used += rowUnits(row, line);
   };
@@ -575,13 +584,40 @@ function paginate(groups: readonly Group[], geometry: TextGeometry, reference: s
         : group.keepTogether
           ? units
           : groupUnits(group.rows.slice(0, 1), line);
-    const fresh = (TOP_LINES + 2) * line;
-    if (used + needed > capacity && needed <= capacity - fresh && used > TOP_LINES * line) {
+    // A group kept together that is more than `fill` on its own still gets a whole form.
+    const limit = group.keepTogether && needed > fill - fresh ? capacity : fill;
+    if (used + needed > limit && needed <= capacity - fresh && used > TOP_LINES * line) {
       newPage();
     }
-    group.rows.forEach(place);
+    for (const row of group.rows) place(row, limit);
   });
   return pages;
+}
+
+/**
+ * Pages as few as filling each form gives, with the content spread evenly over them: a slip just
+ * over one form gets two half-full forms, never a full one and a few stray lines.
+ */
+function paginate(groups: readonly Group[], geometry: TextGeometry, reference: string): GridPage[] {
+  const line = lineUnits(geometry);
+  const capacity = pageCapacity(geometry);
+  const full = fillPages(groups, geometry, reference, capacity);
+  if (full.length === 1) return full;
+  // The least fill that still needs no more forms, found a line at a time by halving.
+  let low = Math.floor(capacity / full.length / line);
+  let high = Math.floor(capacity / line);
+  let best = full;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const pages = fillPages(groups, geometry, reference, mid * line);
+    if (pages.length <= full.length) {
+      best = pages;
+      high = mid;
+    } else {
+      low = mid + 1;
+    }
+  }
+  return best;
 }
 
 interface Variant {
@@ -713,8 +749,9 @@ function layoutCopy(
  * Paper the customer carries home should be one sheet, so layouts are tried roomiest first and the
  * first that needs the fewest forms wins. On landscape paper wide enough, the aside goes beside the
  * body, else everything is stacked; each spaced roomiest first (`SPACINGS`), then tighter;
- * then the same with the signatures under the aside; all at 6 lines per inch, then at 8. Spare
- * lines on a one-form slip go above the signatures.
+ * then the same with the signatures under the aside; all at 6 lines per inch, then at 8. A slip
+ * that needs more than one form anyway is set at 6, spread evenly over its forms. Spare lines on a
+ * one-form slip go above the signatures.
  */
 export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLayout {
   const doc = asciiDocument(source);
@@ -744,12 +781,16 @@ export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLay
   const copies: (string | null)[] =
     paper.carbonless || doc.copies.length === 0 ? [null] : [...doc.copies];
   // Every copy uses the layout the first one needed, so the job keeps one line spacing.
+  // 1/8" only ever buys one form: a slip that runs on anyway stays at the easier-to-read 1/6".
   let best: { variant: Variant; pages: GridPage[] } | null = null;
   for (const variant of variants) {
     const pages = layoutCopy(doc, copies[0] ?? null, paper, variant);
-    if (variant.closingBeside && pages.length > 1) continue;
+    if (pages.length === 1) {
+      best = { variant, pages };
+      break;
+    }
+    if (variant.closingBeside || variant.linesPerInch !== 6) continue;
     if (best === null || pages.length < best.pages.length) best = { variant, pages };
-    if (best.pages.length === 1) break;
   }
   const chosen = (best as { variant: Variant }).variant;
   return {

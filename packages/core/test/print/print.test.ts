@@ -223,6 +223,29 @@ describe('text-mode layout', () => {
     expect(bytes.slice(at - 3, at + 2)).toEqual([0x1b, 0x30, 0x1b, 0x43, 44]);
   });
 
+  it('spreads a slip that runs past one form evenly, at 1/6"', () => {
+    const paper = PAPER_PRESETS.continuous_half;
+    // Too long for one form even at 1/8", but well short of two.
+    const notes = (count: number) =>
+      sampleDoc({
+        blocks: [
+          ...sampleDoc().blocks,
+          {
+            kind: 'paragraph',
+            text: Array.from({ length: count }, (_, i) => `Catatan ${i}`).join('\n'),
+          },
+        ],
+      });
+    for (const count of [30, 36]) {
+      const { geometry, pages } = layoutGrid(notes(count), paper);
+      expect(geometry.linesPerInch).toBe(6);
+      expect(pages).toHaveLength(2);
+      const [first, second] = pages.map((page) => page.length);
+      // Neither form is left with a few stray lines.
+      expect(Math.abs(first! - second!), String(count)).toBeLessThanOrEqual(8);
+    }
+  });
+
   it("moves the aside's trailing sections under the body when that makes the columns shorter", () => {
     const terms = Array.from(
       { length: 6 },
