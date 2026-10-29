@@ -753,8 +753,9 @@ describe('Bayar nanti', () => {
           signature: photo(world, 8),
           note: '',
           unpaidReason: 'Gajian Jumat',
+          checklist: [],
         },
-        { schemaVersion: 2 },
+        { schemaVersion: 3 },
       );
 
     // Approved for less than is left: refused like no approval at all.
