@@ -455,8 +455,9 @@ function journey(world: ChainWorld): OpSpec[] {
         signature: photo(14),
         note: '',
         unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
       }),
-      schemaVersion: 2,
+      schemaVersion: 3,
     },
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {

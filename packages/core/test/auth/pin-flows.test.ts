@@ -376,7 +376,7 @@ describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §
       resetPin(s.flowDeps(), {
         actorUserId: s.h.storeOwnerId,
         targetUserId: s.h.staffId,
-        newPin: '222222',
+        newPin: '593026',
       }),
       'PERMISSION_DENIED',
       'restriction_violated',
@@ -384,7 +384,7 @@ describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §
     await resetPin(s.flowDeps(), {
       actorUserId: s.h.ownerId,
       targetUserId: s.h.staffId,
-      newPin: '222222',
+      newPin: '593026',
     });
     const resets = (await s.pinOps()).filter((o) => o.type === 'auth.pin_reset');
     expect(resets.map((o) => o.userId)).toEqual([s.h.ownerId]);
@@ -637,12 +637,12 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
     const failing = await resetPin(s.flowDeps(), {
       actorUserId: s.h.ownerId,
       targetUserId: s.h.staffId,
-      newPin: '222222',
+      newPin: '582914',
     });
     const later = await changePin(s.flowDeps(), {
       userId: s.h.staffId,
-      currentPin: '222222',
-      newPin: '333333',
+      currentPin: '582914',
+      newPin: '740263',
     });
 
     const server: PinVerifierUploadPort = {
