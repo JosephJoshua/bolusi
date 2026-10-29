@@ -85,7 +85,7 @@ jobs:
       - run: pnpm --filter @bolusi/desktop exec vitest run test/raw-print.windows.test.ts
       # As released, except Playwright needs the inspect switch (`--inspect=0`) to drive the app.
       - run: pnpm --filter @bolusi/desktop run build
-      - run: pnpm --filter @bolusi/desktop exec electron-builder --win --publish never -c.electronFuses.enableNodeCliInspectArguments=true
+      - run: pnpm --filter @bolusi/desktop exec electron-builder --win --publish never '--config.electronFuses.enableNodeCliInspectArguments=true'
       - name: Install it silently, as an update would
         shell: pwsh
         run: |
