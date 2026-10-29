@@ -83,10 +83,10 @@ function common(
     header: ctx.header,
     title,
     reference: ticket.ticketNumber,
-    // The print log counts earlier prints, so this one is the next.
+    // The print log counts earlier prints, so it is also which reprint this one is.
     meta:
       ticket.slipPrints[slip] > 0
-        ? [...meta, tn('repair.slip.reprint', { count: ticket.slipPrints[slip] + 1 })]
+        ? [...meta, tn('repair.slip.reprint', { count: ticket.slipPrints[slip] })]
         : meta,
     ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],

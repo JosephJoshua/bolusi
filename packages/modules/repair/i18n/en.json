@@ -438,7 +438,7 @@
     "received": "Received {date}",
     "readyBy": "Ready by {date}",
     "returned": "Collected {date}",
-    "reprint": "Reprint no. {count}",
+    "reprint": "{count, plural, =1 {Reprint} other {Reprint no. #}}",
     "printed": "Printed {date}",
     "printedBy": "Printed {date} by {name}",
     "field": {
@@ -494,7 +494,7 @@
     "handover": "Repair bill",
     "intakeAbout": "Proof the store received the phone.",
     "handoverAbout": "The bill and proof of pickup.",
-    "reprint": "Printed {count} times already.",
+    "reprint": "{count, plural, one {Printed once already.} other {Printed # times already.}}",
     "paper": "Paper",
     "paperHalf": "Half form",
     "paperFull": "Full form",

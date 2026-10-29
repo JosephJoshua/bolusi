@@ -438,7 +438,7 @@
     "received": "Diterima {date}",
     "readyBy": "Estimasi selesai {date}",
     "returned": "Diambil {date}",
-    "reprint": "Cetak ulang ke-{count}",
+    "reprint": "{count, plural, =1 {Cetak ulang} other {Cetak ulang ke-#}}",
     "printed": "Dicetak {date}",
     "printedBy": "Dicetak {date} oleh {name}",
     "field": {
