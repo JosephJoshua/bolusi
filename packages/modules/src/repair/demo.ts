@@ -21,6 +21,7 @@ import {
   ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
+import { normalizePhone } from './contact.js';
 import { partsInWork } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
 import {
@@ -861,10 +862,13 @@ export function demoRepairRuntime(
   ) => {
     // The one rule every step but the handover shares (repair rules.ts): a change that raced a
     // cancel or a handover on another device is refused with its own reason, as on a phone.
+    // Taking a handover back and correcting a cancelled servisan's details check their own.
     const current = find(ticketId);
-    if (kind !== 'repair.device_returned') {
+    if (kind !== 'repair.device_returned' && kind !== 'repair.handover_reversed') {
       if (current.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
-      if (current.outcome === 'cancelled') throw REPAIR_REFUSALS.refuse('cancelled');
+      if (current.outcome === 'cancelled' && kind !== 'repair.ticket_details_corrected') {
+        throw REPAIR_REFUSALS.refuse('cancelled');
+      }
     }
     tickets = tickets.map((t) =>
       t.id === ticketId
@@ -1311,6 +1315,77 @@ export function demoRepairRuntime(
           ],
         },
         { note, checklist },
+      );
+    },
+    undoHandover: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location !== 'returned') throw REPAIR_REFUSALS.refuse('notReturned');
+      return update(
+        t.id,
+        'repair.handover_reversed',
+        {
+          location: 'in_store',
+          returnedBy: null,
+          returnedByName: null,
+          returnedAt: null,
+          photos: t.photos.filter((p) => p.slot !== 'handover' && p.slot !== 'signature'),
+        },
+        { reason: String(input['reason']) },
+      );
+    },
+    // The demo keeps one record per servisan: the customer's name and number change on it.
+    correctTicketDetails: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
+      const customer = input['customer'] as { name: string; phone: string | null } | undefined;
+      const device = input['device'] as
+        { brand: string; model: string; color?: string; imei?: string | null } | undefined;
+      const changes: { field: string; from?: string | null; to?: string | null }[] = [];
+      const note = (field: string, from: string | null, to: string | null): void => {
+        if (from !== to) changes.push({ field, from, to });
+      };
+      const phone = customer?.phone == null ? null : normalizePhone(customer.phone);
+      if (customer !== undefined) {
+        note('customerName', t.customerName, customer.name);
+        note('customerPhone', t.customerPhone, phone);
+      }
+      if (device !== undefined) {
+        note('brand', t.deviceBrand, device.brand);
+        note('model', t.deviceModel, device.model);
+        note('color', t.deviceColor, device.color ?? '');
+        note('imei', t.deviceImei, device.imei ?? null);
+      }
+      const passcode = input['passcode'] as string | null | undefined;
+      if (passcode !== undefined && passcode !== t.devicePasscode)
+        changes.push({ field: 'passcode' });
+      const complaint = input['complaint'] as string | undefined;
+      if (complaint !== undefined) note('complaint', t.complaint, complaint);
+      const peripherals = input['peripherals'] as TicketDetailRow['peripherals'] | undefined;
+      if (
+        peripherals !== undefined &&
+        JSON.stringify(peripherals) !== JSON.stringify(t.peripherals)
+      ) {
+        changes.push({ field: 'peripherals' });
+      }
+      if (changes.length === 0) throw REPAIR_REFUSALS.refuse('nothingChanged');
+      return update(
+        t.id,
+        'repair.ticket_details_corrected',
+        {
+          ...(customer === undefined ? {} : { customerName: customer.name, customerPhone: phone }),
+          ...(device === undefined
+            ? {}
+            : {
+                deviceBrand: device.brand,
+                deviceModel: device.model,
+                deviceColor: device.color ?? '',
+                deviceImei: device.imei ?? null,
+              }),
+          ...(passcode === undefined ? {} : { devicePasscode: passcode }),
+          ...(complaint === undefined ? {} : { complaint }),
+          ...(peripherals === undefined ? {} : { peripherals }),
+        },
+        { changes, reason: String(input['reason'] ?? '') },
       );
     },
   };

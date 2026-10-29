@@ -448,6 +448,70 @@ describe('price changes and handover', () => {
   });
 });
 
+describe('putting a mistake right', () => {
+  test('the counter corrects the number and the IMEI after saving; the history keeps both', async () => {
+    h = await openRepairScreenHarness(5510);
+    const ticketId = await openTicket(h);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.correctDetails');
+    type(screen, 'repair.correct.customer.phone', '0813 1111 2222');
+    type(screen, 'repair.correct.device.imei', '1234');
+    await settle();
+    await press(screen, 'repair.correct.primary');
+    // A wrong IMEI is caught as at intake; nothing is saved.
+    expect(screen.query('repair.correct.device.imei.error')).not.toBeNull();
+    expect((await ticketRow(h, ticketId)).customerPhone).toBe('081244556677');
+    type(screen, 'repair.correct.device.imei', '356789104455660');
+    type(screen, 'repair.correct.reason', 'Salah ketik');
+    await settle();
+    await press(screen, 'repair.correct.primary');
+
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket).toMatchObject({ customerPhone: '081311112222', deviceImei: '356789104455660' });
+    expect(text(screen, 'repair.ticket.timeline')).toContain('No. HP: 081244556677 → 081311112222');
+  });
+
+  test('only an owner takes a handover back, with a reason; the phone is then in the store', async () => {
+    h = await openRepairScreenHarness(5511);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
+    await h.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: h.photo(64),
+        signature: h.photo(65),
+        checklist: ['charger', 'case'].map((item) => ({
+          kind: 'accessory',
+          item,
+          label: null,
+          done: true,
+        })),
+      },
+      h.cashierId,
+    );
+    const counter = await mount(h, h.cashierId);
+    await press(counter, 'repair.board.views.returned');
+    await press(counter, `repair.board.row.${ticketId}`);
+    expect(counter.query('repair.ticket.action.undoHandover')).toBeNull();
+    expect(counter.query('repair.ticket.action.correctDetails')).toBeNull();
+    counter.unmount();
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, 'repair.board.views.returned');
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, 'repair.ticket.action.undoHandover');
+    expect(owner.all('repair.undoHandover.primary')[0]!.props['disabled']).toBe(true);
+    type(owner, 'repair.undoHandover.reason', 'Salah servisan, HP masih di rak');
+    await settle();
+    await press(owner, 'repair.undoHandover.primary');
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket.location).toBe('in_store');
+    expect(ticket.photos.map((p: { slot: string }) => p.slot)).not.toContain('signature');
+  });
+});
+
 describe('cancelling (owners only)', () => {
   test('the counter is never offered a cancel; a store owner is, also on a repaired phone', async () => {
     h = await openRepairScreenHarness(5501);

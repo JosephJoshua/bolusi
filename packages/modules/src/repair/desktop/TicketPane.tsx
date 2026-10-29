@@ -54,6 +54,7 @@ import {
   canSetRepairTypes,
   claimIntakeDraft,
   CONTEXTUAL_ACTIONS,
+  FINAL_ACTIONS,
   downPaymentAction,
   downPaymentStale,
   paidLabelKey,
@@ -96,12 +97,14 @@ import { CatalogPhoto, DeviceSpecs, StatusChip, photoLabels, usePhotoState } fro
 import {
   AssignDialog,
   CancelDialog,
+  CorrectDetailsDialog,
   DownPaymentDialog,
   HandoverDialog,
   PriceChangeDialog,
   PrintDialog,
   ProposalDialog,
   RepairTypesDialog,
+  UndoHandoverDialog,
   WaitForPartsDialog,
   WorkPhotosDialog,
 } from './steps.js';
@@ -222,6 +225,8 @@ export function TicketPane({
       case 'handover':
       case 'waitForParts':
       case 'cancel':
+      case 'undoHandover':
+      case 'correctDetails':
       case 'assign':
       case 'changePrice':
       case 'proposePrice':
@@ -376,9 +381,15 @@ export function TicketPane({
           />
         </div>
         <div>
-          <h2 className="text-title font-bold text-text" data-testid="repair.desk.ticket.customer">
-            {row.customerName}
-          </h2>
+          <div className="flex items-baseline gap-2">
+            <h2
+              className="min-w-0 text-title font-bold text-text"
+              data-testid="repair.desk.ticket.customer"
+            >
+              {row.customerName}
+            </h2>
+            {contextual('correctDetails', row)}
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-body text-text-muted">
             {row.customerPhone === null ? null : <CopyablePhone phone={row.customerPhone} />}
             <span>
@@ -550,19 +561,22 @@ export function TicketPane({
           />
         </Section>
 
-        {actions.includes('cancel') ? (
-          <div className="border-t border-border pt-6">
-            {/* Kept apart at the end: it is final for the repair, so it never reads as the next step. */}
-            <Button
-              label={tn('repair.action.cancel')}
-              variant="dangerText"
-              className="-ml-2"
-              onClick={() => perform('cancel', row)}
-              disabled={runner.busy}
-              data-testid="repair.desk.ticket.action.cancel"
-            />
-          </div>
-        ) : null}
+        {[...FINAL_ACTIONS]
+          .filter((action) => actions.includes(action))
+          .map((action) => (
+            <div key={action} className="border-t border-border pt-6">
+              {/* Kept apart at the end: final for the repair, or taking a handover back, so it
+                  never reads as the next step. */}
+              <Button
+                label={label(action)}
+                variant="dangerText"
+                className="-ml-2"
+                onClick={() => perform(action, row)}
+                disabled={runner.busy}
+                data-testid={`repair.desk.ticket.action.${action}`}
+              />
+            </div>
+          ))}
       </>
     );
   }
@@ -844,6 +858,19 @@ export function TicketPane({
             workStarted={row.workStarted}
             claimOf={row.claimOfTicketId}
             onDone={() => finishStep(undefined)}
+          />
+        );
+      case 'undoHandover':
+        return (
+          <UndoHandoverDialog {...common} onDone={() => finishStep('repair.done.handoverUndone')} />
+        );
+      case 'correctDetails':
+        return (
+          <CorrectDetailsDialog
+            stale={stale}
+            onClose={closeStep}
+            ticket={row}
+            onDone={() => finishStep('repair.done.corrected')}
           />
         );
       case 'assign':

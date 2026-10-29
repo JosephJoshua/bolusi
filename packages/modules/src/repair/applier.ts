@@ -813,6 +813,109 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
   );
 };
 
+/**
+ * A handover taken back by an owner: the phone never left. It is in the store again, the handover
+ * photo and signature are no longer this servisan's (the next handover takes its own), and the
+ * warranty has not started. What was paid stays paid; the history keeps both entries.
+ */
+export const handoverReversedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { reason } = payloadOf<{ reason: string }>(op);
+  await db
+    .updateTable('repairTickets')
+    .set({ location: 'in_store', returnedBy: null, returnedAt: null, updatedAt: op.timestamp })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+  await db
+    .deleteFrom('repairTicketPhotos')
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('slot', 'in', ['handover', 'signature'])
+    .execute();
+  await recordEvent(db, op, { reason });
+};
+
+/** One corrected fact, as the history shows it: what intake wrote and what it is now. */
+export interface DetailChange {
+  readonly field: string;
+  /** Absent for the screen lock, whose code the history never shows. */
+  readonly from?: string | null;
+  readonly to?: string | null;
+}
+
+/**
+ * Intake's record corrected. The history entry lists each fact that changed with its old and new
+ * value, read from the ticket as it stood, so it cannot claim a "before" that was never there.
+ */
+export const ticketDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<{
+    customer?: { name: string; phone: string | null };
+    customerId?: string;
+    device?: { brand: string; model: string; color: string; imei: string | null };
+    passcode?: string | null;
+    complaint?: string;
+    peripherals?: readonly { item: string; label: string | null }[];
+    reason: string;
+  }>(op);
+  const ticket = await db
+    .selectFrom('repairTickets')
+    .selectAll()
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .executeTakeFirst();
+  if (ticket === undefined) return;
+  const changes: DetailChange[] = [];
+  const note = (field: string, from: string | null, to: string | null): void => {
+    if (from !== to) changes.push({ field, from, to });
+  };
+  if (payload.customer !== undefined) {
+    const customer = await db
+      .selectFrom('repairCustomers')
+      .select(['name', 'phone'])
+      .where('id', '=', ticket.customerId)
+      .where('storeId', '=', storeIdOf(op))
+      .executeTakeFirst();
+    note('customerName', customer?.name ?? null, payload.customer.name);
+    note('customerPhone', customer?.phone ?? null, payload.customer.phone);
+  }
+  if (payload.device !== undefined) {
+    note('brand', ticket.deviceBrand, payload.device.brand);
+    note('model', ticket.deviceModel, payload.device.model);
+    note('color', ticket.deviceColor, payload.device.color);
+    note('imei', ticket.deviceImei, payload.device.imei);
+  }
+  if (payload.passcode !== undefined && payload.passcode !== ticket.devicePasscode) {
+    changes.push({ field: 'passcode' });
+  }
+  if (payload.complaint !== undefined) note('complaint', ticket.complaint, payload.complaint);
+  const peripherals =
+    payload.peripherals === undefined ? undefined : canonicalJson(payload.peripherals);
+  if (peripherals !== undefined && peripherals !== ticket.peripheralsJson) {
+    changes.push({ field: 'peripherals' });
+  }
+  await db
+    .updateTable('repairTickets')
+    .set({
+      ...(payload.customerId === undefined ? {} : { customerId: payload.customerId }),
+      ...(payload.device === undefined
+        ? {}
+        : {
+            deviceBrand: payload.device.brand,
+            deviceModel: payload.device.model,
+            deviceColor: payload.device.color,
+            deviceImei: payload.device.imei,
+          }),
+      ...(payload.passcode === undefined ? {} : { devicePasscode: payload.passcode }),
+      ...(payload.complaint === undefined ? {} : { complaint: payload.complaint }),
+      ...(peripherals === undefined ? {} : { peripheralsJson: peripherals }),
+      updatedAt: op.timestamp,
+    })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+  await recordEvent(db, op, { changes, reason: payload.reason });
+};
+
 // ── down payment and printing ─────────────────────────────────────────────────────────────────
 
 /**

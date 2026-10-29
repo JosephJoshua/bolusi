@@ -10,7 +10,7 @@ import { CASH_ACCOUNT } from '../money/constants.js';
 import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
-import type { OpenTicketInput } from './commands.js';
+import type { CorrectTicketDetailsInput, OpenTicketInput } from './commands.js';
 import { imeiInvalid, phoneInvalid } from './contact.js';
 import type { RepairKey } from './i18n.js';
 import {
@@ -33,7 +33,7 @@ import {
   type IntakeOption,
   type IntakeOptionLists,
 } from './intake-options.js';
-import { SCREEN_LOCK_KINDS, encodeScreenLock } from './screen-lock.js';
+import { SCREEN_LOCK_KINDS, decodeScreenLock, encodeScreenLock } from './screen-lock.js';
 import type {
   ListTicketsInput,
   TicketDetailRow,
@@ -250,6 +250,8 @@ export type TicketAction =
   | 'changePrice'
   | 'proposePrice'
   | 'handover'
+  | 'correctDetails'
+  | 'undoHandover'
   | 'cancel';
 
 /**
@@ -290,15 +292,23 @@ export function ticketActions(
   else if (open && can.work) actions.push('proposePrice');
   if (open && can.assign && !assignFirst) actions.push('assign');
   if (open && can.work && ticket.outcome === 'repaired') actions.push('reopen');
+  // What intake wrote down is put right while the phone is here; after pickup the signed slip is
+  // the record. Taking a handover back is an owner's call, like cancelling.
+  if (ticket.location === 'in_store' && can.intake) actions.push('correctDetails');
   if (open && can.cancel) actions.push('cancel');
+  if (ticket.location === 'returned' && can.cancel) actions.push('undoHandover');
   return actions;
 }
+
+/** The actions kept apart at the end of a servisan, below everything: final, or taking one back. */
+export const FINAL_ACTIONS: ReadonlySet<TicketAction> = new Set(['cancel', 'undoHandover']);
 
 /** Actions that change one fact, offered beside it (the technician, the price), never in a row. */
 export const CONTEXTUAL_ACTIONS: ReadonlySet<TicketAction> = new Set([
   'assign',
   'changePrice',
   'proposePrice',
+  'correctDetails',
 ]);
 
 /**
@@ -337,7 +347,9 @@ export function arrangeTicketActions(
   const mine = ticket.technicianId === null || ticket.technicianId === userId;
   const offered = actions.filter(
     (action) =>
-      action !== 'cancel' && !CONTEXTUAL_ACTIONS.has(action) && (mine || !BENCH_WORK.has(action)),
+      !FINAL_ACTIONS.has(action) &&
+      !CONTEXTUAL_ACTIONS.has(action) &&
+      (mine || !BENCH_WORK.has(action)),
   );
   const forward = FORWARD.filter((action) => offered.includes(action));
   // With nothing to push forward, picking a technician is what an unassigned repair waits on.
@@ -434,6 +446,99 @@ export function claimIntakeDraft(ticket: TicketDetailRow, lineDescription: strin
       ticketNumber: ticket.ticketNumber,
       warrantyUntil: warrantyUntil(ticket.repairTypes, ticket.returnedAt),
     },
+  };
+}
+
+// ── correcting what intake wrote down ───────────────────────────────────────────────────────
+
+/** The correction form, filled with the servisan as saved: intake's own fields, edited in place. */
+export function correctionDraft(ticket: TicketDetailRow): IntakeDraft {
+  const lock = ticket.devicePasscode === null ? null : decodeScreenLock(ticket.devicePasscode);
+  return {
+    ...emptyIntakeDraft(),
+    customer: { kind: 'new', name: ticket.customerName, phone: ticket.customerPhone ?? '' },
+    device: {
+      brand: ticket.deviceBrand,
+      model: ticket.deviceModel,
+      color: ticket.deviceColor,
+      imei: ticket.deviceImei ?? '',
+      // A lock saved before lock kinds is plain text: shown as a password, so it stays readable.
+      lockKind: lock === null ? 'none' : lock.kind === 'unknown' ? 'password' : lock.kind,
+      passcode: lock?.value ?? '',
+    },
+    complaint: ticket.complaint,
+    peripherals: ticket.peripherals.map((option) => option.item),
+    claimOf:
+      ticket.claimOfTicketId === null
+        ? null
+        : { ticketId: ticket.claimOfTicketId, ticketNumber: '', warrantyUntil: null },
+  };
+}
+
+/** What still blocks a correction: intake's own checks on the customer, the phone and the complaint. */
+export function correctionProblems(
+  draft: IntakeDraft,
+  options: IntakeOptionLists,
+): IntakeProblem[] {
+  return (['customer', 'device', 'condition'] as const).flatMap((step) =>
+    stepProblems(draft, step, options),
+  );
+}
+
+/**
+ * The store's lists for a correction: an accessory recorded on this servisan that the store no
+ * longer offers stays on offer, with the label it was recorded with, so it can still be unticked.
+ */
+export function correctionOptions(
+  options: IntakeOptionLists,
+  ticket: Pick<TicketDetailRow, 'peripherals'>,
+): IntakeOptionLists {
+  const offered = new Set(options.accessories.map((option) => option.id));
+  const gone = ticket.peripherals
+    .filter((option) => !offered.has(option.item))
+    .map((option) => ({ id: option.item, label: option.label }));
+  return { ...options, accessories: [...options.accessories, ...gone] };
+}
+
+/**
+ * The `correctTicketDetails` input for a correction with no problems, against the lists from
+ * `correctionOptions`. The command sends on only what differs.
+ */
+export function toCorrectionInput(
+  ticket: TicketDetailRow,
+  draft: IntakeDraft,
+  options: IntakeOptionLists,
+  reason: string,
+): CorrectTicketDetailsInput {
+  const { lockKind, passcode: typed } = draft.device;
+  const passcode =
+    lockKind === 'none' || typed === '' ? null : encodeScreenLock({ kind: lockKind, value: typed });
+  // A lock saved as plain text before lock kinds is unchanged when its text is.
+  const sameLock =
+    passcode === ticket.devicePasscode ||
+    (ticket.devicePasscode !== null &&
+      decodeScreenLock(ticket.devicePasscode).kind === 'unknown' &&
+      typed === ticket.devicePasscode);
+  return {
+    ticketId: ticket.id,
+    customer: {
+      name: draft.customer.name.trim(),
+      phone: (draft.customer.phone ?? '').trim() || null,
+    },
+    device: {
+      brand: draft.device.brand.trim(),
+      model: draft.device.model.trim(),
+      color: draft.device.color.trim(),
+      imei: draft.device.imei.trim() || null,
+    },
+    ...(sameLock ? {} : { passcode }),
+    complaint: draft.complaint.trim(),
+    // One already recorded keeps its recorded label, so a renamed list entry is not a change.
+    peripherals: chosenAccessories(draft, options.accessories).map(({ id, label }) => ({
+      item: id,
+      label: ticket.peripherals.find((option) => option.item === id)?.label ?? label,
+    })),
+    reason: reason.trim(),
   };
 }
 
@@ -568,7 +673,9 @@ export type TicketStep =
         | 'assign'
         | 'changePrice'
         | 'proposePrice'
-        | 'handover';
+        | 'handover'
+        | 'correctDetails'
+        | 'undoHandover';
     }
   | { readonly kind: 'proposal'; readonly lineId: string };
 
@@ -590,6 +697,8 @@ const STEP_ACTIONS: Readonly<Record<TicketStep['kind'], readonly TicketAction[]>
   changePrice: ['changePrice'],
   proposePrice: ['proposePrice'],
   handover: ['handover'],
+  correctDetails: ['correctDetails'],
+  undoHandover: ['undoHandover'],
   proposal: ['decidePrice'],
 };
 
@@ -614,7 +723,7 @@ export function staleStep(
   const lineOpen = step.kind !== 'proposal' || line?.status === 'proposed';
   if (lineOpen && STEP_ACTIONS[step.kind].some((action) => actions.includes(action))) return null;
 
-  if (ticket.location === 'returned') return { kind: 'returned' };
+  if (ticket.location === 'returned' && step.kind !== 'undoHandover') return { kind: 'returned' };
   if (line !== undefined && (line.status === 'applied' || line.status === 'declined')) {
     return { kind: 'proposalDecided', decision: line.status };
   }

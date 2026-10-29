@@ -56,6 +56,7 @@ import {
   intakeOptionSettingsQuery,
   nextTicketCounterQuery,
   printSettingsQuery,
+  countTicketsQuery,
   searchCustomersQuery,
   standardCancelFee,
   uncollectedDaysQuery,
@@ -871,6 +872,152 @@ export async function returnDeviceHandler(
       checklist: input.checklist,
     }),
   );
+  return { ops, result: { ticketId: ticket.id } };
+}
+
+export const undoHandoverInput = z
+  .object({ ticketId: z.string().min(1), reason: zRequiredText(500) })
+  .strict();
+export type UndoHandoverInput = z.input<typeof undoHandoverInput>;
+
+/**
+ * An owner takes back a handover recorded by mistake (the wrong servisan, the phone still on the
+ * shelf). The phone is in the store again and can be handed over properly; the payments stay on
+ * this servisan, and one booked here by mistake is cancelled in Kas, under its own rules.
+ */
+export async function undoHandoverHandler(
+  input: z.output<typeof undoHandoverInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.handoverReversed, { reason: input.reason })],
+    result: { ticketId: ticket.id },
+  };
+}
+
+export const correctTicketDetailsInput = z
+  .object({
+    ticketId: z.string().min(1),
+    customer: z
+      .object({ name: zRequiredText(200), phone: zPhone })
+      .strict()
+      .optional(),
+    device: z
+      .object({
+        brand: zRequiredText(100),
+        model: zRequiredText(100),
+        color: zText(200),
+        imei: zImei,
+      })
+      .strict()
+      .optional(),
+    passcode: z
+      .string()
+      .max(200)
+      .nullable()
+      .optional()
+      .transform((value) => (value === '' ? null : value)),
+    complaint: zRequiredText(2000).optional(),
+    peripherals: z.array(zRecordedOption).max(50).optional(),
+    reason: zText(500).default(''),
+  })
+  .strict();
+export type CorrectTicketDetailsInput = z.input<typeof correctTicketDetailsInput>;
+
+/**
+ * The counter corrects what intake wrote down while the phone is in the store: the customer's
+ * name or number, the phone itself, its lock, the complaint, what was left with it. Only what
+ * differs is sent, and the servisan's history lists each change with what it was before.
+ */
+export async function correctTicketDetailsHandler(
+  input: z.output<typeof correctTicketDetailsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  const changes: Record<string, unknown> = {};
+  const customer = input.customer;
+  const customerChanged =
+    customer !== undefined &&
+    (customer.name !== ticket.customerName || customer.phone !== ticket.customerPhone);
+  const ops: OpDraft[] = [];
+  // The customer's own record is corrected only when this servisan is all it names: another
+  // servisan of theirs would be renamed too, and intake may have picked the wrong person. Then the
+  // servisan moves to the customer the details name, found or made like at intake.
+  let renameRecord = false;
+  if (customerChanged) {
+    changes['customer'] = customer;
+    const known = await findSameCustomer(ctx, customer);
+    const shared =
+      (await ctx.query(countTicketsQuery, { filter: { customerId: ticket.customerId } })).rows[0]!
+        .count > 1;
+    if (known !== null || shared) {
+      const customerId = known ?? ctx.newId();
+      changes['customerId'] = customerId;
+      if (known === null) {
+        ops.push(
+          ctx.op({
+            type: REPAIR_OP.customerRegistered,
+            entityType: REPAIR_CUSTOMER_ENTITY,
+            entityId: customerId,
+            payload: { name: customer.name, phone: customer.phone },
+          }),
+        );
+      }
+    } else {
+      renameRecord = true;
+    }
+  }
+  if (input.device !== undefined) {
+    const catalog = (
+      await ctx.query(findDeviceModelQuery, {
+        brand: input.device.brand,
+        model: input.device.model,
+      })
+    ).rows[0];
+    const device =
+      catalog === undefined
+        ? input.device
+        : { ...input.device, brand: catalog.brand, model: catalog.model };
+    if (
+      device.brand !== ticket.deviceBrand ||
+      device.model !== ticket.deviceModel ||
+      device.color !== ticket.deviceColor ||
+      device.imei !== ticket.deviceImei
+    ) {
+      changes['device'] = device;
+    }
+  }
+  if (input.passcode !== undefined && input.passcode !== ticket.devicePasscode) {
+    changes['passcode'] = input.passcode;
+  }
+  if (input.complaint !== undefined && input.complaint !== ticket.complaint) {
+    changes['complaint'] = input.complaint;
+  }
+  if (
+    input.peripherals !== undefined &&
+    JSON.stringify(input.peripherals) !== JSON.stringify(ticket.peripherals)
+  ) {
+    changes['peripherals'] = input.peripherals;
+  }
+  if (Object.keys(changes).length === 0) throw nothingChanged('device');
+  ops.push(
+    ticketOp(ctx, ticket.id, REPAIR_OP.ticketDetailsCorrected, {
+      ...changes,
+      reason: input.reason,
+    }),
+  );
+  // After the servisan's entry, so that entry reads the details as they were.
+  if (renameRecord && customer !== undefined) {
+    ops.push(
+      ctx.op({
+        type: REPAIR_OP.customerDetailsCorrected,
+        entityType: REPAIR_CUSTOMER_ENTITY,
+        entityId: ticket.customerId,
+        payload: { name: customer.name, phone: customer.phone },
+      }),
+    );
+  }
   return { ops, result: { ticketId: ticket.id } };
 }
 

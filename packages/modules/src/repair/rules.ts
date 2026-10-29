@@ -47,6 +47,7 @@ import type {
   quoteProposalDeclinedPayload,
   slipPrintedPayload,
   technicianAssignedPayload,
+  ticketDetailsCorrectedPayload,
   ticketOpenedPayload,
   workPhotosAddedPayload,
 } from './operations.js';
@@ -109,6 +110,10 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'handoverNoteNeeded',
   'ownershipVideoNeeded',
   'freeHandoverOwnerOnly',
+  'notReturned',
+  'handoverHasClaim',
+  'claimSamePhone',
+  'nothingChanged',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -531,9 +536,28 @@ export const customerRegisteredRule: Rule = async (op, { db }) => {
   }
 };
 
+/**
+ * A customer's details are corrected from one of their servisans still in the store, like the
+ * servisan's own details: once everything went home, the slips they signed are the record.
+ */
 export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
   if (!(await customerExists(db, op, op.entityId))) {
     throw notFound(REPAIR_CUSTOMER_ENTITY, op.entityId);
+  }
+  const inStore = await db
+    .selectFrom('repairTickets')
+    .select('id')
+    .where('customerId', '=', op.entityId)
+    .where('location', '=', 'in_store')
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  if (inStore === undefined) {
+    throw refuse('returned', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: op.entityId },
+      message: 'every servisan of this customer has gone home',
+    });
   }
 };
 
@@ -928,6 +952,69 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
   await requirePaid(op, ctx);
   // Before v3 there was no checklist to judge.
   if (op.schemaVersion >= 3) await requireHandoverChecks(db, op);
+};
+
+/**
+ * Taking a handover back (owner decision): only one that happened, and not once a warranty claim
+ * was opened on it, since that claim already counts from this pickup.
+ */
+export const handoverReversedRule: Rule = async (op, { db }) => {
+  const ticket = await loadTicket(db, op);
+  if (ticket.location !== 'returned') {
+    throw invalidTransition(ticket, op.type, 'notReturned', 'the phone has not been handed over');
+  }
+  const claim = await db
+    .selectFrom('repairTickets')
+    .select('id')
+    .where('claimOfTicketId', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  if (claim !== undefined) {
+    throw invalidTransition(ticket, op.type, 'handoverHasClaim', 'a warranty claim names it');
+  }
+};
+
+/**
+ * Intake's record is corrected only while the phone is in the store: after pickup the slip the
+ * customer signed is the record. A claim is for the phone its servisan repaired, so its brand,
+ * model and IMEI stay as they are. A correction says what changed; moving the servisan to another
+ * customer is a correction too, and like the rest it ends at pickup.
+ */
+export const ticketDetailsCorrectedRule: Rule = async (op, { db }) => {
+  const ticket = await loadTicket(db, op);
+  if (ticket.location === 'returned') {
+    throw invalidTransition(ticket, op.type, 'returned', 'the device has already been returned');
+  }
+  const payload = payloadOf<Payload<typeof ticketDetailsCorrectedPayload>>(op);
+  if (Object.keys(payload).every((field) => field === 'reason')) {
+    throw refuse('nothingChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'device', issue: 'nothing to correct' },
+    });
+  }
+  if (payload.customerId !== undefined && !(await customerExists(db, op, payload.customerId))) {
+    throw notFound(REPAIR_CUSTOMER_ENTITY, payload.customerId);
+  }
+  if (ticket.claimOfTicketId !== null && payload.device !== undefined) {
+    const row = await db
+      .selectFrom('repairTickets')
+      .select(['deviceBrand', 'deviceModel', 'deviceImei'])
+      .where('id', '=', op.entityId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirstOrThrow();
+    if (
+      row.deviceBrand !== payload.device.brand ||
+      row.deviceModel !== payload.device.model ||
+      row.deviceImei !== payload.device.imei
+    ) {
+      throw refuse('claimSamePhone', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'device', issue: "a claim is for its servisan's phone" },
+      });
+    }
+  }
 };
 
 function ownershipVideoNeeded(): DomainError {

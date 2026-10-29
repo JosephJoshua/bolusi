@@ -438,8 +438,6 @@ export function ConditionStep({
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
   const { width, fontScale } = useWindowDimensions();
   const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
-  const togglePeripheral = (item: string): void =>
-    update({ peripherals: toggled(draft.peripherals, item) });
   const toggleRepairType = (item: string): void =>
     update({ repairTypes: toggled(draft.repairTypes, item) });
   return (
@@ -513,21 +511,12 @@ export function ConditionStep({
           ))}
         </Section>
       )}
-      {options.accessories.length === 0 ? null : (
-        <Section title={tn('repair.condition.peripherals')}>
-          <ChipRow testID={`${testID}.peripherals`}>
-            {options.accessories.map((option) => (
-              <ToggleChip
-                key={option.id}
-                label={optionLabel('accessories', option)}
-                selected={draft.peripherals.includes(option.id)}
-                onToggle={() => togglePeripheral(option.id)}
-                testID={`${testID}.peripheral.${option.id}`}
-              />
-            ))}
-          </ChipRow>
-        </Section>
-      )}
+      <AccessoriesSection
+        draft={draft}
+        update={update}
+        accessories={options.accessories}
+        testID={testID}
+      />
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.condition.notes')}
@@ -538,6 +527,34 @@ export function ConditionStep({
         />
       </View>
     </View>
+  );
+}
+
+/** What was left with the phone, ticked from the store's list (intake and its correction). */
+export function AccessoriesSection({
+  draft,
+  update,
+  accessories,
+  testID,
+}: Pick<StepProps, 'update' | 'testID'> & {
+  readonly draft: Pick<IntakeDraft, 'peripherals'>;
+  readonly accessories: readonly IntakeOption[];
+}): React.JSX.Element | null {
+  if (accessories.length === 0) return null;
+  return (
+    <Section title={tn('repair.condition.peripherals')}>
+      <ChipRow testID={`${testID}.peripherals`}>
+        {accessories.map((option) => (
+          <ToggleChip
+            key={option.id}
+            label={optionLabel('accessories', option)}
+            selected={draft.peripherals.includes(option.id)}
+            onToggle={() => update({ peripherals: toggled(draft.peripherals, option.id) })}
+            testID={`${testID}.peripheral.${option.id}`}
+          />
+        ))}
+      </ChipRow>
+    </Section>
   );
 }
 

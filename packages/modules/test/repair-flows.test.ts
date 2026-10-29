@@ -163,6 +163,10 @@ async function perform(
       );
     case 'cancel':
       return harness.run('cancelTicket', { ticketId, reason: 'no parts', fee: 10_000 }, userId);
+    case 'correctDetails':
+      return harness.run('correctTicketDetails', { ticketId, complaint: 'Layar bergaris' }, userId);
+    case 'undoHandover':
+      return harness.run('undoHandover', { ticketId, reason: 'Salah servisan' }, userId);
   }
 }
 
@@ -220,6 +224,8 @@ describe('ticket actions', () => {
       'changePrice',
       'proposePrice',
       'handover',
+      'correctDetails',
+      'undoHandover',
       'cancel',
     ];
     // start, resume and reopen are one command under three names; one of them offered covers all.
@@ -272,10 +278,15 @@ describe('ticket actions', () => {
       'proposePrice',
     ]);
     // Unassigned, the counter's next step is picking a technician; once assigned, pricing leads.
-    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice']);
+    expect(ticketActions(row(), cashier, h.cashierId)).toEqual([
+      'assign',
+      'changePrice',
+      'correctDetails',
+    ]);
     expect(ticketActions(row({ technicianId: h.technicianId }), cashier, h.cashierId)).toEqual([
       'changePrice',
       'assign',
+      'correctDetails',
     ]);
     // Only owners cancel: counter staff kept customers' cash by cancelling. A repaired phone the
     // customer won't pay for or collect can still be cancelled until it is handed back.
@@ -284,9 +295,10 @@ describe('ticket actions', () => {
       expect(ticketActions(row({ outcome }), cashier, h.cashierId)).not.toContain('cancel');
       expect(ticketActions(row({ outcome }), storeOwner, h.storeOwnerId)).toContain('cancel');
     }
+    // After pickup an owner can only take a mistaken handover back; nobody corrects intake's record.
     expect(
       ticketActions(row({ outcome: 'repaired', location: 'returned' }), storeOwner, h.storeOwnerId),
-    ).not.toContain('cancel');
+    ).toEqual(['undoHandover']);
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
     expect(

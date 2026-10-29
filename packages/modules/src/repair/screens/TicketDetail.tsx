@@ -59,6 +59,7 @@ import {
   amountOwed,
   arrangeTicketActions,
   CONTEXTUAL_ACTIONS,
+  FINAL_ACTIONS,
   canSetRepairTypes,
   canUseParts,
   claimIntakeDraft,
@@ -103,6 +104,7 @@ import {
   useUncollectedLimit,
 } from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
+import { CorrectDetailsStep } from './CorrectDetailsStep.js';
 import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
 import { ti } from '../../inventory/i18n.js';
 import type { UsedPartRow } from '../../inventory/queries.js';
@@ -116,6 +118,7 @@ import {
 import {
   AssignStep,
   CancelStep,
+  UndoHandoverStep,
   DownPaymentStep,
   WaitForPartsStep,
   PriceChangeStep,
@@ -140,8 +143,10 @@ const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
 /** The open step, if any. A proposal keeps the line as it was opened, for when no fresher read is at hand. */
 type Step =
   | { readonly kind: 'none' }
-  | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
+  | { readonly kind: Exclude<TicketStep['kind'], 'proposal' | 'handover' | 'correctDetails'> }
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
+  /** The servisan as it read when the correction opened: the form starts from it. */
+  | { readonly kind: 'correctDetails'; readonly ticket: TicketDetailRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
   | { readonly kind: 'repairTypes' }
   | { readonly kind: 'print' }
@@ -297,6 +302,27 @@ export function TicketDetail({
       );
     case 'waitForParts':
       return <WaitForPartsStep {...stepProps} />;
+    case 'undoHandover':
+      return (
+        <UndoHandoverStep
+          {...stepProps}
+          onDone={() => {
+            closeStep();
+            setDone(tn('repair.done.handoverUndone'));
+          }}
+        />
+      );
+    case 'correctDetails':
+      return (
+        <CorrectDetailsStep
+          {...stepProps}
+          ticket={step.ticket}
+          onDone={() => {
+            closeStep();
+            setDone(tn('repair.done.corrected'));
+          }}
+        />
+      );
     case 'cancel':
       return (
         <CancelStep
@@ -424,8 +450,12 @@ export function TicketDetail({
       case 'handover':
         onHandover(ticketId);
         return;
+      case 'correctDetails':
+        setStep({ kind: action, ticket: row });
+        return;
       case 'waitForParts':
       case 'cancel':
+      case 'undoHandover':
       case 'assign':
       case 'changePrice':
       case 'proposePrice':
@@ -443,7 +473,6 @@ export function TicketDetail({
       ? { next: null, alternative: null, more: [] }
       : arrangeTicketActions(actions, ticket, runtime.userId);
   const primary = layout.next ?? undefined;
-  const canCancel = actions.includes('cancel');
   const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
@@ -619,9 +648,12 @@ export function TicketDetail({
               />
             )}
           </View>
-          <Text style={styles.customer} testID={`${testID}.customer`}>
-            {row.customerName}
-          </Text>
+          <View style={styles.customerRow}>
+            <Text style={styles.customer} testID={`${testID}.customer`}>
+              {row.customerName}
+            </Text>
+            {contextual('correctDetails')}
+          </View>
           {row.customerPhone === null ? null : (
             // Tap to call: the counter rings the customer when the phone is ready or a price changes.
             <Pressable
@@ -823,19 +855,21 @@ export function TicketDetail({
           />
         </Section>
 
-        {canCancel ? (
-          <View style={styles.cancel}>
-            {/* Red text, kept apart at the end: it is final for the repair, so it never looks like
-                the next step. The step it opens says what cancelling means. */}
-            <TextButton
-              label={tn(actionKey('cancel', row.technicianId))}
-              tone="danger"
-              onPress={() => perform('cancel', row)}
-              disabled={runner.busy}
-              testID={`${testID}.action.cancel`}
-            />
-          </View>
-        ) : null}
+        {[...FINAL_ACTIONS]
+          .filter((action) => actions.includes(action))
+          .map((action) => (
+            <View key={action} style={styles.cancel}>
+              {/* Red text, kept apart at the end: final for the repair, or taking a handover back,
+                  so it never looks like the next step. The step it opens says what it means. */}
+              <TextButton
+                label={tn(actionKey(action, row.technicianId))}
+                tone="danger"
+                onPress={() => perform(action, row)}
+                disabled={runner.busy}
+                testID={`${testID}.action.${action}`}
+              />
+            </View>
+          ))}
       </View>
     );
   }
@@ -1154,7 +1188,14 @@ function ticketPhotos(row: TicketDetailRow): BrowsablePhoto[] {
 }
 
 const styles = StyleSheet.create({
-  customer: { ...type.title, color: color.text, marginTop: space.md },
+  customerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.sm,
+    marginTop: space.md,
+  },
+  customer: { ...type.title, color: color.text, flexShrink: 1 },
   phone: {
     alignSelf: 'flex-start',
     flexDirection: 'row',

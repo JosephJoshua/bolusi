@@ -537,7 +537,7 @@ function IntakeSection({
  * A new customer by name and phone, with existing customers whose name or phone fuzzily match
  * offered as the counter types, so a returning customer is picked instead of entered twice.
  */
-function CustomerFields({
+export function CustomerFields({
   draft,
   update,
   nameError,
@@ -648,7 +648,7 @@ function CustomerFields({
 
 // ── device ──────────────────────────────────────────────────────────────────────────────────
 
-function DeviceFields({
+export function DeviceFields({
   draft,
   update,
   options,
@@ -1015,8 +1015,6 @@ function ConditionFields({
   readonly options: IntakeOptionLists;
   readonly complaintError: string | undefined;
 }): React.JSX.Element {
-  const togglePeripheral = (item: string): void =>
-    update({ peripherals: toggled(draft.peripherals, item) });
   return (
     <div className="flex flex-col gap-6">
       <TextArea
@@ -1089,23 +1087,7 @@ function ConditionFields({
           </div>
         </div>
       )}
-      {options.accessories.length === 0 ? null : (
-        <div>
-          <p className="mb-2 text-small font-semibold text-text">
-            {tn('repair.condition.peripherals')}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {options.accessories.map((option) => (
-              <ToggleChip
-                key={option.id}
-                label={optionLabel('accessories', option)}
-                selected={draft.peripherals.includes(option.id)}
-                onToggle={() => togglePeripheral(option.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      <AccessoryChips draft={draft} update={update} accessories={options.accessories} />
       <TextArea
         label={tn('repair.condition.notes')}
         value={draft.intakeNotes}
@@ -1113,6 +1095,36 @@ function ConditionFields({
         rows={2}
         data-testid="repair.desk.intake.notes"
       />
+    </div>
+  );
+}
+
+/** What was left with the phone, ticked from the store's list (intake and its correction). */
+export function AccessoryChips({
+  draft,
+  update,
+  accessories,
+}: {
+  readonly draft: Pick<IntakeDraft, 'peripherals'>;
+  readonly update: (patch: Partial<IntakeDraft>) => void;
+  readonly accessories: readonly IntakeOption[];
+}): React.JSX.Element | null {
+  if (accessories.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-small font-semibold text-text">
+        {tn('repair.condition.peripherals')}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {accessories.map((option) => (
+          <ToggleChip
+            key={option.id}
+            label={optionLabel('accessories', option)}
+            selected={draft.peripherals.includes(option.id)}
+            onToggle={() => update({ peripherals: toggled(draft.peripherals, option.id) })}
+          />
+        ))}
+      </div>
     </div>
   );
 }

@@ -46,6 +46,10 @@ export const REPAIR_OP = {
   quoteChanged: 'repair.quote_changed',
   quoteProposalDeclined: 'repair.quote_proposal_declined',
   deviceReturned: 'repair.device_returned',
+  /** An owner takes back a handover recorded by mistake: the phone is still in the store. */
+  handoverReversed: 'repair.handover_reversed',
+  /** The counter corrects what intake wrote down about the phone or the customer. */
+  ticketDetailsCorrected: 'repair.ticket_details_corrected',
   intakeOptionsChanged: 'repair.intake_options_changed',
   storeIntakeOptionsChanged: 'repair.store_intake_options_changed',
   storeCancelFeesChanged: 'repair.store_cancel_fees_changed',
@@ -206,4 +210,5 @@ export const REPAIR_CONFLICT_KEY = {
   customer: 'repair_customer.details',
   downPayment: 'repair_ticket.down_payment',
   repairTypes: 'repair_ticket.repair_types',
+  details: 'repair_ticket.details',
 } as const;

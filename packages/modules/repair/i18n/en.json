@@ -22,7 +22,9 @@
     "slipPrinted": "Slip printed",
     "storePrintSettingsChanged": "Slip details changed",
     "storeUncollectedDaysChanged": "Not-collected limit changed",
-    "ticketRepairTypesChanged": "Repair type changed"
+    "ticketRepairTypesChanged": "Repair type changed",
+    "handoverReversed": "Handover undone",
+    "ticketDetailsCorrected": "Details corrected"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -50,7 +52,9 @@
     "applyUnconfirmed": "Not yet",
     "agreedYes": "Yes",
     "takeOver": "Take over",
-    "more": "More"
+    "more": "More",
+    "correctDetails": "Edit details",
+    "undoHandover": "Undo handover"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -299,7 +303,9 @@
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved.",
-    "repairTypes": "Repair type saved."
+    "repairTypes": "Repair type saved.",
+    "corrected": "Servisan details saved.",
+    "handoverUndone": "Handover undone. The phone is back in the store."
   },
   "passcode": {
     "show": "Show",
@@ -669,7 +675,11 @@
     "overLimit": "Over your limit. Ask a store owner.",
     "handoverAccessories": "An accessory is missing from the handover list.",
     "handoverNoteNeeded": "Something isn’t ticked. Write a note first.",
-    "ownershipVideoNeeded": "Record the ownership video first."
+    "ownershipVideoNeeded": "Record the ownership video first.",
+    "notReturned": "This phone hasn’t been handed over.",
+    "handoverHasClaim": "A warranty claim names this servisan, so its handover can’t be undone.",
+    "claimSamePhone": "A warranty claim is for the same phone. Its brand, model and IMEI can’t change.",
+    "nothingChanged": "Nothing has changed yet."
   },
   "paper": {
     "title": "Slip paper",
@@ -786,5 +796,22 @@
     "termsSummary": "Still the default terms",
     "paymentMethods": "Payment methods",
     "paymentMethodsSummary": "Cash only so far"
+  },
+  "correct": {
+    "title": "Edit servisan details",
+    "about": "The change is kept in the history, with what it was before.",
+    "reason": "Why the change? (optional)",
+    "save": "Save changes",
+    "claimDevice": "This is a warranty claim, so the phone stays the one from the original servisan."
+  },
+  "undoHandover": {
+    "title": "Undo this handover?",
+    "explain": "The phone is recorded as back in the store and can be handed over again. Payments stay recorded. If a payment went to the wrong servisan, cancel it in Kas.",
+    "reason": "Why undo it?"
+  },
+  "changed": {
+    "line": "{field}: {from} → {to}",
+    "only": "{field} changed",
+    "empty": "empty"
   }
 }
