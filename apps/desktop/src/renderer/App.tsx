@@ -28,6 +28,7 @@ import { AuthLayout } from './auth/AuthLayout.js';
 import { FirstPinScreen, PinScreen, type PinSubmitResult } from './auth/PinScreen.js';
 import { SwitcherScreen } from './auth/SwitcherScreen.js';
 import { createCaptureDialogs, type CaptureDialogs } from './capture-dialogs.js';
+import { CloseGuard } from './close-guard.js';
 import { windowHandoff } from './phone-handoff.js';
 import type { PcCapture } from './capture.js';
 import { createCoreRepairRuntime } from './core-runtime.js';
@@ -58,6 +59,7 @@ export function App(): React.JSX.Element {
     <>
       <Gate dialogs={dialogs} />
       <dialogs.Host />
+      <CloseGuard />
     </>
   );
 }
