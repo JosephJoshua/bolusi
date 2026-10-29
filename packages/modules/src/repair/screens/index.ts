@@ -9,6 +9,9 @@ export { IntakeOptionsScreen, type IntakeOptionsScreenProps } from './IntakeOpti
 export { CancelFeesScreen, type CancelFeesScreenProps } from './CancelFeesScreen.js';
 export { PrintSettingsScreen, type PrintSettingsScreenProps } from './PrintSettingsScreen.js';
 export { PaperScreen, type PaperScreenProps } from './PaperScreen.js';
+export { PaperChoice } from './PaperChoice.js';
+export { StoreBasicsList } from './StoreBasicsList.js';
+export { PAPER_KEY, PHONE_PAPERS, paperLabel, useDevicePaper } from '../paper.js';
 export { UncollectedDaysScreen, type UncollectedDaysScreenProps } from './UncollectedDaysScreen.js';
 export type { RepairChrome } from './parts.js';
 export { catalogModelSearch } from '../model-picker.js';

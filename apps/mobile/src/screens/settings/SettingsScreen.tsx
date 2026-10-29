@@ -17,6 +17,7 @@ import {
   Icon,
   ListRow,
   SyncChip,
+  TextButton,
   border,
   color,
   radius,
@@ -74,6 +75,10 @@ export interface SettingsScreenProps {
   readonly onOpenSwitcher: () => void;
   /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
   readonly onOpenChangePin: () => void;
+  /** Rename this phone, for someone who may register devices here; absent for everyone else. */
+  readonly onRenameDevice?: (() => void) | undefined;
+  /** Open this phone's setup guide again (permissions, paper); absent where there is none. */
+  readonly onOpenSetup?: (() => void) | undefined;
   /**
    * Open the owner's staff PIN screen (unlock / reset) — present ONLY when the acting user may do
    * either, so the row is absent for everyone else rather than shown-and-denied. Core still enforces.
@@ -112,6 +117,8 @@ export function SettingsScreen({
   onBack,
   onOpenSwitcher,
   onOpenChangePin,
+  onRenameDevice,
+  onOpenSetup,
   onOpenStaffPins,
   lockedStaffCount = 0,
   onOpenStaff,
@@ -272,12 +279,39 @@ export function SettingsScreen({
         ))}
       </Section>
 
-      <Section title={t('core.settings.device')} rows={false} testID="settings-section-device">
+      <Section
+        title={t('core.settings.device')}
+        rows={false}
+        above={
+          onOpenSetup === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="phoneDevice" />}
+              primaryText={t('auth.setup.reopen')}
+              secondaryText={t('auth.setup.reopenSummary')}
+              onPress={onOpenSetup}
+              testID="settings-setup"
+            />
+          )
+        }
+        testID="settings-section-device"
+      >
         <View style={styles.facts} testID="settings-device-info">
           <FactGrid>
             <Fact
               label={t('core.settings.deviceName')}
               value={device.deviceName}
+              // With the action, the name takes the row, so "Ubah" sits at the end of its label.
+              wide={onRenameDevice !== undefined}
+              action={
+                onRenameDevice === undefined ? undefined : (
+                  <TextButton
+                    label={t('core.action.edit')}
+                    accessibilityLabel={t('auth.rename.titlePhone')}
+                    onPress={onRenameDevice}
+                    testID="settings-device-rename"
+                  />
+                )
+              }
               testID="settings-device-name"
             />
             <Fact
@@ -315,12 +349,15 @@ function Section({
   title,
   children,
   rows = true,
+  above,
   testID,
 }: {
   readonly title: string;
   readonly children: ReactNode;
   /** False for content that is not a list of rows (the device facts). */
   readonly rows?: boolean;
+  /** Rows above content that is not rows (the setup guide over the device facts). */
+  readonly above?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element {
   return (
@@ -328,6 +365,7 @@ function Section({
       <Text style={styles.sectionTitle} accessibilityRole="header" testID={testID}>
         {title}
       </Text>
+      {above === undefined || above === null ? null : <View style={styles.rows}>{above}</View>}
       <View style={rows ? styles.rows : styles.plain}>{children}</View>
     </View>
   );

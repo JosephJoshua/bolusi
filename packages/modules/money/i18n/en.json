@@ -227,5 +227,45 @@
     "cancel": "Cancel",
     "unresolved": "The earlier QR for {amount} is not paid yet. If the customer paid, wait a moment.",
     "unresolvedMany": "{count} earlier QRs are not paid yet. If the customer paid, wait a moment."
+  },
+  "refund": {
+    "limit": "Your refund limit is {amount}.",
+    "overLimit": "Above your limit. At most {amount}.",
+    "title": "Give money back",
+    "action": "Give back",
+    "credit": "Overpaid",
+    "paid": "Paid",
+    "method": "Give back through",
+    "amount": "Amount",
+    "reason": "Reason",
+    "reference": "Reference no. (optional)",
+    "save": "Give back {amount}",
+    "saveEmpty": "Give back",
+    "tooMuch": "At most {amount} through this method.",
+    "lowersBill": "The bill also comes down {amount}.",
+    "nothing": "No payment to give back yet.",
+    "hint": {
+      "method": "Pick a method first.",
+      "amount": "Enter the amount first.",
+      "reason": "Write the reason first."
+    }
+  },
+  "reduce": {
+    "limit": "Your limit for lowering a bill is {amount}.",
+    "overLimit": "Above your limit. At most {amount}.",
+    "title": "Lower the bill",
+    "action": "Lower the bill",
+    "owed": "Left to pay",
+    "amount": "Taken off",
+    "after": "Left after",
+    "becomesCredit": "That leaves {amount} overpaid. Give it back to the customer.",
+    "reason": "Reason",
+    "save": "Take off {amount}",
+    "saveEmpty": "Lower",
+    "tooMuch": "At most {amount}.",
+    "hint": {
+      "amount": "Enter how much to take off first.",
+      "reason": "Write the reason first."
+    }
   }
 }

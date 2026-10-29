@@ -24,6 +24,8 @@ export interface SessionView {
   readonly canManageStaff: boolean;
   /** May set limited roles' amounts at this store (`auth.limit_manage`). */
   readonly canSetLimits: boolean;
+  /** May rename this PC (`auth.device_enroll` at its store). */
+  readonly canRenameDevice: boolean;
   readonly tenantAdmin: boolean;
   /**
    * Every module's permissions the signed-in person holds (repair's, money's, ...), for showing

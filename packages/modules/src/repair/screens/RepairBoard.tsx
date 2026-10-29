@@ -37,6 +37,7 @@ import {
 import { tn, type RepairKey } from '../i18n.js';
 import {
   boardFilter,
+  amountOwed,
   boardSort,
   boardViews,
   defaultBoardView,
@@ -360,7 +361,7 @@ const TicketRow = memo(function TicketRow({
   const details = [device, who].filter((s) => s !== null && s !== '').join(' · ');
   const reason = showCancel ? row.outcomeNote : null;
   // A cancelled servisan costs the customer its fee, never the repair price (none before fees).
-  const amount = row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+  const amount = amountOwed(row);
   const feeChanged =
     showCancel &&
     row.cancelFee !== null &&

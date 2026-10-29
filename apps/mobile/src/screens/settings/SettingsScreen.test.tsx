@@ -280,3 +280,29 @@ describe("the pending chip announces THIS screen's unsent-op count (task 144 rev
     expect(pendingLabel(3)).not.toBe(pendingLabel(9));
   });
 });
+
+describe('renaming this phone', () => {
+  test('is offered beside the name only to someone who may, and opens the rename', () => {
+    expect(renderSettings(ENROLLED).query('settings-device-rename')).toBeNull();
+
+    const onRenameDevice = vi.fn();
+    const screen = render(
+      <SettingsScreen
+        locale="id"
+        onSelectLocale={vi.fn()}
+        onOpenNotificationSettings={vi.fn()}
+        device={ENROLLED}
+        currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
+        onBack={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onOpenChangePin={vi.fn()}
+        onRenameDevice={onRenameDevice}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={vi.fn()}
+      />,
+    );
+    fire(screen.get('settings-device-rename'), 'onPress');
+    expect(onRenameDevice).toHaveBeenCalledOnce();
+  });
+});

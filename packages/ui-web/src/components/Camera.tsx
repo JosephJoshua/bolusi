@@ -8,7 +8,7 @@ import { Banner } from './Banner.js';
 import { Button } from './Button.js';
 import { Dialog } from './Dialog.js';
 import { IconButton } from './IconButton.js';
-import { useWebcam, type WebcamState } from './webcam.js';
+import { useWebcam, type MediaInputChoice, type WebcamState } from './webcam.js';
 
 export interface CameraLabels {
   readonly close: string;
@@ -236,13 +236,16 @@ function CameraProblem({
 export function CameraPreview({
   labels,
   onState,
+  camera,
   testId = 'camera.preview',
 }: {
   readonly labels: Pick<CameraLabels, 'retry' | 'starting' | 'none' | 'denied' | 'failed'>;
   readonly onState?: ((state: WebcamState['kind']) => void) | undefined;
+  /** Show this camera rather than the one the computer is set to use. */
+  readonly camera?: MediaInputChoice | null | undefined;
   readonly testId?: string;
 }): React.JSX.Element {
-  const webcam = useWebcam({ open: true, ideal: IDEAL });
+  const webcam = useWebcam({ open: true, ideal: IDEAL, camera });
   const { state } = webcam;
   const latest = useRef(onState);
   latest.current = onState;

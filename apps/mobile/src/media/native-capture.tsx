@@ -35,6 +35,7 @@ import { Platform, StyleSheet } from 'react-native';
 import { createExpoCameraCapture, type CameraCapturePort } from '@bolusi/device/media/capture';
 import type { CapturePlatform } from './CaptureHost.js';
 import type { ScanPlatform } from './ScanHost.js';
+import type { PermissionPort } from '../push/permission.js';
 
 /**
  * The still size asked of the camera on Android. Without it CameraX takes the HIGHEST size the
@@ -87,6 +88,17 @@ function CameraPreview({
     />
   );
 }
+
+/** The camera permission as the new-phone setup asks it, ahead of the first photo. */
+export const expoCameraPermission: PermissionPort = {
+  async status() {
+    const { granted, canAskAgain } = await Camera.getCameraPermissionsAsync();
+    return { granted, canAskAgain };
+  },
+  async request() {
+    await Camera.requestCameraPermissionsAsync();
+  },
+};
 
 export function createExpoCapturePlatform(): CapturePlatform {
   return {

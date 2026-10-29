@@ -10,6 +10,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { App } from './App.js';
+import { MediaChoiceProvider } from './media-choice.js';
 import './styles.css';
 
 initI18n({ locale: 'id' });
@@ -22,7 +23,9 @@ if (root === null) throw new Error('index.html has no #root');
 createRoot(root).render(
   <StrictMode>
     <TooltipProvider>
-      <App />
+      <MediaChoiceProvider>
+        <App />
+      </MediaChoiceProvider>
     </TooltipProvider>
   </StrictMode>,
 );
