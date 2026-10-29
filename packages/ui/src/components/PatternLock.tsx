@@ -9,7 +9,8 @@
  * a short pattern is acceptable.
  */
 import { useRef, useState } from 'react';
-import { PanResponder, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { Text } from '../text.js';
+import { PanResponder, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 
 import { extendPattern, patternCentre as centre, type PatternPoint } from '../pattern.js';
 import { useScrollLock } from '../shell/scroll-lock.js';

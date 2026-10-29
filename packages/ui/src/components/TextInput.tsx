@@ -27,7 +27,8 @@
  *     trusting `maxHeight` not to clip an 8-line body.
  */
 import { useState } from 'react';
-import { Pressable, TextInput as RNTextInput, StyleSheet, Text, View } from 'react-native';
+import { NativeTextInput as RNTextInput, Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 
 import { useRevealOnFocus, type RevealMode } from '../shell/keyboard.js';

@@ -24,7 +24,8 @@
  * this component only surfaces the affordance.
  */
 import { useMemo, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { border, color, size, space, touch, type } from '../tokens.js';

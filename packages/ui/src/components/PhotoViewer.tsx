@@ -15,13 +15,13 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Text } from '../text.js';
 import {
   Animated,
   PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,

@@ -6,7 +6,8 @@
  * The tone is carried by the icon as well as the colour (§6.3), and the text wraps, never truncates.
  */
 import type { ReactNode } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, StyleSheet, View } from 'react-native';
 
 import { useEntrance, usePop } from '../motion.js';
 import { color, radius, size, space, type } from '../tokens.js';

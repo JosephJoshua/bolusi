@@ -4,8 +4,8 @@
  * itself, or disconnect it. Online only, so it says plainly when the server cannot be asked.
  * The key goes to the server and is never kept on this phone.
  */
-import { Chip, Button, TextButton, TextInput, color, space, type } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { Chip, Button, TextButton, TextInput, color, space, type, Text } from '@bolusi/ui';
+import { StyleSheet, View } from 'react-native';
 
 import { tm } from '../i18n.js';
 import type { QrisConnectionControl } from '../qris-hooks.js';

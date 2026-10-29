@@ -6,7 +6,8 @@
  * render "nothing here" when the truth is "you are not allowed to see this". `UnauthorizedState`
  * is the one that must never be reachable from here.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, size, space, type } from '../tokens.js';
 import { Button } from './Button.js';

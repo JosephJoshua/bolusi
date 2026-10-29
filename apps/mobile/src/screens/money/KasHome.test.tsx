@@ -22,6 +22,9 @@ import {
   type RenderResult,
 } from '../../../test/repair-support.js';
 
+import { FontScaleProvider } from '@bolusi/ui';
+
+import { __windowMetrics } from '../../../test/doubles/react-native.js';
 import { KasHome } from './KasHome.js';
 
 let h: RepairHarness | null = null;
@@ -41,6 +44,19 @@ function moneyRuntimeFor(harness: RepairHarness, userId: string): MoneyRuntime {
   };
 }
 
+function kasHome(harness: RepairHarness, userId: string, now: number): React.JSX.Element {
+  return (
+    <FontScaleProvider>
+      <KasHome
+        runtime={moneyRuntimeFor(harness, userId)}
+        now={() => now}
+        syncChip={null}
+        avatar={null}
+      />
+    </FontScaleProvider>
+  );
+}
+
 async function mount(harness: RepairHarness, userId: string): Promise<RenderResult> {
   ensureRepairCatalog();
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
@@ -51,14 +67,7 @@ async function mount(harness: RepairHarness, userId: string): Promise<RenderResu
     .orderBy('createdAt', 'desc')
     .executeTakeFirst();
   const now = latest === undefined ? Date.now() : Number(latest.createdAt);
-  const screen = render(
-    <KasHome
-      runtime={moneyRuntimeFor(harness, userId)}
-      now={() => now}
-      syncChip={null}
-      avatar={null}
-    />,
-  );
+  const screen = render(kasHome(harness, userId, now));
   await settle();
   return screen;
 }
@@ -152,6 +161,35 @@ describe('the drawer', () => {
     expect(text(screen, 'money.kas.moves')).toContain('Biaya toko');
     expect(text(screen, 'money.kas.moves')).toContain('Bensin');
     expect(text(screen, 'money.kas.moves')).toContain('−Rp 20.000');
+  });
+
+  // QA: a system font size change sent the phone back to the board and dropped the open form.
+  test('a system font size change keeps the open form and what is typed in it', async () => {
+    h = await openRepairScreenHarness(5410);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'money.kas.move');
+    await press(screen, 'money.move.kind.expense');
+    type(screen, 'money.move.amount', '20000');
+    type(screen, 'money.move.reason', 'Bensin');
+    await settle();
+    // The native node itself: the test renderer's wrappers are not kept across updates.
+    const firstText = (): unknown =>
+      screen.container.queryAll((n) => n.type === 'Text')[0]?.unstable_fiber?.stateNode;
+    const textBefore = firstText();
+
+    try {
+      __windowMetrics.fontScale = 1.3;
+      screen.rerender(kasHome(h, h.cashierId, Date.now()));
+      await settle();
+    } finally {
+      __windowMetrics.fontScale = 1;
+    }
+
+    // Every text is drawn afresh at the new size, inside the same form.
+    expect(firstText()).not.toBe(textBefore);
+    expect(screen.query('money.move')).not.toBeNull();
+    expect(screen.get('money.move.reason.field').props['value']).toBe('Bensin');
+    expect(screen.get('money.move.amount.field').props['value']).toBe('20.000');
   });
 
   test('a bank deposit asks for an account the store does not have yet', async () => {

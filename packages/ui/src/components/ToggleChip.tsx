@@ -3,7 +3,8 @@
  * device: SIM tray, case, charger). A selected chip shows a check icon as well as the fill, so it
  * reads without colour (§6.3), and announces itself as `checked`.
  */
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';

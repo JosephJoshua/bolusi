@@ -4,9 +4,9 @@
  * with its reason; the books reverse it (money/applier.ts).
  */
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
-import { Button, EmptyState, TextButton, TextInput, color, space, type } from '@bolusi/ui';
+import { Button, EmptyState, TextButton, TextInput, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';

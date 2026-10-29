@@ -18,9 +18,10 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { Keyboard, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Keyboard, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 import { modelCaption, useModelPicker } from '../model-picker.js';

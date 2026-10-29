@@ -20,9 +20,10 @@ import {
   touch,
   type,
   type ListState,
+  Text,
 } from '@bolusi/ui';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useSettledValue } from '../../screen-kit/index.js';
 import type { ScreenChrome } from '../../screen-kit/screens/views.js';

@@ -48,9 +48,10 @@ import {
   space,
   type,
   type ListState,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useLatestCallback } from '../../hooks/useLatestCallback.js';
 import type { SurfaceNav } from '../../navigation/surface.js';

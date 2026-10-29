@@ -6,7 +6,8 @@
  * label's line, so it stays put however many lines the value takes. Values wrap, never truncate.
  */
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, size, space, type } from '../tokens.js';
 

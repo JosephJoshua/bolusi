@@ -1,8 +1,8 @@
 // The ownership video on the phone screens: at intake one tile that records or retakes it, and on
 // the servisan the clip that was taken, to play back.
 import { formatDateTime } from '@bolusi/i18n';
-import { Icon, PhotoSlot, TextButton, color, size, space } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { Icon, PhotoSlot, TextButton, color, size, space, Text } from '@bolusi/ui';
+import { StyleSheet, View } from 'react-native';
 
 import type { ActionRunner, VideoMediaRef } from '../../screen-kit/index.js';
 import { tn } from '../i18n.js';
