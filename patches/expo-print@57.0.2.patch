@@ -1,0 +1,64 @@
+diff --git a/android/src/main/java/expo/modules/print/PrintModule.kt b/android/src/main/java/expo/modules/print/PrintModule.kt
+index 719d2969772d8a99faf0025fabc145f1f969c6f7..0e70cdced5150d72734c8968750145a1724bc435 100644
+--- a/android/src/main/java/expo/modules/print/PrintModule.kt
++++ b/android/src/main/java/expo/modules/print/PrintModule.kt
+@@ -19,9 +19,24 @@ import java.lang.ref.WeakReference
+ import kotlin.coroutines.Continuation
+ import kotlin.coroutines.resume
+ import kotlin.coroutines.resumeWithException
++import kotlin.math.abs
++import kotlin.math.roundToInt
+ 
+ private const val ORIENTATION_PORTRAIT = "portrait"
+ private const val ORIENTATION_LANDSCAPE = "landscape"
++private const val MILS_PER_POINT = 1000.0 / 72.0
++private const val MILS_PER_MM = 40
++
++private val STANDARD_MEDIA_SIZES = listOf(
++  PrintAttributes.MediaSize.ISO_A3,
++  PrintAttributes.MediaSize.ISO_A4,
++  PrintAttributes.MediaSize.ISO_A5,
++  PrintAttributes.MediaSize.ISO_A6,
++  PrintAttributes.MediaSize.ISO_B5,
++  PrintAttributes.MediaSize.JIS_B5,
++  PrintAttributes.MediaSize.NA_LETTER,
++  PrintAttributes.MediaSize.NA_LEGAL
++)
+ 
+ class PrintModule : Module() {
+   private val jobName = "Printing"
+@@ -159,7 +174,11 @@ class PrintModule : Module() {
+     // @tsapeta: Unfortunately these attributes might be ignored on some devices or Android versions,
+     // in other words it might not change the default orientation in the print dialog,
+     // however the user can change it there.
+-    if (ORIENTATION_LANDSCAPE == orientation) {
++    val pageSize = mediaSizeFromOptions(options)
++    if (pageSize != null) {
++      // The dialog preselects a printer's paper only when its size matches exactly, to the mil.
++      builder.setMediaSize(if (ORIENTATION_LANDSCAPE == orientation) pageSize.asLandscape() else pageSize.asPortrait())
++    } else if (ORIENTATION_LANDSCAPE == orientation) {
+       builder.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_LANDSCAPE)
+     } else {
+       builder.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_PORTRAIT)
+@@ -170,4 +189,21 @@ class PrintModule : Module() {
+     builder.setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+     return builder
+   }
++
++  // `width` and `height` are points (1/72 inch). A size within a millimetre of a standard paper
++  // becomes that paper, since points are rounded and the dialog needs its exact size to select it.
++  private fun mediaSizeFromOptions(options: PrintOptions): PrintAttributes.MediaSize? {
++    val width = options.width ?: return null
++    val height = options.height ?: return null
++    if (width <= 0 || height <= 0) return null
++    val shortMils = (minOf(width, height) * MILS_PER_POINT).roundToInt()
++    val longMils = (maxOf(width, height) * MILS_PER_POINT).roundToInt()
++    return STANDARD_MEDIA_SIZES.firstOrNull {
++      abs(it.widthMils - shortMils) <= MILS_PER_MM && abs(it.heightMils - longMils) <= MILS_PER_MM
++    } ?: PrintAttributes.MediaSize("expo-print-$shortMils-$longMils", "${toMm(shortMils)} x ${toMm(longMils)} mm", shortMils, longMils)
++  }
++
++  private fun toMm(mils: Int): Int {
++    return (mils * 25.4 / 1000).roundToInt()
++  }
+ }
