@@ -269,6 +269,7 @@ describe('ticket actions', () => {
       technicianId: null,
       pendingProposals: 0,
       returnedAt: null,
+      reduced: 0,
       ...ticket,
     });
 
@@ -341,6 +342,7 @@ describe('ticket actions', () => {
         technicianId: null,
         pendingProposals: 0,
         returnedAt: null,
+        reduced: 0,
         ...ticket,
       };
       return arrangeTicketActions(ticketActions(row, can, userId), row, userId);

@@ -64,6 +64,8 @@ import {
   repairAbilities,
   staleStep,
   ticketActions,
+  ticketMoneyActions,
+  ticketMoneyTarget,
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
@@ -85,6 +87,7 @@ import {
   warrantyLine,
 } from '../labels.js';
 import {
+  moneyRuntimeOf,
   useRepairQuery,
   useRepairRuntime,
   useStoreDisplayName,
@@ -93,6 +96,9 @@ import {
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
+import { tm } from '../../money/i18n.js';
+import { ReduceChargeDialog, RefundDialog } from '../../money/desktop/KasDialogs.js';
+import { MoneyRuntimeProvider } from '../../money/runtime.js';
 import { CatalogPhoto, DeviceSpecs, StatusChip, photoLabels, usePhotoState } from './parts.js';
 import {
   AssignDialog,
@@ -126,7 +132,9 @@ type Step =
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
   | { readonly kind: 'repairTypes' }
-  | { readonly kind: 'print' };
+  | { readonly kind: 'print' }
+  | { readonly kind: 'refund' }
+  | { readonly kind: 'reduce' };
 
 interface LoadedTicket {
   readonly ticket: TicketDetailRow | undefined;
@@ -156,6 +164,8 @@ export function TicketPane({
 }: TicketPaneProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  // Money back to the customer and a lowered bill are the ledger's dialogs, over repair's port.
+  const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
   const printing = runtime.printing;
   const [step, setStep] = useState<Step>({ kind: 'none' });
@@ -178,7 +188,11 @@ export function TicketPane({
   const statuses = query.status === 'ready' ? (query.data.statuses[ticketId] ?? []) : [];
   const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId, now());
   const stale: StaleStep | null =
-    step.kind === 'none' || step.kind === 'print' || ticket === undefined
+    step.kind === 'none' ||
+    step.kind === 'print' ||
+    step.kind === 'refund' ||
+    step.kind === 'reduce' ||
+    ticket === undefined
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
@@ -585,6 +599,7 @@ export function TicketPane({
     const pending = row.quoteLines.filter((line) => line.status === 'proposed');
     const deciding = actions.includes('decidePrice');
     const cancelled = row.outcome === 'cancelled';
+    const moneyActions = ticketMoneyActions(row, runtime.hasPermission);
     return (
       <Section
         title={tn('repair.ticket.price')}
@@ -669,6 +684,7 @@ export function TicketPane({
         <DownPaymentLines
           total={amountOwed(row)}
           downPayment={row.downPayment}
+          reduced={row.reduced}
           paidLabel={paidLabelKey(row)}
           action={downPaymentAction(row, can)}
           disabled={runner.busy}
@@ -677,6 +693,36 @@ export function TicketPane({
             setStep({ kind: 'downPayment', mode });
           }}
         />
+        {moneyActions.refund || moneyActions.reduce ? (
+          <div className="-ml-2 flex flex-wrap gap-2">
+            {moneyActions.refund ? (
+              <Button
+                label={tm('money.refund.title')}
+                variant="text"
+                size="sm"
+                onClick={() => {
+                  setDone(null);
+                  setStep({ kind: 'refund' });
+                }}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.refund"
+              />
+            ) : null}
+            {moneyActions.reduce ? (
+              <Button
+                label={tm('money.reduce.action')}
+                variant="text"
+                size="sm"
+                onClick={() => {
+                  setDone(null);
+                  setStep({ kind: 'reduce' });
+                }}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.reduce"
+              />
+            ) : null}
+          </div>
+        ) : null}
         {!deciding || pending.length === 0 ? null : (
           <p className="flex items-center gap-1 text-small font-semibold text-warning">
             <TriangleAlert size={14} aria-hidden />
@@ -857,6 +903,7 @@ export function TicketPane({
             {...common}
             workStarted={row.workStarted}
             claimOf={row.claimOfTicketId}
+            downPayment={row.downPayment ?? 0}
             onDone={() => finishStep(undefined)}
           />
         );
@@ -914,6 +961,24 @@ export function TicketPane({
             onDone={() => finishStep('repair.done.repairTypes')}
           />
         );
+      case 'refund':
+      case 'reduce': {
+        const props = {
+          target: ticketMoneyTarget(row),
+          onClose: closeStep,
+          onDone: () =>
+            finishStep(step.kind === 'refund' ? 'repair.done.refund' : 'repair.done.reduce'),
+        };
+        return (
+          <MoneyRuntimeProvider runtime={money}>
+            {step.kind === 'refund' ? (
+              <RefundDialog {...props} />
+            ) : (
+              <ReduceChargeDialog {...props} />
+            )}
+          </MoneyRuntimeProvider>
+        );
+      }
       case 'print':
         if (printing === undefined) return null;
         return (
@@ -1196,19 +1261,24 @@ function lineCaption(line: QuoteLineRow): string {
 function DownPaymentLines({
   total,
   downPayment,
+  reduced,
   paidLabel,
   action,
   disabled,
   onAction,
 }: {
+  /** What is owed, already less `reduced`. */
   readonly total: number;
   readonly downPayment: number | null;
+  /** What an owner took off the bill, shown above what was paid. */
+  readonly reduced: number;
   readonly paidLabel: RepairKey;
   readonly action: 'record' | 'correct' | null;
   readonly disabled: boolean;
   readonly onAction: (mode: 'record' | 'correct') => void;
 }): React.JSX.Element | null {
-  if (downPayment === null || downPayment === 0) {
+  const paid = downPayment ?? 0;
+  if (paid === 0 && reduced === 0) {
     return action === 'record' ? (
       <Button
         label={tn('repair.downPayment.recordTitle')}
@@ -1222,31 +1292,44 @@ function DownPaymentLines({
       />
     ) : null;
   }
-  const balance = balanceAfterDownPayment(total, downPayment);
+  const balance = balanceAfterDownPayment(total, paid);
+  // Before pickup an overpaid DP goes back at the handover; after it, it is still owed back.
+  const owedBackLabel: RepairKey =
+    paidLabel === 'repair.price.paid' ? 'repair.price.owedBack' : 'repair.price.refund';
   return (
     <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
-      <div className="flex items-center justify-between gap-4 text-body text-text-muted">
-        <dt className="flex items-center gap-2">
-          {tn(paidLabel)}
-          {action === 'correct' ? (
-            <Tooltip label={tn('repair.downPayment.correctTitle')}>
-              <Button
-                label={tn('repair.downPayment.change')}
-                aria-label={tn('repair.downPayment.correctTitle')}
-                variant="text"
-                size="sm"
-                className="-my-1"
-                onClick={() => onAction('correct')}
-                disabled={disabled}
-                data-testid="repair.desk.ticket.downPayment.correct"
-              />
-            </Tooltip>
-          ) : null}
-        </dt>
-        <dd className="tabular">{formatMoney(-downPayment)}</dd>
-      </div>
+      {reduced === 0 ? null : (
+        <div className="flex justify-between gap-4 text-body text-text-muted">
+          <dt>{tn('repair.price.reduced')}</dt>
+          <dd className="tabular" data-testid="repair.desk.ticket.reduced">
+            {formatMoney(-reduced)}
+          </dd>
+        </div>
+      )}
+      {paid === 0 ? null : (
+        <div className="flex items-center justify-between gap-4 text-body text-text-muted">
+          <dt className="flex items-center gap-2">
+            {tn(paidLabel)}
+            {action === 'correct' ? (
+              <Tooltip label={tn('repair.downPayment.correctTitle')}>
+                <Button
+                  label={tn('repair.downPayment.change')}
+                  aria-label={tn('repair.downPayment.correctTitle')}
+                  variant="text"
+                  size="sm"
+                  className="-my-1"
+                  onClick={() => onAction('correct')}
+                  disabled={disabled}
+                  data-testid="repair.desk.ticket.downPayment.correct"
+                />
+              </Tooltip>
+            ) : null}
+          </dt>
+          <dd className="tabular">{formatMoney(-paid)}</dd>
+        </div>
+      )}
       <div className="flex justify-between gap-4 text-body font-semibold text-text">
-        <dt>{tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}</dt>
+        <dt>{tn(balance.kind === 'due' ? 'repair.price.balance' : owedBackLabel)}</dt>
         <dd className="tabular">{formatMoney(balance.amount)}</dd>
       </div>
     </dl>

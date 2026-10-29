@@ -12,7 +12,7 @@ import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/sche
 
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
-import { MONEY_PERMISSION } from '../money/constants.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
 import { demoMoneyLedger, demoQris } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
@@ -38,7 +38,9 @@ import {
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { refundsFor } from './commands.js';
 import { amountOwed } from './flows.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { REPAIR_REFUSALS, claimProblem, freeHandoverNeedsOwner } from './rules.js';
 import {
   demoFindDeviceModel,
@@ -369,6 +371,7 @@ function ticket(spec: {
           ? createdAt + 40 * HOUR
           : HARNESS_NOW - spec.returnedHoursAgo * HOUR,
     downPayment: spec.downPayment ?? null,
+    reduced: 0,
     slipPrints: { intake: 1, handover: 0 },
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
@@ -1309,6 +1312,7 @@ export function demoRepairRuntime(
       const note = String(input['note'] ?? '');
       const problem = handoverProblem(checklist, t.peripherals, note);
       if (problem !== null) throw REPAIR_REFUSALS.refuse(problem);
+      settleInLedger(t, (input['payments'] as { account: string; amount: number }[]) ?? []);
       return update(
         t.id,
         'repair.device_returned',
@@ -1553,6 +1557,7 @@ export function demoRepairRuntime(
       now,
       accounts: DEMO_ACCOUNTS,
       actor: () => actor.userId,
+      mayRefund: () => permitted.has(MONEY_PERMISSION.refund),
       debt:
         unpaid === undefined
           ? undefined
@@ -1582,6 +1587,70 @@ export function demoRepairRuntime(
       }
     },
   });
+  /**
+   * The handover as the ledger records it: the charge, a DP taken by hand before it (in cash) and
+   * what was paid now, so money can go back or the bill come down afterwards.
+   */
+  function settleInLedger(
+    t: TicketDetailRow,
+    payments: readonly { readonly account: string; readonly amount: number }[],
+    at?: number,
+  ): void {
+    const document = { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber };
+    const owed = amountOwed(t);
+    if ((ledger.documentMoney(t.id)?.charged ?? 0) > 0) return;
+    if (owed > 0) ledger.recordCharge({ document, amount: owed, at });
+    const byHand = (t.downPayment ?? 0) - (ledger.documentMoney(t.id)?.paid ?? 0);
+    const all = byHand > 0 ? [{ account: CASH_ACCOUNT, amount: byHand }, ...payments] : payments;
+    all.forEach((payment, n) => {
+      ledger.recordPayment({ id: `m-${t.id}-${String(n)}`, document, ...payment, at });
+    });
+    // As the real handover: what was paid beyond the bill goes back through how it came in.
+    const money = ledger.documentMoney(t.id);
+    if (money === null || money.balance >= 0) return;
+    for (const refund of refundsFor(money, -money.balance)) {
+      void ledger.run('refund', {
+        document,
+        ...refund,
+        reason: 'Dikembalikan saat diambil',
+        reference: null,
+      });
+    }
+  }
+  // What went home before today was paid in full at the counter, except the one debt.
+  tickets = tickets.map((t) => {
+    if (t.location !== 'returned' || t.id === unpaid?.id || amountOwed(t) <= 0) return t;
+    const paidUp = { ...t, downPayment: amountOwed(t) };
+    settleInLedger(paidUp, [], t.returnedAt ?? t.createdAt);
+    return paidUp;
+  });
+  // A DP still waiting at the counter is in the ledger as the cash it came in as, so a handover
+  // shows what goes back through what, as on a real device.
+  for (const t of tickets) {
+    if (t.location === 'returned' || (t.downPayment ?? 0) <= 0) continue;
+    if ((ledger.documentMoney(t.id)?.paid ?? 0) > 0) continue;
+    ledger.recordPayment({
+      id: `m-${t.id}-dp`,
+      document: { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber },
+      account: CASH_ACCOUNT,
+      amount: t.downPayment!,
+      at: t.createdAt,
+    });
+  }
+  /** A servisan's money as the ledger has it now: Kas and refunds change it after pickup. */
+  function syncTicketMoney(documentId: string): void {
+    const recorded = ledger.documentMoney(documentId);
+    if (recorded === null || recorded.charged === 0) return;
+    tickets = tickets.map((t) =>
+      t.id === documentId
+        ? {
+            ...t,
+            downPayment: recorded.paid === 0 ? null : recorded.paid,
+            reduced: recorded.reduced,
+          }
+        : t,
+    );
+  }
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
     inventory,
@@ -1638,7 +1707,14 @@ export function demoRepairRuntime(
         return ledger.query(name, input);
       },
       qris,
-      run: (name: string, input: Input) => ledger.run(name, input),
+      run: async (name: string, input: Input) => {
+        const result = await ledger.run(name, input);
+        const document = input['document'] as { readonly id: string } | undefined;
+        if (document !== undefined) syncTicketMoney(document.id);
+        else if (name === 'voidPayment') tickets.forEach((t) => syncTicketMoney(t.id));
+        notify();
+        return result;
+      },
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
       limitOf: (id: string) => demoLimitOf(actor, permitted, id),

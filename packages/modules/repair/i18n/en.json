@@ -83,6 +83,7 @@
     "waited": "Not collected for {days} days"
   },
   "cancel": {
+    "refundsDp": "At pickup, the customer gets {amount} of the DP back.",
     "reason": "Why is it cancelled?",
     "consequence": "The customer only pays the cancellation fee when collecting the phone.",
     "fee": "Cancellation fee",
@@ -142,6 +143,8 @@
     "watch": "Smartwatch"
   },
   "handover": {
+    "giveBack": "Give {refunds} back to the customer.",
+    "giveBackVia": "{amount} through {method}",
     "note": "Note (optional)",
     "photo": "Handover photo",
     "sign": "Customer signs",
@@ -245,7 +248,9 @@
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
     "refund": "Refunded",
-    "newTotal": "Total becomes {from} → {to}"
+    "newTotal": "Total becomes {from} → {to}",
+    "reduced": "Taken off",
+    "owedBack": "Overpaid"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -306,7 +311,9 @@
     "downPayment": "Down payment saved.",
     "repairTypes": "Repair type saved.",
     "corrected": "Servisan details saved.",
-    "handoverUndone": "Handover undone. The phone is back in the store."
+    "handoverUndone": "Handover undone. The phone is back in the store.",
+    "refund": "Money given back.",
+    "reduce": "Bill lowered."
   },
   "passcode": {
     "show": "Show",
@@ -448,6 +455,7 @@
     "readyBy": "Ready by {date}",
     "returned": "Collected {date}",
     "reprint": "Reprint no. {count}",
+    "reprintFirst": "Reprint",
     "printed": "Printed {date}",
     "printedBy": "Printed {date} by {name}",
     "field": {
@@ -503,7 +511,7 @@
     "handover": "Repair bill",
     "intakeAbout": "Proof the store received the phone.",
     "handoverAbout": "The bill and proof of pickup.",
-    "reprint": "Printed {count} times already.",
+    "reprint": "{count, plural, one {Printed once already.} other {Printed # times already.}}",
     "paper": "Paper",
     "paperHalf": "Half form",
     "paperFull": "Full form",

@@ -27,6 +27,7 @@ const repaired = sampleTicket({
   outcome: 'repaired',
   quoteTotal: 950_000,
   pendingProposals: 0,
+  reduced: 0,
   quoteLines: [
     line({ id: 'l1' }),
     line({ id: 'l2', kind: 'labour', description: 'Jasa pasang', amount: 100_000 }),

@@ -12,6 +12,7 @@ import {
 
 import { CASH_ACCOUNT, type CashMoveKind, type EntryKind } from './constants.js';
 import { dayStart, movesOut } from './kas.js';
+import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDocument } from './documents.js';
 import { QrisError, type QrisPort } from './qris.js';
 import type {
@@ -31,6 +32,8 @@ export interface DemoMoneyOptions {
   readonly accounts: readonly PaymentAccountRow[];
   /** Who records the next entry. */
   readonly actor: () => string;
+  /** Whether they give back beyond an overpayment (an owner); the counter by default. */
+  readonly mayRefund?: (() => boolean) | undefined;
   /** A finished servisan the customer took home unpaid. */
   readonly debt?:
     { readonly id: string; readonly label: string; readonly amount: number } | undefined;
@@ -39,12 +42,22 @@ export interface DemoMoneyOptions {
 export interface DemoMoneyLedger {
   query(name: string, input: Input): Promise<{ rows: unknown[]; nextCursor: null }>;
   run(name: string, input: Input): Promise<unknown>;
-  /** A payment the server would record (a paid QR), under the id it was made with. */
+  /**
+   * A payment the server would record (a paid QR), or one a servisan's handover took, under the id
+   * it was made with; `at` when it was not just now.
+   */
   recordPayment(payment: {
     readonly id: string;
     readonly document: MoneyDocument;
     readonly account: string;
     readonly amount: number;
+    readonly at?: number | undefined;
+  }): void;
+  /** What a document charges once it is settled (a servisan handed back). */
+  recordCharge(charge: {
+    readonly document: MoneyDocument;
+    readonly amount: number;
+    readonly at?: number | undefined;
   }): void;
   /** One document's money, as `documentMoney` reads it; null for a document it never saw. */
   documentMoney(documentId: string): DocumentMoney | null;
@@ -187,7 +200,9 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
             ? -1
             : e.kind === 'refund_paid'
               ? 1
-              : 0;
+              : e.kind === 'charge_reduced'
+                ? -1
+                : 0;
       const row = byDocument.get(e.documentId);
       const charged = e.kind === 'charge_recorded';
       byDocument.set(e.documentId, {
@@ -225,7 +240,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
   const page = (rows: unknown[]) => Promise.resolve({ rows, nextCursor: null });
   return {
     documentMoney,
-    recordPayment: ({ id, document: doc, account, amount }) => {
+    recordPayment: ({ id, document: doc, account, amount, at }) => {
       add({
         id,
         kind: 'payment_received',
@@ -234,6 +249,17 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
         documentKind: doc.kind,
         documentId: doc.id,
         documentLabel: doc.label,
+        ...(at === undefined ? {} : { createdAt: at }),
+      });
+    },
+    recordCharge: ({ document: doc, amount, at }) => {
+      add({
+        kind: 'charge_recorded',
+        amount,
+        documentKind: doc.kind,
+        documentId: doc.id,
+        documentLabel: doc.label,
+        ...(at === undefined ? {} : { createdAt: at }),
       });
     },
     query: (name, input) => {
@@ -306,6 +332,65 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
               documentLabel: doc.label,
             });
           }
+          return Promise.resolve(null);
+        }
+        case 'refund': {
+          // As refundHandler: an owner giving back beyond the overpayment lowers the bill first.
+          const doc = input['document'] as MoneyDocument;
+          const amount = Number(input['amount']);
+          const money = documentMoney(doc.id);
+          const credit = Math.max(0, -(money?.balance ?? 0));
+          // Refused as the rules refuse it, so the preview never shows what a store cannot do.
+          if (money === null || amount > credit + money.charged - money.reduced) {
+            return Promise.reject(
+              MONEY_REFUSALS.refuse('refundAbovePaid', { code: 'VALIDATION_FAILED' }),
+            );
+          }
+          const fields = {
+            reason: String(input['reason']),
+            documentKind: doc.kind,
+            documentId: doc.id,
+            documentLabel: doc.label,
+          };
+          if (amount > credit) {
+            if (options.mayRefund?.() !== true) {
+              return Promise.reject(
+                MONEY_REFUSALS.refuse('refundAboveCredit', { code: 'PERMISSION_DENIED' }),
+              );
+            }
+            add({ kind: 'charge_reduced', amount: amount - credit, ...fields });
+          }
+          add({
+            kind: 'refund_paid',
+            account: String(input['account']),
+            amount,
+            reference: (input['reference'] as string | null) ?? null,
+            ...fields,
+          });
+          return Promise.resolve(null);
+        }
+        case 'reduceCharge': {
+          const doc = input['document'] as MoneyDocument;
+          const money = documentMoney(doc.id);
+          if (options.mayRefund?.() !== true) {
+            // The command itself needs `money.refund`, as the runtime checks before any rule.
+            return Promise.reject(
+              Object.assign(new Error('permission'), { code: 'PERMISSION_DENIED' }),
+            );
+          }
+          if (money === null || Number(input['amount']) > money.charged - money.reduced) {
+            return Promise.reject(
+              MONEY_REFUSALS.refuse('aboveCharged', { code: 'VALIDATION_FAILED' }),
+            );
+          }
+          add({
+            kind: 'charge_reduced',
+            amount: Number(input['amount']),
+            reason: String(input['reason']),
+            documentKind: doc.kind,
+            documentId: doc.id,
+            documentLabel: doc.label,
+          });
           return Promise.resolve(null);
         }
         case 'saveAccount':

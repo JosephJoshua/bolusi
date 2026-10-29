@@ -67,5 +67,14 @@
     "better-sqlite3": "catalog:",
     "test-renderer": "1.2.0",
     "typescript": "catalog:"
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-print"
+        ]
+      }
+    }
   }
 }
