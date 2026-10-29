@@ -224,16 +224,23 @@ export function ColumnsMenu({
 }): React.JSX.Element {
   return (
     <RadixMenu.Root>
-      <RadixMenu.Trigger asChild>
-        <button
-          type="button"
-          data-testid={testId}
-          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border border-border bg-surface px-3 text-small font-semibold text-text-muted transition-colors hover:bg-surface-alt hover:text-text"
-        >
-          <Columns3 size={14} aria-hidden />
-          {label}
-        </button>
-      </RadixMenu.Trigger>
+      {/* In a narrow toolbar (its nearest `@container`) only the icon shows, like a collapsed
+          FilterToggle, so the filters beside it keep their room. */}
+      <Tooltip label={label}>
+        <RadixMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label={label}
+            data-testid={testId}
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border border-border bg-surface px-3 text-small font-semibold text-text-muted transition-colors hover:bg-surface-alt hover:text-text"
+          >
+            <Columns3 size={14} aria-hidden />
+            <span aria-hidden className="hidden whitespace-nowrap @min-[54rem]:inline">
+              {label}
+            </span>
+          </button>
+        </RadixMenu.Trigger>
+      </Tooltip>
       <RadixMenu.Portal>
         <RadixMenu.Content
           align="end"
