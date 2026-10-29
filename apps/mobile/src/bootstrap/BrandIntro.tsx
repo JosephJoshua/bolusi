@@ -2,13 +2,13 @@
  * The opening moment: picks up the native splash where it stops and hands over to the app.
  *
  * It first draws exactly what the splash shows (the mark on the splash green), then hides the
- * native splash under it, so there is no blank frame while the database opens. When the app is
- * ready the gold disc hops and lands on the b, and the mark grows a touch as the cover fades away
- * over the first screen. About 0.4 s, transform and opacity only, on the native driver.
+ * native splash under it, so there is no blank frame while the database opens. While the app loads
+ * the gold disc hops and lands on the b; once the first screen is laid out underneath, the mark
+ * grows a touch as the cover fades away over it. Transform and opacity only, on the native driver.
  *
- * Reduce motion: the cover simply goes when the app is ready. On a cold start the app can be ready
- * before the system has said whether to reduce motion; the cover then waits for that answer (a few
- * milliseconds, never more than `ANSWER_WAIT_MS`) rather than skip the intro by assuming.
+ * Reduce motion: the cover simply goes when the app is ready. The hop waits for the system to say
+ * whether to reduce motion (a few milliseconds, never more than `ANSWER_WAIT_MS`) rather than skip
+ * the intro by assuming.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
@@ -31,7 +31,11 @@ export const SPLASH_MARK_HEIGHT = (200 * 300) / 512;
 /** How high the disc hops, as a share of the mark's height. */
 const HOP = 0.2;
 const HOP_MS = 320;
-/** The longest the ready app waits under the cover for the reduce-motion answer. */
+/** How long the native splash takes to go once hidden, before the disc may hop in view. */
+const SPLASH_EXIT_MS = 150;
+/** How long a ready app waits for a cover that never drew before it is simply removed. */
+const NEVER_DRAWN_MS = 1_000;
+/** The longest the cover waits for the reduce-motion answer before simply leaving. */
 const ANSWER_WAIT_MS = 400;
 /**
  * The hop's height over its time, sampled from a thrown ball's parabola (up to 0.45, down by 0.8),
@@ -54,7 +58,7 @@ const styles = StyleSheet.create({
 });
 
 export interface BrandIntroProps {
-  /** The first screen is mounted under the cover and can be shown. */
+  /** The first screen is mounted and laid out under the cover, so it can be shown. */
   readonly ready: boolean;
   /** Hides the native splash once the cover is drawn over it. Absent on web and in tests. */
   readonly onCovered?: (() => void) | undefined;
@@ -64,42 +68,71 @@ export function BrandIntro({ ready, onCovered }: BrandIntroProps): React.JSX.Ele
   const answer = useReducedMotionAnswer();
   const [gaveUp, setGaveUp] = useState(false);
   const still = answer ?? (gaveUp ? true : null);
+  const [covered, setCovered] = useState(false);
+  // A second layout (a rotation) must not hide the splash again: read synchronously, not via state.
+  const coveredOnce = useRef(false);
+  const [hopped, setHopped] = useState(false);
   const [gone, setGone] = useState(false);
   const hop = useRef(new Animated.Value(0)).current;
   const leave = useRef(new Animated.Value(0)).current;
-  const covered = useRef(false);
 
   useEffect(() => {
-    if (!ready || still !== null) return;
+    if (!covered || still !== null) return;
     const timer = setTimeout(() => setGaveUp(true), ANSWER_WAIT_MS);
     return () => clearTimeout(timer);
-  }, [ready, still]);
+  }, [covered, still]);
 
+  // The hop plays while the app is still loading, once the native splash has handed over: the UI
+  // thread is free then. Played at "ready" it raced the first screen's mount, which holds the UI
+  // thread on a cheap phone, and Android skipped straight to its end.
   useEffect(() => {
-    if (!ready || gone || still === null) return;
+    if (!covered || hopped || still === null) return;
     if (still) {
-      setGone(true);
+      setHopped(true);
       return;
     }
     const animation = Animated.sequence([
+      // The native splash takes a moment to go after it is told to.
+      Animated.delay(SPLASH_EXIT_MS),
       Animated.timing(hop, {
         toValue: 1,
         duration: HOP_MS,
         easing: Easing.linear,
         useNativeDriver: NATIVE_DRIVER,
       }),
-      Animated.timing(leave, {
-        toValue: 1,
-        duration: motion.duration.base,
-        easing: easeExit,
-        useNativeDriver: NATIVE_DRIVER,
-      }),
     ]);
+    animation.start(({ finished }) => {
+      if (finished) setHopped(true);
+    });
+    return () => animation.stop();
+  }, [covered, hopped, still, hop]);
+
+  // A cover that is somehow never laid out must not hold the app hostage.
+  useEffect(() => {
+    if (!ready || covered) return;
+    const timer = setTimeout(() => setGone(true), NEVER_DRAWN_MS);
+    return () => clearTimeout(timer);
+  }, [ready, covered]);
+
+  // The fade starts once the first screen is laid out under the cover (`ready`) and the hop is
+  // done.
+  useEffect(() => {
+    if (!ready || gone || !hopped) return;
+    if (still !== false) {
+      setGone(true);
+      return;
+    }
+    const animation = Animated.timing(leave, {
+      toValue: 1,
+      duration: motion.duration.base,
+      easing: easeExit,
+      useNativeDriver: NATIVE_DRIVER,
+    });
     animation.start(({ finished }) => {
       if (finished) setGone(true);
     });
     return () => animation.stop();
-  }, [ready, gone, still, hop, leave]);
+  }, [ready, gone, hopped, still, leave]);
 
   if (gone) return null;
 
@@ -110,8 +143,9 @@ export function BrandIntro({ ready, onCovered }: BrandIntroProps): React.JSX.Ele
       // Blocks touches only while the app is not there yet; a tap during the fade reaches the app.
       pointerEvents={ready ? 'none' : 'auto'}
       onLayout={() => {
-        if (covered.current) return;
-        covered.current = true;
+        if (coveredOnce.current) return;
+        coveredOnce.current = true;
+        setCovered(true);
         onCovered?.();
       }}
       style={[

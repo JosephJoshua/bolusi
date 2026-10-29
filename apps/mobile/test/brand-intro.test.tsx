@@ -26,14 +26,35 @@ describe('BrandIntro', () => {
     expect(onCovered).toHaveBeenCalledOnce();
   });
 
-  test('goes away once the app is ready', () => {
+  const draw = (r: ReturnType<typeof render>): void => {
+    const layout = r.get('brand-intro').props['onLayout'] as () => void;
+    act(() => layout());
+  };
+
+  test('the disc hops while the app loads, then the cover goes once the app is ready', () => {
     const r = render(<BrandIntro ready={false} />);
+    draw(r);
+    // The hop has played (the double lands it at once), and the cover still waits for the app.
+    expect(r.query('brand-intro')).not.toBeNull();
     r.rerender(<BrandIntro ready />);
     expect(r.query('brand-intro')).toBeNull();
   });
 
+  test('a cover that never drew still leaves soon after the app is ready', () => {
+    vi.useFakeTimers();
+    try {
+      const r = render(<BrandIntro ready />);
+      expect(r.query('brand-intro')).not.toBeNull();
+      act(() => vi.advanceTimersByTime(1_000));
+      expect(r.query('brand-intro')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('stays gone if readiness flickers back', () => {
     const r = render(<BrandIntro ready />);
+    draw(r);
     r.rerender(<BrandIntro ready={false} />);
     expect(r.query('brand-intro')).toBeNull();
   });
@@ -41,6 +62,7 @@ describe('BrandIntro', () => {
   test('with reduce motion on, goes as soon as the app is ready', () => {
     act(() => __setReduceMotion(true));
     const r = render(<BrandIntro ready={false} />);
+    draw(r);
     r.rerender(<BrandIntro ready />);
     expect(r.query('brand-intro')).toBeNull();
   });
@@ -58,6 +80,7 @@ describe('BrandIntro', () => {
     test('waits under the cover for the answer, then plays and goes', async () => {
       const { double, Fresh, harness } = await fresh();
       const r = harness.render(<Fresh ready />);
+      act(() => (r.get('brand-intro').props['onLayout'] as () => void)());
       expect(r.query('brand-intro')).not.toBeNull();
       await act(async () => {
         double.__answerReduceMotion(false);
@@ -71,6 +94,7 @@ describe('BrandIntro', () => {
       try {
         const { Fresh, harness } = await fresh();
         const r = harness.render(<Fresh ready />);
+        act(() => (r.get('brand-intro').props['onLayout'] as () => void)());
         expect(r.query('brand-intro')).not.toBeNull();
         act(() => vi.advanceTimersByTime(400));
         expect(r.query('brand-intro')).toBeNull();

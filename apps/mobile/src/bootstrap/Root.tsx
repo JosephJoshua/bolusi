@@ -347,6 +347,7 @@ export function Root({
   // The name is the guard that remains: with the two spellings distinct, a future import of the real
   // applier cannot be masked, and a reader can see which of the two things a call site does.
   const [locale, setLocaleState] = useState<Locale | null>(null);
+  const [firstScreenShown, setFirstScreenShown] = useState(false);
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   /** The owner this phone's first-run setup waits for (core device-setup.ts), or null. */
@@ -1106,10 +1107,16 @@ export function Root({
   // gating on it here costs no extra wait and keeps the Settings screen from rendering blanks.
   // The opening cover stays over everything until then, in the same place in the tree either way, so
   // its animation carries on from the splash instead of restarting when the app appears.
+  // The cover leaves once the first screen is laid out under it, not merely rendered: on a cheap
+  // phone mounting that screen holds the UI thread, and a fade started then would be skipped.
   const opening = (content: React.JSX.Element | null): React.JSX.Element => (
     <View style={FILL}>
-      {content}
-      <BrandIntro ready={content !== null} onCovered={hideSplash} />
+      {content === null ? null : (
+        <View style={FILL} onLayout={() => setFirstScreenShown(true)}>
+          {content}
+        </View>
+      )}
+      <BrandIntro ready={content !== null && firstScreenShown} onCovered={hideSplash} />
     </View>
   );
   if (locale === null || app === null || deviceInfo === null) return opening(null);
