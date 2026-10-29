@@ -40,7 +40,10 @@ test.beforeEach(() => launch());
 
 test.afterEach(async () => {
   // Quits outright: a test may end with a dialog open, which the close guard would ask about.
-  await app.evaluate(({ app: electronApp }) => setImmediate(() => electronApp.exit(0)));
+  // A test that closed the window itself has already quit the app.
+  await app
+    .evaluate(({ app: electronApp }) => setImmediate(() => electronApp.exit(0)))
+    .catch(() => undefined);
   await app.close().catch(() => undefined);
 });
 
