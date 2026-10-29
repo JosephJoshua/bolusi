@@ -887,11 +887,14 @@ export function ProposalStep({
   ticketId,
   stale,
   line,
+  total,
   onDone,
   onCancel,
   testID = 'repair.proposal',
 }: StepProps & {
   readonly line: QuoteLineRow;
+  /** The agreed total now, so the change reads as what the customer will pay. */
+  readonly total: number;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -943,6 +946,13 @@ export function ProposalStep({
         <Text style={styles.proposalDescription}>{line.description}</Text>
         <Text style={styles.proposalAmount} testID={`${testID}.amount`}>
           {formatMoney(line.amount)}
+        </Text>
+        {/* An extra zero shows here, where the customer hears it: 1.500.000 → 3.500.000. */}
+        <Text style={repairStyles.body} testID={`${testID}.newTotal`}>
+          {tn('repair.price.newTotal', {
+            from: formatMoney(total),
+            to: formatMoney(total + line.amount),
+          })}
         </Text>
         {line.reason === null ? null : (
           <>

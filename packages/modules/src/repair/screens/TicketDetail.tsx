@@ -342,6 +342,7 @@ export function TicketDetail({
         <ProposalStep
           {...stepProps}
           line={ticket?.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+          total={ticket?.quoteTotal ?? 0}
         />
       );
     case 'downPayment':

@@ -892,6 +892,7 @@ export function TicketPane({
           <ProposalDialog
             {...common}
             line={row.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+            total={row.quoteTotal}
             onDone={() => finishStep(undefined)}
           />
         );

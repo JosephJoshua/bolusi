@@ -7,7 +7,7 @@ const source = {
       action: {
         save: 'Simpan',
         cancel: 'Batal',
-        retry: 'Coba Lagi',
+        retry: 'Coba lagi',
         delete: 'Hapus',
         confirm: 'Ya, Lanjutkan',
         back: 'Kembali',

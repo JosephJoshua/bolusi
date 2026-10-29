@@ -1008,9 +1008,14 @@ export function ProposalDialog({
   ticketId,
   stale,
   line,
+  total,
   onDone,
   onClose,
-}: StepDialogProps & { readonly line: QuoteLineRow }): React.JSX.Element {
+}: StepDialogProps & {
+  readonly line: QuoteLineRow;
+  /** The agreed total now, so the change reads as what the customer will pay. */
+  readonly total: number;
+}): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [note, setNote] = useState('');
@@ -1072,6 +1077,13 @@ export function ProposalDialog({
           >
             {formatMoney(line.amount)}
           </p>
+          {/* An extra zero shows here, where the customer hears it: 1.500.000 → 3.500.000. */}
+          <p className="tabular text-body text-text" data-testid="repair.desk.proposal.newTotal">
+            {tn('repair.price.newTotal', {
+              from: formatMoney(total),
+              to: formatMoney(total + line.amount),
+            })}
+          </p>
           {line.reason === null ? null : (
             <>
               <p className="mt-3 text-small text-text-muted">{tn('repair.price.changeReason')}</p>
@@ -1117,7 +1129,13 @@ export function HandoverDialog({
   /** What the checklist is made of: whether it was repaired, and what was left with it. */
   readonly ticket: Pick<
     TicketDetailRow,
-    'outcome' | 'peripherals' | 'quoteTotal' | 'claimOfTicketId' | 'ticketNumber'
+    | 'outcome'
+    | 'peripherals'
+    | 'quoteTotal'
+    | 'claimOfTicketId'
+    | 'ticketNumber'
+    | 'deviceBrand'
+    | 'deviceModel'
   >;
   readonly customerName: string;
   /** What the customer pays in all: the price, or a cancelled servisan's fee. */
@@ -1188,6 +1206,12 @@ export function HandoverDialog({
     <>
       <StepDialog
         title={tn('repair.action.handover')}
+        // Which phone it is, as the phone app shows it: a customer with two ready names both.
+        description={
+          <span data-testid="repair.desk.handover.phone">
+            {`${ticket.deviceBrand} ${ticket.deviceModel} · ${ticket.ticketNumber}`}
+          </span>
+        }
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}

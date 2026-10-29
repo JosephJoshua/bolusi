@@ -280,7 +280,7 @@ describe('empty / error / unauthorized are three distinct components (§3.8, §5
   test('ErrorState exposes retry and an error-code caption (§5: never a dead end)', () => {
     const onRetry = vi.fn();
     const r = render(
-      <ErrorState title="Gagal" errorCode="NETWORK" retryLabel="Coba Lagi" onRetry={onRetry} />,
+      <ErrorState title="Gagal" errorCode="NETWORK" retryLabel="Coba lagi" onRetry={onRetry} />,
     );
     expect(r.query('ui.errorState.code')).not.toBeNull();
     fire(r.get('ui.errorState.retry'), 'onPress');
@@ -437,7 +437,7 @@ describe('List (§3.13) — virtualization and the four mandatory states', () =>
       'error',
       {
         kind: 'error' as const,
-        error: { title: 'Gagal', retryLabel: 'Coba Lagi', onRetry: vi.fn() },
+        error: { title: 'Gagal', retryLabel: 'Coba lagi', onRetry: vi.fn() },
       },
     ],
     [

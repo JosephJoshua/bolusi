@@ -244,7 +244,8 @@
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Dikembalikan"
+    "refund": "Dikembalikan",
+    "newTotal": "Total jadi {from} → {to}"
   },
   "problem": {
     "complaint": "Keluhan belum diisi.",

@@ -244,7 +244,8 @@
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Refunded"
+    "refund": "Refunded",
+    "newTotal": "Total becomes {from} → {to}"
   },
   "problem": {
     "complaint": "Enter the complaint.",

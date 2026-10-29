@@ -683,6 +683,7 @@ export const REPAIR_KEYS = [
   'repair.changed.line',
   'repair.changed.only',
   'repair.changed.empty',
+  'repair.price.newTotal',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];
