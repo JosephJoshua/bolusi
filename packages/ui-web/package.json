@@ -20,6 +20,7 @@
     "react-dom": ">=19"
   },
   "dependencies": {
+    "@bolusi/schemas": "workspace:*",
     "@bolusi/ui": "workspace:*",
     "@radix-ui/react-dialog": "1.2.0",
     "@radix-ui/react-dropdown-menu": "2.1.25",

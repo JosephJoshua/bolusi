@@ -30,6 +30,14 @@ const LABELS: HandoffPageLabels = {
   withdrawn: 'Dibatalkan.',
   expired: 'Kedaluwarsa </script><script>alert(1)</script>',
   unreadable: 'Tidak bisa dibaca.',
+  videoStart: 'Mulai rekam',
+  videoStop: 'Berhenti',
+  videoRetake: 'Rekam ulang',
+  videoDenied: 'Izinkan kamera.',
+  videoFailed: 'Kamera belum bisa menyala.',
+  retry: 'Coba lagi',
+  videoUnsupported: 'Browser ini tidak bisa merekam.',
+  videoTooLarge: 'Videonya terlalu besar.',
 };
 
 /** Virtual time: `advance` fires the timers that fall due, in order. */
@@ -86,8 +94,16 @@ function harness(secureCookies = false) {
     expect(path).toMatch(/^\/h\/[A-Za-z0-9_-]{32}$/);
     return { id, page: `${ORIGIN}${path}` };
   };
-  const ask = async (id: string, kind: string, title: string): Promise<number> => {
-    const res = await call(`/${id}/ask`, { method: 'POST', body: JSON.stringify({ kind, title }) });
+  const ask = async (
+    id: string,
+    kind: string,
+    title: string,
+    more: Record<string, unknown> = {},
+  ): Promise<number> => {
+    const res = await call(`/${id}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ kind, title, ...more }),
+    });
     expect(res.status).toBe(200);
     return ((await res.json()) as { seq: number }).seq;
   };
@@ -148,6 +164,9 @@ describe('the phone page', () => {
     expect(html).not.toContain('</script><script>alert(1)');
     expect(html).toContain('capture="environment"');
     expect(html).not.toMatch(/ style="/);
+    // A clip is recorded in the page, and its take plays back from a blob.
+    expect(html).toContain('getUserMedia');
+    expect(res.headers.get('content-security-policy')).toMatch(/media-src blob:/);
     expect(await events(id, 0)).toEqual({ events: [{ n: 1, type: 'paired' }], ended: false });
     // A reload does not pair twice: there is no news for the PC.
     await open(page);
@@ -336,6 +355,114 @@ describe('one pairing for every step', () => {
   });
 });
 
+describe('a video step', () => {
+  // An MP4's first box ("ftyp" after its size), bigger than a photo may be.
+  const mp4 = (size: number): Uint8Array<ArrayBuffer> => {
+    const bytes = new Uint8Array(size).fill(7);
+    bytes.set([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]);
+    return bytes;
+  };
+
+  test('reaches the phone with its hint and limit, and the PC fetches the clip it sent', async () => {
+    const { pair, ask, events, next, send, call } = harness();
+    const { id, page } = await pair();
+    const seq = await ask(id, 'video', 'Video kepemilikan', {
+      hint: 'Minta pelanggan bilang HP ini miliknya.',
+      maxMs: 60_000,
+    });
+    expect((await next(page, 0)).body.ask).toEqual({
+      seq,
+      kind: 'video',
+      title: 'Video kepemilikan',
+      hint: 'Minta pelanggan bilang HP ini miliknya.',
+      maxMs: 60_000,
+    });
+    const clip = mp4(6 * 1024 * 1024);
+    expect((await send(page, seq, clip)).status).toBe(204);
+    expect((await events(id, 1)).events).toEqual([
+      { n: 2, type: 'video', seq, mime: 'video/mp4', sizeBytes: clip.length },
+    ]);
+    const res = await call(`/${id}/clip/${String(seq)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('video/mp4');
+    // Compared as buffers: a deep equal over 6 MB takes far too long.
+    expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(clip))).toBe(true);
+    // A fetch cut short can be tried again, until the next step lets the clip go.
+    expect((await call(`/${id}/clip/${String(seq)}`)).status).toBe(200);
+    await ask(id, 'photo', 'Depan');
+    expect((await call(`/${id}/clip/${String(seq)}`)).status).toBe(404);
+  });
+
+  test('takes WebM too, and refuses what is not a clip or is past the cap', async () => {
+    const { pair, ask, open, send, events, next } = harness();
+    const { id, page } = await pair();
+    await open(page);
+    const seq = await ask(id, 'video', 'Video', { maxMs: 60_000 });
+    expect((await send(page, seq, JPEG)).status).toBe(415);
+    expect((await send(page, seq, mp4(49 * 1024 * 1024))).status).toBe(413);
+    // None of that spent the step.
+    expect((await next(page, 0)).body.ask?.seq).toBe(seq);
+    const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4]);
+    expect((await send(page, seq, webm)).status).toBe(204);
+    expect((await events(id, 1)).events[0]).toMatchObject({ type: 'video', mime: 'video/webm' });
+  });
+
+  test('lets the clip go once the PC has collected past it, or backed out', async () => {
+    const { time, pair, ask, open, send, events, call } = harness();
+    const { id, page } = await pair();
+    await open(page);
+    const first = await ask(id, 'video', 'Video', { maxMs: 60_000 });
+    expect((await send(page, first, mp4(64))).status).toBe(204);
+    expect((await call(`/${id}/clip/${String(first)}`)).status).toBe(200);
+    const past = events(id, 2);
+    await settle();
+    time.advance(HANDOFF_POLL_MS);
+    await past;
+    expect((await call(`/${id}/clip/${String(first)}`)).status).toBe(404);
+
+    const second = await ask(id, 'video', 'Video', { maxMs: 60_000 });
+    expect((await send(page, second, mp4(64))).status).toBe(204);
+    await call(`/${id}/withdraw`, { method: 'POST', body: JSON.stringify({ seq: second }) });
+    expect((await call(`/${id}/clip/${String(second)}`)).status).toBe(404);
+  });
+
+  test('takes one send at a time, and refuses a stale one before reading it', async () => {
+    const { pair, ask, open, phone, send } = harness();
+    const { id, page } = await pair();
+    await open(page);
+    const seq = await ask(id, 'video', 'Video', { maxMs: 60_000 });
+    expect((await send(page, seq + 1, mp4(64))).status).toBe(409);
+    // A slow upload is still coming in when the phone sends again.
+    let finish!: () => void;
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(mp4(64));
+        await new Promise<void>((resolve) => (finish = resolve));
+        controller.close();
+      },
+    });
+    const slow = phone(`${page}/send?seq=${String(seq)}`, {
+      method: 'POST',
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    await settle();
+    expect((await send(page, seq, mp4(64))).status).toBe(409);
+    finish();
+    expect((await slow).status).toBe(204);
+  });
+
+  test("another PC cannot fetch this PC's clip", async () => {
+    const { h, pair, ask, open, send, call } = harness();
+    const other = enrollDevice(h, OTHER_PC);
+    const { id, page } = await pair();
+    await open(page);
+    const seq = await ask(id, 'video', 'Video', { maxMs: 60_000 });
+    expect((await send(page, seq, mp4(64))).status).toBe(204);
+    expect((await call(`/${id}/clip/${String(seq)}`, {}, other)).status).toBe(404);
+  });
+});
+
 describe('the pairing', () => {
   test('belongs to the PC that made it', async () => {
     const { h, pair, ask, call, gone } = harness();
@@ -389,7 +516,9 @@ describe('the pairing', () => {
     const { pair, call } = harness();
     const { id } = await pair();
     for (const body of [
+      // A clip needs its time limit, and one no longer than the cap.
       { kind: 'video', title: 'x' },
+      { kind: 'video', title: 'x', maxMs: 10 * 60 * 1000 },
       { kind: 'photo', title: 'x'.repeat(301) },
       {},
     ]) {

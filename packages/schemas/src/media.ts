@@ -121,6 +121,28 @@ export const MEDIA_EXTENSION: Readonly<Record<MediaMime, string>> = {
  */
 export const VIDEO_MAX_SIZE_BYTES = 48 * 1024 * 1024;
 
+/**
+ * How a browser records a clip (the PC's webcam, or a store phone's page through the handoff):
+ * 720p at about 2 Mbit/s, as the phone app records, so a minute is some 15 MB. MP4 (H.264 and AAC)
+ * first, the phones' own format, which every phone and PC plays back; WebM where the recorder
+ * cannot. The server checks the file's header against the type.
+ */
+export const VIDEO_RECORDING = {
+  width: 1280,
+  height: 720,
+  videoBitsPerSecond: 2_000_000,
+  audioBitsPerSecond: 64_000,
+  types: [
+    { type: 'video/mp4;codecs=avc1.42E01F,mp4a.40.2', mime: 'video/mp4' },
+    { type: 'video/mp4', mime: 'video/mp4' },
+    { type: 'video/webm;codecs=vp8,opus', mime: 'video/webm' },
+    { type: 'video/webm', mime: 'video/webm' },
+  ],
+} as const satisfies {
+  readonly types: readonly { readonly type: string; readonly mime: VideoMime }[];
+  readonly [key: string]: unknown;
+};
+
 export function isVideoMime(mime: string): mime is VideoMime {
   return (VIDEO_MIMES as readonly string[]).includes(mime);
 }

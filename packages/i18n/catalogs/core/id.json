@@ -158,12 +158,15 @@
       "waiting": "HP sudah tersambung. Langkah berikutnya muncul di sini.",
       "rotate": "Putar HP ke posisi mendatar.",
       "rotateNow": "Putar layar",
-      "withdrawn": "Dibatalkan di komputer."
+      "withdrawn": "Dibatalkan di komputer.",
+      "videoDenied": "Kamera atau mikrofon belum diizinkan. Izinkan untuk situs ini di browser, lalu coba lagi.",
+      "videoUnsupported": "Browser ini belum bisa merekam video. Buka kodenya di Chrome atau Safari."
     },
     "newCode": "Ganti HP",
     "photoOnPhone": "Ambil fotonya di HP",
     "signOnPhone": "Minta pelanggan tanda tangan di HP",
-    "waitingSend": "Menunggu kiriman dari HP…"
+    "waitingSend": "Menunggu kiriman dari HP…",
+    "videoOnPhone": "Rekam videonya di HP"
   },
   "video": {
     "denied": "Kamera atau mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi, lalu coba lagi.",

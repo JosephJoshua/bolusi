@@ -97,4 +97,11 @@ export type HandoffEvent =
       readonly seq: number;
       readonly strokes: readonly (readonly { readonly x: number; readonly y: number }[])[];
       readonly pad: { readonly width: number; readonly height: number };
+    }
+  | {
+      readonly id: string;
+      readonly type: 'video';
+      readonly seq: number;
+      readonly bytes: Uint8Array;
+      readonly mime: VideoMime;
     };

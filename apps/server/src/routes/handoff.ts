@@ -2,14 +2,15 @@
 // the store phone's page outside it, reached only by the pairing's secret key.
 //
 //   POST   /v1/handoff                 a new pairing (and QR) for this PC → { id, path }
-//   POST   /v1/handoff/:id/ask         put a photo or signature step in front of the phone → { seq }
+//   POST   /v1/handoff/:id/ask         put a photo, signature or video step in front of the phone → { seq }
 //   POST   /v1/handoff/:id/withdraw    the PC backed out of that step
 //   GET    /v1/handoff/:id/events      what the phone did since `after`, held open a while
+//   GET    /v1/handoff/:id/clip/:seq   the clip the phone sent for that step, as its bytes
 //   DELETE /v1/handoff/:id             end the pairing
 //
 //   GET    /h/:key                     the phone page
 //   GET    /h/:key/next?v=             the phone's current step, held open until it changes
-//   POST   /h/:key/send?seq=           a JPEG or signature strokes for that step
+//   POST   /h/:key/send?seq=           a JPEG, signature strokes or a clip for that step
 //
 // The phone routes answer with bare statuses the page reads (410 the pairing is over, 409 the step
 // was withdrawn or replaced, 413/415/400 a send it cannot take). A wrong key gets the same 410 as
@@ -43,7 +44,7 @@ import type { ServerDeps } from '../deps.js';
 import type { AppEnv, DevicePrincipal } from '../env.js';
 import { ApiError } from '../errors.js';
 import { handoffPage } from '../handoff/page.js';
-import type { HandoffSession } from '../handoff/relay.js';
+import { sendLimit, type HandoffSession } from '../handoff/relay.js';
 import { zJson, zQuery } from '../middleware/validator-hook.js';
 
 const KEY = /^[A-Za-z0-9_-]{32}$/;
@@ -70,8 +71,7 @@ export function createHandoffRouter(deps: ServerDeps) {
       return c.json(body);
     })
     .post('/:id/ask', zJson(zHandoffAskBody), (c) => {
-      const { kind, title } = c.req.valid('json');
-      const body: HandoffAskResponse = { seq: relay.ask(own(c), kind, title) };
+      const body: HandoffAskResponse = { seq: relay.ask(own(c), c.req.valid('json')) };
       return c.json(body);
     })
     .post('/:id/withdraw', zJson(zHandoffWithdrawBody), (c) => {
@@ -85,6 +85,13 @@ export function createHandoffRouter(deps: ServerDeps) {
       const events = await relay.collect(session, c.req.valid('query').after, c.req.raw.signal);
       const body: HandoffEventsResponse = { events, ended: session.ended };
       return c.json(body);
+    })
+    .get('/:id/clip/:seq', (c) => {
+      const clip = relay.clip(own(c), Number(c.req.param('seq')));
+      if (clip === null) throw new ApiError('NOT_FOUND');
+      c.header('Content-Type', clip.mime);
+      c.header('Cache-Control', 'no-store');
+      return c.body(clip.bytes as Uint8Array<ArrayBuffer>);
     })
     .delete('/:id', (c) => {
       relay.end(own(c));
@@ -132,7 +139,7 @@ export function createHandoffPageRouter(deps: ServerDeps) {
       for (const [name, value] of Object.entries(PHONE_HEADERS)) c.header(name, value);
       c.header(
         'Content-Security-Policy',
-        `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'`,
+        `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src blob:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'`,
       );
       return c.html(handoffPage(session.labels, nonce, HANDOFF_PAD, HANDOFF_LIMITS));
     })
@@ -161,10 +168,23 @@ export function createHandoffPageRouter(deps: ServerDeps) {
     })
     .post(
       '/:key/send',
-      bodyLimit({
-        maxSize: HANDOFF_LIMITS.photoBytes,
-        onError: (c) => bare(c, 413),
-      }),
+      // Refused before a byte is read: a send for a step that is gone, or while another is still
+      // coming in. What a send may carry depends on the step: a clip is far bigger than a photo.
+      async (c, next) => {
+        const session = phoneSessionOf(c);
+        if (session === null) return bare(c, 410);
+        const seq = Number(c.req.query('seq') ?? '0');
+        if (session.ask?.seq !== seq || session.receiving) return bare(c, 409);
+        session.receiving = true;
+        try {
+          return await bodyLimit({
+            maxSize: sendLimit(session.ask),
+            onError: (c) => bare(c, 413),
+          })(c, next);
+        } finally {
+          session.receiving = false;
+        }
+      },
       async (c) => {
         const session = phoneSessionOf(c);
         if (session === null) return bare(c, 410);

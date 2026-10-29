@@ -321,6 +321,9 @@ function LiveCounter({
   readonly onReenrol: () => void;
 }): React.JSX.Element {
   const storeName = state.deviceInfo?.storeName ?? '';
+  // Locking or switching away closes an open capture: nothing of this person's stays on screen,
+  // and a phone still recording for it is told the computer stopped waiting instead of "sent".
+  useEffect(() => () => capture.backOut(), [capture]);
   // A new runtime when the person's grants change, so every screen re-derives what it offers.
   const grants = JSON.stringify({
     permissions: session.permissions,
