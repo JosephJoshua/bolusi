@@ -70,9 +70,9 @@ const OTHER_PC = {
   token: 'bdt_handoff0002',
 };
 
-function harness() {
+function harness(secureCookies = false) {
   const time = new FakeTime();
-  const h = makeTestApp({ handoffRelay: new HandoffRelay(time.scheduler) });
+  const h = makeTestApp({ handoffRelay: new HandoffRelay(time.scheduler), secureCookies });
   const auth = enrollDevice(h, PC);
   const call = (path: string, init: RequestInit = {}, as = auth) =>
     h.app.request(`${API}${path}`, {
@@ -101,26 +101,45 @@ function harness() {
     const res = await call(`/${id}/events?after=0`, {}, as);
     return res.status === 404 && (await readError(res)).error.code === 'NOT_FOUND';
   };
+  /** The store phone's browser: it keeps the cookie each page sets and sends it back on that path. */
+  const jar = new Map<string, string>();
+  const phone = async (url: string, init: RequestInit = {}): Promise<Response> => {
+    const { pathname } = new URL(url);
+    const cookie = [...jar].filter(([path]) => pathname.startsWith(path)).map(([, c]) => c);
+    const res = await h.app.request(url, {
+      ...init,
+      headers: cookie.length === 0 ? {} : { Cookie: cookie.join('; ') },
+    });
+    const set = res.headers.get('set-cookie');
+    if (set !== null) jar.set(/Path=([^;]+)/.exec(set)![1]!, set.split(';')[0]!);
+    return res;
+  };
+  /** Opens the page as a browser does: the page, then its script's first ask for the step. */
+  const open = async (page: string): Promise<Response> => {
+    const res = await phone(page);
+    if (res.status === 200) await phone(`${page}/next?v=-1`);
+    return res;
+  };
   const next = async (
     page: string,
     v: number,
   ): Promise<{ status: number; body: { v: number; ask: { seq: number } | null } }> => {
-    const res = await h.app.request(`${page}/next?v=${String(v)}`);
+    const res = await phone(`${page}/next?v=${String(v)}`);
     return {
       status: res.status,
       body: res.status === 200 ? ((await res.json()) as never) : { v: -1, ask: null },
     };
   };
   const send = (page: string, seq: number, body: Uint8Array<ArrayBuffer> | string) =>
-    h.app.request(`${page}/send?seq=${String(seq)}`, { method: 'POST', body });
-  return { h, time, auth, call, pair, ask, events, gone, next, send };
+    phone(`${page}/send?seq=${String(seq)}`, { method: 'POST', body });
+  return { h, time, auth, call, pair, ask, events, gone, phone, open, next, send };
 }
 
 describe('the phone page', () => {
   test('is served by its key, with its copy escaped and scripts locked down; the PC hears it opened', async () => {
-    const { h, time, pair, events } = harness();
+    const { time, pair, open, events } = harness();
     const { id, page } = await pair();
-    const res = await h.app.request(page);
+    const res = await open(page);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-security-policy')).toMatch(/default-src 'none'/);
     expect(res.headers.get('cache-control')).toBe('no-store');
@@ -131,7 +150,7 @@ describe('the phone page', () => {
     expect(html).not.toMatch(/ style="/);
     expect(await events(id, 0)).toEqual({ events: [{ n: 1, type: 'paired' }], ended: false });
     // A reload does not pair twice: there is no news for the PC.
-    await h.app.request(page);
+    await open(page);
     const later = events(id, 1);
     await settle();
     time.advance(HANDOFF_POLL_MS);
@@ -139,24 +158,107 @@ describe('the phone page', () => {
   });
 
   test('a wrong or ended key gets 410, and the key never reaches the access log', async () => {
-    const { h, pair, call } = harness();
+    const { h, pair, call, open } = harness();
     const { id, page } = await pair();
     expect((await h.app.request(page.replace(/[^/]+$/, 'A'.repeat(32)))).status).toBe(410);
     expect((await h.app.request(`${ORIGIN}/h/short`)).status).toBe(410);
-    await h.app.request(page);
+    await open(page);
     expect((await call(`/${id}`, { method: 'DELETE' })).status).toBe(204);
-    expect((await h.app.request(page)).status).toBe(410);
+    expect((await open(page)).status).toBe(410);
     const key = page.split('/h/')[1]!;
     expect(h.accessLogs.some((log) => log.path.includes(key))).toBe(false);
     expect(h.accessLogs.some((log) => log.path === '/h/:key')).toBe(true);
   });
 });
 
+describe('only the phone that opened the page', () => {
+  test('can use the pairing; someone else holding the QR key gets 410 and cannot send', async () => {
+    const { h, pair, ask, events, phone, open, next, send } = harness();
+    const { id, page } = await pair();
+    expect((await phone(page)).status).toBe(200);
+    const bound = await phone(`${page}/next?v=-1`);
+    expect(bound.status).toBe(200);
+    const cookie = bound.headers.get('set-cookie')!;
+    expect(cookie).toMatch(/HttpOnly/);
+    expect(cookie).toMatch(/SameSite=Lax/);
+    expect(cookie).toContain(`Path=${new URL(page).pathname}`);
+    const sign = await ask(id, 'signature', 'Tanda tangan pelanggan');
+
+    // A stranger who photographed the QR before the store phone scanned it.
+    const strokes = JSON.stringify({
+      strokes: [
+        [
+          { x: 1, y: 1 },
+          { x: 500, y: 300 },
+        ],
+      ],
+    });
+    expect((await h.app.request(page)).status).toBe(410);
+    expect((await h.app.request(`${page}/next?v=-1`)).status).toBe(410);
+    const forged = await h.app.request(`${page}/send?seq=${String(sign)}`, {
+      method: 'POST',
+      body: strokes,
+    });
+    expect(forged.status).toBe(410);
+    const wrongCookie = await h.app.request(`${page}/send?seq=${String(sign)}`, {
+      method: 'POST',
+      body: strokes,
+      headers: { Cookie: 'handoff_phone=' + 'A'.repeat(32) },
+    });
+    expect(wrongCookie.status).toBe(410);
+
+    // None of that reached the PC or spent the step: the store phone still has its step, can reload the page, and its signature arrives.
+    expect((await next(page, 0)).body.ask?.seq).toBe(sign);
+    expect((await open(page)).status).toBe(200);
+    expect((await send(page, sign, strokes)).status).toBe(204);
+    expect((await events(id, 1)).events.map((event) => event.type)).toEqual(['signature']);
+  });
+});
+
+describe('the phone cookie', () => {
+  test('is Secure from config, though the proxy hands the server a plain-http request', async () => {
+    const { pair, phone } = harness(true);
+    const { page } = await pair();
+    expect(page.startsWith('http:')).toBe(true);
+    await phone(page);
+    expect((await phone(`${page}/next?v=-1`)).headers.get('set-cookie')).toMatch(/; Secure/);
+    const plain = harness(false);
+    const other = await plain.pair();
+    await plain.phone(other.page);
+    const cookie = (await plain.phone(`${other.page}/next?v=-1`)).headers.get('set-cookie');
+    expect(cookie).not.toMatch(/Secure/);
+  });
+});
+
+describe('serving the page binds nothing', () => {
+  test('a HEAD or a link preview leaves the pairing to the browser that runs the page', async () => {
+    const { h, pair, events, phone, open, next } = harness();
+    const { id, page } = await pair();
+    const head = await h.app.request(page, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('set-cookie')).toBeNull();
+    const preview = await h.app.request(page);
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get('set-cookie')).toBeNull();
+
+    // The person's browser runs the page and becomes the phone; it reloads fine.
+    expect((await open(page)).status).toBe(200);
+    // Its first event: nothing paired before it ran the page.
+    expect((await events(id, 0)).events).toEqual([{ n: 1, type: 'paired' }]);
+    expect((await phone(page)).status).toBe(200);
+    expect((await next(page, -1)).status).toBe(200);
+
+    // The previewer coming back now gets 410, as anyone else holding the key does.
+    expect((await h.app.request(page)).status).toBe(410);
+    expect((await h.app.request(page, { method: 'HEAD' })).status).toBe(410);
+  });
+});
+
 describe('one pairing for every step', () => {
   test('each step reaches the phone and what it sends reaches the PC, without a new code', async () => {
-    const { h, pair, ask, events, next, send } = harness();
+    const { pair, ask, events, open, next, send } = harness();
     const { id, page } = await pair();
-    await h.app.request(page);
+    await open(page);
     expect(await next(page, -1)).toEqual({ status: 200, body: { v: 0, ask: null } });
 
     // The phone waits; the PC asks for a photo and the wait ends with it.
@@ -204,8 +306,9 @@ describe('one pairing for every step', () => {
   });
 
   test('refuses a send for a step the PC backed out of or replaced', async () => {
-    const { pair, ask, call, next, send, events } = harness();
+    const { pair, ask, call, open, next, send, events } = harness();
     const { id, page } = await pair();
+    await open(page);
     const first = await ask(id, 'photo', 'Depan');
     await call(`/${id}/withdraw`, { method: 'POST', body: JSON.stringify({ seq: first }) });
     expect((await next(page, 1)).body.ask).toBeNull();
@@ -214,12 +317,13 @@ describe('one pairing for every step', () => {
     const third = await ask(id, 'photo', 'Atas');
     expect((await send(page, second, JPEG)).status).toBe(409);
     expect((await send(page, third, JPEG)).status).toBe(204);
-    expect((await events(id, 0)).events.map((event) => event.type)).toEqual(['photo']);
+    expect((await events(id, 1)).events.map((event) => event.type)).toEqual(['photo']);
   });
 
   test('refuses what is not a photo, a bad signature, and one past the size limit', async () => {
-    const { pair, ask, next, send } = harness();
+    const { pair, ask, open, next, send } = harness();
     const { id, page } = await pair();
+    await open(page);
     const photo = await ask(id, 'photo', 'Depan');
     expect((await send(page, photo, new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).status).toBe(415);
     expect((await send(page, photo, new Uint8Array(5 * 1024 * 1024).fill(0xff))).status).toBe(413);
@@ -253,21 +357,23 @@ describe('the pairing', () => {
   });
 
   test('a new code ends the old one, and a waiting phone and PC hear it', async () => {
-    const { h, pair, events, next } = harness();
+    const { pair, events, open, next } = harness();
     const first = await pair();
+    await open(first.page);
     const phone = next(first.page, 0);
-    const pc = events(first.id, 0);
+    const pc = events(first.id, 1);
     const second = await pair();
     expect((await phone).status).toBe(410);
     expect(await pc).toEqual({ events: [], ended: true });
-    expect((await h.app.request(first.page)).status).toBe(410);
-    expect((await h.app.request(second.page)).status).toBe(200);
+    expect((await open(first.page)).status).toBe(410);
+    expect((await open(second.page)).status).toBe(200);
   });
 
   test('ends after half an hour with no step, and a wait with no news is answered empty', async () => {
-    const { time, pair, ask, events, gone, next } = harness();
+    const { time, pair, ask, events, gone, open, next } = harness();
     const { id, page } = await pair();
-    const quiet = events(id, 0);
+    await open(page);
+    const quiet = events(id, 1);
     await settle();
     time.advance(HANDOFF_POLL_MS);
     expect(await quiet).toEqual({ events: [], ended: false });

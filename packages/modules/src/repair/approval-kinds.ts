@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 import { approvalKind, type ApprovalKinds, type ApprovalScope } from '../approvals/kinds.js';
 import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
-import { voidedOffDocument } from '../money/rules.js';
+import { takenOffByVoids } from '../money/rules.js';
 import type { MoneyDatabase } from '../money/schema.js';
 import {
   cancelTicketHandler,
@@ -22,6 +22,7 @@ import {
 } from './commands.js';
 import { REPAIR_APPROVAL_KIND, REPAIR_PERMISSION, REPAIR_TICKET_ENTITY } from './constants.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
+import { cancelDrop } from './queries.js';
 import { cancelStandardFee, handoverDebt, ticketApprovalBasis, ticketDiscounts } from './rules.js';
 import type { RepairDatabase } from './schema.js';
 
@@ -58,7 +59,7 @@ function livePayments(db: Kysely<never>, scope: ApprovalScope, ticketId: string)
 
 /**
  * What fixing the down payment to `input.amount` takes off the servisan's money, as the voids it
- * makes count it (money `voidedOffDocument`): the DP's decrease through the same method, or all
+ * makes count it (money `takenOffByVoids`): the DP's decrease through the same method, or all
  * of it through another. Null when there is nothing to fix.
  */
 async function downPaymentTakenOff(
@@ -71,12 +72,19 @@ async function downPaymentTakenOff(
   if (live.length === 0) return null;
   const account = input.account ?? live[0]?.account ?? CASH_ACCOUNT;
   const replaced = input.amount > 0 ? replacedPayment(live, account) : undefined;
-  return voidedOffDocument(db as unknown as Kysely<MoneyDatabase>, scope.storeId, {
-    kind: REPAIR_DOCUMENT_KIND,
-    id: input.ticketId,
-    voiding: live,
-    replacing: replaced === undefined ? undefined : { replaces: replaced.id, amount: input.amount },
-  });
+  return takenOffByVoids(
+    db as unknown as Kysely<MoneyDatabase>,
+    scope.storeId,
+    { kind: REPAIR_DOCUMENT_KIND, id: input.ticketId },
+    {
+      voiding: live,
+      ...(replaced === undefined
+        ? {}
+        : { paying: { replaces: replaced.id, amount: input.amount } }),
+      // Whenever it is made, the fix comes after everything recorded now.
+      at: Number.MAX_SAFE_INTEGER,
+    },
+  );
 }
 
 const payLaterInput = z.object({ ticketId: z.string().min(1) }).strict();
@@ -116,6 +124,12 @@ export const repairApprovalKinds: ApprovalKinds = {
       const standard = await cancelStandardFee(at.db, at.ref);
       if (standard === null) return null;
       return Math.max(0, standard - (input.fee ?? standard));
+    },
+    // A smaller fee counts with the discounts already on the servisan, as the rule counts it.
+    counted: async (db, scope, input) => {
+      const at = ticketRef(db, scope, input.ticketId);
+      const standard = (await cancelStandardFee(at.db, at.ref)) ?? 0;
+      return cancelDrop(standard, input.fee ?? standard, await ticketDiscounts(at.db, at.ref));
     },
     basis: (db, scope, input) => basisOf(db, scope, input.ticketId),
   }),

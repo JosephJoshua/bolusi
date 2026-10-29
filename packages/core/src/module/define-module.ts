@@ -117,6 +117,12 @@ export interface OperationDeclaration<DB> {
    * would remain a blanket bypass of the unknown-key rule for every type past v1.
    */
   readonly payloadByVersion?: Readonly<Record<number, InputParser<unknown>>>;
+  /**
+   * The oldest version the server accepts in a NEW push; default 1. Set it when the rule only
+   * judges newer versions, so an older one would skip a check. History already stored still folds
+   * at every version in `1..schemaVersion`; devices always sign the current version.
+   */
+  readonly minPushVersion?: number;
   /** MANDATORY prose: how this op is reversed (04 §3, 05 §7). */
   readonly reversal: string;
   /** The fold step (04 §4.1). */
@@ -347,6 +353,15 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
     ) {
       throw new ModuleDefinitionError(
         `op type ${type} declares schemaVersion ${JSON.stringify(schemaVersion)} — must be an integer >= 1 (04 §3; the runtime resolves an op's schemaVersion from this declaration)`,
+      );
+    }
+    const { minPushVersion } = declaration;
+    if (
+      minPushVersion !== undefined &&
+      (!Number.isInteger(minPushVersion) || minPushVersion < 1 || minPushVersion > schemaVersion)
+    ) {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares minPushVersion ${JSON.stringify(minPushVersion)}; it must be an integer in 1..${schemaVersion}, or the server would accept no new push of the type`,
       );
     }
 

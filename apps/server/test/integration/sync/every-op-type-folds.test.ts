@@ -171,19 +171,21 @@ function journey(world: ChainWorld): OpSpec[] {
       movement(3, 'inventory.item_put_back', { itemId: part, qty: 1, use }),
     ];
   };
-  /** v3 with the repair types picked at intake; without them, the v2 an older app signs. */
+  /** The current version, with the repair types picked at intake (none when left out). */
   const opened = (
     ticketId: string,
     ticketNumber: string,
     lineId: string,
-    repairTypes?: readonly object[],
+    repairTypes: readonly object[] = [],
   ): OpSpec => ({
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
     entityId: ticketId,
-    schemaVersion: repairTypes === undefined ? 2 : 3,
+    schemaVersion: 4,
     payload: {
-      ...(repairTypes === undefined ? {} : { repairTypes, claimOf: null }),
+      repairTypes,
+      claimOf: null,
+      ownershipVideo: null,
       ticketNumber,
       customerId: customer,
       device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },
@@ -523,8 +525,9 @@ function journey(world: ChainWorld): OpSpec[] {
         signature: photo(11),
         note: '',
         unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
       }),
-      schemaVersion: 2,
+      schemaVersion: 3,
     },
     onTicket('repair.slip_printed', { slip: 'handover' }),
     // Handed over by mistake, then handed over again.
@@ -535,8 +538,9 @@ function journey(world: ChainWorld): OpSpec[] {
         signature: photo(14),
         note: '',
         unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
       }),
-      schemaVersion: 2,
+      schemaVersion: 3,
     },
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {

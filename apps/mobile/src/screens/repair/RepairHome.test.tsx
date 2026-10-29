@@ -806,6 +806,39 @@ describe('cancelling (owners; the counter asks)', () => {
     );
   });
 
+  test('a manager’s room to cut the fee counts the discounts already on the servisan', async () => {
+    h = await openRepairScreenHarness(5509);
+    await h.run('setCancelFees', { beforeWork: 50_000, afterWork: 80_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run(
+      'changeQuote',
+      {
+        ticketId,
+        kind: 'discount',
+        description: 'Diskon langganan',
+        amount: -30_000,
+        reason: 'Pelanggan langganan',
+        customerAgreed: true,
+      },
+      h.storeOwnerId,
+    );
+
+    const screen = await mount(h, h.managerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    await press(screen, 'repair.cancel.changeFee');
+    // Rp 50.000 less the Rp 30.000 discount leaves Rp 20.000 to cut.
+    expect(text(screen, 'repair.cancel.limit')).toMatch(
+      /^Kamu bisa memotong biaya sampai Rp\s?20\.000\.$/,
+    );
+    type(screen, 'repair.cancel.feeInput', '30.000');
+    await settle();
+    expect(screen.query('repair.cancel.asks')).toBeNull();
+    type(screen, 'repair.cancel.feeInput', '29.000');
+    await settle();
+    expect(text(screen, 'repair.cancel.asks')).toBe(tn('repair.approval.overLimit'));
+  });
+
   test('the owners’ cancelled view shows who cancelled, why, the fee, and a changed fee', async () => {
     h = await openRepairScreenHarness(5503);
     await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);

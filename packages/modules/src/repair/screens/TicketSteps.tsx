@@ -30,7 +30,13 @@ import {
 } from '../constants.js';
 import { useDownPaymentAsk } from '../down-payment-ask.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
-import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
+import {
+  cancelDrop,
+  cancelRoom,
+  standardCancelFee,
+  type QuoteLineRow,
+  type TicketDetailRow,
+} from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
@@ -271,12 +277,15 @@ export function CancelStep({
   workStarted,
   claimOf,
   downPayment,
+  discounted,
   onDone,
   onAsked,
   onCancel,
   testID = 'repair.cancel',
 }: StepProps & {
   readonly workStarted: boolean;
+  /** The discounts standing on the servisan, which a smaller fee counts with against a limit. */
+  readonly discounted: number;
   /** Paid in so far: what is above the fee goes back at pickup. */
   readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
@@ -305,8 +314,9 @@ export function CancelStep({
   const asking = asksApproval(
     holds,
     limit,
-    standard === null || fee === null ? 0 : Math.max(0, standard - fee),
+    standard === null || fee === null ? 0 : cancelDrop(standard, fee, discounted),
   );
+  const room = cancelRoom(limit, standard, discounted);
 
   const submit = (): void => {
     if (fee === null || !complete) return;
@@ -406,9 +416,9 @@ export function CancelStep({
             autoFocus
             testID={`${testID}.feeInput`}
           />
-          {limit === null || standard === null || standard === 0 ? null : (
+          {room === null ? null : (
             <Text style={repairStyles.caption} testID={`${testID}.limit`}>
-              {tn('repair.hint.cancelLimit', { amount: formatMoney(Math.min(limit, standard)) })}
+              {tn('repair.hint.cancelLimit', { amount: formatMoney(room) })}
             </Text>
           )}
         </View>

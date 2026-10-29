@@ -36,7 +36,7 @@ async function directory(seed: number) {
   return { tenant, storeA, storeB, storeOwner, device };
 }
 
-function verifierBody(seed: number) {
+function verifierBody(seed: number, deviceId = '00000000-0000-0000-0000-000000000000') {
   return {
     verifierRef: uuidv7(harness.clock.now() + seed),
     verifier: {
@@ -46,20 +46,25 @@ function verifierBody(seed: number) {
       t: 3,
       p: 1,
       hashB64: Buffer.alloc(32, seed).toString('base64'),
-      asOf: { timestamp: seed * 1000, deviceId: '00000000-0000-0000-0000-000000000000', seq: 0 },
+      asOf: { timestamp: seed * 1000, deviceId, seq: 0 },
     },
   };
 }
 
-function putVerifier(userId: string, actorUserId: string, token: string, seed: number) {
+function putVerifier(
+  userId: string,
+  actorUserId: string,
+  device: { readonly token: string; readonly deviceId: string },
+  seed: number,
+) {
   return harness.app.request(`http://srv.test/v1/users/${userId}/pin-verifier`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${device.token}`,
       'X-Acting-User': actorUserId,
     },
-    body: JSON.stringify(verifierBody(seed)),
+    body: JSON.stringify(verifierBody(seed, device.deviceId)),
   });
 }
 
@@ -84,13 +89,13 @@ test.each([
       storeIds: memberships === 'B only' ? [storeB] : [storeA, storeB],
       roleKeys: ['staff'],
     });
-    const initial = await putVerifier(targetUserId, tenant.ownerUserId, device.token, seed);
+    const initial = await putVerifier(targetUserId, tenant.ownerUserId, device, seed);
     expect(initial.status).toBe(200);
     expect((await initial.json()) as { applied: boolean }).toMatchObject({ applied: true });
     const before = await storedVerifier(targetUserId);
     expect(before).toBeDefined();
 
-    const response = await putVerifier(targetUserId, storeOwner, device.token, seed + 10);
+    const response = await putVerifier(targetUserId, storeOwner, device, seed + 10);
     expect(response.status).toBe(403);
     expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
       'PERMISSION_DENIED',
@@ -139,7 +144,7 @@ test('store-A owner can reset a store-A-only user', async () => {
     roleKeys: ['staff'],
   });
 
-  const response = await putVerifier(targetUserId, storeOwner, device.token, seed);
+  const response = await putVerifier(targetUserId, storeOwner, device, seed);
   expect(response.status).toBe(200);
   expect((await response.json()) as { applied: boolean }).toMatchObject({ applied: true });
   expect((await storedVerifier(targetUserId))?.hash).toBe(verifierBody(seed).verifier.hashB64);
@@ -155,7 +160,7 @@ test('tenant-wide main owner can reset a store-B-only user from a store-A device
     roleKeys: ['staff'],
   });
 
-  const response = await putVerifier(targetUserId, tenant.ownerUserId, device.token, seed);
+  const response = await putVerifier(targetUserId, tenant.ownerUserId, device, seed);
   expect(response.status).toBe(200);
   expect((await response.json()) as { applied: boolean }).toMatchObject({ applied: true });
   expect((await storedVerifier(targetUserId))?.hash).toBe(verifierBody(seed).verifier.hashB64);
@@ -171,7 +176,7 @@ test('own PIN change needs no reset permission, even for a user in both stores',
     roleKeys: ['staff'],
   });
 
-  const response = await putVerifier(targetUserId, targetUserId, device.token, seed);
+  const response = await putVerifier(targetUserId, targetUserId, device, seed);
   expect(response.status).toBe(200);
   expect((await response.json()) as { applied: boolean }).toMatchObject({ applied: true });
   expect((await storedVerifier(targetUserId))?.hash).toBe(verifierBody(seed).verifier.hashB64);

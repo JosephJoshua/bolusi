@@ -2,6 +2,8 @@ name: preview
 
 # Publishes the browser version of the phone app (real screens over demo data, no server) to
 # GitHub Pages: main at /bolusi/, each open PR at /bolusi/pr-preview/pr-<n>/. See docs/previews.md.
+# The build (which runs the dependencies' install scripts) gets a read-only token; only the deploy
+# job, which runs no project code, may write to gh-pages and comment on the PR.
 
 on:
   push:
@@ -11,35 +13,33 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: preview-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    # A fork's token cannot push to gh-pages.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  build:
+    # A fork's token cannot push to gh-pages; a closed PR only has its preview removed.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && github.event.action != 'closed')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      BUILD: ${{ github.event_name != 'pull_request' || github.event.action != 'closed' }}
       SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - run: corepack enable
-        if: env.BUILD == 'true'
       - uses: actions/setup-node@v4
-        if: env.BUILD == 'true'
         with:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-        if: env.BUILD == 'true'
       - name: Build
-        if: env.BUILD == 'true'
         env:
           EXPO_BASE_URL: /${{ github.event.repository.name }}${{ github.event_name == 'pull_request' && format('/pr-preview/pr-{0}', github.event.number) || '' }}
           EXPO_PUBLIC_PREVIEW_LABEL: "${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }}"
@@ -48,10 +48,41 @@ jobs:
           pnpm --filter @bolusi/mobile build:web
           # Pages runs Jekyll otherwise, which drops the bundle's `_expo/` folder.
           touch apps/mobile/dist/.nojekyll
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-site
+          path: apps/mobile/dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    # Also runs when the build was skipped because the PR closed, to remove its preview.
+    if: >-
+      !cancelled() && !failure() &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BUILD: ${{ github.event_name != 'pull_request' || github.event.action != 'closed' }}
+    steps:
+      # The deploy actions work in a checkout of this repository; they push with their own token.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: env.BUILD == 'true'
+        with:
+          name: preview-site
+          path: apps/mobile/dist
 
       - name: Deploy main
         if: github.event_name != 'pull_request'
-        uses: JamesIves/github-pages-deploy-action@v4
+        uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4.9.0
         with:
           folder: apps/mobile/dist
           branch: gh-pages
@@ -64,7 +95,7 @@ jobs:
         if: github.event_name == 'pull_request' && env.BUILD == 'true'
         run: mkdir -p pages-root && touch pages-root/.nojekyll
       - if: github.event_name == 'pull_request' && env.BUILD == 'true'
-        uses: JamesIves/github-pages-deploy-action@v4
+        uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4.9.0
         with:
           folder: pages-root
           branch: gh-pages
@@ -73,7 +104,7 @@ jobs:
 
       - name: Deploy or remove PR preview
         if: github.event_name == 'pull_request'
-        uses: rossjrw/pr-preview-action@v1
+        uses: rossjrw/pr-preview-action@873417d2df72380da1f3978378fb58560bcde976 # v1.8.2
         with:
           source-dir: apps/mobile/dist
           preview-branch: gh-pages

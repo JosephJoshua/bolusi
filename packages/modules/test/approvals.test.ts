@@ -244,6 +244,26 @@ describe('a cancel asked for by the counter', () => {
     expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', cancelFee: 30_000 });
   });
 
+  test('a smaller fee counts with the discounts on the servisan, as the rule counts it', async () => {
+    h = await openRepairHarness(9513);
+    await h.run('setCancelFees', { beforeWork: 100_000, afterWork: 150_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run('changeQuote', discountLine(ticketId, 30_000), h.ownerId);
+    const input = { ticketId, reason: 'Pelanggan batal', fee: 70_000 };
+    const requestId = await ask(h, 'repair.cancel', input, h.cashierId);
+    // 30.000 below the fee alone is within the manager's 50.000; with the 30.000 discount it is not.
+    expect(await request(h, requestId, h.managerId)).toMatchObject({
+      amount: 30_000,
+      counted: 60_000,
+    });
+    await refused(
+      h.approvals('approveRequest', { requestId }, h.managerId),
+      'approvals.refusal.overLimit',
+    );
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+    expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', cancelFee: 70_000 });
+  });
+
   test('a rejection records the note and changes nothing', async () => {
     h = await openRepairHarness(9512);
     const ticketId = await openTicket(h);

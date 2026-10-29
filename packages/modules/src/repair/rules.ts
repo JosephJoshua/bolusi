@@ -39,7 +39,7 @@ import {
   type RecordedRepairType,
 } from './intake-options.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
-import { NO_CANCEL_FEES, standardCancelFee } from './queries.js';
+import { cancelDrop, NO_CANCEL_FEES, standardCancelFee } from './queries.js';
 import type {
   deviceReturnedPayload,
   downPaymentCorrectedPayload,
@@ -151,7 +151,11 @@ async function requireDiscountPermission(
   await requireWithinLimit(op, ctx, REPAIR_PERMISSION.discount, earlier + drop);
 }
 
-/** What the discounts still standing on the op's ticket take off, besides line `exceptLineId`. */
+/**
+ * What the discounts still standing on the op's ticket take off, besides line `exceptLineId`: the
+ * price drops already on the servisan, which its limit counts together with a new one (a discount,
+ * or a cancel fee below the store's).
+ */
 async function discountsStanding(db: Db, op: TicketRef, exceptLineId?: string) {
   let query = db
     .selectFrom('repairQuoteLines')
@@ -868,8 +872,9 @@ export const markedRepairedRule: Rule = async (op, { db }) => {
 
 /**
  * Cancel an open ticket. A fee below the store's standard fee is a price drop: an owner's to give,
- * and a limited role's (a manager's) within its store's limit. The standard fee is the store's as
- * these records have it, not the payload's, which the device writing it could set to anything.
+ * and a limited role's (a manager's) within its store's limit, together with the servisan's
+ * discounts. The standard fee is the store's as these records have it, not the payload's, which the
+ * device writing it could set to anything.
  */
 export const ticketCancelledRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
@@ -878,11 +883,12 @@ export const ticketCancelledRule: Rule = async (op, ctx) => {
   if (ticket.returnedAt !== null) {
     throw invalidTransition(ticket, op.type, 'handedOverBefore', 'it was handed over before');
   }
-  // v1, from before fees, charged nothing and named no fee.
-  const fee = payloadOf<{ fee?: number }>(op).fee;
-  if (fee === undefined) return;
+  // v1, from before fees, names no fee and charges nothing (the applier records no fee): a drop
+  // of the whole standard fee, which an older phone must not get past the limit with.
+  const fee = payloadOf<{ fee?: number }>(op).fee ?? 0;
   const standard = await standardFeeOf(ctx.db, op, ticket);
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, standard - fee);
+  const counted = cancelDrop(standard, fee, await discountsStanding(ctx.db, op));
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, counted);
 };
 
 /** The store's cancellation fee for this ticket as these records have it now. */
@@ -946,16 +952,18 @@ export const quoteChangeProposedRule: Rule = async (op, ctx) => {
 /**
  * A price change by the cashier: a new line, or applying a technician's open proposal. Applying a
  * proposal is the customer agreeing to it; a new line waits exactly when the customer has not
- * agreed yet (v2; a v1 line has no `waitsForCustomer` and counted at once).
+ * agreed yet. A v1 line has no `waitsForCustomer` and counts at once, so it needs the customer's
+ * yes too (synced v1 history replays through the applier, which no rule judges).
  */
 export const quoteChangedRule: Rule = async (op, ctx) => {
   const { db, holdsPermission } = ctx;
   const line = payloadOf<Payload<typeof quoteChangedPayload>>(op);
   checkLineSign(line.kind, line.amount);
   await requireDiscountPermission(op, ctx, [line.amount], line.lineId);
+  const waits = op.schemaVersion >= 2 && line.waitsForCustomer;
   const agreementMismatch = line.fromProposal
     ? !line.customerAgreed
-    : op.schemaVersion >= 2 && line.waitsForCustomer !== !line.customerAgreed;
+    : waits !== !line.customerAgreed;
   if (agreementMismatch) {
     throw refuse('customerAgreementMismatch', {
       code: 'VALIDATION_FAILED',
@@ -1282,7 +1290,9 @@ export const downPaymentReceivedRule: Rule = async (op, { db }) => {
 
 /**
  * An owner's correction, at any time, of a ticket in this store (older devices; newer ones void
- * and re-record the payment in the ledger). Lowering it is within a limited role's limit only.
+ * and re-record the payment in the ledger, which the refund limit counts). Lowering it is an
+ * owner's alone: nothing counts it with the servisan's other price drops, and no phone that knows
+ * limited roles (managers) writes it, so no limit covers it.
  */
 export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
@@ -1292,8 +1302,9 @@ export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
     .select('downPayment')
     .where('id', '=', ticket.id)
     .executeTakeFirst();
-  const recorded = Number(row?.downPayment ?? 0);
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, recorded - amount);
+  const drop = Number(row?.downPayment ?? 0) - amount;
+  const judged = drop > 0 ? Number.MAX_SAFE_INTEGER : drop;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, judged);
 };
 
 /**

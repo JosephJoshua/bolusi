@@ -64,7 +64,13 @@ import {
 } from '../flows.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { ta } from '../../approvals/i18n.js';
-import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
+import {
+  cancelDrop,
+  cancelRoom,
+  standardCancelFee,
+  type QuoteLineRow,
+  type TicketDetailRow,
+} from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
   DOWN_PAYMENT_GAP_KEY,
@@ -468,11 +474,14 @@ export function CancelDialog({
   workStarted,
   claimOf,
   downPayment,
+  discounted,
   onDone,
   onAsked,
   onClose,
 }: StepDialogProps & {
   readonly workStarted: boolean;
+  /** The discounts standing on the servisan, which a smaller fee counts with against a limit. */
+  readonly discounted: number;
   /** Paid in so far: what is above the fee goes back at pickup. */
   readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
@@ -500,8 +509,9 @@ export function CancelDialog({
   const asking = asksApproval(
     holds,
     limit,
-    standard === null || charged === null ? 0 : Math.max(0, standard - charged),
+    standard === null || charged === null ? 0 : cancelDrop(standard, charged, discounted),
   );
+  const room = cancelRoom(limit, standard, discounted);
 
   const submit = (): void => {
     if (!complete || charged === null) return;
@@ -606,14 +616,12 @@ export function CancelDialog({
                           : 'repair.cancel.beforeWork',
                     )}
               </p>
-              {!changing || limit === null || standard === null || standard === 0 ? null : (
+              {!changing || room === null ? null : (
                 <p
                   className="mt-1 text-small text-text-muted"
                   data-testid="repair.desk.cancel.limit"
                 >
-                  {tn('repair.hint.cancelLimit', {
-                    amount: formatMoney(Math.min(limit, standard)),
-                  })}
+                  {tn('repair.hint.cancelLimit', { amount: formatMoney(room) })}
                 </p>
               )}
             </div>

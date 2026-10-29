@@ -966,6 +966,7 @@ export function TicketPane({
             workStarted={row.workStarted}
             claimOf={row.claimOfTicketId}
             downPayment={row.downPayment ?? 0}
+            discounted={discountsStanding(row.quoteLines)}
             onDone={() => finishStep(undefined)}
             onAsked={asked}
           />

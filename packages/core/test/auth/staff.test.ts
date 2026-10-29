@@ -11,11 +11,15 @@ import {
   applyBundle,
   canManageMember,
   grantableRoles,
+  mayManageOwnerPin,
   readStaffDirectory,
+  resolveDisplayRoleKeys,
   settableLimitRoles,
   staffAdminFailure,
   StaffAdminError,
   staffDraftProblem,
+  STORE_ID_META_KEY,
+  writeMeta,
   type BundleUser,
   type DeviceBundle,
   type StaffMember,
@@ -144,6 +148,27 @@ describe('readStaffDirectory', () => {
     );
     // Nobody in this bundle carries a PIN yet.
     expect(directory.members.every((m) => !m.hasPin)).toBe(true);
+  });
+});
+
+describe('an owner at another store', () => {
+  it('is an owner here too, though the roles shown are the ones held here', async () => {
+    const elsewhere: BundleUser = {
+      ...user('u-both', 'Ana', ['r-cashier']),
+      // The bundle carries an owner-role grant at another store, as the server judges owners there.
+      grants: [
+        { roleId: 'r-cashier', storeId: STORE },
+        { roleId: 'r-store', storeId: 'store-2' },
+      ],
+    };
+    const db = await seeded([user('u-so', 'Budi', ['r-store']), elsewhere]);
+    await writeMeta(db, STORE_ID_META_KEY, STORE);
+
+    const ana = (await readStaffDirectory(db)).members.find((m) => m.id === 'u-both');
+    expect(ana).toMatchObject({ owner: true, roleKeys: ['cashier'], roleIds: ['r-cashier'] });
+    expect(await resolveDisplayRoleKeys(db, 'u-both')).toEqual(['cashier']);
+    // This store's owner is not offered her PIN, which the server would refuse.
+    expect(await mayManageOwnerPin(db, 'u-so', 'u-both')).toBe(false);
   });
 });
 

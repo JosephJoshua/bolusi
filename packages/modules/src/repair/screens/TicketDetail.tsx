@@ -369,6 +369,7 @@ export function TicketDetail({
           claimOf={ticket?.claimOfTicketId ?? null}
           onAsked={asked}
           downPayment={ticket?.downPayment ?? 0}
+          discounted={discountsStanding(ticket?.quoteLines ?? [])}
         />
       );
     case 'assign':

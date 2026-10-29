@@ -154,7 +154,7 @@ test('pin-verifier: out-of-bounds params → 422; stale asOf → applied:false; 
     t,
     p: 1,
     hashB64: HASH_B64,
-    asOf: { timestamp: asOfTs, deviceId: NIL_DEVICE, seq: 0 },
+    asOf: { timestamp: asOfTs, deviceId: device.deviceId, seq: 0 },
   });
 
   // out-of-bounds mKiB → 422 (DoS guard).
@@ -245,6 +245,100 @@ test('pin-verifier reset of another user without auth.user_reset_pin → 403', a
   expect(res.status).toBe(403);
 });
 
+// The greatest-asOf merge trusts `asOf`, so an unbounded one let a single reset beat every later
+// reset — a store owner could pin a cashier's PIN against even the main owner.
+test('pin-verifier: an asOf ahead of the server clock or from another device is refused (422) and later resets still apply', async () => {
+  const { tenantId, s1, ownerId } = await tenant();
+  const storeOwner = await seedUser(h, {
+    tenantId,
+    name: 'SO',
+    storeIds: [s1],
+    roleKeys: ['store_owner'],
+  });
+  const cashier = await seedUser(h, {
+    tenantId,
+    name: 'Kasir',
+    storeIds: [s1],
+    roleKeys: ['cashier'],
+  });
+  const device = await seedDevice(h, { tenantId, storeId: s1 });
+  const post = (actor: string, asOf: { timestamp: number; deviceId: string; seq: number }) =>
+    h.app.request(`http://srv.test/v1/users/${cashier}/pin-verifier`, {
+      method: 'POST',
+      headers: { ...bearer(device.token), 'X-Acting-User': actor },
+      body: JSON.stringify({
+        verifierRef: uuidv7(h.clock.now()),
+        verifier: {
+          algorithm: 'argon2id',
+          saltB64: SALT_B64,
+          mKiB: 32768,
+          t: 3,
+          p: 1,
+          hashB64: HASH_B64,
+          asOf,
+        },
+      }),
+    });
+  const now = h.clock.now();
+
+  const farFuture = await post(storeOwner, {
+    timestamp: Number.MAX_SAFE_INTEGER,
+    deviceId: device.deviceId,
+    seq: 0,
+  });
+  expect(farFuture.status).toBe(422);
+  const justAhead = await post(storeOwner, {
+    timestamp: now + 10 * 60 * 1000 + 1,
+    deviceId: device.deviceId,
+    seq: 0,
+  });
+  expect(justAhead.status).toBe(422);
+  const otherDevice = await post(storeOwner, { timestamp: now, deviceId: NIL_DEVICE, seq: 0 });
+  expect(otherDevice.status).toBe(422);
+
+  // Within the clock margin on the posting device: accepted, and a later reset still wins over it.
+  const ahead = await post(storeOwner, {
+    timestamp: now + 10 * 60 * 1000,
+    deviceId: device.deviceId,
+    seq: 0,
+  });
+  expect(((await ahead.json()) as { applied: boolean }).applied).toBe(true);
+  h.clock.advance(10 * 60 * 1000 + 1);
+  const later = await post(ownerId, {
+    timestamp: h.clock.now(),
+    deviceId: device.deviceId,
+    seq: 1,
+  });
+  expect(later.status).toBe(200);
+  expect(((await later.json()) as { applied: boolean }).applied).toBe(true);
+});
+
+test('create: a pinVerifier asOf ahead of the server clock is refused (422)', async () => {
+  const { tenantId, s1, ownerId } = await tenant();
+  const control = await seedControlSession(h, { tenantId, userId: ownerId });
+  const res = await h.app.request('http://srv.test/v1/users', {
+    method: 'POST',
+    headers: bearer(control),
+    body: JSON.stringify({
+      name: 'Tech',
+      loginIdentifier: null,
+      password: null,
+      storeIds: [s1],
+      roleIds: [await roleIdOf(h, tenantId, 'technician')],
+      pinVerifier: {
+        algorithm: 'argon2id',
+        saltB64: SALT_B64,
+        mKiB: 32768,
+        t: 3,
+        p: 1,
+        hashB64: HASH_B64,
+        asOf: { timestamp: Number.MAX_SAFE_INTEGER, deviceId: NIL_DEVICE, seq: 0 },
+      },
+    }),
+  });
+  expect(res.status).toBe(422);
+});
+
 async function bundleEtag(token: string): Promise<string> {
   const res = await h.app.request('http://srv.test/v1/devices/me/bundle', {
     headers: { Authorization: `Bearer ${token}` },
@@ -252,7 +346,7 @@ async function bundleEtag(token: string): Promise<string> {
   return ((await res.json()) as { etag: string }).etag;
 }
 
-function verifierBody() {
+function verifierBody(deviceId: string) {
   return JSON.stringify({
     verifierRef: uuidv7(h.clock.now()),
     verifier: {
@@ -262,7 +356,7 @@ function verifierBody() {
       t: 3,
       p: 1,
       hashB64: HASH_B64,
-      asOf: { timestamp: 1000, deviceId: NIL_DEVICE, seq: 0 },
+      asOf: { timestamp: 1000, deviceId, seq: 0 },
     },
   });
 }
@@ -288,7 +382,7 @@ test('a deactivated user cannot set their own PIN verifier on a device', async (
     h.app.request(`http://srv.test/v1/users/${userId}/pin-verifier`, {
       method: 'POST',
       headers: { ...bearer(device.token), 'X-Acting-User': userId },
-      body: verifierBody(),
+      body: verifierBody(device.deviceId),
     });
 
   expect((await post(former)).status).toBe(403);
@@ -352,6 +446,7 @@ async function storeWithOwners() {
     ownerId,
     storeOwner,
     as,
+    deviceId: device.deviceId,
     cashier: await roleIdOf(h, tenantId, 'cashier'),
     technician: await roleIdOf(h, tenantId, 'technician'),
     storeOwnerRole: await roleIdOf(h, tenantId, 'store_owner'),
@@ -586,4 +681,135 @@ test('every staff change pokes the whole tenant so other phones pull it now; a r
 
   // Refused: a store owner may not make an owner. Nothing changed, so nothing is announced.
   expect(await pokesAfter(patch({ roleIds: [s.storeOwnerRole] }), 403)).toBe(0);
+});
+
+async function twoStores() {
+  const p = await provision(h, {
+    tenantName: 'T',
+    storeNames: ['A', 'B'],
+    ownerName: 'O',
+    ownerLogin: `o-${Math.random()}`,
+  });
+  const [storeA, storeB] = p.storeIds as [string, string];
+  const storeOwner = await seedUser(h, {
+    tenantId: p.tenantId,
+    name: 'SO',
+    storeIds: [storeA],
+    roleKeys: ['store_owner'],
+  });
+  const addCashierAt = async (token: string, storeId: string) =>
+    h.app.request('http://srv.test/v1/users', {
+      method: 'POST',
+      headers: bearer(token),
+      body: JSON.stringify({
+        name: 'Planted',
+        loginIdentifier: null,
+        password: null,
+        pinVerifier: null,
+        storeIds: [storeId],
+        roleIds: [await roleIdOf(h, p.tenantId, 'cashier')],
+      }),
+    });
+  return { ...p, storeA, storeB, storeOwner, addCashierAt };
+}
+
+test('moving a store owner to another store takes their owner powers at the old store away', async () => {
+  const s = await twoStores();
+  const mainOwner = await seedControlSession(h, { tenantId: s.tenantId, userId: s.ownerUserId });
+
+  const moved = await h.app.request(`http://srv.test/v1/users/${s.storeOwner}`, {
+    method: 'PATCH',
+    headers: bearer(mainOwner),
+    body: JSON.stringify({ storeIds: [s.storeB] }),
+  });
+  expect(moved.status).toBe(200);
+  const grants = await h.idb.db
+    .selectFrom('userRoles')
+    .select(['roleId', 'storeId'])
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  expect(grants).toStrictEqual([
+    { roleId: await roleIdOf(h, s.tenantId, 'store_owner'), storeId: s.storeB },
+  ]);
+
+  const token = await seedControlSession(h, { tenantId: s.tenantId, userId: s.storeOwner });
+  const limits = await h.app.request('http://srv.test/v1/role-limits', {
+    method: 'PUT',
+    headers: bearer(token),
+    body: JSON.stringify({
+      storeId: s.storeA,
+      roleId: await roleIdOf(h, s.tenantId, 'manager'),
+      priceDrop: 9_000_000,
+      refund: 9_000_000,
+      credit: 9_000_000,
+    }),
+  });
+  expect(limits.status).toBe(403);
+  expect((await s.addCashierAt(token, s.storeA)).status).toBe(403);
+  expect((await s.addCashierAt(token, s.storeB)).status).toBe(201);
+});
+
+test('a grant left at a store the person no longer belongs to grants nothing there', async () => {
+  const s = await twoStores();
+  // Membership moved without its grant, as PATCH left it before grants followed store moves.
+  await h.idb.db
+    .updateTable('userStores')
+    .set({ storeId: s.storeB })
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  const token = await seedControlSession(h, { tenantId: s.tenantId, userId: s.storeOwner });
+  expect((await s.addCashierAt(token, s.storeA)).status).toBe(403);
+});
+
+test('moving someone back to a store where a stale grant remains keeps that one grant', async () => {
+  const s = await twoStores();
+  // Membership moved without its grant, as PATCH left it before grants followed store moves.
+  await h.idb.db
+    .updateTable('userStores')
+    .set({ storeId: s.storeB })
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  const mainOwner = await seedControlSession(h, { tenantId: s.tenantId, userId: s.ownerUserId });
+
+  const moved = await h.app.request(`http://srv.test/v1/users/${s.storeOwner}`, {
+    method: 'PATCH',
+    headers: bearer(mainOwner),
+    body: JSON.stringify({ storeIds: [s.storeA] }),
+  });
+  expect(moved.status).toBe(200);
+  const grants = await h.idb.db
+    .selectFrom('userRoles')
+    .select(['roleId', 'storeId'])
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  expect(grants).toStrictEqual([
+    { roleId: await roleIdOf(h, s.tenantId, 'store_owner'), storeId: s.storeA },
+  ]);
+});
+
+test("a store owner cannot reset a peer owner's PIN; they can reset a cashier's, and the main owner a store owner's", async () => {
+  const s = await storeWithOwners();
+  const peer = await seedUser(h, {
+    tenantId: s.tenantId,
+    name: 'Peer Owner',
+    storeIds: [s.s1],
+    roleKeys: ['store_owner'],
+  });
+  const cashier = await seedUser(h, {
+    tenantId: s.tenantId,
+    name: 'Cashier',
+    storeIds: [s.s1],
+    roleKeys: ['cashier'],
+  });
+  const reset = (actor: string, target: string) =>
+    h.app.request(`http://srv.test/v1/users/${target}/pin-verifier`, {
+      method: 'POST',
+      headers: s.as(actor),
+      body: verifierBody(s.deviceId),
+    });
+
+  expect((await reset(s.storeOwner, peer)).status).toBe(403);
+  expect((await reset(s.storeOwner, s.ownerId)).status).toBe(403);
+  expect((await reset(s.storeOwner, cashier)).status).toBe(200);
+  expect((await reset(s.ownerId, peer)).status).toBe(200);
 });
