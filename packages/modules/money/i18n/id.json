@@ -145,7 +145,7 @@
     "hint": "Isi alasannya.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
     "reason": "Alasan",
-    "limit": "Batas pembatalanmu {amount} per transaksi."
+    "limit": "Batas pembatalanmu {amount} per servisan."
   },
   "kind": {
     "qris": "QRIS",
