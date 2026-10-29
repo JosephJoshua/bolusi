@@ -11,6 +11,7 @@ import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
 import type { OpenTicketInput } from './commands.js';
+import { imeiInvalid, phoneInvalid } from './contact.js';
 import type { RepairKey } from './i18n.js';
 import {
   CHECKLIST_STATES,
@@ -874,7 +875,9 @@ export type IntakeStep = (typeof INTAKE_STEPS)[number];
 /** What still blocks a step, as the fields to point at. Empty means the step is complete. */
 export type IntakeProblem =
   | 'customerName'
+  | 'customerPhone'
   | 'deviceBrand'
+  | 'deviceImei'
   | 'deviceModel'
   | 'screenLock'
   | 'complaint'
@@ -885,6 +888,24 @@ export type IntakeProblem =
   | 'negativeTotal'
   | 'downPaymentAboveTotal'
   | 'downPaymentReference';
+
+/** What each problem says, on the phone and on the PC. */
+export const INTAKE_PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
+  customerName: 'repair.problem.customerName',
+  customerPhone: 'repair.problem.customerPhone',
+  deviceBrand: 'repair.problem.deviceBrand',
+  deviceModel: 'repair.problem.deviceModel',
+  deviceImei: 'repair.problem.deviceImei',
+  screenLock: 'repair.problem.screenLock',
+  complaint: 'repair.problem.complaint',
+  photos: 'repair.problem.photos',
+  ownershipVideo: 'repair.problem.ownershipVideo',
+  quoteLines: 'repair.problem.quoteLines',
+  incompleteLine: 'repair.problem.incompleteLine',
+  negativeTotal: 'repair.problem.negativeTotal',
+  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
+  downPaymentReference: 'repair.problem.downPaymentReference',
+};
 
 export function stepProblems(
   draft: IntakeDraft,
@@ -899,10 +920,14 @@ export function stepProblems(
       if (draft.customer.kind === 'new' && draft.customer.name.trim() === '') {
         problems.push('customerName');
       }
+      if (draft.customer.kind === 'new' && phoneInvalid(draft.customer.phone)) {
+        problems.push('customerPhone');
+      }
       break;
     case 'device':
       if (draft.device.brand.trim() === '') problems.push('deviceBrand');
       if (draft.device.model.trim() === '') problems.push('deviceModel');
+      if (imeiInvalid(draft.device.imei)) problems.push('deviceImei');
       // A chosen lock with nothing entered (a pattern shorter than Android allows is kept as '')
       // would save as no lock; the counter picks "Tidak ada" for that.
       if (draft.device.lockKind !== 'none' && draft.device.passcode === '') {

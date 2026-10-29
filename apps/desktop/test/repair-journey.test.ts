@@ -360,7 +360,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     const clip = await video(counter);
     const opened = await act(counter, 'repair')('openTicket', {
       customer: { name: 'Yakobus Mandowen', phone: '0813-4455-6677' },
-      device: { brand: 'Samsung', model: 'Galaxy A54', color: 'Hitam', imei: '356789104455667' },
+      device: { brand: 'Samsung', model: 'Galaxy A54', color: 'Hitam', imei: '356789104455660' },
       complaint: 'Layar bergaris, baterai cepat habis',
       checklist: [{ item: 'screen', label: null, state: 'issue', note: 'garis hijau' }],
       peripherals: [{ item: 'charger', label: null }],

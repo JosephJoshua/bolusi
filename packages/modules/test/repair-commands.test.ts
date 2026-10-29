@@ -83,7 +83,7 @@ describe('intake', () => {
     const t = await ticket(h, first.ticketId);
     expect(t).toMatchObject({
       customerName: 'Yohanis Wenda',
-      customerPhone: '0812-4455-6677',
+      customerPhone: '081244556677',
       deviceModel: 'Galaxy A14',
       outcome: 'received',
       location: 'in_store',
@@ -208,6 +208,42 @@ describe('intake', () => {
     h = await openRepairHarness(4);
     const opened = await open(h, { customer: { name: 'Mama Yuliana', phone: '  ' } });
     expect((await ticket(h, opened.ticketId)).customerPhone).toBeNull();
+  });
+
+  test('a phone number is stored one way and one that cannot be dialled is refused', async () => {
+    h = await openRepairHarness(4);
+    const opened = await open(h, {
+      customer: { name: 'Mama Yuliana', phone: '+62 812-3456-7890' },
+    });
+    expect((await ticket(h, opened.ticketId)).customerPhone).toBe('081234567890');
+    for (const phone of ['0812345', '08123456789012345', '12345678', '+1 555 0100']) {
+      await expectCode(
+        h.run('openTicket', intake(h, { customer: { name: 'Mama Yuliana', phone } }), h.cashierId),
+        'VALIDATION_FAILED',
+      );
+    }
+  });
+
+  test('an IMEI must be 15 digits with a valid check digit', async () => {
+    h = await openRepairHarness(4);
+    const device = { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam' };
+    for (const imei of ['35678910445566', '356789104455667']) {
+      await expectCode(
+        h.run('openTicket', intake(h, { device: { ...device, imei } }), h.cashierId),
+        'VALIDATION_FAILED',
+      );
+    }
+    const opened = await open(h, { device: { ...device, imei: '35678910-4455660' } });
+    expect((await ticket(h, opened.ticketId)).deviceImei).toBe('356789104455660');
+  });
+
+  test('retyping a returning customer reuses them; another name on the number is someone new', async () => {
+    h = await openRepairHarness(4);
+    const first = await open(h, { customer: { name: 'Yohanis Wenda', phone: '0812-4455-6677' } });
+    const again = await open(h, { customer: { name: ' yohanis  wenda', phone: '081244556677' } });
+    expect(again.customerId).toBe(first.customerId);
+    const other = await open(h, { customer: { name: 'Mama Wenda', phone: '081244556677' } });
+    expect(other.customerId).not.toBe(first.customerId);
   });
 
   test('technicians and unprivileged users cannot take devices in', async () => {

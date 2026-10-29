@@ -90,8 +90,12 @@ export function CustomerStep({
   draft,
   update,
   nameError,
+  phoneError,
   testID,
-}: StepProps & { readonly nameError: string | undefined }): React.JSX.Element {
+}: StepProps & {
+  readonly nameError: string | undefined;
+  readonly phoneError: string | undefined;
+}): React.JSX.Element {
   const customer = draft.customer;
   const typed = customer.kind === 'new' ? [customer.name, customer.phone].join(' ').trim() : '';
   // Matched once the counter pauses typing, not on every key; a cleared name clears them at once.
@@ -142,6 +146,7 @@ export function CustomerStep({
           value={customer.phone}
           onChangeText={(phone) => update({ customer: { ...customer, phone: phoneText(phone) } })}
           keyboardType="phone-pad"
+          errorMessage={phoneError}
           testID={`${testID}.phone`}
         />
       </View>
@@ -184,11 +189,13 @@ export function DeviceStep({
   options,
   brandError,
   modelError,
+  imeiError,
   lockError,
   testID,
 }: StepProps & {
   readonly brandError: string | undefined;
   readonly modelError: string | undefined;
+  readonly imeiError: string | undefined;
   readonly lockError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
@@ -303,8 +310,9 @@ export function DeviceStep({
         <TextInput
           label={tn('repair.device.imeiField')}
           value={device.imei}
-          onChangeText={(imei) => set({ imei })}
+          onChangeText={(imei) => set({ imei: imei.replace(/[^\d\s-]/g, '') })}
           keyboardType="number-pad"
+          errorMessage={imeiError}
           testID={`${testID}.imei`}
         />
       </View>
@@ -665,6 +673,7 @@ export function PriceStep({
                   if (acceptsRupiahText(text)) setLine(index, { amount: parseRupiah(text) ?? 0 });
                 }}
                 keyboardType="number-pad"
+                selectTextOnFocus
                 testID={`${testID}.amount.${index}`}
               />
             </View>
@@ -704,6 +713,7 @@ export function PriceStep({
             if (acceptsRupiahText(text)) update({ downPayment: text.replace(/\D/g, '') });
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           errorMessage={downPaymentError}
           testID={`${testID}.downPaymentInput`}
         />

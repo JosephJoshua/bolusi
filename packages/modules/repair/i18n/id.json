@@ -254,7 +254,9 @@
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentReference": "Isi kode approval dari mesin EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada.",
-    "ownershipVideo": "Video kepemilikan belum direkam."
+    "ownershipVideo": "Video kepemilikan belum direkam.",
+    "customerPhone": "Nomor HP-nya belum benar. Cek lagi angkanya.",
+    "deviceImei": "IMEI-nya belum benar. IMEI ada 15 angka, cek di *#06#."
   },
   "ready": {
     "today": "Hari ini",

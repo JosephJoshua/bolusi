@@ -254,7 +254,9 @@
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentReference": "Enter the approval code from the EDC machine.",
     "screenLock": "Enter the screen lock, or choose None.",
-    "ownershipVideo": "The ownership video isn’t recorded yet."
+    "ownershipVideo": "The ownership video isn’t recorded yet.",
+    "customerPhone": "This phone number doesn’t look right. Check the digits.",
+    "deviceImei": "This IMEI isn’t right. An IMEI has 15 digits; dial *#06# to see it."
   },
   "ready": {
     "today": "Today",

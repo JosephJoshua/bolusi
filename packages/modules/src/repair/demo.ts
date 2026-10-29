@@ -313,7 +313,7 @@ function ticket(spec: {
     deviceBrand: spec.brand,
     deviceModel: spec.model,
     deviceColor: spec.color,
-    deviceImei: '356789104455667',
+    deviceImei: '356789104455660',
     complaint: spec.complaint,
     outcome: spec.outcome,
     location: spec.location ?? 'in_store',

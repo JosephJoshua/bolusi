@@ -16,7 +16,7 @@ import {
   type VideoMediaRef,
 } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import { INTAKE_STEP_KEY, optionLabel } from '../labels.js';
 import {
   INTAKE_STEPS,
@@ -29,6 +29,7 @@ import {
   stepProblems,
   toOpenTicketInput,
   type IntakeDraft,
+  INTAKE_PROBLEM_KEY,
   type IntakeProblem,
 } from '../flows.js';
 import {
@@ -49,21 +50,6 @@ import {
   PriceStep,
   ReviewStep,
 } from './IntakeSteps.js';
-
-const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
-  customerName: 'repair.problem.customerName',
-  deviceBrand: 'repair.problem.deviceBrand',
-  deviceModel: 'repair.problem.deviceModel',
-  screenLock: 'repair.problem.screenLock',
-  complaint: 'repair.problem.complaint',
-  photos: 'repair.problem.photos',
-  ownershipVideo: 'repair.problem.ownershipVideo',
-  quoteLines: 'repair.problem.quoteLines',
-  incompleteLine: 'repair.problem.incompleteLine',
-  negativeTotal: 'repair.problem.negativeTotal',
-  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
-  downPaymentReference: 'repair.problem.downPaymentReference',
-};
 
 /** Problems said on their own field rather than in the step's list. */
 const FIELD_PROBLEMS: ReadonlySet<IntakeProblem> = new Set([
@@ -304,7 +290,7 @@ export function IntakeWizard({
 
   const back = (): void => (stepIndex === 0 ? requestLeave(onCancel) : goTo(stepIndex - 1));
   const problemText = (problem: IntakeProblem): string | undefined =>
-    showProblems && problems.includes(problem) ? tn(PROBLEM_KEY[problem]) : undefined;
+    showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
 
   return (
     <FlowScreen
@@ -390,7 +376,7 @@ export function IntakeWizard({
             .filter((problem) => !FIELD_PROBLEMS.has(problem))
             .map((problem) => (
               <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
-                {tn(PROBLEM_KEY[problem])}
+                {tn(INTAKE_PROBLEM_KEY[problem])}
               </Text>
             ))}
         </View>
@@ -407,6 +393,7 @@ export function IntakeWizard({
             update={update}
             options={options}
             nameError={problemText('customerName')}
+            phoneError={problemText('customerPhone')}
             testID={`${testID}.customer`}
           />
         );
@@ -418,6 +405,7 @@ export function IntakeWizard({
             options={options}
             brandError={problemText('deviceBrand')}
             modelError={problemText('deviceModel')}
+            imeiError={problemText('deviceImei')}
             lockError={problemText('screenLock')}
             testID={`${testID}.device`}
           />
@@ -456,7 +444,7 @@ export function IntakeWizard({
             // Wrong as soon as it is typed, not merely unfinished, so it shows straight away.
             downPaymentError={
               problems.includes('downPaymentAboveTotal')
-                ? tn(PROBLEM_KEY.downPaymentAboveTotal)
+                ? tn(INTAKE_PROBLEM_KEY.downPaymentAboveTotal)
                 : undefined
             }
             testID={`${testID}.price`}

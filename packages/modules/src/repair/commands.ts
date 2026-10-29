@@ -56,6 +56,7 @@ import {
   intakeOptionSettingsQuery,
   nextTicketCounterQuery,
   printSettingsQuery,
+  searchCustomersQuery,
   standardCancelFee,
   uncollectedDaysQuery,
   type CancelFees,
@@ -76,17 +77,34 @@ import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { formatTicketNumber } from './ticket-number.js';
+import {
+  imeiInvalid,
+  normalizeImei,
+  normalizePhone,
+  phoneInvalid,
+  sameCustomer,
+} from './contact.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
 
 const zText = (max: number) => z.string().trim().max(max);
 const zRequiredText = (max: number) => z.string().trim().min(1).max(max);
+/** A customer's number, stored one way (`normalizePhone`); one that can't be dialled is refused. */
 const zPhone = z
   .string()
   .trim()
   .max(40)
   .nullable()
-  .transform((phone) => (phone === null || phone === '' ? null : phone));
+  .refine((phone) => phone === null || !phoneInvalid(phone), { message: 'not a phone number' })
+  .transform((phone) => (phone === null ? null : normalizePhone(phone)));
+/** 15 digits with a valid check digit, or nothing. */
+const zImei = z
+  .string()
+  .trim()
+  .max(40)
+  .nullable()
+  .refine((imei) => imei === null || !imeiInvalid(imei), { message: 'not an IMEI' })
+  .transform((imei) => (imei === null ? null : normalizeImei(imei)));
 const zAmountInput = z.number().int().min(-MAX_LINE_AMOUNT).max(MAX_LINE_AMOUNT);
 
 const zLineInput = z
@@ -129,6 +147,16 @@ async function ticketMoney(ctx: CommandContext, ticketId: string): Promise<Docum
 }
 
 // ── customers ──────────────────────────────────────────────────────────────────────────────────
+
+/** A customer of this store with this name and number, found by the number. */
+async function findSameCustomer(
+  ctx: CommandContext,
+  customer: { readonly name: string; readonly phone: string | null },
+): Promise<string | null> {
+  if (customer.phone === null) return null;
+  const found = await ctx.query(searchCustomersQuery, { text: customer.phone, limit: 20 });
+  return found.rows.find((row) => sameCustomer(row, customer))?.id ?? null;
+}
 
 export const registerCustomerInput = z
   .object({ name: zRequiredText(200), phone: zPhone.default(null) })
@@ -207,7 +235,7 @@ export const openTicketInput = z
       brand: zRequiredText(100),
       model: zRequiredText(100),
       color: zText(200).default(''),
-      imei: zPhone.default(null),
+      imei: zImei.default(null),
       passcode: z
         .string()
         .max(200)
@@ -280,15 +308,19 @@ export async function openTicketHandler(
     customerId = (await ctx.query(getCustomerQuery, { customerId: input.customer.customerId }))
       .rows[0]!.id;
   } else {
-    customerId = ctx.newId();
-    ops.push(
-      ctx.op({
-        type: REPAIR_OP.customerRegistered,
-        entityType: REPAIR_CUSTOMER_ENTITY,
-        entityId: customerId,
-        payload: { name: input.customer.name, phone: input.customer.phone },
-      }),
-    );
+    // Retyping a returning customer (the "Pakai" card ignored) must not make them twice.
+    const known = await findSameCustomer(ctx, input.customer);
+    customerId = known ?? ctx.newId();
+    if (known === null) {
+      ops.push(
+        ctx.op({
+          type: REPAIR_OP.customerRegistered,
+          entityType: REPAIR_CUSTOMER_ENTITY,
+          entityId: customerId,
+          payload: { name: input.customer.name, phone: input.customer.phone },
+        }),
+      );
+    }
   }
 
   // "Samsung" + "A15" is the catalog's Galaxy A15: store it the catalog's way, whichever screen or
