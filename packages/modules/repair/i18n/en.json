@@ -321,7 +321,9 @@
     "handoverPayment": "Complete the payment first.",
     "discountLimit": "Your discount limit is {amount} per servisan.",
     "handoverChecks": "Tick everything, or write why not.",
-    "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
+    "handoverQris": "Waiting for the QRIS payment. Check the internet is on.",
+    "creditLimit": "Your pay-later limit is {amount} per servisan.",
+    "creditOverLimit": "Pay later only goes up to {amount}. Ask the store owner."
   },
   "discardPhotos": {
     "title": "Leave without saving?",

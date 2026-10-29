@@ -52,7 +52,7 @@ import {
 import { useDiscardConfirm } from './discard.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
-import { useHandoverPayment } from '../handover-payment.js';
+import { payLaterOffer, useHandoverPayment } from '../handover-payment.js';
 import { usePaymentAccounts, useRepairQuery, useRepairRuntime, useTicketQris } from '../runtime.js';
 
 export interface HandoverProps {
@@ -98,11 +98,16 @@ export function Handover({
   // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
   // than take a signature for a handover that would be refused.
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const ticket = query.status === 'ready' ? query.data : undefined;
   const balance =
     ticket === undefined ? { kind: 'due' as const, amount: 0 } : ticketBalance(ticket);
   const due = balance.kind === 'due' ? balance.amount : 0;
+  const payLater = payLaterOffer(
+    runtime.hasPermission(MONEY_PERMISSION.extendCredit),
+    runtime.limitOf(MONEY_PERMISSION.extendCredit),
+    due,
+  );
+  const canPayLater = payLater.offered;
   const qris = useTicketQris(ticketId, ticket?.ticketNumber ?? null);
   const payment = useHandoverPayment(due, accounts, canPayLater, qris, restored?.payment);
   const { settled } = payment;
@@ -338,17 +343,29 @@ export function Handover({
               <Text style={repairStyles.muted} testID={`${testID}.debt`}>
                 {tn('repair.handover.payLaterNote', { amount: formatMoney(due) })}
               </Text>
+              {payLater.limit === null ? null : (
+                <Text style={repairStyles.caption} testID={`${testID}.creditLimit`}>
+                  {tn('repair.hint.creditLimit', { amount: formatMoney(payLater.limit) })}
+                </Text>
+              )}
             </View>
           ) : (
-            <PaymentLines
-              lines={payment.lines}
-              entry={payment.entry}
-              accounts={accounts}
-              onChange={payment.setLines}
-              newKey={payment.newKey}
-              qris={payment.qris}
-              testID={`${testID}.pay`}
-            />
+            <View style={styles.payLater}>
+              {payLater.overLimit && payLater.limit !== null ? (
+                <Text style={repairStyles.caption} testID={`${testID}.creditOverLimit`}>
+                  {tn('repair.hint.creditOverLimit', { amount: formatMoney(payLater.limit) })}
+                </Text>
+              ) : null}
+              <PaymentLines
+                lines={payment.lines}
+                entry={payment.entry}
+                accounts={accounts}
+                onChange={payment.setLines}
+                newKey={payment.newKey}
+                qris={payment.qris}
+                testID={`${testID}.pay`}
+              />
+            </View>
           )}
         </Section>
       ) : null}

@@ -529,6 +529,41 @@ describe('price changes and handover', () => {
     expect(onDraftChange).toHaveBeenLastCalledWith(null);
   });
 
+  // A manager's credit limit is said before the handover, not refused at the end (round 2 QA, F6).
+  test('a manager is offered Bayar nanti only within the credit limit, and told it', async () => {
+    h = await openRepairScreenHarness(5309);
+    const repairedTicket = async (downPayment: number | null): Promise<string> => {
+      const { ticketId } = (await h!.run(
+        'openTicket',
+        intake(h!, downPayment === null ? {} : { downPayment }),
+        h!.cashierId,
+      )) as { ticketId: string };
+      await h!.run('startWork', { ticketId, beforePhotos: [h!.photo(40)] }, h!.technicianId);
+      await h!.run('markRepaired', { ticketId, afterPhotos: [h!.photo(41)] }, h!.technicianId);
+      return ticketId;
+    };
+    const big = await repairedTicket(null);
+    const small = await repairedTicket(700_000);
+    const screen = await mount(h, h.managerId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${big}`);
+    await press(screen, 'repair.ticket.action.handover');
+    // Rp 750.000 due is above the Rp 100.000 limit: not offered, and the limit is said.
+    expect(screen.query('repair.handover.payLater')).toBeNull();
+    expect(text(screen, 'repair.handover.creditOverLimit')).toBe(
+      'Bayar nanti cuma bisa sampai Rp 100.000. Minta pemilik toko.',
+    );
+    screen.unmount();
+    const again = await mount(h, h.managerId);
+    await press(again, 'repair.board.views.pickup');
+    await press(again, `repair.board.row.${small}`);
+    await press(again, 'repair.ticket.action.handover');
+    await press(again, 'repair.handover.payLater');
+    expect(text(again, 'repair.handover.creditLimit')).toBe(
+      'Batas bayar nantimu Rp 100.000 per servisan.',
+    );
+  });
+
   test('a kept handover whose photo is gone asks for it again instead of sending it missing', async () => {
     h = await openRepairScreenHarness(5308);
     const ticketId = await openTicket(h);

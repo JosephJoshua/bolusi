@@ -358,7 +358,7 @@ describe('what customers owe', () => {
 });
 
 describe('Riwayat', () => {
-  async function paid(harness: RepairHarness): Promise<string> {
+  async function paid(harness: RepairHarness, amount = 200_000): Promise<string> {
     const { ticketId, ticketNumber } = (await harness.run(
       'openTicket',
       intake(harness),
@@ -368,7 +368,7 @@ describe('Riwayat', () => {
       'receivePayments',
       {
         document: { kind: 'repair.ticket', id: ticketId, label: ticketNumber },
-        payments: [{ account: 'cash', amount: 200_000 }],
+        payments: [{ account: 'cash', amount }],
       },
       harness.cashierId,
     );
@@ -414,6 +414,23 @@ describe('Riwayat', () => {
     await press(screen, 'money.kas.history');
     const row = screen.all(`money.history.entry.${entryId}`)[0]!;
     expect(row.props['onPress']).toBeUndefined();
+  });
+
+  // A manager's void limit is said before, not refused after (round 2 QA, F6).
+  test('a manager is offered only a void within the limit, and is told the limit', async () => {
+    h = await openRepairScreenHarness(5415);
+    const big = await paid(h);
+    const screen = await mount(h, h.managerId);
+    await press(screen, 'money.kas.history');
+    expect(screen.all(`money.history.entry.${big}`)[0]!.props['onPress']).toBeUndefined();
+    await h.close();
+
+    h = await openRepairScreenHarness(5416);
+    const small = await paid(h, 20_000);
+    const again = await mount(h, h.managerId);
+    await press(again, 'money.kas.history');
+    await press(again, `money.history.entry.${small}`);
+    expect(text(again, 'money.void.limit')).toBe('Batas pembatalanmu Rp 30.000 per servisan.');
   });
 
   test('the day before is its own page', async () => {

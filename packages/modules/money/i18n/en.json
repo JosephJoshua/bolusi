@@ -149,6 +149,7 @@
     "save": "Cancel payment",
     "hint": "Enter the reason.",
     "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
+    "limit": "Your void limit is {amount} per servisan.",
     "reason": "Reason"
   },
   "kind": {

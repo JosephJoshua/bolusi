@@ -15,7 +15,7 @@ import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/scree
 import { MAX_REASON, MONEY_PERMISSION } from '../constants.js';
 import { tm } from '../i18n.js';
 import { shiftDay, useDayRecords } from '../day-records.js';
-import { accountLabel, dayStart, historyLine, voidable } from '../kas.js';
+import { accountLabel, dayStart, historyLine, voidOffered } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
@@ -43,6 +43,7 @@ export function KasHistory({
   testID = 'money.history',
 }: KasHistoryProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
+  const voidLimit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
   const mayVoid = runtime.hasPermission(MONEY_PERMISSION.voidPayment);
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
@@ -105,7 +106,9 @@ export function KasHistory({
                     detail={[formatTime(entry.createdAt), ...line.details].join(' · ')}
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
-                    onPress={mayVoid && voidable(entry) ? () => onVoid(entry) : undefined}
+                    onPress={
+                      mayVoid && voidOffered(entry, voidLimit) ? () => onVoid(entry) : undefined
+                    }
                     testID={`${testID}.entry.${entry.id}`}
                   />
                 );
@@ -153,6 +156,7 @@ export function VoidPaymentStep({
 }: VoidPaymentStepProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
+  const voidLimit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
   const accounts = useMoneyQuery(
     async (rt) => (await rt.query('paymentAccounts', { includeInactive: true })).rows,
     'accounts',
@@ -208,6 +212,11 @@ export function VoidPaymentStep({
           .join(' · ')}
       </Text>
       <Text style={styles.body}>{tm('money.void.explain')}</Text>
+      {voidLimit === null ? null : (
+        <Text style={styles.muted} testID={`${testID}.limit`}>
+          {tm('money.void.limit', { amount: formatMoney(voidLimit) })}
+        </Text>
+      )}
       <View style={styles.gap}>
         <TextInput
           label={tm('money.void.reason')}

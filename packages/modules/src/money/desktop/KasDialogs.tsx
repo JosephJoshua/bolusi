@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 
-import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
+import { CASH_MOVE_KINDS, MAX_REASON, MONEY_PERMISSION, type CashMoveKind } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
   CASH_MOVE_LABEL,
@@ -404,6 +404,7 @@ export function VoidPaymentDialog({
   const runner = useActionRunner();
   const [reason, setReason] = useState('');
   const testId = 'money.desk.void';
+  const voidLimit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
 
   const submit = (): void => {
     if (reason.trim() === '') return;
@@ -441,6 +442,11 @@ export function VoidPaymentDialog({
         </span>
       </div>
       <p className="text-body text-text">{tm('money.void.explain')}</p>
+      {voidLimit === null ? null : (
+        <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
+          {tm('money.void.limit', { amount: formatMoney(voidLimit) })}
+        </p>
+      )}
       <ReasonField
         label={tm('money.void.reason')}
         value={reason}

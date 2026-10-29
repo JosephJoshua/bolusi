@@ -149,6 +149,7 @@
     "save": "Batalkan pembayaran",
     "hint": "Isi alasannya.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
+    "limit": "Batas pembatalanmu {amount} per servisan.",
     "reason": "Alasan"
   },
   "kind": {

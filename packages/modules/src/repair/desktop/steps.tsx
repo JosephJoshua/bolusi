@@ -27,7 +27,7 @@ import { accountLabel } from '../../money/kas.js';
 import { chosenMethod, offeredAccount, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
-import { useHandoverPayment } from '../handover-payment.js';
+import { payLaterOffer, useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_PERMISSION,
@@ -949,7 +949,12 @@ export function HandoverDialog({
   const balance = ticketBalance(ticket);
   const split = balance.kind === 'refund' ? ticket.refunds : [];
   const due = balance.kind === 'due' ? balance.amount : 0;
-  const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
+  const payLater = payLaterOffer(
+    runtime.hasPermission(MONEY_PERMISSION.extendCredit),
+    runtime.limitOf(MONEY_PERMISSION.extendCredit),
+    due,
+  );
+  const canPayLater = payLater.offered;
   const qris = useTicketQris(ticketId, ticket.ticketNumber);
   const payment = useHandoverPayment(due, accounts, canPayLater, qris);
   const { settled } = payment;
@@ -1131,6 +1136,14 @@ export function HandoverDialog({
                 />
               ) : null}
             </div>
+            {payLater.overLimit && payLater.limit !== null ? (
+              <p
+                className="mb-2 text-small text-text-muted"
+                data-testid="repair.desk.handover.creditOverLimit"
+              >
+                {tn('repair.hint.creditOverLimit', { amount: formatMoney(payLater.limit) })}
+              </p>
+            ) : null}
             {payment.unpaid ? (
               <div>
                 <TextArea
@@ -1146,6 +1159,14 @@ export function HandoverDialog({
                 >
                   {tn('repair.handover.payLaterNote', { amount: formatMoney(due) })}
                 </p>
+                {payLater.limit === null ? null : (
+                  <p
+                    className="mt-1 text-small text-text-muted"
+                    data-testid="repair.desk.handover.creditLimit"
+                  >
+                    {tn('repair.hint.creditLimit', { amount: formatMoney(payLater.limit) })}
+                  </p>
+                )}
               </div>
             ) : (
               <PaymentLines

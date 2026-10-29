@@ -29,7 +29,7 @@ import {
   dayStart,
   differenceText,
   historyLine,
-  voidable,
+  voidOffered,
   type NamedBalance,
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
@@ -392,7 +392,9 @@ function History({
   readonly onVoid: (entry: MoneyEntryRow, accounts: readonly PaymentAccountRow[]) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const mayVoid = runtime.hasPermission(MONEY_PERMISSION.voidPayment);
+  const voidLimit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
+  // A limit of 0 voids nothing: the same as not holding it.
+  const mayVoid = runtime.hasPermission(MONEY_PERMISSION.voidPayment) && voidLimit !== 0;
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -479,7 +481,7 @@ function History({
               header: '',
               meta: { track: '112px', align: 'end' as const },
               cell: ({ row: { original: entry } }: { row: { original: MoneyEntryRow } }) =>
-                voidable(entry) ? (
+                voidOffered(entry, voidLimit) ? (
                   <Button
                     label={tm('money.history.void')}
                     aria-label={tm('money.history.voidLabel', {
@@ -499,7 +501,7 @@ function History({
           ]
         : []),
     ];
-  }, [loaded, mayVoid, onVoid]);
+  }, [loaded, mayVoid, onVoid, voidLimit]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>
@@ -548,7 +550,7 @@ function History({
           selectedId={selected}
           onSelect={(row) => setSelected(row.id)}
           onActivate={(row) => {
-            if (mayVoid && voidable(row)) onVoid(row, loaded?.accounts ?? []);
+            if (mayVoid && voidOffered(row, voidLimit)) onVoid(row, loaded?.accounts ?? []);
           }}
           // Newest first, as the query reads them across pages.
           sortable={false}

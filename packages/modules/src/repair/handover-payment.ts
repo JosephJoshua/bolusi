@@ -53,6 +53,28 @@ export interface HandoverQris {
   readonly newId: () => string;
 }
 
+/**
+ * Whether "Bayar nanti" is offered for what is due, and the limit to say beside it: someone holding
+ * the permission with a limit (a manager) may leave a debt only up to it, so a larger one is not
+ * offered and the limit is said instead. A limit of 0 is the same as not holding it.
+ */
+export function payLaterOffer(
+  held: boolean,
+  /** `ModulePort.limitOf(money.extend_credit)`: null when unlimited. */
+  limit: number | null,
+  due: number,
+): {
+  readonly offered: boolean;
+  readonly limit: number | null;
+  readonly overLimit: boolean;
+} {
+  if (!held || limit === 0) return { offered: false, limit: null, overLimit: false };
+  if (limit === null) return { offered: true, limit: null, overLimit: false };
+  return due <= limit
+    ? { offered: true, limit, overLimit: false }
+    : { offered: false, limit, overLimit: true };
+}
+
 export function useHandoverPayment(
   due: number,
   accounts: readonly PaymentAccountRow[],

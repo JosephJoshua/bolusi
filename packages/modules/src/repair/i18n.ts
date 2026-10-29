@@ -138,6 +138,8 @@ export const REPAIR_KEYS = [
   'repair.hint.photo',
   'repair.hint.priceLine',
   'repair.hint.discountLimit',
+  'repair.hint.creditLimit',
+  'repair.hint.creditOverLimit',
   'repair.hint.reason',
   'repair.hint.downPayment',
   'repair.hint.downPaymentCorrect',

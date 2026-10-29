@@ -212,6 +212,15 @@ export function voidable(entry: MoneyEntryRow): boolean {
 }
 
 /**
+ * Whether someone may void this payment, given `ModulePort.limitOf(money.void_payment)`: anyone
+ * unlimited, and a limited role (a manager) only a payment within its limit, so one it would be
+ * refused is not offered. Earlier voids on the same servisan still count against it at the rule.
+ */
+export function voidOffered(entry: MoneyEntryRow, limit: number | null): boolean {
+  return voidable(entry) && (limit === null || entry.amount <= limit);
+}
+
+/**
  * The count an owner is settling, as it stands now (a payment from before the count can sync while
  * they read), and whether it is still the one to settle.
  */

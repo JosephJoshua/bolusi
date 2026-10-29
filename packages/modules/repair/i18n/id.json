@@ -321,7 +321,9 @@
     "handoverPayment": "Lengkapi pembayarannya dulu.",
     "discountLimit": "Batas diskonmu {amount} per servisan.",
     "handoverChecks": "Centang semua, atau tulis kenapa belum.",
-    "handoverQris": "Tunggu QRIS masuk. Pastikan internet nyala."
+    "handoverQris": "Tunggu QRIS masuk. Pastikan internet nyala.",
+    "creditLimit": "Batas bayar nantimu {amount} per servisan.",
+    "creditOverLimit": "Bayar nanti cuma bisa sampai {amount}. Minta pemilik toko."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
