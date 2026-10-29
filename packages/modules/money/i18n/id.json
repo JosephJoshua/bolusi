@@ -140,7 +140,8 @@
       "time": "Waktu",
       "record": "Catatan"
     },
-    "voidLabel": "Batalkan catatan {amount} pukul {time}"
+    "voidLabel": "Batalkan pembayaran {amount} pukul {time}",
+    "voidCashLabel": "Batalkan catatan kas {amount} pukul {time}"
   },
   "void": {
     "title": "Batalkan pembayaran",

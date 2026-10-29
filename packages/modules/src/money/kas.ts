@@ -222,6 +222,8 @@ export function voidKind(entry: Pick<MoneyEntryRow, 'kind'>): {
   readonly title: MoneyKey;
   readonly save: MoneyKey;
   readonly explain: MoneyKey;
+  /** The void button's full name in a list, with the amount and time. */
+  readonly label: MoneyKey;
 } {
   return entry.kind === 'cash_moved'
     ? {
@@ -229,12 +231,14 @@ export function voidKind(entry: Pick<MoneyEntryRow, 'kind'>): {
         title: 'money.void.cashTitle',
         save: 'money.void.cashSave',
         explain: 'money.void.cashExplain',
+        label: 'money.history.voidCashLabel',
       }
     : {
         command: 'voidPayment',
         title: 'money.void.title',
         save: 'money.void.save',
         explain: 'money.void.explain',
+        label: 'money.history.voidLabel',
       };
 }
 

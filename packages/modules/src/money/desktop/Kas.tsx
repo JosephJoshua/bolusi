@@ -30,6 +30,7 @@ import {
   historyLine,
   voidAbilities,
   voidable,
+  voidKind,
   type NamedBalance,
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
@@ -483,7 +484,7 @@ function History({
                 voidable(entry, can) ? (
                   <Button
                     label={tm('money.history.void')}
-                    aria-label={tm('money.history.voidLabel', {
+                    aria-label={tm(voidKind(entry).label, {
                       amount: formatMoney(entry.amount),
                       time: formatTime(entry.createdAt),
                     })}

@@ -140,7 +140,8 @@
       "time": "Time",
       "record": "Record"
     },
-    "voidLabel": "Cancel the record of {amount} at {time}"
+    "voidLabel": "Cancel the {amount} payment at {time}",
+    "voidCashLabel": "Cancel the cash record of {amount} at {time}"
   },
   "void": {
     "title": "Cancel payment",

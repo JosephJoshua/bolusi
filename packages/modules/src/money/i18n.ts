@@ -204,6 +204,7 @@ export const MONEY_KEYS = [
   'money.void.cashTitle',
   'money.void.cashSave',
   'money.void.cashExplain',
+  'money.history.voidCashLabel',
 ] as const;
 
 export type MoneyKey = (typeof MONEY_KEYS)[number];

@@ -537,22 +537,21 @@ export const customerRegisteredRule: Rule = async (op, { db }) => {
 };
 
 /**
- * A customer's details are corrected from one of their servisans still in the store, like the
+ * A customer's details are corrected while one of their servisans is still in the store, like the
  * servisan's own details: once everything went home, the slips they signed are the record.
  */
 export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
   if (!(await customerExists(db, op, op.entityId))) {
     throw notFound(REPAIR_CUSTOMER_ENTITY, op.entityId);
   }
-  const inStore = await db
+  const tickets = await db
     .selectFrom('repairTickets')
-    .select('id')
+    .select('location')
     .where('customerId', '=', op.entityId)
-    .where('location', '=', 'in_store')
     .where('tenantId', '=', op.tenantId)
     .where('storeId', '=', storeOf(op))
-    .executeTakeFirst();
-  if (inStore === undefined) {
+    .execute();
+  if (tickets.length > 0 && tickets.every((ticket) => ticket.location === 'returned')) {
     throw refuse('returned', {
       code: 'INVALID_TRANSITION',
       details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: op.entityId },
