@@ -6,6 +6,7 @@ import { formatMoney, t } from '@bolusi/i18n';
 import type { MediaRef } from '@bolusi/schemas';
 import {
   Avatar,
+  Banner,
   Button,
   CaptureTile,
   ConfirmDialog,
@@ -26,7 +27,7 @@ import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
-import { useHandoverPayment } from '../handover-payment.js';
+import { giveBackText, useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_PERMISSION,
@@ -44,6 +45,7 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
+  cancelRefund,
 } from '../flows.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
@@ -53,6 +55,7 @@ import {
   useCancelFees,
   useIntakeOptionSettings,
   useDownPaymentMethod,
+  useHandoverRefunds,
   usePaymentAccounts,
   useTicketQris,
   useRepairQuery,
@@ -439,10 +442,13 @@ export function CancelDialog({
   stale,
   workStarted,
   claimOf,
+  downPayment,
   onDone,
   onClose,
 }: StepDialogProps & {
   readonly workStarted: boolean;
+  /** Paid in so far: what is above the fee goes back at pickup. */
+  readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
   readonly claimOf: string | null;
 }): React.JSX.Element {
@@ -485,7 +491,13 @@ export function CancelDialog({
     <>
       <StepDialog
         title={tn('repair.action.cancel')}
-        description={tn('repair.cancel.consequence')}
+        description={
+          cancelRefund(downPayment, charged) > 0
+            ? tn('repair.cancel.refundsDp', {
+                amount: formatMoney(cancelRefund(downPayment, charged)),
+              })
+            : tn('repair.cancel.consequence')
+        }
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
@@ -932,6 +944,9 @@ export function HandoverDialog({
   const accounts = loadedAccounts ?? [];
   const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
+  const giveBack = giveBackText(
+    useHandoverRefunds(ticketId, balance.kind === 'refund' ? balance.amount : 0, accounts),
+  );
   const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const qris = useTicketQris(ticketId, ticket.ticketNumber);
   const payment = useHandoverPayment(due, accounts, canPayLater, qris);
@@ -1052,6 +1067,11 @@ export function HandoverDialog({
         {cancelled ? (
           <p className="mt-2 text-small text-text-muted">{tn('repair.handover.cancelled')}</p>
         ) : null}
+        {giveBack === null || stale !== null ? null : (
+          <div className="mt-3" data-testid="repair.desk.handover.giveBack">
+            <Banner tone="info" message={giveBack} />
+          </div>
+        )}
         {checks.lines.length === 0 || stale !== null ? null : (
           <section className="mt-4" data-testid="repair.desk.handover.checks">
             <h3 className="mb-2 text-body font-semibold text-text">

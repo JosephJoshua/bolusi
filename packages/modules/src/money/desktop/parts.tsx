@@ -115,16 +115,19 @@ export function AmountField({
   label,
   digits,
   onChange,
+  error,
   testId,
 }: {
   readonly label: string;
   readonly digits: string;
   readonly onChange: (digits: string) => void;
+  readonly error?: string | undefined;
   readonly testId: string;
 }): React.JSX.Element {
   return (
     <TextField
       label={label}
+      error={error}
       prefix={tm('money.pay.currency')}
       inputMode="numeric"
       inputClassName="tabular text-right"
