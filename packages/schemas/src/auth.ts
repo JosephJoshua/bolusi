@@ -127,6 +127,11 @@ export const EnrollReq = z
   .strict();
 export type EnrollReq = z.infer<typeof EnrollReq>;
 
+// ============ PATCH /v1/devices/me ============
+/** Rename this device, as an owner signed in on it. Same bounds as the name typed at enrolment. */
+export const RenameDeviceReq = z.object({ deviceName: z.string().trim().min(1).max(64) }).strict();
+export type RenameDeviceReq = z.infer<typeof RenameDeviceReq>;
+
 // ============ device bundle (§5.2) ============
 export interface TenantSettings {
   idleLockSeconds: number;

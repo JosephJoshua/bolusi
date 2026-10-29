@@ -1,13 +1,20 @@
 // The tasks the Kas page opens on the counter PC, each a dialog over it: Tutup kas, cash out of or
-// into the drawer, an owner settling a counted difference, a customer paying a debt and an owner
-// cancelling a payment. The rules are the phone's (kas.ts and the commands); only the layout differs.
+// into the drawer, an owner settling a counted difference, a customer paying a debt, money going
+// back to a customer, an owner lowering a bill and an owner cancelling a payment. The rules are the phone's (kas.ts and the commands); only the layout differs.
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
-import { TextField, ToggleChip } from '@bolusi/ui-web';
+import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
 import { useState } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 
-import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
+import {
+  CASH_ACCOUNT,
+  CASH_MOVE_KINDS,
+  MAX_REASON,
+  MAX_REFERENCE,
+  MONEY_PERMISSION,
+  type CashMoveKind,
+} from '../constants.js';
 import { tm } from '../i18n.js';
 import {
   CASH_MOVE_LABEL,
@@ -21,6 +28,18 @@ import { rupiah } from '../payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { canSimulateQris } from '../qris.js';
 import { useDebtReceipt } from '../receive-debt.js';
+import {
+  reduceAmountError,
+  reduceHint,
+  reduceLimitText,
+  refundAmountError,
+  refundHint,
+  refundLimitText,
+  targetOf,
+  useReduceCharge,
+  useRefund,
+  type MoneyTarget,
+} from '../refund.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { AmountField, AmountLine, MoneyDialog } from './parts.js';
@@ -316,6 +335,8 @@ export function ReceiveDebtDialog({
   const runner = useActionRunner();
   const receipt = useDebtReceipt(balance);
   const { entry, input, qris } = receipt;
+  // An owner lowers the bill over this dialog, so what was typed here waits underneath.
+  const [reducing, setReducing] = useState(false);
   const testId = 'money.desk.receive';
 
   const submit = (): void => {
@@ -369,7 +390,25 @@ export function ReceiveDebtDialog({
           qris={qris}
           testId={`${testId}.pay`}
         />
+        {runtime.hasPermission(MONEY_PERMISSION.refund) ? (
+          <Button
+            label={tm('money.reduce.action')}
+            variant="text"
+            size="sm"
+            className="-ml-2 self-start"
+            onClick={() => setReducing(true)}
+            data-testid={`${testId}.reduce`}
+          />
+        ) : null}
       </MoneyDialog>
+      {reducing ? (
+        <ReduceChargeDialog
+          target={targetOf(balance)}
+          // The bill it was paying changed: the board shows what is owed now.
+          onDone={onDone}
+          onClose={() => setReducing(false)}
+        />
+      ) : null}
       {qris.open !== null && runtime.qris !== undefined ? (
         <QrisDialog
           open={qris.open}
@@ -383,6 +422,222 @@ export function ReceiveDebtDialog({
         />
       ) : null}
     </>
+  );
+}
+
+// ── money back to a customer ───────────────────────────────────────────────────────────────────
+
+function targetText(target: MoneyTarget): string {
+  return [target.customer, target.document.label].filter(Boolean).join(' · ');
+}
+
+/**
+ * Money back to a customer, through a method they paid with. The counter gives back only an
+ * overpayment; an owner any part of what was paid (refund.ts).
+ */
+export function RefundDialog({
+  target,
+  onDone,
+  onClose,
+}: TaskProps & { readonly target: MoneyTarget }): React.JSX.Element {
+  const runtime = useMoneyRuntime();
+  const runner = useActionRunner();
+  const form = useRefund(target);
+  const amount = rupiah(form.digits);
+  const testId = 'money.desk.refund';
+  const nothing = form.ready && form.methods.length === 0;
+
+  const submit = (): void => {
+    const { input } = form;
+    if (input === null) return;
+    void runner
+      .run(() => runtime.run('refund', input))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  return (
+    <MoneyDialog
+      title={tm('money.refund.title')}
+      description={targetText(target)}
+      runner={runner}
+      dirty={form.dirty}
+      onClose={onClose}
+      submitLabel={
+        amount !== null && amount > 0
+          ? tm('money.refund.save', { amount: formatMoney(amount) })
+          : tm('money.refund.saveEmpty')
+      }
+      onSubmit={submit}
+      submitDisabled={form.input === null}
+      hint={refundHint(form)}
+      size="md"
+      testId={testId}
+    >
+      {form.owner || form.credit > 0 ? (
+        <div className="flex flex-col gap-2 rounded-sm bg-surface-alt p-3">
+          {form.owner ? (
+            <AmountLine
+              label={tm('money.refund.paid')}
+              value={formatMoney(form.paid)}
+              testId={`${testId}.paid`}
+            />
+          ) : null}
+          {form.credit > 0 ? (
+            <AmountLine
+              label={tm('money.refund.credit')}
+              value={formatMoney(form.credit)}
+              strong
+              testId={`${testId}.credit`}
+            />
+          ) : null}
+        </div>
+      ) : null}
+      {nothing ? (
+        <p className="text-body text-text-muted" data-testid={`${testId}.nothing`}>
+          {tm('money.refund.nothing')}
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-col gap-2">
+            <span className="text-small font-semibold text-text">{tm('money.refund.method')}</span>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label={tm('money.refund.method')}
+              data-testid={`${testId}.methods`}
+            >
+              {form.methods.map((method) => (
+                <ToggleChip
+                  key={method.account}
+                  label={method.label}
+                  selected={form.account === method.account}
+                  onToggle={() => form.setAccount(method.account)}
+                  testId={`${testId}.method.${method.account}`}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 items-start gap-3">
+            <AmountField
+              label={tm('money.refund.amount')}
+              digits={form.digits}
+              onChange={form.setDigits}
+              error={refundAmountError(form)}
+              testId={`${testId}.amount`}
+            />
+            {form.account === CASH_ACCOUNT || form.account === '' ? null : (
+              <TextField
+                label={tm('money.refund.reference')}
+                value={form.reference}
+                onChange={(event) => form.setReference(event.target.value)}
+                maxLength={MAX_REFERENCE}
+                autoComplete="off"
+                data-testid={`${testId}.reference`}
+              />
+            )}
+          </div>
+          {refundLimitText(form) === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
+              {refundLimitText(form)}
+            </p>
+          )}
+          {form.lowersBill > 0 ? (
+            <p className="text-body text-text-muted" data-testid={`${testId}.lowersBill`}>
+              {tm('money.refund.lowersBill', { amount: formatMoney(form.lowersBill) })}
+            </p>
+          ) : null}
+          <ReasonField
+            label={tm('money.refund.reason')}
+            value={form.reason}
+            onChange={form.setReason}
+            testId={`${testId}.reason`}
+          />
+        </>
+      )}
+    </MoneyDialog>
+  );
+}
+
+// ── an owner lowers a bill ─────────────────────────────────────────────────────────────────────
+
+/** An owner takes (part of) what a customer owes off a bill already charged. */
+export function ReduceChargeDialog({
+  target,
+  onDone,
+  onClose,
+}: TaskProps & { readonly target: MoneyTarget }): React.JSX.Element {
+  const runtime = useMoneyRuntime();
+  const runner = useActionRunner();
+  const form = useReduceCharge(target);
+  const amount = rupiah(form.digits);
+  const testId = 'money.desk.reduce';
+
+  const submit = (): void => {
+    const { input } = form;
+    if (input === null) return;
+    void runner
+      .run(() => runtime.run('reduceCharge', input))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  return (
+    <MoneyDialog
+      title={tm('money.reduce.title')}
+      description={targetText(target)}
+      runner={runner}
+      dirty={form.dirty}
+      onClose={onClose}
+      submitLabel={
+        amount !== null && amount > 0
+          ? tm('money.reduce.save', { amount: formatMoney(amount) })
+          : tm('money.reduce.saveEmpty')
+      }
+      onSubmit={submit}
+      submitDisabled={form.input === null}
+      hint={reduceHint(form)}
+      testId={testId}
+    >
+      <AmountField
+        label={tm('money.reduce.amount')}
+        digits={form.digits}
+        onChange={form.setDigits}
+        error={reduceAmountError(form)}
+        testId={`${testId}.amount`}
+      />
+      {reduceLimitText(form) === null ? null : (
+        <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
+          {reduceLimitText(form)}
+        </p>
+      )}
+      <div className="flex flex-col gap-2 rounded-sm bg-surface-alt p-3">
+        <AmountLine
+          label={tm('money.reduce.owed')}
+          value={formatMoney(Math.max(0, form.owed))}
+          testId={`${testId}.owed`}
+        />
+        <AmountLine
+          label={tm('money.reduce.after')}
+          value={formatMoney(Math.max(0, form.after))}
+          strong
+          testId={`${testId}.after`}
+        />
+      </div>
+      {form.after < 0 && form.problem !== 'tooMuch' ? (
+        <p className="text-body text-text-muted" data-testid={`${testId}.becomesCredit`}>
+          {tm('money.reduce.becomesCredit', { amount: formatMoney(-form.after) })}
+        </p>
+      ) : null}
+      <ReasonField
+        label={tm('money.reduce.reason')}
+        value={form.reason}
+        onChange={form.setReason}
+        testId={`${testId}.reason`}
+      />
+    </MoneyDialog>
   );
 }
 

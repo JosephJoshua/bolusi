@@ -563,6 +563,7 @@ export interface MountOptions {
   readonly pushRouter?: RootProps['pushRouter'];
   /** The notification permission seam; default undefined (never asks). */
   readonly notificationPermission?: RootProps['notificationPermission'];
+  readonly cameraPermission?: RootProps['cameraPermission'];
   /**
    * The enrollment factory (api/02-auth §4; task 92). Omitted by default, so the pre-enrolled tests use
    * the rejecting stub below (the device is already enrolled — the transports are never called). The
@@ -703,6 +704,7 @@ export async function mountRoot(
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
       notificationPermission={options.notificationPermission}
+      cameraPermission={options.cameraPermission}
     />
   );
   const screen = render(element);

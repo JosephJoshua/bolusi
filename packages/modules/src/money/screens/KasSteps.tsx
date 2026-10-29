@@ -1,10 +1,20 @@
 /**
  * The tasks the Kas board opens, each a full-screen step: Tutup kas (count the drawer), cash out
- * of or into the drawer with a reason, an owner settling a counted difference, and a customer
- * paying what they still owe on a phone they already took home.
+ * of or into the drawer with a reason, an owner settling a counted difference, a customer paying
+ * what they still owe on a phone they already took home, money going back to a customer, and an
+ * owner lowering a bill.
  */
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
-import { ChipRow, TextInput, ToggleChip, color, space, type } from '@bolusi/ui';
+import {
+  ChipRow,
+  EmptyState,
+  TextButton,
+  TextInput,
+  ToggleChip,
+  color,
+  space,
+  type,
+} from '@bolusi/ui';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -12,7 +22,14 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
-import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
+import {
+  CASH_ACCOUNT,
+  CASH_MOVE_KINDS,
+  MAX_REASON,
+  MAX_REFERENCE,
+  MONEY_PERMISSION,
+  type CashMoveKind,
+} from '../constants.js';
 import { tm } from '../i18n.js';
 import {
   CASH_MOVE_LABEL,
@@ -25,6 +42,17 @@ import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
 import { canSimulateQris } from '../qris.js';
 import type { CashCountRow } from '../queries.js';
 import { useDebtReceipt } from '../receive-debt.js';
+import {
+  reduceAmountError,
+  reduceHint,
+  reduceLimitText,
+  refundAmountError,
+  refundHint,
+  refundLimitText,
+  useReduceCharge,
+  useRefund,
+  type MoneyTarget,
+} from '../refund.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { PaymentLines } from './PaymentLines.js';
@@ -62,11 +90,13 @@ function AmountField({
   label,
   digits,
   onChange,
+  errorMessage,
   testID,
 }: {
   readonly label: string;
   readonly digits: string;
   readonly onChange: (digits: string) => void;
+  readonly errorMessage?: string | undefined;
   readonly testID: string;
 }): React.JSX.Element {
   return (
@@ -78,6 +108,7 @@ function AmountField({
         if (typed !== null) onChange(typed);
       }}
       keyboardType="number-pad"
+      errorMessage={errorMessage}
       testID={testID}
     />
   );
@@ -400,8 +431,11 @@ export function ReceiveDebtStep({
   onCancel,
   testID = 'money.receive',
   onRegisterDiscardGuard,
+  onReduce,
 }: StepProps & {
   readonly balance: NamedBalance;
+  /** An owner lowers the bill instead (absent: not offered). */
+  readonly onReduce?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
@@ -490,18 +524,276 @@ export function ReceiveDebtStep({
           testID={`${testID}.pay`}
         />
       </View>
+      {onReduce === undefined || !runtime.hasPermission(MONEY_PERMISSION.refund) ? null : (
+        <View style={[styles.gap, styles.textAction]}>
+          <TextButton
+            label={tm('money.reduce.action')}
+            onPress={onReduce}
+            testID={`${testID}.reduce`}
+          />
+        </View>
+      )}
+    </FlowScreen>
+  );
+}
+
+// ── money back to a customer ───────────────────────────────────────────────────────────────────
+
+/**
+ * Money back to a customer, through a method they paid with. The counter gives back only an
+ * overpayment; an owner any part of what was paid (refund.ts).
+ */
+export function RefundStep({
+  chrome,
+  target,
+  onDone,
+  onCancel,
+  testID = 'money.refund',
+  onRegisterDiscardGuard,
+}: StepProps & {
+  readonly target: MoneyTarget;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  const runtime = useMoneyRuntime();
+  const runner = useActionRunner();
+  const form = useRefund(target);
+  const leave = useStepLeave(
+    form.dirty,
+    { chrome, onDone, onCancel, onRegisterDiscardGuard },
+    testID,
+  );
+  const amount = rupiah(form.digits);
+
+  const submit = (): void => {
+    const { input } = form;
+    if (input === null) return;
+    void runner
+      .run(() => runtime.run('refund', input))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tm('money.refund.title')}
+      onBack={leave.onBack}
+      overlay={leave.overlay}
+      primaryLabel={
+        amount !== null && amount > 0
+          ? tm('money.refund.save', { amount: formatMoney(amount) })
+          : tm('money.refund.saveEmpty')
+      }
+      onPrimary={submit}
+      primaryDisabled={form.input === null}
+      primaryHint={refundHint(form) ?? undefined}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      <Text style={styles.heading}>{target.customer ?? target.document.label}</Text>
+      {target.customer === null ? null : <Text style={styles.muted}>{target.document.label}</Text>}
+      <View style={styles.sum}>
+        {form.owner ? (
+          <Line
+            label={tm('money.refund.paid')}
+            value={formatMoney(form.paid)}
+            testID={`${testID}.paid`}
+          />
+        ) : null}
+        {form.credit > 0 ? (
+          <Line
+            label={tm('money.refund.credit')}
+            value={formatMoney(form.credit)}
+            strong
+            testID={`${testID}.credit`}
+          />
+        ) : null}
+      </View>
+      {form.ready && form.methods.length === 0 ? (
+        <EmptyState title={tm('money.refund.nothing')} testID={`${testID}.nothing`} />
+      ) : (
+        <>
+          <View style={styles.gap}>
+            <Text style={styles.fieldLabel}>{tm('money.refund.method')}</Text>
+            <ChipRow testID={`${testID}.methods`}>
+              {form.methods.map((method) => (
+                <ToggleChip
+                  key={method.account}
+                  label={method.label}
+                  selected={form.account === method.account}
+                  onToggle={() => form.setAccount(method.account)}
+                  testID={`${testID}.method.${method.account}`}
+                />
+              ))}
+            </ChipRow>
+          </View>
+          <View style={styles.gap}>
+            <AmountField
+              label={tm('money.refund.amount')}
+              digits={form.digits}
+              onChange={form.setDigits}
+              errorMessage={refundAmountError(form)}
+              testID={`${testID}.amount`}
+            />
+            {refundLimitText(form) === null ? null : (
+              <Text style={styles.muted} testID={`${testID}.limit`}>
+                {refundLimitText(form)}
+              </Text>
+            )}
+            {form.lowersBill > 0 ? (
+              <Text style={styles.muted} testID={`${testID}.lowersBill`}>
+                {tm('money.refund.lowersBill', { amount: formatMoney(form.lowersBill) })}
+              </Text>
+            ) : null}
+          </View>
+          {form.account === CASH_ACCOUNT || form.account === '' ? null : (
+            <View style={styles.gap}>
+              <TextInput
+                label={tm('money.refund.reference')}
+                value={form.reference}
+                onChangeText={form.setReference}
+                maxLength={MAX_REFERENCE}
+                autoCorrect={false}
+                autoCapitalize="characters"
+                testID={`${testID}.reference`}
+              />
+            </View>
+          )}
+          <View style={styles.gap}>
+            <TextInput
+              label={tm('money.refund.reason')}
+              value={form.reason}
+              onChangeText={form.setReason}
+              maxLength={MAX_REASON}
+              testID={`${testID}.reason`}
+            />
+          </View>
+        </>
+      )}
+    </FlowScreen>
+  );
+}
+
+// ── an owner lowers a bill ─────────────────────────────────────────────────────────────────────
+
+/** An owner takes (part of) what a customer owes off a bill already charged. */
+export function ReduceChargeStep({
+  chrome,
+  target,
+  onDone,
+  onCancel,
+  testID = 'money.reduce',
+  onRegisterDiscardGuard,
+}: StepProps & {
+  readonly target: MoneyTarget;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  const runtime = useMoneyRuntime();
+  const runner = useActionRunner();
+  const form = useReduceCharge(target);
+  const leave = useStepLeave(
+    form.dirty,
+    { chrome, onDone, onCancel, onRegisterDiscardGuard },
+    testID,
+  );
+  const amount = rupiah(form.digits);
+
+  const submit = (): void => {
+    const { input } = form;
+    if (input === null) return;
+    void runner
+      .run(() => runtime.run('reduceCharge', input))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tm('money.reduce.title')}
+      onBack={leave.onBack}
+      overlay={leave.overlay}
+      primaryLabel={
+        amount !== null && amount > 0
+          ? tm('money.reduce.save', { amount: formatMoney(amount) })
+          : tm('money.reduce.saveEmpty')
+      }
+      onPrimary={submit}
+      primaryDisabled={form.input === null}
+      primaryHint={reduceHint(form) ?? undefined}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      <Text style={styles.heading}>{target.customer ?? target.document.label}</Text>
+      {target.customer === null ? null : <Text style={styles.muted}>{target.document.label}</Text>}
+      <View style={styles.sum}>
+        <Line
+          label={tm('money.reduce.owed')}
+          value={formatMoney(Math.max(0, form.owed))}
+          testID={`${testID}.owed`}
+        />
+      </View>
+      <View style={styles.gap}>
+        <AmountField
+          label={tm('money.reduce.amount')}
+          digits={form.digits}
+          onChange={form.setDigits}
+          errorMessage={reduceAmountError(form)}
+          testID={`${testID}.amount`}
+        />
+        {reduceLimitText(form) === null ? null : (
+          <Text style={styles.muted} testID={`${testID}.limit`}>
+            {reduceLimitText(form)}
+          </Text>
+        )}
+      </View>
+      <View style={styles.sum}>
+        <Line
+          label={tm('money.reduce.after')}
+          value={formatMoney(Math.max(0, form.after))}
+          strong
+          testID={`${testID}.after`}
+        />
+        {form.after < 0 && form.problem !== 'tooMuch' ? (
+          <Text style={styles.muted} testID={`${testID}.becomesCredit`}>
+            {tm('money.reduce.becomesCredit', { amount: formatMoney(-form.after) })}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.gap}>
+        <TextInput
+          label={tm('money.reduce.reason')}
+          value={form.reason}
+          onChangeText={form.setReason}
+          maxLength={MAX_REASON}
+          testID={`${testID}.reason`}
+        />
+      </View>
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
   gap: { marginTop: space.lg },
+  textAction: { alignItems: 'flex-start', marginLeft: -space.sm },
   sum: { marginTop: space.lg, gap: space.sm },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   lineLabel: { ...type.bodySm, color: color.textMuted, flexShrink: 1, marginRight: space.md },
   lineLabelStrong: { ...type.bodyBold, color: color.text, flexShrink: 1, marginRight: space.md },
-  lineValue: { ...type.bodySm, color: color.text, fontVariant: ['tabular-nums'] },
-  lineValueStrong: { ...type.heading, color: color.text, fontVariant: ['tabular-nums'] },
+  // The amount never wraps: "Rp" and its figure stay on one line, the label wraps instead.
+  lineValue: { ...type.bodySm, color: color.text, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  lineValueStrong: {
+    ...type.heading,
+    color: color.text,
+    fontVariant: ['tabular-nums'],
+    flexShrink: 0,
+  },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   fieldLabel: { ...type.caption, color: color.textMuted, marginBottom: space.sm },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
