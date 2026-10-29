@@ -171,6 +171,12 @@ const source = {
         noMicrophone:
           'Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi.',
       },
+      closeWindow: {
+        title: 'Tutup Bolusi?',
+        message: 'Yang sedang diisi belum tersimpan dan akan hilang.',
+        confirm: 'Tutup',
+        keep: 'Lanjut isi',
+      },
     },
     auth: {
       switcher: {
@@ -935,6 +941,12 @@ export const resources = {
           failed: 'The video couldn’t play. Try again.',
           noMicrophone:
             'No microphone found. Plug in a microphone or a webcam that has one, then try again.',
+        },
+        closeWindow: {
+          title: 'Close Bolusi?',
+          message: 'What you are filling in is not saved yet and will be lost.',
+          confirm: 'Close',
+          keep: 'Keep editing',
         },
       },
       auth: {

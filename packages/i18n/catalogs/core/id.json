@@ -171,5 +171,11 @@
     "loading": "Memuat video…",
     "failed": "Videonya belum bisa diputar. Coba lagi.",
     "noMicrophone": "Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi."
+  },
+  "closeWindow": {
+    "title": "Tutup Bolusi?",
+    "message": "Yang sedang diisi belum tersimpan dan akan hilang.",
+    "confirm": "Tutup",
+    "keep": "Lanjut isi"
   }
 }
