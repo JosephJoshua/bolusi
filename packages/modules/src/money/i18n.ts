@@ -198,6 +198,12 @@ export const MONEY_KEYS = [
   'money.qris.cancel',
   'money.qris.unresolved',
   'money.qris.unresolvedMany',
+  'money.refusal.cashMoveNotFound',
+  'money.refusal.laterCountSettled',
+  'money.opType.cashMoveVoided',
+  'money.void.cashTitle',
+  'money.void.cashSave',
+  'money.void.cashExplain',
 ] as const;
 
 export type MoneyKey = (typeof MONEY_KEYS)[number];

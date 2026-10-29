@@ -8,7 +8,12 @@ import { z } from 'zod';
 import type { OperationDeclaration } from '@bolusi/core';
 import { zMoneyIdr, zUuid } from '@bolusi/schemas';
 
-import { accountSavedApplier, entryRecordedApplier, paymentVoidedApplier } from './applier.js';
+import {
+  accountSavedApplier,
+  cashMoveVoidedApplier,
+  entryRecordedApplier,
+  paymentVoidedApplier,
+} from './applier.js';
 import {
   CASH_MOVE_KINDS,
   MAX_ACCOUNT_NAME,
@@ -170,6 +175,16 @@ export function createMoneyOperations(
       apply: paymentVoidedApplier,
       rule: rules.paymentVoidedRule,
       permission: MONEY_PERMISSION.voidPayment,
+      entityType: MONEY_ENTRY_ENTITY,
+    },
+    [MONEY_OP.cashMoveVoided]: {
+      schemaVersion: 1,
+      payload: paymentVoidedPayload,
+      reversal: 'Not reversible: record the cash move again if it was real.',
+      apply: cashMoveVoidedApplier,
+      rule: rules.cashMoveVoidedRule,
+      // Changing what the drawer should hold is settling the book, the owner's call.
+      permission: MONEY_PERMISSION.adjustCash,
       entityType: MONEY_ENTRY_ENTITY,
     },
     [MONEY_OP.refundPaid]: {
