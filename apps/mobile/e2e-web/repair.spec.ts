@@ -644,7 +644,17 @@ test('a phone back under warranty opens a free claim linked to its servisan', as
   await expect(page.getByTestId('repair.intake.claim.ended')).toHaveCount(0);
   await shoot(page, 'claim-intake');
   await tap(page, 'repair.intake.primary');
-  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Redmi Note 12');
+  // The claimed phone is shown fixed, its IMEI too: nothing to retype or change.
+  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveCount(0);
+  await expect(
+    page
+      .getByTestId('repair.intake.device.modelMatch')
+      .or(page.getByTestId('repair.intake.device.claimDevice')),
+  ).toContainText('Redmi Note 12');
+  await expect(page.getByTestId('repair.intake.device.claimDevice.note')).toBeVisible();
+  await expect(page.getByTestId('repair.intake.device.imei')).toHaveText('356789104455667');
+  await expect(page.getByTestId('repair.intake.device.imei.field')).toHaveCount(0);
+  await shoot(page, 'claim-device');
   await tap(page, 'repair.intake.primary');
   await fill(page, 'repair.intake.condition.complaint', 'Layar berkedip lagi');
   // A claim repairs what its servisan did: it picks no types of its own.
