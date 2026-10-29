@@ -167,10 +167,13 @@ async function androidUp(build) {
       cwd: MOBILE,
       env: buildEnv,
     });
+    // No lingering Gradle or Kotlin daemons: on the shared VPS they piled up across runs and starved later builds.
     run(
       './gradlew',
       [
         'assembleRelease',
+        '--no-daemon',
+        '-Pkotlin.compiler.execution.strategy=in-process',
         `--max-workers=${GRADLE_WORKERS}`,
         `-Dorg.gradle.jvmargs=${GRADLE_JVMARGS}`,
       ],
