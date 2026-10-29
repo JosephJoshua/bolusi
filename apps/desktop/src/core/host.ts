@@ -21,7 +21,7 @@ import {
 } from '@bolusi/core';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
-import { readDeviceInfo } from '@bolusi/device/bootstrap/device-info';
+import { readDeviceInfo, renameDevice } from '@bolusi/device/bootstrap/device-info';
 import {
   createEnrollTransport,
   createLoginTransport,
@@ -83,7 +83,7 @@ import {
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingSession, actingStaffAdmin, readForActing } from './acting.js';
+import { actingDeviceAdmin, actingSession, actingStaffAdmin, readForActing } from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
@@ -315,6 +315,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       canReset: snapshot.canReset,
       canManageStaff: snapshot.canManageStaff,
       canSetLimits: snapshot.canSetLimits,
+      canRenameDevice: snapshot.canRenameDevice,
       tenantAdmin: snapshot.tenantAdmin,
       permissions,
       colleaguePermissions,
@@ -830,6 +831,19 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'staff.updateRole': (userId: string, roleId: string, change: RoleChange) =>
       staffFor(userId).onUpdateRole(roleId, change),
     'staff.deleteRole': (userId: string, roleId: string) => staffFor(userId).onDeleteRole(roleId),
+
+    // Online only, like Karyawan: the server takes the new name first, then this PC shows it.
+    async 'device.rename'(userId: string, name: string) {
+      actingDeviceAdmin(session, userId);
+      const booted = app;
+      if (booted === null) throw new Error('the core has not booted');
+      await renameDevice(booted, staffAdmin, { actingUserId: userId, name });
+      deviceInfo = await readDeviceInfo(booted, {
+        platform: PLATFORM,
+        appVersion: deps.appVersion,
+      });
+      emit();
+    },
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
     'sync.requestManual'() {

@@ -13,17 +13,23 @@
 // bundle-apply.test.ts.
 import {
   DEVICE_ID_META_KEY,
+  StaffAdminError,
   STORE_NAME_META_KEY,
   TENANT_NAME_META_KEY,
   writeMeta,
 } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 
 import type { Bootstrapped } from './bootstrap.js';
-import { persistEnrolledNames, readDeviceInfo, type DeviceInfoContext } from './device-info.js';
+import {
+  persistEnrolledNames,
+  readDeviceInfo,
+  renameDevice,
+  type DeviceInfoContext,
+} from './device-info.js';
 import { nodeColumnAead } from '@bolusi/test-support';
 
 const KEY = 'a'.repeat(64);
@@ -108,5 +114,32 @@ describe('an ENROLLED device renders its REAL identity from meta_kv (task 94)', 
     expect(info.deviceName).toBe('New');
     expect(info.storeName).toBe('Store B');
     expect(info.tenantName).toBe('Tenant B');
+  });
+});
+
+describe('renaming this device', () => {
+  test('shows the new name only after the server took it', async () => {
+    await writeMeta(db.db, DEVICE_ID_META_KEY, 'd-1');
+    await persistEnrolledNames(app, { deviceName: 'HP lama' });
+    const port = { renameDevice: vi.fn(() => Promise.resolve()) };
+
+    await renameDevice(app, port, { actingUserId: 'u-owner', name: '  Kasir depan ' });
+
+    expect(port.renameDevice).toHaveBeenCalledWith({
+      actingUserId: 'u-owner',
+      name: 'Kasir depan',
+    });
+    expect((await readDeviceInfo(app, CTX)).deviceName).toBe('Kasir depan');
+  });
+
+  test('keeps the old name when the server refuses or cannot be reached', async () => {
+    await writeMeta(db.db, DEVICE_ID_META_KEY, 'd-1');
+    await persistEnrolledNames(app, { deviceName: 'HP lama' });
+    const port = { renameDevice: vi.fn(() => Promise.reject(new StaffAdminError('offline'))) };
+
+    await expect(
+      renameDevice(app, port, { actingUserId: 'u-owner', name: 'Kasir depan' }),
+    ).rejects.toBeInstanceOf(StaffAdminError);
+    expect((await readDeviceInfo(app, CTX)).deviceName).toBe('HP lama');
   });
 });

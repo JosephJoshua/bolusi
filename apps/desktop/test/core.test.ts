@@ -24,7 +24,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 
-import { actingSession, actingStaffAdmin, readForActing } from '../src/core/acting.js';
+import {
+  actingDeviceAdmin,
+  actingSession,
+  actingStaffAdmin,
+  readForActing,
+} from '../src/core/acting.js';
 import { heldPermissions } from '../src/core/permissions.js';
 import { nodeCryptoPort } from '../src/core/crypto.js';
 import { openNodeSqliteDriver } from '../src/core/sqlite-driver.js';
@@ -182,13 +187,14 @@ describe('window to core calls', () => {
 describe('who a window call may act as', () => {
   const sessionAs = (
     userId: string | null,
-    flags: { locked?: boolean; canManageStaff?: boolean } = {},
+    flags: { locked?: boolean; canManageStaff?: boolean; canRenameDevice?: boolean } = {},
   ): AppSessionController =>
     ({
       snapshot: () => ({
         session: userId === null ? null : { userId },
         locked: flags.locked ?? false,
         canManageStaff: flags.canManageStaff ?? false,
+        canRenameDevice: flags.canRenameDevice ?? false,
       }),
     }) as unknown as AppSessionController;
 
@@ -235,6 +241,18 @@ describe('who a window call may act as', () => {
       code(() => actingStaffAdmin(sessionAs('u-1', { canManageStaff: true }), 'u-1')),
     ).toBeUndefined();
     expect(code(() => actingStaffAdmin(sessionAs('u-1', { canManageStaff: true }), 'u-2'))).toBe(
+      'NOT_AUTHENTICATED',
+    );
+  });
+
+  it('renames this PC only with the permission to register devices', () => {
+    expect(code(() => actingDeviceAdmin(sessionAs('u-1', { canManageStaff: true }), 'u-1'))).toBe(
+      'denied',
+    );
+    expect(
+      code(() => actingDeviceAdmin(sessionAs('u-1', { canRenameDevice: true }), 'u-1')),
+    ).toBeUndefined();
+    expect(code(() => actingDeviceAdmin(sessionAs('u-1', { canRenameDevice: true }), 'u-2'))).toBe(
       'NOT_AUTHENTICATED',
     );
   });

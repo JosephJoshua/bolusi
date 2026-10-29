@@ -93,6 +93,9 @@ for (const [width, height] of [
       const views = page.getByTestId('repair.desk.board.views');
       expect(await views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1)).toBe(true);
       await expect(page.getByTestId('repair.desk.board.views.active')).toBeInViewport({ ratio: 1 });
+      // Every filter shows whole: none runs under the toolbar's faded edge.
+      const filters = page.getByTestId('repair.desk.board.filters').locator('> div').first();
+      expect(await filters.evaluate((row) => row.scrollWidth <= row.clientWidth + 1)).toBe(true);
       if (paneOpen) {
         // The servisan sits beside the table, never over part of it (its pane shows the total).
         const tableBox = (await table.boundingBox())!;
@@ -191,7 +194,7 @@ test('a phone nobody collected shows in its own list, and the message opens What
   expect(app.windows()).toHaveLength(1);
 });
 
-test('the page gets only the narrow print, update, window and core calls, through the real preload', async () => {
+test('the page gets only the narrow print, update, startup, camera, window and core calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;
     return {
@@ -199,15 +202,19 @@ test('the page gets only the narrow print, update, window and core calls, throug
       printers: bridge?.['printers'] === undefined ? null : Object.keys(bridge['printers']).sort(),
       core: bridge?.['core'] === undefined ? null : Object.keys(bridge['core']).sort(),
       window: bridge?.['window'] === undefined ? null : Object.keys(bridge['window']).sort(),
+      startup: bridge?.['startup'] === undefined ? null : Object.keys(bridge['startup']).sort(),
+      media: bridge?.['media'] === undefined ? null : Object.keys(bridge['media']).sort(),
       node: typeof (window as { require?: unknown }).require,
       process: typeof (window as { process?: unknown }).process,
     };
   });
   expect(shape).toEqual({
-    keys: ['core', 'printers', 'updates', 'window'],
+    keys: ['core', 'media', 'printers', 'startup', 'updates', 'window'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
     core: ['connect'],
     window: ['fullscreen', 'onFullscreenChange'],
+    startup: ['get', 'set'],
+    media: ['choices', 'choose'],
     node: 'undefined',
     process: 'undefined',
   });

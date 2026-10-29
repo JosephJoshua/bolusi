@@ -2,7 +2,6 @@
 // page with this store's header and terms, hand it to the platform, and log a print that landed so
 // the next one says "Cetak ulang". Only the screen around it (and the platform's output) differs.
 import {
-  PAPER_PRESETS,
   renderHtml,
   toMonoBitmap,
   type PaperSettings,
@@ -12,8 +11,7 @@ import {
 
 import type { SlipKind } from './constants.js';
 import { printableSlips } from './flows.js';
-import { tn } from './i18n.js';
-import { PAPER_KEY, paperFor, readDevicePaper, type PaperChoice } from './paper.js';
+import { paperLabel, paperSettingsFor, readDevicePaper, type PaperChoice } from './paper.js';
 import { logoRef, slipDocument, slipSignature, storeHeader, testPageDocument } from './print.js';
 import type { PrintSettings, TicketDetailRow } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
@@ -167,12 +165,11 @@ export async function outputTestPage(
     printing.readPaper(),
   ]);
   const sources = settings.rows[0]!;
-  const choice = paperFor(saved, papers);
-  const sheet = PAPER_PRESETS[choice];
+  const sheet = paperSettingsFor(saved, papers);
   const logo = await loadLogo(printing, sources, sheet);
   const doc = testPageDocument(
     storeHeader(sources, storeName, logo),
-    tn(PAPER_KEY[choice]),
+    paperLabel(sheet),
     Date.now(),
   );
   return send(printing, doc, sheet, 'print');

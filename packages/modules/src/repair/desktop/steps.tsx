@@ -68,7 +68,7 @@ import {
   useRepairRuntime,
   type RepairPrinting,
 } from '../runtime.js';
-import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
+import { DESK_PAPERS, paperLabel, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { logSlipPrinted, outputSlip } from '../slip-output.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
@@ -1417,7 +1417,7 @@ export function PrintDialog({
   const slips = printableSlips(ticket);
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
-  const [paper] = useDevicePaper(printing, DESK_PAPERS);
+  const { paper } = useDevicePaper(printing, DESK_PAPERS);
   const { state: printers } = useDevicePrinters(printing.printers);
   const [problem, catchProblem, clearProblem] = usePrinterProblem();
   const [asking, setAsking] = useState(false);
@@ -1495,10 +1495,10 @@ export function PrintDialog({
             {paper === null ? null : (
               <p className="mt-1 text-small text-text-muted" data-testid={`${testId}.paper`}>
                 {printer === null
-                  ? tn('repair.print.onPaper', { paper: tn(PAPER_KEY[paper]) })
+                  ? tn('repair.print.onPaper', { paper: paperLabel(paper) })
                   : tn('repair.print.onPrinter', {
                       printer: printer.label,
-                      paper: tn(PAPER_KEY[paper]),
+                      paper: paperLabel(paper),
                     })}
               </p>
             )}

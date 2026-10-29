@@ -339,10 +339,13 @@ export function RepairBoardPage({
   const statusOptions = statusChoices(searching ? 'search' : view);
   const now = clock();
   const toolbar = (
-    <div className="flex items-start gap-2 px-6 py-2" data-testid="repair.desk.board.filters">
-      {/* One row where it fits; when the pane leaves it little room the filters wrap to a second
-          row rather than run under an edge a mouse cannot scroll. */}
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+    <div
+      className="@container flex h-12 items-center gap-2 px-6"
+      data-testid="repair.desk.board.filters"
+    >
+      {/* One row that scrolls sideways when the pane leaves it little room, never a second row.
+          The right edge fades, so a filter running under it reads as more to scroll to. */}
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [scrollbar-width:none]">
         {statusOptions.length > 0 ? (
           <OptionsFilter
             label={tn('repair.desk.filter.status')}
@@ -410,6 +413,7 @@ export function RepairBoardPage({
           icon={TriangleAlert}
           pressed={facets.priceWaiting}
           onChange={(priceWaiting) => setFacets({ priceWaiting })}
+          collapse
           testId="repair.desk.filter.priceWaiting"
         />
         {filtered ? (

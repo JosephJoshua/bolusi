@@ -10,7 +10,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { SlipKind } from '../constants.js';
 import { printableSlips } from '../flows.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { PAPER_KEY, PHONE_PAPERS, useDevicePaper } from '../paper.js';
+import { PHONE_PAPERS, paperLabel, useDevicePaper } from '../paper.js';
 import { logSlipPrinted, outputSlip } from '../slip-output.js';
 import type { TicketDetailRow } from '../queries.js';
 import { useActionRunner } from '../../screen-kit/index.js';
@@ -45,7 +45,7 @@ export function PrintStep({
   const slips = printableSlips(ticket);
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
-  const [paper] = useDevicePaper(printing, PHONE_PAPERS);
+  const { paper } = useDevicePaper(printing, PHONE_PAPERS);
   // The print dialog could not say whether it printed: ask before logging it, so a cancelled first
   // print does not make the real first slip read "Cetak ulang".
   const [asking, setAsking] = useState(false);
@@ -122,7 +122,7 @@ export function PrintStep({
           </Text>
           {paper === null ? null : (
             <Text style={styles.aboutText} testID={`${testID}.paper`}>
-              {tn('repair.print.onPaper', { paper: tn(PAPER_KEY[paper]) })}
+              {tn('repair.print.onPaper', { paper: paperLabel(paper) })}
             </Text>
           )}
           {printed === 0 ? null : (

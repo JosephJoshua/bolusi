@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import type { SettingsAccess } from './settings/access.js';
 import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
-import { DeviceSetupPage } from './setup/DeviceSetupPage.js';
+import { DeviceSetupPage, type StoreBasicSetting } from './setup/DeviceSetupPage.js';
 import { PrinterReminder } from './setup/PrinterReminder.js';
 import { BAR_CONTROL, TitleBar } from './TitleBar.js';
 import { UpdateNotice } from './updates.js';
@@ -37,7 +37,7 @@ type Page =
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
   | { readonly kind: 'kas' }
-  | { readonly kind: 'settings'; readonly section?: 'computer' }
+  | { readonly kind: 'settings'; readonly section?: 'computer' | StoreBasicSetting }
   // The first-run setup of this PC (setup/DeviceSetupPage.tsx).
   | { readonly kind: 'setup' };
 
@@ -263,7 +263,14 @@ export function Counter({
       }
     >
       {page.kind === 'setup' ? (
-        <DeviceSetupPage onDone={finishSetup} />
+        <DeviceSetupPage
+          onDone={finishSetup}
+          onOpenSetting={(section) => {
+            onSetupDone?.();
+            setSettingsVisit((n) => n + 1);
+            setPage({ kind: 'settings', section });
+          }}
+        />
       ) : page.kind === 'settings' ? (
         <SettingsPage
           key={`${page.section ?? 'settings'}.${settingsVisit}`}
