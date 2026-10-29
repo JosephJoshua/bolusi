@@ -302,9 +302,12 @@ export function debtPayment(
   owed: number,
   lines: readonly PaymentLine[],
   accounts: readonly PaymentAccountRow[],
+  qrAccounts?: ReadonlySet<string>,
 ): DebtPayment {
-  const entry = paymentEntry(owed, lines, accounts);
+  const entry = paymentEntry(owed, lines, accounts, qrAccounts);
   const taken =
-    entry.paid > 0 && entry.overpaid === 0 ? paymentEntry(entry.paid, lines, accounts) : null;
+    entry.paid > 0 && entry.overpaid === 0
+      ? paymentEntry(entry.paid, lines, accounts, qrAccounts)
+      : null;
   return { entry, taken };
 }

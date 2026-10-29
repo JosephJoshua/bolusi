@@ -16,6 +16,10 @@
     "./pattern": {
       "types": "./dist/pattern.d.ts",
       "default": "./dist/pattern.js"
+    },
+    "./qr": {
+      "types": "./dist/qr.d.ts",
+      "default": "./dist/qr.js"
     }
   },
   "files": [
@@ -29,7 +33,8 @@
   },
   "dependencies": {
     "@bolusi/i18n": "workspace:*",
-    "@bolusi/schemas": "workspace:*"
+    "@bolusi/schemas": "workspace:*",
+    "uqr": "0.1.3"
   },
   "devDependencies": {
     "@bolusi/tsconfig": "workspace:*",

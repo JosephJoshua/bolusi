@@ -26,6 +26,8 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/screens/PaymentLines.js';
+import { QrisStep, useQrStepBack } from '../../money/screens/QrisStep.js';
+import { canSimulateQris } from '../../money/qris.js';
 import { tn } from '../i18n.js';
 import {
   ticketBalance,
@@ -49,8 +51,9 @@ import {
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
+import { freeHandoverNeedsOwner } from '../rules.js';
 import { useHandoverPayment } from '../handover-payment.js';
-import { usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { usePaymentAccounts, useRepairQuery, useRepairRuntime, useTicketQris } from '../runtime.js';
 
 export interface HandoverProps {
   readonly ticketId: string;
@@ -100,10 +103,14 @@ export function Handover({
   const balance =
     ticket === undefined ? { kind: 'due' as const, amount: 0 } : ticketBalance(ticket);
   const due = balance.kind === 'due' ? balance.amount : 0;
-  const payment = useHandoverPayment(due, accounts, canPayLater, restored?.payment);
+  const qris = useTicketQris(ticketId, ticket?.ticketNumber ?? null);
+  const payment = useHandoverPayment(due, accounts, canPayLater, qris, restored?.payment);
   const { settled } = payment;
   const checks = useHandoverChecks(ticket, restored?.ticked);
+  const ownerNeeded =
+    ticket !== undefined && freeHandoverNeedsOwner(ticket) && !can.warrantyException;
   const ready =
+    !ownerNeeded &&
     photo !== null &&
     signature !== null &&
     settled &&
@@ -121,7 +128,11 @@ export function Handover({
       checks.touched);
   const discard = useDiscardConfirm({
     dirty,
-    onRegisterDiscardGuard,
+    onRegisterDiscardGuard: useQrStepBack(
+      onRegisterDiscardGuard,
+      payment.qris.open !== null,
+      payment.qris.close,
+    ),
     onDiscard: () => onDraftChange?.(null),
     testID,
   });
@@ -198,6 +209,22 @@ export function Handover({
       });
   };
 
+  if (payment.qris.open !== null && qris.port !== undefined) {
+    return (
+      <QrisStep
+        chrome={chrome}
+        open={payment.qris.open}
+        port={qris.port}
+        canSimulate={canSimulateQris(runtime.hasPermission)}
+        onPaid={payment.qris.paid}
+        onRenew={payment.qris.renew}
+        onTakeByHand={payment.qris.takeByHand}
+        onClose={payment.qris.close}
+        testID={`${testID}.qris`}
+      />
+    );
+  }
+
   return (
     <FlowScreen
       chrome={chrome}
@@ -208,11 +235,15 @@ export function Handover({
       onPrimary={submit}
       primaryDisabled={!ready}
       primaryHint={tn(
-        !settled
-          ? 'repair.hint.handoverPayment'
-          : checks.loaded && !checks.ready(note)
-            ? 'repair.hint.handoverChecks'
-            : 'repair.hint.handover',
+        ownerNeeded
+          ? 'repair.hint.handoverFree'
+          : payment.qris.pending > 0
+            ? 'repair.hint.handoverQris'
+            : !settled
+              ? 'repair.hint.handoverPayment'
+              : checks.loaded && !checks.ready(note)
+                ? 'repair.hint.handoverChecks'
+                : 'repair.hint.handover',
       )}
       busy={runner.busy}
       errorCode={runner.errorCode}
@@ -257,6 +288,8 @@ export function Handover({
                 reduced={shown.chargeReduced}
                 refunds={shown.refunds}
                 downPayment={shown.downPayment}
+                // The DP and anything paid at this counter already (a QR): all of it is paid.
+                paidLabel="repair.price.paid"
                 testID={testID}
               />
             </Card>
@@ -313,6 +346,7 @@ export function Handover({
               accounts={accounts}
               onChange={payment.setLines}
               newKey={payment.newKey}
+              qris={payment.qris}
               testID={`${testID}.pay`}
             />
           )}

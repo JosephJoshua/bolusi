@@ -1,7 +1,7 @@
 // The repair screens' runtime port (04 §7), the same pattern as notes: screens (phone and counter PC) read and write
 // through a small typed port the platform binds, never the database or the op log. The commands and
 // queries come straight from the module through `ModulePort`, so a new command needs no new wiring.
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 
@@ -12,6 +12,7 @@ import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
+import type { HandoverQris } from './handover-payment.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { repairModule } from './manifest.js';
 import {
@@ -259,6 +260,34 @@ export function usePaymentAccounts(): readonly PaymentAccountRow[] | null {
   );
   if (accounts.status === 'ready') return accounts.data;
   return accounts.status === 'error' ? NO_ACCOUNTS : null;
+}
+
+/**
+ * QRIS at a servisan's handover: the port, the servisan as the ledger names it (null until its
+ * number is known), and the ids of the payments the ledger already holds for it, so a QR payment
+ * that synced in is no longer counted as on its way.
+ */
+export function useTicketQris(ticketId: string, ticketNumber: string | null): HandoverQris {
+  const runtime = useRepairRuntime();
+  const entries = useRepairQuery(
+    async (rt) =>
+      (await rt.money.query('documentMoney', { kind: REPAIR_DOCUMENT_KIND, id: ticketId })).rows[0]
+        ?.entries ?? [],
+    `documentMoney:${ticketId}`,
+  );
+  const recorded = useMemo(
+    () => (entries.status === 'ready' ? new Set(entries.data.map((entry) => entry.id)) : null),
+    [entries],
+  );
+  return {
+    port: runtime.money.qris,
+    document:
+      ticketNumber === null
+        ? null
+        : { kind: REPAIR_DOCUMENT_KIND, id: ticketId, label: ticketNumber },
+    recorded,
+    newId: () => runtime.money.newId(),
+  };
 }
 
 export interface PaymentMethodChoice {

@@ -1,11 +1,22 @@
 // The money ledger in memory, for the preview and the screen harnesses: the store's methods, the
 // drawer with today's payments and moves, a count an owner still has to settle and one customer
 // who took their phone before paying. Commands do what the real ones do to the figures the Kas
-// screens read; rules and postings are the real module's job and are tested there.
+// screens read; rules and postings are the real module's job and are tested there. Its QRIS method
+// is connected to a Xendit test account (`demoQris`), so the QR can be shown and "paid".
+import {
+  QRIS_TTL_MS,
+  type QrisCharge,
+  type QrisChargeBody,
+  type QrisConnection,
+} from '@bolusi/schemas';
+
 import { CASH_ACCOUNT, movesOut, type CashMoveKind, type EntryKind } from './constants.js';
+import type { MoneyDocument } from './documents.js';
+import { QrisError, type QrisPort } from './qris.js';
 import type {
   CashCountRow,
   CashDrawer,
+  DocumentMoney,
   MoneyEntryRow,
   OpenBalanceRow,
   PaymentAccountRow,
@@ -27,6 +38,15 @@ export interface DemoMoneyOptions {
 export interface DemoMoneyLedger {
   query(name: string, input: Input): Promise<{ rows: unknown[]; nextCursor: null }>;
   run(name: string, input: Input): Promise<unknown>;
+  /** A payment the server would record (a paid QR), under the id it was made with. */
+  recordPayment(payment: {
+    readonly id: string;
+    readonly document: MoneyDocument;
+    readonly account: string;
+    readonly amount: number;
+  }): void;
+  /** One document's money, as `documentMoney` reads it; null for a document it never saw. */
+  documentMoney(documentId: string): DocumentMoney | null;
 }
 
 /** An entry as the ledger stores it, with the debt it settles when it is one. */
@@ -172,9 +192,22 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     return [...byDocument.values()].filter((row) => !Number.isNaN(row.since) && row.balance !== 0);
   };
 
+  const documentMoney = (documentId: string): DocumentMoney | null => {
+    const mine = entries.filter((e) => e.documentId === documentId);
+    if (mine.length === 0) return null;
+    const total = (kind: EntryKind) =>
+      mine
+        .filter((e) => e.kind === kind && e.voidedAt === null)
+        .reduce((sum, e) => sum + e.amount, 0);
+    const charged = total('charge_recorded');
+    const reduced = total('charge_reduced');
+    const paid = total('payment_received') - total('refund_paid');
+    return { balance: charged - reduced - paid, charged, reduced, paid, entries: mine };
+  };
+
   const add = (fields: Partial<Stored> & { kind: EntryKind; amount: number }): string => {
     // After the seeded records, in the order they were made: the preview's clock stands still.
-    const created = entry({ ...fields, createdBy: options.actor(), createdAt: now + ids });
+    const created = entry({ createdBy: options.actor(), createdAt: now + ids, ...fields });
     entries.push(created);
     notify();
     return created.id;
@@ -182,8 +215,28 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
 
   const page = (rows: unknown[]) => Promise.resolve({ rows, nextCursor: null });
   return {
+    documentMoney,
+    recordPayment: ({ id, document: doc, account, amount }) => {
+      add({
+        id,
+        kind: 'payment_received',
+        account,
+        amount,
+        documentKind: doc.kind,
+        documentId: doc.id,
+        documentLabel: doc.label,
+      });
+    },
     query: (name, input) => {
       switch (name) {
+        case 'documentMoney': {
+          const found = documentMoney(String(input['id']));
+          return page(
+            found === null
+              ? [{ balance: 0, charged: 0, reduced: 0, paid: 0, entries: [] }]
+              : [found],
+          );
+        }
         case 'paymentAccounts':
           return page(accounts.filter((row) => input['includeInactive'] === true || row.active));
         case 'cashDrawer':
@@ -281,6 +334,82 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
         default:
           return Promise.resolve(null);
       }
+    },
+  };
+}
+
+/**
+ * QRIS through a pretend Xendit test account: `connectedAccounts` start connected, a QR waits until
+ * "Bayar (mode uji)" pays it, and the payment lands through `onPaid` as the server would record it.
+ */
+export function demoQris(options: {
+  readonly now: () => number;
+  readonly connectedAccounts: readonly string[];
+  readonly onPaid: (body: QrisChargeBody) => void;
+}): QrisPort {
+  const connections = new Map<string, QrisConnection>(
+    options.connectedAccounts.map((accountId) => [
+      accountId,
+      { accountId, environment: 'test', connectedAt: options.now() },
+    ]),
+  );
+  const charges = new Map<string, { body: QrisChargeBody; charge: QrisCharge }>();
+  const current = (id: string): QrisCharge => {
+    const found = charges.get(id);
+    if (found === undefined) throw new QrisError('notFound');
+    const { charge } = found;
+    return charge.status === 'waiting' && charge.expiresAt <= options.now()
+      ? { ...charge, status: 'expired' }
+      : charge;
+  };
+  return {
+    connections: () => Promise.resolve([...connections.values()]),
+    connect: (accountId, secretKey) => {
+      const connection: QrisConnection = {
+        accountId,
+        environment: secretKey.startsWith('xnd_development_') ? 'test' : 'live',
+        connectedAt: options.now(),
+      };
+      connections.set(accountId, connection);
+      return Promise.resolve(connection);
+    },
+    disconnect: (accountId) => {
+      connections.delete(accountId);
+      return Promise.resolve();
+    },
+    createCharge: (body) => {
+      const known = charges.get(body.id);
+      if (known !== undefined) return Promise.resolve(current(body.id));
+      const connection = connections.get(body.accountId);
+      if (connection === undefined) return Promise.reject(new QrisError('notConnected'));
+      const charge: QrisCharge = {
+        id: body.id,
+        status: 'waiting',
+        amount: body.amount,
+        // Xendit's test mode answers with a placeholder rather than a payable QRIS string.
+        qrString: `DEMO-QRIS-${body.document.label}-${String(body.amount)}-${body.id}`,
+        environment: connection.environment,
+        expiresAt: options.now() + QRIS_TTL_MS,
+        paidAt: null,
+      };
+      charges.set(body.id, { body, charge });
+      return Promise.resolve(charge);
+    },
+    charge: (id) => {
+      try {
+        return Promise.resolve(current(id));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    },
+    simulate: (id) => {
+      const found = charges.get(id);
+      if (found === undefined) return Promise.reject(new QrisError('notFound'));
+      if (found.charge.status !== 'paid') {
+        found.charge = { ...found.charge, status: 'paid', paidAt: options.now() };
+        options.onPaid(found.body);
+      }
+      return Promise.resolve(found.charge);
     },
   };
 }

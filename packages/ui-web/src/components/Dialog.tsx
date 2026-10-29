@@ -43,7 +43,8 @@ export function Dialog({
       }}
     >
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay/40 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
+        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-overlay/40 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
+        {/* Overlay and content share a layer, so a dialog opened from another one dims it. */}
         <RadixDialog.Content
           data-testid={testId}
           // A stray click beside a dialog must not throw away what was typed in it; it closes

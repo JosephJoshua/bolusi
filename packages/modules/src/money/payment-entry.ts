@@ -1,8 +1,11 @@
 // Taking a payment at a counter, platform-free so the phone and the PC (and a till later) work
 // the same: one or more lines, each a method and an amount, against what is due. A cash line may
 // carry what the customer handed over, so the screen can show the change; an EDC line needs its
-// approval code (`referenceRequired`).
+// approval code (`referenceRequired`). A QRIS line on a method connected to Xendit is paid by
+// showing the customer a QR (qris-hooks.ts): it is never recorded from here, since the server
+// records the payment once Xendit confirms it, unless the counter falls back to taking it by hand.
 import { formatNumber } from '@bolusi/i18n';
+import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';
 
 import { CASH_ACCOUNT, referenceRequired, type PaymentAccountKind } from './constants.js';
 import type { PaymentInput } from './commands.js';
@@ -18,10 +21,17 @@ export interface PaymentLine {
   /** Cash handed over, for the change; cash lines only. */
   readonly tendered: string;
   readonly reference: string;
+  /** The QR shown for this line: its charge id, for the amount it was made for. */
+  readonly qr?: { readonly id: string; readonly amount: number } | undefined;
+  /** Taken by hand on a method connected to Xendit (offline, or Xendit not answering). */
+  readonly manual?: boolean | undefined;
 }
 
-/** `method`: the store switched the line's method off since it was picked. */
-export type PaymentLineProblem = 'amount' | 'method' | 'reference' | 'tendered';
+/**
+ * `method`: the store switched the line's method off since it was picked.
+ * `qr`: still to be paid by the customer scanning its QR.
+ */
+export type PaymentLineProblem = 'amount' | 'method' | 'reference' | 'tendered' | 'qr';
 
 export interface PaymentEntry {
   /** The payments to record, once every line is complete; empty while one is not. */
@@ -40,6 +50,8 @@ export interface PaymentEntry {
 }
 
 const MAX_DIGITS = 13;
+
+const NO_QR_ACCOUNTS: ReadonlySet<string> = new Set();
 
 /** The digits of what was typed into an amount field, or null when it is too long to be money. */
 export function digitsOf(text: string): string | null {
@@ -67,10 +79,28 @@ export function lineKind(
   return accounts.find((row) => `account:${row.id}` === account)?.kind ?? 'cash';
 }
 
+/**
+ * Whether a line is paid by its QR rather than recorded here. Below what QRIS takes there is no QR,
+ * so such a line is taken by hand.
+ */
+export function paidByQr(line: PaymentLine, qrAccounts: ReadonlySet<string>): boolean {
+  const amount = rupiah(line.amount);
+  return (
+    line.manual !== true &&
+    qrAccounts.has(line.account) &&
+    (amount === null || amount >= QRIS_MIN_AMOUNT)
+  );
+}
+
+/**
+ * `qrAccounts` are the methods (`account:<id>`) connected to Xendit here: their lines count toward
+ * what is paid, so the rest adds up, but stay incomplete until the customer pays the QR.
+ */
 export function paymentEntry(
   due: number,
   lines: readonly PaymentLine[],
   accounts: readonly PaymentAccountRow[],
+  qrAccounts: ReadonlySet<string> = NO_QR_ACCOUNTS,
 ): PaymentEntry {
   const problems: Record<string, PaymentLineProblem> = {};
   const payments: PaymentInput[] = [];
@@ -87,6 +117,10 @@ export function paymentEntry(
     const account = line.account;
     if (!methodOffered(account, accounts)) {
       problems[line.key] = 'method';
+      continue;
+    }
+    if (paidByQr(line, qrAccounts)) {
+      problems[line.key] = 'qr';
       continue;
     }
     const kind = lineKind(account, accounts);

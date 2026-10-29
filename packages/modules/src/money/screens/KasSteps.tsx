@@ -5,7 +5,7 @@
  */
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import { ChipRow, TextInput, ToggleChip, color, space, type } from '@bolusi/ui';
-import { useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
@@ -17,22 +17,18 @@ import { tm } from '../i18n.js';
 import {
   CASH_MOVE_LABEL,
   cashMoveCheck,
-  debtPayment,
   differenceText,
   settleState,
   type NamedBalance,
 } from '../kas.js';
-import {
-  digitsOf,
-  digitsText,
-  newPaymentLine,
-  rupiah,
-  type PaymentLine,
-} from '../payment-entry.js';
-import type { CashCountRow, PaymentAccountRow } from '../queries.js';
+import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
+import { canSimulateQris } from '../qris.js';
+import type { CashCountRow } from '../queries.js';
+import { useDebtReceipt } from '../receive-debt.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { PaymentLines } from './PaymentLines.js';
+import { QrisStep, useQrStepBack } from './QrisStep.js';
 
 interface StepProps {
   readonly chrome: ScreenChrome;
@@ -412,46 +408,47 @@ export function ReceiveDebtStep({
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
-  const accounts = useMoneyQuery(
-    async (rt) => (await rt.query('paymentAccounts', {})).rows,
-    'accounts',
-  );
-  const keys = useRef(0);
-  const newKey = (): string => {
-    keys.current += 1;
-    return `line${String(keys.current)}`;
-  };
-  const [initial] = useState<readonly PaymentLine[]>(() => [
-    newPaymentLine('line0', balance.balance),
-  ]);
-  const [lines, setLines] = useState<readonly PaymentLine[]>(initial);
+  const receipt = useDebtReceipt(balance);
+  const { entry, input, qris } = receipt;
   const leave = useStepLeave(
-    lines !== initial,
-    { chrome, onDone, onCancel, onRegisterDiscardGuard },
+    receipt.dirty && !receipt.paidByQr,
+    {
+      chrome,
+      onDone,
+      onCancel,
+      onRegisterDiscardGuard: useQrStepBack(onRegisterDiscardGuard, qris.open !== null, qris.close),
+    },
     testID,
   );
-  const accountRows: readonly PaymentAccountRow[] =
-    accounts.status === 'ready' ? accounts.data : [];
-  const { entry, taken } = debtPayment(balance.balance, lines, accountRows);
-  const ready = accounts.status === 'ready' && taken !== null && taken.complete;
 
   const submit = (): void => {
-    if (!ready || taken === null) return;
+    if (receipt.paidByQr) {
+      onDone();
+      return;
+    }
+    if (input === null) return;
     void runner
-      .run(() =>
-        runtime.run('receivePayments', {
-          document: {
-            kind: balance.documentKind,
-            id: balance.documentId,
-            label: balance.documentLabel,
-          },
-          payments: [...taken.payments],
-        }),
-      )
+      .run(() => runtime.run('receivePayments', input))
       .then((result) => {
         if (result !== undefined) onDone();
       });
   };
+
+  if (qris.open !== null && runtime.qris !== undefined) {
+    return (
+      <QrisStep
+        chrome={chrome}
+        open={qris.open}
+        port={runtime.qris}
+        canSimulate={canSimulateQris(runtime.hasPermission)}
+        onPaid={qris.paid}
+        onRenew={qris.renew}
+        onTakeByHand={qris.takeByHand}
+        onClose={qris.close}
+        testID={`${testID}.qris`}
+      />
+    );
+  }
 
   return (
     <FlowScreen
@@ -460,13 +457,15 @@ export function ReceiveDebtStep({
       onBack={leave.onBack}
       overlay={leave.overlay}
       primaryLabel={
-        entry.paid > 0
-          ? tm('money.receive.save', { amount: formatMoney(entry.paid) })
-          : tm('money.receive.saveEmpty')
+        receipt.paidByQr
+          ? tm('money.qris.done')
+          : entry.paid > 0
+            ? tm('money.receive.save', { amount: formatMoney(entry.paid) })
+            : tm('money.receive.saveEmpty')
       }
       onPrimary={submit}
-      primaryDisabled={!ready}
-      primaryHint={tm('money.receive.hint')}
+      primaryDisabled={!receipt.paidByQr && input === null}
+      primaryHint={receipt.hint ?? undefined}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -477,18 +476,19 @@ export function ReceiveDebtStep({
       <View style={styles.sum}>
         <Line
           label={tm('money.receive.owed')}
-          value={formatMoney(balance.balance)}
+          value={formatMoney(receipt.owed)}
           strong
           testID={`${testID}.owed`}
         />
       </View>
       <View style={styles.gap}>
         <PaymentLines
-          lines={lines}
+          lines={receipt.lines}
           entry={entry}
-          accounts={accountRows}
-          onChange={setLines}
-          newKey={newKey}
+          accounts={receipt.accounts}
+          onChange={receipt.setLines}
+          newKey={receipt.newKey}
+          qris={qris}
           testID={`${testID}.pay`}
         />
       </View>

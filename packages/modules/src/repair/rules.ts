@@ -109,6 +109,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'handoverAccessories',
   'handoverNoteNeeded',
   'ownershipVideoNeeded',
+  'freeHandoverOwnerOnly',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -192,6 +193,18 @@ async function requireClaimChargePermission(
 }
 
 // ── shared checks (also used by the commands to word their own input errors) ─────────────────────
+
+/**
+ * A repaired servisan that costs nothing and is not a warranty claim goes home only with an owner,
+ * so a free repair is never the counter's call. A Rp 0 intake ("cek dulu") stays open to everyone.
+ */
+export function freeHandoverNeedsOwner(
+  ticket: Pick<TicketState, 'outcome' | 'quoteTotal' | 'claimOfTicketId'>,
+): boolean {
+  return (
+    ticket.outcome === 'repaired' && ticket.claimOfTicketId === null && ticket.quoteTotal === 0
+  );
+}
 
 /** Parts and labour add to the price, discounts subtract; adjustments may go either way. */
 export function checkLineSign(kind: QuoteLineKind, amount: number): void {
@@ -918,6 +931,16 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
       'priceChangesPending',
       'price proposals are undecided',
     );
+  }
+  if (
+    freeHandoverNeedsOwner(ticket) &&
+    !(await ctx.holdsPermission(op.userId, REPAIR_PERMISSION.warrantyException))
+  ) {
+    throw refuse('freeHandoverOwnerOnly', {
+      code: 'PERMISSION_DENIED',
+      details: { permissionId: REPAIR_PERMISSION.warrantyException },
+      message: `user ${op.userId} cannot hand over ticket ${ticket.ticketNumber} for free`,
+    });
   }
   // Every version: an older payload carries no reason, so it hands over only a paid phone.
   await requirePaid(op, ctx);

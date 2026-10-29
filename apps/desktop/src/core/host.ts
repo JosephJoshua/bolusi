@@ -36,7 +36,12 @@ import {
   repairMediaSeamsFor,
 } from '@bolusi/device/bootstrap/repair';
 import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
-import { createStaffControls, type StaffControls } from '@bolusi/device/bootstrap/staff';
+import {
+  createStaffControls,
+  type RoleChange,
+  type StaffControls,
+} from '@bolusi/device/bootstrap/staff';
+import { createFetchQris } from '@bolusi/device/bootstrap/qris-transport';
 import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
@@ -63,6 +68,7 @@ import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import { moneyModule } from '@bolusi/modules';
+import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
 import {
@@ -72,6 +78,7 @@ import {
   type HandoffKind,
   type HandoffPageLabels,
   type MediaRef,
+  type QrisChargeBody,
   type VideoMime,
 } from '@bolusi/schemas';
 
@@ -196,6 +203,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     deviceToken: loadDeviceToken,
   });
   const staffAdmin = createFetchStaffAdmin({
+    baseUrl: deps.apiBaseUrl,
+    deviceToken: loadDeviceToken,
+    ...fetchOptions,
+  });
+  const qrisFor = createFetchQris({
     baseUrl: deps.apiBaseUrl,
     deviceToken: loadDeviceToken,
     ...fetchOptions,
@@ -387,6 +399,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         // A PC's thumbnails are already `data:` URIs.
         readBase64: (uri) => Promise.resolve(uri.slice(uri.indexOf(',') + 1)),
       },
+      qris: qrisFor,
     });
   }
 
@@ -399,6 +412,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const runtime = activeRepair();
     if (runtime === null || runtime.userId !== userId) throw new DomainError('NOT_AUTHENTICATED');
     return runtime;
+  }
+
+  /** QRIS for the person signed in now; a call for anyone else is refused like a repair call. */
+  function qrisOf(userId: string): QrisPort {
+    const port = repairFor(userId).money.qris;
+    if (port === undefined) throw new QrisError('unavailable');
+    return port;
   }
 
   /** Who a photo or signature from the window is stamped with: the person signed in now. */
@@ -805,6 +825,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       staffFor(userId).onSetActive(memberId, active),
     'staff.setLimits': (userId: string, roleId: string, limits: LimitAmounts) =>
       staffFor(userId).onSetLimits(roleId, limits),
+    'staff.createRole': (userId: string, name: string, copyFromRoleId: string) =>
+      staffFor(userId).onCreateRole(name, copyFromRoleId),
+    'staff.updateRole': (userId: string, roleId: string, change: RoleChange) =>
+      staffFor(userId).onUpdateRole(roleId, change),
+    'staff.deleteRole': (userId: string, roleId: string) => staffFor(userId).onDeleteRole(roleId),
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
     'sync.requestManual'() {
@@ -823,6 +848,16 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'money.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).money.run)(knownName(moneyModule.commands, name), input),
     'money.stores': (userId: string) => repairFor(userId).money.stores(),
+    // QRIS through Xendit: server calls as the same person, made from here like the staff calls.
+    'money.qris.connections': (userId: string) => qrisOf(userId).connections(),
+    'money.qris.connect': (userId: string, accountId: string, secretKey: string) =>
+      qrisOf(userId).connect(accountId, secretKey),
+    'money.qris.disconnect': (userId: string, accountId: string) =>
+      qrisOf(userId).disconnect(accountId),
+    'money.qris.createCharge': (userId: string, body: QrisChargeBody) =>
+      qrisOf(userId).createCharge(body),
+    'money.qris.charge': (userId: string, id: string) => qrisOf(userId).charge(id),
+    'money.qris.simulate': (userId: string, id: string) => qrisOf(userId).simulate(id),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),

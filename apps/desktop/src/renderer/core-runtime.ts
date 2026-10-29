@@ -94,6 +94,15 @@ export function createCoreRepairRuntime(deps: {
       limitOf,
       newId,
       stores: () => call('money.stores'),
+      // QRIS through Xendit, made by the core like the staff calls; errors come back as QrisError.
+      qris: {
+        connections: () => call('money.qris.connections'),
+        connect: (accountId, secretKey) => call('money.qris.connect', accountId, secretKey),
+        disconnect: (accountId) => call('money.qris.disconnect', accountId),
+        createCharge: (body) => call('money.qris.createCharge', body),
+        charge: (id) => call('money.qris.charge', id),
+        simulate: (id) => call('money.qris.simulate', id),
+      },
     },
     subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
     ticketSyncStatuses: (ticketIds) => call('repair.ticketSyncStatuses', ticketIds),

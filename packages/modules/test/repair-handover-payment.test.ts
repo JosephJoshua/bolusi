@@ -297,6 +297,33 @@ describe('a cancelled phone', () => {
   });
 });
 
+describe('a free repair', () => {
+  test('only an owner hands back a repaired phone that costs nothing, unless it is a claim', async () => {
+    h = await openRepairHarness(7251);
+    // Anyone may still take a phone in at Rp 0 to look at it first.
+    const ticketId = await repaired(h, {
+      quoteLines: [{ kind: 'labour', description: 'Cek dulu', amount: 0 }],
+    });
+    await expectRefused(
+      h.run('returnDevice', handover(h, ticketId), h.cashierId),
+      'PERMISSION_DENIED',
+      'repair.refusal.freeHandoverOwnerOnly',
+    );
+    await h.run('returnDevice', handover(h, ticketId), h.ownerId);
+    expect(await location(h, ticketId)).toBe('returned');
+  });
+
+  test('a cancelled phone at no fee still goes home with the counter', async () => {
+    h = await openRepairHarness(7252);
+    const ticketId = await openTicket(h, {
+      quoteLines: [{ kind: 'labour', description: 'Cek dulu', amount: 0 }],
+    });
+    await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 0 }, h.storeOwnerId);
+    await h.run('returnDevice', handover(h, ticketId), h.cashierId);
+    expect(await location(h, ticketId)).toBe('returned');
+  });
+});
+
 describe('Bayar nanti', () => {
   test('only an owner lets a phone go unpaid; it is a debt until the customer pays', async () => {
     h = await openRepairHarness(7301);

@@ -188,7 +188,8 @@ export const repairModuleManifest = {
     },
     [REPAIR_PERMISSION.warrantyException]: {
       scope: 'store',
-      // A free repair outside the warranty is money the store gives away.
+      // A free repair outside the warranty is money the store gives away, and so is handing a
+      // repaired phone back for free (deviceReturnedRule).
       isDangerous: true,
       description: 'Can open a warranty claim after the warranty ended, or charge for a claim.',
     },

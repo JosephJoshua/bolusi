@@ -14,7 +14,7 @@ import {
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import { moneyModule } from '@bolusi/modules';
-import { MONEY_TABLE } from '@bolusi/modules/money';
+import { MONEY_TABLE, type QrisPort } from '@bolusi/modules/money';
 import {
   PHONE_MODELS_TABLE,
   REPAIR_PERMISSION,
@@ -50,6 +50,8 @@ export interface RepairRuntimeDeps {
   readonly media: RepairMediaSeams;
   readonly printing?: RepairRuntime['printing'];
   readonly inventory?: RepairRuntime['inventory'];
+  /** QRIS through Xendit, as this user; absent on a device that cannot reach the server. */
+  readonly qris?: QrisPort | undefined;
 }
 
 /** Every repair table, the op log for each ticket's sync status, the phone catalog (a
@@ -69,6 +71,7 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
     money: {
       ...bindModulePort(moneyModule, deps.runtime, deps.identity),
       stores: () => readStores(deps.db),
+      ...(deps.qris === undefined ? {} : { qris: deps.qris }),
     },
     // Every repair table, not one: a ticket row joins its customer, lines and photos, and a pulled
     // change to any of them must re-render the open screen (04 §7). The op log too, since each

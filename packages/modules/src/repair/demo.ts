@@ -13,7 +13,7 @@ import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/sche
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
-import { demoMoneyLedger } from '../money/demo.js';
+import { demoMoneyLedger, demoQris } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
@@ -38,7 +38,7 @@ import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } fro
 import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
 import { amountOwed } from './flows.js';
-import { REPAIR_REFUSALS, claimProblem } from './rules.js';
+import { REPAIR_REFUSALS, claimProblem, freeHandoverNeedsOwner } from './rules.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -1300,6 +1300,9 @@ export function demoRepairRuntime(
     },
     returnDevice: (input) => {
       const t = find(String(input['ticketId']));
+      if (freeHandoverNeedsOwner(t) && !permitted.has(P.warrantyException)) {
+        throw REPAIR_REFUSALS.refuse('freeHandoverOwnerOnly');
+      }
       const paidNow = ((input['payments'] as { amount: number }[] | undefined) ?? []).reduce(
         (sum, payment) => sum + payment.amount,
         0,
@@ -1469,6 +1472,28 @@ export function demoRepairRuntime(
     },
     notify,
   );
+  // The QRIS method is connected to a Xendit test account; a paid QR lands as the server would
+  // record it, lowering what the servisan or the debt still owes.
+  const qris = demoQris({
+    now: () => Date.now(),
+    connectedAccounts: DEMO_ACCOUNTS.filter((row) => row.kind === 'qris').map((row) => row.id),
+    onPaid: (body) => {
+      ledger.recordPayment({
+        id: body.id,
+        document: body.document,
+        account: `account:${body.accountId}`,
+        amount: body.amount,
+      });
+      if ((ledger.documentMoney(body.document.id)?.charged ?? 0) === 0) {
+        tickets = tickets.map((t) =>
+          t.id === body.document.id
+            ? withTotals({ ...t, downPayment: (t.downPayment ?? 0) + body.amount })
+            : t,
+        );
+        notify();
+      }
+    },
+  });
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
     inventory,
@@ -1504,15 +1529,29 @@ export function demoRepairRuntime(
     money: {
       query: (name: string, input: Input) => {
         if (name === 'documentMoney') {
-          const t = find(String(input['id']));
-          const paid = t.downPayment ?? 0;
+          const id = String(input['id']);
+          const recorded = ledger.documentMoney(id);
+          // A debt is the ledger's; a servisan still in the store keeps its DP on the ticket.
+          if (recorded !== null && recorded.charged > 0) {
+            return Promise.resolve({ rows: [recorded], nextCursor: null });
+          }
+          const paid = find(id).downPayment ?? 0;
           return Promise.resolve({
-            rows: [{ balance: -paid, charged: 0, reduced: 0, paid, entries: [] }],
+            rows: [
+              {
+                balance: -paid,
+                charged: 0,
+                reduced: 0,
+                paid,
+                entries: recorded?.entries ?? [],
+              },
+            ],
             nextCursor: null,
           });
         }
         return ledger.query(name, input);
       },
+      qris,
       run: (name: string, input: Input) => ledger.run(name, input),
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,

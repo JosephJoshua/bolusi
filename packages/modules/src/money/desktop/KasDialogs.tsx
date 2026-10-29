@@ -3,7 +3,7 @@
 // cancelling a payment. The rules are the phone's (kas.ts and the commands); only the layout differs.
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import { TextField, ToggleChip } from '@bolusi/ui-web';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 
@@ -13,17 +13,19 @@ import {
   CASH_MOVE_LABEL,
   accountLabel,
   cashMoveCheck,
-  debtPayment,
   differenceText,
   settleState,
   type NamedBalance,
 } from '../kas.js';
-import { newPaymentLine, rupiah, type PaymentLine } from '../payment-entry.js';
+import { rupiah } from '../payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
+import { canSimulateQris } from '../qris.js';
+import { useDebtReceipt } from '../receive-debt.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { AmountField, AmountLine, MoneyDialog } from './parts.js';
 import { PaymentLines } from './PaymentLines.js';
+import { QrisDialog } from './QrisDialog.js';
 
 interface TaskProps {
   /** The task landed. */
@@ -314,78 +316,75 @@ export function ReceiveDebtDialog({
 }: TaskProps & { readonly balance: NamedBalance }): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
-  const accounts = useMoneyQuery(
-    async (rt) => (await rt.query('paymentAccounts', {})).rows,
-    'accounts',
-  );
-  const keys = useRef(0);
-  const newKey = (): string => {
-    keys.current += 1;
-    return `line${String(keys.current)}`;
-  };
-  const [initial] = useState<readonly PaymentLine[]>(() => [
-    newPaymentLine('line0', balance.balance),
-  ]);
-  const [lines, setLines] = useState<readonly PaymentLine[]>(initial);
-  const accountRows: readonly PaymentAccountRow[] =
-    accounts.status === 'ready' ? accounts.data : [];
-  const { entry, taken } = debtPayment(balance.balance, lines, accountRows);
-  const ready = accounts.status === 'ready' && taken !== null && taken.complete;
+  const receipt = useDebtReceipt(balance);
+  const { entry, input, qris } = receipt;
   const testId = 'money.desk.receive';
 
   const submit = (): void => {
-    if (!ready || taken === null) return;
+    if (receipt.paidByQr) {
+      onDone();
+      return;
+    }
+    if (input === null) return;
     void runner
-      .run(() =>
-        runtime.run('receivePayments', {
-          document: {
-            kind: balance.documentKind,
-            id: balance.documentId,
-            label: balance.documentLabel,
-          },
-          payments: [...taken.payments],
-        }),
-      )
+      .run(() => runtime.run('receivePayments', input))
       .then((result) => {
         if (result !== undefined) onDone();
       });
   };
 
   return (
-    <MoneyDialog
-      title={tm('money.receive.title')}
-      description={[balance.customer, balance.documentLabel].filter(Boolean).join(' · ')}
-      runner={runner}
-      dirty={lines !== initial}
-      onClose={onClose}
-      submitLabel={
-        entry.paid > 0
-          ? tm('money.receive.save', { amount: formatMoney(entry.paid) })
-          : tm('money.receive.saveEmpty')
-      }
-      onSubmit={submit}
-      submitDisabled={!ready}
-      hint={ready ? null : tm('money.receive.hint')}
-      size="md"
-      testId={testId}
-    >
-      <div className="rounded-sm bg-surface-alt p-3">
-        <AmountLine
-          label={tm('money.receive.owed')}
-          value={formatMoney(balance.balance)}
-          strong
-          testId={`${testId}.owed`}
+    <>
+      <MoneyDialog
+        title={tm('money.receive.title')}
+        description={[balance.customer, balance.documentLabel].filter(Boolean).join(' · ')}
+        runner={runner}
+        dirty={receipt.dirty && !receipt.paidByQr}
+        onClose={onClose}
+        submitLabel={
+          receipt.paidByQr
+            ? tm('money.qris.done')
+            : entry.paid > 0
+              ? tm('money.receive.save', { amount: formatMoney(entry.paid) })
+              : tm('money.receive.saveEmpty')
+        }
+        onSubmit={submit}
+        submitDisabled={!receipt.paidByQr && input === null}
+        hint={receipt.hint}
+        size="md"
+        testId={testId}
+      >
+        <div className="rounded-sm bg-surface-alt p-3">
+          <AmountLine
+            label={tm('money.receive.owed')}
+            value={formatMoney(receipt.owed)}
+            strong
+            testId={`${testId}.owed`}
+          />
+        </div>
+        <PaymentLines
+          lines={receipt.lines}
+          entry={entry}
+          accounts={receipt.accounts}
+          onChange={receipt.setLines}
+          newKey={receipt.newKey}
+          qris={qris}
+          testId={`${testId}.pay`}
         />
-      </div>
-      <PaymentLines
-        lines={lines}
-        entry={entry}
-        accounts={accountRows}
-        onChange={setLines}
-        newKey={newKey}
-        testId={`${testId}.pay`}
-      />
-    </MoneyDialog>
+      </MoneyDialog>
+      {qris.open !== null && runtime.qris !== undefined ? (
+        <QrisDialog
+          open={qris.open}
+          port={runtime.qris}
+          canSimulate={canSimulateQris(runtime.hasPermission)}
+          onPaid={qris.paid}
+          onRenew={qris.renew}
+          onTakeByHand={qris.takeByHand}
+          onClose={qris.close}
+          testId={`${testId}.qris`}
+        />
+      ) : null}
+    </>
   );
 }
 
