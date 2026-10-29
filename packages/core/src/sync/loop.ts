@@ -141,6 +141,11 @@ export class SyncLoop<DB> {
   /** In-memory (03 §10: "`failureCount` is in-memory"). A restart retries at once — deliberate. */
   private failureCount = 0;
   private rerun = false;
+  /**
+   * A person pressed "Kirim sekarang" while a cycle ran. If that cycle fails, the press still gets
+   * its own attempt at once, as it would have in backoff, instead of waiting out the backoff.
+   */
+  private manualRerun = false;
   private cancelBackoff: CancelTimer | null = null;
   private cycle: Promise<void> = Promise.resolve();
   private hydrated = false;
@@ -206,6 +211,7 @@ export class SyncLoop<DB> {
       // 03 §10: "any trigger arrives → (no transition), rerun flag set". Coalescing: N triggers
       // during one cycle produce ONE follow-up, because a flag is not a counter.
       this.rerun = true;
+      if (reason === 'manual') this.manualRerun = true;
       return;
     }
 
@@ -239,6 +245,7 @@ export class SyncLoop<DB> {
     this.stopped = true;
     this.pause();
     this.rerun = false;
+    this.manualRerun = false;
     this.clearBackoffTimer();
   }
 
@@ -273,6 +280,7 @@ export class SyncLoop<DB> {
 
   private async runCycle(): Promise<void> {
     this.rerun = false;
+    this.manualRerun = false;
     this.stats = { ...this.stats, cycles: this.stats.cycles + 1 };
 
     try {
@@ -437,6 +445,14 @@ export class SyncLoop<DB> {
       backoffUntil: until,
     });
     this.clearBackoffTimer();
+    if (this.manualRerun && !this.syncDisabled) {
+      // The press came after this cycle started, so it was not answered by it: one attempt now,
+      // as a press in backoff gets (EARLY_EXIT_REASONS). Its failure backs off as usual.
+      this.manualRerun = false;
+      this.transition('trigger');
+      this.cycle = this.runCycle();
+      return;
+    }
     this.cancelBackoff = this.options.timer.schedule(delay, () => {
       this.cancelBackoff = null;
       if (this.syncDisabled || this.stopped) return;

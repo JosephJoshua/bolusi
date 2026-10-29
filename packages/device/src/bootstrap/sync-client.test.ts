@@ -366,6 +366,54 @@ describe('falsification — each wiring broken makes the cycle FAIL LOUDLY (§2.
   });
 });
 
+describe('"Kirim sekarang" answers the press (round 2 QA, F11)', () => {
+  test('sending shows at once, and a hung attempt that times out says it failed', async () => {
+    const { client, transport } = await build({ online: true });
+    await client.start();
+    await client.settle();
+
+    // The server stops answering: the pull hangs until the request deadline gives up.
+    let giveUp: (error: Error) => void = () => undefined;
+    transport.pull = (request) => {
+      transport.pulls.push(request);
+      return new Promise((_, reject) => {
+        giveUp = reject;
+      });
+    };
+    const seen: { state: string; busy: boolean; error: string | null }[] = [];
+    client.subscribe(() => seen.push({ state: client.state(), ...client.manualSync() }));
+    const pulled = transport.pulls.length;
+    client.requestManual();
+    // Told before any answer comes back: the screens show it is sending.
+    expect(seen.at(-1)).toEqual({ state: 'pushing', busy: true, error: null });
+
+    await vi.waitFor(() => expect(transport.pulls.length).toBe(pulled + 1));
+    expect(client.state()).not.toBe('idle');
+    giveUp(new SyncTransportError('no answer within 60000 ms', { code: null, status: null }));
+    await vi.waitFor(() => expect(client.manualSync().busy).toBe(false));
+    // No longer "sending": backed off, with a failure line for the press.
+    expect(client.state()).toBe('backoff');
+    expect(client.manualSync()).toEqual({ busy: false, error: 'NETWORK' });
+    expect(seen.at(-1)).toEqual({ state: 'backoff', busy: false, error: 'NETWORK' });
+    client.stop();
+  });
+
+  test('a press that gets through clears the failure line', async () => {
+    const { client, transport } = await build({ online: true, pullRejects: true });
+    await client.start();
+    client.requestManual();
+    await client.settle();
+    await vi.waitFor(() => expect(client.manualSync().error).toBe('INTERNAL'));
+
+    transport.pullRejects = false;
+    client.requestManual();
+    expect(client.manualSync()).toEqual({ busy: true, error: null });
+    await vi.waitFor(() => expect(client.manualSync()).toEqual({ busy: false, error: null }));
+    expect(client.state()).toBe('idle');
+    client.stop();
+  });
+});
+
 describe('a retry after a failed cycle', () => {
   test('tells the screens when it ends, though no trigger asked for it', async () => {
     const timer = new FakeTimer();

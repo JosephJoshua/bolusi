@@ -74,3 +74,25 @@ test('"Terakhir terhubung" ages while no new snapshot arrives', () => {
   });
   expect(panel()).toContain('Terakhir terhubung 5 menit lalu');
 });
+
+test('a "Kirim sekarang" that did not get through says so in the panel', () => {
+  render(
+    <TooltipProvider>
+      <SyncStatusButton
+        input={{
+          ...input(),
+          loopState: 'backoff',
+          manualSyncBusy: false,
+          manualSyncError: 'NETWORK',
+        }}
+        open
+        onOpenChange={() => undefined}
+        onSyncNow={() => undefined}
+        onReenrol={() => undefined}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.getByTestId('desktop.sync.manualError').textContent).toBe(
+    'Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini.',
+  );
+});

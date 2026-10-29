@@ -1,6 +1,12 @@
 // Whether this PC's work has reached the server: a quiet line in the title bar, and a panel with the detail and "Kirim sekarang". The phone's sync status rules decide every word
 // (shared model); only the layout is the PC's.
-import { formatRelative, t, translateOpType, translateRejection } from '@bolusi/i18n';
+import {
+  formatRelative,
+  t,
+  translateErrorCode,
+  translateOpType,
+  translateRejection,
+} from '@bolusi/i18n';
 import {
   firstSyncPercent,
   manualSync,
@@ -184,6 +190,12 @@ function SyncStatusDialog({
         <p className="text-small text-text-muted">
           {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
         </p>
+        {/* The answer to "Kirim sekarang" when it did not get through; the loop keeps retrying. */}
+        {input.manualSyncError === null ? null : (
+          <div data-testid="desktop.sync.manualError">
+            <Banner tone="warning" message={translateErrorCode(input.manualSyncError)} />
+          </div>
+        )}
         {input.firstSync === null ? null : (
           <Banner
             tone="info"
