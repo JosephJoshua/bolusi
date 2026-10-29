@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import {
+  Linking,
   Platform,
   StatusBar as RNStatusBar,
   StyleSheet,
@@ -64,12 +65,16 @@ import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
 import { LimitsScreen } from './src/screens/staff/LimitsScreen.js';
+import { RolesScreen } from './src/screens/staff/RolesScreen.js';
 import { StaffScreen } from './src/screens/staff/StaffScreen.js';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
 import { pinView } from '@bolusi/device/models/pin/model';
+import { RenameDeviceScreen } from './src/screens/settings/RenameDeviceScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
+import { DeviceSetupRoute } from './src/screens/setup/DeviceSetupRoute.js';
+import type { PermissionPort } from './src/push/permission.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
 import { roleLabel } from './src/screens/switcher/UserRow.js';
 import {
@@ -257,6 +262,11 @@ export interface AppProps {
    * who may not add staff here, and on a build with no server wire; then the row is absent too.
    */
   readonly staff?: StaffControls | undefined;
+  /**
+   * Rename this phone (Settings › device), for someone who may register devices here. Online only;
+   * REJECTS with a `StaffAdminError`. Absent for everyone else, and then the action is absent too.
+   */
+  readonly onRenameDevice?: ((name: string) => Promise<void>) | undefined;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -278,6 +288,13 @@ export interface AppProps {
    * `true` is "Nyalakan" (the OS prompt follows), `false` is "Nanti saja". Null when not asking.
    */
   readonly onAnswerNotifications?: ((allow: boolean) => void) | null | undefined;
+  /** This phone's first-run setup waits for the signed-in person: it opens on their first unlock. */
+  readonly setupPending?: boolean | undefined;
+  /** The setup was finished or put off, so it does not open by itself again. */
+  readonly onSetupDone?: (() => void) | undefined;
+  /** The permissions the setup asks up front, with their reason; absent where none are bound. */
+  readonly cameraPermission?: PermissionPort | undefined;
+  readonly notificationPermission?: PermissionPort | undefined;
 }
 
 export default function App(props: AppProps): React.JSX.Element {
@@ -394,6 +411,8 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const [shownRoute, setShownRoute] = useState<ShellRoute>(route);
   const [syncReturn, setSyncReturn] = useState<ShellRoute>('home');
+  // The setup ends where it was opened from: Settings when reopened there, else the home surface.
+  const [setupReturn, setSetupReturn] = useState<ShellRoute>('home');
   if (routeOwner !== sessionUserId) {
     const restored = workspace?.route ?? 'home';
     setRouteOwner(sessionUserId);
@@ -550,6 +569,21 @@ export default function App(props: AppProps): React.JSX.Element {
   // screen shows a spurious failure over a real success. The stable wrapper keeps each submit single-shot.
   const clearLockout = useLatestCallback(props.onClearLockout);
   const resetPin = useLatestCallback(props.onResetPin);
+
+  /**
+   * The new-phone setup opens for the owner who registered the phone, on their unlock (after the
+   * route they left is restored above). Leaving it any way, "Mulai", "Nanti saja" or back, ends it.
+   */
+  const setupPending = props.setupPending === true;
+  useEffect(() => {
+    if (setupPending && sessionUserId !== null) setRoute('deviceSetup');
+  }, [setupPending, sessionUserId]);
+  const onSetupDone = useLatestCallback(() => props.onSetupDone?.());
+  const lastRoute = useRef(route);
+  useEffect(() => {
+    if (lastRoute.current === 'deviceSetup' && route !== 'deviceSetup') onSetupDone();
+    lastRoute.current = route;
+  }, [route, onSetupDone]);
 
   const zone = resolveZone({
     device: props.device,
@@ -1210,6 +1244,13 @@ export default function App(props: AppProps): React.JSX.Element {
                   onBack={() => setRoute('home')}
                   onOpenSwitcher={() => setSwitching(true)}
                   onOpenChangePin={() => setRoute('changePin')}
+                  onRenameDevice={
+                    props.onRenameDevice === undefined ? undefined : () => setRoute('renameDevice')
+                  }
+                  onOpenSetup={() => {
+                    setSetupReturn('settings');
+                    setRoute('deviceSetup');
+                  }}
                   // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
                   // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
                   onOpenStaffPins={
@@ -1218,6 +1259,10 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
                   onOpenLimits={
                     props.staff?.canSetLimits === true ? () => setRoute('limits') : undefined
+                  }
+                  // The role editor is the main owner's alone.
+                  onOpenRoles={
+                    props.staff?.tenantAdmin === true ? () => setRoute('roles') : undefined
                   }
                   lockedStaffCount={
                     [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
@@ -1349,6 +1394,32 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            if (shellZone.route === 'deviceSetup') {
+              return (
+                <DeviceSetupRoute
+                  repair={props.repair}
+                  syncChip={routeSyncChip}
+                  camera={props.cameraPermission}
+                  notifications={props.notificationPermission}
+                  onOpenSystemSettings={() => void Linking.openSettings()}
+                  onOpenSetting={setRoute}
+                  onDone={() => {
+                    setRoute(setupReturn);
+                    setSetupReturn('home');
+                  }}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'renameDevice' && props.onRenameDevice !== undefined) {
+              return (
+                <RenameDeviceScreen
+                  current={props.deviceInfo.deviceName}
+                  onRename={props.onRenameDevice}
+                  onClose={() => setRoute('settings')}
+                />
+              );
+            }
             if (shellZone.route === 'changePin') {
               // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
               // through the session controller and REJECTS with its DomainError; the screen maps it.
@@ -1417,6 +1488,20 @@ export default function App(props: AppProps): React.JSX.Element {
                   actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
                   load={staff.load}
                   onSave={staff.onSetLimits}
+                  onClose={() => setRoute('settings')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'roles' && props.staff?.tenantAdmin === true) {
+              // The main owner's "Tugas karyawan": the store roles and their switches, online.
+              const staff = props.staff;
+              return (
+                <RolesScreen
+                  load={staff.load}
+                  onCreate={staff.onCreateRole}
+                  onUpdate={staff.onUpdateRole}
+                  onDelete={staff.onDeleteRole}
                   onClose={() => setRoute('settings')}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1607,6 +1692,7 @@ export default function App(props: AppProps): React.JSX.Element {
       ) : null}
       {props.onAnswerNotifications != null &&
       zone.kind === 'shell' &&
+      zone.route !== 'deviceSetup' &&
       !accountMenu &&
       modal === null ? (
         // On the work screen, after unlock, with the reason before the OS asks (never at boot).
@@ -1680,7 +1766,8 @@ const HIDDEN = { display: 'none' } as const;
 
 /**
  * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
- * hardware back asks the surface first: the repair/notes home, and the owner's repair settings.
+ * hardware back asks the surface first: the repair/notes home, the owner's repair settings, and the
+ * new-phone setup's steps.
  */
 const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
@@ -1690,10 +1777,12 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'staff',
   'staffPins',
   'limits',
+  'roles',
   'printSettings',
   'printPaper',
   'parts',
   'paymentMethods',
+  'deviceSetup',
 ]);
 
 /**

@@ -339,7 +339,10 @@ export function RepairBoardPage({
   const statusOptions = statusChoices(searching ? 'search' : view);
   const now = clock();
   const toolbar = (
-    <div className="flex h-12 items-center gap-2 px-6" data-testid="repair.desk.board.filters">
+    <div
+      className="@container flex h-12 items-center gap-2 px-6"
+      data-testid="repair.desk.board.filters"
+    >
       {/* One row that scrolls sideways when the pane leaves it little room, never a second row.
           The right edge fades, so a filter running under it reads as more to scroll to. */}
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [scrollbar-width:none]">
@@ -410,6 +413,7 @@ export function RepairBoardPage({
           icon={TriangleAlert}
           pressed={facets.priceWaiting}
           onChange={(priceWaiting) => setFacets({ priceWaiting })}
+          collapse
           testId="repair.desk.filter.priceWaiting"
         />
         {filtered ? (

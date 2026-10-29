@@ -17,7 +17,9 @@ import { fileURLToPath } from 'node:url';
 import { quitAfter, registerCore } from './core-process.js';
 import { DeviceSettingsFile } from './device-settings.js';
 import { opensExternally } from './external-links.js';
+import { registerMediaChoice } from './media-choice.js';
 import { registerPrinting } from './printing.js';
+import { registerStartup } from './startup.js';
 import { registerUpdates } from './updater.js';
 import { frameOptions, registerWindowChrome, reportFullscreen } from './window-chrome.js';
 
@@ -140,11 +142,15 @@ void app.whenReady().then(() => {
         camera(permission, kind === undefined ? undefined : [kind]))
     );
   });
-  registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
+  // One file object, so the printer's and the camera's writes queue behind each other.
+  const deviceSettings = new DeviceSettingsFile(app.getPath('userData'));
+  registerPrinting(deviceSettings, trusted);
+  registerMediaChoice(deviceSettings, trusted);
   const pages = (): Electron.WebContents[] =>
     [...counterWindows].map((window) => window.webContents);
   registerUpdates(trusted, pages);
   registerWindowChrome(trusted);
+  registerStartup(trusted);
   if (!DEMO && API_BASE_URL === '')
     console.error('BOLUSI_API_URL is not set: nothing to sync with');
   quitAfter(

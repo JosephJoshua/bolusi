@@ -33,16 +33,21 @@ import {
   PageHeader,
   SectionNav,
   SettingsPanel,
+  Tooltip,
   type SectionNavGroup,
 } from '@bolusi/ui-web';
 import { Compass } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CounterPerson } from '../Counter.js';
+import { MediaSettings } from '../media-choice.js';
+import { StartWithWindows } from '../startup.js';
 import { useAppVersion } from '../updates.js';
 import type { SettingsAccess } from './access.js';
 import { AccountPanel } from './AccountPanel.js';
 import { LimitsPanel } from './LimitsPanel.js';
+import { RenameDeviceDialog } from './RenameDevice.js';
+import { RolesPanel } from './RolesPanel.js';
 import { StaffPanel } from './StaffPanel.js';
 import { StaffPinsPanel } from './StaffPinsPanel.js';
 
@@ -51,6 +56,7 @@ type SettingsPageKey =
   | 'staff'
   | 'staffPins'
   | 'limits'
+  | 'roles'
   | 'fees'
   | 'uncollected'
   | 'slip'
@@ -113,6 +119,10 @@ export function SettingsPage({
               ]),
           ...(staff?.canSetLimits === true
             ? [{ value: 'limits' as const, label: t('auth.limits.title') }]
+            : []),
+          // The role editor is the main owner's alone.
+          ...(staff?.tenantAdmin === true
+            ? [{ value: 'roles' as const, label: t('auth.roles.title') }]
             : []),
         ],
       },
@@ -256,6 +266,8 @@ function Page({
           onDirtyChange={onDirtyChange}
         />
       );
+    case 'roles':
+      return <RolesPanel controls={access.staff!} onDirtyChange={onDirtyChange} />;
     case 'fees':
       return <CancelFeesSettings onDirtyChange={onDirtyChange} />;
     case 'uncollected':
@@ -265,7 +277,13 @@ function Page({
     case 'paymentMethods':
       return <PaymentMethodsSettings />;
     case 'computer':
-      return <ComputerPanel device={access.device ?? null} onOpenSetup={onOpenSetup} />;
+      return (
+        <ComputerPanel
+          device={access.device ?? null}
+          onRename={access.renameDevice}
+          onOpenSetup={onOpenSetup}
+        />
+      );
     default:
       return (
         <IntakeListSettings
@@ -279,12 +297,15 @@ function Page({
 /** This PC: the printer and paper its slips use, and what it is registered as. */
 function ComputerPanel({
   device,
+  onRename,
   onOpenSetup,
 }: {
   readonly device: SettingsAccess['device'];
+  readonly onRename: SettingsAccess['renameDevice'];
   readonly onOpenSetup: (() => void) | undefined;
 }): React.JSX.Element {
   const version = useAppVersion();
+  const [renaming, setRenaming] = useState(false);
   return (
     <SettingsPanel
       title={t('auth.pc.settings.thisPc')}
@@ -302,11 +323,31 @@ function ComputerPanel({
       testId="desktop.settings.computer"
     >
       <PrintSettings />
+      <MediaSettings />
+      <StartWithWindows />
       <Card testId="desktop.settings.device">
         <FactGrid>
           {device === null || device === undefined ? null : (
             <>
-              <Fact label={t('auth.pc.deviceNameField')} value={device.deviceName} />
+              <Fact
+                label={t('auth.pc.deviceNameField')}
+                value={<span data-testid="desktop.device.name">{device.deviceName}</span>}
+                action={
+                  onRename === undefined ? undefined : (
+                    <Tooltip label={t('auth.rename.titlePc')}>
+                      <Button
+                        label={t('core.action.edit')}
+                        aria-label={t('auth.rename.titlePc')}
+                        variant="text"
+                        size="sm"
+                        className="-my-1"
+                        onClick={() => setRenaming(true)}
+                        data-testid="desktop.device.rename"
+                      />
+                    </Tooltip>
+                  )
+                }
+              />
               <Fact label={t('core.settings.store')} value={device.storeName} />
               <Fact label={t('core.settings.business')} value={device.tenantName} />
             </>
@@ -322,6 +363,13 @@ function ComputerPanel({
           )}
         </FactGrid>
       </Card>
+      {renaming && onRename !== undefined && device !== null && device !== undefined ? (
+        <RenameDeviceDialog
+          current={device.deviceName}
+          onRename={onRename}
+          onClose={() => setRenaming(false)}
+        />
+      ) : null}
     </SettingsPanel>
   );
 }

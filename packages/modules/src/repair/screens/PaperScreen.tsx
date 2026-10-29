@@ -1,14 +1,10 @@
 /**
- * PaperScreen — the paper this phone prints slips on, picked once here instead of at every print.
- * It is the phone's own setting, so anyone who prints may change it, and a pick saves at once.
+ * PaperScreen — the paper this phone prints slips on, picked once here instead of at every print,
+ * with a test page. It is the phone's own setting, so anyone who prints may change it.
  */
-import { SegmentedControl } from '@bolusi/ui';
-import { Text } from 'react-native';
-
 import { tn } from '../i18n.js';
-import { PAPER_KEY, PHONE_PAPERS, useDevicePaper } from '../paper.js';
-import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
-import { useRepairRuntime } from '../runtime.js';
+import { PaperChoice } from './PaperChoice.js';
+import { FlowScreen, type RepairChrome } from './parts.js';
 
 export interface PaperScreenProps {
   readonly chrome: RepairChrome;
@@ -21,7 +17,6 @@ export function PaperScreen({
   onClose,
   testID = 'repair.paper',
 }: PaperScreenProps): React.JSX.Element {
-  const [paper, setPaper] = useDevicePaper(useRepairRuntime().printing, PHONE_PAPERS);
   return (
     <FlowScreen
       chrome={chrome}
@@ -32,16 +27,7 @@ export function PaperScreen({
       onClearError={() => undefined}
       testID={testID}
     >
-      {paper === null ? null : (
-        <SegmentedControl
-          options={PHONE_PAPERS.map((value) => ({ value, label: tn(PAPER_KEY[value]) }))}
-          value={paper}
-          onChange={(next) => void setPaper(next)}
-          size="compact"
-          testID={`${testID}.choice`}
-        />
-      )}
-      <Text style={[repairStyles.muted, repairStyles.gap]}>{tn('repair.paper.phoneHint')}</Text>
+      <PaperChoice testID={testID} />
     </FlowScreen>
   );
 }

@@ -1,4 +1,4 @@
-// Devices sub-router (api/02-auth §4.3 enroll, §5.2 bundle, §7 list/revoke/me). Bearer-guarded by
+// Devices sub-router (api/02-auth §4.3 enroll, §5.2 bundle, §7 list/revoke/me, rename). Bearer-guarded by
 // the app chain; the per-endpoint auth matrix (§4.5) is enforced here.
 import type { TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
@@ -19,7 +19,7 @@ import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import { purgeExpiredIdempotency, runIdempotent } from '../identity/idempotency.js';
 import { revokeDevice } from '../identity/revocation.js';
-import { EnrollReq, type EnrollRes } from '@bolusi/schemas';
+import { EnrollReq, RenameDeviceReq, type EnrollRes } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant } from '../tenant.js';
 import { tenantIdFromContext } from '../tenant.js';
@@ -405,6 +405,50 @@ export function createDevicesRouter(deps: ServerDeps) {
               lastSyncAt: row.lastSyncAt === null ? null : Number(row.lastSyncAt),
               lastSeenAt: row.lastSeenAt === null ? null : Number(row.lastSeenAt),
             });
+          });
+        }),
+      )
+
+      // ---- PATCH /v1/devices/me: rename this device, as someone signed in on it who may register
+      // devices at its store. Online only; the device writes the new name locally once this answers.
+      .patch('/me', zJson(RenameDeviceReq), (c) =>
+        withIdentityErrors(c, async () => {
+          const device = requireDevice(c);
+          if (device.storeId === null) throw new ApiError('PERMISSION_DENIED');
+          const storeId = device.storeId;
+          const { deviceName } = c.req.valid('json');
+          const t = deps.now();
+          return withTenant(c, async (db) => {
+            const acting = await resolveActingUser(c, db);
+            await requirePermission(db, {
+              userId: acting.userId,
+              tenantId: acting.tenantId,
+              storeId,
+              permissionId: PERM.deviceEnroll,
+            });
+            await touchLastSeen(db, device.deviceId, t);
+            const before = await db
+              .selectFrom('devices')
+              .select('name')
+              .where('id', '=', device.deviceId)
+              .executeTakeFirstOrThrow();
+            if (before.name !== deviceName) {
+              await db
+                .updateTable('devices')
+                .set({ name: deviceName })
+                .where('id', '=', device.deviceId)
+                .execute();
+              await appendAudit(db, acting.tenantId, {
+                actorUserId: acting.userId,
+                action: 'device.renamed',
+                entityType: 'device',
+                entityId: device.deviceId,
+                before: { deviceName: before.name },
+                after: { deviceName },
+                at: t,
+              });
+            }
+            return c.json({ deviceId: device.deviceId, deviceName });
           });
         }),
       )

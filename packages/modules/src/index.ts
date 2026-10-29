@@ -71,3 +71,4 @@ export const ALL_MODULES = [
   moneyModule,
   authModule,
 ] as unknown as readonly AnyModuleDefinition<never>[];
+export * from './role-abilities.js';
