@@ -277,7 +277,7 @@ describe('counter app over demo data', () => {
     expect(screen.queryByTestId('repair.desk.correct')).toBeNull();
     const history = byTestId('repair.desk.ticket.history');
     expect(history.textContent).toContain('Data servisan diubah');
-    expect(history.textContent).toContain(`No. HP: ${before} → 081311112222`);
+    expect(history.textContent).toContain(`No. HP: ${before} → 0813-1111-2222`);
     expect(history.textContent).toContain('Salah ketik');
   });
 

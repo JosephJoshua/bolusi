@@ -91,10 +91,13 @@ export function CustomerStep({
   update,
   nameError,
   phoneError,
+  currentCustomerId,
   testID,
 }: StepProps & {
   readonly nameError: string | undefined;
   readonly phoneError: string | undefined;
+  /** The customer a correction starts from, never offered as a match for itself. */
+  readonly currentCustomerId?: string | undefined;
 }): React.JSX.Element {
   const customer = draft.customer;
   const typed = customer.kind === 'new' ? [customer.name, customer.phone].join(' ').trim() : '';
@@ -108,6 +111,9 @@ export function CustomerStep({
         : (await rt.query('searchCustomers', { text: searchText, limit: 5 })).rows,
     `customers:${searchText}`,
   );
+
+  const offered =
+    matches.status === 'ready' ? matches.data.filter((row) => row.id !== currentCustomerId) : [];
 
   if (customer.kind === 'existing') {
     return (
@@ -150,9 +156,9 @@ export function CustomerStep({
           testID={`${testID}.phone`}
         />
       </View>
-      {matches.status === 'ready' && matches.data.length > 0 ? (
+      {offered.length > 0 ? (
         <Section title={tn('repair.customer.existing')} testID={`${testID}.matches`}>
-          {matches.data.map((row) => (
+          {offered.map((row) => (
             <ListRow
               key={row.id}
               primaryText={row.name}

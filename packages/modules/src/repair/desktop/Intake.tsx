@@ -542,11 +542,14 @@ export function CustomerFields({
   update,
   nameError,
   phoneError,
+  currentCustomerId,
 }: {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
   readonly nameError: string | undefined;
   readonly phoneError: string | undefined;
+  /** The customer a correction starts from, never offered as a match for itself. */
+  readonly currentCustomerId?: string | undefined;
 }): React.JSX.Element {
   const customer = draft.customer;
   const searchText =
@@ -558,6 +561,9 @@ export function CustomerFields({
         : (await rt.query('searchCustomers', { text: searchText, limit: 5 })).rows,
     `desk.customers:${searchText}`,
   );
+
+  const offered =
+    matches.status === 'ready' ? matches.data.filter((row) => row.id !== currentCustomerId) : [];
 
   if (customer.kind === 'existing') {
     return (
@@ -607,13 +613,13 @@ export function CustomerFields({
           data-testid="repair.desk.intake.phone"
         />
       </div>
-      {matches.status === 'ready' && matches.data.length > 0 ? (
+      {offered.length > 0 ? (
         <div data-testid="repair.desk.intake.matches">
           <p className="mb-1 text-small font-semibold text-text-muted">
             {tn('repair.customer.existing')}
           </p>
           <ul className="divide-y divide-border rounded-sm border border-border">
-            {matches.data.map((row) => (
+            {offered.map((row) => (
               <li key={row.id} className="flex items-center gap-4 px-4 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-body font-semibold text-text">{row.name}</p>

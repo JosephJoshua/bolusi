@@ -112,6 +112,7 @@ export function CorrectDetailsStep({
                   options={options}
                   nameError={problemText('customerName')}
                   phoneError={problemText('customerPhone')}
+                  currentCustomerId={ticket.customerId}
                   testID={`${testID}.customer`}
                 />
               </Section>

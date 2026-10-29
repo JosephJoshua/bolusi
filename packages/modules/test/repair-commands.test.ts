@@ -852,6 +852,31 @@ describe('correcting a saved servisan', () => {
     expect((await ticket(h, second.ticketId)).customerId).toBe(first.customerId);
   });
 
+  test('a customer picked from the list takes the servisan, even one with no number', async () => {
+    h = await openRepairHarness(35);
+    const mine = await open(h);
+    const other = await open(h, { customer: { name: 'Mama Wenda', phone: null } });
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { customerId: other.customerId } },
+      h.cashierId,
+    );
+    const moved = await ticket(h, mine.ticketId);
+    expect(moved).toMatchObject({ customerId: other.customerId, customerName: 'Mama Wenda' });
+    // Neither record was renamed.
+    expect(await ticket(h, other.ticketId)).toMatchObject({ customerName: 'Mama Wenda' });
+    const found = await h.query('searchCustomers', { text: '081244556677' }, h.cashierId);
+    expect(found.rows.map((r: { name: string }) => r.name)).toEqual(['Yohanis Wenda']);
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        { ticketId: mine.ticketId, customer: { customerId: 'nobody' } },
+        h.cashierId,
+      ),
+      'ENTITY_NOT_FOUND',
+    );
+  });
+
   test('nothing to correct, a bad number, a technician, or a phone gone home are refused', async () => {
     h = await openRepairHarness(31);
     const { ticketId } = await open(h);

@@ -1337,7 +1337,19 @@ export function demoRepairRuntime(
     correctTicketDetails: (input) => {
       const t = find(String(input['ticketId']));
       if (t.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
-      const customer = input['customer'] as { name: string; phone: string | null } | undefined;
+      const given = input['customer'] as
+        { name: string; phone: string | null } | { customerId: string } | undefined;
+      // A picked customer is known by their other servisans here.
+      const picked =
+        given !== undefined && 'customerId' in given
+          ? tickets.find((other) => other.customerId === given.customerId)
+          : undefined;
+      const customer =
+        picked !== undefined
+          ? { name: picked.customerName, phone: picked.customerPhone }
+          : given !== undefined && 'name' in given
+            ? given
+            : undefined;
       const device = input['device'] as
         { brand: string; model: string; color?: string; imei?: string | null } | undefined;
       const changes: { field: string; from?: string | null; to?: string | null }[] = [];
@@ -1373,6 +1385,7 @@ export function demoRepairRuntime(
         'repair.ticket_details_corrected',
         {
           ...(customer === undefined ? {} : { customerName: customer.name, customerPhone: phone }),
+          ...(picked === undefined ? {} : { customerId: picked.customerId }),
           ...(device === undefined
             ? {}
             : {

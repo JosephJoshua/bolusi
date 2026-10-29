@@ -521,10 +521,10 @@ export function toCorrectionInput(
       typed === ticket.devicePasscode);
   return {
     ticketId: ticket.id,
-    customer: {
-      name: draft.customer.name.trim(),
-      phone: (draft.customer.phone ?? '').trim() || null,
-    },
+    customer:
+      draft.customer.kind === 'existing'
+        ? { customerId: draft.customer.customerId }
+        : { name: draft.customer.name.trim(), phone: draft.customer.phone.trim() || null },
     device: {
       brand: draft.device.brand.trim(),
       model: draft.device.model.trim(),

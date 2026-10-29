@@ -1,7 +1,7 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
-import { formatDate } from '@bolusi/i18n';
+import { formatDate, formatPhone } from '@bolusi/i18n';
 
 import type { DetailChange } from './applier.js';
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
@@ -290,7 +290,11 @@ function changeLine(change: DetailChange): string {
   const field = key === undefined ? change.field : tn(key);
   if (!('to' in change)) return tn('repair.changed.only', { field });
   const value = (text: string | null | undefined): string =>
-    text === null || text === undefined || text === '' ? tn('repair.changed.empty') : text;
+    text === null || text === undefined || text === ''
+      ? tn('repair.changed.empty')
+      : change.field === 'customerPhone'
+        ? formatPhone(text)
+        : text;
   return tn('repair.changed.line', { field, from: value(change.from), to: value(change.to) });
 }
 

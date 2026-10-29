@@ -899,9 +899,12 @@ export async function undoHandoverHandler(
 export const correctTicketDetailsInput = z
   .object({
     ticketId: z.string().min(1),
+    // Typed details, or a customer picked from the store's list (intake's "Pakai").
     customer: z
-      .object({ name: zRequiredText(200), phone: zPhone })
-      .strict()
+      .union([
+        z.object({ name: zRequiredText(200), phone: zPhone }).strict(),
+        z.object({ customerId: z.string().min(1) }).strict(),
+      ])
       .optional(),
     device: z
       .object({
@@ -936,11 +939,24 @@ export async function correctTicketDetailsHandler(
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   const changes: Record<string, unknown> = {};
-  const customer = input.customer;
+  const ops: OpDraft[] = [];
+  // A picked customer moves the servisan to them, whatever their details say.
+  if (
+    input.customer !== undefined &&
+    'customerId' in input.customer &&
+    input.customer.customerId !== ticket.customerId
+  ) {
+    // Throws ENTITY_NOT_FOUND for a customer not visible in this store.
+    const picked = (await ctx.query(getCustomerQuery, { customerId: input.customer.customerId }))
+      .rows[0]!;
+    changes['customer'] = { name: picked.name, phone: picked.phone };
+    changes['customerId'] = picked.id;
+  }
+  const customer =
+    input.customer !== undefined && 'name' in input.customer ? input.customer : undefined;
   const customerChanged =
     customer !== undefined &&
     (customer.name !== ticket.customerName || customer.phone !== ticket.customerPhone);
-  const ops: OpDraft[] = [];
   // The customer's own record is corrected only when this servisan is all it names: another
   // servisan of theirs would be renamed too, and intake may have picked the wrong person. Then the
   // servisan moves to the customer the details name, found or made like at intake.

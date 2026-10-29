@@ -469,7 +469,9 @@ describe('putting a mistake right', () => {
 
     const ticket = await ticketRow(h, ticketId);
     expect(ticket).toMatchObject({ customerPhone: '081311112222', deviceImei: '356789104455660' });
-    expect(text(screen, 'repair.ticket.timeline')).toContain('No. HP: 081244556677 → 081311112222');
+    expect(text(screen, 'repair.ticket.timeline')).toContain(
+      'No. HP: 0812-4455-6677 → 0813-1111-2222',
+    );
   });
 
   test('only an owner takes a handover back, with a reason; the phone is then in the store', async () => {

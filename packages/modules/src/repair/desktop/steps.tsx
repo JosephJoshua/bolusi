@@ -672,6 +672,12 @@ export function CorrectDetailsDialog({
     if (options === null) return;
     if (problems.length > 0) {
       setShowProblems(true);
+      // The first field to fix may be below the fold of the dialog: take the counter to it.
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>('[data-testid="repair.desk.correct"] [aria-invalid="true"]')
+          ?.focus(),
+      );
       return;
     }
     if (JSON.stringify(draft) === JSON.stringify(initial)) {
@@ -724,6 +730,7 @@ export function CorrectDetailsDialog({
                     update={update}
                     nameError={problemText('customerName')}
                     phoneError={problemText('customerPhone')}
+                    currentCustomerId={ticket.customerId}
                   />
                 </section>
                 <section className="flex flex-col gap-3">
@@ -1078,7 +1085,10 @@ export function ProposalDialog({
             {formatMoney(line.amount)}
           </p>
           {/* An extra zero shows here, where the customer hears it: 1.500.000 → 3.500.000. */}
-          <p className="tabular text-body text-text" data-testid="repair.desk.proposal.newTotal">
+          <p
+            className="tabular mt-1 text-body text-text"
+            data-testid="repair.desk.proposal.newTotal"
+          >
             {tn('repair.price.newTotal', {
               from: formatMoney(total),
               to: formatMoney(total + line.amount),
