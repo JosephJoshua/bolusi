@@ -60,6 +60,10 @@ export interface CaptureDialogs {
   readonly capture: PcCapture;
   /** Mount once, inside the app, to show the dialogs. */
   readonly Host: () => React.JSX.Element;
+  /** Since when a photo, signature or video has been waited for; null when none is. */
+  readonly waitingSince: () => number | null;
+  /** Backs out of whatever is open (the screen locked): nothing floats over the lock. */
+  readonly cancel: () => void;
 }
 
 /** Whether Windows lists a webcam; false when it cannot be asked. */
@@ -83,6 +87,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
   /** Offer the phone only once there is a server to pair through. */
   let offerPhone = false;
   let pending: Pending | null = null;
+  let pendingSince: number | null = null;
   const listeners = new Set<() => void>();
   const emit = (): void => {
     for (const listener of listeners) listener();
@@ -101,6 +106,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
     const current = pending;
     if (current === null) return;
     pending = null;
+    pendingSince = null;
     phone?.withdraw();
     (current.resolve as (value: PcPhoto | DrawnSignature | PcVideo | null) => void)(value);
     emit();
@@ -159,6 +165,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
     // One capture at a time: a second ask while one is open cancels the first.
     settle(null);
     pending = next;
+    pendingSince = Date.now();
     emit();
     if (next.via === 'phone') onPhone(next);
   };
@@ -364,5 +371,10 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
         }),
     },
     Host,
+    waitingSince: () => pendingSince,
+    cancel: () => {
+      close();
+      closePlayer();
+    },
   };
 }

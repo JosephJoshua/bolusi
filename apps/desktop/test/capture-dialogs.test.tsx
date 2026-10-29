@@ -460,3 +460,22 @@ describe('phone handoff', () => {
     expect(screen.queryByTestId('desktop.usePhone')).toBeNull();
   });
 });
+
+describe('waiting and locking', () => {
+  it('says since when a capture is waited for, and backs out of it when told to', async () => {
+    const dialogs = mount();
+    expect(dialogs.waitingSince()).toBeNull();
+    let signature: unknown = 'pending';
+    act(() => {
+      void dialogs.capture.signature({ title: 'Tanda tangan' }).then((s) => {
+        signature = s;
+      });
+    });
+    await screen.findByTestId('desktop.signature');
+    expect(dialogs.waitingSince()).toEqual(expect.any(Number));
+    act(() => dialogs.cancel());
+    await waitFor(() => expect(signature).toBeNull());
+    expect(screen.queryByTestId('desktop.signature')).toBeNull();
+    expect(dialogs.waitingSince()).toBeNull();
+  });
+});
