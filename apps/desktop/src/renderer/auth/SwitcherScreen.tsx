@@ -45,9 +45,7 @@ export function SwitcherScreen({
   return (
     <AuthLayout storeName={storeName} width="wide" testId="switcher">
       <AuthHeading title={t('auth.switcher.title')} />
-      {locked ? (
-        <Banner tone="info" message={t('auth.switcher.idleLocked')} className="mb-6" />
-      ) : null}
+      {locked ? <Banner tone="info" message={t('auth.pc.idleLocked')} className="mb-6" /> : null}
       {state.kind === 'loading' ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3" aria-busy>
           {Array.from({ length: 6 }, (_, index) => (

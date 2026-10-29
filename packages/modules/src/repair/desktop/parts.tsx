@@ -151,6 +151,7 @@ export function MoneyField({
       {...rest}
       prefix={tn('repair.desk.currency')}
       inputMode="numeric"
+      selectOnFocus
       inputClassName="tabular text-right"
       // Empty only when nothing is typed: a fee of 0 (waived) must read as 0.
       value={value === null ? '' : formatNumber(value)}

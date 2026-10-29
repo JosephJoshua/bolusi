@@ -23,6 +23,7 @@ import {
   differenceText,
   settleState,
   type NamedBalance,
+  voidKind,
 } from '../kas.js';
 import { rupiah } from '../payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
@@ -656,12 +657,13 @@ export function VoidPaymentDialog({
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const [reason, setReason] = useState('');
+  const kind = voidKind(entry);
   const testId = 'money.desk.void';
 
   const submit = (): void => {
     if (reason.trim() === '') return;
     void runner
-      .run(() => runtime.run('voidPayment', { entryId: entry.id, reason }))
+      .run(() => runtime.run(kind.command, { entryId: entry.id, reason }))
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -669,11 +671,11 @@ export function VoidPaymentDialog({
 
   return (
     <MoneyDialog
-      title={tm('money.void.title')}
+      title={tm(kind.title)}
       runner={runner}
       dirty={reason.trim() !== ''}
       onClose={onClose}
-      submitLabel={tm('money.void.save')}
+      submitLabel={tm(kind.save)}
       onSubmit={submit}
       submitDisabled={reason.trim() === ''}
       destructive
@@ -693,7 +695,7 @@ export function VoidPaymentDialog({
             .join(' · ')}
         </span>
       </div>
-      <p className="text-body text-text">{tm('money.void.explain')}</p>
+      <p className="text-body text-text">{tm(kind.explain)}</p>
       <ReasonField
         label={tm('money.void.reason')}
         value={reason}

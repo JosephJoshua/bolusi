@@ -146,7 +146,10 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
       return e.amount;
     }
     if (e.kind === 'refund_paid' && e.account === CASH_ACCOUNT) return -e.amount;
-    if (e.kind === 'cash_moved') return movesOut(e.subKind as CashMoveKind) ? -e.amount : e.amount;
+    // A cancelled cash move counts nowhere, as the ledger dates its reversal with it.
+    if (e.kind === 'cash_moved' && e.voidedAt === null) {
+      return movesOut(e.subKind as CashMoveKind) ? -e.amount : e.amount;
+    }
     if (e.kind === 'cash_adjusted') return e.amount;
     return 0;
   };
@@ -408,7 +411,8 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
           notify();
           return Promise.resolve({ accountId });
         }
-        case 'voidPayment': {
+        case 'voidPayment':
+        case 'voidCashMove': {
           const at = entries.findIndex((e) => e.id === input['entryId']);
           if (at !== -1) {
             entries[at] = {

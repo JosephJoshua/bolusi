@@ -22,7 +22,9 @@
     "slipPrinted": "Nota dicetak",
     "storePrintSettingsChanged": "Tampilan nota diubah",
     "storeUncollectedDaysChanged": "Batas HP belum diambil diubah",
-    "ticketRepairTypesChanged": "Jenis servisan diubah"
+    "ticketRepairTypesChanged": "Jenis servisan diubah",
+    "handoverReversed": "Penyerahan dibatalkan",
+    "ticketDetailsCorrected": "Data servisan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -50,7 +52,9 @@
     "applyUnconfirmed": "Belum",
     "agreedYes": "Sudah",
     "takeOver": "Ambil alih",
-    "more": "Lainnya"
+    "more": "Lainnya",
+    "correctDetails": "Ubah data",
+    "undoHandover": "Batalkan penyerahan"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -244,6 +248,7 @@
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
     "refund": "Dikembalikan",
+    "newTotal": "Total jadi {from} → {to}",
     "reduced": "Potongan",
     "owedBack": "Lebih bayar"
   },
@@ -259,7 +264,9 @@
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentReference": "Isi kode approval dari mesin EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada.",
-    "ownershipVideo": "Video kepemilikan belum direkam."
+    "ownershipVideo": "Video kepemilikan belum direkam.",
+    "customerPhone": "Nomor HP-nya belum benar. Cek lagi angkanya.",
+    "deviceImei": "IMEI-nya belum benar. Cocokkan dengan 15 angka di *#06#."
   },
   "ready": {
     "today": "Hari ini",
@@ -303,6 +310,8 @@
     "shared": "PDF nota sudah dikirim.",
     "downPayment": "DP tersimpan.",
     "repairTypes": "Jenis servisan disimpan.",
+    "corrected": "Data servisan disimpan.",
+    "handoverUndone": "Penyerahan dibatalkan. HP tercatat ada di toko.",
     "refund": "Uang sudah dikembalikan.",
     "reduce": "Tagihan sudah dikurangi."
   },
@@ -676,7 +685,15 @@
     "overLimit": "Melebihi batasmu. Minta pemilik toko.",
     "handoverAccessories": "Ada kelengkapan yang tidak ada di daftar serah terima.",
     "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu.",
-    "ownershipVideoNeeded": "Rekam video kepemilikan dulu."
+    "ownershipVideoNeeded": "Rekam video kepemilikan dulu.",
+    "notReturned": "HP ini belum diserahkan.",
+    "handoverHasClaim": "Sudah ada klaim garansi untuk servisan ini, jadi penyerahannya tidak bisa dibatalkan.",
+    "claimSamePhone": "Klaim garansi harus untuk HP yang sama. Merek, tipe dan IMEI-nya tidak bisa diubah.",
+    "nothingChanged": "Belum ada yang diubah.",
+    "undoTooLate": "Penyerahan ini sudah lebih dari sehari, jadi tidak bisa dibatalkan.",
+    "handedOverBefore": "Servisan ini sudah pernah diserahkan. Pelanggan dan HP-nya tidak bisa diubah, dan servisannya tidak bisa dibatalkan.",
+    "customerShared": "Pelanggan ini punya servisan lain. Coba ubah lagi.",
+    "customerMismatch": "Data pelanggan tidak cocok. Coba lagi."
   },
   "paper": {
     "title": "Kertas nota",
@@ -793,5 +810,23 @@
     "termsSummary": "Masih ketentuan bawaan",
     "paymentMethods": "Metode pembayaran",
     "paymentMethodsSummary": "Baru tunai"
+  },
+  "correct": {
+    "title": "Ubah data servisan",
+    "about": "Perubahan dicatat di riwayat, lengkap dengan data sebelumnya.",
+    "reason": "Kenapa diubah? (opsional)",
+    "save": "Simpan perubahan",
+    "claimDevice": "Ini klaim garansi, jadi HP-nya tetap sama dengan servisan asal.",
+    "handedOverLocked": "Servisan ini sudah pernah diserahkan, jadi pelanggan dan HP-nya tidak bisa diubah."
+  },
+  "undoHandover": {
+    "title": "Batalkan penyerahan?",
+    "explain": "HP tercatat kembali di toko dan bisa diserahkan lagi. Pembayaran tetap tercatat. Kalau pembayaran masuk ke servisan yang salah, batalkan di Kas.",
+    "reason": "Kenapa dibatalkan?"
+  },
+  "changed": {
+    "line": "{field}: {from} → {to}",
+    "only": "{field} diubah",
+    "empty": "kosong"
   }
 }

@@ -11,6 +11,7 @@ import {
   changePromptKey,
   type ChangePinPhase,
 } from '@bolusi/device/models/pin/change-pin.model';
+import { newPinPadKey } from '@bolusi/device/models/pin/new-pin';
 import { Avatar, Button, Card, Dialog, PinPad, SettingsPanel } from '@bolusi/ui-web';
 import { clsx } from 'clsx';
 import { CircleCheck, KeyRound } from 'lucide-react';
@@ -155,7 +156,7 @@ function ChangePinDialog({
 /** A fresh pad for each of current, new and repeat, so digits never carry over between them. */
 function padKey(phase: ChangePinPhase): string {
   if (phase.kind === 'new') {
-    return `new-${phase.entry.kind}-${String(phase.entry.kind === 'first' && phase.entry.afterMismatch)}`;
+    return `new-${newPinPadKey(phase.entry)}`;
   }
   if (phase.kind === 'current') return `current-${phase.feedback}`;
   return phase.kind;

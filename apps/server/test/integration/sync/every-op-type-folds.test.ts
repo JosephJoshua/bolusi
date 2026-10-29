@@ -363,6 +363,10 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.work_started', {}),
     onTicket('repair.work_photos_added', { stage: 'after', photos: [photo(8)] }),
     onTicket('repair.marked_repaired', { note: '' }),
+    onTicket('repair.ticket_details_corrected', {
+      device: { brand: 'Samsung', model: 'Galaxy A15', color: 'Hitam', imei: null },
+      reason: 'Salah ketik',
+    }),
 
     // money: a DP, the charge, a split payment, an owner's refund, a void, and the drawer
     {
@@ -419,6 +423,13 @@ function journey(world: ChainWorld): OpSpec[] {
       reason: 'Setor ke pemilik',
       account: null,
     }),
+    money('money.cash_moved', 0x40b, {
+      kind: 'float',
+      amount: 5_000_000,
+      reason: 'Uang kembalian',
+      account: null,
+    }),
+    money('money.cash_move_voided', 0x40b, { reason: 'Kelebihan nol' }),
     money('money.cash_counted', 0x409, { counted: 30_000, note: '' }),
     money('money.cash_adjusted', 0x40a, { amount: -10_000, countId: id(0x409), reason: 'Kurang' }),
 
@@ -433,6 +444,17 @@ function journey(world: ChainWorld): OpSpec[] {
       schemaVersion: 2,
     },
     onTicket('repair.slip_printed', { slip: 'handover' }),
+    // Handed over by mistake, then handed over again.
+    onTicket('repair.handover_reversed', { reason: 'Salah servisan' }),
+    {
+      ...onTicket('repair.device_returned', {
+        handoverPhoto: photo(13),
+        signature: photo(14),
+        note: '',
+        unpaidReason: null,
+      }),
+      schemaVersion: 2,
+    },
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {
       type: 'repair.technician_assigned',

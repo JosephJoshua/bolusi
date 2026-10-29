@@ -21,7 +21,6 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
-import { MONEY_PERMISSION } from '../constants.js';
 import { shiftDay, useDayRecords } from '../day-records.js';
 import { tm } from '../i18n.js';
 import {
@@ -29,7 +28,9 @@ import {
   dayStart,
   differenceText,
   historyLine,
+  voidAbilities,
   voidable,
+  voidKind,
   type NamedBalance,
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
@@ -411,7 +412,8 @@ function History({
   readonly onVoid: (entry: MoneyEntryRow, accounts: readonly PaymentAccountRow[]) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const mayVoid = runtime.hasPermission(MONEY_PERMISSION.voidPayment);
+  const can = voidAbilities((id) => runtime.hasPermission(id));
+  const mayVoid = can.payments || can.cashMoves;
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -498,10 +500,10 @@ function History({
               header: '',
               meta: { track: '112px', align: 'end' as const },
               cell: ({ row: { original: entry } }: { row: { original: MoneyEntryRow } }) =>
-                voidable(entry) ? (
+                voidable(entry, can) ? (
                   <Button
                     label={tm('money.history.void')}
-                    aria-label={tm('money.history.voidLabel', {
+                    aria-label={tm(voidKind(entry).label, {
                       amount: formatMoney(entry.amount),
                       time: formatTime(entry.createdAt),
                     })}
@@ -518,7 +520,7 @@ function History({
           ]
         : []),
     ];
-  }, [loaded, mayVoid, onVoid]);
+  }, [loaded, mayVoid, can.payments, can.cashMoves, onVoid]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>
@@ -567,7 +569,7 @@ function History({
           selectedId={selected}
           onSelect={(row) => setSelected(row.id)}
           onActivate={(row) => {
-            if (mayVoid && voidable(row)) onVoid(row, loaded?.accounts ?? []);
+            if (voidable(row, can)) onVoid(row, loaded?.accounts ?? []);
           }}
           // Newest first, as the query reads them across pages.
           sortable={false}

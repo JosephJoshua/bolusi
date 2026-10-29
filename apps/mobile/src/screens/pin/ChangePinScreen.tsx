@@ -28,6 +28,7 @@ import {
   changePromptKey,
   type ChangePinPhase,
 } from '@bolusi/device/models/pin/change-pin.model';
+import { newPinPadKey } from '@bolusi/device/models/pin/new-pin';
 import { PinEntry, type PinEntryPerson } from './PinEntry.js';
 
 export interface ChangePinScreenProps {
@@ -123,7 +124,7 @@ export function ChangePinScreen({
 /** A distinct key per sub-step so the pad remounts (and clears) between current / new / repeat. */
 function padKey(phase: ChangePinPhase): string {
   if (phase.kind === 'new') {
-    return `new-${phase.entry.kind}-${String(phase.entry.kind === 'first' && phase.entry.afterMismatch)}`;
+    return `new-${newPinPadKey(phase.entry)}`;
   }
   if (phase.kind === 'current') return `current-${phase.feedback}`;
   return phase.kind;

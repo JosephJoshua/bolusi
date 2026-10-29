@@ -108,6 +108,7 @@ function AmountField({
         if (typed !== null) onChange(typed);
       }}
       keyboardType="number-pad"
+      selectTextOnFocus
       errorMessage={errorMessage}
       testID={testID}
     />
