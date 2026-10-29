@@ -395,6 +395,20 @@ describe('setting up a newly registered PC', () => {
     await screen.findByTestId('desktop.setup.printer');
   });
 
+  it('lists the store basics still missing, each opening its setting', async () => {
+    core = new FakeCore(
+      ready({ setupFor: OWNER.id, session: session({ ...signedIn(OWNER, ALL) }) }),
+    );
+    renderApp();
+    fireEvent.click(await screen.findByTestId('desktop.setup.next'));
+    fireEvent.click(await screen.findByTestId('desktop.setup.next'));
+    await screen.findByTestId('desktop.setup.done');
+    fireEvent.click(await screen.findByTestId('desktop.setup.basics.logo'));
+    await screen.findByTestId('repair.desk.slip');
+    // Going to fill one in ends the setup, as starting would.
+    expect(core.methods()).toContain('device.finishSetup');
+  });
+
   it('does not stop anyone else with it', async () => {
     core = new FakeCore(
       ready({ setupFor: OWNER.id, session: session({ ...signedIn(TECH, ALL) }) }),

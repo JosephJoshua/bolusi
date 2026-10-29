@@ -19,6 +19,7 @@ import {
   translateRejection,
   translateRejectionCode,
   translateRoleKey,
+  isPresetRoleKey,
   type I18nLogger,
 } from '../src/index.js';
 import { resetWarnOnceState } from '../src/logger.js';
@@ -237,13 +238,11 @@ describe('derived role copy (07-i18n §7; switcher role line, task 129 item 6)',
     expect(translateRoleKey('staff')).toBe(t('role.staff.name'));
   });
 
-  it('returns null and logs for a roleKey with no catalog row (a future custom role)', () => {
-    // null, NOT the UNEXPECTED fallback the error path uses: an unknown role must leave the card's
-    // role line ABSENT, never print "Something went wrong" under a name.
-    const warn = withSpyLogger('id');
-    expect(translateRoleKey('regional_manager')).toBeNull();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]?.[0]).toContain('regional_manager');
+  it('shows a made role by its own name: its key is what the main owner typed', () => {
+    initI18n({ locale: 'id' });
+    expect(translateRoleKey('Kasir senior')).toBe('Kasir senior');
+    expect(isPresetRoleKey('Kasir senior')).toBe(false);
+    expect(isPresetRoleKey('cashier')).toBe(true);
   });
 });
 

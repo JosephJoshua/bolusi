@@ -9,11 +9,15 @@
 //
 // Node-safe: `expo-notifications` is bound at index.ts behind this port, like the tap router.
 
-export interface NotificationPermissionPort {
+/** One OS permission (notifications, the camera), as the shell and the new-phone setup ask it. */
+export interface PermissionPort {
   /** The OS answer so far. `canAskAgain` is false once the OS will no longer show its prompt. */
   status(): Promise<{ readonly granted: boolean; readonly canAskAgain: boolean }>;
   /** Shows the OS prompt. */
   request(): Promise<void>;
+}
+
+export interface NotificationPermissionPort extends PermissionPort {
   /** Whether this device already showed our sheet, whatever the answer. */
   readAsked(): Promise<boolean>;
   writeAsked(): Promise<void>;

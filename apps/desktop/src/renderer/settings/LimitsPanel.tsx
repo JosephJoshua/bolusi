@@ -10,6 +10,7 @@ import {
   sameLimits,
   type LimitRole,
 } from '@bolusi/device/models/staff/limits';
+import { roleName } from '@bolusi/device/models/staff/roles';
 import { t } from '@bolusi/i18n';
 import { FormFooter, MoneyField, SaveBar } from '@bolusi/modules/repair/desktop';
 import { Banner, Button, Card, SettingsPanel, Skeleton, StatePanel } from '@bolusi/ui-web';
@@ -204,8 +205,4 @@ export function LimitsPanel({
       )}
     </SettingsPanel>
   );
-}
-
-function roleName(role: LimitRole): string {
-  return t(`role.${role.key}.name` as 'role.manager.name');
 }

@@ -320,6 +320,7 @@
     "downPayment": "Enter the amount first.",
     "downPaymentCorrect": "Enter the correct down payment first.",
     "downPaymentSame": "The amount has not changed.",
+    "handoverFree": "This servisan is free. Ask an owner to hand it over.",
     "handoverPayment": "Complete the payment first.",
     "discountLimit": "Your discount limit is {amount} per servisan.",
     "handoverChecks": "Tick everything, or write why not.",
@@ -512,7 +513,14 @@
       "noPrinter": "Choose a printer in Settings first.",
       "printerMissing": "Printer not found. Check its cable and power, or choose another printer in Settings.",
       "failed": "Couldn’t print. Check the printer, then try again."
-    }
+    },
+    "paperCustom": "Other size",
+    "paperSize": "{width} × {height} mm",
+    "paperWidth": "Width (mm)",
+    "paperHeight": "Height (mm)",
+    "paperContinuous": "Continuous paper",
+    "paperContinuousHint": "Punched strips on both sides, for a dot-matrix printer.",
+    "paperRange": "Width {minWidth}–{maxWidth} mm, height {minHeight}–{maxHeight} mm."
   },
   "downPayment": {
     "recordTitle": "Record down payment",
@@ -654,6 +662,7 @@
     "partsNotYours": "Another technician is working on this repair.",
     "notPaid": "This servisan isn’t paid in full yet.",
     "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid.",
+    "freeHandoverOwnerOnly": "Only an owner can hand over a free servisan.",
     "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed.",
     "repairTypesNotYours": "Only the counter or a technician can change the repair type.",
     "claimNotReturned": "A warranty claim is only for a phone that was repaired and collected.",
@@ -771,5 +780,16 @@
     "noCamera": "Record it on a store phone: open this servisan there.",
     "label": "Video",
     "expired": "The ownership video was deleted. Record it again."
+  },
+  "basics": {
+    "title": "Finish the store details",
+    "slipHeader": "Store address and phone",
+    "slipHeaderSummary": "Not on the slips yet",
+    "logo": "Store logo",
+    "logoSummary": "Not on the slips yet",
+    "terms": "Slip terms",
+    "termsSummary": "Still the default terms",
+    "paymentMethods": "Payment methods",
+    "paymentMethodsSummary": "Cash only so far"
   }
 }

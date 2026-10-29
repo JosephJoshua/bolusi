@@ -127,6 +127,11 @@ export const EnrollReq = z
   .strict();
 export type EnrollReq = z.infer<typeof EnrollReq>;
 
+// ============ PATCH /v1/devices/me ============
+/** Rename this device, as an owner signed in on it. Same bounds as the name typed at enrolment. */
+export const RenameDeviceReq = z.object({ deviceName: z.string().trim().min(1).max(64) }).strict();
+export type RenameDeviceReq = z.infer<typeof RenameDeviceReq>;
+
 // ============ device bundle (§5.2) ============
 export interface TenantSettings {
   idleLockSeconds: number;
@@ -324,6 +329,26 @@ export const PutRoleLimitsReq = z
   })
   .strict();
 export type PutRoleLimitsReq = z.infer<typeof PutRoleLimitsReq>;
+
+// ============ /v1/roles (role editor, main owner) ============
+/** The longest role name the editor takes. */
+export const ROLE_NAME_MAX = 40;
+const zRoleName = z.string().trim().min(1).max(ROLE_NAME_MAX);
+/** A new store role, starting as a copy of another (its switches and whether it is limited). */
+export const CreateRoleReq = z
+  .object({ name: zRoleName, copyFromRoleId: z.string().uuid() })
+  .strict();
+export type CreateRoleReq = z.infer<typeof CreateRoleReq>;
+
+/** A store role's name (made roles only), switches, or whether owners' decisions are limited. */
+export const UpdateRoleReq = z
+  .object({
+    name: zRoleName.optional(),
+    permissionIds: z.array(z.string().min(1).max(64)).max(200).optional(),
+    limited: z.boolean().optional(),
+  })
+  .strict();
+export type UpdateRoleReq = z.infer<typeof UpdateRoleReq>;
 
 // ============ PATCH /v1/tenant/settings (§6.4) ============
 export const TenantSettingsReq = z

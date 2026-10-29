@@ -11,7 +11,7 @@ import {
 } from '@bolusi/schemas';
 
 import { CASH_ACCOUNT, type CashMoveKind, type EntryKind } from './constants.js';
-import { movesOut } from './kas.js';
+import { dayStart, movesOut } from './kas.js';
 import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDocument } from './documents.js';
 import { QrisError, type QrisPort } from './qris.js';
@@ -97,6 +97,11 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     documentId: id,
     documentLabel: label,
   });
+  // Today's payments and moves an hour or a few back, but never before midnight, so the drawer
+  // shows them as today's at any hour.
+  const start = dayStart(now);
+  const today = (hoursAgo: number): number =>
+    Math.max(now - hoursAgo * HOUR, start + ((now - start) * (4 - hoursAgo)) / 4);
   const entries: Stored[] = [
     entry({ kind: 'cash_moved', subKind: 'float', amount: 200_000, reason: 'Modal kembalian' }),
     entry({ kind: 'cash_counted', amount: 190_000, createdAt: now - 14 * HOUR }),
@@ -104,14 +109,14 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
       kind: 'payment_received',
       account: CASH_ACCOUNT,
       amount: 350_000,
-      createdAt: now - 3 * HOUR,
+      createdAt: today(3),
       ...document('t-demo-a', 'K7Q-0103'),
     }),
     entry({
       kind: 'payment_received',
       account: qris === undefined ? CASH_ACCOUNT : `account:${qris.id}`,
       amount: 150_000,
-      createdAt: now - 2 * HOUR,
+      createdAt: today(2),
       ...document('t-demo-b', 'K7Q-0104'),
     }),
     entry({
@@ -119,7 +124,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
       subKind: 'expense',
       amount: 25_000,
       reason: 'Bensin antar sparepart',
-      createdAt: now - HOUR,
+      createdAt: today(1),
     }),
   ];
   // The float came in before last night's count, which found 10.000 short.
