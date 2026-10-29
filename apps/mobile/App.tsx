@@ -411,6 +411,8 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const [shownRoute, setShownRoute] = useState<ShellRoute>(route);
   const [syncReturn, setSyncReturn] = useState<ShellRoute>('home');
+  // The setup ends where it was opened from: Settings when reopened there, else the home surface.
+  const [setupReturn, setSetupReturn] = useState<ShellRoute>('home');
   if (routeOwner !== sessionUserId) {
     const restored = workspace?.route ?? 'home';
     setRouteOwner(sessionUserId);
@@ -1245,7 +1247,10 @@ export default function App(props: AppProps): React.JSX.Element {
                   onRenameDevice={
                     props.onRenameDevice === undefined ? undefined : () => setRoute('renameDevice')
                   }
-                  onOpenSetup={() => setRoute('deviceSetup')}
+                  onOpenSetup={() => {
+                    setSetupReturn('settings');
+                    setRoute('deviceSetup');
+                  }}
                   // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
                   // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
                   onOpenStaffPins={
@@ -1398,7 +1403,10 @@ export default function App(props: AppProps): React.JSX.Element {
                   notifications={props.notificationPermission}
                   onOpenSystemSettings={() => void Linking.openSettings()}
                   onOpenSetting={setRoute}
-                  onDone={() => setRoute('home')}
+                  onDone={() => {
+                    setRoute(setupReturn);
+                    setSetupReturn('home');
+                  }}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );

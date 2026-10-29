@@ -183,6 +183,9 @@ describe('setting up a newly registered phone', () => {
     await settle();
     fireOn(screen, 'settings-setup');
     expect(await waitUntil(() => screen.query('setup.permissions') !== null)).toBe(true);
+    // Reopened from Settings, it ends back in Settings.
+    fireOn(screen, 'setup.later');
+    expect(await waitUntil(() => screen.query('settings-screen') !== null)).toBe(true);
   });
 
   test('stays out of the way on a phone that was set up, or registered before setup existed', async () => {
