@@ -9,7 +9,12 @@
 //   - VERIFIER MINIMIZATION (§5.1, security-guide §5.2): only this store's ACTIVE users carry a
 //     verifier; deactivated users appear with pinVerifier: null; a user unassigned from the store
 //     disappears entirely.
-import { canonicalizeJcs, NO_LIMIT_AMOUNTS, type JsonValue } from '@bolusi/core';
+import {
+  canonicalizeJcs,
+  NO_LIMIT_AMOUNTS,
+  OWNER_POWER_PERMISSIONS,
+  type JsonValue,
+} from '@bolusi/core';
 import type { TenantDb } from '@bolusi/db-server';
 
 import { sha256Hex } from '../crypto/index.js';
@@ -102,14 +107,13 @@ export async function buildBundle(
           .execute()
       : [];
 
-  // Grants filtered to this store + tenant-wide (§5.2) — the store-2-only grant is excluded here.
-  const grants =
+  // Every grant of this store's people; filtered below once the roles are known.
+  const allGrants =
     userIds.length > 0
       ? await db
           .selectFrom('userRoles')
           .select(['userId', 'roleId', 'storeId'])
           .where('userId', 'in', userIds)
-          .where((eb) => eb.or([eb('storeId', '=', storeId), eb('storeId', 'is', null)]))
           .execute()
       : [];
 
@@ -145,6 +149,23 @@ export async function buildBundle(
     list.push(rp.permissionId);
     permsByRole.set(rp.roleId, list);
   }
+
+  // Grants at this store + tenant-wide (§5.2), plus owner-role grants at other stores: an owner's PIN
+  // is the main owner's to manage wherever they are an owner, and the server judges that across
+  // every store (auth/permissions `holdsOwnerPowers`), so the device must see it too. The evaluator
+  // reads a grant at another store as granting nothing here.
+  const ownerRoleIds = new Set(
+    roles
+      .filter(
+        (r) =>
+          r.scopeType === 'tenant' ||
+          (permsByRole.get(r.id) ?? []).some((p) => OWNER_POWER_PERMISSIONS.includes(p)),
+      )
+      .map((r) => r.id),
+  );
+  const grants = allGrants.filter(
+    (g) => g.storeId === storeId || g.storeId === null || ownerRoleIds.has(g.roleId),
+  );
 
   const bundleUsers = users
     .map((u) => {

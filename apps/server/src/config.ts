@@ -1,7 +1,11 @@
 // Server config, read ONCE at boot through a Zod-validated module (security-guide §10) — no
 // ad-hoc process.env reads scattered through code. `.env.example` is the authoritative list of
 // required vars; secrets live only in the gitignored `.env`.
+import type { BlockList } from 'node:net';
+
 import { z } from 'zod';
+
+import { parseTrustedProxies } from './middleware/client-ip.js';
 
 const zConfig = z.object({
   DATABASE_URL: z.string().min(1),
@@ -25,8 +29,14 @@ const zConfig = z.object({
   // that seals each payment account's Xendit secret key at rest, and this server's public origin,
   // where Xendit posts payments. Either unset ⇒ QRIS through Xendit is off and its routes answer
   // 503; QRIS by hand works as before. It also needs SYSTEM_KEY_DIR (the payment is a system record).
+  // PUBLIC_URL also marks cookies Secure: TLS ends at the proxy, so the request URL the server sees
+  // is http either way; cookies are Secure unless this says http.
   PAYMENT_SECRETS_KEY: z.string().min(1).optional(),
   PUBLIC_URL: z.url().optional(),
+  // OPTIONAL. Comma-separated addresses or CIDR ranges of the reverse proxies in front of this
+  // server. Unset, X-Forwarded-For is ignored and the socket peer is the client. Set, a request
+  // whose peer is one of them is keyed by the rightmost forwarded address that is not.
+  TRUSTED_PROXY_CIDRS: z.string().optional(),
 });
 
 export type ServerConfig = {
@@ -37,6 +47,10 @@ export type ServerConfig = {
   /** Expo push bearer token (api/04-push §7). Absent ⇒ `pushPortFromConfig` fails closed at boot —
    *  push has no silent no-op (task 134). */
   readonly expoAccessToken?: string;
+  /** Whether cookies are marked Secure: true unless PUBLIC_URL is a plain-http origin. */
+  readonly secureCookies: boolean;
+  /** Proxies whose X-Forwarded-For is believed; absent ⇒ the header is never read. */
+  readonly trustedProxies?: BlockList;
   /** Both set ⇒ integrated QRIS is on. */
   readonly paymentSecretsKey?: string;
   readonly publicUrl?: string;
@@ -49,15 +63,29 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     const detail = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid server configuration (security-guide §10): ${detail}`);
   }
+  let trustedProxies: BlockList | undefined;
+  const proxies = parsed.data.TRUSTED_PROXY_CIDRS?.trim();
+  if (proxies !== undefined && proxies !== '') {
+    try {
+      trustedProxies = parseTrustedProxies(proxies);
+    } catch (error) {
+      throw new Error(
+        `Invalid server configuration (security-guide §10): TRUSTED_PROXY_CIDRS: ${(error as Error).message}`,
+      );
+    }
+  }
   return {
     databaseUrl: parsed.data.DATABASE_URL,
     port: parsed.data.PORT,
+    secureCookies:
+      parsed.data.PUBLIC_URL === undefined || new URL(parsed.data.PUBLIC_URL).protocol !== 'http:',
     ...(parsed.data.SYSTEM_KEY_DIR === undefined
       ? {}
       : { systemKeyDir: parsed.data.SYSTEM_KEY_DIR }),
     ...(parsed.data.EXPO_ACCESS_TOKEN === undefined
       ? {}
       : { expoAccessToken: parsed.data.EXPO_ACCESS_TOKEN }),
+    ...(trustedProxies === undefined ? {} : { trustedProxies }),
     ...(parsed.data.PAYMENT_SECRETS_KEY === undefined
       ? {}
       : { paymentSecretsKey: parsed.data.PAYMENT_SECRETS_KEY }),

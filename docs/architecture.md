@@ -120,6 +120,10 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- When a type's rule judges only newer versions, set `minPushVersion` on the type. The
+  server refuses a new push below it as `SCHEMA_INVALID`; stored ops still fold at every version.
+  Signed ops can't be upgraded, so raise a floor only once the app that signs the newer
+  version has reached every device and old queues have synced.
 - A change that lowers what a customer owes (a price, a down payment, a fee) needs
   an owner-only permission, checked in the type's `permission` or its `rule` with
   `holdsPermission` (repair's `requireDiscountPermission`), so the server refuses it too.
@@ -235,6 +239,16 @@ carry a `test:` reference.
 DB; `MEDIA_STORAGE_DIR` needs durable, backed-up production storage.
 `EXPO_ACCESS_TOKEN` is required by the production push transport at boot. Tests
 inject their transport and need no production push credentials.
+
+`PUBLIC_URL` is the origin clients reach the server at. Cookies are marked `Secure`
+unless it is a plain-http origin, so leave it unset or https in production and set it
+to `http://<lan-ip>:3000` only for a local server phones reach over plain HTTP.
+
+`TRUSTED_PROXY_CIDRS` lists the reverse proxies in front of the server (addresses or
+CIDR ranges, comma-separated). Unset, `X-Forwarded-For` is ignored and per-IP login
+limits key by the socket address, which behind a proxy is the proxy's, so all
+clients share one bucket. Set it to the proxy's address in production; a request from
+it is keyed by the rightmost forwarded address that is not a trusted proxy.
 
 `SYSTEM_KEY_DIR` enables server conflict detection. It contains one mode-0600
 `system-device-<tenantId>.key` per tenant: a base64 Ed25519 private key created by

@@ -102,6 +102,28 @@ test('bundle grants-tuple filtering: a store-2-only grant never reaches the stor
   expect(multi!.grants.some((g) => g.storeId === s2)).toBe(false);
 });
 
+test('an owner-role grant at another store reaches the device, so it knows whose PIN is the main owner’s', async () => {
+  const { tenantId, s1, s2 } = await twoStoreTenant();
+  const cashierRole = await roleIdOf(h, tenantId, 'cashier');
+  const storeOwnerRole = await roleIdOf(h, tenantId, 'store_owner');
+  const userId = await seedUser(h, {
+    tenantId,
+    name: 'Ana',
+    storeIds: [s1, s2],
+    roleKeys: ['cashier'],
+  });
+  // Cashier at both stores, store owner at store 2 only.
+  await h.idb.db
+    .insertInto('userRoles')
+    .values({ tenantId, userId, roleId: storeOwnerRole, storeId: s2 })
+    .execute();
+
+  const device = await seedDevice(h, { tenantId, storeId: s1 });
+  const ana = (await fetchBundle(device.token)).users.find((u) => u.id === userId)!;
+  const grantKeys = ana.grants.map((g) => `${g.roleId}:${g.storeId ?? 'null'}`).sort();
+  expect(grantKeys).toEqual([`${cashierRole}:${s1}`, `${storeOwnerRole}:${s2}`].sort());
+});
+
 test('bundle verifier minimization: active in-store user carries the verifier; deactivated → null; out-of-store user absent', async () => {
   const { tenantId, s1, s2 } = await twoStoreTenant();
 

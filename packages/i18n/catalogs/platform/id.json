@@ -6,6 +6,7 @@
   },
   "refusal": {
     "conflictNotFound": "Data bentrok ini tidak ditemukan.",
-    "notYourPreference": "Bahasa hanya bisa diubah oleh pemilik akunnya."
+    "notYourPreference": "Bahasa hanya bisa diubah oleh pemilik akunnya.",
+    "idTaken": "Data ini belum bisa disimpan. Buat ulang, ya."
   }
 }

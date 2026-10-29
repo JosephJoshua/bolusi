@@ -16,6 +16,8 @@ import type { DetectConflictsResult, SurfacedConflict } from '../sync/conflict-d
  */
 export type RegistryResolution =
   | { readonly kind: 'unknown' }
+  /** A foldable version below the type's `minPushVersion`: no longer accepted in a new push. */
+  | { readonly kind: 'retired'; readonly minPushVersion: number }
   | { readonly kind: 'known'; readonly validate: (payload: unknown) => boolean };
 
 export interface OpRegistry {
