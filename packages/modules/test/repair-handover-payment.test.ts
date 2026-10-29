@@ -101,6 +101,7 @@ async function ledger(harness: RepairHarness, ticketId: string) {
       amount: number;
       tendered: number | null;
       reason: string | null;
+      voidedAt: number | null;
     }[];
   };
 }

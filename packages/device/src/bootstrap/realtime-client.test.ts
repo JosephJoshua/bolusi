@@ -243,6 +243,7 @@ describe('the RN realtime adapters compose with the sync loop (task 105 acceptan
     const handle = ws.open({
       onOpen: () => undefined,
       onMessage: () => undefined,
+      onHeartbeat: () => undefined,
       onError: () => {
         errors += 1;
       },
