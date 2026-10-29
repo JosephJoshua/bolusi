@@ -4,6 +4,7 @@
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import { PrinterProblem, type RepairPrinting } from '@bolusi/modules/repair/screens';
 import { color } from '@bolusi/ui';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -1161,6 +1162,44 @@ describe('on a tablet', () => {
       expect(screen.query('repair.board')).toBeNull();
       expect(screen.query('repair.intake.step.customer')).not.toBeNull();
     });
+  });
+});
+
+describe('printing a slip', () => {
+  // Android QA once saw Cetak spin with no dialog, then every print fail until restart. The port now
+  // gives up on a hung print call as `stuck`; the step says so and the next tap prints.
+  test('a print that got stuck says to try again, and the retry prints', async () => {
+    h = await openRepairScreenHarness(5301);
+    const ticketId = await openTicket(h);
+    const output = vi
+      .fn<RepairPrinting['output']>()
+      .mockRejectedValueOnce(new PrinterProblem('stuck'))
+      .mockResolvedValueOnce('unconfirmed');
+    const printing: RepairPrinting = {
+      storeName: async () => 'Bolusi Sorong',
+      userName: async () => null,
+      readPaper: async () => null,
+      writePaper: async () => undefined,
+      output,
+      imageDataUri: async () => null,
+    };
+    const screen = await mount(h, h.cashierId, {
+      runtime: { ...repairRuntimeFor(h, h.cashierId), printing },
+    });
+    await press(screen, `repair.board.row.${ticketId}`);
+    if (screen.query('repair.ticket.more.open') !== null)
+      await press(screen, 'repair.ticket.more.open');
+    await press(screen, 'repair.ticket.action.print');
+
+    await press(screen, 'repair.print.primary');
+    expect(text(screen, 'repair.print.notice')).toBe('Notanya belum bisa disiapkan. Coba lagi.');
+    expect(screen.query('repair.print.error')).toBeNull();
+    expect(screen.all('repair.print.primary')[0]!.props['disabled']).not.toBe(true);
+
+    await press(screen, 'repair.print.primary');
+    expect(output).toHaveBeenCalledTimes(2);
+    expect(screen.query('repair.print.notice')).toBeNull();
+    expect(screen.query('repair.print.ask')).not.toBeNull();
   });
 });
 

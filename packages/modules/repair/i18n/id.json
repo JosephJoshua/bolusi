@@ -506,7 +506,8 @@
     "problem": {
       "noPrinter": "Pilih printernya dulu di Pengaturan.",
       "printerMissing": "Printernya tidak ditemukan. Cek kabel dan dayanya, atau pilih printer lain di Pengaturan.",
-      "failed": "Belum bisa mencetak. Cek printernya, lalu coba lagi."
+      "failed": "Belum bisa mencetak. Cek printernya, lalu coba lagi.",
+      "stuck": "Notanya belum bisa disiapkan. Coba lagi."
     }
   },
   "downPayment": {

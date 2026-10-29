@@ -13,6 +13,7 @@ export { UncollectedDaysScreen, type UncollectedDaysScreenProps } from './Uncoll
 export type { RepairChrome } from './parts.js';
 export { catalogModelSearch } from '../model-picker.js';
 export {
+  PrinterProblem,
   RepairRuntimeProvider,
   moneyRuntimeOf,
   servisanCustomers,

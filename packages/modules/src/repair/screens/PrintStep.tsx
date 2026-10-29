@@ -15,7 +15,7 @@ import { outputSlip } from '../slip-output.js';
 import type { TicketDetailRow } from '../queries.js';
 import { useActionRunner } from '../../screen-kit/index.js';
 import { FlowScreen, Section, repairStyles, type RepairChrome } from './parts.js';
-import { useRepairRuntime, type RepairPrinting } from '../runtime.js';
+import { PrinterProblem, useRepairRuntime, type RepairPrinting } from '../runtime.js';
 
 const SLIP_KEY: Readonly<Record<SlipKind, { title: RepairKey; about: RepairKey }>> = {
   intake: { title: 'repair.print.intake', about: 'repair.print.intakeAbout' },
@@ -49,10 +49,19 @@ export function PrintStep({
   // The print dialog could not say whether it printed: ask before logging it, so a cancelled first
   // print does not make the real first slip read "Cetak ulang".
   const [asking, setAsking] = useState(false);
+  // The phone's print dialog or PDF never got ready: the platform gave up on it, so a retry works.
+  const [stuck, setStuck] = useState(false);
 
   const output = (how: 'print' | 'share'): void => {
+    setStuck(false);
     void runner
-      .run(() => outputSlip(runtime, printing, ticket, slip, PHONE_PAPERS, how))
+      .run(() =>
+        outputSlip(runtime, printing, ticket, slip, PHONE_PAPERS, how).catch((error: unknown) => {
+          if (!(error instanceof PrinterProblem) || error.reason !== 'stuck') throw error;
+          setStuck(true);
+          return 'cancelled' as const;
+        }),
+      )
       .then((outcome) => {
         if (outcome === 'unconfirmed') setAsking(true);
         else if (outcome === 'done')
@@ -86,6 +95,8 @@ export function PrintStep({
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
+      notice={stuck ? tn('repair.print.problem.stuck') : null}
+      onClearNotice={() => setStuck(false)}
       overlay={
         asking ? (
           <ConfirmSheet
