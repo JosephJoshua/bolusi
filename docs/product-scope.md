@@ -164,6 +164,38 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   phone cannot be handed back while a change waits. Technicians keep proposing,
   since they find the extra fault once the phone is open.
 
+## Putting staff mistakes right (2026-10-29)
+
+From PC exploratory QA round 2. Corrections are their own recorded steps, never
+silent edits, and each one names who did it and what it was before.
+
+- **Intake's record while the phone is in the store:** the counter (repair
+  intake) can correct the customer's name and number, the phone (brand, model,
+  colour, IMEI), its lock, the complaint and the accessories, with an optional
+  reason. The history lists each change as before and after; the lock's code is
+  never shown, only that it changed. After pickup the signed slip is the record,
+  so nothing here can be changed.
+- **Customers are never renamed under other servisans:** a correction renames
+  the customer's record only when this servisan is the only one it names.
+  Otherwise, or when the typed details match another customer, the servisan
+  moves to that customer (found, or made like at intake), and other servisans
+  keep their own.
+- **Warranty claims keep their phone:** a claim's brand, model and IMEI cannot
+  change, and a handover with a claim on it cannot be taken back.
+- **Taking a handover back is an owner's** (the cancel permission): for a phone
+  marked as handed over by mistake that is still in the store. A reason is
+  required. The handover photo and signature stop counting, the warranty has
+  not started, and payments stay; a payment booked to the wrong servisan is
+  cancelled in Kas under its own rules.
+- **A mistyped cash move is voided by an owner** (adjust cash) with a reason,
+  until a later count of the drawer was settled. The void dates back to the move,
+  so a count taken after it reads as if the move never happened.
+- **Checks at entry:** phone numbers must be callable (stored one way, 0812…),
+  an IMEI must be 15 digits with a valid check digit, a retyped returning
+  customer is reused, and PINs that are easy to guess (111111, 123456, common
+  ones) are refused on every device. The server only sees PIN verifiers, so it
+  cannot check this itself.
+
 ## Printing repair slips (2026-10-26)
 
 Agreed with the owner before building printing.
