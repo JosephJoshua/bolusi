@@ -249,8 +249,8 @@ Motion explains what changed; it never decorates or makes anyone wait.
 - A row or card another device just changed glows once (`FreshGlow`): a soft
   highlight fading out over a second, the one thing allowed past 220 ms because it
   shows a change rather than moving anything. Only what is on screen when the change
-  arrives glows; the person's own edits and a catch-up burst (first sync, back
-  online) stay calm.
+  arrives, or what it brings in (a new Kas row), glows; the person's own edits and a
+  catch-up burst (first sync, back online) stay calm.
 
 ## References
 

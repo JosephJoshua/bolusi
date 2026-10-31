@@ -96,6 +96,7 @@ import { createIdleTicker } from '@bolusi/device/session/idle-ticker';
 import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { MediaClient } from '@bolusi/device/media/client';
 import {
+  changedRemotely,
   finishDeviceSetup,
   readDeviceId,
   readDeviceSetupFor,
@@ -1137,7 +1138,7 @@ export function Root({
   useEffect(() => {
     if (app === null) return;
     return app.invalidation.subscribe((_tables, change) => {
-      if (change?.remote === true) markFresh(change.entityId);
+      for (const id of changedRemotely(change)) markFresh(id);
     });
   }, [app]);
 

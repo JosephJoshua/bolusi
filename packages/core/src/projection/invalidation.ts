@@ -29,6 +29,26 @@ export interface EntityChange {
    * changed; this device's own changes and re-folds leave it unset.
    */
   readonly remote?: boolean;
+  /**
+   * Other records the op changes the look of, as its type declares (`OperationDeclaration.
+   * concerns`): the servisan a payment is for. Set only on a remote change, for the same marking.
+   */
+  readonly concerns?: readonly EntityRef[];
+}
+
+/**
+ * The ids a colleague on another device just changed with `change`: its own record and the ones
+ * it concerns. Empty for this device's own changes, so they never glow.
+ */
+export function changedRemotely(change: EntityChange | undefined): readonly string[] {
+  if (change?.remote !== true) return [];
+  return [change.entityId, ...(change.concerns ?? []).map((ref) => ref.entityId)];
+}
+
+/** A record named by its entity type and id. */
+export interface EntityRef {
+  readonly entityType: string;
+  readonly entityId: string;
 }
 
 /**

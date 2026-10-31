@@ -113,8 +113,7 @@ function requestPort(): Promise<CoreConnection> {
         });
         // What a colleague just changed on another device glows once wherever it shows.
         client.on(CORE_EVENTS.repairChanged, (change) => {
-          const fresh = (change as RepairChange | null)?.freshId;
-          if (typeof fresh === 'string') markFresh(fresh);
+          for (const id of (change as RepairChange | null)?.freshIds ?? []) markFresh(id);
         });
         resolve({ mode: 'live', client });
       } else {

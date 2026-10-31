@@ -7,6 +7,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 import {
+  changedRemotely,
   createUuidV7Generator,
   DomainError,
   finishDeviceSetup,
@@ -727,8 +728,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     enrollment = enroll;
     cleanups.push(
       booting.invalidation.subscribe((_tables, change) => {
-        const fresh: RepairChange | null =
-          change?.remote === true ? { freshId: change.entityId } : null;
+        const freshIds = changedRemotely(change);
+        const fresh: RepairChange | null = freshIds.length > 0 ? { freshIds } : null;
         for (const listener of repairListeners) listener(fresh);
         void rereadSyncStatus();
       }),

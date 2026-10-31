@@ -3,14 +3,20 @@
  * servisan. Fed by the app from changes that came from another device (`markFresh`); read per row
  * with `useFresh`. Platform-free, so the phone and the PC share it.
  *
- * Calm by design: only what changes while it is on screen glows (a row that mounts after the
- * change does not), and a burst, such as a new phone's first sync or coming back online after
- * hours, marks nothing.
+ * Calm by design: only what changes while it is on screen glows, and a burst, such as a new
+ * phone's first sync or coming back online after hours, marks nothing. A row the change itself
+ * brought in (a new Kas entry at the top) mounts just after the mark and glows too; a row that
+ * mounts later, when someone opens a screen, does not.
  */
 import { useRef, useSyncExternalStore } from 'react';
 
 /** How long a glow lasts, and so how long a mark counts. */
 export const FRESH_MS = 1_000;
+/**
+ * How long after a mark a row may mount and still glow: a new row arrives once the list's query
+ * has run again, a few frames after the change.
+ */
+const ARRIVAL_MS = 500;
 /** More changes than this inside `FRESH_MS` is a catch-up, not a colleague at work. */
 const BURST = 12;
 
@@ -39,13 +45,13 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
- * When `id` was last changed by another device while this component was on screen, or 0. A new
- * value is the cue to glow; use it as a key.
+ * When `id` was last changed by another device while this component was on screen, or as it came
+ * in, or 0. A new value is the cue to glow; use it as a key.
  */
 export function useFresh(id: string): number {
   const mountedAt = useRef(Date.now()).current;
   const at = useSyncExternalStore(subscribe, () => marks.get(id) ?? 0);
-  return at > mountedAt ? at : 0;
+  return at > mountedAt - ARRIVAL_MS ? at : 0;
 }
 
 /** Forget every mark and burst: for tests. */

@@ -54,7 +54,8 @@ export interface CoreState {
 
 /** The `repairChanged` payload: the record another device just changed, or null. */
 export interface RepairChange {
-  readonly freshId: string;
+  /** What a colleague just changed on another device: the record and the ones it concerns. */
+  readonly freshIds: readonly string[];
 }
 
 /** Events the core pushes to the window. */

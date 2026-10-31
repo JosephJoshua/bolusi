@@ -38,6 +38,8 @@ export interface DocumentCharge {
 }
 
 export interface MoneyDocumentSource {
+  /** The record a document of this kind is (`repair_ticket`), so its screens can show money land. */
+  readonly entityType: string;
   /** Whether the document exists in this store, so money can be taken for it. */
   exists(db: Kysely<never>, lookup: DocumentLookup): Promise<boolean>;
   /**

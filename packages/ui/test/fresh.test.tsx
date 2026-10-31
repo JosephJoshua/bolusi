@@ -1,6 +1,7 @@
 /**
- * What a colleague just changed glows once: only while it is on screen, never for a row that
- * mounts after the change, and never in a catch-up burst (a new phone's first sync).
+ * What a colleague just changed glows once: while it is on screen or as the change brings it in,
+ * never for a row that mounts well after the change, and never in a catch-up burst (a new phone's
+ * first sync).
  */
 import { act } from 'react';
 import { afterEach, describe, expect, test } from 'vitest';
@@ -36,8 +37,14 @@ describe('FreshGlow', () => {
     expect(r.query('glow')).toBeNull();
   });
 
-  test('a row that mounts after the change stays calm', () => {
-    act(() => markFresh('t1', Date.now() - 5));
+  test('a row the change brings in (a new Kas entry on top) glows as it arrives', () => {
+    act(() => markFresh('t1', Date.now() - 100));
+    const r = render(<FreshGlow id="t1" testID="glow" />);
+    expect(r.query('glow')).not.toBeNull();
+  });
+
+  test('a row that mounts well after the change, as a screen opens, stays calm', () => {
+    act(() => markFresh('t1', Date.now() - 2_000));
     const r = render(<FreshGlow id="t1" testID="glow" />);
     expect(r.query('glow')).toBeNull();
   });
