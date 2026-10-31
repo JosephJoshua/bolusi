@@ -17,8 +17,12 @@ export const FRESH_MS = 1_000;
  * has run again, a few frames after the change.
  */
 const ARRIVAL_MS = 500;
-/** More changes than this inside `FRESH_MS` is a catch-up, not a colleague at work. */
-const BURST = 12;
+/**
+ * More records than this changed inside `FRESH_MS` is a catch-up, not a colleague at work. One
+ * payment marks its Kas entry and its servisan, so a few at once is still a person; seven rows
+ * glowing together read as one blue block that says "everything changed" (QA on PR #111).
+ */
+const BURST = 6;
 
 const marks = new Map<string, number>();
 const recent: number[] = [];

@@ -59,6 +59,25 @@ describe('FreshGlow', () => {
     expect(r.query('glow')).toBeNull();
   });
 
+  test('a payment marking a few records still glows; seven at once is a catch-up', () => {
+    const r = render(<FreshGlow id="t1" testID="glow" />);
+    const at = later();
+    act(() => {
+      markFresh('entry', at);
+      markFresh('t1', at);
+    });
+    expect(r.query('glow')).not.toBeNull();
+
+    resetFresh();
+    const s = render(<FreshGlow id="t2" testID="glow2" />);
+    const then = later();
+    act(() => {
+      for (let i = 0; i < 6; i += 1) markFresh(`row-${String(i)}`, then);
+      markFresh('t2', then);
+    });
+    expect(s.query('glow2')).toBeNull();
+  });
+
   test('with reduce motion on, nothing glows', () => {
     act(() => __setReduceMotion(true));
     const r = render(<FreshGlow id="t1" testID="glow" />);
