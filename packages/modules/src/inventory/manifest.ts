@@ -43,6 +43,7 @@ import {
 } from './queries.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
+import type { StockSourceTargets } from './stock-source.js';
 
 export const INVENTORY_PERMISSIONS = {
   [INVENTORY_PERMISSION.read]: {
@@ -79,13 +80,18 @@ export const INVENTORY_PERMISSIONS = {
     description:
       'Can take or put back parts on a servisan that is no longer being worked on, to correct it.',
   },
+  [INVENTORY_PERMISSION.receive]: {
+    scope: 'store',
+    isDangerous: false,
+    description: "Can add parts that arrived on a supplier order to the store's stock.",
+  },
 } as const;
 
-export function inventoryModuleManifest(targets: PartUseTargets) {
+export function inventoryModuleManifest(targets: PartUseTargets, sources: StockSourceTargets) {
   return {
     id: INVENTORY_MODULE_ID,
 
-    operations: inventoryOperations(targets),
+    operations: inventoryOperations(targets, sources),
     refusals: INVENTORY_REFUSALS.reasons,
 
     // DDL lives in the client and server migrations, as for repair.
@@ -156,6 +162,11 @@ export function inventoryModuleManifest(targets: PartUseTargets) {
 export type InventoryModuleManifest = ReturnType<typeof inventoryModuleManifest>;
 export type InventoryModule = ModuleDefinition<InventoryDatabase, InventoryModuleManifest>;
 
-export function defineInventoryModule(targets: PartUseTargets): InventoryModule {
-  return defineModule<InventoryDatabase, InventoryModuleManifest>(inventoryModuleManifest(targets));
+export function defineInventoryModule(
+  targets: PartUseTargets,
+  sources: StockSourceTargets,
+): InventoryModule {
+  return defineModule<InventoryDatabase, InventoryModuleManifest>(
+    inventoryModuleManifest(targets, sources),
+  );
 }

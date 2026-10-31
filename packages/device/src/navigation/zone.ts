@@ -44,6 +44,7 @@ export const SHELL_ROUTES = [
   'printSettings',
   'printPaper',
   'parts',
+  'purchasing',
   'paymentMethods',
   'renameDevice',
   // The first-run setup of a newly registered phone (apps/mobile screens/setup).

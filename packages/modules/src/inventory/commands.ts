@@ -22,7 +22,10 @@ import {
   MAX_MOVEMENT_QTY,
   MAX_PART_FITS,
   PART_USE_KINDS,
+  type StockSourceKind,
 } from './constants.js';
+
+type OpDraft = ReturnType<CommandContext['op']>;
 import { MAX_BARCODE, MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME, zPartFit } from './operations.js';
 import { compactModel } from '../shared/model-key.js';
 import {
@@ -387,4 +390,30 @@ export function putBackPartHandler(
   ctx: CommandContext,
 ): CommandHandlerResult<{ movementId: string }> {
   return useOp(ctx, INVENTORY_OP.itemPutBack, input);
+}
+
+// ── parts received ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parts that arrived, as the module that brought them adds them next to its own record (a receipt
+ * from a supplier). The receive rule asks that module whether its record really lists them.
+ */
+export function stockReceivedOp(
+  ctx: CommandContext,
+  received: {
+    readonly itemId: string;
+    readonly qty: number;
+    readonly source: {
+      readonly kind: StockSourceKind;
+      readonly id: string;
+      readonly label: string;
+    };
+  },
+): OpDraft {
+  return ctx.op({
+    type: INVENTORY_OP.stockReceived,
+    entityType: INVENTORY_MOVEMENT_ENTITY,
+    entityId: ctx.newId(),
+    payload: { itemId: received.itemId, qty: received.qty, source: received.source },
+  });
 }

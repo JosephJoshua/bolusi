@@ -17,6 +17,7 @@ import type { MediaClient } from '../media/client.js';
 import type { GalleryPort } from '../media/import.js';
 import { createPhotoSharer, type SharePlatform } from '../media/share.js';
 import { createInventoryRuntime } from '../models/inventory/runtime-adapter.js';
+import { createPurchasingRuntime } from '../models/purchasing/runtime-adapter.js';
 import { createRepairRuntime, type RepairMediaSeams } from '../models/repair/runtime-adapter.js';
 
 import type { Bootstrapped } from './bootstrap.js';
@@ -111,6 +112,16 @@ export function createSessionRepairRuntime(deps: {
     searchModels: (text, limit) => catalogModelSearch(repair!)(text, limit),
     scanCode: deps.scanCode,
   });
+  // Orders to suppliers ("Belanja"), signed with the name the slips print.
+  const purchasing = createPurchasingRuntime({
+    runtime,
+    invalidation: app.invalidation,
+    identity,
+    storeName: async () =>
+      (await repair!.query('printSettings', {})).rows[0]?.name ??
+      (await printing?.storeName()) ??
+      null,
+  });
   repair = createRepairRuntime({
     runtime,
     db: app.db.db,
@@ -119,6 +130,7 @@ export function createSessionRepairRuntime(deps: {
     media: deps.media,
     printing,
     inventory,
+    purchasing,
     qris: deps.qris?.(identity.userId),
     statusSite: deps.statusSite ?? null,
   });

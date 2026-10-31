@@ -451,6 +451,26 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
   will be seen only by owners and whoever records purchases; a sell price per
   store waits for the shop POS.
 
+## Buying parts from suppliers (2026-10-31)
+
+Agreed with the owner on 2026-10-28; first part built 2026-10-31.
+
+- **Who buys:** owners, and anyone given "Belanja sparepart". One supplier list
+  for the business; orders belong to a store. On the phone it is "Belanja" in the
+  avatar menu, on the PC a sidebar page.
+- **An order:** a draft, then "Pesan" places it and it can be sent to the
+  supplier as WhatsApp text (copied on the PC when the supplier has no number).
+  Only a draft changes; a placed order is cancelled instead, and what already
+  came stays in stock.
+- **Receiving:** count what came per part, as many deliveries as it takes. Each
+  delivery adds stock at once as its own movement ("Diterima dari PO-…"). An
+  order's state (Dipesan, Diterima sebagian, Diterima, Diterima lebih) is worked
+  out from its deliveries, so two phones receiving offline never clash; more than
+  ordered is kept and flagged for a stock correction.
+- **Next:** buy prices at receiving with a moving average cost per store, seen
+  only on owners' own phones (permission-scoped sync); supplier bills and
+  payments; transfers between stores; supplier returns.
+
 ## Managers, limits, approvals and roles (2026-10-28)
 
 Agreed with the owner. This replaces the October 14-16 manager, limit and role

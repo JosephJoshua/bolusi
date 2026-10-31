@@ -10,21 +10,9 @@
 // tolerated rather than prevented: tickets are keyed by id, and a search for a number simply
 // shows both matches.
 
-/** Crockford base32 minus easily confused letters (no I, L, O, U). */
-const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+import { deviceCode } from '../shared/device-code.js';
 
-/** A 3-character code for a device id. Uses the UUID's random tail, not its timestamp prefix. */
-export function deviceCode(deviceId: string): string {
-  const hex = deviceId.replace(/-/g, '').slice(-8);
-  let value = Number.parseInt(hex, 16);
-  if (!Number.isFinite(value)) throw new Error(`deviceCode: not a uuid: ${deviceId}`);
-  let code = '';
-  for (let i = 0; i < 3; i += 1) {
-    code = ALPHABET[value % 32]! + code;
-    value = Math.floor(value / 32);
-  }
-  return code;
-}
+export { deviceCode };
 
 export function formatTicketNumber(deviceId: string, counter: number): string {
   return `${deviceCode(deviceId)}-${String(counter).padStart(4, '0')}`;

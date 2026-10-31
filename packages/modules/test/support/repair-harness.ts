@@ -29,9 +29,15 @@ import {
 } from '@bolusi/core';
 
 import { APPROVAL_PERMISSION } from '../../src/approvals/index.js';
-import { approvalsModule, inventoryModule, moneyModule } from '../../src/index.js';
+import {
+  approvalsModule,
+  inventoryModule,
+  moneyModule,
+  purchasingModule,
+} from '../../src/index.js';
 import { INVENTORY_PERMISSION } from '../../src/inventory/index.js';
 import { MONEY_PERMISSION } from '../../src/money/index.js';
+import { PURCHASING_PERMISSION } from '../../src/purchasing/index.js';
 import { repairModule, REPAIR_PERMISSION } from '../../src/repair/index.js';
 import { SqliteOpStore } from './harness.js';
 
@@ -47,6 +53,7 @@ const MANAGER_ID = '0191e000-0000-7000-8000-00000000a11a';
 const P = REPAIR_PERMISSION;
 const M = MONEY_PERMISSION;
 const I = INVENTORY_PERMISSION;
+const B = PURCHASING_PERMISSION;
 
 // Every role asks for and answers approvals; the decision's own permission says what.
 const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
@@ -103,6 +110,18 @@ export interface RepairHarness {
   ): Promise<unknown>;
   /** Run an inventory query as `userId`. */
   queryInventory<K extends keyof typeof inventoryModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Run a purchasing command as `userId`. */
+  purchasing<K extends keyof typeof purchasingModule.commands>(
+    command: K,
+    input: Parameters<(typeof purchasingModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run a purchasing query as `userId`. */
+  purchasingQuery<K extends keyof typeof purchasingModule.queries>(
     query: K,
     input: unknown,
     userId: string,
@@ -166,6 +185,7 @@ export async function openRepairHarness(
   const registry = registerModules([
     repairModule as unknown as AnyModuleDefinition<ClientDatabase>,
     inventoryModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    purchasingModule as unknown as AnyModuleDefinition<ClientDatabase>,
     moneyModule as unknown as AnyModuleDefinition<ClientDatabase>,
     approvalsModule as unknown as AnyModuleDefinition<ClientDatabase>,
   ]);
@@ -192,6 +212,7 @@ export async function openRepairHarness(
     assemblePermissionRegistry([
       repairModule as unknown as ModulePermissionManifest,
       inventoryModule as unknown as ModulePermissionManifest,
+      purchasingModule as unknown as ModulePermissionManifest,
       moneyModule as unknown as ModulePermissionManifest,
       approvalsModule as unknown as ModulePermissionManifest,
     ]),
@@ -230,7 +251,15 @@ export async function openRepairHarness(
             [TECHNICIAN_ROLE, role([P.read, P.work, I.read, I.useParts])],
             [
               OWNER_ROLE,
-              role([...Object.values(P), ...Object.values(I), ...Object.values(M)], 'tenant'),
+              role(
+                [
+                  ...Object.values(P),
+                  ...Object.values(I),
+                  ...Object.values(M),
+                  ...Object.values(B),
+                ],
+                'tenant',
+              ),
             ],
             [
               STORE_OWNER_ROLE,
@@ -249,6 +278,7 @@ export async function openRepairHarness(
                 // Categories are the business owner's alone (a tenant-wide permission).
                 ...Object.values(I).filter((id) => id !== I.manageCategories),
                 ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
+                ...Object.values(B),
               ]),
             ],
             [
@@ -380,6 +410,21 @@ export async function openRepairHarness(
         { tenantId, storeId, userId, deviceId },
       )) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    purchasing: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        purchasingModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    purchasingQuery: async (query, input, userId) => {
+      return (await runtime.queries.execute(
+        purchasingModule.queries[query] as never,
+        input as never,
+        { tenantId, storeId, userId, deviceId },
+      )) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
     money: async (command, input, userId) => {
       const outcome = await runtime.commands.execute(
         moneyModule.commands[command] as never,
@@ -431,6 +476,7 @@ export async function openRepairHarness(
             eb('type', 'like', 'repair.%'),
             eb('type', 'like', 'inventory.%'),
             eb('type', 'like', 'money.%'),
+            eb('type', 'like', 'purchasing.%'),
             eb('type', 'like', 'approvals.%'),
           ]),
         )

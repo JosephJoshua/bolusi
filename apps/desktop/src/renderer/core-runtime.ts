@@ -6,6 +6,7 @@
 import { createUuidV7Generator } from '@bolusi/core';
 import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { InventoryRuntime } from '@bolusi/modules/inventory/desktop';
+import type { PurchasingRuntime } from '@bolusi/modules/purchasing/desktop';
 import { catalogModelSearch } from '@bolusi/modules/repair';
 import type { RepairPrinting, RepairRuntime } from '@bolusi/modules/repair/desktop';
 import type { CapturedMedia, CaptureRequest } from '@bolusi/modules/screen-kit';
@@ -91,6 +92,23 @@ export function createCoreRepairRuntime(deps: {
     searchModels: catalogModelSearch({ query }),
   };
 
+  // Orders to suppliers: the same person, permissions and change feed; the order message is signed
+  // with the store's name as the slips print it.
+  const purchasing: PurchasingRuntime = {
+    userId,
+    query: ((name: string, input: unknown) =>
+      call('purchasing.query', name, input)) as PurchasingRuntime['query'],
+    run: ((name: string, input: unknown) =>
+      call('purchasing.run', name, input)) as PurchasingRuntime['run'],
+    hasPermission: (permission) => granted.has(permission),
+    colleagueHasPermission: (colleague, permission) =>
+      deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+    limitOf,
+    newId,
+    subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
+    storeName: () => call('purchasing.storeName'),
+  };
+
   const runtime: RepairRuntime = {
     userId,
     query,
@@ -138,6 +156,7 @@ export function createCoreRepairRuntime(deps: {
     },
     subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
     inventory,
+    purchasing,
     ticketSyncStatuses: (ticketIds) => call('repair.ticketSyncStatuses', ticketIds),
     technicians: () => call('repair.technicians'),
     loadThumbnail: (ref) => call('repair.loadThumbnail', ref),

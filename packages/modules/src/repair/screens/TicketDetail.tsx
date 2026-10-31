@@ -43,7 +43,7 @@ import {
   type CustomerMessageKind,
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
-import { whatsAppAppUrl, whatsAppUrl } from '../whatsapp.js';
+import { whatsAppAppUrl, whatsAppUrl } from '../../shared/whatsapp.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   rejectedCount,

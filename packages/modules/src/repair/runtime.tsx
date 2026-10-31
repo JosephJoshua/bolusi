@@ -12,6 +12,7 @@ import type { ApprovalsPort } from '../approvals/runtime.js';
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import type { ApprovalRow } from '../approvals/queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
+import type { PurchasingRuntime } from '../purchasing/runtime.js';
 import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
@@ -159,6 +160,8 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
   readonly printing?: RepairPrinting | undefined;
   /** The parts a servisan draws on. Absent ⇒ this build has no stock, and no parts section shows. */
   readonly inventory?: InventoryRuntime | undefined;
+  /** Orders to suppliers ("Belanja"). Absent ⇒ this build does no purchasing. */
+  readonly purchasing?: PurchasingRuntime | undefined;
   /** The app's client diagnostics log (`@bolusi/device` `consoleDiagnostics`), for what fails quietly. */
   readonly diagnostics: RepairDiagnostics;
 }

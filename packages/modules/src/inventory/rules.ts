@@ -11,6 +11,7 @@ import { categoryProblem, type CategoryShape } from './categories.js';
 import { INVENTORY_CATEGORY_ENTITY, INVENTORY_ITEM_ENTITY } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import type { InventoryDatabase } from './schema.js';
+import type { StockSourceTargets } from './stock-source.js';
 
 type Rule = OpRule<InventoryDatabase>;
 type Db = Parameters<Rule>[1]['db'];
@@ -24,6 +25,7 @@ export const INVENTORY_REFUSALS = defineRefusals('inventory', [
   'itemArchived',
   'moreThanTaken',
   'wrongUse',
+  'wrongSource',
 ] as const);
 const { refuse } = INVENTORY_REFUSALS;
 
@@ -231,6 +233,56 @@ export function itemPutBackRule(targets: PartUseTargets): Rule {
       throw refuse('moreThanTaken', {
         code: 'VALIDATION_FAILED',
         details: { field: 'qty', issue: `only ${String(out)} taken` },
+      });
+    }
+  };
+}
+
+interface ReceivedPayload {
+  readonly itemId: string;
+  readonly qty: number;
+  readonly source: {
+    readonly kind: keyof StockSourceTargets;
+    readonly id: string;
+    readonly label: string;
+  };
+}
+
+/**
+ * Parts come into stock only as their source says: the receipt lists this part in this quantity,
+ * and it comes in once. An archived part can still arrive (it was on the order).
+ */
+export function stockReceivedRule(sources: StockSourceTargets): Rule {
+  return async (op, ctx) => {
+    await requireFreshMovement(ctx.db, op);
+    const payload = payloadOf<ReceivedPayload>(op);
+    await requirePart(ctx.db, op, payload.itemId);
+    const { label } = await sources[payload.source.kind].check({
+      op,
+      sourceId: payload.source.id,
+      itemId: payload.itemId,
+      qty: payload.qty,
+      db: ctx.db,
+      holdsPermission: (userId, permissionId) => ctx.holdsPermission(userId, permissionId),
+    });
+    if (label !== payload.source.label) {
+      throw refuse('wrongSource', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'source.label', issue: `expected ${label}` },
+      });
+    }
+    const already = await ctx.db
+      .selectFrom('inventoryMovements')
+      .select('id')
+      .where('tenantId', '=', op.tenantId)
+      .where('useId', '=', payload.source.id)
+      .where('itemId', '=', payload.itemId)
+      .where('kind', '=', 'received')
+      .executeTakeFirst();
+    if (already !== undefined) {
+      throw refuse('alreadyRecorded', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'source.id', issue: 'already in stock' },
       });
     }
   };

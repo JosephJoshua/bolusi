@@ -246,7 +246,16 @@ const SEED: readonly Seed[] = [
   { category: 'cat-chg', values: { m: ['Robot'], w: ['10W'], k: ['Micro USB'] }, stock: 8 },
 ];
 
-export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRuntime {
+/** The demo shelf, and the way a demo receipt from a supplier puts parts on it. */
+export type DemoInventoryRuntime = InventoryRuntime & {
+  readonly receiveDemoStock: (
+    itemId: string,
+    qty: number,
+    source: { id: string; label: string },
+  ) => void;
+};
+
+export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInventoryRuntime {
   const { now, actor, checkUse } = options;
   let ids = 0;
   const newId = (prefix: string): string => `${prefix}-${String((ids += 1))}`;
@@ -638,6 +647,13 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     searchModels: options.searchModels,
     // The preview has no camera: a scan reads the Redmi 9 battery's barcode, so the flow can be tried.
     scanCode: () => Promise.resolve(DEMO_SCANNED_CODE),
+    receiveDemoStock: (itemId: string, qty: number, source: { id: string; label: string }) => {
+      record(itemId, 'received', qty, {
+        useKind: 'purchase_receipt',
+        useId: source.id,
+        useLabel: source.label,
+      });
+    },
   };
-  return runtime as unknown as InventoryRuntime;
+  return runtime as unknown as DemoInventoryRuntime;
 }

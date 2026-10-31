@@ -13,6 +13,7 @@ import {
   itemPutBackApplier,
   itemTakenApplier,
   stockCountedApplier,
+  stockReceivedApplier,
 } from './applier.js';
 import { MAX_FIELD_VALUE, zCategoryShape, zFieldValues } from './categories.js';
 import {
@@ -26,6 +27,7 @@ import {
   MAX_ITEM_TAGS,
   MAX_MOVEMENT_QTY,
   PART_USE_KINDS,
+  STOCK_SOURCE_KINDS,
 } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import {
@@ -36,8 +38,10 @@ import {
   itemPutBackRule,
   itemTakenRule,
   stockCountedRule,
+  stockReceivedRule,
 } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
+import type { StockSourceTargets } from './stock-source.js';
 
 export const MAX_PART_NAME = 200;
 export const MAX_PART_CODE = 60;
@@ -98,9 +102,22 @@ export const itemTakenPayload = z.object({ itemId: zUuidV7, qty: zQty, use: zPar
 
 export const itemPutBackPayload = itemTakenPayload;
 
-/** The op declarations. Rules that check a part's use need the use targets the composition wires. */
+export const zStockSource = z
+  .object({ kind: z.enum(STOCK_SOURCE_KINDS), id: zUuidV7, label: z.string().min(1).max(60) })
+  .strict();
+
+/** Parts that arrived, and the receipt (or later, transfer) that brought them. */
+export const stockReceivedPayload = z
+  .object({ itemId: zUuidV7, qty: zQty, source: zStockSource })
+  .strict();
+
+/**
+ * The op declarations. Rules that check a part's use, or where received parts came from, need the
+ * targets the composition wires.
+ */
 export function inventoryOperations(
   targets: PartUseTargets,
+  sources: StockSourceTargets,
 ): Readonly<Record<string, OperationDeclaration<InventoryDatabase>>> {
   return {
     [INVENTORY_OP.categoryAdded]: {
@@ -176,6 +193,17 @@ export function inventoryOperations(
       apply: itemPutBackApplier,
       rule: itemPutBackRule(targets),
       permission: INVENTORY_PERMISSION.useParts,
+      read: INVENTORY_PERMISSION.read,
+      entityType: INVENTORY_MOVEMENT_ENTITY,
+    },
+    [INVENTORY_OP.stockReceived]: {
+      schemaVersion: 1,
+      payload: stockReceivedPayload,
+      reversal: 'Corrected by a count, or later by a return to the supplier.',
+      apply: stockReceivedApplier,
+      rule: stockReceivedRule(sources),
+      permission: INVENTORY_PERMISSION.receive,
+      // Staff see stock arrive; what it cost travels apart, to owners only.
       read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },

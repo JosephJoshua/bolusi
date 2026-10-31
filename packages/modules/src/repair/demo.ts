@@ -26,6 +26,8 @@ import {
 import { normalizePhone } from './contact.js';
 import { partsInWork, undoableHandover } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
+import { PURCHASING_PERMISSION } from '../purchasing/constants.js';
+import { demoPurchasingRuntime } from '../purchasing/demo.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
@@ -74,7 +76,12 @@ export const DEMO_REPAIR_ROLES = {
   owner: {
     userId: 'u-andi',
     name: 'Andi Pratama',
-    permissions: [...Object.values(P), ...Object.values(I), ...Object.values(M)],
+    permissions: [
+      ...Object.values(P),
+      ...Object.values(I),
+      ...Object.values(M),
+      PURCHASING_PERMISSION.buy,
+    ],
   },
   counter: {
     userId: 'u-siti',
@@ -1762,8 +1769,21 @@ export function demoRepairRuntime(
       },
     ],
   });
+  // Orders to suppliers: a delivery received lands on the shelf above.
+  const purchasing = demoPurchasingRuntime({
+    now: HARNESS_NOW,
+    actor: () => actor,
+    inventory,
+    storeName: 'Bolusi Wamena',
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    notify,
+  });
   const runtime = {
     inventory,
+    purchasing,
     // The demo keeps no log; the apps wire their diagnostics channel.
     diagnostics: { warn: () => {} },
     get userId() {

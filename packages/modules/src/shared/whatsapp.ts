@@ -1,5 +1,6 @@
-// WhatsApp links: the counter messaging a customer (customer-message.ts), and a customer messaging
-// the store from their status page (customer-page.ts). On its own so the page loads only this.
+// WhatsApp links: the counter messaging a customer (repair customer-message.ts), a customer messaging
+// the store from their status page (customer-page.ts), and an order sent to a supplier (purchasing).
+// On its own so the status page loads only this.
 
 /**
  * The number as WhatsApp links want it: country code first, digits only (`6281234567890`). A number

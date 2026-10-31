@@ -51,6 +51,7 @@ export interface RepairRuntimeDeps {
   readonly media: RepairMediaSeams;
   readonly printing?: RepairRuntime['printing'];
   readonly inventory?: RepairRuntime['inventory'];
+  readonly purchasing?: RepairRuntime['purchasing'];
   /** QRIS through Xendit, as this user; absent on a device that cannot reach the server. */
   readonly qris?: QrisPort | undefined;
   /** `RepairRuntime.statusSite`; absent, no status links (tests). */
@@ -92,5 +93,6 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
     diagnostics: consoleDiagnostics,
     ...(deps.printing === undefined ? {} : { printing: deps.printing }),
     ...(deps.inventory === undefined ? {} : { inventory: deps.inventory }),
+    ...(deps.purchasing === undefined ? {} : { purchasing: deps.purchasing }),
   };
 }

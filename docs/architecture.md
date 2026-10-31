@@ -89,6 +89,10 @@ behind adapters. Node tests do not establish native performance or correctness.
   runs both before saving; the server runs both again against its own records and
   refuses what fails. The device then re-folds the record without the refused
   change and lists it under sync problems.
+- A stock movement that names another module's record is checked through a target
+  registry wired in `packages/modules/src/index.ts`, never by inventory reading that
+  module's tables: `PartUseTargets` for a part taken for a servisan,
+  `StockSourceTargets` for stock received from a purchase order.
 - A change stamped more than 10 minutes ahead of the server clock is refused, so
   a wrong clock cannot win last-writer-wins. A device whose last sync found its
   clock that far ahead saves nothing until the clock is fixed.

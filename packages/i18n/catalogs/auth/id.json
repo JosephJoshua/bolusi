@@ -427,6 +427,8 @@
       "stockCorrectHint": "Ubah part yang sudah terpakai",
       "stockManage": "Atur daftar part",
       "stockManageHint": "Tambah dan ubah part",
+      "stockBuy": "Belanja sparepart",
+      "stockBuyHint": "Pesan ke supplier dan terima barangnya",
       "notes": "Catatan",
       "notesHint": "Tulis dan arsipkan catatan toko",
       "syncProblems": "Masalah sinkron",

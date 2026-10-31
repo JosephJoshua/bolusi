@@ -26,6 +26,7 @@ import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { KasHome } from './src/screens/money/KasHome.js';
 import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
 import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
+import { PurchasingRoute } from './src/screens/purchasing/PurchasingRoute.js';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
@@ -111,6 +112,8 @@ import { MONEY_PERMISSION } from '@bolusi/modules/money';
 import { tm, type MoneyRuntime } from '@bolusi/modules/money/screens';
 import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
 import { ti } from '@bolusi/modules/inventory/screens';
+import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
+import { tp } from '@bolusi/modules/purchasing/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -1386,6 +1389,21 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            if (
+              shellZone.route === 'purchasing' &&
+              props.repair?.purchasing !== undefined &&
+              props.repair.inventory !== undefined
+            ) {
+              return (
+                <PurchasingRoute
+                  runtime={props.repair.purchasing}
+                  inventory={props.repair.inventory}
+                  syncChip={routeSyncChip}
+                  onClose={closeParts}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
             if (shellZone.route === 'deviceSetup') {
               return (
                 <DeviceSetupRoute
@@ -1670,6 +1688,17 @@ export default function App(props: AppProps): React.JSX.Element {
                 testID="shell-open-parts"
               />
             ) : null}
+            {props.repair?.purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true ? (
+              <ListRow
+                leading={<Icon name="buy" size={size.iconInline} color={color.text} />}
+                primaryText={tp('purchasing.list.title')}
+                onPress={() => {
+                  setAccountMenu(false);
+                  leaveHome(() => setRoute('purchasing'));
+                }}
+                testID="shell-open-purchasing"
+              />
+            ) : null}
             <ListRow
               leading={<Icon name="settings" size={size.iconInline} color={color.text} />}
               primaryText={t('core.settings.title')}
@@ -1773,6 +1802,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'printSettings',
   'printPaper',
   'parts',
+  'purchasing',
   'paymentMethods',
   'deviceSetup',
 ]);

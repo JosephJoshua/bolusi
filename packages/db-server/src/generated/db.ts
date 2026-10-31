@@ -391,6 +391,65 @@ export interface ProjectionWatermarks {
   tenantId: string;
 }
 
+export interface PurchasingOrderLines {
+  itemId: string;
+  itemName: string;
+  orderId: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+}
+
+export interface PurchasingOrders {
+  cancelledAt: Int8 | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  note: string | null;
+  orderedAt: Int8 | null;
+  orderedBy: string | null;
+  orderNumber: string;
+  status: string;
+  storeId: string;
+  supplierId: string;
+  tenantId: string;
+  updatedAt: Int8;
+}
+
+export interface PurchasingReceiptLines {
+  itemId: string;
+  orderId: string;
+  position: number;
+  qty: number;
+  receiptId: string;
+  tenantId: string;
+}
+
+export interface PurchasingReceipts {
+  at: Int8;
+  id: string;
+  note: string | null;
+  orderId: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+}
+
+export interface PurchasingSuppliers {
+  archived: number;
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  name: string;
+  note: string | null;
+  phone: string | null;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface PushTokens {
   deviceId: string;
   expoPushToken: string;
@@ -718,6 +777,11 @@ export interface DB {
   phoneModels: PhoneModels;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
+  purchasingOrderLines: PurchasingOrderLines;
+  purchasingOrders: PurchasingOrders;
+  purchasingReceiptLines: PurchasingReceiptLines;
+  purchasingReceipts: PurchasingReceipts;
+  purchasingSuppliers: PurchasingSuppliers;
   pushTokens: PushTokens;
   qrisCharges: QrisCharges;
   qrisConnections: QrisConnections;

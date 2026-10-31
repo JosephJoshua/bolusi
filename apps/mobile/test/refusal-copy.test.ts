@@ -30,6 +30,7 @@ test('the modules with rules are the ones expected (the denominator)', () => {
     'money',
     'notes',
     'platform',
+    'purchasing',
     'repair',
   ]);
 });

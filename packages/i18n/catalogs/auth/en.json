@@ -427,6 +427,8 @@
       "stockCorrectHint": "Change parts already used",
       "stockManage": "Manage parts",
       "stockManageHint": "Add and edit parts",
+      "stockBuy": "Buy parts",
+      "stockBuyHint": "Order from suppliers and receive the parts",
       "notes": "Notes",
       "notesHint": "Write and archive store notes",
       "syncProblems": "Sync problems",
