@@ -29,39 +29,12 @@ import { useSettledValue } from '../../screen-kit/index.js';
 import type { ScreenChrome } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { stockText } from '../labels.js';
-import { ti, type InventoryKey } from '../i18n.js';
-import { NO_CATEGORY, type CategoryRow, type ItemRow, type PartFilter } from '../queries.js';
+import { ti } from '../i18n.js';
+import { EMPTY_VIEW_KEY, filterCount, listInput, type ListFilter } from '../list-filter.js';
+import { NO_CATEGORY, type CategoryRow, type ItemRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 
 const PAGE = 50;
-
-/** What the list is narrowed to. The surface keeps it, so it outlives a trip into an item. */
-export interface ListFilter {
-  readonly stock: PartFilter;
-  /** A category's id, `NO_CATEGORY`, or null for all. */
-  readonly categoryId: string | null;
-  readonly tags: readonly string[];
-  /** By field id of the chosen category. */
-  readonly values: Readonly<Record<string, readonly string[]>>;
-}
-
-export const NO_FILTER: ListFilter = { stock: 'active', categoryId: null, tags: [], values: {} };
-
-/** How many filters are in force beyond the category, which shows in its own chips. */
-export function filterCount(filter: ListFilter): number {
-  return (
-    (filter.stock === 'active' ? 0 : 1) +
-    filter.tags.length +
-    Object.values(filter.values).reduce((sum, values) => sum + values.length, 0)
-  );
-}
-
-const EMPTY_KEY: Readonly<Record<PartFilter, InventoryKey>> = {
-  active: 'inventory.list.emptyHint',
-  belowZero: 'inventory.list.noBelowZero',
-  outOfStock: 'inventory.list.noOutOfStock',
-  archived: 'inventory.list.noArchived',
-};
 
 export interface PartListProps {
   readonly chrome: ScreenChrome;
@@ -116,17 +89,10 @@ export function PartList({
       let next: string | null = '0';
       for (let n = 0; n < pages && next !== null; n += 1) {
         const page: { readonly rows: readonly ItemRow[]; readonly nextCursor: string | null } =
-          await rt.query('listItems', {
-            text: searchText,
-            filter: filter.stock,
-            categoryId: filter.categoryId,
-            tags: [...filter.tags],
-            values: Object.fromEntries(
-              Object.entries(filter.values).map(([id, values]) => [id, [...values]]),
-            ),
-            limit: PAGE,
-            offset: Number(next),
-          });
+          await rt.query(
+            'listItems',
+            listInput(filter, searchText, { limit: PAGE, offset: Number(next) }),
+          );
         rows = [...rows, ...page.rows];
         next = page.nextCursor;
       }
@@ -170,9 +136,9 @@ export function PartList({
             empty: searching
               ? { title: ti('inventory.list.noMatches') }
               : !narrowed
-                ? { title: t('core.status.empty'), hint: ti(EMPTY_KEY.active) }
+                ? { title: t('core.status.empty'), hint: ti(EMPTY_VIEW_KEY.active) }
                 : onlyStock
-                  ? { title: ti(EMPTY_KEY[filter.stock]) }
+                  ? { title: ti(EMPTY_VIEW_KEY[filter.stock]) }
                   : { title: ti('inventory.list.noFilterMatches') },
           };
         }

@@ -44,6 +44,7 @@ import { refundsFor } from './commands.js';
 import { amountOwed } from './flows.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { REPAIR_REFUSALS, claimProblem, freeHandoverNeedsOwner } from './rules.js';
+import { statusCodeFor } from './status-link.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -360,6 +361,13 @@ function ticket(spec: {
     claimOfTicketId: null,
     claimOf: null,
     claims: [],
+    // A fixed code per demo servisan, so a preview's QR and link stay the same between reloads. The
+    // demo has no crypto port, and its codes only need to differ, so the "hash" is the input's tail.
+    statusCode: statusCodeFor(
+      { tenantId: 'demo', storeId: 'demo', ticketId: spec.id },
+      '',
+      (data) => data.subarray(-8),
+    ),
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',

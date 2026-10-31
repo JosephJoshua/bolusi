@@ -11,6 +11,14 @@ import type { SignedOperation } from '@bolusi/schemas';
 
 import type { PartUseKind } from './constants.js';
 
+/** What the parts are for, as the stock rules record it. */
+export interface PartUse {
+  readonly kind: PartUseKind;
+  readonly id: string;
+  /** How it reads in stock history: the servisan number. */
+  readonly label: string;
+}
+
 export interface PartUseCheck {
   readonly op: SignedOperation;
   readonly useId: string;

@@ -1,8 +1,16 @@
 // The counter app's frame once someone is signed in: the title bar (store, update, sync, who is
-// here), the sidebar's sections, and the servisan board, the intake page, Kas or Settings beside
-// them. The same frame runs over the offline core and over the seeded demo; what differs (who is
+// here), the sidebar's sections, and the servisan board, the intake page, parts, Kas or Settings
+// beside them. The same frame runs over the offline core and over the seeded demo; what differs (who is
 // here, the person menu, the sync status) comes in as props.
 import { t } from '@bolusi/i18n';
+import {
+  INVENTORY_PERMISSION,
+  InventoryRuntimeProvider,
+  NO_FILTER,
+  PartsPage,
+  ti,
+  type ListFilter,
+} from '@bolusi/modules/inventory/desktop';
 import { KasPage, MONEY_PERMISSION, MoneyRuntimeProvider, tm } from '@bolusi/modules/money/desktop';
 import {
   IntakePage,
@@ -14,7 +22,7 @@ import {
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
 import { AppShell, Avatar, Menu, Sidebar, SidebarToggle, type MenuItem } from '@bolusi/ui-web';
-import { Banknote, ChevronDown, Settings, Wrench } from 'lucide-react';
+import { Banknote, ChevronDown, Package, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { SettingsAccess } from './settings/access.js';
@@ -28,6 +36,7 @@ type Page =
   | { readonly kind: 'board' }
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
+  | { readonly kind: 'parts' }
   | { readonly kind: 'kas' }
   | { readonly kind: 'settings'; readonly section?: 'computer' | StoreBasicSetting }
   // The first-run setup of this PC (setup/DeviceSetupPage.tsx).
@@ -127,6 +136,10 @@ export function Counter({
   // The ledger as Kas and the payment settings read it: repair's money port, live on its feed.
   const repair = useRepairRuntime();
   const money = useMemo(() => moneyRuntimeOf(repair, nameOf), [repair, nameOf]);
+  // Parts, for whoever may read the list; their filter is still there when they come back.
+  const inventory = repair.inventory;
+  const showsParts = inventory?.hasPermission(INVENTORY_PERMISSION.read) === true;
+  const [partsFilter, setPartsFilter] = useState<ListFilter>(NO_FILTER);
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
   const showsKas =
     money.hasPermission(MONEY_PERMISSION.read) || money.hasPermission(MONEY_PERMISSION.countCash);
@@ -217,9 +230,21 @@ export function Counter({
               active:
                 page.kind === 'board' ||
                 page.kind === 'intake' ||
-                (page.kind === 'kas' && !showsKas),
+                (page.kind === 'kas' && !showsKas) ||
+                (page.kind === 'parts' && !showsParts),
               onSelect: () => go({ kind: 'board' }),
             },
+            ...(showsParts
+              ? [
+                  {
+                    key: 'parts',
+                    label: ti('inventory.list.title'),
+                    icon: Package,
+                    active: page.kind === 'parts',
+                    onSelect: () => go({ kind: 'parts' }),
+                  },
+                ]
+              : []),
             ...(showsKas
               ? [
                   {
@@ -260,6 +285,10 @@ export function Counter({
           onOpenSetup={() => setPage({ kind: 'setup' })}
           onRegisterLeaveGuard={registerLeaveGuard}
         />
+      ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
+        <InventoryRuntimeProvider runtime={inventory}>
+          <PartsPage filter={partsFilter} onFilterChange={setPartsFilter} />
+        </InventoryRuntimeProvider>
       ) : page.kind === 'kas' && showsKas ? (
         <KasPage now={Date.now} />
       ) : page.kind === 'intake' ? (

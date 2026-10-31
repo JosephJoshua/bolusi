@@ -55,6 +55,8 @@ describe('the brand is object identity, not symbol obscurity', () => {
       deviceId: fixture.deviceId,
       op: (draft: unknown) => draft,
       newId: () => fixture.newId(),
+      randomBytes: (length: number) => new Uint8Array(length),
+      sha256: (data: Uint8Array) => data,
       requirePermission: () => Promise.resolve(),
       query: () => Promise.resolve(undefined),
       [CTX_RUNTIME_BRAND]: {

@@ -56,6 +56,7 @@ export const REPAIR_OP = {
   downPaymentReceived: 'repair.down_payment_received',
   downPaymentCorrected: 'repair.down_payment_corrected',
   slipPrinted: 'repair.slip_printed',
+  statusLinkMade: 'repair.status_link_made',
   storePrintSettingsChanged: 'repair.store_print_settings_changed',
   storeUncollectedDaysChanged: 'repair.store_uncollected_days_changed',
 } as const;

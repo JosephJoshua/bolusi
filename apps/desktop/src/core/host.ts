@@ -67,7 +67,7 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import { approvalsModule, moneyModule } from '@bolusi/modules';
+import { approvalsModule, inventoryModule, moneyModule } from '@bolusi/modules';
 import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
@@ -98,6 +98,7 @@ import { nodeRealtimeSocket } from './websocket.js';
 
 /** The repair runtime the core builds for whoever is signed in. */
 type RepairRuntime = ReturnType<typeof createSessionRepairRuntime>;
+type InventoryRuntime = NonNullable<RepairRuntime['inventory']>;
 
 import { nodeColumnAead, nodeCryptoPort } from './crypto.js';
 import { createDesktopMediaFiles, createDesktopPhonePhotoFiles } from './media-files.js';
@@ -406,6 +407,12 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const port = repairFor(userId).money.qris;
     if (port === undefined) throw new QrisError('unavailable');
     return port;
+  }
+
+  function inventoryFor(userId: string): InventoryRuntime {
+    const inventory = repairFor(userId).inventory;
+    if (inventory === undefined) throw new Error('stock is not running on this PC');
+    return inventory;
   }
 
   /** Who a photo or signature from the window is stamped with: the person signed in now. */
@@ -859,6 +866,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       untyped(repairFor(userId).approvals.query)(knownName(approvalsModule.queries, name), input),
     'approvals.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).approvals.run)(knownName(approvalsModule.commands, name), input),
+    // The parts list and each servisan's parts, for the same person.
+    'inventory.query': (userId: string, name: string, input: unknown) =>
+      untyped(inventoryFor(userId).query)(knownName(inventoryModule.queries, name), input),
+    'inventory.run': (userId: string, name: string, input: unknown) =>
+      untyped(inventoryFor(userId).run)(knownName(inventoryModule.commands, name), input),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),
