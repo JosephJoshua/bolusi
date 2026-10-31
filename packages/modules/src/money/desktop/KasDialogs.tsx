@@ -16,6 +16,8 @@ import {
   type CashMoveKind,
 } from '../constants.js';
 import { tm } from '../i18n.js';
+import { useVoidAsk, voidRequest } from '../void-ask.js';
+import { ta } from '../../approvals/i18n.js';
 import {
   CASH_MOVE_LABEL,
   accountLabel,
@@ -644,35 +646,43 @@ export function ReduceChargeDialog({
   );
 }
 
-// ── an owner cancels a payment ─────────────────────────────────────────────────────────────────
+// ── an owner cancels a payment (the counter asks one to) ───────────────────────────────────────
 
-/** A payment recorded by mistake is cancelled with a reason; the customer's balance goes back up. */
+/**
+ * A payment recorded by mistake is cancelled with a reason; the customer's balance goes back up.
+ * Someone who may not cancel it (or not this much) asks an owner instead.
+ */
 export function VoidPaymentDialog({
   entry,
   accounts,
   onDone,
+  onAsked,
   onClose,
 }: TaskProps & {
   readonly entry: MoneyEntryRow;
   readonly accounts: readonly PaymentAccountRow[];
+  readonly onAsked: () => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const [reason, setReason] = useState('');
   const kind = voidKind(entry);
-  // A limited role (a manager) sees what it may cancel of a payment before the server refuses it.
-  const limit =
-    kind.command === 'voidPayment' ? runtime.limitOf(MONEY_PERMISSION.voidPayment) : null;
-  // A void counts in full against that limit (with any earlier ones on the same servisan).
-  const beyond = limit !== null && entry.amount > limit;
+  // A limited role (a manager) sees its limit up front; beyond it, or without the decision, an
+  // owner is asked instead.
+  const ask = useVoidAsk(entry);
+  const blocked = ask.asking && !ask.mayAsk;
   const testId = 'money.desk.void';
 
   const submit = (): void => {
-    if (reason.trim() === '' || beyond) return;
+    if (reason.trim() === '' || blocked) return;
     void runner
-      .run(() => runtime.run(kind.command, { entryId: entry.id, reason }))
+      .run<unknown>(() =>
+        ask.asking
+          ? runtime.approvals.run('requestApproval', voidRequest(entry, reason))
+          : runtime.run(kind.command, { entryId: entry.id, reason }),
+      )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result !== undefined) (ask.asking ? onAsked : onDone)();
       });
   };
 
@@ -682,11 +692,11 @@ export function VoidPaymentDialog({
       runner={runner}
       dirty={reason.trim() !== ''}
       onClose={onClose}
-      submitLabel={tm(kind.save)}
+      submitLabel={ask.asking ? ta('approvals.action.ask') : tm(kind.save)}
       onSubmit={submit}
-      submitDisabled={reason.trim() === '' || beyond}
-      hint={beyond ? tm('money.refusal.overLimit') : null}
-      destructive
+      submitDisabled={reason.trim() === '' || blocked}
+      hint={blocked ? tm('money.refusal.overLimit') : null}
+      destructive={!ask.asking}
       testId={testId}
     >
       <div className="flex flex-col gap-1 rounded-sm bg-surface-alt p-3">
@@ -704,11 +714,21 @@ export function VoidPaymentDialog({
         </span>
       </div>
       <p className="text-body text-text">{tm(kind.explain)}</p>
-      {limit === null ? null : (
+      {ask.limit === null ? null : (
         <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
-          {tm('money.void.limit', { amount: formatMoney(limit) })}
+          {tm('money.void.limit', { amount: formatMoney(ask.limit) })}
         </p>
       )}
+      {ask.withEarlier === null ? null : (
+        <p className="text-small text-text-muted" data-testid={`${testId}.withEarlier`}>
+          {tm('money.void.withEarlier', { amount: formatMoney(ask.withEarlier) })}
+        </p>
+      )}
+      {ask.asking && ask.mayAsk ? (
+        <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
+          {tm(ask.because)}
+        </p>
+      ) : null}
       <ReasonField
         label={tm('money.void.reason')}
         value={reason}

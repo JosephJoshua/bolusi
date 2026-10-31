@@ -1719,6 +1719,24 @@ export function demoRepairRuntime(
         targetId: (input) => String(input['ticketId']),
         apply: (input) => commands['correctDownPayment']!(input),
       },
+      // A payment cancelled from Kas, asked about its servisan.
+      'money.voidPayment': {
+        permission: MONEY_PERMISSION.voidPayment,
+        commandPermission: MONEY_PERMISSION.voidPayment,
+        amount: (input) =>
+          ledger
+            .documentMoney(String((input['document'] as { id: string }).id))
+            ?.entries.find((e) => e.id === input['entryId'])?.amount ?? 0,
+        targetId: (input) => String((input['document'] as { id: string }).id),
+        apply: async (input) => {
+          const result = await ledger.run('voidPayment', {
+            entryId: input['entryId'],
+            reason: input['reason'],
+          });
+          syncTicketMoney(String((input['document'] as { id: string }).id));
+          return result;
+        },
+      },
     },
     actor: () => ({ userId: actor.userId, name: actor.name, can: (id) => permitted.has(id) }),
     now: () => HARNESS_NOW,

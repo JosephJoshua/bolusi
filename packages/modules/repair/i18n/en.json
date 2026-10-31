@@ -898,7 +898,8 @@
     "payLaterDebt": "Left to pay later",
     "payLaterAfter": "Once approved, the counter can hand the phone over unpaid.",
     "downPaymentNew": "Correct down payment",
-    "downPaymentTakenOff": "Takes {amount} in total off the money taken in on this repair."
+    "downPaymentTakenOff": "Takes {amount} in total off the money taken in on this repair.",
+    "voidPayment": "Payment to cancel"
   },
   "basics": {
     "title": "Finish the store details",

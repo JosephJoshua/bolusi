@@ -272,7 +272,11 @@ describe('history', () => {
 
   test('a void limit of 0 cancels no payment, the same as not holding it', () => {
     const holds = (id: string) => id === MONEY_PERMISSION.voidPayment;
-    expect(voidAbilities(holds, () => 100_000)).toEqual({ payments: true, cashMoves: false });
+    expect(voidAbilities(holds, () => 100_000)).toEqual({
+      payments: true,
+      askPayments: false,
+      cashMoves: false,
+    });
     expect(voidAbilities(holds, () => 0).payments).toBe(false);
     expect(voidAbilities(holds).payments).toBe(true);
     expect(voidKind(entry({})).command).toBe('voidPayment');

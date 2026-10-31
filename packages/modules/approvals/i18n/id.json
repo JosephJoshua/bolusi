@@ -23,7 +23,8 @@
     "repairDiscount": "Diskon",
     "repairCancel": "Batalkan servisan",
     "repairPayLater": "Bayar nanti",
-    "repairDownPayment": "Ubah DP"
+    "repairDownPayment": "Ubah DP",
+    "moneyVoidPayment": "Batalkan pembayaran"
   },
   "status": {
     "waiting": "Menunggu",
