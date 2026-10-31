@@ -216,6 +216,8 @@ describe('authorization contract: permission + entityType (server-enforced on pu
   test.each([
     ['a missing permission', { permission: undefined }, 'permission'],
     ['an empty permission', { permission: '' }, 'permission'],
+    ['a missing read permission', { read: undefined }, 'read permission'],
+    ['an empty read permission', { read: '' }, 'read permission'],
     ['a missing entityType', { entityType: undefined }, 'entityType'],
     ['an empty entityType', { entityType: '' }, 'entityType'],
   ])('rejects %s', (_label, override, field) => {
@@ -237,6 +239,24 @@ describe('authorization contract: permission + entityType (server-enforced on pu
       `${id}.widget_created`,
     );
     expect(error.message).toContain(field);
+  });
+
+  test('accepts read null for a type every device of its scope needs', () => {
+    const seed = 115;
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+
+    expect(() =>
+      defineModule<FixtureSuiteDatabase, typeof manifest>({
+        ...manifest,
+        operations: {
+          [`${id}.widget_created`]: {
+            ...manifest.operations[`${id}.widget_created`]!,
+            read: null,
+          },
+        },
+      }),
+    ).not.toThrow();
   });
 
   test('accepts permission null for a type only the runtime writes', () => {
@@ -549,6 +569,7 @@ describe('payloadSchemaFor — (type, schemaVersion) → the schema that validat
     apply: () => Promise.resolve(),
     rule: null,
     permission: null,
+    read: null,
     entityType: 'widget',
   };
 

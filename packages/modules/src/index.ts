@@ -38,6 +38,7 @@ import { authModule, platformModule, type AnyModuleDefinition } from '@bolusi/co
 
 import { createApprovalsModule, type ApprovalsModule } from './approvals/manifest.js';
 import { defineInventoryModule, type InventoryModule } from './inventory/index.js';
+import { createMoneyApprovalKinds } from './money/approval-kinds.js';
 import { createMoneyModule } from './money/manifest.js';
 import { notesModule } from './notes/manifest.js';
 import { repairApprovalKinds } from './repair/approval-kinds.js';
@@ -57,13 +58,17 @@ export const inventoryModule: InventoryModule = defineInventoryModule({
  * The money ledger, checking each charge against the module that issued the document. A module that
  * charges customers adds its document source here.
  */
-export const moneyModule = createMoneyModule({ [REPAIR_DOCUMENT_KIND]: repairMoneyDocument });
+const moneyDocumentSources = { [REPAIR_DOCUMENT_KIND]: repairMoneyDocument };
+export const moneyModule = createMoneyModule(moneyDocumentSources);
 
 /**
  * Approval requests, for the decisions each module lets an owner hand out. A module with such
  * decisions adds its kinds here.
  */
-export const approvalsModule: ApprovalsModule = createApprovalsModule({ ...repairApprovalKinds });
+export const approvalsModule: ApprovalsModule = createApprovalsModule({
+  ...repairApprovalKinds,
+  ...createMoneyApprovalKinds(moneyDocumentSources),
+});
 
 /**
  * The modules every Bolusi build registers — the ONE list `SERVER_MODULES` and `CLIENT_MODULES`

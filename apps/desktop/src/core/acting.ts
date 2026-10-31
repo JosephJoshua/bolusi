@@ -4,15 +4,31 @@
 import { DomainError, StaffAdminError } from '@bolusi/core';
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 
+function isActing(session: AppSessionController | null, userId: string): boolean {
+  const snapshot = session?.snapshot();
+  return snapshot !== undefined && snapshot.session?.userId === userId && !snapshot.locked;
+}
+
 export function actingSession(
   session: AppSessionController | null,
   userId: string,
 ): AppSessionController {
-  const snapshot = session?.snapshot();
-  if (session === null || snapshot?.session?.userId !== userId || snapshot.locked) {
-    throw new DomainError('NOT_AUTHENTICATED');
-  }
+  if (session === null || !isActing(session, userId)) throw new DomainError('NOT_AUTHENTICATED');
   return session;
+}
+
+/**
+ * Read something for `userId` and keep it only if they are still the one acting when the read
+ * lands. A switch or a lock can happen while it runs: a result read for the person who just left
+ * must never be installed for the screens of the person who came in.
+ */
+export async function readForActing<T>(
+  current: () => AppSessionController | null,
+  userId: string,
+  read: (userId: string) => Promise<T | null>,
+): Promise<T | null> {
+  const value = await read(userId);
+  return value !== null && isActing(current(), userId) ? value : null;
 }
 
 /** The same, for "Karyawan": only someone who may add staff here; the server decides each change. */

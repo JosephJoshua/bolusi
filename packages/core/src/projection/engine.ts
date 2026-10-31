@@ -23,7 +23,7 @@
 // ops are applied ONE AT A TIME (exactly the append seam's shape). Idempotent replay is the
 // insert layer's job (05 §5: a duplicate `id` is not inserted, so apply is never called for it)
 // — the engine's re-fold is inherently idempotent, and this contract keeps head-apply so too.
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 
 import type { ProjectionApply } from '../oplog/append.js';
 import type { ModuleProjectionManifest, ProjectionOperation } from './manifest.js';
@@ -45,6 +45,7 @@ import {
 } from './rebuild.js';
 import { InvalidationBus } from './invalidation.js';
 import { ProjectionStats } from './stats.js';
+import { int8ToNumber, type Int8Value } from './int8.js';
 import { createSqlWatermarkStore, type WatermarkState, type WatermarkStore } from './watermarks.js';
 
 /** How an op was incorporated (§4.2), for tests + observability. */
@@ -213,7 +214,9 @@ export class ProjectionEngine<DB> {
    * change that alters the record's history without being a new op: a refusal, or a re-enrolled
    * phone's unsynced changes moving to its new device.
    */
-  async refoldEntityOf(op: ProjectionOperation): Promise<void> {
+  async refoldEntityOf(
+    op: Pick<ProjectionOperation, 'type' | 'entityType' | 'entityId'>,
+  ): Promise<void> {
     const module = this.registry.moduleForType(op.type);
     if (module === undefined) return;
     await refoldEntities(this.db, this.registry, module, op.entityType, [op.entityId], this.fold);
@@ -222,6 +225,34 @@ export class ProjectionEngine<DB> {
       this.registry.tablesForEntityType(module, op.entityType).map((ref) => ref.table),
     );
     this.invalidation.emit(written, { entityType: op.entityType, entityId: op.entityId });
+  }
+
+  /**
+   * After pulled ops were taken back out of the log (a device that may no longer read them), move
+   * every module's pulled watermark past the numbers they held. Every op in the log is already
+   * applied, so that is the truth, and it keeps the holes the removal left from pinning a lagging
+   * module's watermark below them forever. Client only; runs inside the caller's transaction.
+   */
+  async catchUpPulledWatermarks(): Promise<void> {
+    // Every module moves to the same point: the newest arrival still present, or a watermark that
+    // already passed the removed ones. The next arrival is numbered after it (the client pull's
+    // `nextArrivalSeq`), so no module waits on a number that will never come.
+    const result = await sql<{ maxSeq: Int8Value | null }>`
+      SELECT MAX(seq) AS "maxSeq" FROM (
+        SELECT MAX(${sql.ref(this.seqColumn)}) AS seq FROM operations
+        UNION ALL
+        SELECT MAX(applied_server_seq) AS seq FROM projection_watermarks
+      )
+    `.execute(this.db);
+    const raw = result.rows[0]?.maxSeq ?? null;
+    if (raw === null) return;
+    const newest = int8ToNumber(raw, this.seqColumn);
+    for (const module of this.registry.modules()) {
+      const current = await this.watermarks.read(module.id);
+      if (newest > current.appliedServerSeq) {
+        await this.watermarks.advanceServerSeq(module.id, newest);
+      }
+    }
   }
 
   /** Apply one op via its module's registered applier (guards a foreign type defensively). */

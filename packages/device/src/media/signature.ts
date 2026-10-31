@@ -31,6 +31,8 @@ const SIGNATURE_EXTENSION = 'png';
 
 export interface SignatureCaptureDeps<DB> {
   readonly db: Kysely<DB>;
+  /** The connection's transaction queue (db-client `ClientDb.transaction`), for the row. */
+  readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
   readonly identity: CaptureIdentity;
   readonly files: MediaFilePort;
   /** `writeCaptureToCache` (files.ts) — synchronous by contract; see its header. */

@@ -459,6 +459,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: customerRegisteredApplier,
     rule: customerRegisteredRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_CUSTOMER_ENTITY,
   },
   [REPAIR_OP.customerDetailsCorrected]: {
@@ -468,6 +469,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: customerDetailsCorrectedApplier,
     rule: customerDetailsCorrectedRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_CUSTOMER_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
@@ -486,6 +488,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: ticketOpenedApplier,
     rule: ticketOpenedRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketClaimed]: {
@@ -495,6 +498,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: ticketClaimedApplier,
     rule: ticketClaimedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
@@ -505,6 +509,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: technicianAssignedApplier,
     rule: technicianAssignedRule,
     permission: REPAIR_PERMISSION.assign,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
@@ -515,6 +520,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: workPhotosAddedApplier,
     rule: workPhotosAddedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.workStarted]: {
@@ -524,6 +530,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: workStartedApplier,
     rule: workStartedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -534,6 +541,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: workPausedApplier,
     rule: workPausedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -544,6 +552,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: markedRepairedApplier,
     rule: markedRepairedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -557,6 +566,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: ticketCancelledApplier,
     rule: ticketCancelledRule,
     permission: REPAIR_PERMISSION.cancel,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -567,6 +577,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: quoteChangeProposedApplier,
     rule: quoteChangeProposedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteChanged]: {
@@ -579,6 +590,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: quoteChangedApplier,
     rule: quoteChangedRule,
     permission: REPAIR_PERMISSION.quoteChange,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteProposalDeclined]: {
@@ -588,6 +600,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: quoteProposalDeclinedApplier,
     rule: quoteProposalDeclinedRule,
     permission: REPAIR_PERMISSION.quoteChange,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketRepairTypesChanged]: {
@@ -598,6 +611,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     rule: ticketRepairTypesChangedRule,
     // The counter and the technician both set it; the rule checks for either.
     permission: REPAIR_PERMISSION.read,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.repairTypes, severity: 'minor' },
   },
@@ -613,6 +627,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: deviceReturnedApplier,
     rule: deviceReturnedRule,
     permission: REPAIR_PERMISSION.handover,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
   },
@@ -624,6 +639,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     rule: handoverReversedRule,
     // Undoing a handover is an owner's decision, like cancelling: the same switch in the role editor.
     permission: REPAIR_PERMISSION.cancel,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
   },
@@ -634,6 +650,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: ticketDetailsCorrectedApplier,
     rule: ticketDetailsCorrectedRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.details, severity: 'minor' },
   },
@@ -645,6 +662,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: intakeOptionsChangedApplier,
     rule: intakeOptionsChangedRule,
     permission: REPAIR_PERMISSION.manageIntakeOptions,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_INTAKE_OPTIONS_ENTITY,
     // One list for the whole franchise, on every device, whichever store edited it. No conflict
     // key: the entity holds all five lists, so saving two different lists would read as a clash,
@@ -662,6 +680,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeIntakeOptionsChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.hideIntakeOptions,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   },
   [REPAIR_OP.storeCancelFeesChanged]: {
@@ -671,6 +690,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeCancelFeesChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.setCancelFees,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
   },
   [REPAIR_OP.downPaymentReceived]: {
@@ -680,6 +700,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: downPaymentChangedApplier,
     rule: downPaymentReceivedRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.downPayment, severity: 'significant' },
   },
@@ -690,6 +711,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: downPaymentChangedApplier,
     rule: downPaymentCorrectedRule,
     permission: REPAIR_PERMISSION.correctDownPayment,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.downPayment, severity: 'significant' },
   },
@@ -700,6 +722,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: slipPrintedApplier,
     rule: slipPrintedRule,
     permission: REPAIR_PERMISSION.read,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.statusLinkMade]: {
@@ -709,6 +732,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: statusLinkMadeApplier,
     rule: statusLinkMadeRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.storePrintSettingsChanged]: {
@@ -718,6 +742,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storePrintSettingsChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.setPrintSettings,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   },
   [REPAIR_OP.storeUncollectedDaysChanged]: {
@@ -727,6 +752,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeUncollectedDaysChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.setUncollectedDays,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_UNCOLLECTED_ENTITY,
   },
 };

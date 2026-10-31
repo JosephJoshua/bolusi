@@ -47,7 +47,8 @@ function forTenantOn(handle: Kysely<DB>): ForTenant {
 }
 
 function productionDeps(): OplogPipelineDeps {
-  const deps = resolveDeps({ forTenant: appForTenant, now: () => 1_726_100_000_000 });
+  // A few hours after the journey: a handover undo is held to the day by when the server got it.
+  const deps = resolveDeps({ forTenant: appForTenant, now: () => 1_726_010_000_000 });
   return {
     forTenant: deps.forTenant,
     crypto: deps.serverCrypto,
@@ -202,10 +203,12 @@ function journey(world: ChainWorld): OpSpec[] {
       peripherals: [{ item: 'charger', label: null }],
       estimatedReadyAt: 1_726_200_000_000,
       quoteLines: [{ lineId, kind: 'part', description: 'LCD', amount: 650_000 }],
-      photos: [
-        { slot: 'front', label: null, ref: photo(1) },
-        { slot: 'back', label: null, ref: photo(2) },
-      ],
+      // Every angle the store asks for (the six defaults): the server checks them too.
+      photos: ['front', 'back', 'left', 'right', 'top', 'bottom'].map((slot, i) => ({
+        slot,
+        label: null,
+        ref: photo(i === 0 ? 1 : i === 1 ? 2 : 20 + i),
+      })),
     },
   });
   /** Discount requests on the open second servisan: one line (650.000) until the third applies. */
@@ -340,6 +343,7 @@ function journey(world: ChainWorld): OpSpec[] {
         list: 'repairTypes',
         items: [
           { id: 'screen', label: null, warrantyDays: 30, needsVideo: false },
+          { id: 'battery', label: null, warrantyDays: 30, needsVideo: false },
           { id: 'buka-icloud', label: 'Buka iCloud', warrantyDays: 0, needsVideo: true },
         ],
       },

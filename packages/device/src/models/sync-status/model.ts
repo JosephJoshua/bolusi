@@ -400,6 +400,16 @@ export function manualSync(input: SyncStatusInput): ManualSync {
   return { kind: 'ready' };
 }
 
+/**
+ * The last "Kirim sekarang" failure to show, or null: hidden while a new attempt runs, so the line
+ * never says the connection failed beside "Sedang mengirim".
+ */
+export function manualSyncErrorShown(input: SyncStatusInput): string | null {
+  const sending =
+    input.manualSyncBusy || input.loopState === 'pushing' || input.loopState === 'pulling';
+  return sending ? null : input.manualSyncError;
+}
+
 /** §8.4 item 4: the rejected section renders only when non-empty. */
 export function showsRejectedSection(input: SyncStatusInput): boolean {
   return input.rejected.length > 0;

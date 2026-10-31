@@ -51,10 +51,25 @@ export type PushResponse = z.infer<typeof zPushResponse>;
  * `devicesDirectoryVersion` 0 = no directory held. `limit` defaults to the
  * endpoint default when absent (api/00 §10).
  */
+/** Bounds for read sets on the wire: far above the read permissions any build declares. */
+export const MAX_READ_SET = 256;
+const MAX_READ_PERMISSION_LENGTH = 128;
+
 export const zPullRequest = z.strictObject({
   cursor: z.number().int().min(0),
   limit: z.number().int().min(1).max(MAX_PULL_LIMIT).default(MAX_PULL_LIMIT),
   devicesDirectoryVersion: z.number().int().min(0),
+  /**
+   * A catch-up pull (permission-scoped sync): only the ops read with these permissions, from
+   * `cursor` up to `through`. A device asks for it when its read set grew, for the older ops it was
+   * not sent before. The server still limits it to the device's current read set.
+   */
+  backfill: z
+    .strictObject({
+      reads: z.array(z.string().min(1).max(MAX_READ_PERMISSION_LENGTH)).min(1).max(MAX_READ_SET),
+      through: z.number().int().min(0),
+    })
+    .optional(),
 });
 export type PullRequest = z.infer<typeof zPullRequest>;
 
@@ -95,5 +110,11 @@ export const zPullResponse = z.object({
   serverTime: zMsEpoch,
   devices: z.array(zDeviceInfo).optional(),
   devicesDirectoryVersion: z.number().int().min(0).optional(),
+  /**
+   * The read permissions this page was filtered by, sorted (permission-scoped sync). The device
+   * compares it with the set it holds: it drops ops it may no longer read and catches up on ops it
+   * newly may. Absent from a server that does not scope pulls.
+   */
+  readSet: z.array(z.string().min(1).max(MAX_READ_PERMISSION_LENGTH)).max(MAX_READ_SET).optional(),
 });
 export type PullResponse = z.infer<typeof zPullResponse>;

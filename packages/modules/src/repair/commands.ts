@@ -64,7 +64,7 @@ import {
   type PrintSettings,
   type TicketDetailRow,
 } from './queries.js';
-import { CASH_ACCOUNT } from '../money/constants.js';
+import { CASH_ACCOUNT, HANDOVER_REFUND_REASON } from '../money/constants.js';
 import {
   chargeOp,
   paymentOp,
@@ -75,6 +75,7 @@ import {
 } from '../money/commands.js';
 import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
+import { refundSplit } from '../money/rules.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { STATUS_NONCE_BYTES, statusCodeFor, statusNonceFrom } from './status-link.js';
@@ -792,8 +793,6 @@ export const returnDeviceInput = z
       .nullable()
       .default(null)
       .transform((reason) => (reason === null || reason === '' ? null : reason)),
-    /** Shown in the history next to money handed back (a cancelled servisan's DP less its fee). */
-    refundReason: zText(200).default(''),
     /** What the counter went through with the customer (`handoverChecklist`), ticked or not. */
     checklist: z
       .array(zHandoverCheck)
@@ -804,38 +803,26 @@ export const returnDeviceInput = z
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
 /**
- * Money handed back at the counter, through the accounts the customer paid with: the drawer
- * first, then each account in the order it was paid. Never more than went in through each one.
+ * Money handed back at the counter, through the accounts that overpaid as the money rule reads
+ * them (`refundSplit`), as the handover screens show it (`TicketDetailRow.refunds`). The bill is
+ * what the servisan is charged once this handover's charge is recorded; `extra` are the payments
+ * taken now.
  */
 export function refundsFor(
   money: DocumentMoney,
   credit: number,
+  bill: number,
   extra: readonly { account: string; amount: number }[] = [],
 ): { account: string; amount: number }[] {
-  const paidIn = new Map<string, number>();
-  const add = (account: string, amount: number) =>
-    paidIn.set(account, (paidIn.get(account) ?? 0) + amount);
-  paidIn.set(CASH_ACCOUNT, 0);
-  for (const entry of money.entries) {
-    if (entry.account === null) continue;
-    if (entry.kind === 'payment_received' && entry.voidedAt === null)
-      add(entry.account, entry.amount);
-    if (entry.kind === 'refund_paid') add(entry.account, -entry.amount);
-  }
-  for (const payment of extra) add(payment.account, payment.amount);
-  const refunds: { account: string; amount: number }[] = [];
-  let left = credit;
-  for (const [account, paid] of paidIn) {
-    if (left <= 0) break;
-    const amount = Math.min(left, paid);
-    if (amount <= 0) continue;
-    refunds.push({ account, amount });
-    left -= amount;
-  }
-  return refunds;
+  return refundSplit(
+    [
+      ...money.entries,
+      ...extra.map((payment) => ({ ...payment, kind: 'payment_received', voidedBy: null })),
+    ],
+    credit,
+    bill,
+  );
 }
-
-const HANDOVER_REFUND_REASON = 'Returned at handover';
 
 /**
  * Hand the device back, with a photo and the customer's signature (when: `deviceReturnedRule`).
@@ -865,9 +852,11 @@ export async function returnDeviceHandler(
     const paidNow = input.payments.reduce((sum, payment) => sum + payment.amount, 0);
     balance = money.balance + toCharge - paidNow;
     if (balance < 0) {
-      const reason = input.refundReason === '' ? HANDOVER_REFUND_REASON : input.refundReason;
-      for (const refund of refundsFor(money, -balance, input.payments)) {
-        ops.push(refundOp(ctx, document, { ...refund, reason, reference: null }));
+      const bill = money.charged + toCharge - money.reduced;
+      for (const refund of refundsFor(money, -balance, bill, input.payments)) {
+        ops.push(
+          refundOp(ctx, document, { ...refund, reason: HANDOVER_REFUND_REASON, reference: null }),
+        );
       }
     }
   }
@@ -1123,9 +1112,10 @@ export const correctDownPaymentInput = z
 export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
 
 /**
- * An owner corrects a down payment, with a reason: the payments taken so far are voided and, when
- * the amount is not 0, one payment of the right amount is recorded through the method the owner
- * picks (the first payment's, unless said otherwise).
+ * An owner corrects a down payment, with a reason. Raising it keeps the payments taken so far and
+ * records only the difference through the method picked, so cash already in the drawer stays
+ * there. Lowering it voids the payments taken so far and, when the amount is not 0, records one
+ * payment of the right amount through the method picked (the first payment's, unless said).
  */
 export async function correctDownPaymentHandler(
   input: z.output<typeof correctDownPaymentInput>,
@@ -1145,12 +1135,24 @@ export async function correctDownPaymentHandler(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
   );
   const ops: OpDraft[] = [];
+  const first = live[0];
+  const method =
+    input.account === undefined
+      ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
+      : { account: input.account, reference: input.reference };
+  const recorded = ticket.downPayment ?? 0;
+  if (input.amount > recorded) {
+    // The customer paid more: what was taken stays where it is.
+    ops.push(
+      paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
+        ...method,
+        amount: input.amount - recorded,
+        tendered: null,
+      }),
+    );
+    return { ops, result: { ticketId: ticket.id } };
+  }
   if (input.amount > 0) {
-    const first = live[0];
-    const method =
-      input.account === undefined
-        ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
-        : { account: input.account, reference: input.reference };
     // Recorded first, in place of the largest payment through the same account, so a limited
     // role's refund limit counts only what the DP went down by there.
     const replaced = replacedPayment(live, method.account);

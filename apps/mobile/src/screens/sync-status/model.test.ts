@@ -22,6 +22,7 @@ import {
   firstSyncPercent,
   isOfflineButHealthy,
   manualSync,
+  manualSyncErrorShown,
   mediaQueue,
   reassurance,
   REASSURANCE_KEY,
@@ -58,6 +59,8 @@ function state(overrides: Partial<SyncState> = {}): SyncState {
     backoffUntil: null,
     tokenRejectedSince: null,
     tokenRejectedCount: 0,
+    readSet: null,
+    backfill: null,
     lastServerTime: NOW,
     lastServerTimeReceivedAt: NOW,
     ...overrides,
@@ -222,6 +225,7 @@ describe('the counters are DERIVED — no stored count column exists to read (01
     // absent for the same reason the counts are: 03 §10 keeps the loop state in memory, so it is
     // not a column — the record and the DDL agree by construction.
     expect(Object.keys(record).sort()).toEqual([
+      'backfill',
       'backoffUntil',
       'cursor',
       'devicesDirectoryVersion',
@@ -232,6 +236,7 @@ describe('the counters are DERIVED — no stored count column exists to read (01
       'lastSuccessfulSyncAt',
       'lastSyncError',
       'pushHalted',
+      'readSet',
       'syncDisabled',
       'syncDisabledReason',
       'tokenRejectedCount',
@@ -431,6 +436,20 @@ describe('manual sync (§8.4 item 3)', () => {
 
   test('busy while the loop runs (design-system §3.1 `busy`)', () => {
     expect(manualSync(input({ manualSyncBusy: true }))).toEqual({ kind: 'busy' });
+  });
+
+  test('the last failure hides while a new attempt sends, so it never sits beside "Sedang mengirim"', () => {
+    expect(manualSyncErrorShown(input({ manualSyncError: 'NETWORK' }))).toBe('NETWORK');
+    for (const loopState of ['pushing', 'pulling'] as const) {
+      expect(manualSyncErrorShown(input({ manualSyncError: 'NETWORK', loopState }))).toBeNull();
+    }
+    expect(
+      manualSyncErrorShown(input({ manualSyncError: 'NETWORK', manualSyncBusy: true })),
+    ).toBeNull();
+    // Waiting to retry, the failure is still the news.
+    expect(manualSyncErrorShown(input({ manualSyncError: 'NETWORK', loopState: 'backoff' }))).toBe(
+      'NETWORK',
+    );
   });
 
   test('disabled WITH an explanation when the device is revoked', () => {

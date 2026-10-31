@@ -61,7 +61,7 @@ export function KasBoard({
     drawer: drawerData,
     accounts: accountRows,
     entriesReady,
-    methods,
+    moneyIn,
     moves,
     open,
     difference,
@@ -140,11 +140,11 @@ export function KasBoard({
 
       {entriesReady ? (
         <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
-          {methods.length === 0 ? (
+          {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
             <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
           ) : (
             <>
-              {methods.map((method) => (
+              {moneyIn.methods.map((method) => (
                 <Row
                   key={method.account}
                   label={accountLabel(method.account, accountRows)}
@@ -152,9 +152,16 @@ export function KasBoard({
                   testID={`${testID}.in.${method.account}`}
                 />
               ))}
+              {moneyIn.refunded === 0 ? null : (
+                <Row
+                  label={tm('money.kas.refunded')}
+                  value={formatMoney(-moneyIn.refunded)}
+                  testID={`${testID}.in.refunded`}
+                />
+              )}
               <Row
                 label={tm('money.kas.total')}
-                value={formatMoney(methods.reduce((sum, method) => sum + method.amount, 0))}
+                value={formatMoney(moneyIn.total)}
                 strong
                 testID={`${testID}.in.total`}
               />
@@ -170,7 +177,7 @@ export function KasBoard({
               key={entry.id}
               label={tm(label)}
               detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
-              value={`${delta < 0 ? '−' : '+'}${formatMoney(Math.abs(delta))}`}
+              value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
               testID={`${testID}.moves.${entry.id}`}
             />
           ))}

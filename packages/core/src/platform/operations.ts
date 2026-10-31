@@ -65,6 +65,7 @@ export const platformOperations: Readonly<Record<string, OperationDeclaration<Pl
       // Built by the server alone; the scope step refuses one from any other device.
       rule: null,
       permission: null,
+      read: null,
       entityType: PLATFORM_ENTITY.conflict,
       // Store-scoped: the envelope carries the CONFLICTED entity's store, which routes the conflict
       // to the right devices via pull scope (01 §5.4). Left as the 'store' default rather than
@@ -80,6 +81,7 @@ export const platformOperations: Readonly<Record<string, OperationDeclaration<Pl
       apply: conflictAcknowledgedApplier,
       rule: conflictAcknowledgedRule,
       permission: PLATFORM_PERMISSION.conflictAcknowledge,
+      read: null,
       entityType: PLATFORM_ENTITY.conflict,
     },
 
@@ -91,6 +93,7 @@ export const platformOperations: Readonly<Record<string, OperationDeclaration<Pl
       apply: userLocaleChangedApplier,
       rule: userLocaleChangedRule,
       permission: PLATFORM_PERMISSION.setLocale,
+      read: null,
       entityType: PLATFORM_ENTITY.userPref,
       // TENANT-scoped (01 §6): "the preference follows the user to every device". Without this the
       // runtime would stamp the emitting device's store and the preference would reach only that

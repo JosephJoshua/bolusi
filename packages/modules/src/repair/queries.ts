@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -43,6 +43,10 @@ import {
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
 import { paidOnDocumentSql, reducedOnDocumentSql } from '../money/queries.js';
+import { CASH_ACCOUNT, paymentAccountIdOf } from '../money/constants.js';
+import { refundSplit } from '../money/rules.js';
+import { amountOwed } from './flows.js';
+import type { MoneyDatabase } from '../money/schema.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
@@ -129,6 +133,8 @@ export interface TicketEventRow {
   readonly kind: string;
   readonly actorId: string;
   readonly actorName: string | null;
+  /** The technician an assignment gave the work to, by name; null for every other event. */
+  readonly technicianName: string | null;
   readonly at: number;
   readonly detail: Readonly<Record<string, unknown>>;
 }
@@ -156,6 +162,12 @@ export interface ClaimedTicket {
   readonly returnedAt: number | null;
 }
 
+export interface TicketRefund {
+  readonly account: string;
+  readonly name: string | null;
+  readonly amount: number;
+}
+
 export interface TicketDetailRow extends TicketSummaryRow {
   readonly devicePasscode: string | null;
   readonly intakeNotes: string;
@@ -181,6 +193,12 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly workStarted: boolean;
   /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
   readonly slipPrints: Readonly<Record<SlipKind, number>>;
+  /**
+   * What goes back to the customer at handover, through each method that overpaid
+   * (`refundSplit`), as the handover records it; empty when nothing does or once handed back.
+   * `name` is the method's name, null for cash.
+   */
+  readonly refunds: readonly TicketRefund[];
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -641,6 +659,45 @@ function intakePhotoAngles(json: string | null): readonly IntakePhotoAngle[] {
   return parseJson<IntakePhotoAngle[]>(json, []);
 }
 
+/**
+ * What a servisan's handover would give back through each method: what was paid beyond the bill
+ * (`amountOwed`), split as `returnDevice` records it.
+ */
+async function ticketRefunds(qctx: Qctx, ticket: TicketSummaryRow): Promise<TicketRefund[]> {
+  const db = qctx.db as unknown as Kysely<MoneyDatabase>;
+  const entries = (
+    await db
+      .selectFrom('moneyEntries')
+      .select(['kind', 'account', 'amount', 'voidedBy'])
+      .where('storeId', '=', qctx.storeId ?? '')
+      .where('documentKind', '=', REPAIR_DOCUMENT_KIND)
+      .where('documentId', '=', ticket.id)
+      .orderBy('createdAt')
+      .orderBy('id')
+      .execute()
+  ).map((entry) => ({ ...entry, amount: Number(entry.amount) }));
+  const bill = amountOwed(ticket);
+  const credit = (ticket.downPayment ?? 0) - bill;
+  const split =
+    ticket.location === 'returned' || credit <= 0 ? [] : refundSplit(entries, credit, bill);
+  const ids = split.flatMap(({ account }) => paymentAccountIdOf(account) ?? []);
+  const names =
+    ids.length === 0
+      ? []
+      : await db
+          .selectFrom('moneyAccounts')
+          .select(['id', 'name'])
+          .where('tenantId', '=', qctx.tenantId)
+          .where('id', 'in', ids)
+          .execute();
+  return split.map((refund) => ({
+    ...refund,
+    name:
+      names.find((row) => row.id === paymentAccountIdOf(refund.account))?.name ??
+      (refund.account === CASH_ACCOUNT ? null : refund.account),
+  }));
+}
+
 export async function getTicketHandler(
   input: GetTicketInput,
   qctx: Qctx,
@@ -717,11 +774,18 @@ export async function getTicketHandler(
     .orderBy('id', 'asc')
     .execute();
 
+  const assignedTo = (event: (typeof events)[number]): string | null => {
+    if (event.kind !== REPAIR_OP.technicianAssigned) return null;
+    const { technicianId } = parseJson<{ technicianId?: unknown }>(event.detailJson, {});
+    return typeof technicianId === 'string' ? technicianId : null;
+  };
   const names = await userNames(qctx.db, [
     summary.technicianId,
     detail.createdBy,
     ...events.map((event) => event.actorId),
+    ...events.flatMap((event) => assignedTo(event) ?? []),
   ]);
+  const refunds = await ticketRefunds(qctx, toSummary(summary, names));
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -761,6 +825,7 @@ export async function getTicketHandler(
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
         slipPrints,
+        refunds,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,
@@ -781,6 +846,7 @@ export async function getTicketHandler(
           kind: event.kind,
           actorId: event.actorId,
           actorName: names.get(event.actorId) ?? null,
+          technicianName: names.get(assignedTo(event) ?? '') ?? null,
           at: Number(event.at),
           detail: parseJson(event.detailJson, {}),
         })),
@@ -894,30 +960,40 @@ export async function intakeOptionSettingsHandler(
   _input: z.infer<typeof intakeOptionSettingsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<IntakeOptionSettings>> {
+  const settings = await readIntakeOptionSettings(qctx.db, qctx.tenantId, qctx.storeId);
+  return { rows: [settings], nextCursor: null };
+}
+
+/** The franchise's intake lists and one store's hidden items, as these records hold them now. */
+export async function readIntakeOptionSettings(
+  db: Qctx['db'],
+  tenantId: string,
+  storeId: string | null,
+): Promise<IntakeOptionSettings> {
   const known = (list: string): list is IntakeOptionList =>
     (INTAKE_OPTION_LISTS as readonly string[]).includes(list);
 
   const lists: Record<IntakeOptionList, readonly IntakeOption[]> = { ...DEFAULT_INTAKE_OPTIONS };
-  const franchise = await qctx.db
+  const franchise = await db
     .selectFrom('repairIntakeOptions')
     .select(['list', 'itemsJson'])
-    .where('tenantId', '=', qctx.tenantId)
+    .where('tenantId', '=', tenantId)
     .execute();
   for (const row of franchise) {
     if (known(row.list)) lists[row.list] = parseJson<IntakeOption[]>(row.itemsJson, []);
   }
 
   const hidden: Record<IntakeOptionList, readonly string[]> = { ...NOTHING_HIDDEN };
-  const store = await qctx.db
+  const store = await db
     .selectFrom('repairStoreIntakeOptions')
     .select(['list', 'hiddenJson'])
-    .where('storeId', '=', qctx.storeId)
+    .where('storeId', '=', storeId)
     .execute();
   for (const row of store) {
     if (known(row.list)) hidden[row.list] = parseJson<string[]>(row.hiddenJson, []);
   }
 
-  return { rows: [{ lists, hidden }], nextCursor: null };
+  return { lists, hidden };
 }
 
 export const intakeOptionSettingsQuery = {

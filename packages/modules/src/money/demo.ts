@@ -10,8 +10,8 @@ import {
   type QrisConnection,
 } from '@bolusi/schemas';
 
-import { CASH_ACCOUNT, type CashMoveKind, type EntryKind } from './constants.js';
-import { dayStart, movesOut } from './kas.js';
+import { CASH_ACCOUNT, movesOut, type CashMoveKind, type EntryKind } from './constants.js';
+import { dayStart } from './kas.js';
 import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDocument } from './documents.js';
 import { QrisError, type QrisPort } from './qris.js';
@@ -278,6 +278,23 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
           return page([drawer()]);
         case 'openBalances':
           return page(openBalances());
+        case 'voidCount': {
+          const entry = entries.find(
+            (e) =>
+              e.id === input['entryId'] && e.kind === 'payment_received' && e.voidedAt === null,
+          );
+          if (entry === undefined) return page([]);
+          // Roughly as the rule counts it: what was already taken off the servisan, with this one.
+          const earlier = entries
+            .filter((e) => e.documentId === entry.documentId && e.id !== entry.id)
+            .filter(
+              (e) =>
+                (e.kind === 'payment_received' && e.voidedAt !== null) ||
+                e.kind === 'charge_reduced',
+            )
+            .reduce((sum, e) => sum + e.amount, 0);
+          return page([{ counted: earlier + entry.amount }]);
+        }
         case 'moneyEntries': {
           const from = Number(input['from']);
           const to = Number(input['to']);

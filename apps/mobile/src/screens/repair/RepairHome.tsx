@@ -9,7 +9,7 @@
  * the list. The intake is one task from start to finish and keeps the whole screen. Navigation is
  * the same state either way: turning the tablet only changes how it is drawn.
  */
-import type { IntakeDraft } from '@bolusi/modules/repair';
+import type { IntakeDraft, RepairDraft } from '@bolusi/modules/repair';
 import {
   Handover,
   IntakeWizard,
@@ -32,7 +32,8 @@ type RepairView =
   | { readonly kind: 'board' }
   /** A warranty claim's intake starts from a draft made from the servisan it claims on. */
   | { readonly kind: 'intake'; readonly draft?: IntakeDraft }
-  | { readonly kind: 'ticket'; readonly ticketId: string }
+  /** `print`: just opened or handed over, so it opens on the customer's slip. */
+  | { readonly kind: 'ticket'; readonly ticketId: string; readonly print?: true }
   | { readonly kind: 'handover'; readonly ticketId: string };
 
 /**
@@ -52,9 +53,12 @@ export interface RepairHomeProps {
   readonly avatar: ReactNode;
   readonly onOpenSyncStatus: () => void;
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
-  /** This user's intake in progress when they last locked, already owner-checked by the shell. */
-  readonly restoredDraft?: IntakeDraft | null;
-  readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
+  /**
+   * This user's intake or handover in progress when the screens last went away (a lock, a system
+   * font change, Android recreating the app), already owner-checked by the shell.
+   */
+  readonly restoredDraft?: RepairDraft | null;
+  readonly onDraftChange?: ((draft: RepairDraft | null) => void) | undefined;
 }
 
 export function RepairHome({
@@ -69,7 +73,11 @@ export function RepairHome({
 }: RepairHomeProps): React.JSX.Element {
   // Read once at mount: the lock unmounts this surface and the unlock remounts it.
   const [view, setView] = useState<RepairView>(() =>
-    restoredDraft === null || restoredDraft === undefined ? { kind: 'board' } : { kind: 'intake' },
+    restoredDraft === null || restoredDraft === undefined
+      ? { kind: 'board' }
+      : restoredDraft.kind === 'handover'
+        ? { kind: 'handover', ticketId: restoredDraft.ticketId }
+        : { kind: 'intake' },
   );
   const viewport = useViewport();
   const split = viewport.widthClass === 'expanded' && view.kind !== 'intake';
@@ -139,6 +147,7 @@ export function RepairHome({
         // A new ticket is a new screen: its open step and scroll position stay with the last one.
         key={view.ticketId}
         ticketId={view.ticketId}
+        printFirst={view.print === true}
         chrome={chrome}
         now={now}
         hideBack={split}
@@ -155,9 +164,11 @@ export function RepairHome({
         key={view.ticketId}
         ticketId={view.ticketId}
         chrome={chrome}
-        onDone={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
+        onDone={() => setView({ kind: 'ticket', ticketId: view.ticketId, print: true })}
         onCancel={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
         onRegisterDiscardGuard={registerDiscardGuard}
+        restoredDraft={restoredDraft?.kind === 'handover' ? restoredDraft : null}
+        onDraftChange={onDraftChange}
       />
     ) : null;
 
@@ -194,11 +205,11 @@ export function RepairHome({
           <IntakeWizard
             chrome={chrome}
             now={now}
-            restoredDraft={view.draft ?? restoredDraft}
+            restoredDraft={view.draft ?? (restoredDraft?.kind === 'intake' ? restoredDraft : null)}
             onDraftChange={onDraftChange}
             onRegisterDiscardGuard={registerDiscardGuard}
             onRegisterStepBack={registerStepBack}
-            onOpened={(ticketId) => setView({ kind: 'ticket', ticketId })}
+            onOpened={(ticketId) => setView({ kind: 'ticket', ticketId, print: true })}
             onCancel={() => setView({ kind: 'board' })}
           />
         ) : null}

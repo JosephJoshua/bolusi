@@ -30,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { statusesFor, useTick, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import {
   amountOwed,
+  BOARD_EMPTY_KEY,
   boardViews,
   UNCOLLECTED_REFRESH_MS,
   defaultBoardView,
@@ -87,7 +88,12 @@ export interface RepairBoardPageProps {
   /** The repair open beside the table, owned by the app so a new intake can open its ticket. */
   readonly selectedTicketId: string | null;
   readonly onSelectTicket: (ticketId: string | null) => void;
+  /** The servisan an intake just opened, whose slip the pane offers at once. */
+  readonly openedTicketId?: string | null | undefined;
+  readonly onOpenedShown?: (() => void) | undefined;
   readonly onNewIntake: () => void;
+  /** An unsaved intake or warranty claim this person left: "Servisan baru" says it carries on with it. */
+  readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
   /** Starts a warranty claim's intake from the open servisan. */
   readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   readonly onOpenSyncStatus?: (() => void) | undefined;
@@ -151,7 +157,10 @@ function fuzzyOptions(options: readonly FilterOption[], text: string): FilterOpt
 export function RepairBoardPage({
   selectedTicketId,
   onSelectTicket,
+  openedTicketId = null,
+  onOpenedShown,
   onNewIntake,
+  waitingDraft = null,
   onStartClaim,
   onOpenSyncStatus,
   filters,
@@ -345,8 +354,8 @@ export function RepairBoardPage({
     ) : (
       <StatePanel
         icon={ClipboardList}
-        title={t('core.status.empty')}
-        hint={tn('repair.board.emptyHint')}
+        title={tn(BOARD_EMPTY_KEY[view])}
+        {...(view === 'active' ? { hint: tn('repair.board.emptyHint') } : {})}
       />
     );
 
@@ -476,8 +485,15 @@ export function RepairBoardPage({
         actions={
           can.intake ? (
             <Button
-              label={tn('repair.action.newIntake')}
-              variant="primary"
+              label={tn(
+                waitingDraft === 'claim'
+                  ? 'repair.action.resumeClaim'
+                  : waitingDraft === 'intake'
+                    ? 'repair.action.resumeIntake'
+                    : 'repair.action.newIntake',
+              )}
+              // One filled button on screen: an open servisan has its own next step.
+              variant={selectedTicketId === null ? 'primary' : 'secondary'}
               icon={Plus}
               shortcut="F2"
               onClick={onNewIntake}
@@ -501,20 +517,28 @@ export function RepairBoardPage({
           label={t('core.action.search')}
           clearLabel={tn('repair.board.clearSearch')}
           shortcut="/"
+          // Straight from typing to the first result: it opens, and the arrows go on from there.
+          onPick={() => {
+            const first = loaded?.rows[0];
+            if (first === undefined || stale) return;
+            onSelectTicket(first.id);
+            tableRef.current?.focus();
+          }}
           className="w-full max-w-[520px]"
           testId="repair.desk.board.search"
         />
       </PageHeader>
 
-      {/* The servisan opens beside the table when both fit (the table's fixed columns need about
-          680 px, next to a 400 px pane); on a narrower screen it slides over the table's right
-          side instead. */}
+      {/* The servisan opens beside the table when both fit: a 400 px pane next to a table folded
+          down to number, customer and status (about 530 px), which a 1024 px window with the
+          sidebar down to icons holds. Narrower than that (the sidebar opened wide on a small
+          screen), it covers the whole board rather than half of it, so no column is cut. */}
       <div className="flex min-h-0 flex-1 flex-col @container">
         <div
           className={
             selectedTicketId === null
               ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
-              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1080px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
+              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[960px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
           }
         >
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -611,7 +635,7 @@ export function RepairBoardPage({
           {selectedTicketId === null ? null : (
             <div
               ref={paneRef}
-              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1080px]:static @[1080px]:w-auto @[1080px]:shadow-none"
+              className="absolute inset-0 z-10 flex animate-pane-in flex-col @[960px]:static"
             >
               <TicketPane
                 // A fresh pane per ticket: nothing said about the last one carries over.
@@ -622,6 +646,8 @@ export function RepairBoardPage({
                 onOpenSyncStatus={onOpenSyncStatus}
                 onStartClaim={onStartClaim}
                 onOpenTicket={onSelectTicket}
+                printFirst={openedTicketId === selectedTicketId}
+                onPrintOffered={onOpenedShown}
               />
             </div>
           )}
@@ -796,7 +822,8 @@ function boardColumns({
       // A cancelled servisan costs the customer its fee, never the repair price.
       accessorFn: amountOwed,
       header: tn('repair.price.total'),
-      meta: { track: '116px', align: 'end' },
+      // The last to give way: beside an open servisan, whose pane shows the price, on a small screen.
+      meta: { track: '116px', align: 'end', fold: 4 },
       cell: ({ getValue }) => (
         <span className="tabular text-body font-semibold text-text">
           {formatMoney(getValue() as number)}

@@ -61,6 +61,18 @@ export const BOARD_VIEWS = [
 ] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
 
+/** What an empty view says: what is not there, never a generic "no data". */
+export const BOARD_EMPTY_KEY = {
+  approvals: 'repair.board.empty.approvals',
+  active: 'repair.board.empty.active',
+  mine: 'repair.board.empty.mine',
+  unassigned: 'repair.board.empty.unassigned',
+  pickup: 'repair.board.empty.pickup',
+  uncollected: 'repair.board.empty.uncollected',
+  returned: 'repair.board.empty.returned',
+  cancelled: 'repair.board.empty.cancelled',
+} as const satisfies Record<BoardView, RepairKey>;
+
 /**
  * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
  * nobody collected are for the counter and owners, who call the customer. Servisan with requests
@@ -518,6 +530,7 @@ export function claimIntakeDraft(ticket: TicketDetailRow, lineDescription: strin
       ticketId: ticket.id,
       ticketNumber: ticket.ticketNumber,
       warrantyUntil: warrantyUntil(ticket.repairTypes, ticket.returnedAt),
+      imei: (ticket.deviceImei ?? '').trim(),
     },
   };
 }
@@ -544,7 +557,13 @@ export function correctionDraft(ticket: TicketDetailRow): IntakeDraft {
     claimOf:
       ticket.claimOfTicketId === null
         ? null
-        : { ticketId: ticket.claimOfTicketId, ticketNumber: '', warrantyUntil: null },
+        : {
+            ticketId: ticket.claimOfTicketId,
+            ticketNumber: '',
+            warrantyUntil: null,
+            // A claim stays on the claimed phone: its IMEI is not one to correct here.
+            imei: ticket.deviceImei ?? '',
+          },
   };
 }
 
@@ -646,10 +665,43 @@ export function amountOwed(
   return (row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal) - row.reduced;
 }
 
+/** What is left to pay on the bill, or what goes back, given what was paid so far. */
+export function ticketBalance(
+  ticket: Pick<
+    TicketSummaryRow,
+    'outcome' | 'cancelFee' | 'quoteTotal' | 'reduced' | 'downPayment'
+  >,
+): { readonly kind: 'due' | 'refund'; readonly amount: number } {
+  return balanceAfterDownPayment(amountOwed(ticket), ticket.downPayment ?? 0);
+}
+
+/**
+ * What the last money row under a total is called: what is left to pay, or what goes back. Before
+ * pickup an overpaid DP goes back at the handover ("Kembalikan"); refunds a handover paid out are
+ * already off what was paid, so money left to give back on a phone that went home is still owed
+ * ("Lebih bayar"), never done.
+ */
+export function balanceLabelKey(kind: 'due' | 'refund', returned: boolean): RepairKey {
+  if (kind === 'due') return 'repair.price.balance';
+  return returned ? 'repair.price.owedBack' : 'repair.price.refundDue';
+}
+
 /**
  * What the money already paid on a servisan is called: its DP while the phone is in the store,
  * what was paid in all (DP and the rest) once it went home.
  */
+/**
+ * What marking a servisan repaired says: ready for the customer, or, while a price change still
+ * waits for them, that it needs their answer first.
+ */
+export function repairedDoneKey(
+  ticket: Pick<TicketSummaryRow, 'pendingProposals'> | undefined,
+): RepairKey {
+  return ticket !== undefined && ticket.pendingProposals > 0
+    ? 'repair.done.repairedPriceWaiting'
+    : 'repair.done.repaired';
+}
+
 export function paidLabelKey(ticket: Pick<TicketSummaryRow, 'location'>): RepairKey {
   return ticket.location === 'returned' ? 'repair.price.paid' : 'repair.price.downPayment';
 }
@@ -1063,6 +1115,8 @@ const zIntakeDraft = z.strictObject({
       ticketNumber: z.string(),
       /** When that servisan's warranty ends; null when it had none. */
       warrantyUntil: z.number().int().nullable(),
+      /** The IMEI that servisan wrote down, fixed on the claim; '' when it had none. */
+      imei: z.string().default(''),
     })
     .nullable()
     .default(null),
@@ -1073,6 +1127,47 @@ export type QuoteLineDraft = z.infer<typeof zLineDraft>;
 
 export function parseIntakeDraft(value: unknown): IntakeDraft | null {
   const parsed = zIntakeDraft.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * A handover in progress: what was ticked, paid, photographed and signed. Kept like an intake, so
+ * a lock, a system font change (the screens remount) or Android recreating the app does not make
+ * the counter take the customer's signature again.
+ */
+const zHandoverDraft = z.strictObject({
+  kind: z.literal('handover'),
+  ticketId: z.string(),
+  photo: zMediaRef.nullable(),
+  signature: zMediaRef.nullable(),
+  note: z.string(),
+  /** The checklist lines ticked, as `kind:item`. */
+  ticked: z.array(z.string()),
+  payment: z.strictObject({
+    /** The payment lines as typed; null while the counter has not touched them. */
+    lines: z
+      .array(
+        z.strictObject({
+          key: z.string(),
+          account: z.string(),
+          amount: z.string(),
+          tendered: z.string(),
+          reference: z.string(),
+        }),
+      )
+      .nullable(),
+    payLater: z.boolean(),
+    unpaidReason: z.string(),
+  }),
+});
+
+export type HandoverDraft = z.infer<typeof zHandoverDraft>;
+
+/** The repair work a user has in progress: one intake or one handover at a time. */
+export type RepairDraft = IntakeDraft | HandoverDraft;
+
+export function parseRepairDraft(value: unknown): RepairDraft | null {
+  const parsed = z.union([zIntakeDraft, zHandoverDraft]).safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
@@ -1336,7 +1431,7 @@ export function toOpenTicketInput(
       brand: draft.device.brand.trim(),
       model: draft.device.model.trim(),
       color: draft.device.color.trim(),
-      imei: draft.device.imei.trim() || null,
+      imei: (draft.claimOf?.imei || draft.device.imei).trim() || null,
       passcode:
         draft.device.lockKind === 'none' || draft.device.passcode === ''
           ? null

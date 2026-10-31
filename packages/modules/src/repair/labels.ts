@@ -1,15 +1,28 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
-import { formatDate, formatMoney, formatPhone } from '@bolusi/i18n';
+import {
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  formatPhone,
+  translateOpType,
+} from '@bolusi/i18n';
 
 import type { DetailChange } from './applier.js';
-import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
+import type { TicketEventRow } from './queries.js';
+import {
+  REPAIR_OP,
+  type ChecklistState,
+  type IntakePhotoSlot,
+  type QuoteLineKind,
+} from './constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import type { DownPaymentGap, IntakeStep, StaleStep, TicketAction, TicketStatus } from './flows.js';
 import type { SpecFactKey } from './device-specs.js';
 import type { ScreenLockKind } from './screen-lock.js';
+import type { TicketRefund } from './queries.js';
 import {
   READY_UNKNOWN,
   readyDays,
@@ -316,6 +329,19 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
     if (notDone.length > 0)
       lines.push(tn('repair.handover.unchecked', { items: notDone.join(', ') }));
   }
+  // What a price change or a DP was for, and how much: "Ganti baterai · Rp 200.000".
+  const amount = detail['amount'];
+  if (typeof amount === 'number') {
+    const description = detail['description'];
+    lines.push(
+      [
+        typeof description === 'string' && description !== '' ? description : null,
+        formatMoney(amount),
+      ]
+        .filter((part) => part !== null)
+        .join(' · '),
+    );
+  }
   for (const field of ['note', 'reason'] as const) {
     const value = detail[field];
     if (typeof value === 'string' && value.trim() !== '') {
@@ -324,6 +350,84 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
     }
   }
   return lines.length === 0 ? null : lines.join('\n');
+}
+
+/** One line of a servisan's history, the same on the phone and the PC. */
+export function historyEntry(event: TicketEventRow): {
+  readonly key: string;
+  readonly title: string;
+  readonly meta: string;
+  readonly detail?: string;
+} {
+  const note = eventNote(event.detail);
+  // Who was given the work, beside who gave it.
+  const technician =
+    event.kind === REPAIR_OP.technicianAssigned && event.technicianName !== null
+      ? tn('repair.history.technician', { name: event.technicianName })
+      : null;
+  const detail = [technician, note].filter((part) => part !== null).join('\n');
+  return {
+    key: event.id,
+    // A change saved before the customer agreed reads as waiting, not as changed.
+    title:
+      event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
+        ? tn('repair.price.waitingEvent')
+        : translateOpType(event.kind),
+    meta: [formatDateTime(event.at), event.actorName].filter((part) => part !== null).join(' · '),
+    ...(detail === '' ? {} : { detail }),
+  };
+}
+
+/**
+ * One method's part of what goes back at handover: "Kembalikan lewat Transfer BCA" to the counter,
+ * "Dikembalikan lewat Transfer BCA" on the slip; cash reads "Kembalikan tunai".
+ */
+export function refundLabel(refund: Pick<TicketRefund, 'name'>, on: 'screen' | 'slip'): string {
+  if (refund.name === null) {
+    return tn(on === 'slip' ? 'repair.slip.refundCash' : 'repair.price.refundCash');
+  }
+  return tn(on === 'slip' ? 'repair.slip.refundVia' : 'repair.price.refundVia', {
+    method: refund.name,
+  });
+}
+
+/**
+ * What saving a corrected DP does to the payments taken, as the dialog says it under the method:
+ * a higher DP adds only the difference there, a lower one replaces what was taken. Nothing to say
+ * until a new amount is typed, or when it removes the DP (the hint under the reason says that).
+ */
+export function downPaymentChangeLine(
+  current: number | null,
+  amount: number | null,
+  method: string,
+): string | null {
+  const recorded = current ?? 0;
+  if (amount === null || amount === 0 || amount === recorded) return null;
+  return amount > recorded
+    ? tn('repair.downPayment.raised', {
+        added: formatMoney(amount - recorded),
+        method,
+        current: formatMoney(recorded),
+      })
+    : tn('repair.downPayment.replaced', {
+        current: formatMoney(recorded),
+        amount: formatMoney(amount),
+        method,
+      });
+}
+
+/**
+ * The row for what was paid on a servisan, which comes off the total. When more went back than
+ * came in (a payment voided after its money was handed back), the net is negative: it is named
+ * as given back and adds to what is left to pay, so the rows still add up.
+ */
+export function paidRow(
+  paid: number,
+  paidLabel: RepairKey,
+): { readonly label: string; readonly amount: string } {
+  return paid < 0
+    ? { label: tn('repair.price.givenBack'), amount: `+${formatMoney(-paid)}` }
+    : { label: tn(paidLabel), amount: formatMoney(-paid) };
 }
 
 /** A limited role's discount limit, or what is left of it once the servisan has discounts. */

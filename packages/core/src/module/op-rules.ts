@@ -48,6 +48,12 @@ export interface OpRuleContext<DB> {
    * same directory as `holdsPermission`.
    */
   withinLimit(userId: string, permissionId: string, amount: number): Promise<boolean>;
+  /**
+   * When the server received the op (ms epoch, server clock); absent on a device, which judges by
+   * the op's own timestamp. A rule whose verdict turns on time and must not trust the author's
+   * clock (a phone set back to open a free warranty claim) judges by this when present.
+   */
+  readonly receivedAt?: number;
 }
 
 /** Throws a `DomainError` when `op` must not be recorded against the current records. */

@@ -473,6 +473,42 @@ describe('single-flight + coalescing — the CONCURRENCY axis (03 §10, api/01 �
     expect(loop.state).toBe('idle');
   });
 
+  it('a manual press while a doomed cycle runs gets its own attempt, not the backoff', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    let pullCalls = 0;
+    harness.transport.scriptPull(
+      () => {
+        pullCalls += 1;
+        // The person presses "Kirim sekarang" while this attempt is still waiting on the server.
+        loop.requestSync('manual');
+        throw new SyncTransportError('network down');
+      },
+      () => {
+        pullCalls += 1;
+        return { ops: [], nextCursor: 0, hasMore: false, serverTime: 1 };
+      },
+    );
+    loop.requestSync('periodic');
+    await loop.settle();
+
+    expect(pullCalls).toBe(2);
+    expect(loop.state).toBe('idle');
+    expect(harness.timer.pending()).toBe(0);
+  });
+
+  it('an automatic trigger during a doomed cycle still waits out the backoff', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(() => {
+      loop.requestSync('periodic');
+      throw new SyncTransportError('network down');
+    });
+    loop.requestSync('manual');
+    await loop.settle();
+
+    expect(loop.getStats().cycles).toBe(1);
+    expect(loop.state).toBe('backoff');
+  });
+
   it('a rerun does not chain forever — one follow-up, then quiescence', async () => {
     const loop = await harness.makeLoop({ deviceId: device.id });
     loop.requestSync('manual');

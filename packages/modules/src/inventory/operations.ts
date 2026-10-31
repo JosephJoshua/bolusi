@@ -111,6 +111,7 @@ export function inventoryOperations(
       apply: categoryAddedApplier,
       rule: categoryAddedRule,
       permission: INVENTORY_PERMISSION.manageCategories,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_CATEGORY_ENTITY,
     },
     [INVENTORY_OP.categoryEdited]: {
@@ -121,6 +122,7 @@ export function inventoryOperations(
       apply: categoryEditedApplier,
       rule: categoryEditedRule,
       permission: INVENTORY_PERMISSION.manageCategories,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_CATEGORY_ENTITY,
       conflict: { key: 'inventory_category.details', severity: 'minor' },
     },
@@ -132,6 +134,7 @@ export function inventoryOperations(
       apply: itemAddedApplier,
       rule: itemAddedRule,
       permission: INVENTORY_PERMISSION.manageItems,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_ITEM_ENTITY,
     },
     [INVENTORY_OP.itemEdited]: {
@@ -142,6 +145,7 @@ export function inventoryOperations(
       apply: itemEditedApplier,
       rule: itemEditedRule,
       permission: INVENTORY_PERMISSION.manageItems,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_ITEM_ENTITY,
       conflict: { key: 'inventory_item.details', severity: 'minor' },
     },
@@ -152,6 +156,7 @@ export function inventoryOperations(
       apply: stockCountedApplier,
       rule: stockCountedRule,
       permission: INVENTORY_PERMISSION.count,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
     [INVENTORY_OP.itemTaken]: {
@@ -161,6 +166,7 @@ export function inventoryOperations(
       apply: itemTakenApplier,
       rule: itemTakenRule(targets),
       permission: INVENTORY_PERMISSION.useParts,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
     [INVENTORY_OP.itemPutBack]: {
@@ -170,6 +176,7 @@ export function inventoryOperations(
       apply: itemPutBackApplier,
       rule: itemPutBackRule(targets),
       permission: INVENTORY_PERMISSION.useParts,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
   };

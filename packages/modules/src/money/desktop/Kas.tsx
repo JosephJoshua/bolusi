@@ -4,8 +4,9 @@
  * owes or is owed on the right; Riwayat lists a day's records, where an owner cancels a payment.
  * Each task opens as a dialog over the page.
  */
-import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatTime, t } from '@bolusi/i18n';
 import {
+  Banner,
   Button,
   Card,
   DataTable,
@@ -22,7 +23,9 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
 import { shiftDay, useDayRecords } from '../day-records.js';
+import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { tm } from '../i18n.js';
+import { ta } from '../../approvals/i18n.js';
 import {
   accountLabel,
   dayStart,
@@ -73,6 +76,8 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   // The day Riwayat shows; null for today, so a page left open overnight moves on with the clock.
   const [historyDay, setHistoryDay] = useState<number | null>(null);
   const close = (): void => setTask(null);
+  // Said once an owner has been asked to cancel a payment.
+  const [notice, setNotice] = useState<string | null>(null);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="money.desk.kas">
@@ -99,6 +104,16 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           </>
         }
       />
+      {notice === null ? null : (
+        <div className="px-6 pb-3">
+          <Banner
+            tone="success"
+            message={notice}
+            onDismiss={() => setNotice(null)}
+            dismissLabel={t('core.action.close')}
+          />
+        </div>
+      )}
       {may.read ? (
         <div className="px-6">
           <Tabs
@@ -145,6 +160,10 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           entry={task.entry}
           accounts={task.accounts}
           onDone={close}
+          onAsked={() => {
+            close();
+            setNotice(ta('approvals.done.asked'));
+          }}
           onClose={close}
         />
       ) : null}
@@ -166,7 +185,7 @@ function Today({
   readonly onRefund: (balance: NamedBalance) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const { drawerQuery, drawer, accounts, entriesReady, methods, moves, open, difference, counted } =
+  const { drawerQuery, drawer, accounts, entriesReady, moneyIn, moves, open, difference, counted } =
     day;
   const { may } = day;
   const testId = 'money.desk.kas';
@@ -244,11 +263,11 @@ function Today({
           {entriesReady ? (
             <Section title={tm('money.kas.inToday')} testId={`${testId}.in`}>
               <Card>
-                {methods.length === 0 ? (
+                {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
                   <p className="text-body text-text-muted">{tm('money.kas.nothingIn')}</p>
                 ) : (
                   <>
-                    {methods.map((method) => (
+                    {moneyIn.methods.map((method) => (
                       <Line
                         key={method.account}
                         label={accountLabel(method.account, accounts)}
@@ -256,9 +275,16 @@ function Today({
                         testId={`${testId}.in.${method.account}`}
                       />
                     ))}
+                    {moneyIn.refunded === 0 ? null : (
+                      <Line
+                        label={tm('money.kas.refunded')}
+                        value={formatMoney(-moneyIn.refunded)}
+                        testId={`${testId}.in.refunded`}
+                      />
+                    )}
                     <Line
                       label={tm('money.kas.total')}
-                      value={formatMoney(methods.reduce((sum, method) => sum + method.amount, 0))}
+                      value={formatMoney(moneyIn.total)}
                       strong
                       testId={`${testId}.in.total`}
                     />
@@ -276,7 +302,7 @@ function Today({
                     key={entry.id}
                     label={tm(label)}
                     detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
-                    value={`${delta < 0 ? '−' : '+'}${formatMoney(Math.abs(delta))}`}
+                    value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
                     testId={`${testId}.moves.${entry.id}`}
                   />
                 ))}
@@ -412,8 +438,12 @@ function History({
   readonly onVoid: (entry: MoneyEntryRow, accounts: readonly PaymentAccountRow[]) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const can = voidAbilities((id) => runtime.hasPermission(id));
-  const mayVoid = can.payments || can.cashMoves;
+  const can = voidAbilities(
+    (id) => runtime.hasPermission(id),
+    (id) => runtime.limitOf(id),
+    runtime.approvals.hasPermission(APPROVAL_PERMISSION.use),
+  );
+  const mayVoid = can.payments || can.askPayments || can.cashMoves;
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -520,7 +550,7 @@ function History({
           ]
         : []),
     ];
-  }, [loaded, mayVoid, can.payments, can.cashMoves, onVoid]);
+  }, [loaded, mayVoid, can, onVoid]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>

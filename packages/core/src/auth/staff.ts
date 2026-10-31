@@ -17,8 +17,17 @@ import { STORE_ID_META_KEY } from '../authz/directory.js';
 import { AUTH_PERMISSION } from './operations.js';
 import { holdsMainOwnerRole } from './repo.js';
 
-/** The preset roles an owner picks from, in the order they are offered. Made roles follow. */
-export const STAFF_ROLE_KEYS = ['cashier', 'technician', 'manager', 'store_owner'] as const;
+/**
+ * The preset roles an owner picks from, in the order they are offered. Made roles follow. "Staf"
+ * starts with notes only: a base the main owner fills in the role editor.
+ */
+export const STAFF_ROLE_KEYS = [
+  'cashier',
+  'technician',
+  'manager',
+  'staff',
+  'store_owner',
+] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
 export interface StaffRole {
@@ -87,9 +96,14 @@ export const OWNER_POWER_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.roleManage,
 ];
 
+/** Whether a role is an owner role: tenant-wide, or holding power over other people's accounts. */
+export function isOwnerRoleOf(scopeType: string, permissionIds: readonly string[]): boolean {
+  if (scopeType === 'tenant') return true;
+  return permissionIds.some((id) => OWNER_POWER_PERMISSIONS.includes(id));
+}
+
 function isOwnerRole(role: Pick<RoleRow, 'scopeType' | 'permissionIds'>): boolean {
-  if (role.scopeType === 'tenant') return true;
-  return permissionIdsOf(role).some((id) => OWNER_POWER_PERMISSIONS.includes(id));
+  return isOwnerRoleOf(role.scopeType, permissionIdsOf(role));
 }
 
 function staffRoleOf(row: RoleRow): StaffRole {

@@ -79,6 +79,31 @@ describe('outputSlip', () => {
     expect(shared!.html).not.toContain('Untuk toko');
   });
 
+  it('a print that landed but could not be logged still makes the next one a reprint', async () => {
+    const { runtime, printing, output } = await setup(PAPER_PRESETS.continuous_half, false);
+    const ticket = (await runtime.query('listTickets', {})).rows[0]!;
+    const detail = (await runtime.query('getTicket', { ticketId: ticket.id })).rows[0]!;
+    const run = runtime.run.bind(runtime);
+    vi.spyOn(runtime, 'run').mockImplementation((name, input) =>
+      name === 'recordSlipPrinted' ? Promise.reject(new Error('disk full')) : run(name, input),
+    );
+    const warn = vi.spyOn(runtime.diagnostics, 'warn');
+    const before = detail.slipPrints.intake;
+    expect(await outputSlip(runtime, printing, detail, 'intake', DESK_PAPERS, 'print')).toBe(
+      'done',
+    );
+    // Not silent: the lost log is written down where a support person can find it.
+    expect(warn).toHaveBeenCalledWith('printed slip could not be logged', {
+      ticketId: detail.id,
+      slip: 'intake',
+      error: 'disk full',
+    });
+    await outputSlip(runtime, printing, detail, 'intake', DESK_PAPERS, 'print');
+    const second = output.mock.calls[1]![0].document;
+    // The lost log still counts: this is the reprint after `before + 1` earlier prints.
+    expect(second.meta).toContain(before === 0 ? 'Cetak ulang' : `Cetak ulang ke-${before + 1}`);
+  });
+
   it('prints the logo as dots on a dot-matrix only when the store asked for it', async () => {
     const on = await setup(PAPER_PRESETS.continuous_half, true);
     const ticket = (await on.runtime.query('listTickets', {})).rows[0]!;

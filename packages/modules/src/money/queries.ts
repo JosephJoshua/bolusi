@@ -20,7 +20,14 @@ import {
   type EntryKind,
   type PaymentAccountKind,
 } from './constants.js';
-import { accountVisibleTo, centralStoreIds, countExpected, documentBalance } from './rules.js';
+import type { MoneyDocumentSources } from './documents.js';
+import {
+  accountVisibleTo,
+  centralStoreIds,
+  countExpected,
+  documentBalance,
+  voidCounted,
+} from './rules.js';
 import type { MoneyDatabase } from './schema.js';
 
 type Qctx = QueryContext<MoneyDatabase>;
@@ -320,6 +327,13 @@ export const cashDrawerQuery = {
   handler: cashDrawerHandler,
 } as const;
 
+/** The same drawer, read by a cash move's command to stop taking out more than is there. */
+export const drawerForMoveQuery = {
+  ...cashDrawerQuery,
+  name: 'drawerForMove',
+  permission: MONEY_PERMISSION.moveCash,
+} as const;
+
 // ── moneyEntries (the store's records over a period) ───────────────────────────────────────────
 
 export const moneyEntriesInput = z
@@ -433,3 +447,43 @@ export const openBalancesQuery = {
   input: openBalancesInput,
   handler: openBalancesHandler,
 } as const;
+
+// ── voidCount (what cancelling a payment counts against a limit) ─────────────────────────────
+
+export const voidCountInput = z.object({ entryId: zUuid }).strict();
+
+/**
+ * What cancelling this payment now would count against a limited role's limit, as its rule counts
+ * it; none when it is not a payment of this store that still counts.
+ */
+export function createVoidCountQuery(sources: MoneyDocumentSources) {
+  return {
+    name: 'voidCount',
+    permission: MONEY_PERMISSION.read,
+    input: voidCountInput,
+    handler: async (
+      input: z.output<typeof voidCountInput>,
+      qctx: Qctx,
+    ): Promise<QueryPage<{ readonly counted: number }>> => {
+      const entry = await qctx.db
+        .selectFrom('moneyEntries')
+        .select(['id', 'amount', 'account', 'documentKind', 'documentId'])
+        .where('id', '=', input.entryId)
+        .where('storeId', '=', storeOf(qctx))
+        .where('kind', '=', 'payment_received')
+        .where('voidedBy', 'is', null)
+        .executeTakeFirst();
+      if (entry === undefined) return { rows: [], nextCursor: null };
+      // Whenever it is made, the void comes after everything recorded now.
+      const scope = {
+        tenantId: qctx.tenantId,
+        storeId: storeOf(qctx),
+        at: Number.MAX_SAFE_INTEGER,
+      };
+      return {
+        rows: [{ counted: await voidCounted(qctx.db, sources, scope, entry) }],
+        nextCursor: null,
+      };
+    },
+  } as const;
+}

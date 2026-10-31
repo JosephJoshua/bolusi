@@ -66,6 +66,10 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   ladder is a step smaller: display 28, title 22, heading 17, body 15, small 14.
   The 14 floor is the same. Mouse-first controls are 32 to 40 px tall; tables,
   not cards, carry lists.
+- The PC window goes down to 1024 × 520 (a small laptop at 125% scaling) and
+  nothing is cut off there: tabs and filters wrap to a second row instead of
+  scrolling sideways out of a mouse's reach, and an open servisan sits beside
+  the table, which folds to number, customer and status, never over it.
 
 ## 4. Alignment and spacing
 

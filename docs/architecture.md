@@ -71,6 +71,11 @@ behind adapters. Node tests do not establish native performance or correctness.
   can change without rewriting signed facts.
 - Apply operations transactionally and make replay idempotent. Interrupted rebuilds
   and reordered sync must preserve resulting business state.
+- Folding sorts ops by each phone's clock, but the server judged them as they arrived,
+  so an applier must reach what the server judged in either order: a final state
+  (a cancel) is not undone by an earlier-judged op folded after it, and a change
+  folded before the record it changes exists is not lost (repair replays it from
+  the ticket's history entries when the ticket is opened).
 - A projection version bump rebuilds on the device in the background, re-folding one
   entity at a time from the op log. Appliers write only their own entity's rows, so
   screens and commands keep working while it runs.
@@ -125,6 +130,13 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- Every op type also declares `read`: the permission a person needs to see its ops.
+  A device is sent only the ops its read set covers (`sync/read-scope.ts`); a shared
+  store device gets what the business's staff roles may read, so owner-only data never
+  lands on it. When the set shrinks, the device drops those pulled ops and re-folds;
+  when it grows, it catches up on the older ones. `null` is for records every device
+  needs (sign-in, PIN, device). A record with fields for different readers is split
+  into separate op types, one per reader (part costs live apart from stock moves).
 - When a type's rule judges only newer versions, set `minPushVersion` on the type. The
   server refuses a new push below it as `SCHEMA_INVALID`; stored ops still fold at every version.
   Signed ops can't be upgraded, so raise a floor only once the app that signs the newer
@@ -161,8 +173,10 @@ customers registers a document source (`money/documents.ts`) in
 
 The server judges each pushed op alone, not a command's ops as a group, so each
 money rule is safe on its own: a charge equals the document's price, a refund by
-the counter returns at most the overpayment through the account it came in by,
-and lowering a bill, voiding a payment or settling a cash difference are owners'.
+the counter returns at most the overpayment through the account it came in by
+(payments cover the bill in the order they came in, `overpaidByAccount`), nobody
+refunds more than was paid, and lowering a bill, voiding a payment or settling a
+cash difference are owners'. Settling a cash difference always names its count.
 A cash count records what was counted; the difference is computed against the
 book at the count's time, so late-synced cash shows up correctly. Stock and
 purchasing post through the same module (reserved accounts in `constants.ts`).

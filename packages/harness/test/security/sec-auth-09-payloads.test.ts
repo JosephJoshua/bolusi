@@ -117,6 +117,8 @@ describe('I-13 PIN hash material never reaches the operation log or any pushed o
         clock: { now: () => fixture.clock.now() },
         deviceId: fixture.deviceId,
         onChainBroken: () => Promise.resolve(),
+        // Nothing else writes on this fixture's connection, so the push needs no queueing here.
+        transaction: (fn) => fn(),
       });
       expect(transport.pushes.length, 'the push phase sent no batch').toBeGreaterThan(0);
       const pushedOps = transport.pushes.flatMap((request) => request.ops);

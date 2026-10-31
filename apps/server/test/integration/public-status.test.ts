@@ -3,7 +3,12 @@
 // a page closes a while after the warranty ends, and the lookup is limited per IP.
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
-import { displayStatusCode, formatTicketNumber, statusCodeFor } from '@bolusi/modules/repair';
+import {
+  INTAKE_PHOTO_SLOTS,
+  displayStatusCode,
+  formatTicketNumber,
+  statusCodeFor,
+} from '@bolusi/modules/repair';
 import { STATUS_PAGE_GRACE_MS, zPublicRepairStatus, type MediaRef } from '@bolusi/schemas';
 import { ChainBuilder, makeWorld, type ChainWorld, type OpSpec } from '@bolusi/test-support';
 import { sql, type Kysely } from 'kysely';
@@ -166,7 +171,7 @@ async function pushServisan(
         peripherals: [],
         estimatedReadyAt: 1_726_200_000_000,
         quoteLines: [{ lineId: id(0x200), kind: 'part', description: 'LCD', amount: 650_000 }],
-        photos: [{ slot: 'front', label: null, ref: photo(1) }],
+        photos: INTAKE_PHOTO_SLOTS.map((slot, i) => ({ slot, label: null, ref: photo(0x10 + i) })),
         repairTypes: [{ item: 'screen', label: null, warrantyDays: 30, needsVideo: false }],
         claimOf: null,
         ownershipVideo: null,

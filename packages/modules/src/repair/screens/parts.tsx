@@ -30,9 +30,11 @@ import {
 } from '../../screen-kit/screens/views.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
+import { SPEC_FACT_KEY, paidRow, refundLabel, staleStepMessage, statusLabel } from '../labels.js';
+import type { TicketRefund } from '../queries.js';
 import {
   balanceAfterDownPayment,
+  balanceLabelKey,
   statusTone,
   type StaleStep,
   type TicketStatus,
@@ -251,37 +253,43 @@ export { Fact, FactGrid };
 
 /**
  * Under a total: what an owner took off it, the down payment taken off it, then what the customer
- * still pays, or what the store gives back when they paid more. Nothing when neither was taken.
- * `total` is what is owed, already less `reduced`. `action` sits beside the down payment, the one
- * thing it changes.
+ * still pays, or what the store gives back when they paid more, through each method it goes back
+ * by when `refunds` says. Nothing when neither was taken. `total` is what is owed, already less
+ * `reduced`. `action` sits beside the down payment, the one thing it changes.
  */
 export function DownPaymentRows({
   total,
-  downPayment,
   reduced = 0,
+  downPayment,
+  refunds = [],
   paidLabel = 'repair.price.downPayment',
+  returned = false,
   action,
   testID,
 }: {
   readonly total: number;
+  /** What an owner took off the bill (`TicketSummaryRow.reduced`), shown above what was paid. */
+  readonly reduced?: number;
   readonly downPayment: number | null;
-  readonly reduced?: number | undefined;
+  /** What goes back through each method (`TicketDetailRow.refunds`). */
+  readonly refunds?: readonly TicketRefund[];
   /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
   readonly paidLabel?: RepairKey;
+  /** The phone went home: what is left to give back is still owed. */
+  readonly returned?: boolean;
   readonly action?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element | null {
   const paid = downPayment ?? 0;
   if (paid === 0 && reduced === 0) return null;
   const balance = balanceAfterDownPayment(total, paid);
-  // Before pickup an overpaid DP goes back at the handover; after it, it is still owed back.
-  const owedBackLabel: RepairKey =
-    paidLabel === 'repair.price.paid' ? 'repair.price.owedBack' : 'repair.price.refund';
+  const split = balance.kind === 'refund' ? refunds : [];
+  const paidText = paidRow(paid, paidLabel);
   return (
     <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
       {reduced === 0 ? null : (
         <View style={[repairStyles.row, styles.paidRow]}>
-          <Text style={styles.paidText}>{tn('repair.price.reduced')}</Text>
+          <Text style={[styles.paidText, repairStyles.rowText]}>{tn('repair.price.reduced')}</Text>
           <Text style={[styles.paidText, styles.amount]} testID={`${testID}.reduced`}>
             {formatMoney(-reduced)}
           </Text>
@@ -290,22 +298,39 @@ export function DownPaymentRows({
       {paid === 0 ? null : (
         <View style={[repairStyles.row, styles.paidRow]}>
           <View style={styles.paidLabel}>
-            <Text style={styles.paidText}>{tn(paidLabel)}</Text>
+            <Text style={styles.paidText}>{paidText.label}</Text>
             {action}
           </View>
           <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
-            {formatMoney(-paid)}
+            {paidText.amount}
           </Text>
         </View>
       )}
-      <View style={[repairStyles.row, styles.paidRow]}>
-        <Text style={styles.balanceLabel}>
-          {tn(balance.kind === 'due' ? 'repair.price.balance' : owedBackLabel)}
-        </Text>
-        <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
-          {formatMoney(balance.amount)}
-        </Text>
-      </View>
+      {split.length === 0 ? (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={[styles.balanceLabel, repairStyles.rowText]}>
+            {tn(balanceLabelKey(balance.kind, returned))}
+          </Text>
+          <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
+            {formatMoney(balance.amount)}
+          </Text>
+        </View>
+      ) : (
+        split.map((refund) => (
+          <View
+            key={refund.account}
+            style={[repairStyles.row, styles.paidRow]}
+            testID={`${testID}.refund.${refund.account}`}
+          >
+            <Text style={[styles.balanceLabel, repairStyles.rowText]}>
+              {refundLabel(refund, 'screen')}
+            </Text>
+            <Text style={[styles.balanceValue, styles.amount, repairStyles.rowValue]}>
+              {formatMoney(refund.amount)}
+            </Text>
+          </View>
+        ))
+      )}
     </View>
   );
 }

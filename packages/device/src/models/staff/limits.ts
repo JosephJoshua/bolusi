@@ -61,6 +61,20 @@ export function limitRoles(directory: StaffDirectory, actor: StaffActor): readon
   );
 }
 
+/**
+ * Above this a limit is more than one servisan ever costs, so the field asks to check it: an extra
+ * zero turns Rp 1.000.000 into Rp 10.000.000. A warning only; the owner may mean it.
+ */
+export const LIMIT_CHECK_ABOVE = 10_000_000;
+
+/** The field's line under it: what it covers, or a check on an amount that looks like a typo. */
+export function limitHintKey(
+  field: (typeof LIMIT_FIELDS)[number],
+  amount: number | null,
+): 'auth.limits.checkAmount' | (typeof LIMIT_FIELDS)[number]['hint'] {
+  return amount !== null && amount > LIMIT_CHECK_ABOVE ? 'auth.limits.checkAmount' : field.hint;
+}
+
 /** Each amount's label and what it covers, in the order the form asks for them. */
 export const LIMIT_FIELDS = [
   { kind: 'priceDrop', label: 'auth.limits.priceDrop', hint: 'auth.limits.priceDropHint' },

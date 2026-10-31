@@ -6,6 +6,9 @@ import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import idApprovalsCatalog from '@bolusi/modules/approvals/i18n/id.json';
+import enApprovalsCatalog from '@bolusi/modules/approvals/i18n/en.json';
+import { registerApprovalsCatalog } from '@bolusi/modules/approvals/desktop';
 import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
@@ -25,6 +28,7 @@ beforeEach(() => {
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
+  registerApprovalsCatalog({ id: idApprovalsCatalog, en: enApprovalsCatalog });
 });
 afterEach(() => {
   cleanup();
@@ -124,7 +128,7 @@ describe('Kas on the PC', () => {
     const move = within(byTestId('money.desk.kas.moves'))
       .getByText(/Beli lakban/)
       .closest('[data-testid^="money.desk.kas.moves."]')!;
-    expect(move.textContent!.replace(/\s/g, '')).toMatch(/^Biayatoko.*Belilakban−Rp25\.000$/);
+    expect(move.textContent!.replace(/\s/g, '')).toMatch(/^Biayatoko.*Belilakban\u2212Rp25\.000$/);
   });
 
   it('takes a debt paid later, then an owner cancels it in Riwayat and the debt is back', async () => {
@@ -284,8 +288,7 @@ describe('Kas on the PC', () => {
     await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
   });
 
-  it('shows a manager their cancel limit before they cancel a payment', async () => {
-    await openKas('Maria Kogoya');
+  async function openVoid(): Promise<void> {
     fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });
     fireEvent.click(byTestId('money.desk.kas.tabs.history'));
     const table = await screen.findByTestId('money.desk.history.table');
@@ -294,25 +297,39 @@ describe('Kas on the PC', () => {
     });
     fireEvent.click(voidButton!);
     await screen.findByTestId('money.desk.void');
+  }
+
+  it('shows a manager their cancel limit, and asks an owner beyond it', async () => {
+    await openKas('Maria Kogoya');
+    await openVoid();
     expect(byTestId('money.desk.void.limit').textContent).toBe(
       'Batas pembatalanmu Rp 30.000 per servisan.',
     );
-    // Every payment today is beyond it: refused up front, not after submitting.
-    fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
-    expect(byTestId('money.desk.void.submit')).toHaveProperty('disabled', true);
-    expect(byTestId('money.desk.void.hint').textContent).toBe(
-      'Melebihi batasmu. Minta pemilik toko.',
+    // Every payment today is beyond it: said up front, and the cancel goes to an owner.
+    expect((await screen.findByTestId('money.desk.void.asks')).textContent).toBe(
+      'Melebihi batasmu, jadi perlu persetujuan.',
     );
+    expect(byTestId('money.desk.void.submit').textContent).toBe('Minta persetujuan');
+    fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
+    fireEvent.click(byTestId('money.desk.void.submit'));
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
+    expect(screen.queryByTestId('money.desk.void')).toBeNull();
   });
 
-  it('offers cancelling a payment to owners only', async () => {
+  it('lets the counter ask an owner to cancel a payment, and only that', async () => {
+    await openKas();
+    await openVoid();
+    expect(screen.queryByTestId('money.desk.void.limit')).toBeNull();
+    expect(byTestId('money.desk.void.asks').textContent).toBe('Perlu persetujuan pemilik toko.');
+    expect(byTestId('money.desk.void.submit').textContent).toBe('Minta persetujuan');
+  });
+
+  it('moves between days in Riwayat', async () => {
     await openKas();
     fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });
     fireEvent.click(byTestId('money.desk.kas.tabs.history'));
     const table = await screen.findByTestId('money.desk.history.table');
-    // Today's payments are listed, without a cancel for the counter.
     await within(table).findAllByText('Pembayaran diterima');
-    expect(screen.queryByRole('button', { name: /^Batalkan/ })).toBeNull();
     fireEvent.click(byTestId('money.desk.history.previous'));
     await waitFor(() =>
       expect(byTestId('money.desk.history.day').textContent).not.toBe('Hari ini'),

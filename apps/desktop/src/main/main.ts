@@ -6,6 +6,7 @@ import {
   app,
   BrowserWindow,
   Menu,
+  screen,
   session,
   shell,
   type IpcMainEvent,
@@ -23,7 +24,12 @@ import { registerPrinting } from './printing.js';
 import { serverAddress } from './server-address.js';
 import { registerStartup } from './startup.js';
 import { registerUpdates } from './updater.js';
-import { frameOptions, registerWindowChrome, reportFullscreen } from './window-chrome.js';
+import {
+  frameOptions,
+  registerWindowChrome,
+  reportFullscreen,
+  windowSize,
+} from './window-chrome.js';
 
 // The dev server is for development only; an installed app never loads a page from elsewhere.
 const DEV_SERVER_URL = app.isPackaged ? undefined : process.env['BOLUSI_DESKTOP_DEV_URL'];
@@ -68,10 +74,7 @@ function trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
 
 function createWindow(): void {
   const window = new BrowserWindow({
-    width: 1366,
-    height: 768,
-    minWidth: 1024,
-    minHeight: 640,
+    ...windowSize(screen.getPrimaryDisplay().workAreaSize),
     show: false,
     backgroundColor: '#ffffff',
     autoHideMenuBar: true,

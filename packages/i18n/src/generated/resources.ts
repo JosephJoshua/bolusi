@@ -9,7 +9,7 @@ const source = {
         cancel: 'Batal',
         retry: 'Coba lagi',
         delete: 'Hapus',
-        confirm: 'Ya, Lanjutkan',
+        confirm: 'Ya, lanjutkan',
         back: 'Kembali',
         close: 'Tutup',
         edit: 'Ubah',
@@ -98,7 +98,7 @@ const source = {
         CHAIN_GAP: 'Ada yang tertinggal. Dikirim ulang otomatis.',
         CHAIN_HALTED: 'Menunggu perubahan sebelumnya beres.',
         CLOCK_AHEAD:
-          'Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
+          'Jam perangkat ini terlalu cepat saat perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
         DEVICE_REVOKED: 'Perangkat ini sudah diblokir. Daftarkan ulang.',
         PERMISSION_DENIED: 'Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.',
         RULE_VIOLATED:
@@ -202,6 +202,7 @@ const source = {
         wrong: 'PIN salah.',
         attemptsLeft: 'Sisa {count} kali coba.',
         wait: 'Terlalu sering salah. Coba lagi dalam {duration}.',
+        nextWait: 'Salah sekali lagi, harus tunggu {duration}.',
         lockedOut: 'Minta pemilik toko membuka kuncinya.',
         forgot: 'Minta pemilik toko membuatkan PIN baru. Bisa tanpa internet.',
         setup: {
@@ -325,6 +326,7 @@ const source = {
           cashier: 'Terima HP, atur harga, dan serahkan HP ke pelanggan',
           technician: 'Kerjakan servisan, termasuk foto sebelum dan sesudah',
           manager: 'Tugas kasir dan teknisi, plus diskon dan refund terbatas',
+          staff: 'Hanya menulis catatan',
           storeOwner: 'Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan',
         },
         save: 'Simpan',
@@ -469,6 +471,7 @@ const source = {
         refundHint: 'Termasuk membatalkan pembayaran dan DP',
         credit: 'Bayar nanti',
         creditHint: 'Sisa tagihan saat HP dibawa pulang',
+        checkAmount: 'Besar sekali untuk satu servisan. Cek lagi jumlahnya.',
         save: 'Simpan',
         saved: 'Batas {role} tersimpan.',
         missing: 'Isi ketiga batas. Tulis 0 kalau harus pemilik toko.',
@@ -702,10 +705,10 @@ const source = {
         waitingForConnection: 'Menunggu koneksi',
       },
       action: {
-        takePhoto: 'Ambil Foto',
-        retake: 'Foto Ulang',
-        usePhoto: 'Pakai Foto Ini',
-        retryUpload: 'Kirim Ulang',
+        takePhoto: 'Ambil foto',
+        retake: 'Foto ulang',
+        usePhoto: 'Pakai foto ini',
+        retryUpload: 'Kirim ulang',
       },
       permission: {
         camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
@@ -791,7 +794,7 @@ export const resources = {
           cancel: 'Cancel',
           retry: 'Try again',
           delete: 'Delete',
-          confirm: 'Yes, Continue',
+          confirm: 'Yes, continue',
           back: 'Back',
           close: 'Close',
           edit: 'Edit',
@@ -885,7 +888,7 @@ export const resources = {
           CHAIN_GAP: 'Something was missing. Resending automatically.',
           CHAIN_HALTED: 'Waiting on an earlier change.',
           CLOCK_AHEAD:
-            'This phone’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
+            'This device’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
           DEVICE_REVOKED: 'This device is blocked. Enroll it again.',
           PERMISSION_DENIED: 'Whoever made it wasn’t allowed to. Ask someone who is to redo it.',
           RULE_VIOLATED:
@@ -987,6 +990,7 @@ export const resources = {
           wrong: 'Wrong PIN.',
           attemptsLeft: '{count, plural, one {# try left.} other {# tries left.}}',
           wait: 'Too many wrong tries. Try again in {duration}.',
+          nextWait: 'One more wrong try and you wait {duration}.',
           lockedOut: 'Ask the store owner to unlock it.',
           forgot: 'Ask the store owner to make you a new PIN. Works offline.',
           setup: {
@@ -1112,6 +1116,7 @@ export const resources = {
             cashier: 'Take in devices, set prices and hand devices back',
             technician: 'Work on repairs, including before and after photos',
             manager: 'Cashier and technician work, plus limited discounts and refunds',
+            staff: 'Notes only',
             storeOwner:
               'Everything in the store, including staff, discounts and cancelling repairs',
           },
@@ -1260,6 +1265,7 @@ export const resources = {
           refundHint: 'Includes voiding payments and down payments',
           credit: 'Pay later',
           creditHint: 'What the customer still owes when they take the phone',
+          checkAmount: 'That is a lot for one repair. Check the amount.',
           save: 'Save',
           saved: '{role} limits saved.',
           missing: 'Fill in all three. Enter 0 to always need a store owner.',
@@ -1504,10 +1510,10 @@ export const resources = {
           waitingForConnection: 'Waiting for connection',
         },
         action: {
-          takePhoto: 'Take Photo',
+          takePhoto: 'Take photo',
           retake: 'Retake',
-          usePhoto: 'Use This Photo',
-          retryUpload: 'Send Again',
+          usePhoto: 'Use this photo',
+          retryUpload: 'Send again',
         },
         permission: {
           camera: 'Allow the app to use the camera to take photos.',

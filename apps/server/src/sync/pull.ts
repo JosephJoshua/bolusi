@@ -6,8 +6,15 @@
 // db-server's generated types do not reach apps/server (task 39), so the query layer is unchecked
 // against the schema — the real-Postgres tests are the correctness gate for column names, not tsc.
 import type { ForTenant, TenantDb } from '@bolusi/db-server';
-import { operationFromSignedCoreJcs } from '@bolusi/core';
+import {
+  operationFromSignedCoreJcs,
+  readPermissionsOf,
+  typesReadWith,
+  type ReadScopeRegistry,
+} from '@bolusi/core';
 import type { DeviceInfo, PullRequest, PullResponse, SignedOperation } from '@bolusi/schemas';
+
+import { sharedDeviceReadSet } from './read-set.js';
 
 /** The token-authenticated device pulling (api/00 §3; store null = system/tenant-scoped device). */
 export interface PullIdentity {
@@ -19,6 +26,8 @@ export interface PullIdentity {
 export interface PullDeps {
   readonly forTenant: ForTenant;
   readonly now: () => number;
+  /** Which permission each op type is read with: a device is sent only what its read set covers. */
+  readonly readScope: ReadScopeRegistry;
 }
 
 /**
@@ -40,8 +49,8 @@ function reconstructWireOp(row: {
 /**
  * The per-tenant `devicesDirectoryVersion` (api/01-sync §4.1). No dedicated column exists server-
  * side (10-db has only the client-side `sync_state.devices_directory_version`) and this task adds
- * no migration, so it is DERIVED from the append-only device directory: `count(devices) +
- * count(revoked devices)`. Devices are never hard-deleted (terminal `revoked`, no un-revoke —
+ * no migration, so it is DERIVED from the append-only device directory: `SNAPSHOT_SHAPE_OFFSET +
+ * count(devices) + count(revoked devices)`. Devices are never hard-deleted (terminal `revoked`, no un-revoke —
  * 03-state-machines §5), so this is strictly monotonic and bumps by exactly one on every enrollment
  * (a new row) and every revocation (a newly-non-null `revoked_at`) — precisely "bumped on any device
  * enrollment/revocation". Tenant-wide (all stores), scoped by the `forTenant` RLS predicate; the
@@ -64,22 +73,34 @@ async function directoryVersion(db: TenantDb): Promise<number> {
     .selectFrom('devices')
     .select((eb) => [eb.fn.countAll().as('total'), eb.fn.count('revokedAt').as('revoked')])
     .executeTakeFirstOrThrow();
-  return Number(row.total) + Number(row.revoked);
+  return SNAPSHOT_SHAPE_OFFSET + Number(row.total) + Number(row.revoked);
 }
 
 /**
- * The devices sidecar snapshot (api/01-sync §4.1): the FULL directory of the device's pull scope
- * — `storeId = device.storeId OR storeId IS NULL` — including the tenant-scoped `kind: 'system'`
- * device and any revoked devices (their historical signatures must stay verifiable; the client
- * keeps them for pull-side verification). Never contains other tenants' (RLS) or other stores'
- * devices (the scope predicate). For a store-less device the store leg matches nothing, leaving
- * `storeId IS NULL` — the system devices only.
+ * Raised whenever what a snapshot holds changes, so every device's stored version stops matching
+ * once and it fetches the new snapshot; the client re-verifies its quarantined ops against every
+ * sidecar it receives (core sync/pull.ts), which releases the ones the old snapshot left unknown.
+ * A version stored under the old offset is far below the new one, so the two never meet.
+ * 1_000_000 (from 0): the snapshot became every device of the tenant, not only the puller's store's.
  */
-async function deviceSnapshot(db: TenantDb, storeId: string | null): Promise<DeviceInfo[]> {
+const SNAPSHOT_SHAPE_OFFSET = 1_000_000;
+
+/**
+ * The devices sidecar snapshot (api/01-sync §4.1): EVERY device of the tenant, including the
+ * tenant-scoped `kind: 'system'` device and any revoked devices (their historical signatures must
+ * stay verifiable; the client keeps them for pull-side verification). Never contains other
+ * tenants' devices (RLS).
+ *
+ * Not narrowed to the puller's store: the pull serves every `storeId IS NULL` op of the tenant,
+ * and a member device at ANY store may author one (a locale change, a tenant inventory item, a
+ * central money account). The client verifies each pulled op against this list, so a list without
+ * the other stores' keys left those ops unverifiable and quarantined them on every other store.
+ * Public keys are not secret, and the list carries no op content.
+ */
+async function deviceSnapshot(db: TenantDb): Promise<DeviceInfo[]> {
   const rows = await db
     .selectFrom('devices')
     .select(['id', 'storeId', 'kind', 'signingKeyPublic', 'status', 'revokedAt'])
-    .where((eb) => eb.or([eb('storeId', '=', storeId), eb('storeId', 'is', null)]))
     .orderBy('id')
     .execute();
   return rows.map((row) => ({
@@ -99,20 +120,50 @@ export async function runPull(
 ): Promise<PullResponse> {
   return deps.forTenant(identity.tenantId, async (db) => {
     const limit = request.limit; // schema default 500, hard max 500 (api/01-sync §4)
+    // Permission-scoped sync: the types read with a permission outside the device's read set are
+    // never sent. Filtering out (rather than listing what is allowed) keeps a type every device
+    // reads, like sign-in records, flowing without a lookup.
+    const readSet = await sharedDeviceReadSet(db, identity.tenantId, deps.readScope);
+    const allowed = new Set(readSet);
+    const hidden = typesReadWith(
+      deps.readScope,
+      readPermissionsOf(deps.readScope).filter((read) => !allowed.has(read)),
+    );
+    // A catch-up pull asks for older ops of newly readable types only, up to where its normal pull
+    // already is. What it asks for is still limited to what the device may read now.
+    const backfill =
+      request.backfill === undefined
+        ? undefined
+        : {
+            types: typesReadWith(
+              deps.readScope,
+              request.backfill.reads.filter((read) => allowed.has(read)),
+            ),
+            through: request.backfill.through,
+          };
     // The v0 pull scope (api/01-sync §4.3): `serverSeq > cursor AND (storeId = device.storeId OR
     // storeId IS NULL)`, ORDER BY serverSeq. Fetch one MORE than the page: the extra row answers "is
     // there a next page?" without a second COUNT, and pins nextCursor to the last SERVED op.
-    const rows = await db
-      .selectFrom('operations')
-      .select(['serverSeq', 'signedCoreJcs', 'hash', 'signature'])
-      // `server_seq` is int8 → derived as `Int8 = ColumnType<string, ...>` (the pg driver returns
-      // int8 as a string), so the comparison operand is typed `string`. pg serializes 500 and '500'
-      // to the same wire value — this honours the derived type without changing behaviour.
-      .where('serverSeq', '>', String(request.cursor))
-      .where((eb) => eb.or([eb('storeId', '=', identity.storeId), eb('storeId', 'is', null)]))
-      .orderBy('serverSeq')
-      .limit(limit + 1)
-      .execute();
+    const rows =
+      backfill !== undefined && backfill.types.length === 0
+        ? []
+        : await db
+            .selectFrom('operations')
+            .select(['serverSeq', 'signedCoreJcs', 'hash', 'signature'])
+            // `server_seq` is int8 → derived as `Int8 = ColumnType<string, ...>` (the pg driver
+            // returns int8 as a string), so the comparison operand is typed `string`. pg serializes
+            // 500 and '500' to the same wire value — this honours the derived type.
+            .where('serverSeq', '>', String(request.cursor))
+            .where((eb) => eb.or([eb('storeId', '=', identity.storeId), eb('storeId', 'is', null)]))
+            .$if(hidden.length > 0, (qb) => qb.where('type', 'not in', hidden))
+            .$if(backfill !== undefined, (qb) =>
+              qb
+                .where('type', 'in', backfill?.types ?? [])
+                .where('serverSeq', '<=', String(backfill?.through ?? 0)),
+            )
+            .orderBy('serverSeq')
+            .limit(limit + 1)
+            .execute();
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
@@ -127,13 +178,14 @@ export async function runPull(
       nextCursor,
       hasMore,
       serverTime: deps.now(),
+      readSet: [...readSet],
     };
 
     // Devices sidecar (api/01-sync §4.1): only when the client's echoed version is stale. Equal ⇒
     // omit both fields (nothing changed since the client's last snapshot).
     const currentVersion = await directoryVersion(db);
     if (request.devicesDirectoryVersion !== currentVersion) {
-      response.devices = await deviceSnapshot(db, identity.storeId);
+      response.devices = await deviceSnapshot(db);
       response.devicesDirectoryVersion = currentVersion;
     }
 

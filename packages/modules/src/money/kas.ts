@@ -2,7 +2,13 @@
 // method, the drawer's moves, a count's difference and what customers still owe.
 import { formatMoney } from '@bolusi/i18n';
 
-import { CASH_ACCOUNT, MONEY_PERMISSION, type CashMoveKind } from './constants.js';
+import {
+  CASH_ACCOUNT,
+  HANDOVER_REFUND_REASON,
+  MONEY_PERMISSION,
+  movesOut,
+  type CashMoveKind,
+} from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -25,21 +31,16 @@ export interface MethodTotal {
   readonly amount: number;
 }
 
-/**
- * Money in through each method over the records given: payments that still count, less what was
- * handed back through that method. The drawer first, then the rest by size.
- */
-export function moneyInByMethod(entries: readonly MoneyEntryRow[]): MethodTotal[] {
-  const totals = new Map<string, number>();
-  const add = (account: string, amount: number) =>
-    totals.set(account, (totals.get(account) ?? 0) + amount);
-  for (const entry of entries) {
-    if (entry.account === null) continue;
-    if (entry.kind === 'payment_received' && entry.voidedAt === null) {
-      add(entry.account, entry.amount);
-    }
-    if (entry.kind === 'refund_paid') add(entry.account, -entry.amount);
-  }
+/** The day's money in: payments by method, what went back, and the net of both. */
+export interface MoneyIn {
+  readonly methods: MethodTotal[];
+  /** Handed back to customers, through any method: its own line, never a negative money in. */
+  readonly refunded: number;
+  readonly total: number;
+}
+
+/** The drawer first, then the rest by size. */
+function byMethodOrder(totals: Map<string, number>): MethodTotal[] {
   return [...totals]
     .map(([account, amount]) => ({ account, amount }))
     .filter((total) => total.amount !== 0)
@@ -51,9 +52,40 @@ export function moneyInByMethod(entries: readonly MoneyEntryRow[]): MethodTotal[
     );
 }
 
-/** Whether a move takes cash out of the drawer (everything but change money put in). */
-export function movesOut(kind: CashMoveKind): boolean {
-  return kind !== 'float';
+/**
+ * Money in through each method over the records given (payments that still count); what was
+ * handed back is its own figure, so a refund of an earlier day's payment never shows as a method's
+ * negative money in.
+ */
+export function moneyIn(entries: readonly MoneyEntryRow[]): MoneyIn {
+  const totals = new Map<string, number>();
+  let refunded = 0;
+  for (const entry of entries) {
+    if (entry.account === null) continue;
+    if (entry.kind === 'payment_received' && entry.voidedAt === null) {
+      totals.set(entry.account, (totals.get(entry.account) ?? 0) + entry.amount);
+    }
+    if (entry.kind === 'refund_paid') refunded += entry.amount;
+  }
+  const methods = byMethodOrder(totals);
+  const paid = methods.reduce((sum, method) => sum + method.amount, 0);
+  return { methods, refunded, total: paid - refunded };
+}
+
+/** What is still in through each method on one document: its payments less what went back. */
+export function moneyInByMethod(entries: readonly MoneyEntryRow[]): MethodTotal[] {
+  const totals = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.account === null) continue;
+    const amount =
+      entry.kind === 'payment_received' && entry.voidedAt === null
+        ? entry.amount
+        : entry.kind === 'refund_paid'
+          ? -entry.amount
+          : 0;
+    if (amount !== 0) totals.set(entry.account, (totals.get(entry.account) ?? 0) + amount);
+  }
+  return byMethodOrder(totals);
 }
 
 /** How each move reads, in the order the counter is offered them. */
@@ -137,6 +169,23 @@ export function splitOpenBalances<T extends OpenBalanceRow>(rows: readonly T[]):
   };
 }
 
+/**
+ * A record's reason as the history shows it. The handover refund's code reads in this reader's
+ * language, and so do the fixed words older versions saved in its place.
+ */
+const HANDOVER_REFUND_WORDS = new Set([
+  HANDOVER_REFUND_REASON,
+  'Returned at handover',
+  'Sisa DP dikembalikan saat serah terima',
+  'Rest of the DP returned at handover',
+]);
+
+function reasonText(reason: string | null): string | null {
+  return reason !== null && HANDOVER_REFUND_WORDS.has(reason)
+    ? tm('money.history.handoverRefund')
+    : reason;
+}
+
 /** How each kind of record reads in the day's history. */
 const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
   charge_recorded: 'money.opType.chargeRecorded',
@@ -185,34 +234,51 @@ export function historyLine(
       customer,
       entry.documentLabel,
       method,
-      voided ? tm('money.history.voided', { reason: entry.voidReason ?? '' }) : entry.reason,
+      voided
+        ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
+        : reasonText(entry.reason),
     ].filter((part): part is string => part !== null && part !== ''),
-    amount: `${signed < 0 ? '−' : ''}${formatMoney(Math.abs(signed))}`,
+    amount: formatMoney(signed),
     voided,
   };
 }
 
-/** What the person may cancel in Riwayat: payments (`voidPayment`), cash moves (`adjustCash`). */
+/**
+ * What the person may cancel in Riwayat: payments (`voidPayment`), cash moves (`adjustCash`).
+ * A void limit of 0 (`ModulePort.limitOf(money.void_payment)`) cancels nothing, the same as not
+ * holding it; any other limit is said in the void step, which asks an owner beyond it.
+ */
 export interface VoidAbilities {
   readonly payments: boolean;
+  /** May ask an owner to cancel a payment on a servisan instead (as `useVoidAsk` allows). */
+  readonly askPayments: boolean;
   readonly cashMoves: boolean;
 }
 
-export function voidAbilities(hasPermission: (id: string) => boolean): VoidAbilities {
+export function voidAbilities(
+  hasPermission: (id: string) => boolean,
+  limitOf: (id: string) => number | null = () => null,
+  /** Approvals' own check: whether this person may ask for decisions at all. */
+  mayAsk = false,
+): VoidAbilities {
   return {
-    payments: hasPermission(MONEY_PERMISSION.voidPayment),
+    payments:
+      hasPermission(MONEY_PERMISSION.voidPayment) && limitOf(MONEY_PERMISSION.voidPayment) !== 0,
+    askPayments:
+      (hasPermission(MONEY_PERMISSION.receive) || hasPermission(MONEY_PERMISSION.voidPayment)) &&
+      mayAsk,
     cashMoves: hasPermission(MONEY_PERMISSION.adjustCash),
   };
 }
 
 /**
- * Whether this person may still cancel this record: a payment, or money put in or taken out of
- * the drawer by hand, not cancelled yet.
+ * Whether this person may still cancel this record, or ask an owner to: a payment, or money put in
+ * or taken out of the drawer by hand, not cancelled yet.
  */
 export function voidable(entry: MoneyEntryRow, can: VoidAbilities): boolean {
   if (entry.voidedAt !== null) return false;
   return entry.kind === 'payment_received'
-    ? can.payments
+    ? can.payments || (can.askPayments && entry.documentId !== null)
     : entry.kind === 'cash_moved' && can.cashMoves;
 }
 
@@ -271,11 +337,15 @@ export interface CashMoveCheck {
   readonly depositAccount: PaymentAccountRow | null;
   /** What is still missing before it can be saved, in words; null when nothing is. */
   readonly missing: MoneyKey | null;
+  /** The values `missing` reads with. */
+  readonly missingValues?: { readonly amount: string };
 }
 
 /**
  * Cash out of or into the drawer: what it needs before it is saved. Cash is deposited into a bank
- * account; QRIS and card machines settle there on their own.
+ * account; QRIS and card machines settle there on their own. Nobody takes out more than the book
+ * says is in the drawer (`drawer`, null while it loads; the command checks again on save): the
+ * server records real cash as it comes, so the device is where an over-withdrawal is stopped.
  */
 export function cashMoveCheck(move: {
   readonly kind: CashMoveKind;
@@ -283,12 +353,26 @@ export function cashMoveCheck(move: {
   readonly amount: number | null;
   readonly reason: string;
   readonly accounts: readonly PaymentAccountRow[];
+  readonly drawer: number | null;
 }): CashMoveCheck {
   const banks = move.accounts.filter((row) => row.kind === 'transfer');
   const depositAccount =
     move.kind === 'deposit'
       ? (banks.find((row) => `account:${row.id}` === move.account) ?? banks[0] ?? null)
       : null;
+  const aboveDrawer =
+    move.amount !== null &&
+    movesOut(move.kind) &&
+    move.drawer !== null &&
+    move.amount > move.drawer;
+  if (aboveDrawer) {
+    return {
+      banks,
+      depositAccount,
+      missing: 'money.move.aboveDrawer',
+      missingValues: { amount: formatMoney(Math.max(0, move.drawer ?? 0)) },
+    };
+  }
   const missing: MoneyKey | null =
     move.amount === null || move.amount <= 0
       ? 'money.move.hintAmount'

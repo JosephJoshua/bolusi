@@ -25,6 +25,7 @@ import {
   type DirectoryRole,
   type ModulePermissionManifest,
   type ModuleRuntime,
+  type OpRuleContext,
 } from '@bolusi/core';
 
 import { APPROVAL_PERMISSION } from '../../src/approvals/index.js';
@@ -66,6 +67,8 @@ export interface RepairHarness {
   readonly checkRule: (
     op: SignedOperation,
     withinLimit?: (userId: string, permissionId: string, amount: number) => Promise<boolean>,
+    /** Who holds what instead, and the server's clock (none: judged as a device does). */
+    extra?: Partial<Pick<OpRuleContext<never>, 'holdsPermission' | 'receivedAt'>>,
   ) => Promise<void>;
   readonly tenantId: string;
   readonly storeId: string;
@@ -335,12 +338,13 @@ export async function openRepairHarness(
     runtime,
     db,
     engine,
-    checkRule: (op, withinLimit = () => Promise.resolve(true)) =>
+    checkRule: (op, withinLimit = () => Promise.resolve(true), extra = {}) =>
       registry.checkOpRule(op, {
         db: db as never,
         holdsPermission: () => Promise.resolve(true),
         withinLimit,
         sha256: (data) => noblePort.sha256(data),
+        ...extra,
       }),
     tenantId,
     storeId,

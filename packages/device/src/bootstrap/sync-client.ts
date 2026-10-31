@@ -28,6 +28,7 @@ import {
   readSyncState,
   SyncLoop,
   type PulledBatch,
+  type PullReadScope,
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
@@ -86,6 +87,8 @@ export interface SyncClientDeps {
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   /** Can this build fold the op? One from a newer app pauses the pull until this app updates. */
   readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
+  /** Follow the server's read set: drop what this device may no longer read, catch up on the new. */
+  readonly readScope: PullReadScope;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -136,6 +139,12 @@ export interface SyncClient {
   startForBackgroundPass(): Promise<void>;
   /** (e) pull-to-refresh. */
   requestManual(): void;
+  /**
+   * What became of the last "Kirim sekarang": still sending, or the bare error code its attempt
+   * failed with (null once it got through), so the screen answers the press instead of waiting for
+   * the next automatic try to say anything.
+   */
+  manualSync(): ManualSyncStatus;
   /** (d) one background-task pass. */
   requestBackground(): void;
   /** Stop the running cycle at its next committed pull batch, for a background pass out of time. */
@@ -163,6 +172,15 @@ export interface SyncClient {
   settle(): Promise<void>;
 }
 
+/** The last manual sync's outcome, as `SyncStatusInput.manualSyncBusy` / `manualSyncError`. */
+export interface ManualSyncStatus {
+  readonly busy: boolean;
+  readonly error: string | null;
+}
+
+/** The code a failed manual sync shows when the loop recorded none (a bundle refresh, say). */
+const MANUAL_SYNC_FALLBACK_ERROR = 'NETWORK';
+
 class SyncClientImpl implements SyncClient {
   private readonly loop: SyncLoop<ClientDatabase>;
   private readonly triggers: SyncTriggers;
@@ -178,6 +196,9 @@ class SyncClientImpl implements SyncClient {
   private background: BackgroundRegistration | null = null;
   private lease: BackgroundLease | null = null;
   private stopped = false;
+  private manual: ManualSyncStatus = { busy: false, error: null };
+  /** Counts presses, so only the latest one's outcome is shown. */
+  private manualPresses = 0;
 
   constructor(private readonly deps: SyncClientDeps) {
     this.currentSyncState = deps.initialSyncState;
@@ -207,6 +228,7 @@ class SyncClientImpl implements SyncClient {
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
       knowsOp: deps.knowsOp,
+      readScope: deps.readScope,
       refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
@@ -282,7 +304,15 @@ class SyncClientImpl implements SyncClient {
   }
 
   requestManual(): void {
+    this.manualPresses += 1;
+    const press = this.manualPresses;
+    this.manual = { busy: true, error: null };
     this.triggers.requestManual();
+    void this.afterManual(press);
+  }
+
+  manualSync(): ManualSyncStatus {
+    return this.manual;
   }
 
   requestBackground(): void {
@@ -347,7 +377,26 @@ class SyncClientImpl implements SyncClient {
 
   private request(reason: SyncTriggerReason): void {
     this.loop.requestSync(reason);
+    // Say at once that a cycle is running: a hung server answers nothing for up to a minute.
+    this.notify();
     void this.afterCycle();
+  }
+
+  /**
+   * Once the press's attempt (and a retry it asked for) has settled: through unless the loop backed
+   * off, in which case the error it recorded.
+   */
+  private async afterManual(press: number): Promise<void> {
+    await this.loop.settle().catch(() => undefined);
+    const state = await readSyncState(this.deps.db.db).catch(() => this.currentSyncState);
+    if (press !== this.manualPresses) return;
+    const failed = this.loop.state === 'backoff' && !state.syncDisabled;
+    this.manual = {
+      busy: false,
+      error: failed ? (state.lastSyncError ?? MANUAL_SYNC_FALLBACK_ERROR) : null,
+    };
+    this.currentSyncState = state;
+    this.notify();
   }
 
   /**
@@ -441,6 +490,22 @@ export interface SyncClientForAppConfig {
 }
 
 /**
+ * How a booted app follows its read set (permission-scoped sync): which permission reads each op
+ * type, and how to rebuild a record or move the watermarks after a drop. The registry is read
+ * lazily, like `knowsOp`: it is looked up when a pull needs it.
+ */
+export function readScopeOf(app: Pick<Bootstrapped, 'registry' | 'engine'>): PullReadScope {
+  return {
+    registry: {
+      types: () => app.registry.operations.types(),
+      readPermissionFor: (type) => app.registry.operations.readPermissionFor(type),
+    },
+    refold: (record) => app.engine.refoldEntityOf(record),
+    catchUpWatermarks: () => app.engine.catchUpPulledWatermarks(),
+  };
+}
+
+/**
  * Build the real sync client over a booted app. This is the platform-facing assembly: the fetch
  * transport (api/01-sync §3/§4) and the bundle producer (api/02-auth §5.2) are built here from the
  * one connection + the token reader; the loop's projection seam is the boot's own engine.
@@ -489,6 +554,7 @@ export function createSyncClientForApp(
     bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
     knowsOp: (op) => knowsOp(app.registry.operations, op),
+    readScope: readScopeOf(app),
     refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,

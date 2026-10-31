@@ -261,6 +261,10 @@ Agreed with the owner after reviewing what the repair release still lacks.
   picks them at intake; the counter or a technician can change them until the phone
   goes home or the servisan is cancelled. A servisan keeps the warranty its types
   had when picked, so editing the list later never changes a promise already made.
+  The server checks a newly picked type against every version the owner's list has
+  had, so an intake taken offline before the owner edited the list still counts;
+  terms no version ever gave are refused. Intake photo angles and a cancel's
+  store fee are checked the same way.
   The warranty counts from pickup (owner decision) and is
   printed per type on the handover slip.
 - **Warranty claims:** a claim opens a new servisan linked to the old one, at Rp 0.
@@ -268,7 +272,9 @@ Agreed with the owner after reviewing what the repair release still lacks.
   counter starts it from the servisan that went home ("Klaim garansi"), with the same
   customer and phone. A claim always names the first servisan, never another claim,
   and has no repair types of its own, so its warranty is that servisan's and a claim
-  never extends it. A later price rise on a claim also needs an owner.
+  never extends it. A later price rise on a claim also needs an owner. The server
+  judges whether the warranty still runs by when it receives the claim, not the
+  phone's clock, so a free claim taken offline that syncs after the end needs an owner.
 - **Ownership video:** taken by the counter at intake when a chosen type needs it. It
   shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
   720p (about 2 Mbit/s: MP4, or WebM from a PC whose browser engine cannot record MP4); it uploads in the
