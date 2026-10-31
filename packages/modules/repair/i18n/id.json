@@ -82,7 +82,17 @@
     "cancelledBy": "oleh {name}",
     "feeChanged": "Biaya diubah",
     "pickTicket": "Pilih servisan untuk melihat detailnya.",
-    "waited": "{days} hari belum diambil"
+    "waited": "{days} hari belum diambil",
+    "empty": {
+      "approvals": "Tidak ada yang menunggu persetujuan.",
+      "active": "Belum ada servisan aktif.",
+      "mine": "Tugasmu kosong.",
+      "unassigned": "Semua servisan sudah ada teknisinya.",
+      "pickup": "Belum ada HP yang siap diambil.",
+      "uncollected": "Tidak ada HP yang lama belum diambil.",
+      "returned": "Belum ada HP yang diambil.",
+      "cancelled": "Tidak ada servisan yang dibatalkan."
+    }
   },
   "cancel": {
     "refundsDp": "Saat ambil HP, pelanggan dapat kembali {amount} dari DP.",
@@ -96,7 +106,8 @@
     "feeInput": "Biaya yang dibayar pelanggan",
     "storeFee": "Biaya biasa di toko ini: {amount}",
     "feeChangedHint": "Tulis juga kenapa biayanya diubah.",
-    "claimFree": "Klaim garansi, tanpa biaya"
+    "claimFree": "Klaim garansi, tanpa biaya",
+    "title": "Pembatalan servisan"
   },
   "check": {
     "biometrics": "Sidik jari & wajah",
@@ -169,7 +180,8 @@
     "payLaterPermitted": "Disetujui {name}.",
     "payLaterWaiting": "Menunggu persetujuan pemilik toko.",
     "payLaterRejected": "Ditolak {name}.",
-    "payLaterRejectedNote": "Ditolak {name}: {note}"
+    "payLaterRejectedNote": "Ditolak {name}: {note}",
+    "title": "Serah terima HP"
   },
   "intake": {
     "discard": "Buang",
@@ -257,7 +269,8 @@
     "refund": "Dikembalikan",
     "newTotal": "Total jadi {from} → {to}",
     "reduced": "Potongan",
-    "owedBack": "Lebih bayar"
+    "owedBack": "Lebih bayar",
+    "editTitle": "Harga baru"
   },
   "problem": {
     "complaint": "Keluhan belum diisi.",
@@ -300,12 +313,12 @@
     "unassigned": "Belum ada teknisi"
   },
   "work": {
-    "afterHint": "Foto HP setelah diperbaiki, minimal satu.",
+    "afterHint": "Minimal satu, setelah HP diperbaiki.",
     "afterShot": "Foto sesudah {n}",
-    "afterTitle": "Selesai dikerjakan",
-    "beforeHint": "Foto HP sebelum dibongkar, minimal satu.",
+    "afterTitle": "Foto sesudah dikerjakan",
+    "beforeHint": "Minimal satu, sebelum HP dibongkar.",
     "beforeShot": "Foto sebelum {n}",
-    "beforeTitle": "Mulai kerjakan",
+    "beforeTitle": "Foto sebelum dikerjakan",
     "partsNote": "Butuh sparepart apa? (opsional)",
     "repairNote": "Apa yang diperbaiki? (opsional)"
   },
@@ -320,7 +333,8 @@
     "corrected": "Data servisan disimpan.",
     "handoverUndone": "Penyerahan dibatalkan. HP tercatat ada di toko.",
     "refund": "Uang sudah dikembalikan.",
-    "reduce": "Tagihan sudah dikurangi."
+    "reduce": "Tagihan sudah dikurangi.",
+    "repairedPriceWaiting": "Selesai dikerjakan. Harga barunya masih perlu dikonfirmasi pelanggan."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -506,7 +520,7 @@
     },
     "plyNote": "Merah muda: toko, kuning: pelanggan.",
     "terms": {
-      "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
+      "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 60 hari setelah selesai bukan tanggung jawab toko.",
       "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
     },
     "refund": "Dikembalikan"
@@ -533,8 +547,8 @@
     "onPaper": "Kertas {paper}",
     "onPrinter": "Dicetak di {printer}, kertas {paper}",
     "problem": {
-      "noPrinter": "Pilih printernya dulu di Pengaturan.",
-      "printerMissing": "Printernya tidak ditemukan. Cek kabel dan dayanya, atau pilih printer lain di Pengaturan.",
+      "noPrinter": "Pilih printernya dulu.",
+      "printerMissing": "Printernya tidak ditemukan. Cek kabel dan dayanya, atau pilih printer lain.",
       "failed": "Belum bisa mencetak. Cek printernya, lalu coba lagi.",
       "stuck": "Notanya belum bisa disiapkan. Coba lagi."
     },
@@ -854,5 +868,8 @@
     "line": "{field}: {from} → {to}",
     "only": "{field} diubah",
     "empty": "kosong"
+  },
+  "history": {
+    "technician": "Teknisi: {name}"
   }
 }

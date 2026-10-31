@@ -129,6 +129,8 @@ export interface TicketEventRow {
   readonly kind: string;
   readonly actorId: string;
   readonly actorName: string | null;
+  /** The technician an assignment gave the work to, by name; null for every other event. */
+  readonly technicianName: string | null;
   readonly at: number;
   readonly detail: Readonly<Record<string, unknown>>;
 }
@@ -714,10 +716,16 @@ export async function getTicketHandler(
     .orderBy('id', 'asc')
     .execute();
 
+  const assignedTo = (event: (typeof events)[number]): string | null => {
+    if (event.kind !== REPAIR_OP.technicianAssigned) return null;
+    const { technicianId } = parseJson<{ technicianId?: unknown }>(event.detailJson, {});
+    return typeof technicianId === 'string' ? technicianId : null;
+  };
   const names = await userNames(qctx.db, [
     summary.technicianId,
     detail.createdBy,
     ...events.map((event) => event.actorId),
+    ...events.flatMap((event) => assignedTo(event) ?? []),
   ]);
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
@@ -777,6 +785,7 @@ export async function getTicketHandler(
           kind: event.kind,
           actorId: event.actorId,
           actorName: names.get(event.actorId) ?? null,
+          technicianName: names.get(assignedTo(event) ?? '') ?? null,
           at: Number(event.at),
           detail: parseJson(event.detailJson, {}),
         })),

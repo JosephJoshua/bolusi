@@ -5,7 +5,7 @@ import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -204,10 +204,16 @@ describe('printing on the counter PC', () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
     await openPrintFor('Ester Mandowen');
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'Pilih printernya dulu di Pengaturan.',
-    );
+    expect((await screen.findByRole('alert')).textContent).toBe('Pilih printernya dulu.');
     expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(true);
+    // Picked right in the dialog, and kept for this computer, as in Settings.
+    fireEvent.click(
+      within(byTestId('repair.desk.print.printers')).getByRole('radio', { name: /EPSON LX-310/ }),
+    );
+    await waitFor(() =>
+      expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(false),
+    );
+    expect(screen.queryByTestId('repair.desk.print.printers')).toBeNull();
   });
 
   it('keeps the slip uncounted when the printer is gone, and says what to check', async () => {

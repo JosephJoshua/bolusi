@@ -138,6 +138,31 @@ describe('counter app over demo data', () => {
     expect(screen.queryByText('Benny Kambu')).toBeNull();
   });
 
+  it('goes from the search straight to the first result with Enter or the down arrow', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    const search = byTestId('repair.desk.board.search');
+    fireEvent.change(search, { target: { value: 'yohanes' } });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.board.results').textContent).toMatch(/ditemukan/),
+    );
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.ticket.customer').textContent).toBe('Yohanis Wenda'),
+    );
+    // The table has the keyboard now, so the arrows go on through the rows.
+    expect(document.activeElement?.getAttribute('role')).not.toBe('searchbox');
+    expect(byTestId('repair.desk.board.table').contains(document.activeElement)).toBe(true);
+  });
+
+  it('keeps one filled button: "Servisan baru" steps back while a servisan is open', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    expect(byTestId('repair.desk.board.newIntake').className).toContain('bg-primary');
+    await openTicket('Yohanis Wenda');
+    expect(byTestId('repair.desk.board.newIntake').className).not.toContain('bg-primary');
+  });
+
   it('keeps the queue the counter was on after a trip to the intake page', async () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
@@ -217,6 +242,10 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.phone').textContent).toContain('0813-4455-6677');
     expect(byTestId('repair.desk.ticket.total').textContent).toContain('1.250.000');
     expect(byTestId('repair.desk.ticket.balance').textContent).toContain('750.000');
+    // The customer is still at the counter: their slip is offered at once, and only once.
+    const print = await screen.findByTestId('repair.desk.print');
+    fireEvent.click(within(print).getByRole('button', { name: 'Kembali' }));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.print')).toBeNull());
     expect(byTestId('repair.desk.ticket.passcode').textContent).toContain('Pola');
     expect(byTestId('repair.desk.ticket.passcode').textContent).not.toContain('1-5-9-6');
     fireEvent.click(screen.getByRole('button', { name: 'Tampilkan' }));
@@ -257,7 +286,7 @@ describe('counter app over demo data', () => {
     await openTicket('Benny Kambu');
     fireEvent.click(byTestId('repair.desk.ticket.action.cancel'));
     const dialog = await screen.findByTestId('repair.desk.cancel');
-    expect(within(dialog).getByRole('heading').textContent).toBe('Minta pembatalan');
+    expect(within(dialog).getByRole('heading').textContent).toBe('Pembatalan servisan');
     expect(byTestId('repair.desk.cancel.asks').textContent).toBe('Perlu persetujuan pemilik toko.');
     fireEvent.change(byTestId('repair.desk.cancel.reason'), {
       target: { value: 'Pelanggan tidak jadi' },
@@ -284,7 +313,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(within(section).getByRole('button', { name: 'Putuskan' }));
     const dialog = await screen.findByTestId('repair.desk.approval');
     expect(within(dialog).getByTestId('repair.desk.approval.amount').textContent).toBe(
-      '-Rp 25.000',
+      '−Rp 25.000',
     );
     fireEvent.click(within(dialog).getByTestId('repair.desk.approval.approve'));
     await screen.findByText('Disetujui dan sudah dicatat.');
@@ -455,7 +484,7 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.downPayment.correct.submit').textContent).toBe(
       'Minta persetujuan',
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Kembali' }));
     await waitFor(() => expect(screen.queryByTestId('repair.desk.downPayment.correct')).toBeNull());
 
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
@@ -539,6 +568,12 @@ describe('counter app over demo data', () => {
     );
     fireEvent.click(byTestId('repair.desk.handover.submit'));
     await waitFor(() => expect(screen.queryByTestId('repair.desk.handover')).toBeNull());
+    // Then the bill the customer takes home is offered, as it stands after the handover.
+    await waitFor(() =>
+      expect(byTestId('repair.desk.print.about').textContent).toContain(
+        'Tagihan sekaligus bukti HP sudah diambil.',
+      ),
+    );
   });
 
   it('takes the rest by QRIS: the same QR again after closing, then paid and handed back', async () => {
@@ -852,7 +887,7 @@ describe('money after pickup on the servisan', () => {
     fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Garansi kaca' } });
     fireEvent.click(byTestId('money.desk.refund.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.refund')).toBeNull());
-    await waitFor(() => expect(text('repair.desk.ticket.reduced')).toBe('-Rp50.000'));
+    await waitFor(() => expect(text('repair.desk.ticket.reduced')).toBe('−Rp50.000'));
     expect(byTestId('repair.desk.ticket.balance').textContent).toContain('Sisa bayar');
     expect(text('repair.desk.ticket.balance')).toContain('SisabayarRp0');
   });

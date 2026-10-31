@@ -60,6 +60,18 @@ export const BOARD_VIEWS = [
 ] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
 
+/** What an empty view says: what is not there, never a generic "no data". */
+export const BOARD_EMPTY_KEY = {
+  approvals: 'repair.board.empty.approvals',
+  active: 'repair.board.empty.active',
+  mine: 'repair.board.empty.mine',
+  unassigned: 'repair.board.empty.unassigned',
+  pickup: 'repair.board.empty.pickup',
+  uncollected: 'repair.board.empty.uncollected',
+  returned: 'repair.board.empty.returned',
+  cancelled: 'repair.board.empty.cancelled',
+} as const satisfies Record<BoardView, RepairKey>;
+
 /**
  * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
  * nobody collected are for the counter and owners, who call the customer. Servisan with requests
@@ -644,6 +656,18 @@ export function amountOwed(
  * What the money already paid on a servisan is called: its DP while the phone is in the store,
  * what was paid in all (DP and the rest) once it went home.
  */
+/**
+ * What marking a servisan repaired says: ready for the customer, or, while a price change still
+ * waits for them, that it needs their answer first.
+ */
+export function repairedDoneKey(
+  ticket: Pick<TicketSummaryRow, 'pendingProposals'> | undefined,
+): RepairKey {
+  return ticket !== undefined && ticket.pendingProposals > 0
+    ? 'repair.done.repairedPriceWaiting'
+    : 'repair.done.repaired';
+}
+
 export function paidLabelKey(ticket: Pick<TicketSummaryRow, 'location'>): RepairKey {
   return ticket.location === 'returned' ? 'repair.price.paid' : 'repair.price.downPayment';
 }

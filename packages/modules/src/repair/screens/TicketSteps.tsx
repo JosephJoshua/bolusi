@@ -341,7 +341,7 @@ export function CancelStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(holds ? 'repair.action.cancel' : 'repair.approval.askCancel')}
+      title={tn('repair.cancel.title')}
       onBack={onCancel}
       primaryLabel={asking ? ta('approvals.action.ask') : tn('repair.action.cancel')}
       primaryVariant={asking ? 'primary' : 'destructive'}
@@ -909,7 +909,7 @@ export function PriceChangeStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(mode === 'change' ? 'repair.action.changePrice' : 'repair.action.proposePrice')}
+      title={tn('repair.price.editTitle')}
       onBack={onCancel}
       question={deciding ? tn('repair.price.alreadyAgreed') : undefined}
       primaryLabel={
