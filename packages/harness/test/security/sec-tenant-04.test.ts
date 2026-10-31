@@ -104,7 +104,8 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
       expect(census.crossTenantProbes).toBeGreaterThanOrEqual(15);
       expect(census.unassignedStoreProbes).toBeGreaterThanOrEqual(12);
       // Bearer-exempt: login, the phone handoff page and the customer status page, whose path key is
-      // the credential, and Xendit's callback, whose QR's callback token is.
+      // the credential, Xendit's callback, whose QR's callback token is, and the signed, tenant-free
+      // app update manifest.
       expect(
         Object.entries(PROBE_REGISTRY)
           .filter(([, row]) => row.unauthenticated.kind === 'absent')
@@ -113,12 +114,13 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
       ).toEqual([
         'GET /h/:key',
         'GET /h/:key/next',
+        'GET /updates/manifest',
         'GET /v1/public/status/:code',
         'POST /h/:key/send',
         'POST /v1/auth/login',
         'POST /xendit/qr/:tenantId',
       ]);
-      expect(census.unauthenticatedProbes).toBe(endpoints.length - 6);
+      expect(census.unauthenticatedProbes).toBe(endpoints.length - 7);
     } finally {
       await fixture.close();
     }

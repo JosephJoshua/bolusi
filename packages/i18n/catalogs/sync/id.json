@@ -65,5 +65,14 @@
     "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini.",
     "rejectedExplain": "Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.",
     "rejectedBanner": "{count} perubahan ditolak server."
+  },
+  "updateNeeded": {
+    "title": "Perbarui aplikasi",
+    "body": "Perangkat lain sudah pakai versi baru. Data baru dari perangkat lain tertahan sampai aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron.",
+    "check": "Cek pembaruan",
+    "checking": "Mengecek pembaruan…",
+    "none": "Belum ada pembaruan untuk HP ini. Coba lagi nanti.",
+    "failed": "Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.",
+    "lastArrived": "Data baru terakhir masuk {relative}"
   }
 }

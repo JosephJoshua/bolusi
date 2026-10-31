@@ -751,6 +751,21 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     },
     unauthenticatedRequest: unauthLeg('GET', () => '/v1/public/status/0000000000'),
   },
+  // ── app updates ───────────────────────────────────────────────────────────────────────────────
+  'GET /updates/manifest': {
+    crossTenant: {
+      kind: 'absent',
+      reason:
+        'no tenant data: every phone of a build gets the same signed manifest from the public release repo (docs/app-updates.md)',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the answer carries no store scope' },
+    unauthenticated: {
+      kind: 'absent',
+      reason:
+        'bearer-exempt by design: expo-updates sends no credentials, and phones trust the update by its signature, not the channel',
+    },
+    unauthenticatedRequest: unauthLeg('GET', () => '/updates/manifest'),
+  },
   // ── QRIS through Xendit ───────────────────────────────────────────────────────────────────────
   'GET /v1/money/qris/accounts': {
     crossTenant: { kind: 'denied', verdict: ACTING_USER_INVALID, rule: RULE_CROSS_TENANT },

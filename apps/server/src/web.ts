@@ -4,7 +4,8 @@
 //
 // Built assets carry a content hash in their name and are cached for good; every other path gets
 // index.html (the app picks its page by path, e.g. /c/<code>), never cached, so a new build reaches
-// customers on their next visit. API and handoff paths are never answered here.
+// customers on their next visit. The server's own paths (API, handoff, updates) are never
+// answered here.
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 
@@ -31,8 +32,11 @@ const PAGE_HEADERS = {
   'X-Robots-Tag': 'noindex',
 } as const;
 
+/** The server's own top-level paths (app.ts): the API, the phone handoff and the phones' updates. */
+const SERVER_PATHS = ['/v1', '/h', '/updates'] as const;
+
 function isApi(path: string): boolean {
-  return path === '/v1' || path.startsWith('/v1/') || path === '/h' || path.startsWith('/h/');
+  return SERVER_PATHS.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 /** The file under `root` a request path names, or null for anything that would leave it. */

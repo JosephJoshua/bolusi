@@ -24,6 +24,7 @@ import { ALL_MODULES } from '@bolusi/modules';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
+import type { UpdateSource } from './app-updates/releases.js';
 import type { QrisConfig } from './qris/service.js';
 import { HandoffRelay } from './handoff/relay.js';
 import { createDbVerifyToken } from './auth/verify-token.js';
@@ -315,6 +316,8 @@ export interface ServerDeps {
   readonly handoffRelay: HandoffRelay;
   /** The web app's build, served at the site root (web.ts); absent ⇒ the API only. */
   readonly webDir?: string;
+  /** Where phones' over-the-air updates come from (app-updates/releases.ts); absent ⇒ none. */
+  readonly appUpdates?: UpdateSource;
   /** Integrated QRIS through Xendit (qris/service.ts). Absent ⇒ its routes answer 503; it also
    *  needs `systemKeyStore`, since a confirmed payment is a record the server signs. */
   readonly qris?: QrisConfig;
@@ -451,6 +454,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     },
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
+    ...(overrides.appUpdates === undefined ? {} : { appUpdates: overrides.appUpdates }),
     ...(overrides.qris === undefined ? {} : { qris: overrides.qris }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.webDir !== undefined ? { webDir: overrides.webDir } : {}),

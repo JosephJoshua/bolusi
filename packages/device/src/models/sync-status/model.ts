@@ -23,6 +23,7 @@
  *   - `pushHalted`     — the local chain is broken (CHAIN_BROKEN, 05 §8); sending has STOPPED.
  *   - `rejected`       — the server refused these changes; they will never send (05 §8).
  *   - `quarantined`    — changes from another device failed verification and are being withheld.
+ *   - `appUpdateNeeded` — another device runs a newer app; its changes wait here until this one updates.
  *
  * Each is permanent-until-a-human-acts, and each means data is not where the user thinks it is.
  * Being offline means none of those things: the work is on the device, it is safe, and it will send
@@ -39,6 +40,7 @@
  */
 
 import {
+  APP_UPDATE_REQUIRED_ERROR_CODE,
   DEVICE_UNRECOGNISED_REASON,
   stalenessLevel,
   type StalenessLevel,
@@ -161,7 +163,8 @@ export type SyncProblem =
   | { readonly kind: 'deviceUnrecognised' }
   | { readonly kind: 'pushHalted' }
   | { readonly kind: 'rejected'; readonly count: number }
-  | { readonly kind: 'quarantined'; readonly count: number };
+  | { readonly kind: 'quarantined'; readonly count: number }
+  | { readonly kind: 'appUpdateNeeded' };
 
 /**
  * The problems, worst first. An empty array is the load-bearing case: it means "nothing is wrong",
@@ -181,6 +184,11 @@ export function syncProblems(input: SyncStatusInput): readonly SyncProblem[] {
   if (input.rejected.length > 0) problems.push({ kind: 'rejected', count: input.rejected.length });
   if (input.quarantined.length > 0) {
     problems.push({ kind: 'quarantined', count: input.quarantined.length });
+  }
+  // The pull stopped at a change from a newer app (core `AppUpdateRequiredError`); it stays until
+  // a pull after the update succeeds and clears `lastSyncError`.
+  if (!input.state.syncDisabled && input.state.lastSyncError === APP_UPDATE_REQUIRED_ERROR_CODE) {
+    problems.push({ kind: 'appUpdateNeeded' });
   }
   return problems;
 }

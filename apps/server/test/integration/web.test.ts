@@ -69,6 +69,9 @@ describe('the web app', () => {
     const { app } = makeTestApp({ webDir: build() });
     const res = await app.request('http://srv.test/v1/nope');
     expect(res.status).toBe(401);
+    // The phones' update manifest is the server's, not a page of the site.
+    const manifest = await app.request('http://srv.test/updates/manifest');
+    expect(manifest.headers.get('content-type') ?? '').not.toContain('text/html');
 
     const apiOnly = makeTestApp().app;
     expect((await apiOnly.request('http://srv.test/c/K7M2Q9XA4BRS')).status).toBe(404);

@@ -9,6 +9,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
 import { createApp } from './app.js';
+import { gitHubReleaseSource } from './app-updates/releases.js';
 import { loadConfig } from './config.js';
 import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
@@ -65,6 +66,9 @@ const app = createApp({
   pushPort,
   ...(config.webDir === undefined ? {} : { webDir: resolve(config.webDir) }),
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
+  ...(config.appUpdatesRepo === undefined
+    ? {}
+    : { appUpdates: gitHubReleaseSource({ repo: config.appUpdatesRepo }) }),
   ...(qris === undefined ? {} : { qris }),
 });
 
