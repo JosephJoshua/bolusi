@@ -4,7 +4,7 @@
  * own full-screen step (TicketSteps.tsx); the rest run in place. The rejected-op banner shows here,
  * where the change was made (05-operation-log §8).
  */
-import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -35,7 +35,7 @@ import { ApprovalSection, ApprovalStep } from '../../approvals/screens/ApprovalV
 import { ta } from '../../approvals/i18n.js';
 import type { ApprovalRow } from '../../approvals/queries.js';
 import { describeRepairApproval } from '../approval-copy.js';
-import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
 import {
   MESSAGE_ACTION_KEY,
   customerMessageKind,
@@ -56,7 +56,7 @@ import { tn, type RepairKey } from '../i18n.js';
 import {
   actionKey,
   downPaymentTitleKey,
-  eventNote,
+  historyEntry,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
@@ -92,6 +92,7 @@ import {
   type StaleStep,
   type TicketAction,
   type TicketStep,
+  repairedDoneKey,
 } from '../flows.js';
 import { useClearAskedNotice } from '../asked-notice.js';
 import {
@@ -165,6 +166,11 @@ type Step =
 
 export interface TicketDetailProps {
   readonly ticketId: string;
+  /**
+   * Just opened by an intake or handed over: opens on its slip, as the customer is still at the
+   * counter. Read once, when the screen opens.
+   */
+  readonly printFirst?: boolean | undefined;
   readonly chrome: RepairChrome;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
@@ -195,6 +201,7 @@ interface LoadedTicket {
 
 export function TicketDetail({
   ticketId,
+  printFirst = false,
   chrome,
   now,
   onBack,
@@ -213,7 +220,9 @@ export function TicketDetail({
   // Money back to the customer and a lowered bill are the ledger's steps, over repair's port.
   const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
-  const [step, setStep] = useState<Step>({ kind: 'none' });
+  const [step, setStep] = useState<Step>(() =>
+    printFirst && runtime.printing !== undefined ? { kind: 'print' } : { kind: 'none' },
+  );
   const [reloadNonce, setReloadNonce] = useState(0);
   // What the last action did, already in words: repair's own steps and the parts steps say it.
   const [done, setDone] = useState<string | null>(null);
@@ -330,7 +339,7 @@ export function TicketDetail({
           stage={step.kind}
           onDone={() => {
             closeStep();
-            setDone(tn(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired'));
+            setDone(tn(step.kind === 'before' ? 'repair.done.start' : repairedDoneKey(ticket)));
           }}
         />
       );
@@ -946,21 +955,7 @@ export function TicketDetail({
 
         <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
           <Timeline
-            entries={[...row.events].reverse().map((event) => {
-              const note = eventNote(event.detail);
-              return {
-                key: event.id,
-                // A change saved before the customer agreed reads as waiting, not as changed.
-                title:
-                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
-                    ? tn('repair.price.waitingEvent')
-                    : translateOpType(event.kind),
-                meta: [formatDateTime(event.at), event.actorName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(note === null ? {} : { detail: note }),
-              };
-            })}
+            entries={[...row.events].reverse().map(historyEntry)}
             testID={`${testID}.timeline`}
           />
         </Section>

@@ -13,7 +13,7 @@
  *
  * No camera glyph on the shutter: §0 is explicit that this audience gets "no icons without labels",
  * and the icon inventory (§3.5/Icon.tsx) is CLOSED — adding a camera glyph is a design-system change
- * first (§3). `media.action.takePhoto` ("Ambil Foto") is the label, and it is also the clearest
+ * first (§3). `media.action.takePhoto` ("Ambil foto") is the label, and it is also the clearest
  * thing that could be written there.
  *
  * ── WHY THE PREVIEW IS A PROP ───────────────────────────────────────────────────────────────────
@@ -168,10 +168,10 @@ export function CaptureScreen({
  * The bottom action bar.
  *
  * `review` is the ONE state with two buttons, and they are deliberately NOT adjacent primaries:
- * "Foto Ulang" is secondary and sits above "Pakai Foto Ini", which is the primary. §3.1 allows one
+ * "Foto ulang" is secondary and sits above "Pakai foto ini", which is the primary. §3.1 allows one
  * visible primary per screen, and the stack (rather than a row) is what keeps both at the full
  * `touch.primary` height with §1.4's 8 dp separation on a 360 dp screen where Indonesian labels run
- * long ("Pakai Foto Ini" is 14 characters).
+ * long ("Pakai foto ini" is 14 characters).
  *
  * Every other state renders NO action, including the error states — their retry lives inside
  * `ErrorState` (§5: "retry action"), and a second retry in the action bar would be two controls for
