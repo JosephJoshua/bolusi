@@ -54,6 +54,7 @@ function fakeUpdates(state: UpdateState = { kind: 'none' }): UpdatesBridge & {
     state: () => Promise.resolve(state),
     onChange: () => () => undefined,
     install: vi.fn<UpdatesBridge['install']>(() => Promise.resolve()),
+    busy: vi.fn<UpdatesBridge['busy']>(),
   };
 }
 

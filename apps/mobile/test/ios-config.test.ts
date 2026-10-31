@@ -39,7 +39,7 @@
 // permission dialogs, or scopes the Keychain accordingly is UNVERIFIED on a real iPhone, and was not
 // attempted on a Simulator because none can run in this environment. No green here is a device test.
 import { createRequire } from 'node:module';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -143,6 +143,8 @@ async function loadIosArtifact(): Promise<{
 
   const { exp: resolved } = await getPrebuildConfigAsync(MOBILE_ROOT, { platforms: ['ios'] });
   const projectRoot = mkdtempSync(join(tmpdir(), 'bolusi-ios-config-'));
+  // The over-the-air update certificate, which the updates mod embeds in Expo.plist.
+  cpSync(join(MOBILE_ROOT, 'updates'), join(projectRoot, 'updates'), { recursive: true });
   const compiled = await compileModsAsync(resolved, {
     projectRoot,
     platforms: ['ios'],

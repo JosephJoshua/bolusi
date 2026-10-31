@@ -58,6 +58,8 @@ import {
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import type { UpdateCheckResult } from '../../bootstrap/app-updates.js';
+
 import { syncChipAccessibilityLabels } from './chip-a11y.js';
 import {
   bannerCauses,
@@ -90,6 +92,11 @@ export interface SyncStatusScreenProps {
   /** Open device setup to register this phone again (offered only when the server forgot it). */
   readonly onReenroll: () => void;
   /**
+   * Fetch and restart into a newer app version, offered while a change from a newer app holds the
+   * pull. Absent in builds without over-the-air updates; the section then only explains.
+   */
+  readonly onCheckForUpdate?: (() => Promise<UpdateCheckResult>) | undefined;
+  /**
    * The refused change whose detail sheet is open, or `null`. The row already says what happened and
    * what to do (`core.rejection.<CODE>`, 07-i18n §10.2); the sheet adds which change it was, when, and
    * the server's own words as collapsed technical detail (07-i18n §4.3).
@@ -109,6 +116,7 @@ export function SyncStatusScreen({
   onRetryMedia,
   onOpenSwitcher,
   onReenroll,
+  onCheckForUpdate,
   expandedRejectedOpId,
 }: SyncStatusScreenProps): React.JSX.Element {
   const level = staleness(input);
@@ -118,6 +126,7 @@ export function SyncStatusScreen({
   const sync = manualSync(input);
   const queue = mediaQueue(input);
   const problems = syncProblems(input);
+  const updateNeeded = problems.some((problem) => problem.kind === 'appUpdateNeeded');
   // The header chip is the five-state, media-blind verdict (design-system §8.1). The headline is that
   // verdict PLUS the `photosPending` distinction the chip cannot carry (task 147).
   const chip = syncChipState(input);
@@ -135,6 +144,15 @@ export function SyncStatusScreen({
   const hasWaiting = input.pendingOperationCount > 0 || waitingPhotos > 0;
   const openRejected = input.rejected.find((row) => row.opId === expandedRejectedOpId) ?? null;
   const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
+  const [updateCheck, setUpdateCheck] = useState<'idle' | 'checking' | 'none' | 'failed'>('idle');
+  const checkForUpdate = (): void => {
+    if (onCheckForUpdate === undefined) return;
+    setUpdateCheck('checking');
+    onCheckForUpdate().then(
+      (result) => setUpdateCheck(result === 'none' ? 'none' : 'checking'),
+      () => setUpdateCheck('failed'),
+    );
+  };
   const rejectedHidden = input.rejected.length - rejectedShown;
   const { icon, tone } = HERO[titleState];
 
@@ -258,7 +276,11 @@ export function SyncStatusScreen({
             {reassuranceMessage(input, 'phone')}
           </Text>
           <Text style={styles.meta} testID="sync-last-synced">
-            {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
+            {/* While a newer app holds the pull, pushes still reach the server: "last connected"
+                would read as offline, so say what actually stopped. */}
+            {t(updateNeeded ? 'sync.updateNeeded.lastArrived' : 'sync.status.lastSynced', {
+              relative: relativeLabel(input),
+            })}
           </Text>
         </View>
       </View>
@@ -335,6 +357,33 @@ export function SyncStatusScreen({
               testID="sync-media-retry"
             />
           </View>
+        </View>
+      ) : null}
+
+      {updateNeeded ? (
+        <View style={styles.section} testID="sync-update-needed">
+          <Text style={styles.sectionTitle}>{t('sync.updateNeeded.title')}</Text>
+          <Text style={styles.sectionText}>{t('sync.updateNeeded.body')}</Text>
+          {onCheckForUpdate === undefined ? null : (
+            <View style={styles.sectionAction}>
+              <TextButton
+                label={t(
+                  updateCheck === 'checking'
+                    ? 'sync.updateNeeded.checking'
+                    : 'sync.updateNeeded.check',
+                )}
+                icon="retry"
+                onPress={checkForUpdate}
+                disabled={updateCheck === 'checking'}
+                testID="sync-update-check"
+              />
+            </View>
+          )}
+          {updateCheck === 'none' || updateCheck === 'failed' ? (
+            <Text style={styles.sectionText} testID="sync-update-result">
+              {t(updateCheck === 'none' ? 'sync.updateNeeded.none' : 'sync.updateNeeded.failed')}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 

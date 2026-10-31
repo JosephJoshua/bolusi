@@ -141,14 +141,19 @@ open the address gets a cookie for that pairing; any other browser with the same
 internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
 a server restart, or 30 minutes without a step.
 
+How every app updates itself, and the phone release paths, are in `app-updates.md`.
+
 Releasing: set the `BOLUSI_API_URL` repository variable to the production server's
 `https://` address once (the workflow refuses to build without one, and an installed app
 ignores a plain-HTTP address), bump `version` in `apps/desktop/package.json`,
 merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
 installer on Windows and publishes it with `latest.yml` to that GitHub Release.
-Installed apps check the latest release a minute after start and every 4 hours,
-download in the background and install on the next close (or "Pasang sekarang" in
-the sidebar). Updates only look at the repository's latest release, so keep other
+Installed apps check the latest release a minute after start and every 4 hours (30
+minutes after a failed check or download), download in the background and install on
+the next close, after 15 minutes with no keyboard or mouse input while no dialog is
+open and no print is running, or on "Pasang sekarang" in the title bar. The core closes
+its database before the installer starts, and an installer that never takes over
+reopens the app. A Windows shutdown skips the install until the next close. Updates only look at the repository's latest release, so keep other
 release kinds out of this repository or mark them pre-release. `pnpm --filter
 @bolusi/desktop dist` builds the installer locally (on Windows; Linux needs wine).
 
