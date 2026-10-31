@@ -20,6 +20,7 @@
     "downPaymentReceived": "Down payment received",
     "downPaymentCorrected": "Down payment changed",
     "slipPrinted": "Slip printed",
+    "statusLinkMade": "Status link made",
     "storePrintSettingsChanged": "Slip details changed",
     "storeUncollectedDaysChanged": "Not-collected limit changed",
     "ticketRepairTypesChanged": "Repair type changed",
@@ -42,6 +43,8 @@
     "proposePrice": "Propose price change",
     "reopen": "Reopen repair",
     "resume": "Resume repair",
+    "resumeClaim": "Continue warranty claim",
+    "resumeIntake": "Continue new repair",
     "start": "Start repair",
     "waitForParts": "Mark waiting for parts",
     "reassign": "Change technician",
@@ -145,8 +148,6 @@
     "watch": "Smartwatch"
   },
   "handover": {
-    "giveBack": "Give {refunds} back to the customer.",
-    "giveBackVia": "{amount} through {method}",
     "note": "Note (optional)",
     "photo": "Handover photo",
     "sign": "Customer signs",
@@ -159,7 +160,6 @@
     "payNow": "Pay now",
     "payLaterReason": "Why pay later",
     "payLaterNote": "The remaining {amount} is recorded as the customer’s debt.",
-    "refundReason": "Rest of the DP returned at handover",
     "checks": "Check with the customer",
     "accessoryBack": "{name} returned",
     "noteNeeded": "Note",
@@ -254,9 +254,12 @@
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Refunded",
+    "refundDue": "To give back",
+    "refundVia": "Give back by {method}",
+    "refundCash": "Give back in cash",
     "newTotal": "Total becomes {from} → {to}",
     "reduced": "Taken off",
+    "givenBack": "Given back",
     "owedBack": "Overpaid"
   },
   "problem": {
@@ -269,7 +272,7 @@
     "incompleteLine": "Describe every line that has an amount.",
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
-    "downPaymentReference": "Enter the approval code from the EDC machine.",
+    "downPaymentReference": "Enter the approval code from the EDC slip.",
     "screenLock": "Enter the screen lock, or choose None.",
     "ownershipVideo": "The ownership video isn’t recorded yet.",
     "customerPhone": "This phone number doesn’t look right. Check the digits.",
@@ -509,7 +512,9 @@
       "intake": "Bring this receipt to collect the phone.\nThe price is an estimate. The store checks with you before it goes up.\nThe store is not responsible for lost data.\nThe store is not responsible for a phone left 30 days after you are told.",
       "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and parts only. Bring this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
     },
-    "refund": "Refund"
+    "refund": "Still to give back",
+    "refundVia": "Refunded by {method}",
+    "refundCash": "Refunded in cash"
   },
   "print": {
     "askTitle": "Did the slip print?",
@@ -557,6 +562,8 @@
     "ofTotal": "Total {amount}",
     "reason": "Reason for the change",
     "removeHint": "Enter 0 if the down payment is void.",
+    "raised": "The extra {added} is recorded as {method}. The {current} DP stays as recorded.",
+    "replaced": "The {current} DP is voided, then {amount} is recorded as {method}.",
     "askTitle": "Ask to change the down payment"
   },
   "printSettings": {
@@ -696,9 +703,11 @@
     "warrantyEnded": "The warranty has ended. Only an owner can open this claim.",
     "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
     "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan.",
+    "claimOtherImei": "The IMEI differs from the phone on the original servisan. A warranty claim is only for the same phone.",
     "overLimit": "Over your limit. Ask a store owner.",
     "handoverAccessories": "An accessory is missing from the handover list.",
     "handoverNoteNeeded": "Something isn’t ticked. Write a note first.",
+    "statusLinkMismatch": "This repair’s status link isn’t valid.",
     "ownershipVideoNeeded": "Record the ownership video first.",
     "notReturned": "This phone hasn’t been handed over.",
     "handoverHasClaim": "A warranty claim names this servisan, so its handover can’t be undone.",
@@ -795,11 +804,76 @@
     "claims": "Warranty claim",
     "open": "Open",
     "intakeNote": "From {number}. Its repair types and warranty carry over.",
-    "ended": "The warranty has ended. Only an owner can open this claim."
+    "ended": "The warranty has ended. Only an owner can open this claim.",
+    "replaceTitle": "Start a warranty claim?",
+    "replaceMessage": "What you have not saved yet will be discarded.",
+    "replaceConfirm": "Start claim",
+    "sameDevice": "A claim is only for this phone."
   },
   "handoverCheck": {
     "customerTried": "Customer tried it",
     "repairWorks": "The repaired part works"
+  },
+  "customerPage": {
+    "title": "Repair status",
+    "reference": "Repair {number}",
+    "step": {
+      "received": "Received",
+      "inRepair": "Being repaired",
+      "waitingForParts": "Waiting for parts",
+      "repaired": "Ready to collect",
+      "cancelled": "Cancelled",
+      "returned": "Collected"
+    },
+    "hint": {
+      "estimate": "Expected by {date}",
+      "ready": "Your phone is ready to collect. Please bring the slip.",
+      "cancelled": "You can collect your phone at the store.",
+      "returned": "Collected {date}"
+    },
+    "pending": {
+      "title": "Needs your approval",
+      "hint": "The price changed. Contact the store to accept or decline it."
+    },
+    "money": {
+      "title": "Cost",
+      "total": "Total",
+      "cancelFee": "Cancellation fee",
+      "paid": "Paid",
+      "due": "Left to pay",
+      "overpaid": "Overpaid",
+      "settled": "Paid"
+    },
+    "history": "History",
+    "contact": {
+      "whatsApp": "Chat with the store",
+      "call": "Call"
+    },
+    "whatsApp": "Hello, I have a question about repair {number} ({device}).",
+    "updated": "Updated {date}",
+    "refresh": "Refresh",
+    "notFound": {
+      "title": "Repair not found",
+      "hint": "Check the code on your slip. A repair just taken in can take a few minutes to appear.",
+      "retype": "Type the code"
+    },
+    "ended": {
+      "title": "This link has ended",
+      "hint": "The warranty is over. Contact the store if you have questions."
+    },
+    "error": {
+      "title": "Could not load",
+      "hint": "Check your internet connection, then try again.",
+      "retry": "Try again"
+    },
+    "lookup": {
+      "title": "Check a repair",
+      "hint": "Enter the code on your repair slip.",
+      "label": "Repair code",
+      "placeholder": "For example: K7M2Q-9XA4B",
+      "submit": "Check",
+      "invalid": "The code is 12 letters and numbers. Please check it."
+    }
   },
   "video": {
     "title": "Ownership video",

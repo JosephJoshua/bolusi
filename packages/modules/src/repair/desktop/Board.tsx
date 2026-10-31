@@ -65,7 +65,7 @@ import {
   type TicketFacets,
 } from '../table.js';
 
-import { QueryPanel } from '../../screen-kit/desktop/index.js';
+import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
 import { StatusChip } from './parts.js';
 import { TicketPane } from './TicketPane.js';
 
@@ -90,6 +90,8 @@ export interface RepairBoardPageProps {
   /** The servisan an intake opened just now: its number is stamped in when its pane shows. */
   readonly justOpenedTicketId?: string | null | undefined;
   readonly onNewIntake: () => void;
+  /** An unsaved intake or warranty claim this person left: "Servisan baru" says it carries on with it. */
+  readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
   /** Starts a warranty claim's intake from the open servisan. */
   readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   readonly onOpenSyncStatus?: (() => void) | undefined;
@@ -141,12 +143,6 @@ interface LoadedBoard {
   readonly approvalWaiting: ReadonlySet<string>;
 }
 
-/** Whether a key press was meant for a field rather than for the page. */
-function typingInField(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-}
-
 /** The filter options matching typed text, best first, with the app's typo-tolerant search. */
 function fuzzyOptions(options: readonly FilterOption[], text: string): FilterOption[] {
   const index = new FuzzyIndex(
@@ -161,6 +157,7 @@ export function RepairBoardPage({
   onSelectTicket,
   justOpenedTicketId = null,
   onNewIntake,
+  waitingDraft = null,
   onStartClaim,
   onOpenSyncStatus,
   filters,
@@ -293,8 +290,7 @@ export function RepairBoardPage({
       // Page shortcuts are off while a dialog or menu is up; it owns the keyboard, Escape included.
       // Listening in the capture phase sees the key before the dialog closes itself on it.
       // (A filter's popover is a dialog too; a tooltip is not, so hovering never mutes the keys.)
-      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') !== null)
-        return;
+      if (overlayOpen()) return;
       if (event.key === 'F2' && can.intake) {
         event.preventDefault();
         onNewIntake();
@@ -486,7 +482,13 @@ export function RepairBoardPage({
         actions={
           can.intake ? (
             <Button
-              label={tn('repair.action.newIntake')}
+              label={tn(
+                waitingDraft === 'claim'
+                  ? 'repair.action.resumeClaim'
+                  : waitingDraft === 'intake'
+                    ? 'repair.action.resumeIntake'
+                    : 'repair.action.newIntake',
+              )}
               variant="primary"
               icon={Plus}
               shortcut="F2"
@@ -516,15 +518,16 @@ export function RepairBoardPage({
         />
       </PageHeader>
 
-      {/* The servisan opens beside the table when both fit (the table's fixed columns need about
-          680 px, next to a 400 px pane); on a narrower screen it slides over the table's right
-          side instead. */}
+      {/* The servisan opens beside the table when both fit: a 400 px pane next to a table folded
+          down to number, customer and status (about 530 px), which a 1024 px window with the
+          sidebar down to icons holds. Narrower than that (the sidebar opened wide on a small
+          screen), it covers the whole board rather than half of it, so no column is cut. */}
       <div className="flex min-h-0 flex-1 flex-col @container">
         <div
           className={
             selectedTicketId === null
               ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
-              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1080px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
+              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[960px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
           }
         >
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -621,7 +624,7 @@ export function RepairBoardPage({
           {selectedTicketId === null ? null : (
             <div
               ref={paneRef}
-              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1080px]:static @[1080px]:w-auto @[1080px]:shadow-none"
+              className="absolute inset-0 z-10 flex animate-pane-in flex-col @[960px]:static"
             >
               <TicketPane
                 // A fresh pane per ticket: nothing said about the last one carries over.
@@ -807,7 +810,8 @@ function boardColumns({
       // A cancelled servisan costs the customer its fee, never the repair price.
       accessorFn: amountOwed,
       header: tn('repair.price.total'),
-      meta: { track: '116px', align: 'end' },
+      // The last to give way: beside an open servisan, whose pane shows the price, on a small screen.
+      meta: { track: '116px', align: 'end', fold: 4 },
       cell: ({ getValue }) => (
         <span className="tabular text-body font-semibold text-text">
           {formatMoney(getValue() as number)}

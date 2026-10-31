@@ -307,6 +307,7 @@ class MediaClientImpl implements MediaClient {
   capturePhoto(identity: CaptureIdentity, camera: CameraCapturePort): Promise<CaptureOutcome> {
     return capturePhoto({
       db: this.deps.db.db,
+      transaction: <T>(fn: () => Promise<T>) => this.deps.db.transaction(() => fn()),
       identity,
       camera,
       compressor: this.deps.compressor,
@@ -328,6 +329,7 @@ class MediaClientImpl implements MediaClient {
     return captureSignature(
       {
         db: this.deps.db.db,
+        transaction: <T>(fn: () => Promise<T>) => this.deps.db.transaction(() => fn()),
         identity,
         files: this.deps.files,
         writeToCache: this.deps.writeToCache,
@@ -354,6 +356,7 @@ class MediaClientImpl implements MediaClient {
   private importDeps(identity: CaptureIdentity) {
     return {
       db: this.deps.db.db,
+      transaction: <T>(fn: () => Promise<T>) => this.deps.db.transaction(() => fn()),
       identity,
       files: this.deps.files,
       moveToDocuments: this.deps.moveToDocuments,

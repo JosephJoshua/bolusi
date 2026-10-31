@@ -135,6 +135,8 @@ describe('readStaffDirectory', () => {
       ['cashier', false],
       ['technician', false],
       ['manager', false],
+      // The notes-only base role is offered too, so the main owner can fill it in.
+      ['staff', false],
       ['store_owner', true],
     ]);
     expect(directory.members.map((m) => [m.name, m.active, m.owner, m.roleKeys.join('+')])).toEqual(
@@ -218,11 +220,13 @@ describe('who may manage what', () => {
       'cashier',
       'technician',
       'manager',
+      'staff',
     ]);
     expect(grantableRoles(roles, mainOwner).map((r) => r.key)).toEqual([
       'cashier',
       'technician',
       'manager',
+      'staff',
       'store_owner',
     ]);
   });

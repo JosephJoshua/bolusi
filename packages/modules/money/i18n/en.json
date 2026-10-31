@@ -30,10 +30,12 @@
     "notThisStore": "This belongs to another store.",
     "accountKindChanged": "A payment method’s type can’t be changed.",
     "countNotFound": "This cash count wasn’t found.",
+    "countRequired": "A cash difference is settled only from a cash count.",
     "countSettled": "This cash count is already settled.",
     "countSuperseded": "There is a newer cash count. Settle the latest difference.",
     "differenceChanged": "The difference has changed. Check it again before settling.",
     "overLimit": "Over your limit. Ask a store owner.",
+    "moveAboveDrawer": "Not enough cash in the drawer.",
     "cashMoveNotFound": "This cash record isn’t in this store.",
     "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more."
   },
@@ -52,6 +54,7 @@
     "remaining": "{amount} still to pay",
     "overpaid": "{amount} too much. Lower the amount first.",
     "problem": {
+      "method": "This method is no longer available. Pick another.",
       "tendered": "Cash received is less than the amount."
     },
     "method": "Payment method",
@@ -67,6 +70,7 @@
     "waitingOwner": "Waiting for an owner",
     "inToday": "In today",
     "nothingIn": "No money in yet today.",
+    "refunded": "Given back to customers",
     "total": "Total",
     "movesToday": "Drawer moves today",
     "owed": "Unpaid",
@@ -102,7 +106,8 @@
     "save": "Save",
     "hintAmount": "Enter the amount.",
     "hintReason": "Enter a description.",
-    "noAccount": "The store has no bank account yet. Ask an owner to add one."
+    "noAccount": "The store has no bank account yet. Ask an owner to add one.",
+    "aboveDrawer": "The drawer only has {amount}. Lower the amount first."
   },
   "settle": {
     "title": "Settle difference",
@@ -134,6 +139,7 @@
     "nextDay": "Next",
     "none": "No records on this day.",
     "voided": "Cancelled: {reason}",
+    "handoverRefund": "Rest of the DP, at pickup",
     "more": "Load more",
     "void": "Cancel",
     "col": {

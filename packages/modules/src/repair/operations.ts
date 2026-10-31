@@ -24,6 +24,7 @@ import {
   quoteChangeProposedApplier,
   quoteProposalDeclinedApplier,
   slipPrintedApplier,
+  statusLinkMadeApplier,
   storePrintSettingsChangedApplier,
   technicianAssignedApplier,
   ticketCancelledApplier,
@@ -77,6 +78,7 @@ import {
   quoteChangeProposedRule,
   quoteProposalDeclinedRule,
   slipPrintedRule,
+  statusLinkMadeRule,
   technicianAssignedRule,
   ticketCancelledRule,
   ticketClaimedRule,
@@ -87,6 +89,7 @@ import {
   workStartedRule,
 } from './rules.js';
 import type { RepairDatabase } from './schema.js';
+import { STATUS_CODE_PATTERN, STATUS_NONCE_PATTERN } from './status-link.js';
 
 const MAX_TEXT = 2000;
 const zName = z.string().trim().min(1).max(200);
@@ -415,6 +418,17 @@ export const downPaymentCorrectedPayload = z
 
 export const slipPrintedPayload = z.object({ slip: z.enum(SLIP_KINDS) }).strict();
 
+/**
+ * The customer's status link (status-link.ts), made with the servisan at intake: the code and the
+ * nonce it was derived from, which the rule checks against each other.
+ */
+export const statusLinkMadePayload = z
+  .object({
+    code: z.string().regex(STATUS_CODE_PATTERN),
+    nonce: z.string().regex(STATUS_NONCE_PATTERN),
+  })
+  .strict();
+
 /** Longest terms a slip prints, all lines together. */
 export const MAX_TERMS = 2000;
 const zTerms = z.string().trim().min(1).max(MAX_TERMS).nullable();
@@ -686,6 +700,15 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: slipPrintedApplier,
     rule: slipPrintedRule,
     permission: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+  },
+  [REPAIR_OP.statusLinkMade]: {
+    schemaVersion: 1,
+    payload: statusLinkMadePayload,
+    reversal: 'Not reversible: the link is printed on paper the customer keeps.',
+    apply: statusLinkMadeApplier,
+    rule: statusLinkMadeRule,
+    permission: REPAIR_PERMISSION.intake,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.storePrintSettingsChanged]: {

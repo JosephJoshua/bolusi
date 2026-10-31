@@ -82,6 +82,12 @@ export interface PullPhaseDeps<DB> {
   readonly clock: ClockPort;
   /** `ProjectionEngine.applyPulledOp` (task 08). Runs INSIDE the batch transaction. */
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
+  /**
+   * Can this build fold `op` (its type is registered, at a schemaVersion it knows)? An op from a
+   * newer app stops the pull before its batch, see {@link AppUpdateRequiredError}. Absent means
+   * every op is foldable, which only a test or bench may assume.
+   */
+  readonly knowsOp?: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
   readonly limit?: number;
   /**
    * Called after each batch commits, outside the transaction, so a long pull can show progress.
@@ -117,6 +123,27 @@ export interface PullPhaseResult {
   readonly serverTime: number | null;
   /** False when `shouldContinue` stopped the pull before the server ran out of ops. */
   readonly drained: boolean;
+}
+
+/** `lastSyncError` while the pull waits for a newer app. */
+export const APP_UPDATE_REQUIRED_ERROR_CODE = 'APP_UPDATE_REQUIRED';
+
+/**
+ * The server sent an op this build cannot fold: a type it does not know, or a newer schemaVersion
+ * of one it does. Another device runs a newer app. Folding around it would leave records wrong
+ * (and an unknown version throws in its applier, which would fail the batch on every retry), so the
+ * batch is not applied and its cursor stays put: the pull resumes from it once this app is updated.
+ * Pushing goes on meanwhile, since the push runs first and the server accepts older versions.
+ */
+export class AppUpdateRequiredError extends Error {
+  override readonly name = 'AppUpdateRequiredError';
+  readonly code = APP_UPDATE_REQUIRED_ERROR_CODE;
+  constructor(
+    readonly opType: string,
+    readonly schemaVersion: number,
+  ) {
+    super(`pulled ${opType} at schemaVersion ${String(schemaVersion)}, which this app cannot fold`);
+  }
 }
 
 /** An op as it survived (or failed) individual parsing. */
@@ -185,6 +212,11 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
       refetches += 1;
     }
 
+    const unknown =
+      deps.knowsOp === undefined ? undefined : firstUnknownOp(parsed.ops, deps.knowsOp);
+    if (unknown !== undefined)
+      throw new AppUpdateRequiredError(unknown.type, unknown.schemaVersion);
+
     const outcome = await applyBatchAtomically(deps, parsed);
     applied += outcome.applied;
     quarantined += outcome.quarantined;
@@ -200,6 +232,28 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
   }
 
   return { applied, quarantined, released, batches, refetches, serverTime, drained: true };
+}
+
+/**
+ * The first op in the batch this build cannot fold. That includes one that fails to parse yet
+ * names a type and version: the server validated it on push, so its shape is newer than this
+ * build's (an added envelope field, say). Dropping it would skip it for good.
+ */
+function firstUnknownOp(
+  ops: readonly ParsedOp[],
+  knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean,
+): Pick<SignedOperation, 'type' | 'schemaVersion'> | undefined {
+  for (const entry of ops) {
+    if (entry.ok) {
+      if (!knowsOp(entry.op)) return entry.op;
+      continue;
+    }
+    const raw = entry.raw as { type?: unknown; schemaVersion?: unknown } | null;
+    if (typeof raw?.type === 'string' && Number.isInteger(raw.schemaVersion)) {
+      return { type: raw.type, schemaVersion: raw.schemaVersion as number };
+    }
+  }
+  return undefined;
 }
 
 /** Would any op in this batch fail verification for `unknown_pubkey`, given the registry it would see? */

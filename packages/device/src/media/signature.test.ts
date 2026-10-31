@@ -33,6 +33,7 @@ function buildDeps(
   const fs = new FakeFs();
   const deps: SignatureCaptureDeps<never> = {
     db: db.db as never,
+    transaction: (fn) => db.transaction(() => fn()),
     identity: {
       tenantId: 'tenant-1',
       storeId: null,

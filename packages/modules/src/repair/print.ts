@@ -17,17 +17,24 @@ import type {
 import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 
 import type { SlipKind } from './constants.js';
-import { balanceAfterDownPayment, photoInSlot, photoThumbnailRef, ticketStatus } from './flows.js';
+import {
+  amountOwed,
+  balanceAfterDownPayment,
+  photoInSlot,
+  photoThumbnailRef,
+  ticketStatus,
+} from './flows.js';
 import { tn } from './i18n.js';
 import {
   CHECK_STATE_KEY,
   PRICE_KIND_KEY,
   optionLabel,
+  refundLabel,
   repairTypeLabel,
   statusLabel,
   warrantyTerms,
 } from './labels.js';
-import type { PrintSettings, QuoteLineRow, TicketDetailRow } from './queries.js';
+import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketRefund } from './queries.js';
 
 /** What a slip needs besides the ticket. */
 export interface SlipContext {
@@ -161,16 +168,38 @@ function totals(
   paidSoFar: number | null,
   paidLabel: string,
   reduced = 0,
+  /** False when the total is no longer what the customer owes, so a balance would be wrong. */
+  withBalance = true,
+  /** What goes back through each method, when more was paid (`TicketDetailRow.refunds`). */
+  refunds: readonly TicketRefund[] = [],
 ): PrintAmountRow[] {
   const paid = paidSoFar ?? 0;
   const rows: PrintAmountRow[] = [
-    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 && reduced === 0 },
+    {
+      label: totalLabel,
+      amount: formatMoney(total),
+      strong: (paid === 0 && reduced === 0) || !withBalance,
+    },
   ];
+  if (!withBalance) {
+    if (paid > 0) rows.push({ label: paidLabel, amount: formatMoney(-paid) });
+    return rows;
+  }
   // What an owner took off once charged, so the rest adds up to what the customer owes.
   if (reduced > 0) rows.push({ label: tn('repair.price.reduced'), amount: formatMoney(-reduced) });
   if (paid > 0 || reduced > 0) {
     const balance = balanceAfterDownPayment(total - reduced, paid);
     if (paid > 0) rows.push({ label: paidLabel, amount: formatMoney(-paid) });
+    if (balance.kind === 'refund' && refunds.length > 0) {
+      for (const refund of refunds) {
+        rows.push({
+          label: refundLabel(refund, 'slip'),
+          amount: formatMoney(refund.amount),
+          strong: true,
+        });
+      }
+      return rows;
+    }
     rows.push({
       label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
       amount: formatMoney(balance.amount),
@@ -228,6 +257,9 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   // The price the customer left with; later changes belong on the handover slip.
   const lines = ticket.quoteLines.filter((line) => line.status === 'intake');
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
+  // What was paid counts against the estimate only while the estimate is still the bill: once the
+  // price changed or the servisan was cancelled, the balance belongs on the handover slip.
+  const estimateStands = ticket.outcome !== 'cancelled' && amountOwed(ticket) === total;
   const blocks: PrintBlock[] = [
     { kind: 'fields', fields },
     { kind: 'heading', text: tn('repair.slip.section.complaint') },
@@ -253,7 +285,8 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
         ticket.downPayment,
         // Reprinted after pickup, what was paid is more than the DP.
         tn(ticket.location === 'returned' ? 'repair.slip.paid' : 'repair.slip.downPayment'),
-        ticket.reduced,
+        0,
+        estimateStands,
       ),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
@@ -310,6 +343,8 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
           ticket.downPayment,
           tn('repair.slip.paid'),
           ticket.reduced,
+          true,
+          ticket.refunds,
         ),
       }
     : {
@@ -324,6 +359,8 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
           ticket.downPayment,
           tn('repair.slip.paid'),
           ticket.reduced,
+          true,
+          ticket.refunds,
         ),
       };
   const aside: PrintBlock[] = [

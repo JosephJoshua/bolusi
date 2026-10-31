@@ -6,6 +6,8 @@ export { Banner, type BannerTone } from './components/Banner.js';
 export { BrandMark } from './components/BrandMark.js';
 export {
   Button,
+  ButtonLink,
+  type ButtonLinkProps,
   type ButtonProps,
   type ButtonSize,
   type ButtonVariant,

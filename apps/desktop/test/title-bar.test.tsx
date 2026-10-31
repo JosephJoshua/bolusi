@@ -3,7 +3,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { WindowBridge } from '../src/main/bridge.js';
-import { frameOptions, TITLE_BAR } from '../src/main/window-chrome.js';
+import { frameOptions, TITLE_BAR, windowSize } from '../src/main/window-chrome.js';
 import { TitleBar } from '../src/renderer/TitleBar.js';
 
 function fakeWindow(fullscreen: boolean): WindowBridge & { emit: (next: boolean) => void } {
@@ -38,6 +38,23 @@ describe('window frame', () => {
       titleBarOverlay: { color: '#0F172A', symbolColor: '#F8FAFC', height: 40 },
     });
     expect(frameOptions('darwin')).toEqual({ titleBarStyle: 'hidden', titleBarOverlay: true });
+  });
+
+  it('opens within a small screen and can be made as small as it is', () => {
+    expect(windowSize({ width: 1920, height: 1040 })).toEqual({
+      width: 1366,
+      height: 768,
+      minWidth: 1024,
+      minHeight: 520,
+    });
+    // A 1366×768 laptop at 125% scaling, less the taskbar: never held taller than it can show.
+    expect(windowSize({ width: 1093, height: 574 })).toEqual({
+      width: 1093,
+      height: 574,
+      minWidth: 1024,
+      minHeight: 520,
+    });
+    expect(windowSize({ width: 1024, height: 560 })).toMatchObject({ height: 560, minHeight: 520 });
   });
 });
 

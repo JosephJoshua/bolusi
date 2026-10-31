@@ -22,6 +22,7 @@ import {
   firstSyncPercent,
   isOfflineButHealthy,
   manualSync,
+  manualSyncErrorShown,
   mediaQueue,
   reassurance,
   REASSURANCE_KEY,
@@ -433,6 +434,20 @@ describe('manual sync (§8.4 item 3)', () => {
     expect(manualSync(input({ manualSyncBusy: true }))).toEqual({ kind: 'busy' });
   });
 
+  test('the last failure hides while a new attempt sends, so it never sits beside "Sedang mengirim"', () => {
+    expect(manualSyncErrorShown(input({ manualSyncError: 'NETWORK' }))).toBe('NETWORK');
+    for (const loopState of ['pushing', 'pulling'] as const) {
+      expect(manualSyncErrorShown(input({ manualSyncError: 'NETWORK', loopState }))).toBeNull();
+    }
+    expect(
+      manualSyncErrorShown(input({ manualSyncError: 'NETWORK', manualSyncBusy: true })),
+    ).toBeNull();
+    // Waiting to retry, the failure is still the news.
+    expect(manualSyncErrorShown(input({ manualSyncError: 'NETWORK', loopState: 'backoff' }))).toBe(
+      'NETWORK',
+    );
+  });
+
   test('disabled WITH an explanation when the device is revoked', () => {
     const given = input({
       state: state({ syncDisabled: true, syncDisabledReason: 'device_revoked' }),
@@ -473,6 +488,17 @@ describe('manual sync (§8.4 item 3)', () => {
     // A failed manual sync is NOT a problem with the data: nothing was lost, and the loop retries.
     expect(syncProblems(given)).toEqual([]);
     expect(manualSync(given)).toEqual({ kind: 'ready' });
+  });
+});
+
+describe('a change from a newer app', () => {
+  test('asks for an app update, and only while the pull is waiting on it', () => {
+    const waiting = input({ state: state({ lastSyncError: 'APP_UPDATE_REQUIRED' }) });
+    expect(syncProblems(waiting)).toEqual([{ kind: 'appUpdateNeeded' }]);
+    expect(syncChipState(waiting)).toBe('attention');
+    // A network failure is not a version problem, and a successful pull clears the code.
+    expect(syncProblems(input({ state: state({ lastSyncError: 'NETWORK' }) }))).toEqual([]);
+    expect(syncProblems(input({ state: state({ lastSyncError: null }) }))).toEqual([]);
   });
 });
 

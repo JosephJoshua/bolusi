@@ -11,7 +11,7 @@ import type { SlipKind } from '../constants.js';
 import { printableSlips } from '../flows.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { PHONE_PAPERS, paperLabel, useDevicePaper } from '../paper.js';
-import { outputSlip } from '../slip-output.js';
+import { logSlipPrinted, outputSlip } from '../slip-output.js';
 import type { TicketDetailRow } from '../queries.js';
 import { useActionRunner } from '../../screen-kit/index.js';
 import { FlowScreen, Section, repairStyles, type RepairChrome } from './parts.js';
@@ -72,7 +72,7 @@ export function PrintStep({
   const confirmPrinted = (): void => {
     setAsking(false);
     void runner
-      .run(() => runtime.run('recordSlipPrinted', { ticketId: ticket.id, slip }))
+      .run(() => logSlipPrinted(runtime, ticket.id, slip))
       .then((result) => {
         if (result !== undefined) onDone('repair.done.printed');
       });

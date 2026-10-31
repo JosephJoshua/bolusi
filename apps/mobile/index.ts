@@ -65,6 +65,8 @@ import { createFetchMediaTransport } from '@bolusi/device/media/transport';
 import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
 import { createPhonePhotoLoader } from '@bolusi/device/media/phone-photos';
 import { appStatePort } from './src/ports/app-state.js';
+import { startAppUpdates, updateNow } from './src/bootstrap/app-updates.js';
+import { expoUpdatesPort } from './src/ports/updates.js';
 import { expoPrintPlatform } from './src/ports/print.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
 import { systemClock } from '@bolusi/device/ports/clock';
@@ -576,6 +578,7 @@ let rootProps: RootProps | null = null;
 
 function buildRootProps(): RootProps {
   return {
+    checkForUpdate: expoUpdatesPort.isEnabled ? () => updateNow(expoUpdatesPort) : undefined,
     boot: foregroundBoot,
     createSync,
     createEnrollment,
@@ -657,4 +660,11 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 // The cover is the splash's exact twin, so the splash goes at once rather than with its default
 // 400 ms fade, which kept it on top of the cover's whole intro on Android.
 SplashScreen.setOptions({ duration: 0, fade: false });
+// Over-the-air updates apply on a fresh start or after a long break (src/bootstrap/app-updates.ts).
+startAppUpdates({
+  updates: expoUpdatesPort,
+  appState: appStatePort,
+  now: () => Date.now(),
+  onError: (error) => consoleDiagnostics.warn('app update check failed', { error: String(error) }),
+});
 registerRootComponent(Bootstrapped);

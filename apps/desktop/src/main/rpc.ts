@@ -75,7 +75,19 @@ export function serve(
         const value: unknown = await (handler as (...a: readonly unknown[]) => unknown)(...args);
         channel.send({ kind: 'reply', id, ok: true, value } satisfies Reply);
       } catch (error) {
-        channel.send({ kind: 'reply', id, ok: false, error: toWireError(error) } satisfies Reply);
+        const wire = toWireError(error);
+        try {
+          channel.send({ kind: 'reply', id, ok: false, error: wire } satisfies Reply);
+        } catch {
+          // A field that cannot be cloned must not leave the caller waiting forever: the name and
+          // message always cross. If even that fails the port is gone, and so is the caller.
+          const plain: WireError = { name: wire.name, message: wire.message, fields: {} };
+          try {
+            channel.send({ kind: 'reply', id, ok: false, error: plain } satisfies Reply);
+          } catch {
+            // Nobody is left to answer.
+          }
+        }
       }
     })();
   });

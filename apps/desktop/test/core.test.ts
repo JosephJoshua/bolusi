@@ -18,14 +18,22 @@ import {
 } from '@bolusi/test-support';
 import { MONEY_PERMISSION } from '@bolusi/modules/money';
 import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 
-import { actingDeviceAdmin, actingSession, actingStaffAdmin } from '../src/core/acting.js';
+import {
+  actingDeviceAdmin,
+  actingSession,
+  actingStaffAdmin,
+  readForActing,
+} from '../src/core/acting.js';
 import { heldPermissions } from '../src/core/permissions.js';
 import { nodeCryptoPort } from '../src/core/crypto.js';
 import { openNodeSqliteDriver } from '../src/core/sqlite-driver.js';
+import { logUnhandledRejections } from '../src/core/unhandled.js';
 import { connect, serve, type Channel } from '../src/main/rpc.js';
 import { reviveCoreError } from '../src/renderer/core-client.js';
 
@@ -83,14 +91,19 @@ describe('PC crypto', () => {
   });
 });
 
-/** Two ends of an in-memory port, delivering asynchronously like a real one. */
+/**
+ * Two ends of an in-memory port, delivering asynchronously like a real one. Like a real one, `send`
+ * clones at once and throws for a value that cannot be cloned.
+ */
 function pair(): [Channel, Channel] {
   const listeners: [Set<(m: unknown) => void>, Set<(m: unknown) => void>] = [new Set(), new Set()];
   const end = (mine: 0 | 1): Channel => ({
-    send: (message) =>
+    send: (message) => {
+      const copy = structuredClone(message);
       queueMicrotask(() => {
-        for (const listener of listeners[mine === 0 ? 1 : 0]) listener(structuredClone(message));
-      }),
+        for (const listener of listeners[mine === 0 ? 1 : 0]) listener(copy);
+      });
+    },
     listen(onMessage) {
       listeners[mine].add(onMessage);
       return () => listeners[mine].delete(onMessage);
@@ -112,6 +125,21 @@ describe('window to core calls', () => {
     server.emit('state', { phase: 'ready' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(seen).toEqual([{ phase: 'ready' }]);
+  });
+
+  it('still answers a call whose error or value cannot cross the port', async () => {
+    const [core, window] = pair();
+    serve(core, {
+      badError: () => {
+        throw Object.assign(new Error('save failed'), { details: { retry: () => undefined } });
+      },
+      badValue: () => ({ retry: () => undefined }),
+    });
+    const client = connect(window, reviveCoreError);
+
+    const failed = await client.call('badError').catch((error: unknown) => error);
+    expect((failed as Error).message).toBe('save failed');
+    await expect(client.call('badValue')).rejects.toThrow();
   });
 
   it('brings a domain error and a rule refusal back as their own classes', async () => {
@@ -189,6 +217,24 @@ describe('who a window call may act as', () => {
     expect(code(() => actingSession(null, 'u-1'))).toBe('NOT_AUTHENTICATED');
   });
 
+  it('keeps a slow read only if its person is still signed in when it lands', async () => {
+    let now: AppSessionController | null = sessionAs('u-a');
+    const slowRead = (switchTo: AppSessionController | null) => (userId: string) => {
+      // The person switches (or the PC locks) while the identity read is still running.
+      now = switchTo;
+      return Promise.resolve(`identity of ${userId}`);
+    };
+
+    expect(await readForActing(() => now, 'u-a', slowRead(sessionAs('u-a')))).toBe(
+      'identity of u-a',
+    );
+    expect(await readForActing(() => now, 'u-a', slowRead(sessionAs('u-b')))).toBeNull();
+    expect(
+      await readForActing(() => now, 'u-a', slowRead(sessionAs('u-a', { locked: true }))),
+    ).toBeNull();
+    expect(await readForActing(() => now, 'u-a', slowRead(null))).toBeNull();
+  });
+
   it('manages staff only with the permission to add staff', () => {
     expect(code(() => actingStaffAdmin(sessionAs('u-1'), 'u-1'))).toBe('denied');
     expect(
@@ -229,5 +275,20 @@ describe('the permissions the window is told about', () => {
         ...Object.values(REPAIR_PERMISSION),
       ]),
     );
+  });
+});
+
+describe('a rejection nobody handles in the core', () => {
+  it('is logged, and the core keeps running', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const source = new EventEmitter();
+    logUnhandledRejections(source);
+    // Node ends the process when no listener takes an unhandled rejection; this one is taken.
+    expect(source.listenerCount('unhandledRejection')).toBe(1);
+    source.emit('unhandledRejection', new Error('identity read failed'));
+    expect(warn).toHaveBeenCalledWith('[bolusi] unhandled rejection in the core', {
+      error: 'identity read failed',
+    });
+    warn.mockRestore();
   });
 });

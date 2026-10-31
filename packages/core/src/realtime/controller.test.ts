@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { SYNC_BACKOFF_SCHEDULE_MS } from '../sync/backoff.js';
-import { DEGRADED_WS_RETRY_MS, RealtimeController } from './controller.js';
+import { DEGRADED_WS_RETRY_MS, RealtimeController, SSE_IDLE_LIMIT_MS } from './controller.js';
 import type {
   RealtimeControllerDeps,
   RealtimeTransportCallbacks,
@@ -263,6 +263,76 @@ describe('RealtimeController — fallback ladder (api/00 §12.3)', () => {
 
     expect(rungs).toEqual(['sse', 'polling', 'ws']);
     expect(controller.state.connected).toBe(true);
+  });
+});
+
+describe('RealtimeController — idle watchdog on the SSE leg', () => {
+  /** Walk the ladder to SSE and open it. */
+  function onSse() {
+    const made = makeDeps();
+    const controller = new RealtimeController(made.deps);
+    controller.start();
+    made.ws.last.cb.onError();
+    made.timer.advance(SYNC_BACKOFF_SCHEDULE_MS[0]);
+    made.ws.last.cb.onError();
+    made.timer.advance(SYNC_BACKOFF_SCHEDULE_MS[1]);
+    made.ws.last.cb.onError();
+    made.sse.last.cb.onOpen();
+    return { ...made, controller };
+  }
+
+  test('a stream that goes silent while open is closed and reconnected like a drop', () => {
+    const { controller, sse, timer } = onSse();
+    expect(controller.state).toEqual({ rung: 'sse', connected: true });
+    const stream = sse.last;
+
+    timer.advance(SSE_IDLE_LIMIT_MS - 1);
+    expect(stream.closed).toBe(false);
+    timer.advance(1);
+    // The server stopped answering but kept the stream open: the device stops believing it.
+    expect(stream.closed).toBe(true);
+    expect(controller.state.connected).toBe(false);
+    expect(controller.state.rung).toBe('sse');
+    // Back through the drop's backoff, on the same rung.
+    timer.advance(SYNC_BACKOFF_SCHEDULE_MS[0]);
+    expect(sse.count).toBe(2);
+    expect(controller.getStats().sseConnectFailures).toBe(0);
+    controller.stop();
+  });
+
+  test('heartbeats and pokes keep a quiet stream open', () => {
+    const { controller, sse, timer } = onSse();
+    const stream = sse.last;
+    for (let beat = 0; beat < 10; beat += 1) {
+      timer.advance(25_000);
+      stream.cb.onHeartbeat();
+    }
+    timer.advance(25_000);
+    stream.cb.onMessage(POKE_FRAME);
+    timer.advance(SSE_IDLE_LIMIT_MS - 1);
+    expect(stream.closed).toBe(false);
+    expect(controller.state.connected).toBe(true);
+    controller.stop();
+  });
+
+  test('the WebSocket leg, whose keepalive a script never sees, has no watchdog', () => {
+    const { deps, ws, timer } = makeDeps();
+    const controller = new RealtimeController(deps);
+    controller.start();
+    ws.last.cb.onOpen();
+    timer.advance(SSE_IDLE_LIMIT_MS * 10);
+    expect(ws.last.closed).toBe(false);
+    expect(controller.state.connected).toBe(true);
+    controller.stop();
+  });
+
+  test('a stopped controller leaves no watchdog behind', () => {
+    const { controller, sse, timer, triggerCount } = onSse();
+    controller.stop();
+    const triggers = triggerCount();
+    timer.advance(SSE_IDLE_LIMIT_MS * 4);
+    expect(sse.count).toBe(1);
+    expect(triggerCount()).toBe(triggers);
   });
 });
 

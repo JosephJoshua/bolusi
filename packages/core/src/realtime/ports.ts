@@ -29,6 +29,11 @@ export interface RealtimeTransportCallbacks {
   /** A server→client frame arrived. WS text / SSE `data`. Non-string (binary) is passed through so
    *  the controller can count-and-ignore it (api/00 §12.1). */
   onMessage(data: unknown): void;
+  /**
+   * The server is still there: bytes arrived that carry no frame (an SSE `: hb` comment). A leg
+   * with a heartbeat that hears nothing for too long is treated as dropped (the idle watchdog).
+   */
+  onHeartbeat(): void;
   /** The transport failed to open, or faulted mid-stream. */
   onError(error?: unknown): void;
   /** The transport closed. */

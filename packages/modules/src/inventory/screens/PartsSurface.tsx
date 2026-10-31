@@ -15,7 +15,8 @@ import { CountStep } from './CountStep.js';
 import { FilterStep } from './FilterStep.js';
 import { PartDetail } from './PartDetail.js';
 import { PartForm } from './PartForm.js';
-import { NO_FILTER, PartList, type ListFilter } from './PartList.js';
+import { NO_FILTER, type ListFilter } from '../list-filter.js';
+import { PartList } from './PartList.js';
 
 type View =
   | { readonly kind: 'list' }

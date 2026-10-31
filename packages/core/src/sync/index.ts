@@ -36,6 +36,8 @@ export {
   type TimerPort,
 } from './ports.js';
 export {
+  APP_UPDATE_REQUIRED_ERROR_CODE,
+  AppUpdateRequiredError,
   parsePullResponse,
   runPullPhase,
   type PullPhaseDeps,

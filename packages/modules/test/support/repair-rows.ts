@@ -55,7 +55,9 @@ export function sampleTicket(overrides: Partial<TicketDetailRow> = {}): TicketDe
     claimOfTicketId: null,
     claimOf: null,
     claims: [],
+    statusCode: 'K7M2Q9XA4BRS',
     slipPrints: { intake: 0, handover: 0 },
+    refunds: [],
     devicePasscode: 'pin:975319',
     intakeNotes: 'Ada goresan di bodi belakang.',
     checklist: [

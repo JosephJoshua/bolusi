@@ -11,7 +11,7 @@
 // so they also pass every type's rule: a rule that refuses ordinary shop work fails here too.
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
-import { formatTicketNumber } from '@bolusi/modules/repair';
+import { formatTicketNumber, statusCodeFor } from '@bolusi/modules/repair';
 import { ChainBuilder, makeWorld, type ChainWorld, type OpSpec } from '@bolusi/test-support';
 import type { MediaRef } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
@@ -22,6 +22,13 @@ import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
 import { grantRole, seedUser, seedWorld } from '../oplog/helpers.js';
+
+/** A status link as a phone makes it: a nonce and the code it gives this servisan. */
+function statusLink(world: ChainWorld, ticketId: string): { code: string; nonce: string } {
+  const nonce = '0123456789abcdef'.repeat(2);
+  const owner = { tenantId: world.tenantId, storeId: world.storeId, ticketId };
+  return { code: statusCodeFor(owner, nonce, (data) => serverCryptoPort.sha256(data)), nonce };
+}
 
 /** Built by the server itself (conflict detection); a device that pushes it is refused. */
 const SERVER_WRITTEN = new Set(['platform.conflict_detected']);
@@ -392,6 +399,7 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.down_payment_received', { amount: 100_000 }),
     onTicket('repair.down_payment_corrected', { amount: 150_000, reason: 'Salah ketik' }),
     onTicket('repair.slip_printed', { slip: 'intake' }),
+    onTicket('repair.status_link_made', statusLink(world, ticket)),
     onTicket('repair.ticket_claimed', {}),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),

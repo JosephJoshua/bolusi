@@ -10,11 +10,11 @@ import {
   dayStart,
   differenceToSettle,
   drawerMoves,
-  moneyInByMethod,
+  moneyIn,
   nameBalances,
   splitOpenBalances,
   type DrawerMove,
-  type MethodTotal,
+  type MoneyIn,
   type NamedBalance,
   type OpenBalances,
 } from './kas.js';
@@ -35,7 +35,7 @@ export interface KasDay {
   readonly accounts: readonly PaymentAccountRow[];
   /** The day's records have loaded (and this person may read them). */
   readonly entriesReady: boolean;
-  readonly methods: readonly MethodTotal[];
+  readonly moneyIn: MoneyIn;
   readonly moves: readonly DrawerMove[];
   readonly open: OpenBalances<NamedBalance>;
   /** The latest count's difference an owner still has to settle. */
@@ -102,7 +102,7 @@ export function useKasDay(now: () => number): KasDay {
     drawer,
     accounts: readyOr(accounts) ?? [],
     entriesReady: entries.status === 'ready',
-    methods: moneyInByMethod(todayEntries),
+    moneyIn: moneyIn(todayEntries),
     moves: drawerMoves(todayEntries),
     open: splitOpenBalances(readyOr(balances) ?? []),
     difference: drawer === null ? null : differenceToSettle(drawer.counts),
