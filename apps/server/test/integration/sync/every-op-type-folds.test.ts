@@ -47,7 +47,8 @@ function forTenantOn(handle: Kysely<DB>): ForTenant {
 }
 
 function productionDeps(): OplogPipelineDeps {
-  const deps = resolveDeps({ forTenant: appForTenant, now: () => 1_726_100_000_000 });
+  // A few hours after the journey: a handover undo is held to the day by when the server got it.
+  const deps = resolveDeps({ forTenant: appForTenant, now: () => 1_726_010_000_000 });
   return {
     forTenant: deps.forTenant,
     crypto: deps.serverCrypto,

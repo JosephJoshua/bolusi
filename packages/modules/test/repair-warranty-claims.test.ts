@@ -242,10 +242,12 @@ describe('whose phone, and when', () => {
     h.advance(DAY);
     await claim(h, original, h.cashierId);
     const ops = await h.ownOps();
-    const claimOp = ops.at(-1)!;
+    const claimOp = [...ops].reverse().find((op) => op.type === REPAIR_OP.ticketOpened)!;
     expect(claimOp.type).toBe(REPAIR_OP.ticketOpened);
     let arrival = 0;
-    for (const op of ops.slice(0, -1)) await server.deliverPulled(op, (arrival += 1));
+    for (const op of ops.slice(0, ops.indexOf(claimOp))) {
+      await server.deliverPulled(op, (arrival += 1));
+    }
 
     const cashier = (userId: string, permissionId: string) =>
       Promise.resolve(
