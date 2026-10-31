@@ -36,7 +36,7 @@
     "line": "{n}. {name}: {qty} pcs",
     "note": "Note: {note}",
     "thanks": "Thank you.",
-    "sendFailed": "WhatsApp isn’t installed on this phone."
+    "sendFailed": "WhatsApp isn’t installed on this device."
   },
   "action": {
     "place": "Order",

@@ -36,7 +36,7 @@
     "line": "{n}. {name}: {qty} pcs",
     "note": "Catatan: {note}",
     "thanks": "Terima kasih.",
-    "sendFailed": "WhatsApp belum terpasang di HP ini."
+    "sendFailed": "WhatsApp belum terpasang di perangkat ini."
   },
   "action": {
     "place": "Pesan",
