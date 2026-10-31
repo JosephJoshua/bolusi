@@ -503,10 +503,19 @@ async function followReadSet<DB>(
   const before = fresh ? now : (state.readSet ?? readPermissionsOf(scope.registry));
   const { added, removed } = readSetChange(before, now);
   if (removed.length > 0) {
+    const dropped = typesReadWith(scope.registry, removed);
     await purgePulledOps(
       { db: deps.db, refold: scope.refold, catchUpWatermarks: scope.catchUpWatermarks },
-      typesReadWith(scope.registry, removed),
+      dropped,
     );
+    // A quarantined op waits to be applied once its signer is known; one of a dropped type must
+    // not wait, or a later sidecar would bring it back into the log.
+    const droppedTypes = new Set(dropped);
+    for (const row of await readQuarantinedOps(deps.db)) {
+      if (droppedTypes.has(reconstructQuarantinedOp(row).type)) {
+        await deleteQuarantinedOp(deps.db, row.id);
+      }
+    }
   }
 
   // A catch-up keeps only what may still be read; a grown set starts it over from the beginning,
@@ -529,7 +538,7 @@ async function followReadSet<DB>(
     state.readSet === null ||
     added.length > 0 ||
     removed.length > 0 ||
-    backfill !== state.backfill
+    JSON.stringify(backfill) !== JSON.stringify(state.backfill)
   ) {
     await writeSyncState(deps.db, { readSet: now, backfill });
   }

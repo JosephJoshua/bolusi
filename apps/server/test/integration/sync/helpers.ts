@@ -45,7 +45,6 @@ export function makeFakeClock(startMs = CLOCK_START): FakeClock {
   return { now: () => t, set: (ms) => (t = ms), advance: (ms) => (t += ms) };
 }
 
-/** A seeded device ready to push/pull: its directory identity + chain builder + bearer header. */
 /** A pull body; `backfill` asks for a catch-up on newly readable ops. */
 export interface PullBody {
   readonly cursor: number;
@@ -54,6 +53,7 @@ export interface PullBody {
   readonly backfill?: { readonly reads: readonly string[]; readonly through: number };
 }
 
+/** A seeded device ready to push/pull: its directory identity + chain builder + bearer header. */
 export interface SeededDevice {
   readonly world: ChainWorld;
   readonly auth: string;

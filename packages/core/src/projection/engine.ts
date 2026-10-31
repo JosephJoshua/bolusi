@@ -229,13 +229,20 @@ export class ProjectionEngine<DB> {
 
   /**
    * After pulled ops were taken back out of the log (a device that may no longer read them), move
-   * every module's pulled watermark up to the newest arrival still present. Every op in the log is
-   * already applied, so that is the truth, and it keeps the holes the removal left from pinning a
-   * lagging module's watermark below them forever. Runs inside the caller's transaction.
+   * every module's pulled watermark past the numbers they held. Every op in the log is already
+   * applied, so that is the truth, and it keeps the holes the removal left from pinning a lagging
+   * module's watermark below them forever. Client only; runs inside the caller's transaction.
    */
   async catchUpPulledWatermarks(): Promise<void> {
+    // Every module moves to the same point: the newest arrival still present, or a watermark that
+    // already passed the removed ones. The next arrival is numbered after it (the client pull's
+    // `nextArrivalSeq`), so no module waits on a number that will never come.
     const result = await sql<{ maxSeq: Int8Value | null }>`
-      SELECT MAX(${sql.ref(this.seqColumn)}) AS "maxSeq" FROM operations
+      SELECT MAX(seq) AS "maxSeq" FROM (
+        SELECT MAX(${sql.ref(this.seqColumn)}) AS seq FROM operations
+        UNION ALL
+        SELECT MAX(applied_server_seq) AS seq FROM projection_watermarks
+      )
     `.execute(this.db);
     const raw = result.rows[0]?.maxSeq ?? null;
     if (raw === null) return;

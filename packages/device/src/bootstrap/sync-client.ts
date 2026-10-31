@@ -494,6 +494,7 @@ export function createSyncClientForApp(
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
     knowsOp: (op) => knowsOp(app.registry.operations, op),
     readScope: {
+      // Read lazily, like `knowsOp`: the registry is looked up when a pull needs it.
       registry: {
         types: () => app.registry.operations.types(),
         readPermissionFor: (type) => app.registry.operations.readPermissionFor(type),

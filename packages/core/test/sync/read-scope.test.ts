@@ -22,6 +22,7 @@ import {
 } from './_fixtures.js';
 import {
   insertOpLogRow,
+  insertQuarantinedOp,
   readSyncState,
   runPullPhase,
   signedCoreJcsOf,
@@ -166,6 +167,25 @@ describe('a shrunk read set drops what the device may no longer read', () => {
       SELECT MAX(arrival_seq) AS "m" FROM operations
     `.execute(harness.db);
     expect(watermark).toBe(Number(newest.rows[0]?.m));
+  });
+
+  it('also drops a quarantined op of a dropped type, so a later sidecar cannot bring it back', async () => {
+    await writeSyncState(harness.db, { cursor: 30, readSet: [NOTES_READ] });
+    const [op] = noteOps(other, 1);
+    await insertQuarantinedOp(harness.db, {
+      id: op!.id,
+      deviceId: op!.deviceId,
+      serverSeq: 30,
+      signedCoreJcs: signedCoreJcsOf(op!, noblePort),
+      hash: op!.hash,
+      signature: op!.signature,
+      reason: 'unknown_pubkey',
+      quarantinedAt: 1,
+    });
+
+    harness.transport.scriptPull(page([], 30, []));
+    await pull();
+    expect(await countRows(harness.db, 'quarantined_ops')).toBe(0);
   });
 
   it('drops on the first scoped pull of a device upgraded from an unscoped server', async () => {
