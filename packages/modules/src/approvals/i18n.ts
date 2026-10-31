@@ -27,6 +27,7 @@ export const APPROVALS_KEYS = [
   'approvals.kind.repairCancel',
   'approvals.kind.repairPayLater',
   'approvals.kind.repairDownPayment',
+  'approvals.kind.moneyVoidPayment',
   'approvals.status.waiting',
   'approvals.status.approved',
   'approvals.status.rejected',

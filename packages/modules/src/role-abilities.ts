@@ -120,6 +120,7 @@ export const PRESET_ROLE_ABILITIES = {
   ],
   technician: ['repairView', 'repairWork', 'stockView', 'stockUse'],
   // The counter's and the technician's work, plus the owners' daily decisions within limits.
+  // Settling a drawer shortage (adjust cash, which has no limit) stays with the owners.
   manager: [
     'repairView',
     'repairIntake',
@@ -140,7 +141,6 @@ export const PRESET_ROLE_ABILITIES = {
     'moneyRefund',
     'moneyVoid',
     'moneyCredit',
-    'moneyAdjust',
   ],
   staff: ['notes'],
 } as const satisfies Record<string, readonly RoleAbilityId[]>;

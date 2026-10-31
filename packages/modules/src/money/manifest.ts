@@ -33,6 +33,7 @@ import type { MoneyDocumentSources } from './documents.js';
 import { createMoneyOperations } from './operations.js';
 import {
   cashDrawerQuery,
+  createVoidCountQuery,
   documentMoneyQuery,
   moneyEntriesQuery,
   openBalancesQuery,
@@ -177,6 +178,7 @@ function moneyManifest(sources: MoneyDocumentSources) {
       cashDrawer: cashDrawerQuery,
       moneyEntries: moneyEntriesQuery,
       openBalances: openBalancesQuery,
+      voidCount: createVoidCountQuery(sources),
     },
   } as const satisfies ModuleManifest<MoneyDatabase>;
 }
