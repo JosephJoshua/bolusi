@@ -32,7 +32,6 @@ function fakePrinting(): RepairPrinting & { readonly saved: PaperSettings[] } {
   return {
     saved,
     storeName: () => Promise.resolve('Toko Sorong Kota'),
-    userName: () => Promise.resolve('Andi'),
     readPaper: () => Promise.resolve(saved.at(-1) ?? null),
     writePaper: (paper) => {
       saved.push(paper);
