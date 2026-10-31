@@ -1592,6 +1592,7 @@ export function demoRepairRuntime(
       now,
       accounts: DEMO_ACCOUNTS,
       actor: () => actor.userId,
+      nameOf: (userId) => NAMES.get(userId) ?? null,
       mayRefund: () => permitted.has(MONEY_PERMISSION.refund),
       debt:
         unpaid === undefined

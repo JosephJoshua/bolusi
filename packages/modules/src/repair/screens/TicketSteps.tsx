@@ -83,7 +83,12 @@ import {
   useRepairRuntime,
 } from '../runtime.js';
 import { accountLabel } from '../../money/kas.js';
-import { chosenMethod, offeredAccount, referenceMissing } from '../../money/payment-entry.js';
+import {
+  chosenMethod,
+  methodMissing,
+  offeredAccount,
+  referenceMissing,
+} from '../../money/payment-entry.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 export interface StepProps {
@@ -567,14 +572,18 @@ export function DownPaymentStep({
     reason,
     current,
     total,
+    methodMissing: methodMissing(method.account, accounts),
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const complete = gap === null && loadedAccounts !== null;
-  const changeLine = downPaymentChangeLine(
-    current,
-    amount,
-    accountLabel(offeredAccount(method.account, accounts), accounts),
-  );
+  // Through which method is said once one is picked.
+  const changeLine = methodMissing(method.account, accounts)
+    ? null
+    : downPaymentChangeLine(
+        current,
+        amount,
+        accountLabel(offeredAccount(method.account, accounts), accounts),
+      );
   const fix =
     correcting && complete && amount !== null
       ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }

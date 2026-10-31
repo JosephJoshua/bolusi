@@ -30,6 +30,8 @@ import {
   lineKind,
   methodOffered,
   newPaymentLine,
+  NO_METHOD,
+  pickedAccount,
   paidByQr,
   paymentMethods,
   type PaymentEntry,
@@ -84,9 +86,10 @@ export function PaymentLines({
       ) : null}
       {lines.map((line, index) => {
         const id = `${testID}.line${String(index)}`;
-        const account = line.account;
-        // A method switched off since it was picked: no chip is on, and the line asks again.
-        const offered = methodOffered(account, accounts);
+        const account = pickedAccount(line.account, accounts);
+        // Nothing picked yet, or a method switched off since it was: no chip is on, and it asks.
+        const unpicked = account === NO_METHOD;
+        const offered = unpicked || methodOffered(account, accounts);
         const kind = lineKind(account, accounts);
         const problem = entry.problems[line.key];
         const amount = Number(line.amount === '' ? 0 : line.amount);
@@ -124,7 +127,11 @@ export function PaymentLines({
               selectTextOnFocus
               testID={`${id}.amount`}
             />
-            {!offered ? (
+            {unpicked ? (
+              <Text style={styles.qrNote} testID={`${id}.pick`}>
+                {tm('money.pay.problem.pick')}
+              </Text>
+            ) : !offered ? (
               <Text style={styles.problem} testID={`${id}.methodGone`}>
                 {tm('money.pay.problem.method')}
               </Text>
@@ -223,9 +230,8 @@ export function PaymentLines({
             label={tm('money.pay.addMethod')}
             icon="add"
             onPress={() => {
-              const used = new Set(lines.map((line) => line.account));
-              const next = methods.find((method) => !used.has(method.account))?.account;
-              onChange([...lines, newPaymentLine(newKey(), entry.remaining, next)]);
+              // The new line waits for its method too: nothing is guessed for the counter.
+              onChange([...lines, newPaymentLine(newKey(), entry.remaining)]);
             }}
             testID={`${testID}.add`}
           />

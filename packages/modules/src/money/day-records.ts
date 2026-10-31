@@ -1,6 +1,7 @@
 // Riwayat's read, shared by the phone and the PC: one day's money records, newest first, with the
 // customer each is for and the methods' names, a page at a time.
-import { dayStart } from './kas.js';
+import { dayStart, inHistory } from './kas.js';
+import type { MoneyKey } from './i18n.js';
 import type { MoneyEntryRow, PaymentAccountRow } from './queries.js';
 import { useMoneyQuery } from './runtime.js';
 import type { QueryState } from '../screen-kit/index.js';
@@ -13,6 +14,11 @@ export function shiftDay(day: number, days: number): number {
   const date = new Date(day);
   date.setDate(date.getDate() + days);
   return dayStart(date.getTime());
+}
+
+/** Riwayat with nothing in it: today may still get some, a past day is done. */
+export function historyEmptyKey(day: number, today: number): MoneyKey {
+  return day >= today ? 'money.history.none' : 'money.history.noneDay';
 }
 
 export interface DayRecords {
@@ -36,7 +42,7 @@ export function useDayRecords(day: number, pages: number, nonce: number): QueryS
           limit: PAGE,
           ...(cursor === undefined || cursor === null ? {} : { cursor }),
         });
-        rows.push(...result.rows);
+        rows.push(...result.rows.filter(inHistory));
         cursor = result.nextCursor;
         if (cursor === null) break;
       }

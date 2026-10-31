@@ -8,7 +8,12 @@ import { z } from 'zod';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import type { PartUse } from '../inventory/part-use.js';
 import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
-import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
+import {
+  chosenMethod,
+  methodMissing,
+  NO_METHOD,
+  referenceMissing,
+} from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { ApprovalRow } from '../approvals/queries.js';
 import type { MoneyTarget } from '../money/refund.js';
@@ -718,7 +723,7 @@ export function downPaymentStale(
 
 /** What still stands between a typed down payment and saving it; null when it can be saved. */
 export type DownPaymentGap =
-  'aboveTotal' | 'amount' | 'reference' | 'correctAmount' | 'same' | 'reason';
+  'aboveTotal' | 'amount' | 'method' | 'reference' | 'correctAmount' | 'same' | 'reason';
 
 /**
  * A down payment being recorded or corrected, as typed. A new one is at least Rp 1; a correction
@@ -731,6 +736,8 @@ export function downPaymentEntry(input: {
   readonly reason: string;
   readonly current: number | null;
   readonly total: number;
+  /** No method picked yet, where the store takes more than cash. */
+  readonly methodMissing?: boolean;
   /** A new DP's method still lacks the reference it takes (an EDC's approval code). */
   readonly referenceMissing?: boolean;
 }): {
@@ -746,18 +753,22 @@ export function downPaymentEntry(input: {
     : !correcting
       ? amount === null || amount <= 0
         ? 'amount'
-        : input.referenceMissing === true
-          ? 'reference'
-          : null
+        : input.methodMissing === true
+          ? 'method'
+          : input.referenceMissing === true
+            ? 'reference'
+            : null
       : amount === null
         ? 'correctAmount'
         : amount === input.current
           ? 'same'
           : input.reason.trim() === ''
             ? 'reason'
-            : amount > 0 && input.referenceMissing === true
-              ? 'reference'
-              : null;
+            : amount > 0 && input.methodMissing === true
+              ? 'method'
+              : amount > 0 && input.referenceMissing === true
+                ? 'reference'
+                : null;
   return { amount, aboveTotal, gap };
 }
 
@@ -1101,7 +1112,7 @@ const zIntakeDraft = z.strictObject({
   /** Rupiah the customer paid up front, as typed; '' when nothing was paid. */
   downPayment: z.string().default(''),
   /** How the DP came in: `cash` or `account:<id>`. */
-  downPaymentAccount: z.string().default(CASH_ACCOUNT),
+  downPaymentAccount: z.string().default(NO_METHOD),
   /** The DP's reference, as an EDC's approval code; '' when none. */
   downPaymentReference: z.string().default(''),
   /** The ready-by option id picked, or '' while the store's default stands. */
@@ -1186,7 +1197,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     ownershipVideo: null,
     lines: [],
     downPayment: '',
-    downPaymentAccount: CASH_ACCOUNT,
+    downPaymentAccount: NO_METHOD,
     downPaymentReference: '',
     ready: '',
     claimOf: null,
@@ -1236,6 +1247,7 @@ export type IntakeProblem =
   | 'incompleteLine'
   | 'negativeTotal'
   | 'downPaymentAboveTotal'
+  | 'downPaymentMethod'
   | 'downPaymentReference';
 
 /** What each problem says, on the phone and on the PC. */
@@ -1253,6 +1265,7 @@ export const INTAKE_PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
   downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
+  downPaymentMethod: 'repair.problem.downPaymentMethod',
   downPaymentReference: 'repair.problem.downPaymentReference',
 };
 
@@ -1308,7 +1321,9 @@ export function stepProblems(
       ) {
         problems.push('downPaymentAboveTotal');
       }
-      if (
+      if (intakeDownPayment(draft) > 0 && methodMissing(draft.downPaymentAccount, accounts)) {
+        problems.push('downPaymentMethod');
+      } else if (
         intakeDownPayment(draft) > 0 &&
         referenceMissing(draft.downPaymentAccount, draft.downPaymentReference, accounts)
       ) {

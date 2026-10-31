@@ -54,6 +54,7 @@
     "remaining": "{amount} still to pay",
     "overpaid": "{amount} too much. Lower the amount first.",
     "problem": {
+      "pick": "Pick how they paid first.",
       "method": "This method is no longer available. Pick another.",
       "tendered": "Cash received is less than the amount."
     },
@@ -64,6 +65,7 @@
     "turnedDown": "Turned down by the owner",
     "title": "Cash",
     "expected": "Should be in the drawer",
+    "drawer": "Cash drawer",
     "notCounted": "Drawer not counted today",
     "counted": "Drawer counted at {time}",
     "count": "Count drawer",
@@ -97,6 +99,9 @@
     "counted": "Cash in the drawer",
     "difference": "Difference",
     "note": "Note (optional)",
+    "check": "Check count",
+    "recount": "Count again",
+    "recountHint": "It is off. Count once more if unsure, or save.",
     "save": "Save count",
     "hint": "Count the drawer, then enter the amount."
   },
@@ -111,7 +116,7 @@
     "aboveDrawer": "The drawer only has {amount}. Lower the amount first."
   },
   "settle": {
-    "title": "Settle difference",
+    "title": "Cash difference",
     "countedBy": "Counted by {name}, {time}",
     "reason": "Reason",
     "save": "Settle difference",
@@ -138,7 +143,8 @@
     "today": "Today",
     "previousDay": "Previous",
     "nextDay": "Next",
-    "none": "No records on this day.",
+    "none": "Nothing recorded yet today.",
+    "noneDay": "Nothing was recorded that day.",
     "voided": "Cancelled: {reason}",
     "handoverRefund": "Rest of the DP, at pickup",
     "more": "Load more",
@@ -151,7 +157,7 @@
     "voidCashLabel": "Cancel the cash record of {amount} at {time}"
   },
   "void": {
-    "title": "Cancel payment",
+    "title": "Payment cancellation",
     "save": "Cancel payment",
     "hint": "Enter the reason first.",
     "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
@@ -160,7 +166,7 @@
     "waiting": "Waiting for approval",
     "rejected": "{name} turned down cancelling the {amount} payment.",
     "rejectedNote": "{name} turned down cancelling the {amount} payment: {note}",
-    "cashTitle": "Cancel cash record",
+    "cashTitle": "Cash record cancellation",
     "cashSave": "Cancel record",
     "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts.",
     "needsApproval": "Needs the store owner’s approval.",

@@ -96,14 +96,20 @@ export function KasBoard({
         <LoadingState variant="spinner" />
       ) : drawerData === null ? null : (
         <View style={styles.drawer} testID={`${testID}.drawer`}>
-          <Text style={styles.label}>{tm('money.kas.expected')}</Text>
-          <RollingText
-            value={drawerData.expected}
-            style={styles.expected}
-            testID={`${testID}.expected`}
-          >
-            {formatMoney(drawerData.expected)}
-          </RollingText>
+          {may.seeExpected ? (
+            <>
+              <Text style={styles.label}>{tm('money.kas.expected')}</Text>
+              <RollingText
+                value={drawerData.expected}
+                style={styles.expected}
+                testID={`${testID}.expected`}
+              >
+                {formatMoney(drawerData.expected)}
+              </RollingText>
+            </>
+          ) : (
+            <Text style={styles.label}>{tm('money.kas.drawer')}</Text>
+          )}
           <Text style={styles.muted} testID={`${testID}.lastCount`}>
             {counted === null
               ? tm('money.kas.notCounted')
@@ -166,7 +172,8 @@ export function KasBoard({
         </Section>
       )}
 
-      {entriesReady ? (
+      {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+      {entriesReady && may.seeExpected ? (
         <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
           {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
             <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>

@@ -112,6 +112,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   incompleteLine: 'repair.desk.intake.lines',
   negativeTotal: 'repair.desk.intake.lines',
   downPaymentAboveTotal: 'repair.desk.intake.downPayment',
+  downPaymentMethod: 'repair.desk.intake.downPaymentMethod.methods',
   downPaymentReference: 'repair.desk.intake.downPaymentMethod.reference',
   screenLock: 'repair.desk.intake.lock.kind',
 };
