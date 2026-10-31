@@ -17,6 +17,8 @@ import {
   lineKind,
   methodOffered,
   newPaymentLine,
+  NO_METHOD,
+  pickedAccount,
   paidByQr,
   paymentMethods,
   type PaymentEntry,
@@ -69,9 +71,10 @@ export function PaymentLines({
       ) : null}
       {lines.map((line, index) => {
         const id = `${testId}.line${String(index)}`;
-        const account = line.account;
-        // A method switched off since it was picked: no chip is on, and the line asks again.
-        const offered = methodOffered(account, accounts);
+        const account = pickedAccount(line.account, accounts);
+        // Nothing picked yet, or a method switched off since it was: no chip is on, and it asks.
+        const unpicked = account === NO_METHOD;
+        const offered = unpicked || methodOffered(account, accounts);
         const kind = lineKind(account, accounts);
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
@@ -119,7 +122,11 @@ export function PaymentLines({
                 onChange={(event) => digits(line.key, 'amount')(event.target.value)}
                 data-testid={`${id}.amount`}
               />
-              {!offered ? (
+              {unpicked ? (
+                <p className="self-end text-small text-text-muted" data-testid={`${id}.pick`}>
+                  {tm('money.pay.problem.pick')}
+                </p>
+              ) : !offered ? (
                 <p className="self-end text-small text-danger" data-testid={`${id}.methodGone`}>
                   {tm('money.pay.problem.method')}
                 </p>
@@ -189,7 +196,11 @@ export function PaymentLines({
                 />
               ) : null}
               {/* Handed over exactly: no change to give, so nothing to say. */}
-              {kind === 'cash' && line.tendered !== '' && tendered > amount && amount > 0 ? (
+              {!unpicked &&
+              kind === 'cash' &&
+              line.tendered !== '' &&
+              tendered > amount &&
+              amount > 0 ? (
                 <p className="text-body text-text" data-testid={`${id}.change`}>
                   <span className="text-text-muted">{tm('money.pay.change')} </span>
                   <span className="tabular font-semibold">{formatMoney(tendered - amount)}</span>
@@ -207,9 +218,8 @@ export function PaymentLines({
             variant="text"
             size="sm"
             onClick={() => {
-              const used = new Set(lines.map((line) => line.account));
-              const next = methods.find((method) => !used.has(method.account))?.account;
-              onChange([...lines, newPaymentLine(newKey(), entry.remaining, next)]);
+              // The new line waits for its method too: nothing is guessed for the counter.
+              onChange([...lines, newPaymentLine(newKey(), entry.remaining)]);
             }}
             data-testid={`${testId}.add`}
           />

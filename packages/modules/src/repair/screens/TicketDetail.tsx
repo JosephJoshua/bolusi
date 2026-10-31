@@ -751,7 +751,7 @@ export function TicketDetail({
         : null;
     return (
       <View testID={`${testID}.content`}>
-        <Card testID={`${testID}.summary`}>
+        <Card freshId={row.id} testID={`${testID}.summary`}>
           <View style={styles.statusRow}>
             <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
             {row.claimOf === null ? null : (

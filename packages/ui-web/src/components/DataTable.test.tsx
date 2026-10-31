@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { markFresh } from '@bolusi/ui/fresh';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DataTable, foldColumns, type ColumnDef } from './DataTable.js';
@@ -100,6 +101,27 @@ describe('DataTable keyboard', () => {
     expect(onSelect).toHaveBeenLastCalledWith(ROWS[2]);
     fireEvent.keyDown(body, { key: 'Enter' });
     expect(onActivate).toHaveBeenCalledWith(ROWS[2]);
+  });
+
+  it('lets a row another device just changed glow, and only that row', () => {
+    render(
+      <DataTable
+        rows={ROWS}
+        columns={COLUMNS}
+        getRowId={(row) => row.id}
+        selectedId={null}
+        onSelect={vi.fn()}
+        label="Rows"
+        testId="t"
+      />,
+    );
+    const glowing = (): string[] =>
+      [...document.querySelectorAll('[data-fresh]')].map((glow) =>
+        glow.closest('[role="row"]')!.getAttribute('data-testid')!,
+      );
+    expect(glowing()).toEqual([]);
+    act(() => markFresh('b', Date.now() + 5));
+    expect(glowing()).toEqual(['t.row.b']);
   });
 
   it('selects a row on click', () => {

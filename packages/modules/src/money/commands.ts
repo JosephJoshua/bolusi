@@ -25,6 +25,7 @@ import { zDocument, type MoneyDocument } from './documents.js';
 import { zAccountRef, zAmount, zReason } from './operations.js';
 import { documentMoneyQuery, drawerForMoveQuery } from './queries.js';
 import { MONEY_REFUSALS } from './rules.js';
+import { seesExpected } from './kas.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
 
@@ -282,15 +283,18 @@ export const moveCashInput = z
 export type MoveCashInput = z.input<typeof moveCashInput>;
 
 /**
- * Cash out of or into the drawer. Nobody takes out more than the book says is in it: the server
- * records cash as it really moved (an offline device's moves may cross), so it is stopped here.
+ * Cash out of or into the drawer. Nobody who sees the drawer takes out more than the book says is
+ * in it: the server records cash as it really moved (an offline device's moves may cross), so it
+ * is stopped here. Someone counting blind is not checked (`cashMoveCheck`).
  */
 export async function moveCashHandler(
   input: z.output<typeof moveCashInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ entryId: string }>> {
   const kind: CashMoveKind = input.kind;
-  if (movesOut(kind)) {
+  // Not for someone counting blind: the refusal would give the drawer away a try at a time.
+  const blind = !seesExpected((permission) => ctx.colleagueHasPermission(ctx.userId, permission));
+  if (movesOut(kind) && !blind) {
     const drawer = (await ctx.query(drawerForMoveQuery, { counts: 0 })).rows[0]!.expected;
     if (input.amount > drawer) {
       throw MONEY_REFUSALS.refuse('moveAboveDrawer', {

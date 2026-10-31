@@ -9,6 +9,7 @@
  */
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/schemas';
+import { markFresh } from '@bolusi/ui/fresh';
 
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import { demoApprovals } from '../approvals/demo.js';
@@ -1523,11 +1524,16 @@ export function demoRepairRuntime(
   const colleague = (name: string, input: Input): unknown => {
     const self = actor;
     actor = DEMO_REPAIR_ROLES.owner;
+    let result: unknown;
     try {
-      return commands[name]!(input);
+      result = commands[name]!(input);
     } finally {
       actor = self;
     }
+    // Arrived "by sync", so it glows where it shows, as a pulled change does.
+    const ticketId = (result as { ticketId?: unknown } | null)?.ticketId;
+    if (typeof ticketId === 'string') markFresh(ticketId);
+    return result;
   };
   if (browser.window !== undefined) {
     browser.window[DEMO_COLLEAGUE_HOOK] = { run: colleague };
@@ -1593,6 +1599,7 @@ export function demoRepairRuntime(
       now,
       accounts: DEMO_ACCOUNTS,
       actor: () => actor.userId,
+      nameOf: (userId) => NAMES.get(userId) ?? null,
       mayRefund: () => permitted.has(MONEY_PERMISSION.refund),
       debt:
         unpaid === undefined

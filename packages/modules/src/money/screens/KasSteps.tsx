@@ -34,9 +34,14 @@ import {
 import { tm } from '../i18n.js';
 import {
   CASH_MOVE_LABEL,
+  cashCountView,
   cashMoveCheck,
   differenceText,
+  NEW_CASH_COUNT,
+  RECOUNT_CASH,
+  seesExpected,
   settleState,
+  type CashCountForm,
   type NamedBalance,
 } from '../kas.js';
 import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
@@ -154,18 +159,26 @@ export function CountCashStep({
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
-  const [counted, setCounted] = useState('');
+  const [form, setForm] = useState<CashCountForm>(NEW_CASH_COUNT);
   const [note, setNote] = useState('');
   const leave = useStepLeave(
-    counted !== '' || note.trim() !== '',
+    form.counted !== '' || note.trim() !== '',
     { chrome, onDone, onCancel, onRegisterDiscardGuard },
     testID,
   );
-  const amount = rupiah(counted);
-  const expected = drawer.status === 'ready' ? drawer.data.expected : null;
+  const blind = !seesExpected(
+    (id) => runtime.hasPermission(id),
+    (id) => runtime.limitOf(id),
+  );
+  const view = cashCountView(form, drawer.status === 'ready' ? drawer.data.expected : null, blind);
+  const { amount } = view;
 
   const submit = (): void => {
     if (amount === null) return;
+    if (view.next === 'check') {
+      setForm({ ...form, checked: true });
+      return;
+    }
     void runner
       .run(() => runtime.run('countCash', { counted: amount, note }))
       .then((result) => {
@@ -179,32 +192,53 @@ export function CountCashStep({
       title={tm('money.kas.count')}
       onBack={leave.onBack}
       overlay={leave.overlay}
-      primaryLabel={tm('money.count.save')}
+      primaryLabel={tm(view.next === 'check' ? 'money.count.check' : 'money.count.save')}
       onPrimary={submit}
       primaryDisabled={amount === null}
       primaryHint={tm('money.count.hint')}
+      secondary={
+        view.mayRecount
+          ? {
+              label: tm('money.count.recount'),
+              onPress: () => setForm(RECOUNT_CASH),
+              testID: `${testID}.recount`,
+            }
+          : undefined
+      }
+      question={view.mayRecount ? tm('money.count.recountHint') : undefined}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
       testID={testID}
     >
-      <AmountField
-        label={tm('money.count.counted')}
-        digits={counted}
-        onChange={setCounted}
-        testID={`${testID}.counted`}
-      />
-      {expected === null ? null : (
+      {view.locked && amount !== null ? (
+        <View style={styles.sum}>
+          <Line
+            label={tm('money.count.counted')}
+            value={formatMoney(amount)}
+            strong
+            testID={`${testID}.countedValue`}
+          />
+        </View>
+      ) : (
+        <AmountField
+          label={tm('money.count.counted')}
+          digits={form.counted}
+          onChange={(counted) => setForm({ ...form, counted })}
+          testID={`${testID}.counted`}
+        />
+      )}
+      {view.expected === null ? null : (
         <View style={styles.sum}>
           <Line
             label={tm('money.kas.expected')}
-            value={formatMoney(expected)}
+            value={formatMoney(view.expected)}
             testID={`${testID}.expected`}
           />
-          {amount === null ? null : (
+          {view.difference === null ? null : (
             <Line
               label={tm('money.count.difference')}
-              value={differenceText(amount - expected)}
+              value={differenceText(view.difference)}
               strong
               testID={`${testID}.difference`}
             />
@@ -258,6 +292,10 @@ export function MoveCashStep({
     reason,
     accounts: accounts.status === 'ready' ? accounts.data : [],
     drawer: drawer.status === 'ready' ? drawer.data.expected : null,
+    blind: !seesExpected(
+      (id) => runtime.hasPermission(id),
+      (id) => runtime.limitOf(id),
+    ),
   });
 
   const submit = (): void => {

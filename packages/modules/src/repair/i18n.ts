@@ -351,6 +351,7 @@ export const REPAIR_KEYS = [
   'repair.problem.photos',
   'repair.problem.quoteLines',
   'repair.problem.downPaymentAboveTotal',
+  'repair.problem.downPaymentMethod',
   'repair.problem.downPaymentReference',
   'repair.problem.screenLock',
   'repair.ready.inDays',

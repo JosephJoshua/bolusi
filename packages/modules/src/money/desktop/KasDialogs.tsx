@@ -16,14 +16,19 @@ import {
   type CashMoveKind,
 } from '../constants.js';
 import { tm } from '../i18n.js';
-import { useVoidAsk, voidRequest } from '../void-ask.js';
+import { useEntryCustomer, useVoidAsk, voidRequest } from '../void-ask.js';
 import { ta } from '../../approvals/i18n.js';
 import {
   CASH_MOVE_LABEL,
   accountLabel,
+  cashCountView,
   cashMoveCheck,
   differenceText,
+  NEW_CASH_COUNT,
+  RECOUNT_CASH,
+  seesExpected,
   settleState,
+  type CashCountForm,
   type NamedBalance,
   voidKind,
 } from '../kas.js';
@@ -89,14 +94,22 @@ export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Eleme
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const drawer = useDrawer();
-  const [counted, setCounted] = useState('');
+  const [form, setForm] = useState<CashCountForm>(NEW_CASH_COUNT);
   const [note, setNote] = useState('');
-  const amount = rupiah(counted);
-  const expected = drawer.status === 'ready' ? drawer.data.expected : null;
+  const blind = !seesExpected(
+    (id) => runtime.hasPermission(id),
+    (id) => runtime.limitOf(id),
+  );
+  const view = cashCountView(form, drawer.status === 'ready' ? drawer.data.expected : null, blind);
+  const { amount } = view;
   const testId = 'money.desk.count';
 
   const submit = (): void => {
     if (amount === null) return;
+    if (view.next === 'check') {
+      setForm({ ...form, checked: true });
+      return;
+    }
     void runner
       .run(() => runtime.run('countCash', { counted: amount, note }))
       .then((result) => {
@@ -107,33 +120,51 @@ export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Eleme
   return (
     <MoneyDialog
       title={tm('money.kas.count')}
-      description={tm('money.count.hint')}
+      description={tm(view.mayRecount ? 'money.count.recountHint' : 'money.count.hint')}
       runner={runner}
-      dirty={counted !== '' || note.trim() !== ''}
+      dirty={form.counted !== '' || note.trim() !== ''}
       onClose={onClose}
-      submitLabel={tm('money.count.save')}
+      submitLabel={tm(view.next === 'check' ? 'money.count.check' : 'money.count.save')}
       onSubmit={submit}
       submitDisabled={amount === null}
+      secondary={
+        view.mayRecount
+          ? {
+              label: tm('money.count.recount'),
+              onClick: () => setForm(RECOUNT_CASH),
+              testId: `${testId}.recount`,
+            }
+          : undefined
+      }
       testId={testId}
     >
-      <AmountField
-        label={tm('money.count.counted')}
-        digits={counted}
-        onChange={setCounted}
-        testId={`${testId}.counted`}
-      />
-      {expected === null ? null : (
+      {view.locked && amount !== null ? (
+        <AmountLine
+          label={tm('money.count.counted')}
+          value={formatMoney(amount)}
+          strong
+          testId={`${testId}.countedValue`}
+        />
+      ) : (
+        <AmountField
+          label={tm('money.count.counted')}
+          digits={form.counted}
+          onChange={(counted) => setForm({ ...form, counted })}
+          testId={`${testId}.counted`}
+        />
+      )}
+      {view.expected === null ? null : (
         <div className="flex flex-col gap-2 rounded-sm bg-surface-alt p-3">
           <AmountLine
             label={tm('money.kas.expected')}
-            value={formatMoney(expected)}
+            value={formatMoney(view.expected)}
             testId={`${testId}.expected`}
           />
-          {amount === null ? null : (
+          {view.difference === null ? null : (
             <AmountLine
               label={tm('money.count.difference')}
-              value={differenceText(amount - expected)}
-              tone={amount < expected ? 'danger' : 'text'}
+              value={differenceText(view.difference)}
+              tone={view.difference < 0 ? 'danger' : 'text'}
               strong
               testId={`${testId}.difference`}
             />
@@ -173,6 +204,10 @@ export function MoveCashDialog({ onDone, onClose }: TaskProps): React.JSX.Elemen
     reason,
     accounts: accounts.status === 'ready' ? accounts.data : [],
     drawer: drawer.status === 'ready' ? drawer.data.expected : null,
+    blind: !seesExpected(
+      (id) => runtime.hasPermission(id),
+      (id) => runtime.limitOf(id),
+    ),
   });
   const testId = 'money.desk.move';
 
@@ -670,6 +705,7 @@ export function VoidPaymentDialog({
   // A limited role (a manager) sees its limit up front; beyond it, or without the decision, an
   // owner is asked instead.
   const ask = useVoidAsk(entry);
+  const customer = useEntryCustomer(entry);
   const blocked = ask.asking && !ask.mayAsk;
   const testId = 'money.desk.void';
 
@@ -705,6 +741,7 @@ export function VoidPaymentDialog({
         </span>
         <span className="text-body text-text-muted">
           {[
+            customer,
             accountLabel(entry.account ?? '', accounts),
             entry.documentLabel,
             formatDateTime(entry.createdAt),

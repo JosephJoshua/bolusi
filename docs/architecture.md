@@ -161,6 +161,13 @@ fails a build, a boot or a test rather than waiting for review:
 - Screens read through `useLiveQuery` (`screen-kit/live.ts`). The platform adapter
   subscribes the module runtime to the module's tables, so a pulled change re-runs
   every open read.
+- What another device just changed glows once where it shows. The engine flags pulled
+  changes `remote` on the invalidation bus, each app feeds them to `markFresh`
+  (`@bolusi/ui/fresh`), and shared parts glow by record id: every PC `DataTable` row on
+  its own, phone `ListRow` and `Card` (and both apps' cards) with `freshId`, anything
+  else with `FreshGlow`. Pass the id the module's ops name as `entityId`. An op that
+  changes how another record looks (a payment on a servisan) declares `concerns`, and
+  that record glows too.
 - Counter PC screens live in `src/<module>/desktop/`. The PC's stylesheet picks up their
   classes from that folder, and the PC window is told every module's permissions
   (`apps/desktop/src/core/permissions.ts`), so a new module needs no PC wiring for either.

@@ -32,6 +32,8 @@ export interface DemoMoneyOptions {
   readonly accounts: readonly PaymentAccountRow[];
   /** Who records the next entry. */
   readonly actor: () => string;
+  /** A staff member's name, as the device's staff list gives it. */
+  readonly nameOf?: ((userId: string) => string | null) | undefined;
   /** Whether they give back beyond an overpayment (an owner); the counter by default. */
   readonly mayRefund?: (() => boolean) | undefined;
   /** A finished servisan the customer took home unpaid. */
@@ -90,6 +92,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     voidReason: null,
     relatedEntryId: null,
     ...fields,
+    createdByName: options.nameOf?.(fields.createdBy ?? 'u-siti') ?? null,
   });
   const qris = accounts.find((row) => row.kind === 'qris');
   const document = (id: string, label: string) => ({

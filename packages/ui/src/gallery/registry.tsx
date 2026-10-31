@@ -998,6 +998,9 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  // Renders nothing until a colleague's change marks the id: the resting state is the only one.
+  FreshGlow: [{ id: 'resting', render: () => <componentInventory.FreshGlow id="gallery" /> }],
+
   RollingText: [
     {
       id: 'default',

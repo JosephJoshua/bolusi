@@ -13,6 +13,7 @@
 // scope: `module/registry.ts` + `authz/registry.ts` (02 §3.2 rules 1–4).
 import type { PermissionDeclaration } from '../authz/registry.js';
 import type {
+  OperationConcerns,
   ProjectionApplier,
   ProjectionDb,
   ProjectionTableManifest,
@@ -127,6 +128,12 @@ export interface OperationDeclaration<DB> {
   readonly reversal: string;
   /** The fold step (04 §4.1). */
   readonly apply: ProjectionApplier<DB>;
+  /**
+   * Other records an op of this type changes the look of, besides its own: the servisan a payment
+   * is for. Optional. When the op arrives from another device, screens mark these as changed by a
+   * colleague too, so the servisan's row glows when its DP is paid elsewhere. Never used to fold.
+   */
+  readonly concerns?: OperationConcerns;
   /** Optional collision declaration (01 §8.1). Absent ⇒ this type never produces a Conflict. */
   readonly conflict?: ConflictDeclaration;
   /** Envelope scope (01 §6; 05 §2.1). Default `'store'`. */

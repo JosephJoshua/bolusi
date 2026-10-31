@@ -14,7 +14,7 @@ import type { ApprovalRow } from '../approvals/queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { PurchasingRuntime } from '../purchasing/runtime.js';
 import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
-import { CASH_ACCOUNT } from '../money/constants.js';
+import { NO_METHOD } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { HandoverQris } from './handover-payment.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
@@ -311,8 +311,8 @@ export interface PaymentMethodChoice {
 }
 
 /**
- * The method a down payment step records through: cash for a new DP; for a correction, the one the
- * DP came in by, until the owner picks another.
+ * The method a down payment step records through: none for a new DP until it is picked (cash where
+ * that is all the store takes); for a correction, the one the DP came in by, until another is picked.
  */
 export function useDownPaymentMethod(
   ticketId: string,
@@ -332,7 +332,7 @@ export function useDownPaymentMethod(
       : { account: first.account, reference: first.reference ?? '' };
   }, `downPaymentMethod:${ticketId}:${mode}`);
   const fallback = original.status === 'ready' ? original.data : null;
-  return [picked ?? fallback ?? { account: CASH_ACCOUNT, reference: '' }, setPicked];
+  return [picked ?? fallback ?? { account: NO_METHOD, reference: '' }, setPicked];
 }
 
 /** A model photo's uri once loaded; null while loading or when there is none to show. */

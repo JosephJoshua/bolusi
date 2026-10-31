@@ -87,6 +87,10 @@ function renderApp(): void {
 
 const RETAKE = 'Foto ulang';
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
+/** Where the store takes more than cash, the counter picks each payment's method itself. */
+function pick(line: string, method = 'Tunai'): void {
+  fireEvent.click(within(byTestId(`${line}.methods`)).getByRole('button', { name: method }));
+}
 /** An element's text without spaces: amounts print "Rp" and the figure apart. */
 const text = (id: string): string => byTestId(id).textContent!.replace(/\s/g, '');
 
@@ -724,6 +728,7 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.handover.askPayLater')).toHaveProperty('disabled', true);
     fireEvent.click(byTestId('repair.desk.handover.payLater'));
     await captureHandover();
+    pick('repair.desk.handover.pay.line0');
     fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
       target: { value: '10000' },
     });
@@ -791,6 +796,7 @@ describe('counter app over demo data', () => {
     await openTicket('Ester Mandowen');
     fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
     const checks = within(await screen.findByTestId('repair.desk.handover.checks'));
+    pick('repair.desk.handover.pay.line0');
     expect(checks.getAllByRole('button').map((line) => line.textContent)).toEqual([
       'Sudah dicoba pelanggan',
       'Bagian yang diperbaiki berfungsi',
@@ -830,6 +836,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
     await screen.findByTestId('repair.desk.handover');
     await captureHandover();
+    pick('repair.desk.handover.pay.line0');
     fireEvent.change(byTestId('repair.desk.handover.pay.line0.amount'), {
       target: { value: '5000' },
     });

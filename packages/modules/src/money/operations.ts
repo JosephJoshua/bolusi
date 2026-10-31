@@ -5,7 +5,7 @@
 // tenant-scoped, so every store's devices know them. Payloads are strict; money is integer IDR.
 import { z } from 'zod';
 
-import type { OperationDeclaration } from '@bolusi/core';
+import type { OperationConcerns, OperationDeclaration } from '@bolusi/core';
 import { zMoneyIdr, zUuid } from '@bolusi/schemas';
 
 import {
@@ -27,7 +27,7 @@ import {
   PAYMENT_ACCOUNT_KINDS,
   REVENUE_ACCOUNTS,
 } from './constants.js';
-import { zDocument, type MoneyDocumentSources } from './documents.js';
+import { zDocument, type MoneyDocument, type MoneyDocumentSources } from './documents.js';
 import { accountSavedRule, centralAccountSavedRule, createMoneyRules } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
 
@@ -121,7 +121,17 @@ export function createMoneyOperations(
   sources: MoneyDocumentSources,
 ): Record<string, OperationDeclaration<MoneyDatabase>> {
   const rules = createMoneyRules(sources);
-  const entry = { entityType: MONEY_ENTRY_ENTITY, apply: entryRecordedApplier } as const;
+  // Money taken or given back for a document changes how that document looks: a servisan's row
+  // shows what is still owed.
+  const concerns: OperationConcerns = (op) => {
+    // Cash moves and counts are for no document.
+    const { document } = op.payload as { readonly document?: MoneyDocument };
+    const source = document === undefined ? undefined : sources[document.kind];
+    return document === undefined || source === undefined
+      ? []
+      : [{ entityType: source.entityType, entityId: document.id }];
+  };
+  const entry = { entityType: MONEY_ENTRY_ENTITY, apply: entryRecordedApplier, concerns } as const;
   return {
     [MONEY_OP.accountSaved]: {
       schemaVersion: 1,

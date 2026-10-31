@@ -61,6 +61,8 @@
   --animate-shake: shake 280ms ease-in-out;
   /* A just-issued servisan number comes down like a rubber stamp. */
   --animate-stamp: stamp 320ms var(--b-ease-enter);
+  /* What a colleague just changed: a highlight that fades away (FreshGlow). */
+  --animate-fresh: fade-out 1000ms var(--b-ease-exit) forwards;
   --animate-roll-up: roll-up var(--b-duration-base) var(--b-ease-enter);
   --animate-roll-down: roll-down var(--b-duration-base) var(--b-ease-enter);
   /* A tick drawn in: the window opens over it while the tick inside holds still. */

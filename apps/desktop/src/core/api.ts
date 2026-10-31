@@ -54,6 +54,12 @@ export interface CoreState {
   readonly statusSite: string;
 }
 
+/** The `repairChanged` payload: the record another device just changed, or null. */
+export interface RepairChange {
+  /** What a colleague just changed on another device: the record and the ones it concerns. */
+  readonly freshIds: readonly string[];
+}
+
 /** Events the core pushes to the window. */
 export const CORE_EVENTS = {
   state: 'state',

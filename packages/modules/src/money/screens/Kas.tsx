@@ -8,6 +8,7 @@ import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18
 import {
   AppShell,
   Button,
+  FreshGlow,
   Icon,
   LoadingState,
   RollingText,
@@ -25,10 +26,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
 import { tm } from '../i18n.js';
-import { accountLabel, differenceText, type NamedBalance } from '../kas.js';
+import { accountLabel, dayStart, differenceText, type NamedBalance } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
 import type { CashCountRow } from '../queries.js';
 import { useMoneyRuntime } from '../runtime.js';
+import { useVoidRequests } from '../void-ask.js';
+import { ta } from '../../approvals/i18n.js';
 
 export interface KasBoardProps {
   readonly chrome: ScreenChrome;
@@ -70,6 +73,11 @@ export function KasBoard({
     may,
   } = useKasDay(now);
   const { count: mayCount, settle: maySettle, receive: mayReceive, read: mayRead } = may;
+  // Cancels this person asked for that an owner turned down today: told here, not only in Riwayat.
+  const since = dayStart(now());
+  const turnedDown = [...useVoidRequests().rejected.values()].filter(
+    (row) => (row.decidedAt ?? 0) >= since,
+  );
 
   return (
     <AppShell
@@ -88,14 +96,20 @@ export function KasBoard({
         <LoadingState variant="spinner" />
       ) : drawerData === null ? null : (
         <View style={styles.drawer} testID={`${testID}.drawer`}>
-          <Text style={styles.label}>{tm('money.kas.expected')}</Text>
-          <RollingText
-            value={drawerData.expected}
-            style={styles.expected}
-            testID={`${testID}.expected`}
-          >
-            {formatMoney(drawerData.expected)}
-          </RollingText>
+          {may.seeExpected ? (
+            <>
+              <Text style={styles.label}>{tm('money.kas.expected')}</Text>
+              <RollingText
+                value={drawerData.expected}
+                style={styles.expected}
+                testID={`${testID}.expected`}
+              >
+                {formatMoney(drawerData.expected)}
+              </RollingText>
+            </>
+          ) : (
+            <Text style={styles.label}>{tm('money.kas.drawer')}</Text>
+          )}
           <Text style={styles.muted} testID={`${testID}.lastCount`}>
             {counted === null
               ? tm('money.kas.notCounted')
@@ -126,6 +140,21 @@ export function KasBoard({
         </View>
       )}
 
+      {turnedDown.length === 0 ? null : (
+        <Section title={tm('money.kas.turnedDown')} testID={`${testID}.turnedDown`}>
+          {turnedDown.map((row) => (
+            <Row
+              key={row.id}
+              label={ta('approvals.kind.moneyVoidPayment')}
+              detail={[row.decidedByName, row.note].filter(Boolean).join(': ')}
+              value={formatMoney(row.amount)}
+              onPress={onHistory}
+              testID={`${testID}.turnedDown.${row.id}`}
+            />
+          ))}
+        </Section>
+      )}
+
       {difference === null ? null : (
         <Section title={tm('money.kas.difference')} testID={`${testID}.differences`}>
           <Row
@@ -143,7 +172,8 @@ export function KasBoard({
         </Section>
       )}
 
-      {entriesReady ? (
+      {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+      {entriesReady && may.seeExpected ? (
         <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
           {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
             <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
@@ -236,6 +266,7 @@ export function Row({
   tone = 'text',
   strong = false,
   onPress,
+  freshId,
   testID,
 }: {
   readonly label: string;
@@ -245,10 +276,13 @@ export function Row({
   readonly tone?: 'text' | 'danger' | 'struck' | undefined;
   readonly strong?: boolean | undefined;
   readonly onPress?: (() => void) | undefined;
+  /** The record the row shows: it glows once when another device changes it. */
+  readonly freshId?: string | undefined;
   readonly testID: string;
 }): React.JSX.Element {
   const body: ReactNode = (
     <>
+      {freshId === undefined ? null : <FreshGlow id={freshId} />}
       <View style={styles.rowText}>
         <Text style={strong ? styles.rowLabelStrong : styles.rowLabel}>{label}</Text>
         {detail === undefined || detail === '' ? null : (

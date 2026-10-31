@@ -15,11 +15,18 @@ import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/scree
 import { MAX_REASON } from '../constants.js';
 import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { tm } from '../i18n.js';
-import { shiftDay, useDayRecords } from '../day-records.js';
+import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
-import { useVoidAsk, voidRequest } from '../void-ask.js';
+import {
+  useVoidAsk,
+  useEntryCustomer,
+  useOnVoidDecided,
+  useVoidRequests,
+  voidRequest,
+} from '../void-ask.js';
+import { approvalByLine } from '../../approvals/copy.js';
 import { ta } from '../../approvals/i18n.js';
 
 import { Row } from './Kas.js';
@@ -35,6 +42,8 @@ export interface KasHistoryProps {
   readonly onVoid: (entry: MoneyEntryRow) => void;
   /** Said back from a record, e.g. that an owner was asked. */
   readonly notice?: string | null | undefined;
+  /** The payment that notice asked about: once an owner answers, the notice goes. */
+  readonly noticeEntryId?: string | null | undefined;
   readonly onClearNotice?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
@@ -47,6 +56,7 @@ export function KasHistory({
   onBack,
   onVoid,
   notice,
+  noticeEntryId = null,
   onClearNotice,
   testID = 'money.history',
 }: KasHistoryProps): React.JSX.Element {
@@ -61,6 +71,10 @@ export function KasHistory({
   const today = dayStart(now());
   const day = chosen ?? today;
   const records = useDayRecords(day, pages, nonce);
+  const asks = useVoidRequests();
+  useOnVoidDecided(notice === null || notice === undefined ? null : noticeEntryId, () =>
+    onClearNotice?.(),
+  );
 
   const goTo = (next: number): void => {
     setPages(1);
@@ -103,7 +117,7 @@ export function KasHistory({
       >
         {({ rows, more, customers, accounts }) =>
           rows.length === 0 ? (
-            <EmptyState title={tm('money.history.none')} testID={`${testID}.empty`} />
+            <EmptyState title={tm(historyEmptyKey(day, today))} testID={`${testID}.empty`} />
           ) : (
             <View>
               {rows.map((entry) => {
@@ -112,14 +126,23 @@ export function KasHistory({
                   accounts,
                   entry.documentId === null ? null : (customers.get(entry.documentId) ?? null),
                 );
+                const standing = entry.voidedAt === null;
+                const asked = standing && asks.waiting.has(entry.id);
+                const turnedDown = standing ? asks.rejected.get(entry.id) : undefined;
                 return (
                   <Row
                     key={entry.id}
                     label={tm(line.label)}
-                    detail={[formatTime(entry.createdAt), ...line.details].join(' · ')}
+                    detail={[
+                      formatTime(entry.createdAt),
+                      ...line.details,
+                      ...(asked ? [tm('money.void.waiting')] : []),
+                      ...(!asked && turnedDown !== undefined ? [approvalByLine(turnedDown)] : []),
+                    ].join(' · ')}
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
-                    onPress={voidable(entry, can) ? () => onVoid(entry) : undefined}
+                    onPress={!asked && voidable(entry, can) ? () => onVoid(entry) : undefined}
+                    freshId={entry.id}
                     testID={`${testID}.entry.${entry.id}`}
                   />
                 );
@@ -179,6 +202,7 @@ export function VoidPaymentStep({
   // A limited role (a manager) sees its limit up front; beyond it, or without the decision, an
   // owner is asked instead.
   const ask = useVoidAsk(entry);
+  const customer = useEntryCustomer(entry);
   const blocked = ask.asking && !ask.mayAsk;
   const discard = useDiscardConfirm({
     dirty: reason.trim() !== '',
@@ -229,7 +253,7 @@ export function VoidPaymentStep({
         {formatMoney(entry.amount)}
       </Text>
       <Text style={styles.muted}>
-        {[method, entry.documentLabel, formatDateTime(entry.createdAt)]
+        {[customer, method, entry.documentLabel, formatDateTime(entry.createdAt)]
           .filter((part) => part !== null && part !== '')
           .join(' · ')}
       </Text>
