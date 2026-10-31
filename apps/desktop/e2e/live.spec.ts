@@ -128,6 +128,13 @@ async function registerAndSignIn(page: Page, name: string): Promise<void> {
   await expect(page.getByTestId('repair.desk.board.newIntake')).toBeVisible();
 }
 
+/** A new servisan and a handover offer the slip first; these runs print nothing. */
+async function skipPrint(page: Page): Promise<void> {
+  const print = page.getByTestId('repair.desk.print');
+  await print.getByRole('button', { name: 'Kembali' }).click();
+  await expect(print).toBeHidden();
+}
+
 let counter: Page;
 /** The PC without a webcam, and the store phone paired to it. */
 let pc: Page;
@@ -157,6 +164,7 @@ test('registers the PC, signs in and takes a servisan in that reaches the server
   await counter.getByTestId('repair.desk.intake.line.0.amount').fill('1250000');
   await counter.keyboard.press('Control+Enter');
   await expect(counter.getByTestId('repair.desk.ticket.customer')).toHaveText('Yakobus Mandowen');
+  await skipPrint(counter);
 
   // The change and every photo reach the server.
   await expect(counter.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
@@ -235,6 +243,7 @@ test('a PC without a webcam takes every intake photo on one paired phone, throug
   await pc.getByTestId('repair.desk.intake.line.0.amount').fill('150000');
   await pc.keyboard.press('Control+Enter');
   await expect(pc.getByTestId('repair.desk.ticket.customer')).toHaveText('Ruth Wanggai');
+  await skipPrint(pc);
   // The phone's photos are this PC's own: they upload with the servisan.
   await expect(pc.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
     timeout: 60_000,
@@ -295,6 +304,7 @@ test('the same phone takes the work photos, and the customer signs on it turned 
   await expect(pc.getByTestId('repair.desk.handover.signature').locator('img')).toBeVisible();
   await pc.getByTestId('repair.desk.handover').getByRole('button', { name: 'Serahkan HP' }).click();
   await expect(pc.getByTestId('repair.desk.handover')).toBeHidden();
+  await skipPrint(pc);
   await expect(pc.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
     timeout: 60_000,
   });
