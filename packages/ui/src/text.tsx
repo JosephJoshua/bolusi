@@ -30,8 +30,17 @@ export function Text(props: ComponentPropsWithRef<typeof RNText>): React.JSX.Ele
   return <RNText key={useContext(FontScaleContext)} {...props} />;
 }
 
-/** `Text` that takes animated styles, for figures and titles that move. */
-export const AnimatedText = Animated.createAnimatedComponent(Text);
+/**
+ * `Text` that takes animated styles, for figures and titles that move. The whole animated text
+ * remounts on a new font scale, not just its text node inside: native-driven animations stay
+ * bound to the view they started on, so a fresh view under the same animated node crashes Android
+ * ("Animated node is already attached to a view").
+ */
+export function AnimatedText(
+  props: ComponentPropsWithRef<typeof Animated.Text>,
+): React.JSX.Element {
+  return <Animated.Text key={useContext(FontScaleContext)} {...props} />;
+}
 
 /** The bare input under the design system's fields. Screens use `TextInput` or `SearchField`. */
 export function NativeTextInput(

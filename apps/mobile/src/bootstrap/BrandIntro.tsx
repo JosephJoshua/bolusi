@@ -10,7 +10,7 @@
  * whether to reduce motion (a few milliseconds, never more than `ANSWER_WAIT_MS`) rather than skip
  * the intro by assuming.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
 
 import {
@@ -92,6 +92,15 @@ export function BrandIntro({
   const [gone, setGone] = useState(false);
   const hop = useRef(new Animated.Value(0)).current;
   const leave = useRef(new Animated.Value(0)).current;
+  // Made once: a new interpolation on each render would rebind the cover's native animated
+  // style mid-fade, whenever the app under it re-renders the cover.
+  const fade = useMemo(
+    () => ({
+      opacity: leave.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+      grow: leave.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }),
+    }),
+    [leave],
+  );
 
   useEffect(() => {
     if (!covered || still !== null) return;
@@ -186,18 +195,13 @@ export function BrandIntro({
         setCovered(true);
         onCovered?.();
       }}
-      style={[
-        styles.cover,
-        { opacity: leave.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) },
-      ]}
+      style={[styles.cover, { opacity: fade.opacity }]}
     >
       <Animated.View
         style={[
           styles.mark,
           {
-            transform: [
-              { scale: leave.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) },
-            ],
+            transform: [{ scale: fade.grow }],
           },
         ]}
       >
