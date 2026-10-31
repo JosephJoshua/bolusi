@@ -214,7 +214,10 @@ silent edits, and each one names who did it and what it was before.
 - **Blind cash count for staff** (Joseph, 2026-10-31): Kasir and Teknisi type
   what they counted before they see "Seharusnya di laci" and the difference,
   and may recount once before saving. Owners and managers see the expected
-  amount up front.
+  amount up front. Kas does not add up today's takings for them, and taking
+  out more than the drawer holds is not refused for them, since the refusal
+  would reveal the figure a try at a time; the next count shows the gap.
+  Riwayat still lists each amount.
 
 ## Printing repair slips (2026-10-26)
 

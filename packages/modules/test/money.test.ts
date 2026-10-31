@@ -899,17 +899,32 @@ describe('the drawer', () => {
     ]);
   });
 
-  test('cash out above what the drawer holds is stopped on the device', async () => {
+  test('cash out above what the drawer holds is stopped on the device, for whoever sees the drawer', async () => {
     h = await openRepairHarness(514);
     await h.money('moveCash', { kind: 'float', amount: 700_000, reason: 'Modal' }, h.cashierId);
     const out = (kind: string, amount: number) =>
-      h!.money('moveCash', { kind, amount, reason: 'Setor ke pemilik' }, h!.cashierId);
+      h!.money('moveCash', { kind, amount, reason: 'Setor ke pemilik' }, h!.storeOwnerId);
     await expectRefused(out('withdrawal', 900_000), 'VALIDATION_FAILED', 'moveAboveDrawer');
     await expectRefused(out('expense', 700_001), 'VALIDATION_FAILED', 'moveAboveDrawer');
     await out('withdrawal', 700_000);
     expect((await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0].expected).toBe(0);
     // Putting change money in is never limited.
     await out('float', 50_000);
+    await expectBalancedBooks(h);
+  });
+
+  test('someone who counts blind is not stopped, so a refusal cannot give the drawer away', async () => {
+    h = await openRepairHarness(515);
+    await h.money('moveCash', { kind: 'float', amount: 50_000, reason: 'Modal' }, h.cashierId);
+    // Just above what is there is taken like any other amount; a wrong record shows at the count.
+    await h.money('moveCash', { kind: 'expense', amount: 50_001, reason: 'Bensin' }, h.cashierId);
+    const { entryId: countId } = (await h.money(
+      'countCash',
+      { counted: 0, note: '' },
+      h.cashierId,
+    )) as { entryId: string };
+    const drawer = (await h.moneyQuery('cashDrawer', {}, h.storeOwnerId)).rows[0];
+    expect(drawer.counts[0]).toMatchObject({ id: countId, expected: -1, difference: 1 });
     await expectBalancedBooks(h);
   });
 

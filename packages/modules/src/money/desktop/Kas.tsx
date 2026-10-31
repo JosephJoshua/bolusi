@@ -247,7 +247,8 @@ function Today({
             </Section>
           )}
 
-          {entriesReady ? (
+          {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+          {entriesReady && may.seeExpected ? (
             <Section title={tm('money.kas.inToday')} testId={`${testId}.in`}>
               <Card>
                 {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (

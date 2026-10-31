@@ -201,23 +201,34 @@ describe('the drawer', () => {
     expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp 20.000');
   });
 
-  test('cash out stops at what the drawer holds', async () => {
+  test('cash out stops at what the drawer holds, for an owner', async () => {
     h = await openRepairScreenHarness(5409);
     await float(h, 700_000);
-    const screen = await mount(h, h.cashierId);
+    const screen = await mount(h, h.storeOwnerId);
     await press(screen, 'money.kas.move');
     type(screen, 'money.move.amount', '900000');
     type(screen, 'money.move.reason', 'Setor ke pemilik');
     await settle();
     expect(screen.all('money.move.primary')[0]!.props['disabled']).toBe(true);
-    // Blind: told it is too much, not what the drawer holds.
-    expect(text(screen, 'money.move.primaryHint')).toBe(
-      'Lebih dari uang di laci. Kurangi jumlahnya dulu.',
-    );
+    expect(text(screen, 'money.move.primaryHint')).toContain('Rp 700.000');
     type(screen, 'money.move.amount', '700000');
     await settle();
     await press(screen, 'money.move.primary');
     expect(await drawerFigure(h)).toBe('Rp 0');
+  });
+
+  // QA: a refusal just above the drawer told a blind counter its figure, a try at a time.
+  test('someone who counts blind is not stopped at the drawer, and sees no takings total', async () => {
+    h = await openRepairScreenHarness(5411);
+    await float(h, 700_000);
+    const screen = await mount(h, h.cashierId);
+    expect(screen.query('money.kas.in')).toBeNull();
+    await press(screen, 'money.kas.move');
+    type(screen, 'money.move.amount', '700001');
+    type(screen, 'money.move.reason', 'Setor ke pemilik');
+    await settle();
+    expect(screen.all('money.move.primary')[0]!.props['disabled']).toBe(false);
+    expect(screen.query('money.move.primaryHint')).toBeNull();
   });
 
   // QA: a system font size change sent the phone back to the board and dropped the open form.
@@ -418,7 +429,9 @@ describe('what customers owe', () => {
     await press(screen, 'money.receive.primary');
 
     expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 250.000');
-    expect(text(screen, 'money.kas.in.cash.value')).toBe('Rp 500.000');
+    // The counter counts blind, so today's takings are not added up for them.
+    expect(screen.query('money.kas.in')).toBeNull();
+    expect(await drawerFigure(h)).toBe('Rp 500.000');
   });
 
   // Round 2 QA, F14: what went back read as a method's negative money in.

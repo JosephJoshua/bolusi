@@ -356,7 +356,7 @@ export function cashMoveCheck(move: {
   readonly reason: string;
   readonly accounts: readonly PaymentAccountRow[];
   readonly drawer: number | null;
-  /** Counts blind (`seesExpected`): told it is too much, not how much is in the drawer. */
+  /** Counts blind (`seesExpected`): never checked against the drawer, which would give it away. */
   readonly blind?: boolean | undefined;
 }): CashMoveCheck {
   const banks = move.accounts.filter((row) => row.kind === 'transfer');
@@ -369,10 +369,9 @@ export function cashMoveCheck(move: {
     movesOut(move.kind) &&
     move.drawer !== null &&
     move.amount > move.drawer;
-  if (aboveDrawer && move.blind === true) {
-    return { banks, depositAccount, missing: 'money.move.aboveDrawerBlind' };
-  }
-  if (aboveDrawer) {
+  // Someone counting blind is not stopped: a refusal would tell them, a try at a time, what the
+  // drawer holds. They cannot take out cash that is not there, and the count shows a wrong record.
+  if (aboveDrawer && move.blind !== true) {
     return {
       banks,
       depositAccount,

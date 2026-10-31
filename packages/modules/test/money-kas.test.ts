@@ -391,7 +391,7 @@ describe('the blind count', () => {
     ).toBe(false);
   });
 
-  test('taking out more than is there says so, without the figure, to someone who counts blind', () => {
+  test('someone who counts blind is never stopped at the drawer, which would give its figure away', () => {
     const move = {
       kind: 'withdrawal' as const,
       account: null,
@@ -401,9 +401,9 @@ describe('the blind count', () => {
       drawer: 700_000,
     };
     expect(cashMoveCheck(move).missingValues).toEqual({ amount: formatMoney(700_000) });
-    expect(cashMoveCheck({ ...move, blind: true })).toMatchObject({
-      missing: 'money.move.aboveDrawerBlind',
-    });
+    // The same answer just above and just below the drawer: nothing to learn it from.
+    expect(cashMoveCheck({ ...move, blind: true }).missing).toBeNull();
+    expect(cashMoveCheck({ ...move, amount: 700_000, blind: true }).missing).toBeNull();
     expect(cashMoveCheck({ ...move, blind: true }).missingValues).toBeUndefined();
   });
 });

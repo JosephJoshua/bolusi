@@ -138,7 +138,6 @@ export const MONEY_KEYS = [
   'money.move.hintReason',
   'money.move.noAccount',
   'money.move.aboveDrawer',
-  'money.move.aboveDrawerBlind',
   'money.settle.title',
   'money.settle.countedBy',
   'money.settle.reason',

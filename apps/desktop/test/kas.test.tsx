@@ -84,6 +84,8 @@ describe('Kas on the PC', () => {
     await openKas();
     // What should be in the drawer is not shown to the counter, here or in the count.
     expect(screen.queryByTestId('money.desk.kas.expected')).toBeNull();
+    // Nor today's takings, which add up to it.
+    expect(screen.queryByTestId('money.desk.kas.in')).toBeNull();
     fireEvent.click(byTestId('money.desk.kas.count'));
     await screen.findByTestId('money.desk.count');
     expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', true);

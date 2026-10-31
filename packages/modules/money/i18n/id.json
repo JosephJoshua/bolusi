@@ -112,8 +112,7 @@
     "hintAmount": "Isi jumlahnya.",
     "hintReason": "Isi keterangannya.",
     "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya.",
-    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu.",
-    "aboveDrawerBlind": "Lebih dari uang di laci. Kurangi jumlahnya dulu."
+    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu."
   },
   "settle": {
     "title": "Selisih kas",

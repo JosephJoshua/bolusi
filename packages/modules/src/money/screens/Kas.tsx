@@ -144,7 +144,8 @@ export function KasBoard({
         </Section>
       )}
 
-      {entriesReady ? (
+      {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+      {entriesReady && may.seeExpected ? (
         <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
           {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
             <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>

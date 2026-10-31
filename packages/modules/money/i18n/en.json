@@ -112,8 +112,7 @@
     "hintAmount": "Enter the amount.",
     "hintReason": "Enter a description.",
     "noAccount": "The store has no bank account yet. Ask an owner to add one.",
-    "aboveDrawer": "The drawer only has {amount}. Lower the amount first.",
-    "aboveDrawerBlind": "That is more than the drawer has. Lower the amount first."
+    "aboveDrawer": "The drawer only has {amount}. Lower the amount first."
   },
   "settle": {
     "title": "Cash difference",
