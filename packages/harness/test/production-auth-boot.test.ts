@@ -125,6 +125,17 @@ describe('task 201-B: HarnessServer.boot({ productionAuth }) serves real auth ov
     expect((await httpLogin(running.url, LANE_OTP)).status).toBe(200);
   });
 
+  test('the customer status page looks its code up through the real definer', async () => {
+    const server = await HarnessServer.boot({ productionAuth: true });
+    running = await server.listen();
+    await provisionOwner(server);
+
+    // A well-formed code no servisan carries: the lookup runs (findStatusLink over PGlite) and finds
+    // nothing, which is a 404, never a 500 from a lookup the lane's directory lacks.
+    const res = await fetch(`${running.url}/v1/public/status/K7M2Q9XA4BRS`);
+    expect(res.status).toBe(404);
+  });
+
   test('a wrong password is rejected by the real argon2id verify (login 401)', async () => {
     const server = await HarnessServer.boot({ productionAuth: true });
     running = await server.listen();

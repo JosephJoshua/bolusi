@@ -266,6 +266,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     setupFor: null,
     session: null,
     sync: null,
+    statusSite: deps.apiBaseUrl,
   };
 
   // Many changes land together (a pull applies ops one by one), so the window gets one state per
@@ -342,6 +343,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       setupFor,
       session: sessionView(),
       sync: shell.sync,
+      statusSite: deps.apiBaseUrl,
     };
   }
 
@@ -407,6 +409,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         readBase64: (uri) => Promise.resolve(uri.slice(uri.indexOf(',') + 1)),
       },
       qris: qrisFor,
+      statusSite: deps.apiBaseUrl,
     });
   }
 
@@ -763,14 +766,16 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       const enroll = requireEnrollment();
       const booted = app;
       if (booted === null || booted.deviceId === null) {
-        await enroll.controller.enroll({ login: heldLogin, ...request });
+        // The counter PC is always shared by its store.
+        await enroll.controller.enroll({ login: heldLogin, ...request, personalUserId: null });
         return;
       }
       // Re-enrolling replaces this PC's registration (and carries its unsent work over), so
       // nothing may keep running under the old one meanwhile.
       stopServices();
       try {
-        await enroll.controller.enroll({ login: heldLogin, ...request });
+        // The counter PC is always shared by its store.
+        await enroll.controller.enroll({ login: heldLogin, ...request, personalUserId: null });
       } catch (error) {
         // Nothing was replaced: pick up where the PC was.
         if (!stopped) void startEnrolledServices(booted, enroll);
@@ -906,7 +911,6 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       photo: Parameters<RepairRuntime['loadModelPhoto']>[0],
     ) => repairFor(userId).loadModelPhoto(photo),
     'repair.print.storeName': (userId: string) => repairFor(userId).printing!.storeName(),
-    'repair.print.userName': (userId: string) => repairFor(userId).printing!.userName(),
     'repair.print.readPaper': (userId: string) => repairFor(userId).printing!.readPaper(),
     'repair.print.writePaper': (
       userId: string,

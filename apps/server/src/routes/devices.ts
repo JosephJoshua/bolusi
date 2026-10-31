@@ -15,6 +15,7 @@ import { appendAudit } from '../identity/audit.js';
 import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { buildBundle, bundleEtag } from '../identity/bundle.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
+import { personalDeviceChoices } from '../identity/personal-devices.js';
 import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import { purgeExpiredIdempotency, runIdempotent } from '../identity/idempotency.js';
@@ -259,6 +260,27 @@ export function createDevicesRouter(deps: ServerDeps) {
                   replacedNewly = outcome.newlyRevoked;
                 }
 
+                // Someone's own phone: only a person the store offers for it (identity/personal-devices).
+                if (body.personalUserId !== undefined) {
+                  const choices = await personalDeviceChoices(
+                    db,
+                    tenantId,
+                    body.storeId,
+                    control.userId,
+                  );
+                  if (!choices.some((choice) => choice.id === body.personalUserId)) {
+                    throw new ApiError('VALIDATION_FAILED', {
+                      issues: [
+                        {
+                          path: ['personalUserId'],
+                          code: 'custom',
+                          message: 'not someone this store can set a personal device up for',
+                        },
+                      ],
+                    });
+                  }
+                }
+
                 // deviceId unused.
                 const dupId = await db
                   .selectFrom('devices')
@@ -290,6 +312,7 @@ export function createDevicesRouter(deps: ServerDeps) {
                       tokenHash: sha256Hex(deviceToken),
                       enrolledAt: BigInt(t),
                       enrolledBy: control.userId,
+                      personalUserId: body.personalUserId ?? null,
                       status: 'active',
                     })
                     .execute();
@@ -314,6 +337,7 @@ export function createDevicesRouter(deps: ServerDeps) {
                     storeId: body.storeId,
                     deviceName: body.deviceName,
                     platform: body.platform,
+                    personalUserId: body.personalUserId ?? null,
                   },
                   at: t,
                 });
@@ -323,7 +347,12 @@ export function createDevicesRouter(deps: ServerDeps) {
                   .select(['id', 'name'])
                   .where('id', '=', tenantId)
                   .executeTakeFirstOrThrow();
-                const bundle = await buildBundle(db, tenantId, body.storeId);
+                const bundle = await buildBundle(
+                  db,
+                  tenantId,
+                  body.storeId,
+                  body.personalUserId ?? null,
+                );
                 const etag = bundleEtag(bundle);
                 const res: EnrollRes = {
                   deviceId: body.deviceId,
@@ -368,7 +397,17 @@ export function createDevicesRouter(deps: ServerDeps) {
           );
           return withTenant(c, async (db) => {
             await touchLastSeen(db, device.deviceId, t);
-            const bundle = await buildBundle(db, device.tenantId, device.storeId as string);
+            const personal = await db
+              .selectFrom('devices')
+              .select('personalUserId')
+              .where('id', '=', device.deviceId)
+              .executeTakeFirst();
+            const bundle = await buildBundle(
+              db,
+              device.tenantId,
+              device.storeId as string,
+              personal?.personalUserId ?? null,
+            );
             const etag = bundleEtag(bundle);
             if (c.req.header('If-None-Match') === etag) {
               c.header('ETag', etag);

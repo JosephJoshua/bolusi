@@ -14,7 +14,7 @@ import {
 } from '@bolusi/core';
 import type { DeviceInfo, PullRequest, PullResponse, SignedOperation } from '@bolusi/schemas';
 
-import { sharedDeviceReadSet } from './read-set.js';
+import { deviceReadSet } from './read-set.js';
 
 /** The token-authenticated device pulling (api/00 §3; store null = system/tenant-scoped device). */
 export interface PullIdentity {
@@ -123,7 +123,17 @@ export async function runPull(
     // Permission-scoped sync: the types read with a permission outside the device's read set are
     // never sent. Filtering out (rather than listing what is allowed) keeps a type every device
     // reads, like sign-in records, flowing without a lookup.
-    const readSet = await sharedDeviceReadSet(db, identity.tenantId, deps.readScope);
+    const device = await db
+      .selectFrom('devices')
+      .select(['personalUserId'])
+      .where('id', '=', identity.deviceId)
+      .executeTakeFirst();
+    const readSet = await deviceReadSet(
+      db,
+      identity.tenantId,
+      { storeId: identity.storeId, personalUserId: device?.personalUserId ?? null },
+      deps.readScope,
+    );
     const allowed = new Set(readSet);
     const hidden = typesReadWith(
       deps.readScope,

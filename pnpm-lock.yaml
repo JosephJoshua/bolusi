@@ -766,6 +766,9 @@ importers:
       '@bolusi/schemas':
         specifier: workspace:*
         version: link:../schemas
+      uqr:
+        specifier: 0.1.3
+        version: 0.1.3
       zod:
         specifier: 4.4.3
         version: 4.4.3

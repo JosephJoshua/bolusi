@@ -50,6 +50,8 @@ export interface CoreState {
   readonly session: SessionView | null;
   /** Null until the core has booted. */
   readonly sync: SyncStatusInput | null;
+  /** The server this PC syncs with, which serves customers' status pages. */
+  readonly statusSite: string;
 }
 
 /** The `repairChanged` payload: the record another device just changed, or null. */

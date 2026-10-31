@@ -1,5 +1,5 @@
 /**
- * The three D14 auth-lookup QUERIES — shared SQL, not shared execution (task 204, approach 1).
+ * The D14 auth-lookup QUERIES — shared SQL, not shared execution (task 204, approach 1).
  *
  * WHY THIS SHAPE, AND NOT A FUNCTION THAT TAKES A HANDLE. `auth-entry.ts` keeps `getDb` deliberately
  * unexported so that "an arbitrary cross-tenant query is impossible to express" through this package
@@ -73,6 +73,21 @@ export function loginCredentialQuery(loginIdentifier: string) {
     SELECT tenant_id AS "tenantId", user_id AS "userId",
            password_verifier AS "passwordVerifier", status
       FROM auth_find_login_credential(${loginIdentifier})
+  `;
+}
+
+/** Raw status-link row: the servisan a customer's link code names. */
+export interface StatusLinkRow {
+  readonly tenantId: string;
+  readonly storeId: string;
+  readonly ticketId: string;
+}
+
+/** Resolve a customer's status link code to its servisan. Cross-tenant, definer-gated. */
+export function statusLinkQuery(code: string) {
+  return sql<StatusLinkRow>`
+    SELECT tenant_id AS "tenantId", store_id AS "storeId", ticket_id AS "ticketId"
+      FROM public_find_status_link(${code})
   `;
 }
 

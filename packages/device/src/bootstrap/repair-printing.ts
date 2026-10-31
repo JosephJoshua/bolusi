@@ -4,7 +4,6 @@
  * to the platform. Node-safe: the print dialog, PDF writer and file reads arrive as a port.
  */
 import {
-  listSwitcherUsers,
   readMeta,
   STORE_NAME_META_KEY,
   writeMeta,
@@ -29,14 +28,11 @@ export interface PrintPlatform {
 
 export function createRepairPrinting<DB>(deps: {
   readonly db: Kysely<DB>;
-  readonly userId: string;
   readonly loadThumbnail: ThumbnailLoader;
   readonly platform: PrintPlatform;
 }): RepairPrinting {
   return {
     storeName: async () => (await readMeta(deps.db, STORE_NAME_META_KEY)) ?? '',
-    userName: async () =>
-      (await listSwitcherUsers(deps.db)).find((user) => user.id === deps.userId)?.name ?? null,
     async readPaper(): Promise<PaperSettings | null> {
       const saved = await readMeta(deps.db, PRINT_PAPER_META_KEY);
       if (saved === null) return null;

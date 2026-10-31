@@ -29,7 +29,7 @@ import {
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ApprovalSection, ApprovalStep } from '../../approvals/screens/ApprovalViews.js';
 import { ta } from '../../approvals/i18n.js';
@@ -43,6 +43,7 @@ import {
   type CustomerMessageKind,
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
+import { whatsAppAppUrl, whatsAppUrl } from '../whatsapp.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   rejectedCount,
@@ -578,14 +579,23 @@ export function TicketDetail({
       ? { next: null, alternative: null, more: [] }
       : arrangeTicketActions(actions, ticket, runtime.userId);
   const primary = layout.next ?? undefined;
-  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const messageKind =
+    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
       ? null
       : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
+  // A phone opens the app itself, so a phone without WhatsApp says so instead of landing in a
+  // browser; the web preview keeps the wa.me link.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
-    const url = customerMessageUrl(kind, row, storeName);
+    const url = customerMessageUrl(
+      kind,
+      row,
+      storeName,
+      runtime.statusSite,
+      Platform.OS === 'web' ? whatsAppUrl : whatsAppAppUrl,
+    );
     if (url === null) return;
     setDone(null);
     setMessageFailed(false);

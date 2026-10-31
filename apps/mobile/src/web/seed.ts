@@ -102,8 +102,23 @@ export const DEMO_LOGIN: LoginResult = {
   tenantName: 'Maju Group',
   user: { id: 'owner-1', name: 'Pemilik Toko' },
   stores: [
-    { id: 'store-depan', name: 'Servis Ponsel Maju' },
-    { id: 'store-cabang', name: 'Cabang Pasar Baru' },
+    {
+      id: 'store-depan',
+      name: 'Servis Ponsel Maju',
+      // Who a phone here may be set up for as their own: the owner, then staff who have a PIN.
+      people: [
+        { id: 'owner-1', name: 'Pemilik Toko' },
+        { id: 'staff-yosua', name: 'Yosua Wonda' },
+        { id: 'staff-maria', name: 'Maria Kambu' },
+        { id: 'staff-agus', name: 'Agus Rumbiak' },
+        { id: 'staff-natalia', name: 'Natalia Mandacan' },
+      ],
+    },
+    {
+      id: 'store-cabang',
+      name: 'Cabang Pasar Baru',
+      people: [{ id: 'owner-1', name: 'Pemilik Toko' }],
+    },
   ],
 };
 

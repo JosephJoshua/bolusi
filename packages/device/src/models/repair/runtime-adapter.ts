@@ -53,6 +53,8 @@ export interface RepairRuntimeDeps {
   readonly inventory?: RepairRuntime['inventory'];
   /** QRIS through Xendit, as this user; absent on a device that cannot reach the server. */
   readonly qris?: QrisPort | undefined;
+  /** `RepairRuntime.statusSite`; absent, no status links (tests). */
+  readonly statusSite?: string | null;
 }
 
 /** Every repair table, the op log for each ticket's sync status, the phone catalog (a
@@ -86,6 +88,7 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
         .filter((user) => port.colleagueHasPermission(user.id, REPAIR_PERMISSION.work))
         .map(({ id, name }) => ({ id, name })),
     ...deps.media,
+    statusSite: deps.statusSite ?? null,
     diagnostics: consoleDiagnostics,
     ...(deps.printing === undefined ? {} : { printing: deps.printing }),
     ...(deps.inventory === undefined ? {} : { inventory: deps.inventory }),

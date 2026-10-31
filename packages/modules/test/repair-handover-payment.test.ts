@@ -401,8 +401,7 @@ describe('the bill the screens, the slip and the ledger agree on', () => {
     const slip = handoverSlip(row, {
       header: { name: 'Toko', lines: [], logo: null },
       terms: null,
-      printedAt: 0,
-      printedByName: null,
+      link: null,
       handedOverByName: null,
       signature: null,
     });

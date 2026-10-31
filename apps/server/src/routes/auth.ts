@@ -13,6 +13,7 @@ import { appendAudit } from '../identity/audit.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
+import { personalDeviceChoices, type PersonalChoice } from '../identity/personal-devices.js';
 import { LoginReq, PasswordChangeReq, type LoginRes } from '@bolusi/schemas';
 import { ipRateKey } from '../middleware/rate-limit.js';
 import { zJson } from '../middleware/validator-hook.js';
@@ -103,6 +104,14 @@ export function createAuthRouter(deps: ServerDeps) {
               .orderBy('stores.id')
               .execute()
           ).filter((store) => enrollable.storeIds.includes(store.id));
+          // Who each store's phones may be set up for as their own (permission-scoped sync).
+          const people = new Map<string, readonly PersonalChoice[]>();
+          for (const store of stores) {
+            people.set(
+              store.id,
+              await personalDeviceChoices(db, cred.tenantId, store.id, cred.userId),
+            );
+          }
           await appendAudit(db, cred.tenantId, {
             actorUserId: cred.userId,
             action: 'auth.login',
@@ -111,7 +120,7 @@ export function createAuthRouter(deps: ServerDeps) {
             after: { userId: cred.userId },
             at: t,
           });
-          return { session, user, stores, tenant };
+          return { session, user, stores, tenant, people };
         });
 
         const res: LoginRes = {
@@ -120,7 +129,11 @@ export function createAuthRouter(deps: ServerDeps) {
           tenantId: cred.tenantId,
           tenantName: result.tenant.name,
           user: { id: result.user.id, name: result.user.name },
-          stores: result.stores.map((s) => ({ id: s.id, name: s.name })),
+          stores: result.stores.map((s) => ({
+            id: s.id,
+            name: s.name,
+            people: (result.people.get(s.id) ?? []).map((p) => ({ id: p.id, name: p.name })),
+          })),
         };
         return c.json(res);
       }),

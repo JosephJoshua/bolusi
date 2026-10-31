@@ -36,7 +36,7 @@ export {
   type LoginCredentialRecord,
 } from './auth-entry.js';
 
-// Task 204, approach 1 — the three lookups' SQL, shared as UNEXECUTED query builders so
+// Task 204, approach 1 — the lookups' SQL, shared as UNEXECUTED query builders so
 // `@bolusi/harness` can run the same statement against its own PGlite handle instead of keeping a
 // line-for-line copy whose aliases drift silently. Deliberately NOT functions that accept a
 // `Kysely` handle: threading an external executor into this package's authz path would be a §6
@@ -48,6 +48,7 @@ export {
   controlSessionByTokenHashQuery,
   loginCredentialQuery,
   mapControlSessionRow,
+  statusLinkQuery,
 } from './auth-lookup-queries.js';
 
 // Task 47 — the SERVER projection watermark store (10-db §8, 04 §4.3), moved here from

@@ -58,7 +58,11 @@ interface LoginResponseBody {
   readonly tenantId: string;
   readonly tenantName: string;
   readonly user: { readonly id: string; readonly name: string };
-  readonly stores: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  readonly stores: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly people?: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  }>;
 }
 
 /**
@@ -111,7 +115,12 @@ export function createLoginTransport(config: EnrollTransportConfig): LoginTransp
         tenantId: res.tenantId,
         tenantName: res.tenantName,
         user: { id: res.user.id, name: res.user.name },
-        stores: res.stores.map((s) => ({ id: s.id, name: s.name })),
+        stores: res.stores.map((s) => ({
+          id: s.id,
+          name: s.name,
+          // An older server sends none: it only sets up shared devices.
+          people: (s.people ?? []).map((p) => ({ id: p.id, name: p.name })),
+        })),
       };
     },
   };
