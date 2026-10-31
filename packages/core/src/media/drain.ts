@@ -32,6 +32,7 @@ import {
   markUploaded,
   markUploading,
   selectDrainable,
+  stillQueued,
   type MediaQueueItem,
 } from './repository.js';
 import {
@@ -96,7 +97,10 @@ type Disposition =
   // selection and the connectivity reset also consult. A per-disposition flag would be a second
   // opinion that can disagree with the predicate the selection filter actually uses.
   | { readonly kind: 'failed'; readonly code: string; readonly message: string | null }
-  | { readonly kind: 'halt'; readonly code: string; readonly message: string | null };
+  | { readonly kind: 'halt'; readonly code: string; readonly message: string | null }
+  // The server refused the item's op while the pass ran, so the item left the queue: nothing to
+  // record, and its bytes must not reach the server.
+  | { readonly kind: 'released' };
 
 export class MediaDrainLoop<DB> {
   private running = false;
@@ -201,6 +205,7 @@ export class MediaDrainLoop<DB> {
       // remedies for LOCAL_CORRUPT / DEVICE_REVOKED are re-capture + new op, or re-enrollment.
       // Without this line the drain would spin on a rotted file forever.
       if (!isAutoRetryable(item.lastErrorCode)) continue;
+      if (!(await stillQueued(db, item.id))) continue;
       await this.drainItem(item);
     }
   }
@@ -217,6 +222,8 @@ export class MediaDrainLoop<DB> {
         break;
       case 'failed':
         await this.recordFailure(item, disposition.code, disposition.message);
+        break;
+      case 'released':
         break;
     }
     this.options.onItemSettled?.();
@@ -344,7 +351,9 @@ export class MediaDrainLoop<DB> {
         // Self-loop (03 §4): advances a progress display, nothing persisted.
         this.transition('uploading', 'chunk_ack');
       }
-      // 4. complete
+      // 4. complete, unless a refusal released the item meanwhile: an incomplete upload is never
+      //    a file on the server.
+      if (!(await stillQueued(this.options.db, item.id))) return { kind: 'released' };
       try {
         await transport.complete(item.id);
         this.transition('uploading', 'complete');
