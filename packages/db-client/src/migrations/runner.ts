@@ -20,6 +20,7 @@ import { inventoryMigration } from './019-inventory.js';
 import { repairTypesMigration } from './020-repair-types.js';
 import { roleLimitsMigration } from './021-role-limits.js';
 import { approvalsMigration } from './023-approvals.js';
+import { repairStatusLinkMigration } from './024-repair-status-link.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
@@ -44,6 +45,7 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   repairTypesMigration,
   roleLimitsMigration,
   approvalsMigration,
+  repairStatusLinkMigration,
 ];
 
 export interface RunMigrationsOptions {
