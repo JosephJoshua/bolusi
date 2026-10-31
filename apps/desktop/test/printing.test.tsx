@@ -216,6 +216,18 @@ describe('printing on the counter PC', () => {
     expect(screen.queryByTestId('repair.desk.print.printers')).toBeNull();
   });
 
+  it('says to install a printer when this PC has none, instead of asking to pick one', async () => {
+    setBridge(fakePrinters({ installed: [] }));
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    await openPrintFor('Ester Mandowen');
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Belum ada printer di komputer ini. Pasang printernya di Windows dulu, lalu cari lagi.',
+    );
+    expect(screen.queryByTestId('repair.desk.print.printers')).toBeNull();
+    expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(true);
+  });
+
   it('keeps the slip uncounted when the printer is gone, and says what to check', async () => {
     const printers = fakePrinters({
       chosen: 'EPSON LX-310',

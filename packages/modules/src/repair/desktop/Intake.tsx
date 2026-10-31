@@ -26,7 +26,7 @@ import {
 import { ArrowLeft, Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { useActionRunner, type VideoMediaRef } from '../../screen-kit/index.js';
+import { useActionRunner, useCapture, type VideoMediaRef } from '../../screen-kit/index.js';
 import { PATTERN_MIN_DOTS, SCREEN_LOCK_KINDS } from '../screen-lock.js';
 import type { DeviceModelRow } from '../device-models.js';
 import { modelCaption, useModelPicker, type ModelPicker } from '../model-picker.js';
@@ -142,8 +142,8 @@ export function IntakePage({
 }: IntakePageProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  // The camera and the video player run on their own, so "Simpan servisan" does not spin under them.
-  const media = useActionRunner();
+  // "Simpan servisan" does not spin under the camera or the video player.
+  const media = useCapture(runner);
   const [draft, setDraft] = useState<IntakeDraft>(() => restoredDraft ?? emptyIntakeDraft());
   const [showProblems, setShowProblems] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -269,7 +269,7 @@ export function IntakePage({
 
   const takePhoto = (angle: IntakeOption): void => {
     void media
-      .run(() => runtime.capturePhoto({ title: optionLabel('photoAngles', angle) }))
+      .capture(() => runtime.capturePhoto({ title: optionLabel('photoAngles', angle) }))
       .then((captured) => {
         if (captured === undefined || captured === null) return;
         setDraft((current) => ({
@@ -286,7 +286,7 @@ export function IntakePage({
       ? undefined
       : (): void => {
           const record = video.record!;
-          void media.run(record).then((captured) => {
+          void media.capture(record).then((captured) => {
             if (captured === undefined || captured === null) return;
             setDraft((current) => ({ ...current, ownershipVideo: captured.videoRef }));
           });
@@ -294,12 +294,12 @@ export function IntakePage({
   const playVideo =
     video.play === undefined
       ? undefined
-      : (ref: VideoMediaRef): void => void media.run(() => video.play!(ref));
+      : (ref: VideoMediaRef): void => void media.capture(() => video.play!(ref));
 
   /** Every angle still missing, one after another; backing out of one stops there. */
   const takeMissing = (): void => {
     const missing = options.photoAngles.filter((angle) => draft.photos[angle.id] === undefined);
-    void media.run(async () => {
+    void media.capture(async () => {
       for (const angle of missing) {
         const captured = await runtime.capturePhoto({ title: optionLabel('photoAngles', angle) });
         if (captured === null) return;
@@ -462,16 +462,8 @@ export function IntakePage({
               showProblems={showProblems}
               onJump={focusProblem}
               onSave={save}
-              busy={runner.busy}
-              error={
-                <ActionError
-                  errorCode={runner.errorCode ?? media.errorCode}
-                  onDismiss={() => {
-                    runner.clearError();
-                    media.clearError();
-                  }}
-                />
-              }
+              busy={media.busy}
+              error={<ActionError errorCode={runner.errorCode} onDismiss={runner.clearError} />}
             />
           </div>
         </div>
