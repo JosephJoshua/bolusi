@@ -179,6 +179,8 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly claimOf: ClaimedTicket | null;
   /** The warranty claims opened on this servisan, oldest first. */
   readonly claims: readonly { readonly id: string; readonly ticketNumber: string }[];
+  /** The code of the customer's status link (status-link.ts); null on servisan made before it. */
+  readonly statusCode: string | null;
   readonly intakePhotos: readonly IntakePhotoAngle[];
   readonly createdBy: string;
   readonly createdByName: string | null;
@@ -716,6 +718,7 @@ export async function getTicketHandler(
       'peripheralsJson',
       'repairTypesJson',
       'claimOfTicketId',
+      'statusCode',
       'intakePhotosJson',
       'createdBy',
       'returnedBy',
@@ -795,6 +798,7 @@ export async function getTicketHandler(
         peripherals: parseJson<unknown[]>(detail.peripheralsJson, []).map(recordedOption),
         repairTypes: parseJson<RecordedRepairType[]>(detail.repairTypesJson, []),
         claimOfTicketId: detail.claimOfTicketId,
+        statusCode: detail.statusCode,
         claimOf:
           claimed === undefined
             ? null

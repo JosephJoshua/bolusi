@@ -210,5 +210,23 @@
     "removeOption": "Hapus pilihan {option}",
     "addToName": "Tambahkan {label} ke nama",
     "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang."
+  },
+  "desk": {
+    "col": {
+      "name": "Barang",
+      "category": "Kategori",
+      "fits": "Cocok untuk",
+      "stock": "Stok"
+    },
+    "filter": {
+      "category": "Kategori",
+      "clear": "Hapus filter",
+      "reset": "Hapus semua filter",
+      "search": "Cari",
+      "noMatches": "Tidak ada yang cocok",
+      "chosen": "{count} dipilih"
+    },
+    "results": "{count} barang",
+    "closePart": "Tutup barang"
   }
 }

@@ -304,6 +304,7 @@ const EXPECTED_SERVER_OPS = {
   'repair.quote_change_proposed': 1,
   // The counter's screen protector and the technician's battery once the customer agreed.
   'repair.quote_changed': 2,
+  'repair.status_link_made': 1,
   'repair.ticket_claimed': 1,
   'repair.ticket_opened': 1,
   'repair.ticket_repair_types_changed': 1,

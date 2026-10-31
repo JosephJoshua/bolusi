@@ -22,8 +22,15 @@ export const consoleAccessLogSink: AccessLogSink = (record) => {
   console.log(JSON.stringify({ msg: 'access', ...record }));
 };
 
-/** A phone handoff path carries its pairing's secret key, which is a credential: never logged. */
-const loggedPath = (path: string): string => path.replace(/^\/h\/[^/]+/, '/h/:key');
+/**
+ * Paths that carry a credential, never logged: a phone handoff's pairing key, and a customer's
+ * status link code (its page and its data).
+ */
+const loggedPath = (path: string): string =>
+  path
+    .replace(/^\/h\/[^/]+/, '/h/:key')
+    .replace(/^\/c\/[^/]+/i, '/c/:code')
+    .replace(/^\/v1\/public\/status\/[^/]+/i, '/v1/public/status/:code');
 
 export function accessLog(options: { sink: AccessLogSink }): MiddlewareHandler<AppEnv> {
   return async (c, next) => {

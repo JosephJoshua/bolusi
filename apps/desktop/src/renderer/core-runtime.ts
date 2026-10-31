@@ -5,6 +5,8 @@
 // handed to the core.
 import { createUuidV7Generator } from '@bolusi/core';
 import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
+import type { InventoryRuntime } from '@bolusi/modules/inventory/desktop';
+import { catalogModelSearch } from '@bolusi/modules/repair';
 import type { RepairPrinting, RepairRuntime } from '@bolusi/modules/repair/desktop';
 import type { CapturedMedia, CaptureRequest } from '@bolusi/modules/screen-kit';
 
@@ -70,10 +72,28 @@ export function createCoreRepairRuntime(deps: {
     deps.storeName,
   );
 
-  const runtime: RepairRuntime = {
+  const query = ((name: string, input: unknown) =>
+    call('repair.query', name, input)) as RepairRuntime['query'];
+  // The parts list and each servisan's parts: the same person, permissions and change feed. Its
+  // "fits" picker searches the phone catalog the intake uses. No camera scan: a USB scanner types.
+  const inventory: InventoryRuntime = {
     userId,
     query: ((name: string, input: unknown) =>
-      call('repair.query', name, input)) as RepairRuntime['query'],
+      call('inventory.query', name, input)) as InventoryRuntime['query'],
+    run: ((name: string, input: unknown) =>
+      call('inventory.run', name, input)) as InventoryRuntime['run'],
+    hasPermission: (permission) => granted.has(permission),
+    colleagueHasPermission: (colleague, permission) =>
+      deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+    limitOf,
+    newId,
+    subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
+    searchModels: catalogModelSearch({ query }),
+  };
+
+  const runtime: RepairRuntime = {
+    userId,
+    query,
     run: ((name: string, input: unknown) =>
       call('repair.run', name, input)) as RepairRuntime['run'],
     hasPermission: (permission) => granted.has(permission),
@@ -117,6 +137,7 @@ export function createCoreRepairRuntime(deps: {
       newId,
     },
     subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
+    inventory,
     ticketSyncStatuses: (ticketIds) => call('repair.ticketSyncStatuses', ticketIds),
     technicians: () => call('repair.technicians'),
     loadThumbnail: (ref) => call('repair.loadThumbnail', ref),

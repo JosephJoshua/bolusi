@@ -100,6 +100,7 @@ export function createModuleRuntime<DB>(
               permissionId,
             }).allowed,
           ),
+        sha256: (data) => options.crypto.sha256(data),
         withinLimit: (userId, permissionId, amount) =>
           Promise.resolve(
             allowanceCovers(

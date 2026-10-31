@@ -314,6 +314,8 @@ export interface ServerDeps {
   readonly phoneCatalog: PhoneCatalogReader;
   /** The counter PC ↔ store phone handoff (handoff/relay.ts); in memory, like the realtime hub. */
   readonly handoffRelay: HandoffRelay;
+  /** The web app's build, served at the site root (web.ts); absent ⇒ the API only. */
+  readonly webDir?: string;
   /** Where phones' over-the-air updates come from (app-updates/releases.ts); absent ⇒ none. */
   readonly appUpdates?: UpdateSource;
   /** Integrated QRIS through Xendit (qris/service.ts). Absent ⇒ its routes answer 503; it also
@@ -455,6 +457,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     ...(overrides.appUpdates === undefined ? {} : { appUpdates: overrides.appUpdates }),
     ...(overrides.qris === undefined ? {} : { qris: overrides.qris }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
+    ...(overrides.webDir !== undefined ? { webDir: overrides.webDir } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };
 }

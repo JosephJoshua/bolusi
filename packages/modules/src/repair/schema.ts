@@ -78,6 +78,8 @@ export interface RepairTicketsTable {
   /** The servisan this one is a warranty claim on; null for an ordinary servisan. */
   claimOfTicketId: string | null;
   readyAt: number | null;
+  /** The customer's status link code (status-link.ts); null before the servisan has one. */
+  statusCode: string | null;
 }
 
 export interface RepairQuoteLinesTable {

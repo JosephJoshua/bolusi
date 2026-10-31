@@ -33,6 +33,10 @@
       "types": "./dist/repair/print.d.ts",
       "default": "./dist/repair/print.js"
     },
+    "./repair/customer-page": {
+      "types": "./dist/repair/customer-page.d.ts",
+      "default": "./dist/repair/customer-page.js"
+    },
     "./repair/demo": {
       "types": "./dist/repair/demo.d.ts",
       "default": "./dist/repair/demo.js"
@@ -48,6 +52,10 @@
     "./inventory/screens": {
       "types": "./dist/inventory/screens/index.d.ts",
       "default": "./dist/inventory/screens/index.js"
+    },
+    "./inventory/desktop": {
+      "types": "./dist/inventory/desktop/index.d.ts",
+      "default": "./dist/inventory/desktop/index.js"
     },
     "./money": {
       "types": "./dist/money/index.d.ts",

@@ -6,6 +6,7 @@ import { zMediaRef, zVideoRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
+import type { PartUse } from '../inventory/part-use.js';
 import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
 import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
@@ -251,6 +252,11 @@ export function canUseParts(
   if (hasPermission(INVENTORY_PERMISSION.correctUse)) return true;
   if (!partsInWork(ticket)) return false;
   return ticket.technicianId === userId || hasPermission(REPAIR_PERMISSION.assign);
+}
+
+/** The servisan as stock records it: parts taken for it carry its number. */
+export function partUse(ticket: Pick<TicketSummaryRow, 'id' | 'ticketNumber'>): PartUse {
+  return { kind: 'repair_ticket', id: ticket.id, label: ticket.ticketNumber };
 }
 
 export type TicketAction =

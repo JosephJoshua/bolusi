@@ -78,6 +78,7 @@ import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
 import { refundSplit } from '../money/rules.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
+import { STATUS_NONCE_BYTES, statusCodeFor, statusNonceFrom } from './status-link.js';
 import { formatTicketNumber } from './ticket-number.js';
 import {
   imeiInvalid,
@@ -88,6 +89,13 @@ import {
 } from './contact.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
+
+/** A new servisan's status link: a fresh nonce and the code it gives where the servisan lives. */
+function statusLinkFor(ctx: CommandContext, ticketId: string): { code: string; nonce: string } {
+  const nonce = statusNonceFrom(ctx.randomBytes(STATUS_NONCE_BYTES));
+  const owner = { tenantId: ctx.tenantId, storeId: ctx.storeId ?? '', ticketId };
+  return { code: statusCodeFor(owner, nonce, ctx.sha256), nonce };
+}
 
 const zText = (max: number) => z.string().trim().max(max);
 const zRequiredText = (max: number) => z.string().trim().min(1).max(max);
@@ -356,6 +364,7 @@ export async function openTicketHandler(
       photos: input.photos,
       ownershipVideo: input.ownershipVideo,
     }),
+    ticketOp(ctx, ticketId, REPAIR_OP.statusLinkMade, statusLinkFor(ctx, ticketId)),
   );
   if (input.downPayment > 0) {
     const total = input.quoteLines.reduce((sum, line) => sum + line.amount, 0);

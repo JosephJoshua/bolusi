@@ -20,6 +20,7 @@
     "downPaymentReceived": "Down payment received",
     "downPaymentCorrected": "Down payment changed",
     "slipPrinted": "Slip printed",
+    "statusLinkMade": "Status link made",
     "storePrintSettingsChanged": "Slip details changed",
     "storeUncollectedDaysChanged": "Not-collected limit changed",
     "ticketRepairTypesChanged": "Repair type changed",
@@ -706,6 +707,7 @@
     "overLimit": "Over your limit. Ask a store owner.",
     "handoverAccessories": "An accessory is missing from the handover list.",
     "handoverNoteNeeded": "Something isn’t ticked. Write a note first.",
+    "statusLinkMismatch": "This repair’s status link isn’t valid.",
     "ownershipVideoNeeded": "Record the ownership video first.",
     "notReturned": "This phone hasn’t been handed over.",
     "handoverHasClaim": "A warranty claim names this servisan, so its handover can’t be undone.",
@@ -811,6 +813,67 @@
   "handoverCheck": {
     "customerTried": "Customer tried it",
     "repairWorks": "The repaired part works"
+  },
+  "customerPage": {
+    "title": "Repair status",
+    "reference": "Repair {number}",
+    "step": {
+      "received": "Received",
+      "inRepair": "Being repaired",
+      "waitingForParts": "Waiting for parts",
+      "repaired": "Ready to collect",
+      "cancelled": "Cancelled",
+      "returned": "Collected"
+    },
+    "hint": {
+      "estimate": "Expected by {date}",
+      "ready": "Your phone is ready to collect. Please bring the slip.",
+      "cancelled": "You can collect your phone at the store.",
+      "returned": "Collected {date}"
+    },
+    "pending": {
+      "title": "Needs your approval",
+      "hint": "The price changed. Contact the store to accept or decline it."
+    },
+    "money": {
+      "title": "Cost",
+      "total": "Total",
+      "cancelFee": "Cancellation fee",
+      "paid": "Paid",
+      "due": "Left to pay",
+      "overpaid": "Overpaid",
+      "settled": "Paid"
+    },
+    "history": "History",
+    "contact": {
+      "whatsApp": "Chat with the store",
+      "call": "Call"
+    },
+    "whatsApp": "Hello, I have a question about repair {number} ({device}).",
+    "updated": "Updated {date}",
+    "refresh": "Refresh",
+    "notFound": {
+      "title": "Repair not found",
+      "hint": "Check the code on your slip. A repair just taken in can take a few minutes to appear.",
+      "retype": "Type the code"
+    },
+    "ended": {
+      "title": "This link has ended",
+      "hint": "The warranty is over. Contact the store if you have questions."
+    },
+    "error": {
+      "title": "Could not load",
+      "hint": "Check your internet connection, then try again.",
+      "retry": "Try again"
+    },
+    "lookup": {
+      "title": "Check a repair",
+      "hint": "Enter the code on your repair slip.",
+      "label": "Repair code",
+      "placeholder": "For example: K7M2Q-9XA4B",
+      "submit": "Check",
+      "invalid": "The code is 12 letters and numbers. Please check it."
+    }
   },
   "video": {
     "title": "Ownership video",
