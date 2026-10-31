@@ -898,7 +898,8 @@
     "payLaterDebt": "Sisa yang dibayar nanti",
     "payLaterAfter": "Setelah disetujui, kasir bisa menyerahkan HP tanpa pelunasan.",
     "downPaymentNew": "DP yang benar",
-    "downPaymentTakenOff": "Total pengurangan uang masuk di servisan ini {amount}."
+    "downPaymentTakenOff": "Total pengurangan uang masuk di servisan ini {amount}.",
+    "voidPayment": "Pembayaran yang dibatalkan"
   },
   "basics": {
     "title": "Lengkapi data toko",

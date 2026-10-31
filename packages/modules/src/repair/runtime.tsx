@@ -363,6 +363,7 @@ export function moneyRuntimeOf(
 ): MoneyRuntime {
   return {
     ...repair.money,
+    approvals: repair.approvals,
     subscribe: repair.subscribe,
     nameOf,
     customersOf: (documents) => servisanCustomers(repair, documents),

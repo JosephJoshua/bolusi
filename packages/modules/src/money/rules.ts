@@ -390,6 +390,96 @@ async function requireAccount(
   return usable.kind;
 }
 
+/** The change a refund limit judges with what is already taken off a document. */
+export interface TakenOffChange {
+  readonly reduced?: number;
+  readonly refund?: { readonly account: string; readonly amount: number };
+  readonly voiding?: { readonly id: string; readonly amount: number; readonly account: string };
+}
+
+/**
+ * Everything taken off a document that its refund limit counts, `change` (the op being judged, at
+ * `scope.at`) included: charge reductions, voided payments (`voidedOffDocument`) and refunds beyond what the
+ * counter could give back. Once the document is charged in full, refunds count as far as they
+ * left the customer owing (the refund command lowers the bill by that first, and the two then
+ * count once, as the reduction), plus what went back through an account beyond what the customer
+ * paid through it (`overdrawnAccounts`), so credit from a payment through one account does not
+ * come back free through another. Before that, every refund counts.
+ */
+export async function takenOffDocument(
+  db: Db,
+  sources: MoneyDocumentSources,
+  scope: { readonly tenantId: string; readonly storeId: string; readonly at: number },
+  document: { readonly kind: string; readonly id: string },
+  change: TakenOffChange,
+): Promise<number> {
+  const store = scope.storeId;
+  const reduced = change.reduced ?? 0;
+  const refunded = change.refund?.amount ?? 0;
+  const voided = change.voiding?.amount ?? 0;
+  const source = sources[document.kind];
+  const expected =
+    source === undefined
+      ? null
+      : await source.charge(db as unknown as Kysely<never>, {
+          tenantId: scope.tenantId,
+          storeId: store,
+          documentId: document.id,
+        });
+  const charged = await documentTotal(db, store, document, 'charge_recorded');
+  const refunds = (await documentTotal(db, store, document, 'refund_paid')) + refunded;
+  const balance = (await documentBalance(db, store, document)) - reduced + refunded + voided;
+  const outgoing = [change.refund, change.voiding].filter((move) => move !== undefined);
+  const refundsCounted =
+    expected !== null && charged >= expected.amount
+      ? Math.min(
+          refunds,
+          Math.max(0, balance) + (await overdrawnAccounts(db, store, document, outgoing)),
+        )
+      : refunds;
+  return (
+    (await documentTotal(db, store, document, 'charge_reduced')) +
+    reduced +
+    (await voidedOffDocument(db, store, {
+      ...document,
+      voiding: change.voiding === undefined ? [] : [{ ...change.voiding, at: scope.at }],
+      owed: balance,
+    })) +
+    refundsCounted
+  );
+}
+
+/** A payment as a void reads it. */
+export interface VoidedPayment {
+  readonly id: string;
+  readonly amount: string | number;
+  readonly account: string | null;
+  readonly documentKind: string | null;
+  readonly documentId: string | null;
+}
+
+/**
+ * What voiding this payment at `scope.at` counts against its store's refund limit: everything taken
+ * off its document with it (`takenOffDocument`), or the payment alone when it has no document. The
+ * rule, an approval request and the Kas screens all read it here, so they never disagree.
+ */
+export async function voidCounted(
+  db: Db,
+  sources: MoneyDocumentSources,
+  scope: { readonly tenantId: string; readonly storeId: string; readonly at: number },
+  entry: VoidedPayment,
+): Promise<number> {
+  const amount = Number(entry.amount);
+  if (entry.documentKind === null || entry.documentId === null) return amount;
+  return takenOffDocument(
+    db,
+    sources,
+    scope,
+    { kind: entry.documentKind, id: entry.documentId },
+    { voiding: { id: entry.id, amount, account: entry.account ?? '' } },
+  );
+}
+
 export function createMoneyRules(sources: MoneyDocumentSources) {
   async function requireDocument(db: Db, op: SignedOperation, document: MoneyDocument) {
     const source = sources[document.kind];
@@ -403,60 +493,19 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     return { source, lookup };
   }
 
-  /**
-   * Everything taken off a document that its refund limit counts, `change` (the op being judged)
-   * included: charge reductions, voided payments (`voidedOffDocument`) and refunds beyond what the
-   * counter could give back. Once the document is charged in full, refunds count as far as they
-   * left the customer owing (the refund command lowers the bill by that first, and the two then
-   * count once, as the reduction), plus what went back through an account beyond what the customer
-   * paid through it (`overdrawnAccounts`), so credit from a payment through one account does not
-   * come back free through another. Before that, every refund counts.
-   */
-  async function takenOffDocument(
+  const takenOffBy = (
     db: Db,
     op: SignedOperation,
     document: { readonly kind: string; readonly id: string },
-    change: {
-      readonly reduced?: number;
-      readonly refund?: { readonly account: string; readonly amount: number };
-      readonly voiding?: { readonly id: string; readonly amount: number; readonly account: string };
-    },
-  ): Promise<number> {
-    const store = storeOf(op);
-    const reduced = change.reduced ?? 0;
-    const refunded = change.refund?.amount ?? 0;
-    const voided = change.voiding?.amount ?? 0;
-    const source = sources[document.kind];
-    const expected =
-      source === undefined
-        ? null
-        : await source.charge(db as unknown as Kysely<never>, {
-            tenantId: op.tenantId,
-            storeId: store,
-            documentId: document.id,
-          });
-    const charged = await documentTotal(db, store, document, 'charge_recorded');
-    const refunds = (await documentTotal(db, store, document, 'refund_paid')) + refunded;
-    const balance = (await documentBalance(db, store, document)) - reduced + refunded + voided;
-    const outgoing = [change.refund, change.voiding].filter((move) => move !== undefined);
-    const refundsCounted =
-      expected !== null && charged >= expected.amount
-        ? Math.min(
-            refunds,
-            Math.max(0, balance) + (await overdrawnAccounts(db, store, document, outgoing)),
-          )
-        : refunds;
-    return (
-      (await documentTotal(db, store, document, 'charge_reduced')) +
-      reduced +
-      (await voidedOffDocument(db, store, {
-        ...document,
-        voiding: change.voiding === undefined ? [] : [{ ...change.voiding, at: op.timestamp }],
-        owed: balance,
-      })) +
-      refundsCounted
+    change: TakenOffChange,
+  ) =>
+    takenOffDocument(
+      db,
+      sources,
+      { tenantId: op.tenantId, storeId: storeOf(op), at: op.timestamp },
+      document,
+      change,
     );
-  }
 
   /** Exactly what is left to charge for the document, to the revenue account it names. */
   const chargeRecordedRule: Rule = async (op, { db }) => {
@@ -500,7 +549,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         details: { field: 'amount', issue: `at most ${charged - reduced}` },
       });
     }
-    const takenOff = await takenOffDocument(db, op, document, { reduced: amount });
+    const takenOff = await takenOffBy(db, op, document, { reduced: amount });
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
@@ -553,17 +602,12 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (entry.voidedBy !== null) {
       throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
     }
-    const takenOff =
-      entry.documentKind === null || entry.documentId === null
-        ? Number(entry.amount)
-        : await takenOffDocument(
-            db,
-            op,
-            { kind: entry.documentKind, id: entry.documentId },
-            {
-              voiding: { id: entry.id, amount: Number(entry.amount), account: entry.account ?? '' },
-            },
-          );
+    const takenOff = await voidCounted(
+      db,
+      sources,
+      { tenantId: op.tenantId, storeId: storeOf(op), at: op.timestamp },
+      entry,
+    );
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
   };
 
@@ -661,7 +705,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (counterRefusal === null) return;
     if (!(await holdsPermission(op.userId, MONEY_PERMISSION.refund))) throw counterRefusal;
     // A limited role (a manager): everything taken off the document, this with it, within limit.
-    const takenOff = await takenOffDocument(db, op, document, { refund: { account, amount } });
+    const takenOff = await takenOffBy(db, op, document, { refund: { account, amount } });
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 

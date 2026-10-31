@@ -4,8 +4,9 @@
  * owes or is owed on the right; Riwayat lists a day's records, where an owner cancels a payment.
  * Each task opens as a dialog over the page.
  */
-import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatTime, t } from '@bolusi/i18n';
 import {
+  Banner,
   Button,
   Card,
   DataTable,
@@ -22,7 +23,9 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
 import { shiftDay, useDayRecords } from '../day-records.js';
+import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { tm } from '../i18n.js';
+import { ta } from '../../approvals/i18n.js';
 import {
   accountLabel,
   dayStart,
@@ -73,6 +76,8 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   // The day Riwayat shows; null for today, so a page left open overnight moves on with the clock.
   const [historyDay, setHistoryDay] = useState<number | null>(null);
   const close = (): void => setTask(null);
+  // Said once an owner has been asked to cancel a payment.
+  const [notice, setNotice] = useState<string | null>(null);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="money.desk.kas">
@@ -99,6 +104,16 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           </>
         }
       />
+      {notice === null ? null : (
+        <div className="px-6 pb-3">
+          <Banner
+            tone="success"
+            message={notice}
+            onDismiss={() => setNotice(null)}
+            dismissLabel={t('core.action.close')}
+          />
+        </div>
+      )}
       {may.read ? (
         <div className="px-6">
           <Tabs
@@ -145,6 +160,10 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           entry={task.entry}
           accounts={task.accounts}
           onDone={close}
+          onAsked={() => {
+            close();
+            setNotice(ta('approvals.done.asked'));
+          }}
           onClose={close}
         />
       ) : null}
@@ -422,8 +441,9 @@ function History({
   const can = voidAbilities(
     (id) => runtime.hasPermission(id),
     (id) => runtime.limitOf(id),
+    runtime.approvals.hasPermission(APPROVAL_PERMISSION.use),
   );
-  const mayVoid = can.payments || can.cashMoves;
+  const mayVoid = can.payments || can.askPayments || can.cashMoves;
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
