@@ -1541,7 +1541,6 @@ describe('printing a slip', () => {
       .mockResolvedValueOnce('unconfirmed');
     const printing: RepairPrinting = {
       storeName: async () => 'Bolusi Sorong',
-      userName: async () => null,
       readPaper: async () => null,
       writePaper: async () => undefined,
       output,

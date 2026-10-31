@@ -1,25 +1,45 @@
 import { initI18n, setLocale } from '@bolusi/i18n';
-import { PAPER_PRESETS, layoutGrid, renderHtml, type PrintDocument } from '@bolusi/core';
+import {
+  MAX_PAPER_HEIGHT_MM,
+  MAX_PAPER_WIDTH_MM,
+  MIN_PAPER_MM,
+  PAPER_PRESETS,
+  layoutGrid,
+  renderHtml,
+  type GridRow,
+  type PaperSettings,
+  type PrintDocument,
+} from '@bolusi/core';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
 import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
 import { registerRepairCatalog } from '../src/repair/i18n.js';
-import { handoverSlip, intakeSlip, slipTerms, type SlipContext } from '../src/repair/print.js';
+import {
+  handoverSlip,
+  intakeSlip,
+  slipLink,
+  slipTerms,
+  type SlipContext,
+} from '../src/repair/print.js';
 
 import { AT, line, sampleTicket } from './support/repair-rows.js';
 
 const ctx: SlipContext = {
   header: { name: 'Bolusi Cell Sorong', lines: ['Jl. Basuki Rahmat 12, Sorong'], logo: null },
   terms: null,
-  printedAt: AT + 60_000,
-  printedByName: 'Maria Kasir',
+  link: null,
 };
+
+/** A row's printed text: a band beside a picture prints its lead. */
+function rowText(row: GridRow): string {
+  return row.kind === 'text' ? row.text : row.lead.map((span) => span.text).join('');
+}
 
 function allText(doc: PrintDocument): string {
   return layoutGrid(doc, { ...PAPER_PRESETS.continuous_full, carbonless: false })
     .pages.flat()
-    .flatMap((row) => (row.kind === 'text' ? [row.text] : []))
+    .map(rowText)
     .join('\n');
 }
 
@@ -114,7 +134,7 @@ describe('handover slip', () => {
     expect(text).not.toContain('Ganti kamera');
     expect(text).toMatch(/Total\s+Rp 1\.150\.000/);
     expect(text).toMatch(/Status\s+: Selesai/);
-    expect(text).toContain('Pelanggan, HP sudah diterima');
+    expect(text).toContain('Diterima pelanggan');
     expect(text).toContain('KETENTUAN');
   });
 
@@ -236,7 +256,22 @@ describe('handover slip', () => {
 });
 
 describe('slip layout', () => {
-  const papers = Object.values(PAPER_PRESETS);
+  // Every preset, and custom sizes at the edges of what Settings accepts, either kind of paper.
+  const custom = (widthMm: number, heightMm: number, continuous: boolean): PaperSettings => ({
+    preset: 'custom',
+    widthMm,
+    heightMm,
+    continuous,
+    carbonless: continuous,
+  });
+  const papers = [
+    ...Object.values(PAPER_PRESETS),
+    custom(MIN_PAPER_MM, MIN_PAPER_MM, true),
+    custom(80, 200, true),
+    custom(MIN_PAPER_MM, MAX_PAPER_HEIGHT_MM, false),
+    custom(MAX_PAPER_WIDTH_MM, MIN_PAPER_MM, true),
+    custom(MAX_PAPER_WIDTH_MM, MAX_PAPER_HEIGHT_MM, false),
+  ];
 
   it('fits an ordinary intake slip on one short landscape form, the money beside the phone', () => {
     const { geometry, pages } = layoutGrid(
@@ -249,6 +284,51 @@ describe('slip layout', () => {
     const rows = (pages[0] ?? []).flatMap((row) => (row.kind === 'text' ? [row.text] : []));
     expect(rows.some((r) => r.includes('Pelanggan') && r.includes('Ganti LCD'))).toBe(false);
     expect(rows.some((r) => /^(?=.*\S {3,}\S)(?=.*ESTIMASI BIAYA)/.test(r))).toBe(true);
+  });
+
+  it('prints the status link beside the signatures and still fits one short form', () => {
+    const ticket = sampleTicket();
+    const linked = { ...ctx, link: slipLink(ticket, 'https://bolusi.id') };
+    for (const doc of [
+      intakeSlip(ticket, linked),
+      handoverSlip(ticket, { ...linked, handedOverByName: 'Maria Kasir', signature: null }),
+    ]) {
+      const { geometry, pages } = layoutGrid(doc, PAPER_PRESETS.continuous_half);
+      expect(pages).toHaveLength(1);
+      expect(geometry.linesPerInch).toBe(6);
+      const leads = (pages[0] ?? []).filter((row) => row.kind === 'image').map(rowText);
+      expect(leads.join('\n')).toContain('bolusi.id/c/K7M2Q9XA4BRS');
+      expect(leads.join('\n')).toContain('Cek status servisan');
+    }
+  });
+
+  it('gives up the blank lines under titles before the ones between sections', () => {
+    const ticket = sampleTicket();
+    const linked = { ...ctx, link: slipLink(ticket, 'https://bolusi.id') };
+    const rows = (
+      layoutGrid(intakeSlip(ticket, linked), PAPER_PRESETS.continuous_half).pages[0] ?? []
+    ).map(rowText);
+    const at = rows.findIndex((r) => r.startsWith('KELUHAN'));
+    expect(rows[at - 1]?.trim()).toBe('');
+    expect(rows[at + 1]).toMatch(/^Layar retak/);
+    // A shorter handover slip has room for both.
+    const handover = handoverSlip(ticket, {
+      ...linked,
+      handedOverByName: 'Maria Kasir',
+      signature: null,
+    });
+    const hrows = (layoutGrid(handover, PAPER_PRESETS.continuous_half).pages[0] ?? []).map(rowText);
+    const terms = hrows.findIndex((r) => r.startsWith('KETENTUAN'));
+    expect(hrows[terms + 1]?.trim()).toBe('');
+  });
+
+  it('prints no note of who printed it or which ply goes where', () => {
+    const rows = layoutGrid(intakeSlip(sampleTicket(), ctx), PAPER_PRESETS.continuous_half)
+      .pages.flat()
+      .map(rowText)
+      .join('\n');
+    expect(rows).not.toContain('Dicetak');
+    expect(rows).not.toMatch(/merah muda/i);
   });
 
   /** Distinct short words up to `max` characters, so a cut or a dropped word shows up. */
@@ -300,24 +380,44 @@ describe('slip layout', () => {
       logo: null,
     },
     terms: filler('t', 2000),
-    printedAt: AT,
-    printedByName: filler('pb', 200),
+    link: null,
   };
-  const slips = (): [PrintDocument, PrintDocument] => [
-    intakeSlip(longest, longCtx),
-    handoverSlip(longest, { ...longCtx, handedOverByName: filler('hb', 200), signature: null }),
-  ];
+  // The same servisan repaired and picked up instead: its handover slip prints warranty terms and
+  // a warranty line per repair type.
+  const repaired = {
+    ...longest,
+    outcome: 'repaired' as const,
+    location: 'returned' as const,
+    returnedAt: Date.UTC(2026, 9, 1, 3),
+    repairTypes: Array.from({ length: 20 }, (_, i) => ({
+      item: `custom${i}`,
+      label: filler(`rt${i}x`, 60),
+      warrantyDays: 365,
+      needsVideo: false,
+    })),
+  };
+  const slips = (): PrintDocument[] => {
+    // A long site too: the link's address beside the signatures must fit as well.
+    const linked = {
+      ...longCtx,
+      link: slipLink(longest, 'https://servisan.bolusi-cell-cabang-manokwari.example'),
+    };
+    return [
+      intakeSlip(longest, linked),
+      handoverSlip(longest, { ...linked, handedOverByName: filler('hb', 200), signature: null }),
+      handoverSlip(repaired, { ...linked, handedOverByName: filler('hb', 200), signature: null }),
+    ];
+  };
   const words = (value: string): string[] => value.split(/[\s():,.-]+/).filter((w) => w !== '');
-  const expected = (intake: boolean): string[] =>
+  const expected = (slip: number): string[] =>
     [
       longCtx.header.name,
       ...longCtx.header.lines,
-      longCtx.printedByName ?? '',
       longest.customerName,
       longest.customerPhone ?? '',
       longest.deviceColor,
       longest.deviceImei ?? '',
-      ...(intake
+      ...(slip === 0
         ? [
             // The longest servisan is a cancelled one, whose handover slip has no warranty terms.
             longCtx.terms ?? '',
@@ -328,23 +428,34 @@ describe('slip layout', () => {
             ...longest.peripherals.map((p) => p.label ?? ''),
             ...longest.quoteLines.map((l) => l.description),
           ]
-        : [longest.outcomeNote ?? '']),
+        : slip === 1
+          ? [longest.outcomeNote ?? '']
+          : [longCtx.terms ?? '', ...repaired.repairTypes.map((t) => t.label)]),
     ].flatMap(words);
 
   it.each(papers)('prints every word of the longest values inside the paper ($preset)', (paper) => {
     for (const [i, doc] of slips().entries()) {
       const { geometry, pages } = layoutGrid(doc, paper);
+      const line = 216 / geometry.linesPerInch;
       const printed = new Set<string>();
       for (const page of pages) {
-        expect(page.length).toBeLessThanOrEqual(geometry.pageLines - 1);
+        // In 1/216 inch: a text line, or an 8-dot band of a picture.
+        const height = page.reduce(
+          (sum, row) => sum + (row.kind === 'text' ? line : Math.ceil(row.bitmap.height / 8) * 24),
+          0,
+        );
+        expect(height).toBeLessThanOrEqual((geometry.pageLines - 1) * line);
         for (const row of page) {
-          if (row.kind !== 'text') continue;
-          expect(row.text.length).toBeLessThanOrEqual(geometry.columns);
-          expect(row.spans.map((s) => s.text).join('')).toBe(row.text);
-          for (const word of words(row.text)) printed.add(word);
+          if (row.kind === 'image') {
+            expect(rowText(row).length).toBeLessThanOrEqual(row.offset);
+          } else {
+            expect(row.text.length).toBeLessThanOrEqual(geometry.columns);
+            expect(row.spans.map((s) => s.text).join('')).toBe(row.text);
+          }
+          for (const word of words(rowText(row))) printed.add(word);
         }
       }
-      const missing = expected(i === 0).filter((word) => !printed.has(word));
+      const missing = expected(i).filter((word) => !printed.has(word));
       expect(missing).toEqual([]);
     }
   });
@@ -353,7 +464,22 @@ describe('slip layout', () => {
     for (const [i, doc] of slips().entries()) {
       const html = renderHtml(doc, paper);
       const printed = new Set(words(html.replace(/<[^>]+>/g, ' ')));
-      expect(expected(i === 0).filter((word) => !printed.has(word))).toEqual([]);
+      expect(expected(i).filter((word) => !printed.has(word))).toEqual([]);
     }
+  });
+});
+
+describe('status link', () => {
+  it('points at the servisan’s page on the device’s site, in capitals for a smaller code', () => {
+    const link = slipLink(sampleTicket(), 'https://bolusi.id/');
+    expect(link?.address).toBe('bolusi.id/c/K7M2Q9XA4BRS');
+    expect(link?.title).toBe('Cek status servisan');
+    // Version 2 (25 modules): the capitals pack into the code's alphanumeric mode.
+    expect(link?.modules).toHaveLength(25);
+  });
+
+  it('is left off without a link code or a site', () => {
+    expect(slipLink(sampleTicket({ statusCode: null }), 'https://bolusi.id')).toBeNull();
+    expect(slipLink(sampleTicket(), null)).toBeNull();
   });
 });

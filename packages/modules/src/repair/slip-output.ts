@@ -73,11 +73,10 @@ export async function outputSlip(
   how: 'print' | 'share',
 ): Promise<SlipOutcome> {
   // The ticket as it reads now, so the print count and a payment just recorded are right.
-  const [fresh, settings, storeName, userName, sheet] = await Promise.all([
+  const [fresh, settings, storeName, sheet] = await Promise.all([
     runtime.query('getTicket', { ticketId: ticket.id }),
     runtime.query('printSettings', {}),
     printing.storeName(),
-    printing.userName(),
     readDevicePaper(printing, papers),
   ]);
   const row = fresh.rows[0] ?? ticket;
@@ -94,8 +93,7 @@ export async function outputSlip(
     storeName,
     logo,
     signature: signatureUri === null ? null : { dataUri: signatureUri, mono: null },
-    printedAt: Date.now(),
-    printedByName: userName,
+    statusSite: runtime.statusSite,
   });
   const outcome = await send(printing, doc, sheet, how);
   if (outcome === 'done') await runtime.run('recordSlipPrinted', { ticketId: row.id, slip });

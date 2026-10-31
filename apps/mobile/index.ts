@@ -475,6 +475,7 @@ function createRepair(
     scanCode,
     // QRIS through Xendit: online-only server calls as the signed-in person, on the device bearer.
     qris: createFetchQris({ baseUrl: apiBaseUrl(), deviceToken: () => keystore.loadDeviceToken() }),
+    statusSite: apiBaseUrl(),
   });
 }
 

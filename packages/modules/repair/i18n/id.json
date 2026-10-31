@@ -471,7 +471,6 @@
     "reprint": "Cetak ulang ke-{count}",
     "reprintFirst": "Cetak ulang",
     "printed": "Dicetak {date}",
-    "printedBy": "Dicetak {date} oleh {name}",
     "field": {
       "customer": "Pelanggan",
       "phone": "No. HP",
@@ -498,19 +497,19 @@
     "balance": "Sisa bayar",
     "sign": {
       "customer": "Pelanggan",
-      "customerPickup": "Pelanggan, HP sudah diterima",
+      "customerPickup": "Diterima pelanggan",
       "staff": "Petugas toko"
     },
     "copy": {
       "store": "Untuk toko",
       "customer": "Untuk pelanggan"
     },
-    "plyNote": "Merah muda: toko, kuning: pelanggan.",
     "terms": {
-      "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
-      "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
+      "intake": "Nota ini wajib dibawa saat pengambilan perangkat.\nBiaya merupakan estimasi. Penambahan biaya akan dikonfirmasi terlebih dahulu.\nToko tidak bertanggung jawab atas kehilangan data.\nPerangkat yang tidak diambil dalam 30 hari setelah pemberitahuan bukan tanggung jawab toko.",
+      "handover": "Pelanggan wajib memeriksa perangkat sebelum meninggalkan toko.\nGaransi hanya berlaku untuk kerusakan dan suku cadang yang sama, dengan menunjukkan nota ini.\nGaransi tidak berlaku apabila segel rusak, perangkat terkena air atau terjatuh, atau dibongkar pihak lain."
     },
-    "refund": "Dikembalikan"
+    "refund": "Dikembalikan",
+    "link": "Cek status servisan"
   },
   "print": {
     "askTitle": "Notanya sudah tercetak?",
@@ -742,7 +741,11 @@
     "refund": "DP dikembalikan: {amount}",
     "newTotal": "Total jadi {amount}.",
     "askAgree": "Boleh kami lanjutkan, Kak?",
-    "thanks": "Terima kasih."
+    "thanks": "Terima kasih.",
+    "sendLink": "Kirim link status",
+    "received": "Halo Kak {name}, HP {device} sudah kami terima untuk diservis.",
+    "receivedAt": "Halo Kak {name}, HP {device} sudah kami terima untuk diservis di {store}.",
+    "track": "Pantau statusnya di sini: {link}"
   },
   "testPage": {
     "job": "Halaman uji",

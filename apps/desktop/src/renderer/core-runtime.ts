@@ -50,6 +50,7 @@ export function createCoreRepairRuntime(deps: {
   readonly userId: string;
   readonly storeName: string;
   readonly capture: PcCapture;
+  readonly statusSite: string;
 }): RepairRuntime {
   const { client, userId, capture } = deps;
   const granted = new Set(deps.session.permissions);
@@ -61,7 +62,6 @@ export function createCoreRepairRuntime(deps: {
   const printing: RepairPrinting = desktopPrinting(
     {
       storeName: () => call('repair.print.storeName'),
-      userName: () => call('repair.print.userName'),
       readPaper: () => call('repair.print.readPaper'),
       writePaper: (paper) => call('repair.print.writePaper', paper),
       // Replaced by the PC's printers below; the window prints, never the core.
@@ -141,6 +141,7 @@ export function createCoreRepairRuntime(deps: {
     technicians: () => call('repair.technicians'),
     loadThumbnail: (ref) => call('repair.loadThumbnail', ref),
     loadModelPhoto: (photo) => call('repair.loadModelPhoto', photo),
+    statusSite: deps.statusSite,
     async capturePhoto(request?: CaptureRequest) {
       const photo = await capture.photo(request);
       if (photo === null) return null;

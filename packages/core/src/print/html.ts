@@ -1,7 +1,7 @@
 // A document as a self-contained HTML page for plain paper and PDF: what the phone hands to the
 // system print dialog or saves as a PDF, and what the desktop app prints to an ordinary printer.
 // No external fonts, scripts or images: everything is inline so it renders offline.
-import type { PrintBlock, PrintDocument, PrintField, PrintImage } from './document.js';
+import type { PrintBlock, PrintDocument, PrintField, PrintImage, PrintLink } from './document.js';
 import { isLandscape, type PaperSettings } from './paper.js';
 
 function esc(text: string): string {
@@ -81,12 +81,43 @@ function main(doc: PrintDocument, paper: PaperSettings): string {
   )}</aside></main>`;
 }
 
+/** A QR code as an inline SVG: one path, a rectangle per run of dark modules, a 4-module margin. */
+function qrSvg(modules: PrintLink['modules']): string {
+  const quiet = 4;
+  const size = modules.length + 2 * quiet;
+  const runs: string[] = [];
+  modules.forEach((row, y) => {
+    let start = -1;
+    row.forEach((dark, x) => {
+      if (dark && start < 0) start = x;
+      if (start >= 0 && (!dark || x === row.length - 1)) {
+        const end = dark ? x + 1 : x;
+        runs.push(
+          `M${String(start + quiet)} ${String(y + quiet)}h${String(end - start)}v1h-${String(end - start)}z`,
+        );
+        start = -1;
+      }
+    });
+  });
+  return `<svg class="qr" viewBox="0 0 ${String(size)} ${String(size)}" shape-rendering="crispEdges" aria-hidden="true"><path d="${runs.join('')}"/></svg>`;
+}
+
+function link(value: PrintLink): string {
+  return `<div class="link">${qrSvg(value.modules)}<div class="link-text"><div class="link-title">${esc(
+    value.title,
+  )}</div><div class="link-address">${esc(value.address)}</div></div></div>`;
+}
+
+/** The signatures, and the link beside them. */
 function closing(doc: PrintDocument): string {
-  return doc.closing.length === 0 ? '' : `<div class="closing">${blocks(doc.closing)}</div>`;
+  const linked = doc.link ?? null;
+  if (doc.closing.length === 0 && linked === null) return '';
+  return `<div class="closing${linked === null ? '' : ' with-link'}"><div class="closing-blocks">${blocks(
+    doc.closing,
+  )}</div>${linked === null ? '' : link(linked)}</div>`;
 }
 
 function copy(doc: PrintDocument, label: string | null, paper: PaperSettings): string {
-  const carbonless = paper.carbonless;
   const header = `<header class="store">${img(doc.header.logo, 'logo')}<div><div class="store-name">${esc(
     doc.header.name,
   )}</div>${doc.header.lines.map((l) => `<div class="store-line">${esc(l)}</div>`).join('')}</div></header>`;
@@ -95,15 +126,9 @@ function copy(doc: PrintDocument, label: string | null, paper: PaperSettings): s
     .join('')}</div><div class="doc-right">${
     label === null ? '' : `<div class="copy-label">${esc(label)}</div>`
   }<div class="ref">${esc(doc.reference)}</div></div></div>`;
-  const notes = [doc.footer, carbonless ? doc.plyNote : null].filter(
-    (n): n is string => n !== null && n !== '',
-  );
-  const footer =
-    notes.length === 0 ? '' : `<footer>${notes.map((n) => `<p>${esc(n)}</p>`).join('')}</footer>`;
-  // The signatures and the footer move to a new sheet together, never the footer alone.
   return `<section class="copy">${header}${title}${main(doc, paper)}<div class="end">${closing(
     doc,
-  )}${footer}</div></section>`;
+  )}</div></section>`;
 }
 
 function styles(paper: PaperSettings): string {
@@ -127,16 +152,16 @@ body { font: 9pt/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #11
 .store-name { font-size: 14pt; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .store-line { font-size: 8pt; color: #444; overflow-wrap: anywhere; }
 .doc { display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm; margin: ${v(5)} 0 1mm; }
-.doc > div:first-child { min-width: 0; }
+.doc > div:first-child { flex: 1 1 auto; min-width: 45%; }
 .title { font-size: 11pt; font-weight: 700; letter-spacing: 0.04em; }
 .meta { font-size: 8pt; color: #444; }
-.doc-right { text-align: right; flex: none; }
+.doc-right { text-align: right; flex: 0 1 auto; min-width: 0; }
 .copy-label { display: inline-block; border: 0.8pt solid #111; border-radius: 99px; padding: 0.3mm 2.5mm;
   font-size: 7.5pt; font-weight: 600; margin-bottom: 1.2mm; }
-.ref { font-size: 17pt; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.ref { font-size: 17pt; font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
 main.columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 9mm; }
 h2 { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #555;
-  margin: ${v(5.5)} 0 ${v(1.8)}; break-after: avoid; page-break-after: avoid; overflow-wrap: anywhere; }
+  margin: ${v(5.5)} 0 ${v(3)}; break-after: avoid; page-break-after: avoid; overflow-wrap: anywhere; }
 main.columns h2:first-child, aside > h2:first-child { margin-top: ${v(4)}; }
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(58mm, 1fr)); gap: ${v(1.6)} 7mm; }
 .body > .fields:first-child, main > .fields:first-child { margin-top: ${v(4.5)}; }
@@ -162,14 +187,18 @@ main.columns h2:first-child, aside > h2:first-child { margin-top: ${v(4)}; }
 .amounts .strong td { font-weight: 700; color: #111; font-size: 10.5pt; }
 .end { break-inside: avoid; page-break-inside: avoid; }
 .closing { margin-top: ${v(4)}; }
+.closing.with-link { display: flex; align-items: flex-end; gap: 8mm; }
+.closing-blocks { flex: 1; min-width: 0; }
+.link { flex: none; display: flex; flex-direction: column; align-items: center; gap: 1mm; max-width: 42mm; text-align: center; }
+.qr { width: ${small ? 20 : 24}mm; height: ${small ? 20 : 24}mm; display: block; }
+.link-title { font-size: 7.5pt; color: #444; }
+.link-address { font-size: 8.5pt; font-weight: 700; overflow-wrap: anywhere; }
 .signatures { display: flex; gap: 12mm; padding-top: ${v(4)}; }
 .sig { flex: 1; min-width: 0; text-align: center; }
 .sig-role { font-size: 8pt; color: #444; overflow-wrap: anywhere; }
 .sig-space { height: ${v(20)}; display: flex; align-items: flex-end; justify-content: center; }
 .sig-img { max-height: 19mm; max-width: 100%; object-fit: contain; }
 .sig-line { border-top: 0.8pt solid #111; padding-top: 1.2mm; min-height: 5mm; font-weight: 500; overflow-wrap: anywhere; }
-footer { margin-top: ${v(6)}; padding-top: ${v(2.5)}; border-top: 0.5pt solid #bbb; font-size: 7.5pt; color: #555; }
-footer p + p { margin-top: 0.6mm; }
 .ruler { border: 0.8pt solid #111; padding: 3mm; margin: 4mm 0 3mm; }
 .ruler-scale { display: flex; height: 4mm; overflow: hidden; border-right: 0.3mm solid #111; }
 .ruler-scale span { flex: 0 0 10mm; border-left: 0.3mm solid #111; }
