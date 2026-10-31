@@ -1,5 +1,5 @@
 // Permission-scoped pull (owner decisions 2026-10-31): a shared store device is sent only what the
-// business's staff roles may read, the response says which read permissions it was filtered by, and
+// business's staff roles may read or be given, the response says which read permissions it was filtered by, and
 // a catch-up pull returns only the newly readable types up to where the device's normal pull was.
 // Real Postgres, real routes, the production op registry's read permissions.
 import type { PullResponse, SignedOperation } from '@bolusi/schemas';
@@ -16,6 +16,7 @@ afterEach(async () => {
 });
 
 const NOTES_READ = 'notes.read';
+const OWNER_ONLY_READ = 'auth.device_read';
 const note = (title: string) => ({
   type: 'notes.note_created',
   entityType: 'note',
@@ -69,19 +70,20 @@ describe('a shared store device is sent what staff roles may read', () => {
     expect(body.readSet).toContain(NOTES_READ);
   });
 
-  test('a permission only owner roles hold is never sent, but sign-in records still are', async () => {
+  test('what a staff role can be given still comes when no staff role has it now', async () => {
     const writer = await h.seedDevice(9103);
     const reader = await h.seedDeviceIn(writer.world.tenantId, writer.world.storeId, 9104);
     await pushNotes(writer, 2);
-    // Every user holds an owner role with every permission; only the staff role loses it.
+    // Owners sign in on shared devices too (the counter PC), so taking Catatan from every staff
+    // role does not take the notes off: only what no staff role can ever hold stays off.
     await revokeFromStaff(writer.world.tenantId, NOTES_READ);
 
     const body = await pullJson(
       await h.pull(reader.auth, { cursor: 0, devicesDirectoryVersion: 0 }),
     );
-    expect(typesOf(body)).not.toContain('notes.note_created');
+    expect(typesOf(body).filter((type) => type === 'notes.note_created')).toHaveLength(2);
     expect(typesOf(body)).toContain('auth.device_enrolled');
-    expect(body.readSet).not.toContain(NOTES_READ);
+    expect(body.readSet).toContain(NOTES_READ);
   });
 });
 
@@ -108,17 +110,17 @@ describe('a catch-up pull', () => {
     expect(catchUp.hasMore).toBe(false);
   });
 
-  test('returns nothing for a permission the device may not read now', async () => {
+  test('returns nothing for a permission the device may not read', async () => {
     const writer = await h.seedDevice(9107);
     const reader = await h.seedDeviceIn(writer.world.tenantId, writer.world.storeId, 9108);
     await pushNotes(writer, 2);
-    await revokeFromStaff(writer.world.tenantId, NOTES_READ);
 
+    // Seeing the business's devices is the owners' alone, so a shared device is never sent it.
     const catchUp = await pullJson(
       await h.pull(reader.auth, {
         cursor: 0,
         devicesDirectoryVersion: 0,
-        backfill: { reads: [NOTES_READ], through: 1_000 },
+        backfill: { reads: [OWNER_ONLY_READ], through: 1_000 },
       }),
     );
     expect(catchUp.ops).toEqual([]);

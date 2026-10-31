@@ -36,7 +36,7 @@
     "line": "{n}. {name}: {qty} pcs",
     "note": "Catatan: {note}",
     "thanks": "Terima kasih.",
-    "sendFailed": "WhatsApp tidak bisa dibuka."
+    "sendFailed": "WhatsApp belum terpasang di HP ini."
   },
   "action": {
     "place": "Pesan",
@@ -108,6 +108,7 @@
     "arrived": "Datang",
     "ordered": "Dipesan {qty}",
     "orderedSoFar": "Dipesan {qty}, sudah datang {received}",
+    "over": "Lebih {extra} dari pesanan.",
     "note": "Catatan",
     "nothing": "Isi jumlah barang yang datang dulu.",
     "save": "Simpan"

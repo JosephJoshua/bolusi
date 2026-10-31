@@ -36,7 +36,7 @@
     "line": "{n}. {name}: {qty} pcs",
     "note": "Note: {note}",
     "thanks": "Thank you.",
-    "sendFailed": "WhatsApp could not be opened."
+    "sendFailed": "WhatsApp isn’t installed on this phone."
   },
   "action": {
     "place": "Order",
@@ -108,6 +108,7 @@
     "arrived": "Arrived",
     "ordered": "Ordered {qty}",
     "orderedSoFar": "Ordered {qty}, {received} arrived",
+    "over": "{extra} more than ordered.",
     "note": "Note",
     "nothing": "Enter how many parts arrived first.",
     "save": "Save"

@@ -1,7 +1,8 @@
 // What the order and receive forms hold, on the phone and the PC alike: the same lines, the same
 // checks before saving, the same input to the commands. Platform-free and pure.
 import { MAX_LINE_QTY, MAX_ORDER_LINES, type OrderStage } from './constants.js';
-import { stillToCome, type OrderDetailRow } from './queries.js';
+import { tp } from './i18n.js';
+import { stillToCome, type OrderDetailRow, type OrderLineRow } from './queries.js';
 
 export interface DraftLine {
   readonly itemId: string;
@@ -137,3 +138,15 @@ export const STAGE_CHIP: Readonly<
   over: { tone: 'warning', icon: 'warning' },
   cancelled: { tone: 'neutral', icon: 'remove' },
 };
+
+/**
+ * What a line's count says under it while receiving: what was ordered and has come, or, once the
+ * count goes past what was ordered, by how much, so the buyer sees it before saving.
+ */
+export function receiveHint(line: Pick<OrderLineRow, 'qty' | 'received'>, count: number): string {
+  const extra = line.received + count - line.qty;
+  if (extra > 0) return tp('purchasing.receive.over', { extra });
+  return line.received === 0
+    ? tp('purchasing.receive.ordered', { qty: line.qty })
+    : tp('purchasing.receive.orderedSoFar', { qty: line.qty, received: line.received });
+}

@@ -31,7 +31,12 @@ export function orderMessage(order: MessageOrder, storeName: string | null): str
 }
 
 /** The WhatsApp link that opens this order to the supplier, or null without a usable number. */
-export function orderMessageUrl(order: MessageOrder, storeName: string | null): string | null {
+export function orderMessageUrl(
+  order: MessageOrder,
+  storeName: string | null,
+  /** wa.me on the PC and the web; a phone opens the app itself (`whatsAppAppUrl`). */
+  link: (number: string, text: string) => string = whatsAppUrl,
+): string | null {
   const number = whatsAppNumber(order.supplierPhone);
-  return number === null ? null : whatsAppUrl(number, orderMessage(order, storeName));
+  return number === null ? null : link(number, orderMessage(order, storeName));
 }

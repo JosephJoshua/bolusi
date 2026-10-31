@@ -17,7 +17,9 @@ import {
   orderStage,
   type OrderDetailRow,
 } from '../src/purchasing/index.js';
+import { receiveHint } from '../src/purchasing/order-form.js';
 import { loadOrderPages, type PurchasingRuntime } from '../src/purchasing/runtime.js';
+import { whatsAppAppUrl } from '../src/shared/whatsapp.js';
 import { openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
 beforeAll(() => {
@@ -407,6 +409,8 @@ describe('the order on WhatsApp', () => {
     expect(url.startsWith('https://wa.me/6281234567890?text=')).toBe(true);
     expect(decodeURIComponent(url.split('?text=')[1]!)).toBe(orderMessage(long, null));
     expect(orderMessageUrl({ ...long, supplierPhone: null }, null)).toBeNull();
+    // A phone opens WhatsApp itself, so one without it can say so instead of opening a browser.
+    expect(orderMessageUrl(long, null, whatsAppAppUrl)).toMatch(/^whatsapp:\/\/send\?phone=62/);
   });
 });
 
@@ -585,5 +589,12 @@ describe('review round 2 (2026-10-31)', () => {
       { filter: 'done', limit: 2, offset: 0 },
       { filter: 'done', limit: 2, offset: 2 },
     ]);
+  });
+
+  test('receiving says how far a count goes past the order before it is saved', () => {
+    expect(receiveHint({ qty: 2, received: 0 }, 2)).toBe('Dipesan 2');
+    expect(receiveHint({ qty: 2, received: 0 }, 4)).toBe('Lebih 2 dari pesanan.');
+    expect(receiveHint({ qty: 5, received: 3 }, 2)).toBe('Dipesan 5, sudah datang 3');
+    expect(receiveHint({ qty: 5, received: 3 }, 3)).toBe('Lebih 1 dari pesanan.');
   });
 });

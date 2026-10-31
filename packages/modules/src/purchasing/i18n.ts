@@ -93,6 +93,7 @@ export const PURCHASING_KEYS = [
   'purchasing.receive.arrived',
   'purchasing.receive.ordered',
   'purchasing.receive.orderedSoFar',
+  'purchasing.receive.over',
   'purchasing.receive.note',
   'purchasing.receive.nothing',
   'purchasing.receive.save',

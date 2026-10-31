@@ -10,7 +10,7 @@ import { useActionRunner } from '../../screen-kit/index.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import { MAX_LINE_QTY, MAX_PURCHASING_NOTE } from '../constants.js';
 import { tp } from '../i18n.js';
-import { receiveInput, receiveStart, receivedTotal } from '../order-form.js';
+import { receiveHint, receiveInput, receiveStart, receivedTotal } from '../order-form.js';
 import type { OrderDetailRow } from '../queries.js';
 import { usePurchasingRuntime } from '../runtime.js';
 
@@ -68,11 +68,7 @@ export function ReceiveStep({
             max={MAX_LINE_QTY}
             decreaseLabel={tp('purchasing.form.decrease')}
             increaseLabel={tp('purchasing.form.increase')}
-            caption={
-              line.received === 0
-                ? tp('purchasing.receive.ordered', { qty: line.qty })
-                : tp('purchasing.receive.orderedSoFar', { qty: line.qty, received: line.received })
-            }
+            caption={receiveHint(line, counts[line.itemId] ?? 0)}
             testID={`${testID}.line.${line.itemId}.qty`}
           />
         </View>

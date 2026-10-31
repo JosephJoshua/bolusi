@@ -20,7 +20,7 @@ import {
   Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { Linking, Share, StyleSheet, View } from 'react-native';
+import { Linking, Platform, Share, StyleSheet, View } from 'react-native';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import {
@@ -31,6 +31,7 @@ import {
 } from '../../screen-kit/screens/views.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { orderMessage, orderMessageUrl } from '../order-message.js';
+import { whatsAppAppUrl, whatsAppUrl } from '../../shared/whatsapp.js';
 import { STAGE_CHIP, draftOf, orderActions, orderInput, showsReceived } from '../order-form.js';
 import type { OrderDetailRow } from '../queries.js';
 import { useOrderStoreName, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
@@ -95,10 +96,15 @@ export function OrderDetail({
   };
 
   // Writes the order and opens WhatsApp on the supplier's number, or the share sheet without one;
-  // the buyer checks it and sends.
+  // the buyer checks it and sends. As a servisan's messages: a phone opens the app itself, so one
+  // without WhatsApp says so instead of landing in a browser; the web preview keeps wa.me.
   const send = (row: OrderDetailRow): void => {
     say(null);
-    const url = orderMessageUrl(row, storeName);
+    const url = orderMessageUrl(
+      row,
+      storeName,
+      Platform.OS === 'web' ? whatsAppUrl : whatsAppAppUrl,
+    );
     const opened =
       url === null ? Share.share({ message: orderMessage(row, storeName) }) : Linking.openURL(url);
     opened.catch(() => setDone('purchasing.message.sendFailed'));

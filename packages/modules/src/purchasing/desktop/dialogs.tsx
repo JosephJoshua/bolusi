@@ -34,6 +34,7 @@ import {
   draftChanged,
   draftOf,
   orderInput,
+  receiveHint,
   receiveInput,
   receiveStart,
   receivedTotal,
@@ -365,11 +366,7 @@ export function ReceiveDialog({ order, onClose, onDone }: ReceiveDialogProps): R
           onChange={(qty) => setCounts({ ...counts, [line.itemId]: qty })}
           max={MAX_LINE_QTY}
           autoFocus={index === 0}
-          hint={
-            line.received === 0
-              ? tp('purchasing.receive.ordered', { qty: line.qty })
-              : tp('purchasing.receive.orderedSoFar', { qty: line.qty, received: line.received })
-          }
+          hint={receiveHint(line, counts[line.itemId] ?? 0)}
           testId={`purchasing.desk.receive.line.${line.itemId}`}
         />
       ))}

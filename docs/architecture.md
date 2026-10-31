@@ -136,8 +136,9 @@ fails a build, a boot or a test rather than waiting for review:
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
 - Every op type also declares `read`: the permission a person needs to see its ops.
   A device is sent only the ops its read set covers (`sync/read-scope.ts`); a shared
-  store device gets what the business's staff roles may read, so owner-only data never
-  lands on it. A phone set up as one person's own (`devices.personal_user_id`, chosen at
+  store device gets what the business's staff roles may read or be given in the role
+  editor (owners sign in there too, so Belanja reaches the counter PC), so owner-only
+  data, such as part costs, never lands on it. A phone set up as one person's own (`devices.personal_user_id`, chosen at
   setup) gets what that person may read, and only they sign in on it. The server
   takes its ops only as that person (its genesis and re-enrolment record aside), so a
   deactivated person's phone writes nothing more. When the set shrinks, the device drops those pulled ops and re-folds;
