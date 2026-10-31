@@ -217,7 +217,7 @@ describe('pending counts are DERIVED queries, never stored (01 §5.2)', () => {
 });
 
 describe('SyncState persistence (10-db §9.3)', () => {
-  it('round-trips every field, and booleans survive the 0/1 encoding', async () => {
+  it('round-trips every field; booleans survive the 0/1 encoding and the read set its JSON', async () => {
     await writeSyncState(harness.db, {
       cursor: 91,
       devicesDirectoryVersion: 8,
@@ -233,6 +233,8 @@ describe('SyncState persistence (10-db §9.3)', () => {
       backoffUntil: 666,
       tokenRejectedSince: 777,
       tokenRejectedCount: 4,
+      readSet: ['money.read', 'repair.read'],
+      backfill: { reads: ['money.read'], through: 80, cursor: 12 },
     });
 
     expect(await readSyncState(harness.db)).toEqual({
@@ -250,6 +252,8 @@ describe('SyncState persistence (10-db §9.3)', () => {
       backoffUntil: 666,
       tokenRejectedSince: 777,
       tokenRejectedCount: 4,
+      readSet: ['money.read', 'repair.read'],
+      backfill: { reads: ['money.read'], through: 80, cursor: 12 },
     });
   });
 

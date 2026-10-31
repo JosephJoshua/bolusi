@@ -39,6 +39,23 @@ export interface SyncState extends StalenessInput {
    */
   readonly tokenRejectedSince: number | null;
   readonly tokenRejectedCount: number;
+  /**
+   * The read permissions the server last filtered this device's pulls by (client migration 28),
+   * sorted. `null` until the first scoped pull: an older server sent every op of the store.
+   */
+  readonly readSet: readonly string[] | null;
+  /** A catch-up on older ops the device newly may read, while one is due. */
+  readonly backfill: PullBackfill | null;
+}
+
+/**
+ * A catch-up pull in progress: the ops read with `reads`, from `cursor` up to `through` (where the
+ * normal pull was when the read set grew; everything after it arrives by the normal pull).
+ */
+export interface PullBackfill {
+  readonly reads: readonly string[];
+  readonly through: number;
+  readonly cursor: number;
 }
 
 /** A partial update. Every key is optional; absent keys are left untouched. */
@@ -61,6 +78,8 @@ interface SyncStateRow {
   readonly syncDisabledReason: string | null;
   readonly tokenRejectedSince: number | null;
   readonly tokenRejectedCount: number;
+  readonly readSet: string | null;
+  readonly backfill: string | null;
 }
 
 /** Read the singleton (10-db §9.3). @throws {Error} when the seeded row is absent. */
@@ -79,7 +98,9 @@ export async function readSyncState<DB>(db: Kysely<DB>): Promise<SyncState> {
            push_halted AS "pushHalted", sync_disabled AS "syncDisabled",
            sync_disabled_reason AS "syncDisabledReason",
            token_rejected_since AS "tokenRejectedSince",
-           token_rejected_count AS "tokenRejectedCount"
+           token_rejected_count AS "tokenRejectedCount",
+           read_set AS "readSet",
+           backfill AS "backfill"
     FROM sync_state WHERE id = 1
   `.execute(db);
   const row = result.rows[0];
@@ -103,6 +124,8 @@ export async function readSyncState<DB>(db: Kysely<DB>): Promise<SyncState> {
     backoffUntil: nullableNumber(row.backoffUntil),
     tokenRejectedSince: nullableNumber(row.tokenRejectedSince),
     tokenRejectedCount: Number(row.tokenRejectedCount),
+    readSet: row.readSet === null ? null : (JSON.parse(row.readSet) as string[]),
+    backfill: row.backfill === null ? null : (JSON.parse(row.backfill) as PullBackfill),
   };
 }
 
@@ -132,6 +155,8 @@ const COLUMNS: Record<keyof SyncState, string> = {
   backoffUntil: 'backoff_until',
   tokenRejectedSince: 'token_rejected_since',
   tokenRejectedCount: 'token_rejected_count',
+  readSet: 'read_set',
+  backfill: 'backfill',
 };
 
 export async function writeSyncState<DB>(db: Kysely<DB>, patch: SyncStatePatch): Promise<void> {
@@ -139,8 +164,15 @@ export async function writeSyncState<DB>(db: Kysely<DB>, patch: SyncStatePatch):
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => {
       const column = COLUMNS[key as keyof SyncState];
+      // Booleans are 0/1 in SQLite; the read set and the catch-up are stored as JSON.
       const encoded =
-        typeof value === 'boolean' ? (value ? 1 : 0) : (value as number | string | null);
+        typeof value === 'boolean'
+          ? value
+            ? 1
+            : 0
+          : typeof value === 'object' && value !== null
+            ? JSON.stringify(value)
+            : (value as number | string | null);
       return sql`${sql.raw(column)} = ${encoded}`;
     });
   if (assignments.length === 0) return;
@@ -163,6 +195,8 @@ export async function resetSyncStateForNewDevice<DB>(db: Kysely<DB>): Promise<vo
     backoffUntil: null,
     tokenRejectedSince: null,
     tokenRejectedCount: 0,
+    readSet: null,
+    backfill: null,
   });
 }
 

@@ -25,6 +25,8 @@ function syncState(over: Partial<SyncState> = {}): SyncState {
     backoffUntil: null,
     tokenRejectedSince: null,
     tokenRejectedCount: 0,
+    readSet: null,
+    backfill: null,
     ...over,
   };
 }

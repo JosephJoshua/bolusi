@@ -103,7 +103,7 @@ export interface CaptureHostDeps {
 export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
   const [state, setState] = useState<CaptureScreenState | null>(null);
   const [title, setTitle] = useState<string | null>(null);
-  /** The captured still awaiting the user's "Pakai Foto Ini". Cleared on retake / use / cancel. */
+  /** The captured still awaiting the user's "Pakai foto ini". Cleared on retake / use / cancel. */
   const [review, setReview] = useState<{
     readonly uri: string;
     readonly media: CapturedMedia;

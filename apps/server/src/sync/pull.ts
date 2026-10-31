@@ -6,8 +6,15 @@
 // db-server's generated types do not reach apps/server (task 39), so the query layer is unchecked
 // against the schema — the real-Postgres tests are the correctness gate for column names, not tsc.
 import type { ForTenant, TenantDb } from '@bolusi/db-server';
-import { operationFromSignedCoreJcs } from '@bolusi/core';
+import {
+  operationFromSignedCoreJcs,
+  readPermissionsOf,
+  typesReadWith,
+  type ReadScopeRegistry,
+} from '@bolusi/core';
 import type { DeviceInfo, PullRequest, PullResponse, SignedOperation } from '@bolusi/schemas';
+
+import { sharedDeviceReadSet } from './read-set.js';
 
 /** The token-authenticated device pulling (api/00 §3; store null = system/tenant-scoped device). */
 export interface PullIdentity {
@@ -19,6 +26,8 @@ export interface PullIdentity {
 export interface PullDeps {
   readonly forTenant: ForTenant;
   readonly now: () => number;
+  /** Which permission each op type is read with: a device is sent only what its read set covers. */
+  readonly readScope: ReadScopeRegistry;
 }
 
 /**
@@ -111,20 +120,50 @@ export async function runPull(
 ): Promise<PullResponse> {
   return deps.forTenant(identity.tenantId, async (db) => {
     const limit = request.limit; // schema default 500, hard max 500 (api/01-sync §4)
+    // Permission-scoped sync: the types read with a permission outside the device's read set are
+    // never sent. Filtering out (rather than listing what is allowed) keeps a type every device
+    // reads, like sign-in records, flowing without a lookup.
+    const readSet = await sharedDeviceReadSet(db, identity.tenantId, deps.readScope);
+    const allowed = new Set(readSet);
+    const hidden = typesReadWith(
+      deps.readScope,
+      readPermissionsOf(deps.readScope).filter((read) => !allowed.has(read)),
+    );
+    // A catch-up pull asks for older ops of newly readable types only, up to where its normal pull
+    // already is. What it asks for is still limited to what the device may read now.
+    const backfill =
+      request.backfill === undefined
+        ? undefined
+        : {
+            types: typesReadWith(
+              deps.readScope,
+              request.backfill.reads.filter((read) => allowed.has(read)),
+            ),
+            through: request.backfill.through,
+          };
     // The v0 pull scope (api/01-sync §4.3): `serverSeq > cursor AND (storeId = device.storeId OR
     // storeId IS NULL)`, ORDER BY serverSeq. Fetch one MORE than the page: the extra row answers "is
     // there a next page?" without a second COUNT, and pins nextCursor to the last SERVED op.
-    const rows = await db
-      .selectFrom('operations')
-      .select(['serverSeq', 'signedCoreJcs', 'hash', 'signature'])
-      // `server_seq` is int8 → derived as `Int8 = ColumnType<string, ...>` (the pg driver returns
-      // int8 as a string), so the comparison operand is typed `string`. pg serializes 500 and '500'
-      // to the same wire value — this honours the derived type without changing behaviour.
-      .where('serverSeq', '>', String(request.cursor))
-      .where((eb) => eb.or([eb('storeId', '=', identity.storeId), eb('storeId', 'is', null)]))
-      .orderBy('serverSeq')
-      .limit(limit + 1)
-      .execute();
+    const rows =
+      backfill !== undefined && backfill.types.length === 0
+        ? []
+        : await db
+            .selectFrom('operations')
+            .select(['serverSeq', 'signedCoreJcs', 'hash', 'signature'])
+            // `server_seq` is int8 → derived as `Int8 = ColumnType<string, ...>` (the pg driver
+            // returns int8 as a string), so the comparison operand is typed `string`. pg serializes
+            // 500 and '500' to the same wire value — this honours the derived type.
+            .where('serverSeq', '>', String(request.cursor))
+            .where((eb) => eb.or([eb('storeId', '=', identity.storeId), eb('storeId', 'is', null)]))
+            .$if(hidden.length > 0, (qb) => qb.where('type', 'not in', hidden))
+            .$if(backfill !== undefined, (qb) =>
+              qb
+                .where('type', 'in', backfill?.types ?? [])
+                .where('serverSeq', '<=', String(backfill?.through ?? 0)),
+            )
+            .orderBy('serverSeq')
+            .limit(limit + 1)
+            .execute();
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
@@ -139,6 +178,7 @@ export async function runPull(
       nextCursor,
       hasMore,
       serverTime: deps.now(),
+      readSet: [...readSet],
     };
 
     // Devices sidecar (api/01-sync §4.1): only when the client's echoed version is stale. Equal ⇒

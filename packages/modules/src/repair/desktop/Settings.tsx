@@ -349,7 +349,8 @@ function ListEditor({
               <span className="w-24 shrink-0">{tn('repair.options.videoShort')}</span>
             </>
           ) : null}
-          {hide ? <span className="shrink-0">{tn('repair.options.showHere')}</span> : null}
+          {/* Each column as wide as its cells below, so a header sits over its own controls. */}
+          {hide ? <span className="w-36 shrink-0">{tn('repair.options.showHere')}</span> : null}
           {manage ? <span className="w-8 shrink-0" /> : null}
         </div>
         <SortableList
@@ -519,7 +520,7 @@ function OptionRow({
         </>
       ) : null}
       {hide ? (
-        <div className="flex h-10 shrink-0 items-center">
+        <div className="flex h-10 w-36 shrink-0 items-center">
           {row.id === null ? (
             <Tooltip label={tn('repair.options.notSavedYet')}>
               <span tabIndex={0} className="rounded-xs" data-testid={`${testId}.new`}>
