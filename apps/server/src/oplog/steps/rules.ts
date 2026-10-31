@@ -24,10 +24,13 @@ export async function checkRules(
   registry: OpRegistry,
   lookup: AuthorLookup,
   crypto: CryptoPort,
+  receivedAt: number,
 ): Promise<RuleOutcome> {
   try {
     await registry.checkRule(op, {
       db,
+      // The server's clock, for a rule that must not take the author's clock on trust.
+      receivedAt,
       // Someone the op names (an assigned technician) must work at this store and hold the
       // permission there, by the server's directory: the same test the author passed.
       holdsPermission: async (userId, permissionId) => {

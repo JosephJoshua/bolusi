@@ -960,30 +960,40 @@ export async function intakeOptionSettingsHandler(
   _input: z.infer<typeof intakeOptionSettingsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<IntakeOptionSettings>> {
+  const settings = await readIntakeOptionSettings(qctx.db, qctx.tenantId, qctx.storeId);
+  return { rows: [settings], nextCursor: null };
+}
+
+/** The franchise's intake lists and one store's hidden items, as these records hold them now. */
+export async function readIntakeOptionSettings(
+  db: Qctx['db'],
+  tenantId: string,
+  storeId: string | null,
+): Promise<IntakeOptionSettings> {
   const known = (list: string): list is IntakeOptionList =>
     (INTAKE_OPTION_LISTS as readonly string[]).includes(list);
 
   const lists: Record<IntakeOptionList, readonly IntakeOption[]> = { ...DEFAULT_INTAKE_OPTIONS };
-  const franchise = await qctx.db
+  const franchise = await db
     .selectFrom('repairIntakeOptions')
     .select(['list', 'itemsJson'])
-    .where('tenantId', '=', qctx.tenantId)
+    .where('tenantId', '=', tenantId)
     .execute();
   for (const row of franchise) {
     if (known(row.list)) lists[row.list] = parseJson<IntakeOption[]>(row.itemsJson, []);
   }
 
   const hidden: Record<IntakeOptionList, readonly string[]> = { ...NOTHING_HIDDEN };
-  const store = await qctx.db
+  const store = await db
     .selectFrom('repairStoreIntakeOptions')
     .select(['list', 'hiddenJson'])
-    .where('storeId', '=', qctx.storeId)
+    .where('storeId', '=', storeId)
     .execute();
   for (const row of store) {
     if (known(row.list)) hidden[row.list] = parseJson<string[]>(row.hiddenJson, []);
   }
 
-  return { rows: [{ lists, hidden }], nextCursor: null };
+  return { lists, hidden };
 }
 
 export const intakeOptionSettingsQuery = {

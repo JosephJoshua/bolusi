@@ -6,7 +6,7 @@
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
 import { CLOCK_AHEAD_MARGIN_MS } from '@bolusi/core';
-import { formatTicketNumber } from '@bolusi/modules/repair';
+import { formatTicketNumber, INTAKE_PHOTO_SLOTS } from '@bolusi/modules/repair';
 import type { MediaRef } from '@bolusi/schemas';
 import { ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
 import { sql, type Kysely } from 'kysely';
@@ -181,10 +181,11 @@ function openTicket(
       peripherals: [],
       estimatedReadyAt: null,
       quoteLines: [{ lineId, kind: 'labour', description: 'Ganti konektor', amount: 150_000 }],
-      photos: [
-        { slot: 'front', label: null, ref: photo(world, 1) },
-        { slot: 'back', label: null, ref: photo(world, 2) },
-      ],
+      photos: INTAKE_PHOTO_SLOTS.map((slot, i) => ({
+        slot,
+        label: null,
+        ref: photo(world, i + 1),
+      })),
       repairTypes: [],
       claimOf: null,
       ownershipVideo: null,
