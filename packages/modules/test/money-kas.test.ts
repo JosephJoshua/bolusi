@@ -7,7 +7,7 @@ import enCatalog from '../money/i18n/en.json' with { type: 'json' };
 import idCatalog from '../money/i18n/id.json' with { type: 'json' };
 import { registerMoneyCatalog } from '../src/money/i18n.js';
 import { methodStores, methodSummary } from '../src/money/methods.js';
-import { shiftDay } from '../src/money/day-records.js';
+import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
 
 import {
@@ -18,6 +18,7 @@ import {
   differenceToSettle,
   drawerMoves,
   historyLine,
+  inHistory,
   settleState,
   splitOpenBalances,
   voidAbilities,
@@ -45,6 +46,7 @@ function entry(overrides: Partial<MoneyEntryRow>): MoneyEntryRow {
     documentId: 'd',
     documentLabel: 'B7B-0001',
     createdBy: 'u',
+    createdByName: null,
     createdAt: 0,
     voidedBy: null,
     voidedAt: null,
@@ -232,6 +234,35 @@ describe('history', () => {
     const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
     expect(short.label).toBe('money.kas.adjusted');
     expect(short.amount).toBe('\u2212Rp 5.000');
+  });
+
+  test('each record says who recorded it, last', () => {
+    const line = historyLine(
+      entry({ account: 'account:q', createdByName: 'Dewi' }),
+      [qris],
+      'Yakobus',
+    );
+    expect(line.details).toEqual(['Yakobus', 'B7B-0001', 'QRIS BCA', 'Dewi']);
+  });
+
+  test('the bill recorded at handover is not money that moved, so Riwayat leaves it out', () => {
+    expect(inHistory(entry({ kind: 'charge_recorded' }))).toBe(false);
+    for (const kind of [
+      'charge_reduced',
+      'payment_received',
+      'refund_paid',
+      'cash_moved',
+      'cash_counted',
+      'cash_adjusted',
+    ] as const) {
+      expect(inHistory(entry({ kind }))).toBe(true);
+    }
+  });
+
+  test('an empty day says today may still get some, a past day that it had none', () => {
+    const today = dayStart(Date.now());
+    expect(historyEmptyKey(today, today)).toBe('money.history.none');
+    expect(historyEmptyKey(shiftDay(today, -1), today)).toBe('money.history.noneDay');
   });
 
   test('a cancelled payment keeps its customer, servisan and method, and says why', () => {

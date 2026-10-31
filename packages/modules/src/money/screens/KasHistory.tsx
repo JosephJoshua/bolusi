@@ -14,7 +14,7 @@ import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/scree
 
 import { MAX_REASON, MONEY_PERMISSION } from '../constants.js';
 import { tm } from '../i18n.js';
-import { shiftDay, useDayRecords } from '../day-records.js';
+import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
@@ -92,7 +92,7 @@ export function KasHistory({
       >
         {({ rows, more, customers, accounts }) =>
           rows.length === 0 ? (
-            <EmptyState title={tm('money.history.none')} testID={`${testID}.empty`} />
+            <EmptyState title={tm(historyEmptyKey(day, today))} testID={`${testID}.empty`} />
           ) : (
             <View>
               {rows.map((entry) => {

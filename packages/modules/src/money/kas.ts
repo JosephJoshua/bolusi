@@ -186,9 +186,16 @@ function reasonText(reason: string | null): string | null {
     : reason;
 }
 
+/**
+ * Whether Riwayat lists a record. It is the money that moved and what an owner decided about it; a
+ * bill recorded at handover moved no money, and the servisan's own history already says it.
+ */
+export function inHistory(entry: Pick<MoneyEntryRow, 'kind'>): boolean {
+  return entry.kind !== 'charge_recorded';
+}
+
 /** How each kind of record reads in the day's history. */
 const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
-  charge_recorded: 'money.opType.chargeRecorded',
   charge_reduced: 'money.opType.chargeReduced',
   payment_received: 'money.opType.paymentReceived',
   refund_paid: 'money.opType.refundPaid',
@@ -198,8 +205,9 @@ const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
 export interface HistoryLine {
   readonly label: MoneyKey;
   /**
-   * The customer, the servisan, the method and the reason, as far as the record has them. A
-   * cancelled one keeps whose and which method it was, and says why it was cancelled instead.
+   * The customer, the servisan, the method, the reason and who recorded it, as far as the record
+   * has them. A cancelled one keeps whose and which method it was, and says why it was cancelled
+   * instead.
    */
   readonly details: readonly string[];
   /** Signed for the drawer's moves and refunds, as the amount reads. */
@@ -237,6 +245,7 @@ export function historyLine(
       voided
         ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
         : reasonText(entry.reason),
+      entry.createdByName,
     ].filter((part): part is string => part !== null && part !== ''),
     amount: formatMoney(signed),
     voided,

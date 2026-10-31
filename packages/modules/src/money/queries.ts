@@ -22,6 +22,7 @@ import {
 } from './constants.js';
 import { accountVisibleTo, centralStoreIds, countExpected, documentBalance } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
+import { userNames } from '../shared/user-names.js';
 
 type Qctx = QueryContext<MoneyDatabase>;
 
@@ -144,6 +145,8 @@ export interface MoneyEntryRow {
   readonly documentId: string | null;
   readonly documentLabel: string | null;
   readonly createdBy: string;
+  /** Who recorded it, from the device's staff list; null for someone it does not know. */
+  readonly createdByName: string | null;
   readonly createdAt: number;
   readonly voidedBy: string | null;
   readonly voidedAt: number | null;
@@ -161,7 +164,7 @@ export interface DocumentMoney {
   readonly entries: readonly MoneyEntryRow[];
 }
 
-function entryRow(row: Record<string, unknown>): MoneyEntryRow {
+function entryRow(row: Record<string, unknown>, names: ReadonlyMap<string, string>): MoneyEntryRow {
   const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
   return {
     id: row['id'] as string,
@@ -176,11 +179,24 @@ function entryRow(row: Record<string, unknown>): MoneyEntryRow {
     documentId: (row['documentId'] as string | null) ?? null,
     documentLabel: (row['documentLabel'] as string | null) ?? null,
     createdBy: row['createdBy'] as string,
+    createdByName: names.get(row['createdBy'] as string) ?? null,
     createdAt: Number(row['createdAt']),
     voidedBy: (row['voidedBy'] as string | null) ?? null,
     voidedAt: num(row['voidedAt']),
     voidReason: (row['voidReason'] as string | null) ?? null,
   };
+}
+
+/** The records as the screens read them, each with the name of whoever recorded it. */
+async function entryRows(
+  qctx: Qctx,
+  rows: readonly { readonly createdBy: string }[],
+): Promise<MoneyEntryRow[]> {
+  const names = await userNames(
+    qctx.db,
+    rows.map((row) => row.createdBy),
+  );
+  return rows.map((row) => entryRow(row as unknown as Record<string, unknown>, names));
 }
 
 export const documentMoneyInput = z.object({ kind: z.string().min(1).max(40), id: zUuid }).strict();
@@ -199,7 +215,7 @@ async function documentMoneyHandler(
     .orderBy('createdAt')
     .orderBy('id')
     .execute();
-  const entries = rows.map((row) => entryRow(row as unknown as Record<string, unknown>));
+  const entries = await entryRows(qctx, rows);
   // The balance is the receivable's lines, as the rules read it; the totals come off the records.
   const total = (kind: EntryKind) =>
     entries.filter((entry) => entry.kind === kind).reduce((sum, entry) => sum + entry.amount, 0);
@@ -365,7 +381,7 @@ async function moneyEntriesHandler(
     cursorValues: (last) => [Number(last.createdAt), last.id],
   });
   return {
-    rows: rows.map((row) => entryRow(row as unknown as Record<string, unknown>)),
+    rows: await entryRows(qctx, rows),
     nextCursor,
   };
 }

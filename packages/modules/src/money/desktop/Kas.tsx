@@ -21,7 +21,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
-import { shiftDay, useDayRecords } from '../day-records.js';
+import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
 import { tm } from '../i18n.js';
 import {
   accountLabel,
@@ -589,7 +589,7 @@ function History({
           empty={
             <StatePanel
               icon={day === today ? Inbox : ReceiptText}
-              title={tm('money.history.none')}
+              title={tm(historyEmptyKey(day, today))}
               testId={`${testId}.empty`}
             />
           }

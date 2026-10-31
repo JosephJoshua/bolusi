@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
 import { MONEY_OP } from '../src/money/index.js';
+import type { MoneyEntryRow } from '../src/money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from '../src/repair/index.js';
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
@@ -142,6 +143,28 @@ describe('charges follow the servisan', () => {
 });
 
 describe('payments', () => {
+  test("each record carries the name of who recorded it, from the device's staff list", async () => {
+    h = await openRepairHarness(530);
+    const document = await openTicket(h);
+    await h.db
+      .insertInto('usersDirectory')
+      .values({ id: h.cashierId, name: 'Dewi', status: 'active', photoMediaId: null })
+      .execute();
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 50_000 }] },
+      h.cashierId,
+    );
+    const { rows } = await h.moneyQuery(
+      'moneyEntries',
+      { from: 0, to: Date.now() + 60_000 },
+      h.cashierId,
+    );
+    const paid = (rows as MoneyEntryRow[]).find((row) => row.kind === 'payment_received')!;
+    expect(paid.createdByName).toBe('Dewi');
+    expect((await documentMoney(h, document)).entries[0]).toMatchObject({ createdByName: 'Dewi' });
+  });
+
   test('a DP paid ahead leaves the servisan in credit, and a split pays the rest', async () => {
     h = await openRepairHarness(503);
     const document = await openTicket(h);

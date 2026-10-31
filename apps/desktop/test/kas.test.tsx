@@ -34,6 +34,10 @@ afterEach(() => {
 });
 
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
+/** Where the store takes more than cash, the counter picks each payment's method itself. */
+function pick(line: string, method = 'Tunai'): void {
+  fireEvent.click(within(byTestId(`${line}.methods`)).getByRole('button', { name: method }));
+}
 /** An element's text without spaces: amounts print "Rp" and the figure apart. */
 const text = (id: string): string => byTestId(id).textContent!.replace(/\s/g, '');
 
@@ -144,6 +148,13 @@ describe('Kas on the PC', () => {
     fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
       target: { value: '200000' },
     });
+    // The store takes more than cash, so nothing is picked for the counter (round 2 QA, A11).
+    expect(byTestId('money.desk.receive.pay.line0.pick').textContent).toBe(
+      'Pilih cara bayarnya dulu.',
+    );
+    expect(byTestId('money.desk.receive.submit')).toHaveProperty('disabled', true);
+    pick('money.desk.receive.pay.line0');
+    expect(screen.queryByTestId('money.desk.receive.pay.line0.pick')).toBeNull();
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
@@ -167,7 +178,10 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.void.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.void')).toBeNull());
     // The record stays, with whose and which method it was and why it was cancelled.
-    await waitFor(() => expect(table.textContent).toContain('Dibatalkan: Salah metode'));
+    // ...and who took it.
+    await waitFor(() =>
+      expect(table.textContent).toContain('Dibatalkan: Salah metode · Andi Pratama'),
+    );
     expect(table.textContent).toContain('Yulianus Wenda · K7Q-0004 · Tunai');
     expect(
       within(table).queryByRole('button', { name: /^Batalkan pembayaran Rp\s?200\.000/ }),
@@ -192,6 +206,7 @@ describe('Kas on the PC', () => {
     fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
       target: { value: '200000' },
     });
+    pick('money.desk.receive.pay.line0');
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
 
@@ -279,6 +294,7 @@ describe('Kas on the PC', () => {
     await waitFor(() => expect(text('money.desk.receive.owed')).toBe('Rp350.000'));
     fireEvent.click(byTestId('money.desk.receive.pay.add'));
     expect(byTestId('money.desk.receive.pay.line0.amount')).toHaveProperty('value', '350.000');
+    pick('money.desk.receive.pay.line0');
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
     await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
@@ -317,6 +333,7 @@ describe('Kas on the PC', () => {
     await waitFor(() =>
       expect(byTestId('money.desk.history.day').textContent).not.toBe('Hari ini'),
     );
+
     fireEvent.click(byTestId('money.desk.history.today'));
     expect(byTestId('money.desk.history.day').textContent).toBe('Hari ini');
     expect(byTestId('money.desk.history.next')).toHaveProperty('disabled', true);
@@ -392,7 +409,7 @@ describe('payment methods in PC Settings', () => {
     expect(byTestId('money.desk.methodForm.qris.connected').textContent).not.toContain('mode uji');
     // Other kinds have nothing to connect.
     fireEvent.click(
-      within(byTestId('money.desk.methodForm')).getByRole('button', { name: 'Batal' }),
+      within(byTestId('money.desk.methodForm')).getByRole('button', { name: 'Kembali' }),
     );
     await waitFor(() => expect(screen.queryByTestId('money.desk.methodForm')).toBeNull());
     fireEvent.click(byTestId('money.desk.methods.row.01920000-0000-7000-8000-00000000a002.open'));

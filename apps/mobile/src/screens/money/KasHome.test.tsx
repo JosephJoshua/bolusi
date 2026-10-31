@@ -332,6 +332,8 @@ describe('the drawer', () => {
 describe('what customers owe', () => {
   test('a phone handed over unpaid is on the list, and the counter takes the payment', async () => {
     h = await openRepairScreenHarness(5406);
+    // The store also takes transfers, so the counter picks each payment's method (round 2 QA, A11).
+    await h.money('saveAccount', { kind: 'transfer', name: 'BCA' }, h.storeOwnerId);
     const { ticketId } = (await h.run('openTicket', intake(h), h.cashierId)) as {
       ticketId: string;
     };
@@ -360,6 +362,11 @@ describe('what customers owe', () => {
     expect(text(screen, 'money.receive')).toContain('Yohanis Wenda');
     // Part of it today.
     type(screen, 'money.receive.pay.line0.amount', '500000');
+    await settle();
+    expect(text(screen, 'money.receive.pay.line0.pick')).toBe('Pilih cara bayarnya dulu.');
+    expect(screen.all('money.receive.primary')[0]!.props['disabled']).toBe(true);
+    await press(screen, 'money.receive.pay.line0.method.cash');
+    expect(screen.query('money.receive.pay.line0.pick')).toBeNull();
     // Handed over exactly: no "Kembalian Rp 0" (round 2 QA, F14); more shows the change.
     type(screen, 'money.receive.pay.line0.tendered', '500000');
     await settle();
