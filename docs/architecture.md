@@ -125,6 +125,13 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- Every op type also declares `read`: the permission a person needs to see its ops.
+  A device is sent only the ops its read set covers (`sync/read-scope.ts`); a shared
+  store device gets what the business's staff roles may read, so owner-only data never
+  lands on it. When the set shrinks, the device drops those pulled ops and re-folds;
+  when it grows, it catches up on the older ones. `null` is for records every device
+  needs (sign-in, PIN, device). A record with fields for different readers is split
+  into separate op types, one per reader (part costs live apart from stock moves).
 - When a type's rule judges only newer versions, set `minPushVersion` on the type. The
   server refuses a new push below it as `SCHEMA_INVALID`; stored ops still fold at every version.
   Signed ops can't be upgraded, so raise a floor only once the app that signs the newer

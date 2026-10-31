@@ -28,6 +28,7 @@ import {
   readSyncState,
   SyncLoop,
   type PulledBatch,
+  type PullReadScope,
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
@@ -86,6 +87,8 @@ export interface SyncClientDeps {
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   /** Can this build fold the op? One from a newer app pauses the pull until this app updates. */
   readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
+  /** Follow the server's read set: drop what this device may no longer read, catch up on the new. */
+  readonly readScope: PullReadScope;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -207,6 +210,7 @@ class SyncClientImpl implements SyncClient {
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
       knowsOp: deps.knowsOp,
+      readScope: deps.readScope,
       refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
@@ -489,6 +493,14 @@ export function createSyncClientForApp(
     bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
     knowsOp: (op) => knowsOp(app.registry.operations, op),
+    readScope: {
+      registry: {
+        types: () => app.registry.operations.types(),
+        readPermissionFor: (type) => app.registry.operations.readPermissionFor(type),
+      },
+      refold: (record) => app.engine.refoldEntityOf(record),
+      catchUpWatermarks: () => app.engine.catchUpPulledWatermarks(),
+    },
     refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,

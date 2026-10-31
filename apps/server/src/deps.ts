@@ -19,6 +19,7 @@ import {
   type ModuleRegistry,
   type OperationDeclaration,
   type ProjectionRegistry,
+  type ReadScopeRegistry,
 } from '@bolusi/core';
 import { ALL_MODULES } from '@bolusi/modules';
 import type { Context } from 'hono';
@@ -267,6 +268,9 @@ export interface ServerDeps {
   /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Derived from
    *  SERVER_MODULES — `platform.*` + `auth.*` + `notes.*` (25), all registered. */
   readonly opRegistry: OpRegistry;
+  /** Which permission each op type is read with, for permission-scoped pulls (sync/read-set.ts).
+   *  Derived from the SAME SERVER_MODULES list. */
+  readonly readScope: ReadScopeRegistry;
   /** Op type → projection applier (04 §4) for the push pipeline's apply step (10-db §3 step 6).
    *  Derived from the SAME SERVER_MODULES list as `opRegistry` — the `platform` appliers
    *  (`conflicts` + `user_prefs`) and the `auth` appliers (`auth_sessions` + `pin_lockout_events` +
@@ -435,6 +439,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     serverCrypto,
     newOpLogId,
     opRegistry: overrides.opRegistry ?? serverOpRegistry,
+    readScope: overrides.readScope ?? serverModuleRegistry.operations,
     projections: overrides.projections ?? serverModuleRegistry.projections,
     pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
     tenantPushQueue: overrides.tenantPushQueue ?? createTenantQueue(),

@@ -26,7 +26,7 @@ import { createVerifyToken, InMemoryTokenStore } from '../../../src/middleware/a
 import { ImmediateDeliveryDispatcher } from '../../../src/push/dispatcher.js';
 import { FakePushPort, type PushPort } from '../../../src/push/port.js';
 import { InProcessPokeHub, type PokeScope } from '../../../src/realtime/poke-hub.js';
-import { grantAllPermissions, testRegistry } from '../oplog/helpers.js';
+import { grantAllPermissions, seedStaffRole, testRegistry } from '../oplog/helpers.js';
 
 const APP_ROLE = 'bolusi_app';
 
@@ -46,6 +46,14 @@ export function makeFakeClock(startMs = CLOCK_START): FakeClock {
 }
 
 /** A seeded device ready to push/pull: its directory identity + chain builder + bearer header. */
+/** A pull body; `backfill` asks for a catch-up on newly readable ops. */
+export interface PullBody {
+  readonly cursor: number;
+  readonly limit?: number;
+  readonly devicesDirectoryVersion: number;
+  readonly backfill?: { readonly reads: readonly string[]; readonly through: number };
+}
+
 export interface SeededDevice {
   readonly world: ChainWorld;
   readonly auth: string;
@@ -92,10 +100,7 @@ export interface SyncHarness {
   /** Revoke a seeded device in place (directory mutation — bumps the devices-directory version). */
   revokeDevice(deviceId: string, at?: number): Promise<void>;
   push(auth: string, deviceId: string, ops: readonly SignedOperation[]): Promise<Response>;
-  pull(
-    auth: string,
-    body: { cursor: number; limit?: number; devicesDirectoryVersion: number },
-  ): Promise<Response>;
+  pull(auth: string, body: PullBody): Promise<Response>;
   close(): Promise<void>;
 }
 
@@ -224,6 +229,7 @@ export async function makeSyncHarness(
       .values({ userId: world.userId, storeId: world.storeId, tenantId: world.tenantId })
       .execute();
     await grantAllPermissions(db, world.tenantId, world.userId);
+    await seedStaffRole(db, world.tenantId);
     const auth = enroll({ ...world, status });
     return { world, auth, builder: new ChainBuilder(world, serverCryptoPort) };
   }
@@ -310,10 +316,7 @@ export async function makeSyncHarness(
     });
   }
 
-  async function pull(
-    auth: string,
-    body: { cursor: number; limit?: number; devicesDirectoryVersion: number },
-  ): Promise<Response> {
+  async function pull(auth: string, body: PullBody): Promise<Response> {
     return app.request('http://srv.test/v1/sync/pull', {
       method: 'POST',
       headers: { Authorization: auth, 'Content-Type': 'application/json' },
