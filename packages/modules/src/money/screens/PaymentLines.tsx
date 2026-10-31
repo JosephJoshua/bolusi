@@ -18,8 +18,9 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
@@ -118,6 +119,7 @@ export function PaymentLines({
               value={digitsText(line.amount)}
               onChangeText={digits(line.key, 'amount')}
               keyboardType="number-pad"
+              selectTextOnFocus
               testID={`${id}.amount`}
             />
             {kind === 'cash' ? (
@@ -127,6 +129,7 @@ export function PaymentLines({
                   value={digitsText(line.tendered)}
                   onChangeText={digits(line.key, 'tendered')}
                   keyboardType="number-pad"
+                  selectTextOnFocus
                   errorMessage={
                     problem === 'tendered' ? tm('money.pay.problem.tendered') : undefined
                   }

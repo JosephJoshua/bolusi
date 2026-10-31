@@ -46,7 +46,7 @@ import {
 import type { TicketSummaryRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { statusLabel } from '../labels.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { readApprovals, useRepairQuery, useRepairRuntime } from '../runtime.js';
 import {
   NO_FACETS,
   RECEIVED_PRESETS,
@@ -73,6 +73,7 @@ import { TicketPane } from './TicketPane.js';
 const SEARCH_LIMIT = 100;
 
 const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
+  approvals: 'repair.board.view.approvals',
   active: 'repair.board.view.active',
   mine: 'repair.board.view.mine',
   unassigned: 'repair.board.view.unassigned',
@@ -135,6 +136,9 @@ interface LoadedBoard {
   /** The store's not-collected limit in days, and the time the rows were read against it. */
   readonly uncollectedLimit: number;
   readonly readAt: number;
+  /** Servisan waiting on this user's approval, and those with any waiting request they see. */
+  readonly approvalIds: readonly string[];
+  readonly approvalWaiting: ReadonlySet<string>;
 }
 
 /** Whether a key press was meant for a field rather than for the page. */
@@ -198,6 +202,11 @@ export function RepairBoardPage({
       let total: number;
       const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
       const readAt = clock();
+      const requests = await readApprovals(rt);
+      const approvalIds = [
+        ...new Set(requests.filter((row) => row.canDecide).map((row) => row.targetId)),
+      ];
+      const approvalWaiting = new Set(requests.map((row) => row.targetId));
       if (searching) {
         // Search ranks across every ticket; the filters, sort and pages then apply to its matches.
         const found = (await rt.query('searchTickets', { text: text.trim(), limit: SEARCH_LIMIT }))
@@ -208,12 +217,17 @@ export function RepairBoardPage({
         );
         total = kept.length;
         rows = kept.slice((page - 1) * pageSize, page * pageSize);
+      } else if (view === 'approvals' && approvalIds.length === 0) {
+        // Every request answered: nothing to list, and the view goes.
+        rows = [];
+        total = 0;
       } else {
         const filter = tableFilter(
           view,
           rt.userId,
           uncollectedBefore(uncollectedLimit, readAt),
           facets,
+          approvalIds,
         );
         const [list, count] = await Promise.all([
           rt.query('listTickets', {
@@ -232,7 +246,16 @@ export function RepairBoardPage({
         total = count.rows[0]?.count ?? 0;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
-      return { scope, rows, total, statuses, uncollectedLimit, readAt };
+      return {
+        scope,
+        rows,
+        total,
+        statuses,
+        uncollectedLimit,
+        readAt,
+        approvalIds,
+        approvalWaiting,
+      };
     },
     `desk.board:${scope}:${String(reloadNonce)}:${String(hour)}`,
   );
@@ -246,6 +269,12 @@ export function RepairBoardPage({
   useEffect(() => {
     if (!stale && loaded !== null && page > pageCount)
       onFiltersChange({ ...state, page: pageCount });
+  });
+  const waitingApprovals = loaded?.approvalIds.length ?? 0;
+  // Every request answered: the approvals view goes, and the board returns to its usual queue.
+  useEffect(() => {
+    if (!stale && loaded !== null && view === 'approvals' && waitingApprovals === 0)
+      onFiltersChange({ ...state, view: defaultFilters(can).view, page: 1 });
   });
 
   const options = useRepairQuery(
@@ -299,6 +328,7 @@ export function RepairBoardPage({
           flagsUncollected(can) && loaded !== null
             ? (row) => uncollectedDays(row, loaded.uncollectedLimit, loaded.readAt)
             : () => null,
+        approvalWaiting: (row) => loaded?.approvalWaiting.has(row.id) === true,
       }),
     [loaded, showCancel, searching, can],
   );
@@ -511,7 +541,10 @@ export function RepairBoardPage({
                 </p>
               ) : (
                 <Tabs
-                  items={boardViews(can).map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
+                  items={boardViews(can, waitingApprovals).map((value) => ({
+                    value,
+                    label: tn(VIEW_KEY[value], { count: waitingApprovals }),
+                  }))}
                   value={view}
                   onChange={(next) =>
                     update({
@@ -632,9 +665,12 @@ function boardColumns({
   showCancel,
   searching,
   waited,
+  approvalWaiting,
 }: {
   readonly statuses: EntitySyncStatuses;
   readonly searching: boolean;
+  /** A request on it waits on an owner's answer (one this user asked, or may give). */
+  readonly approvalWaiting: (row: TicketSummaryRow) => boolean;
   /** Days a finished phone has waited past the store's limit; null when it is not flagged. */
   readonly waited: (row: TicketSummaryRow) => number | null;
   /** The owners' cancelled view: who cancelled and why, and the fee charged. */
@@ -732,8 +768,9 @@ function boardColumns({
           row.cancelStandardFee !== null &&
           row.cancelFee !== row.cancelStandardFee;
         const days = waited(row);
-        const warning =
-          row.pendingProposals > 0
+        const warning = approvalWaiting(row)
+          ? tn('repair.board.approvalWaiting')
+          : row.pendingProposals > 0
             ? tn('repair.board.priceChangeWaiting')
             : feeChanged
               ? tn('repair.board.feeChanged')

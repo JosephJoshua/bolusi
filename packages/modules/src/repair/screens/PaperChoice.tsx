@@ -2,8 +2,8 @@
  * PaperChoice — the paper this phone prints slips on, saved at once, and a test page to check it
  * through the phone's print dialog. Shared by Settings (PaperScreen) and the new-phone setup.
  */
-import { Button, SegmentedControl, TextInput, color, space } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { Button, SegmentedControl, TextInput, color, space, Text } from '@bolusi/ui';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import { tn } from '../i18n.js';

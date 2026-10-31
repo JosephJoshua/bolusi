@@ -5,7 +5,7 @@
  * THE TARGET USER types a new PIN — the owner never learns it (§6.6). So the flow is: choose a target
  * → hand the device over → the target enters a new PIN and repeats it → reset. Core's `resetPin`
  * enforces the permission, the directory-membership restriction, and the §6.6 privileged-target rule
- * (only a main owner may reset another main owner); this model decides what the screen shows.
+ * (an owner's PIN is the main owner's to reset); this model decides what the screen shows.
  *
  * The list (permission first, the acting owner left out) is `staff-pin.model.ts`. Two decisions
  * live here:

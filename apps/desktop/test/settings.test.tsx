@@ -209,19 +209,19 @@ describe('Settings on the PC', () => {
     await openSettings();
     fireEvent.click(byTestId('desktop.settings.changePin'));
     await screen.findByTestId('desktop.changePin');
-    typePin('111111');
-    typePin('222222');
-    typePin('222222');
+    typePin('571938');
+    typePin('593026');
+    typePin('593026');
     await waitFor(() =>
       expect(byTestId('desktop.changePin.message').textContent).toBe('PIN lama salah. Coba lagi.'),
     );
-    typePin('123456');
-    typePin('654321');
-    typePin('654321');
+    typePin('274816');
+    typePin('639174');
+    typePin('639174');
     await screen.findByTestId('desktop.changePin.done');
     expect(callsTo('session.changePin')).toEqual([
-      [TECH.id, '111111', '222222'],
-      [TECH.id, '123456', '654321'],
+      [TECH.id, '571938', '593026'],
+      [TECH.id, '274816', '639174'],
     ]);
   });
 
@@ -231,9 +231,9 @@ describe('Settings on the PC', () => {
     await openSettings();
     fireEvent.click(byTestId('desktop.settings.changePin'));
     await screen.findByTestId('desktop.changePin');
-    typePin('111111');
-    typePin('222222');
-    typePin('333333');
+    typePin('571938');
+    typePin('593026');
+    typePin('361548');
     await waitFor(() =>
       expect(byTestId('desktop.changePin.message').textContent).toContain('tidak sama'),
     );

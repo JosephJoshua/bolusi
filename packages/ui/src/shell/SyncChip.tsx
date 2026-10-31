@@ -9,7 +9,8 @@
  * an error. Only `attention` — a rejected op or a revocation — earns the danger token.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { NATIVE_DRIVER, easeEnter, useReducedMotion } from '../motion.js';
 import { color, radius, size, space, touch, type } from '../tokens.js';

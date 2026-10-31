@@ -17,9 +17,10 @@ import {
   space,
   touch,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
@@ -36,6 +37,8 @@ export interface KasBoardProps {
   readonly onMove: () => void;
   readonly onSettle: (count: CashCountRow) => void;
   readonly onReceive: (balance: NamedBalance) => void;
+  /** Give back what a customer paid beyond their bill. */
+  readonly onRefund: (balance: NamedBalance) => void;
   /** The day's records; absent for someone who cannot read the store's money. */
   readonly onHistory?: (() => void) | undefined;
   /** A tablet beside another pane shows no header of its own; absent on a phone. */
@@ -49,6 +52,7 @@ export function KasBoard({
   onMove,
   onSettle,
   onReceive,
+  onRefund,
   onHistory,
   testID = 'money.kas',
 }: KasBoardProps): React.JSX.Element {
@@ -207,6 +211,7 @@ export function KasBoard({
               label={row.customer ?? row.documentLabel}
               detail={row.customer === null ? undefined : row.documentLabel}
               value={formatMoney(-row.balance)}
+              onPress={mayReceive ? () => onRefund(row) : undefined}
               testID={`${testID}.owedBack.${row.documentId}`}
             />
           ))}

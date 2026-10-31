@@ -3,7 +3,8 @@
  * step's title, over a segmented progress bar. The count is text, so progress never rides on the
  * bar's colour alone (§6.3).
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, radius, space, type } from '../tokens.js';
 

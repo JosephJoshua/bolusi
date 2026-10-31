@@ -24,7 +24,9 @@
 // migrated from that checkout. BUNDLE_INTERVAL_S overrides the devices' bundle refresh throttle (0
 // refreshes every cycle, as clients did before the throttle).
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { BUNDLE_REFRESH_INTERVAL_MS } from '@bolusi/core';
@@ -118,6 +120,7 @@ async function startServer(): Promise<ChildProcess> {
       PORT: String(port),
       // Required at boot; no simulated device registers a push token, so nothing is ever sent.
       EXPO_ACCESS_TOKEN: 'load-test-not-used',
+      MEDIA_STORAGE_DIR: mkdtempSync(join(tmpdir(), 'bolusi-load-media-')),
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   });

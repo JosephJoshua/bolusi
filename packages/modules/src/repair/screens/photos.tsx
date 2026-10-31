@@ -1,10 +1,10 @@
 // A repair's photos, kept to one row: a scrolling strip, a sheet with every photo by group, and the
 // full-screen viewer (zoom, save or send). Used wherever a screen shows photos it does not capture.
 import { t } from '@bolusi/i18n';
-import { PhotoStrip, PhotoViewer, Sheet, TextButton, color, space, type } from '@bolusi/ui';
+import { PhotoStrip, PhotoViewer, Sheet, TextButton, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 

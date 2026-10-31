@@ -16,6 +16,8 @@ import {
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
+  handoverReversedApplier,
+  ticketDetailsCorrectedApplier,
   downPaymentChangedApplier,
   markedRepairedApplier,
   quoteChangedApplier,
@@ -64,6 +66,8 @@ import {
   customerDetailsCorrectedRule,
   customerRegisteredRule,
   deviceReturnedRule,
+  handoverReversedRule,
+  ticketDetailsCorrectedRule,
   downPaymentCorrectedRule,
   downPaymentReceivedRule,
   intakeOptionsChangedRule,
@@ -377,6 +381,30 @@ export const deviceReturnedPayload = deviceReturnedPayloadV2
   .extend({ checklist: z.array(zHandoverCheck).max(MAX_OPTIONS + 50) })
   .strict();
 
+/** Why an owner took a handover back, said in their words. */
+export const handoverReversedPayload = z
+  .object({ reason: z.string().trim().min(1).max(500) })
+  .strict();
+
+/**
+ * What intake wrote down, corrected while the phone is in the store: only the parts that changed.
+ * `customer` is the name and number the servisan names from now on. With `customerId` the
+ * servisan moves to that customer, whose record must read the same (intake picked the wrong
+ * person, or a shared record must not be renamed); without it the servisan's own customer, named
+ * by no other servisan, is renamed to it.
+ */
+export const ticketDetailsCorrectedPayload = z
+  .object({
+    customer: customerRegisteredPayload.optional(),
+    customerId: z.string().min(1).optional(),
+    device: zDevice.omit({ passcode: true }).strict().optional(),
+    passcode: z.string().max(200).nullable().optional(),
+    complaint: z.string().trim().min(1).max(MAX_TEXT).optional(),
+    peripherals: z.array(zRecordedOption).max(50).optional(),
+    reason: z.string().trim().max(500),
+  })
+  .strict();
+
 /** Money the customer paid up front: a positive amount when received. */
 export const downPaymentReceivedPayload = z.object({ amount: zFee.min(1) }).strict();
 
@@ -437,6 +465,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
       2: ticketOpenedPayloadV2,
       3: ticketOpenedPayloadV3,
     },
+    // Before v4 the rule skips the ownership-video check.
+    minPushVersion: 4,
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
@@ -507,6 +537,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 2,
     payload: ticketCancelledPayload,
     payloadByVersion: { 1: ticketCancelledPayloadV1 },
+    // v1 names no fee, so it would skip the cancel-fee limit.
+    minPushVersion: 2,
     reversal: 'Not reversible in slice 1: open a new ticket if the customer changes their mind.',
     apply: ticketCancelledApplier,
     rule: ticketCancelledRule,
@@ -527,6 +559,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 2,
     payload: quoteChangedPayload,
     payloadByVersion: { 1: quoteChangedPayloadV1 },
+    // v1 skips the customer-agreement check.
+    minPushVersion: 2,
     reversal: 'Reversed by a further repair.quote_changed line with the opposite amount.',
     apply: quoteChangedApplier,
     rule: quoteChangedRule,
@@ -557,12 +591,37 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 3,
     payload: deviceReturnedPayload,
     payloadByVersion: { 1: deviceReturnedPayloadV1, 2: deviceReturnedPayloadV2 },
-    reversal: 'Not reversible: the device physically left the store. Warranty opens a new ticket.',
+    // Before v3 the rule skips the handover checklist.
+    minPushVersion: 3,
+    reversal:
+      'Reversed by an owner with repair.handover_reversed when the phone never left (the wrong ' +
+      'servisan was handed over). Warranty opens a new ticket.',
     apply: deviceReturnedApplier,
     rule: deviceReturnedRule,
     permission: REPAIR_PERMISSION.handover,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
+  },
+  [REPAIR_OP.handoverReversed]: {
+    schemaVersion: 1,
+    payload: handoverReversedPayload,
+    reversal: 'Reversed by handing the phone over again (repair.device_returned).',
+    apply: handoverReversedApplier,
+    rule: handoverReversedRule,
+    // Undoing a handover is an owner's decision, like cancelling: the same switch in the role editor.
+    permission: REPAIR_PERMISSION.cancel,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
+  },
+  [REPAIR_OP.ticketDetailsCorrected]: {
+    schemaVersion: 1,
+    payload: ticketDetailsCorrectedPayload,
+    reversal: 'Reversed by another repair.ticket_details_corrected with the earlier details.',
+    apply: ticketDetailsCorrectedApplier,
+    rule: ticketDetailsCorrectedRule,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.details, severity: 'minor' },
   },
   [REPAIR_OP.intakeOptionsChanged]: {
     schemaVersion: 3,

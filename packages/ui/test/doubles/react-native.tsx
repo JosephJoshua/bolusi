@@ -255,6 +255,8 @@ export const Animated = {
   View: hostComponent('Animated.View'),
   // A plain `Text` host, so the "text lives inside <Text>" rule still holds for it.
   Text: hostComponent('Text'),
+  // Nothing animates here, so the animated version of a component is the component itself.
+  createAnimatedComponent: <C,>(component: C): C => component,
   Value: AnimatedValue,
   spring: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),
   timing: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),

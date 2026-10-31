@@ -57,6 +57,9 @@ export { NAV_BAR_INSET } from './platform-insets.js';
 export { ViewportProvider, breakpoint, useViewport, widthClassOf } from './viewport.js';
 export type { Viewport, WidthClass } from './viewport.js';
 
+// ---- Text that follows a live system font size change -----------------------------------------
+export { FontScaleProvider, Text } from './text.js';
+
 // ---- Component inventory (design-system §3) ----------------------------------------------------
 export * from './components/index.js';
 export * from './shell/index.js';

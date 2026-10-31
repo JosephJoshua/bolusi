@@ -10,7 +10,8 @@
  * retrying a denial just denies again. Denial is logged at the command/query layer (FR-1045), not
  * here — a UI component is not an audit surface.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, size, space, type } from '../tokens.js';
 import { Button } from './Button.js';

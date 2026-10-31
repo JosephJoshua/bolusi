@@ -170,6 +170,10 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       if (!isFoldableSchemaVersion(currentVersion, schemaVersion)) {
         return { kind: 'known', validate: () => false };
       }
+      // A version the type's rule no longer fully judges is refused in a new push. Only push
+      // ingestion asks: stored history still folds at every version.
+      const minPushVersion = declaration.minPushVersion ?? 1;
+      if (schemaVersion < minPushVersion) return { kind: 'retired', minPushVersion };
 
       // THE PAYLOAD GATE (task 127; 05 §8, 04 §3). The version is foldable, so validate the payload
       // against the schema THAT VERSION declared — `payloadSchemaFor` returns `payload` for the
@@ -252,6 +256,9 @@ export interface ServerDeps {
   readonly accessLogSink: AccessLogSink;
   readonly bodyCaps: (path: string) => BodyCaps;
   readonly clientIp: (c: Context<AppEnv>) => string;
+  /** Mark cookies Secure. From config in production (main.ts); off for tests and the plain-http
+   *  harness, whose browsers would otherwise drop them. */
+  readonly secureCookies: boolean;
   /** Ed25519 verify + SHA-256 over JCS bytes for the push pipeline (05 §3; task 16 sync push). */
   readonly serverCrypto: CryptoPort;
   /** Fresh ids for `device_anomalies` rows the push pipeline writes (05 §3). */
@@ -421,6 +428,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     accessLogSink: overrides.accessLogSink ?? consoleAccessLogSink,
     bodyCaps: overrides.bodyCaps ?? defaultBodyCaps,
     clientIp: overrides.clientIp ?? defaultClientIp,
+    secureCookies: overrides.secureCookies ?? false,
     serverCrypto,
     newOpLogId,
     opRegistry: overrides.opRegistry ?? serverOpRegistry,

@@ -103,6 +103,18 @@ export function createCoreRepairRuntime(deps: {
         simulate: (id) => call('money.qris.simulate', id),
       },
     },
+    approvals: {
+      userId,
+      query: ((name: string, input: unknown) =>
+        call('approvals.query', name, input)) as RepairRuntime['approvals']['query'],
+      run: ((name: string, input: unknown) =>
+        call('approvals.run', name, input)) as RepairRuntime['approvals']['run'],
+      hasPermission: (permission) => granted.has(permission),
+      colleagueHasPermission: (colleague, permission) =>
+        deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+      limitOf,
+      newId,
+    },
     subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
     ticketSyncStatuses: (ticketIds) => call('repair.ticketSyncStatuses', ticketIds),
     technicians: () => call('repair.technicians'),

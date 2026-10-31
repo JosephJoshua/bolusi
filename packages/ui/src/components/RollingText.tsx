@@ -7,7 +7,7 @@
  * would be noise.
  */
 import type { StyleProp, TextStyle } from 'react-native';
-import { Animated } from 'react-native';
+import { AnimatedText } from '../text.js';
 
 import { useEntrance } from '../motion.js';
 import { useChangeDirection } from '../direction.js';
@@ -33,9 +33,9 @@ function Roll({
 }): React.JSX.Element {
   const entrance = useEntrance({ from });
   return (
-    <Animated.Text testID={testID} style={[style, entrance]}>
+    <AnimatedText testID={testID} style={[style, entrance]}>
       {children}
-    </Animated.Text>
+    </AnimatedText>
   );
 }
 
@@ -49,9 +49,9 @@ export function RollingText({
   const direction = useChangeDirection(value);
   if (direction === null || still) {
     return (
-      <Animated.Text testID={testID} style={style}>
+      <AnimatedText testID={testID} style={style}>
         {children}
-      </Animated.Text>
+      </AnimatedText>
     );
   }
   // A new key per value plays the roll again.

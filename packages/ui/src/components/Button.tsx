@@ -6,7 +6,8 @@
  * passes `color.danger` for emphasis and the meaning of red is gone app-wide. A new look = a new
  * variant = a design-system change first.
  */
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text } from 'react-native';
+import { Text } from '../text.js';
+import { ActivityIndicator, Animated, Pressable, StyleSheet } from 'react-native';
 
 import { usePressScale } from '../motion.js';
 import { border, color, radius, size as sizes, space, touch, type } from '../tokens.js';

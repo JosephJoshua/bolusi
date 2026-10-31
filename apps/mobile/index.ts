@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
+import { FontScaleProvider } from '@bolusi/ui';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
@@ -641,7 +642,12 @@ function buildRootProps(): RootProps {
 function Bootstrapped(): React.JSX.Element | null {
   rootProps ??= buildRootProps();
   // Live system insets for the shell, so the header follows the status bar when a tablet turns.
-  return createElement(SafeAreaProvider, null, Root(rootProps));
+  // The font scale redraws every text after a system font size change (packages/ui/src/text.tsx).
+  return createElement(
+    SafeAreaProvider,
+    null,
+    createElement(FontScaleProvider, null, Root(rootProps)),
+  );
 }
 
 // Before the first screen, so a phone held sideways at launch turns upright straight away.

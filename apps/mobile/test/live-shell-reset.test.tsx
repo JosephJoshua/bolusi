@@ -33,6 +33,7 @@ vi.mock('expo-location', () => ({
 }));
 
 import { DomainError } from '@bolusi/core';
+import { sql } from 'kysely';
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 import * as SecureStore from 'expo-secure-store';
 
@@ -200,5 +201,30 @@ describe("colleagues' PIN state is only for those who may unlock or reset", () =
     const refused = await controller!.listPinTargets().catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(DomainError);
     expect((refused as DomainError).code).toBe('PERMISSION_DENIED');
+  });
+});
+
+describe("a peer owner's PIN is the main owner's to manage", () => {
+  test('a store owner is not offered a peer store owner in PIN karyawan', async () => {
+    let controller: AppSessionController | null = null;
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedOwnerAndLockedTarget(fixture);
+    const screen = await mountRoot(fixture, {
+      onSessionController: (next) => {
+        controller = next;
+      },
+    });
+    await signInAsOwner(screen);
+    const ids = async () => (await controller!.listPinTargets()).map((user) => user.id);
+    expect(await ids()).toContain(SECOND_USER_ID);
+
+    // Budi becomes a second store owner here: the store owner may no longer touch his PIN.
+    await sql`
+      INSERT INTO user_roles_directory (user_id, role_id, store_id)
+      SELECT ${SECOND_USER_ID}, role_id, store_id FROM user_roles_directory
+      WHERE user_id = ${fixture.userId}
+    `.execute(fixture.app.db.db);
+    expect(await ids()).not.toContain(SECOND_USER_ID);
   });
 });

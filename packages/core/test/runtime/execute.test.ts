@@ -92,6 +92,39 @@ describe('step 1 — strict input parse (04 §5.1)', () => {
     expect(JSON.stringify(domainError.details)).not.toContain(secret);
     expect(domainError.message).not.toContain(secret);
   });
+
+  it('refuses an op holding a NUL character before signing it, since the server cannot store one', async () => {
+    const fixture = await ready(6);
+    const command = makeCommandSpy(fixture.log);
+
+    const error = await fixture.runtime
+      .execute(
+        command,
+        { title: 't', body: 'pasted\u0000text' },
+        fixture.runtime.createContext(fixture.ownerId),
+      )
+      .catch((e: unknown) => e);
+
+    expectDomainError(error, 'VALIDATION_FAILED');
+    expect(appendedOps(fixture), 'nothing appended').toEqual([]);
+    expect(fixture.projected, 'projections untouched').toEqual([]);
+  });
+
+  it('refuses an op holding an unpaired surrogate (text cut mid-emoji) before signing it', async () => {
+    const fixture = await ready(6);
+    const command = makeCommandSpy(fixture.log);
+
+    const error = await fixture.runtime
+      .execute(
+        command,
+        { title: 't', body: 'layar retak \u{1F4F1}'.slice(0, -1) },
+        fixture.runtime.createContext(fixture.ownerId),
+      )
+      .catch((e: unknown) => e);
+
+    expectDomainError(error, 'VALIDATION_FAILED');
+    expect(appendedOps(fixture), 'nothing appended').toEqual([]);
+  });
 });
 
 describe('the sequence runs in 04 §5.1 order', () => {

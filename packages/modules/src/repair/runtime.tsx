@@ -8,11 +8,16 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
+import type { ApprovalsPort } from '../approvals/runtime.js';
+import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import type { ApprovalRow } from '../approvals/queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { HandoverQris } from './handover-payment.js';
+import { refundsFor } from './commands.js';
+import { paymentMethods } from '../money/payment-entry.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { repairModule } from './manifest.js';
 import {
@@ -44,8 +49,11 @@ export interface SlipOutput {
   readonly paper: PaperSettings;
 }
 
-/** Why a print did not go out: no printer picked yet, the picked one is gone, or it refused the job. */
-export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed';
+/**
+ * Why a print did not go out: no printer picked yet, the picked one is gone, it refused the job, or
+ * the phone's print dialog or PDF never got ready (the system's print call hung).
+ */
+export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed' | 'stuck';
 
 /** Thrown by `RepairPrinting.output` when the job did not reach the printer. */
 export class PrinterProblem extends Error {
@@ -118,6 +126,8 @@ export interface RepairTechnician {
 export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSource {
   /** The money ledger: payment methods, a servisan's payments, and taking money at handover. */
   readonly money: MoneyPort;
+  /** Approval requests: asking an owner for a discount or a cancel, and answering them. */
+  readonly approvals: ApprovalsPort;
   /** Op sync statuses per ticket id (design-system §3.5); an absent ticket is all-synced. */
   ticketSyncStatuses(ticketIds: readonly string[]): Promise<EntitySyncStatuses>;
   /** Active colleagues who hold `repair.work` in this store, by name. */
@@ -283,6 +293,30 @@ export function useTicketQris(ticketId: string, ticketNumber: string | null): Ha
   };
 }
 
+/**
+ * What the counter hands back at a handover that leaves the customer in credit (a cancelled
+ * servisan's DP above its fee), method by method: the same split `returnDevice` records, so the
+ * counter knows to give cash from the drawer or send a transfer back before the phone goes.
+ */
+export function useHandoverRefunds(
+  ticketId: string,
+  credit: number,
+  accounts: readonly PaymentAccountRow[],
+): readonly { readonly account: string; readonly label: string; readonly amount: number }[] {
+  const money = useRepairQuery(
+    async (rt) =>
+      (await rt.money.query('documentMoney', { kind: REPAIR_DOCUMENT_KIND, id: ticketId }))
+        .rows[0] ?? null,
+    `handoverRefunds:${ticketId}`,
+  );
+  if (credit <= 0 || money.status !== 'ready' || money.data === null) return [];
+  const methods = paymentMethods(accounts);
+  return refundsFor(money.data, credit).map((refund) => ({
+    ...refund,
+    label: methods.find((method) => method.account === refund.account)?.label ?? refund.account,
+  }));
+}
+
 export interface PaymentMethodChoice {
   readonly account: string;
   readonly reference: string;
@@ -377,4 +411,17 @@ export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
     // The key is the photo's identity; a new object for the same photo must not reload it.
   }, [key]);
   return loaded !== null && loaded.key === key ? loaded.uri : null;
+}
+
+/**
+ * The approval requests a screen shows: a servisan's (`targetId`), or the ones waiting on this
+ * user. None for someone without approvals, so their board and servisan still read.
+ */
+export async function readApprovals(
+  runtime: RepairRuntime,
+  targetId?: string,
+): Promise<readonly ApprovalRow[]> {
+  if (!runtime.approvals.hasPermission(APPROVAL_PERMISSION.use)) return [];
+  const input = targetId === undefined ? {} : { targetId };
+  return (await runtime.approvals.query('approvalRequests', input)).rows;
 }

@@ -3,8 +3,8 @@
  * letters, tap the model. A phone the catalog does not know can still be added as typed. Picked
  * models list above the search, each with a way to take it off.
  */
-import { ListRow, SearchField, TextButton, color, space, type } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { ListRow, SearchField, TextButton, color, space, type, Text } from '@bolusi/ui';
+import { StyleSheet, View } from 'react-native';
 import { useState } from 'react';
 
 import { useSettledValue } from '../../screen-kit/index.js';

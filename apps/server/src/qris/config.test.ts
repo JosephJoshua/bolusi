@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import { qrisFromConfig } from './config.js';
 
-const base = { databaseUrl: 'postgres://x', port: 3000 };
+const base = { databaseUrl: 'postgres://x', port: 3000, secureCookies: true };
 const key = Buffer.alloc(32, 3).toString('base64');
 
 describe('QRIS through Xendit from the boot config', () => {

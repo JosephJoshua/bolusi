@@ -1,0 +1,69 @@
+{
+  "opType": {
+    "requestMade": "Approval requested",
+    "requestApproved": "Request approved",
+    "requestRejected": "Request rejected",
+    "requestWithdrawn": "Request withdrawn"
+  },
+  "refusal": {
+    "unknownKind": "This request is not known. Update the app.",
+    "notNeeded": "This does not need approval.",
+    "cannotAsk": "You cannot ask for this.",
+    "targetNotFound": "This repair is not in this store.",
+    "changed": "The repair changed since this was asked. Ask again if it is still needed.",
+    "alreadyAsked": "The same request is already waiting.",
+    "requestNotFound": "This request does not exist.",
+    "alreadyAnswered": "This request has already been answered.",
+    "ownRequest": "Someone else has to decide your own request.",
+    "cannotDecide": "You cannot decide this.",
+    "notYours": "Only the person who asked can withdraw it.",
+    "overLimit": "Over your limit. Ask the store owner."
+  },
+  "kind": {
+    "repairDiscount": "Discount",
+    "repairCancel": "Cancel the repair",
+    "repairPayLater": "Pay later",
+    "repairDownPayment": "Change down payment"
+  },
+  "status": {
+    "waiting": "Waiting",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "withdrawn": "Withdrawn",
+    "closed": "No longer valid"
+  },
+  "section": {
+    "title": "Approvals"
+  },
+  "row": {
+    "askedBy": "{name}: {reason}",
+    "answeredBy": "{status} by {name}",
+    "answeredNote": "{status} by {name}: {note}",
+    "withdrawn": "Withdrawn by the person who asked"
+  },
+  "step": {
+    "title": "Approval request",
+    "askedBy": "Asked by {name} · {time}",
+    "question": "Approve this request?",
+    "note": "Note (optional)",
+    "beyondLimit": "Above your limit of {amount}. Only the store owner can approve it."
+  },
+  "action": {
+    "ask": "Ask for approval",
+    "approve": "Approve",
+    "reject": "Reject",
+    "withdraw": "Withdraw request",
+    "decide": "Decide",
+    "open": "View"
+  },
+  "withdraw": {
+    "title": "Withdraw this request?",
+    "message": "The store owner will not need to decide it."
+  },
+  "done": {
+    "asked": "Request made. The store owner will decide.",
+    "approved": "Approved and recorded.",
+    "rejected": "Request rejected.",
+    "withdrawn": "Request withdrawn."
+  }
+}

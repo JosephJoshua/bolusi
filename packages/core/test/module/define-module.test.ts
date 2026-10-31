@@ -364,6 +364,35 @@ describe('schemaVersion (04 §3)', () => {
   });
 });
 
+describe('minPushVersion', () => {
+  const withFloor = (seed: number, minPushVersion: number) => {
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+    return () =>
+      defineModule<FixtureSuiteDatabase, typeof manifest>({
+        ...manifest,
+        operations: {
+          [`${id}.widget_created`]: {
+            ...manifest.operations[`${id}.widget_created`]!,
+            minPushVersion,
+          },
+        },
+      });
+  };
+
+  test.each([
+    ['zero', 0],
+    ['fractional', 0.5],
+    ['above the current version', 2],
+  ])('rejects a floor that is %s', (_label, value) => {
+    expectRejected(withFloor(140 + String(_label).length, value), 'minPushVersion');
+  });
+
+  test('accepts the current version as the floor', () => {
+    expect(withFloor(171, 1)).not.toThrow();
+  });
+});
+
 describe('payloadByVersion — retained schemas for superseded versions (04 §3; task 127)', () => {
   /** A manifest whose one op type declares `schemaVersion` with the given retention map. */
   function manifestAt(

@@ -195,7 +195,7 @@ const PHONE_PAGE: EndpointProbes = {
   unauthenticated: {
     kind: 'absent',
     reason:
-      'bearer-exempt by design: the store phone has no device token, so the unguessable key is its only credential',
+      'bearer-exempt by design: the store phone has no device token; the unguessable key opens the page once, then only that browser (its HttpOnly phone cookie) may use the pairing',
   },
   unauthenticatedRequest: unauthLeg('GET', () => `/h/${'A'.repeat(32)}`),
 };
@@ -730,6 +730,7 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   ),
   'POST /v1/handoff/:id/withdraw': handoffProbes('POST', '/withdraw', JSON.stringify({ seq: 1 })),
   'GET /v1/handoff/:id/events': handoffProbes('GET', '/events?after=0'),
+  'GET /v1/handoff/:id/clip/:seq': handoffProbes('GET', '/clip/1'),
   'DELETE /v1/handoff/:id': handoffProbes('DELETE', ''),
   'GET /h/:key': PHONE_PAGE,
   'GET /h/:key/next': PHONE_PAGE,

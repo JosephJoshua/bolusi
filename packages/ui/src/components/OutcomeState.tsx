@@ -9,7 +9,8 @@
  * PIN changed): the moment the work is done should feel done.
  */
 import type { ReactNode } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, StyleSheet, View } from 'react-native';
 
 import { useEntrance, usePop, useWipe } from '../motion.js';
 import { color, radius, size, space, type } from '../tokens.js';

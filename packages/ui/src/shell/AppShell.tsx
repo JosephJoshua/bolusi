@@ -24,15 +24,8 @@
  * this component only surfaces the affordance.
  */
 import { useMemo, useState, type ReactNode } from 'react';
-import {
-  Animated,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type TextStyle,
-} from 'react-native';
+import { AnimatedText, Text } from '../text.js';
+import { Pressable, ScrollView, StyleSheet, View, type TextStyle } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { useStamp } from '../motion.js';
@@ -189,9 +182,9 @@ function StampedTitle({
   const stamp = useStamp();
   return (
     <View style={styles.stampSlot}>
-      <Animated.Text testID={testID} numberOfLines={2} style={[style, stamp]}>
+      <AnimatedText testID={testID} numberOfLines={2} style={[style, stamp]}>
         {title}
-      </Animated.Text>
+      </AnimatedText>
     </View>
   );
 }

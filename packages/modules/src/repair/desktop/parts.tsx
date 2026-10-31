@@ -101,6 +101,7 @@ const PRINTER_PROBLEM_KEY: Readonly<Record<PrinterProblemReason, RepairKey>> = {
   noPrinter: 'repair.print.problem.noPrinter',
   printerMissing: 'repair.print.problem.printerMissing',
   failed: 'repair.print.problem.failed',
+  stuck: 'repair.print.problem.stuck',
 };
 
 export function PrinterProblemBanner({
@@ -150,6 +151,7 @@ export function MoneyField({
       {...rest}
       prefix={tn('repair.desk.currency')}
       inputMode="numeric"
+      selectOnFocus
       inputClassName="tabular text-right"
       // Empty only when nothing is typed: a fee of 0 (waived) must read as 0.
       value={value === null ? '' : formatNumber(value)}

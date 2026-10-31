@@ -19,9 +19,10 @@ import {
   space,
   touch,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useActionRunner, useSettledValue } from '../../screen-kit/index.js';
 import {
