@@ -10,6 +10,7 @@ import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
 import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
 import { registerRepairCatalog } from '../src/repair/i18n.js';
 
+import { REPAIR_OP, REPAIR_PERMISSION } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS, warrantyUntil } from '../src/repair/intake-options.js';
 import {
   claimIntakeDraft,
@@ -218,6 +219,49 @@ describe('whose phone, and when', () => {
     // A phone clock set back past the pickup.
     h.advance(-DAY);
     await expectRefusal(claim(h, original, h.cashierId), 'PERMISSION_DENIED', 'warrantyEnded');
+  });
+
+  test('the server holds a free claim to the warranty by when it received it, not the phone’s clock', async () => {
+    const h = await harness(6211);
+    const server = await openRepairHarness(6261, {
+      tenantId: h.tenantId,
+      storeId: h.storeId,
+      users: [
+        h.cashierId,
+        h.technicianId,
+        h.technician2Id,
+        h.zeroUserId,
+        h.ownerId,
+        h.storeOwnerId,
+      ],
+    });
+    open.push(server);
+    const original = await pickedUp(h);
+    const returnedAt = (await ticket(h, original)).returnedAt as number;
+    // Signed on a phone clock a day after pickup, whenever it really was.
+    h.advance(DAY);
+    await claim(h, original, h.cashierId);
+    const ops = await h.ownOps();
+    const claimOp = [...ops].reverse().find((op) => op.type === REPAIR_OP.ticketOpened)!;
+    expect(claimOp.type).toBe(REPAIR_OP.ticketOpened);
+    let arrival = 0;
+    for (const op of ops.slice(0, ops.indexOf(claimOp))) {
+      await server.deliverPulled(op, (arrival += 1));
+    }
+
+    const cashier = (userId: string, permissionId: string) =>
+      Promise.resolve(
+        userId !== h.cashierId || permissionId !== REPAIR_PERMISSION.warrantyException,
+      );
+    const judge = (receivedAt?: number) =>
+      server.checkRule(claimOp, undefined, {
+        holdsPermission: cashier,
+        ...(receivedAt === undefined ? {} : { receivedAt }),
+      });
+    // A device judges by the op's own time, as before.
+    await judge();
+    await judge(returnedAt + 2 * DAY);
+    await expectRefusal(judge(returnedAt + 31 * DAY), 'PERMISSION_DENIED', 'warrantyEnded');
   });
 
   test('cancelling a claim costs nothing unless the owner sets a fee', async () => {
