@@ -115,6 +115,7 @@ export interface Devices {
   lastSeq: Generated<Int8>;
   lastSyncAt: Int8 | null;
   name: string | null;
+  personalUserId: string | null;
   revokedAt: Int8 | null;
   revokedBy: string | null;
   signingKeyPublic: string;

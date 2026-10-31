@@ -55,6 +55,9 @@ export type EnrollmentStep = 'credentials' | 'confirm' | 'done';
 export interface StoreChoice {
   readonly id: string;
   readonly name: string;
+  /** Who a phone here may be set up for as their own: the signed-in owner first, then staff with a
+   *  PIN. Empty from an older server, which only sets up shared phones. */
+  readonly people?: readonly { readonly id: string; readonly name: string }[];
 }
 
 /** What `POST /v1/auth/login` returns (§4.2), trimmed to what the wizard renders. */
@@ -113,6 +116,8 @@ export interface EnrollmentState {
   /** Set after a successful login; carries the tenant/store choices step 2 confirms. */
   readonly login: LoginResult | null;
   readonly selectedStoreId: string | null;
+  /** Whose own phone this is; null (the default) for one the store shares. */
+  readonly personalUserId: string | null;
   readonly busy: boolean;
   readonly failure: EnrollmentFailure | null;
   /** §8.5: a `revoked` device lands here with the danger banner. */
@@ -133,6 +138,7 @@ export function initialEnrollmentState(revoked = false): EnrollmentState {
     deviceName: '',
     login: null,
     selectedStoreId: null,
+    personalUserId: null,
     busy: false,
     failure: null,
     revoked,
@@ -192,6 +198,28 @@ export function chosenStoreId(state: EnrollmentState): string | null {
   if (state.selectedStoreId !== null) return state.selectedStoreId;
   const stores = state.login?.stores ?? [];
   return stores.length === 1 ? (stores[0]?.id ?? null) : null;
+}
+
+/**
+ * Who a phone at the chosen store may be set up for as their own (permission-scoped sync): it then
+ * holds what that person may see, and only they sign in on it. The signed-in owner comes first.
+ * Empty before a store is chosen, and from an older server.
+ */
+export function personalChoices(
+  state: EnrollmentState,
+): readonly { readonly id: string; readonly name: string }[] {
+  const storeId = chosenStoreId(state);
+  return state.login?.stores.find((store) => store.id === storeId)?.people ?? [];
+}
+
+/**
+ * Whose own phone this becomes: the person picked, if the chosen store still offers them (picking
+ * another store can drop them), else null, a phone the store shares.
+ */
+export function chosenPersonalUserId(state: EnrollmentState): string | null {
+  const picked = state.personalUserId;
+  if (picked === null) return null;
+  return personalChoices(state).some((person) => person.id === picked) ? picked : null;
 }
 
 /** The tenant + store the user is about to bind to — what step 2 puts on screen, big. */

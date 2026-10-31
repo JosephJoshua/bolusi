@@ -756,14 +756,16 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       const enroll = requireEnrollment();
       const booted = app;
       if (booted === null || booted.deviceId === null) {
-        await enroll.controller.enroll({ login: heldLogin, ...request });
+        // The counter PC is always shared by its store.
+        await enroll.controller.enroll({ login: heldLogin, ...request, personalUserId: null });
         return;
       }
       // Re-enrolling replaces this PC's registration (and carries its unsent work over), so
       // nothing may keep running under the old one meanwhile.
       stopServices();
       try {
-        await enroll.controller.enroll({ login: heldLogin, ...request });
+        // The counter PC is always shared by its store.
+        await enroll.controller.enroll({ login: heldLogin, ...request, personalUserId: null });
       } catch (error) {
         // Nothing was replaced: pick up where the PC was.
         if (!stopped) void startEnrolledServices(booted, enroll);

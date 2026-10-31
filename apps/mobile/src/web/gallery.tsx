@@ -888,6 +888,24 @@ export const ENTRIES: readonly HarnessEntry[] = [
     ),
   },
   {
+    // Set up as a staff member's own phone: only they sign in, and it holds what they may see.
+    screen: 'enrollment',
+    state: 'confirmPersonal',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="confirmPersonal">
+        <EnrollmentInteractive
+          revoked={false}
+          step="confirm"
+          over={{
+            selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
+            personalUserId: 'staff-yosua',
+            deviceName: 'HP Yosua',
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
     screen: 'enrollment',
     state: 'confirmOneStore',
     render: () => (

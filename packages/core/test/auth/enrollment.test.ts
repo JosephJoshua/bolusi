@@ -571,6 +571,24 @@ describe('the enrolling owner’s own first PIN', () => {
     await runEnrollment(fx.deps, fx.params);
     expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBeNull();
   });
+
+  it('is not offered on a phone set up as someone else’s own, where the owner never signs in', async () => {
+    const someoneElse = '0190a000-0000-7000-8000-00000000beef';
+    fx = await fixture(181, undefined, undefined, (bundle) => {
+      (bundle as { personalUserId?: string }).personalUserId = someoneElse;
+    });
+    await runEnrollment(fx.deps, { ...fx.params, personalUserId: someoneElse });
+    expect(fx.transport.calls.at(-1)!.body.personalUserId).toBe(someoneElse);
+    expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBeNull();
+  });
+
+  it('is still offered on the owner’s own phone', async () => {
+    fx = await fixture(182, undefined, undefined, (bundle) => {
+      (bundle as { personalUserId?: string }).personalUserId = bundle.users[0]!.id;
+    });
+    await runEnrollment(fx.deps, { ...fx.params, personalUserId: fx.params.ownerUserId });
+    expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBe(fx.params.ownerUserId);
+  });
 });
 
 describe('applyBundle atomicity on the enrollment path (task 179)', () => {

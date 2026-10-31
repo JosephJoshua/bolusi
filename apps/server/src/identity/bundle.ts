@@ -58,7 +58,9 @@ function toVerifier(row: {
 }
 
 /**
- * Build the bundle for a device at `(tenantId, storeId)`, inside the caller's forTenant tx. Arrays
+ * Build the bundle for a device at `(tenantId, storeId)`, inside the caller's forTenant tx. A
+ * personal device (`personalUserId`) still lists the store's people, whose names and roles its
+ * screens show, but only its person carries a PIN verifier: nobody else can sign in on it. Arrays
  * are sorted deterministically so the RFC 8785 etag is stable across identical directory states
  * (JCS canonicalizes object keys but not array element order).
  */
@@ -66,6 +68,7 @@ export async function buildBundle(
   db: TenantDb,
   tenantId: string,
   storeId: string,
+  personalUserId: string | null = null,
 ): Promise<DeviceBundle> {
   const tenant = await db
     .selectFrom('tenants')
@@ -173,9 +176,14 @@ export async function buildBundle(
               `${b.roleId}${b.storeId ?? NIL_UUID}`,
             ),
           ),
-        // Verifier minimization: only ACTIVE users of this store carry a verifier.
+        // Verifier minimization: only ACTIVE users of this store carry a verifier, and on a
+        // personal device only its person.
         pinVerifier:
-          status === 'active' && verifierRow !== undefined ? toVerifier(verifierRow) : null,
+          status === 'active' &&
+          verifierRow !== undefined &&
+          (personalUserId === null || personalUserId === u.id)
+            ? toVerifier(verifierRow)
+            : null,
       };
     })
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -185,6 +193,9 @@ export async function buildBundle(
     store: { id: store.id, name: store.name },
     stores: stores.map((row) => ({ id: row.id, name: row.name })),
     settings: { idleLockSeconds: readIdleLock(tenant.configuration) },
+    // Only on a personal device: an older app parses the bundle strictly and knows no such key, and
+    // a shared device's bundle (and so its etag) stays as it was.
+    ...(personalUserId === null ? {} : { personalUserId }),
     users: bundleUsers,
     rolesSnapshot: roles
       .map((r) => ({
