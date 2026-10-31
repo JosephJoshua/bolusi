@@ -6,6 +6,7 @@ import {
   Chip,
   ConfirmSheet,
   ListRow,
+  Text,
   TextButton,
   TextInput,
   color,

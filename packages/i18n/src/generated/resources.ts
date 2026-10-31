@@ -89,6 +89,7 @@ const source = {
         AUTH_TOKEN_MISSING: 'Masuk lagi untuk melanjutkan pengiriman foto.',
         AUTH_TOKEN_INVALID:
           'Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.',
+        APP_UPDATE_REQUIRED: 'Perbarui aplikasi dulu agar data terbaru bisa masuk.',
       },
       rejection: {
         BAD_SIGNATURE: 'Gagal diverifikasi server. Kabari pemilik toko.',
@@ -670,6 +671,15 @@ const source = {
         rejectedExplain: 'Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.',
         rejectedBanner: '{count} perubahan ditolak server.',
       },
+      updateNeeded: {
+        title: 'Perbarui aplikasi',
+        body: 'Perangkat lain sudah pakai versi baru. Data baru dari perangkat lain tertahan sampai aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron.',
+        check: 'Cek pembaruan',
+        checking: 'Mengecek pembaruan…',
+        none: 'Belum ada pembaruan untuk HP ini. Coba lagi nanti.',
+        failed: 'Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.',
+        lastArrived: 'Data baru terakhir masuk {relative}',
+      },
     },
     conflict: {
       list: { banner: '{count} data bentrok butuh keputusan', title: 'Data Bentrok' },
@@ -866,6 +876,7 @@ export const resources = {
           AUTH_TOKEN_MISSING: 'Sign in again to keep sending photos.',
           AUTH_TOKEN_INVALID:
             'This device’s session has ended. Sign in again to keep sending photos.',
+          APP_UPDATE_REQUIRED: 'Update the app to receive the latest data.',
         },
         rejection: {
           BAD_SIGNATURE: 'Failed the server check. Tell the store owner.',
@@ -1457,6 +1468,15 @@ export const resources = {
           rejectedExplain: 'Also undone on this computer. Redo them if they’re still needed.',
           rejectedBanner:
             '{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}',
+        },
+        updateNeeded: {
+          title: 'Update the app',
+          body: 'Another device runs a newer version. New data from other devices waits until this app is updated. Changes made here still sync.',
+          check: 'Check for updates',
+          checking: 'Checking for updates…',
+          none: 'No update for this phone yet. Try again later.',
+          failed: 'Couldn’t check for updates. Check the connection, then try again.',
+          lastArrived: 'New data last arrived {relative}',
         },
       },
       conflict: {

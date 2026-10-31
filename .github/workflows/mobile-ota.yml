@@ -1,0 +1,62 @@
+name: mobile-ota
+
+# Publishes an over-the-air phone update (docs/app-updates.md): push a tag like mobile-ota-12 and
+# the JS bundle and assets, with a signed manifest per platform, go to a pre-release of that tag.
+# The server hands the newest one made for each phone's native build to that phone, which runs it
+# from its next start. Release the server first if the update brings a new change type or version.
+on:
+  push:
+    tags: ['mobile-ota-*']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Metro resolves @bolusi/* through dist/.
+      - run: pnpm exec tsc -b
+      - name: Check the server address and signing key are set
+        run: |
+          test -n "$EXPO_PUBLIC_API_URL" || { echo 'Set the BOLUSI_API_URL repository variable'; exit 1; }
+          test -n "$BOLUSI_OTA_PRIVATE_KEY" || { echo 'Set the BOLUSI_OTA_PRIVATE_KEY secret'; exit 1; }
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.BOLUSI_API_URL }}
+          BOLUSI_OTA_PRIVATE_KEY: ${{ secrets.BOLUSI_OTA_PRIVATE_KEY }}
+      # The same server address as the store build, so the fingerprints (runtime versions) match.
+      - name: Export the update
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.BOLUSI_API_URL }}
+        run: |
+          set -euo pipefail
+          resolve() { npx expo-updates runtimeversion:resolve --platform "$1" | node -pe 'JSON.parse(require("fs").readFileSync(0)).runtimeVersion'; }
+          echo "ANDROID_RUNTIME=$(resolve android)" >> "$GITHUB_ENV"
+          echo "IOS_RUNTIME=$(resolve ios)" >> "$GITHUB_ENV"
+          npx expo export --platform android --platform ios --output-dir "$RUNNER_TEMP/export"
+          npx expo config --json --type public > "$RUNNER_TEMP/expo-config.json"
+      # The signing key reaches only this script, not Metro or its plugins.
+      - name: Sign the update
+        working-directory: apps/mobile
+        env:
+          BOLUSI_OTA_PRIVATE_KEY: ${{ secrets.BOLUSI_OTA_PRIVATE_KEY }}
+        run: |
+          echo "Runtime versions: android $ANDROID_RUNTIME, ios $IOS_RUNTIME" >> "$GITHUB_STEP_SUMMARY"
+          node scripts/ota-release.mjs --dist "$RUNNER_TEMP/export" --out "$RUNNER_TEMP/release" \
+            --config "$RUNNER_TEMP/expo-config.json" \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
+            --runtime "android=$ANDROID_RUNTIME" --runtime "ios=$IOS_RUNTIME"
+      # A pre-release, so the PC app's updater (latest release) never sees it.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --prerelease --title "Phone update $GITHUB_REF_NAME" --notes "Over-the-air phone update." "$RUNNER_TEMP"/release/*

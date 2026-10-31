@@ -47,6 +47,8 @@ export interface UpdatesBridge {
   onChange(listener: (state: UpdateState) => void): () => void;
   /** Restart into the downloaded version. */
   install(): Promise<void>;
+  /** A dialog is open on the counter, so a quiet-time update must wait. */
+  busy(busy: boolean): void;
 }
 
 /** The window around the page, as far as the title bar needs it. */
