@@ -139,6 +139,7 @@
       "cashier": "Take in devices, set prices and hand devices back",
       "technician": "Work on repairs, including before and after photos",
       "manager": "Cashier and technician work, plus limited discounts and refunds",
+      "staff": "Notes only",
       "storeOwner": "Everything in the store, including staff, discounts and cancelling repairs"
     },
     "save": "Save",

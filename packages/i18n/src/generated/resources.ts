@@ -325,6 +325,7 @@ const source = {
           cashier: 'Terima HP, atur harga, dan serahkan HP ke pelanggan',
           technician: 'Kerjakan servisan, termasuk foto sebelum dan sesudah',
           manager: 'Tugas kasir dan teknisi, plus diskon dan refund terbatas',
+          staff: 'Hanya menulis catatan',
           storeOwner: 'Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan',
         },
         save: 'Simpan',
@@ -1112,6 +1113,7 @@ export const resources = {
             cashier: 'Take in devices, set prices and hand devices back',
             technician: 'Work on repairs, including before and after photos',
             manager: 'Cashier and technician work, plus limited discounts and refunds',
+            staff: 'Notes only',
             storeOwner:
               'Everything in the store, including staff, discounts and cancelling repairs',
           },
