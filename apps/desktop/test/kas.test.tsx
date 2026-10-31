@@ -80,24 +80,48 @@ describe('Kas on the PC', () => {
     expect(screen.queryByRole('button', { name: 'Kas' })).toBeNull();
   });
 
-  it('counts the drawer, showing the difference before it is saved', async () => {
+  it('the counter counts blind, checks it, may count once more, then saves', async () => {
     await openKas();
-    const expected = byTestId('money.desk.kas.expected').textContent!;
+    // What should be in the drawer is not shown to the counter, here or in the count.
+    expect(screen.queryByTestId('money.desk.kas.expected')).toBeNull();
     fireEvent.click(byTestId('money.desk.kas.count'));
     await screen.findByTestId('money.desk.count');
     expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', true);
-    expect(byTestId('money.desk.count.expected').textContent).toBe(expected);
-    const drawer = Number(expected.replace(/\D/g, ''));
-    fireEvent.change(byTestId('money.desk.count.counted'), {
-      target: { value: String(drawer - 5_000) },
-    });
-    expect(text('money.desk.count.difference')).toBe('KurangRp5.000');
+    expect(screen.queryByTestId('money.desk.count.expected')).toBeNull();
+    fireEvent.change(byTestId('money.desk.count.counted'), { target: { value: '1000000' } });
+    expect(screen.queryByTestId('money.desk.count.difference')).toBeNull();
+    expect(byTestId('money.desk.count.submit').textContent).toBe('Cek hitungan');
+    fireEvent.click(byTestId('money.desk.count.submit'));
+    // Checked: the drawer's figure and the difference show, and it may be counted once more.
+    expect(byTestId('money.desk.count.expected')).toBeTruthy();
+    expect(text('money.desk.count.difference')).toMatch(/^(Kurang|Lebih)Rp/);
+    expect(text('money.desk.count.countedValue')).toContain('Rp1.000.000');
+    fireEvent.click(byTestId('money.desk.count.recount'));
+    expect(screen.queryByTestId('money.desk.count.expected')).toBeNull();
+    fireEvent.change(byTestId('money.desk.count.counted'), { target: { value: '1000000' } });
+    fireEvent.click(byTestId('money.desk.count.submit'));
+    expect(screen.queryByTestId('money.desk.count.recount')).toBeNull();
+    expect(byTestId('money.desk.count.submit').textContent).toBe('Simpan hitungan');
     fireEvent.click(byTestId('money.desk.count.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.count')).toBeNull());
     expect(byTestId('money.desk.kas.lastCount').textContent).toMatch(/^Sudah tutup kas pukul/);
     // The counter cannot settle it: an owner does.
     expect(byTestId('money.desk.kas.differences').textContent).toContain('Menunggu pemilik');
     expect(screen.queryByTestId('money.desk.kas.settle')).toBeNull();
+  });
+
+  it('an owner sees what should be in the drawer up front, and the difference as they type', async () => {
+    await openKas('Andi Pratama');
+    const expected = byTestId('money.desk.kas.expected').textContent!;
+    fireEvent.click(byTestId('money.desk.kas.count'));
+    await screen.findByTestId('money.desk.count');
+    expect(byTestId('money.desk.count.expected').textContent).toBe(expected);
+    const drawer = Number(expected.replace(/\D/g, ''));
+    fireEvent.change(byTestId('money.desk.count.counted'), {
+      target: { value: String(drawer - 5_000) },
+    });
+    expect(text('money.desk.count.difference')).toBe('KurangRp5.000');
+    expect(byTestId('money.desk.count.submit').textContent).toBe('Simpan hitungan');
   });
 
   it('lets an owner settle a counted difference with a reason', async () => {

@@ -87,10 +87,16 @@ export function KasBoard({
         <LoadingState variant="spinner" />
       ) : drawerData === null ? null : (
         <View style={styles.drawer} testID={`${testID}.drawer`}>
-          <Text style={styles.label}>{tm('money.kas.expected')}</Text>
-          <Text style={styles.expected} testID={`${testID}.expected`}>
-            {formatMoney(drawerData.expected)}
-          </Text>
+          {may.seeExpected ? (
+            <>
+              <Text style={styles.label}>{tm('money.kas.expected')}</Text>
+              <Text style={styles.expected} testID={`${testID}.expected`}>
+                {formatMoney(drawerData.expected)}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.label}>{tm('money.kas.drawer')}</Text>
+          )}
           <Text style={styles.muted} testID={`${testID}.lastCount`}>
             {counted === null
               ? tm('money.kas.notCounted')

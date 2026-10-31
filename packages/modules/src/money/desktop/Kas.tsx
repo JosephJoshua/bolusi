@@ -182,13 +182,19 @@ function Today({
             {() =>
               drawer === null ? null : (
                 <Card testId={`${testId}.drawer`}>
-                  <p className="text-body text-text-muted">{tm('money.kas.expected')}</p>
-                  <p
-                    className="tabular mt-1 text-display font-bold text-text"
-                    data-testid={`${testId}.expected`}
-                  >
-                    {formatMoney(drawer.expected)}
-                  </p>
+                  {may.seeExpected ? (
+                    <>
+                      <p className="text-body text-text-muted">{tm('money.kas.expected')}</p>
+                      <p
+                        className="tabular mt-1 text-display font-bold text-text"
+                        data-testid={`${testId}.expected`}
+                      >
+                        {formatMoney(drawer.expected)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-heading font-semibold text-text">{tm('money.kas.drawer')}</p>
+                  )}
                   <p className="mt-1 text-body text-text-muted" data-testid={`${testId}.lastCount`}>
                     {counted === null
                       ? tm('money.kas.notCounted')

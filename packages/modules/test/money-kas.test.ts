@@ -17,8 +17,12 @@ import {
   moneyIn,
   differenceToSettle,
   drawerMoves,
+  cashCountView,
   historyLine,
   inHistory,
+  NEW_CASH_COUNT,
+  RECOUNT_CASH,
+  seesExpected,
   settleState,
   splitOpenBalances,
   voidAbilities,
@@ -344,5 +348,62 @@ describe('payment methods', () => {
       'QRIS · Bolusi Sorong · Tidak dipakai',
     );
     expect(methodSummary(method({ central: false, kind: 'edc' }), stores)).toBe('EDC');
+  });
+});
+
+describe('the blind count', () => {
+  test('owners and managers see the drawer up front; the counter and technicians count blind', () => {
+    const holding = (ids: string[]) => (id: string) => ids.includes(id);
+    expect(seesExpected(holding(['money.adjust_cash']))).toBe(true);
+    expect(seesExpected(holding(['money.void_payment']))).toBe(true);
+    // A void limit of 0 cancels nothing, so it is not oversight of the drawer.
+    expect(seesExpected(holding(['money.void_payment']), () => 0)).toBe(false);
+    expect(seesExpected(holding(['money.count_cash', 'money.move_cash']))).toBe(false);
+  });
+
+  test('seen up front, the difference shows as it is typed and it saves', () => {
+    const view = cashCountView({ ...NEW_CASH_COUNT, counted: '95000' }, 100_000, false);
+    expect(view).toMatchObject({ expected: 100_000, difference: -5_000, next: 'save' });
+    expect(view.mayRecount).toBe(false);
+  });
+
+  test('blind, nothing shows until it is checked, then a count that is off may be redone once', () => {
+    const typed = { ...NEW_CASH_COUNT, counted: '95000' };
+    expect(cashCountView(typed, 100_000, true)).toMatchObject({
+      expected: null,
+      difference: null,
+      next: 'check',
+      locked: false,
+    });
+    const checked = cashCountView({ ...typed, checked: true }, 100_000, true);
+    expect(checked).toMatchObject({ expected: 100_000, difference: -5_000, next: 'save' });
+    expect(checked).toMatchObject({ locked: true, mayRecount: true });
+    expect(cashCountView(RECOUNT_CASH, 100_000, true)).toMatchObject({
+      expected: null,
+      next: 'check',
+    });
+    expect(
+      cashCountView({ ...RECOUNT_CASH, counted: '95000', checked: true }, 100_000, true).mayRecount,
+    ).toBe(false);
+    // Right the first time: nothing to redo.
+    expect(
+      cashCountView({ ...typed, counted: '100000', checked: true }, 100_000, true).mayRecount,
+    ).toBe(false);
+  });
+
+  test('taking out more than is there says so, without the figure, to someone who counts blind', () => {
+    const move = {
+      kind: 'withdrawal' as const,
+      account: null,
+      amount: 900_000,
+      reason: 'x',
+      accounts: [],
+      drawer: 700_000,
+    };
+    expect(cashMoveCheck(move).missingValues).toEqual({ amount: formatMoney(700_000) });
+    expect(cashMoveCheck({ ...move, blind: true })).toMatchObject({
+      missing: 'money.move.aboveDrawerBlind',
+    });
+    expect(cashMoveCheck({ ...move, blind: true }).missingValues).toBeUndefined();
   });
 });

@@ -64,6 +64,7 @@
   "kas": {
     "title": "Kas",
     "expected": "Seharusnya di laci",
+    "drawer": "Laci kas",
     "notCounted": "Belum tutup kas hari ini",
     "counted": "Sudah tutup kas pukul {time}",
     "count": "Tutup kas",
@@ -97,6 +98,9 @@
     "counted": "Uang di laci",
     "difference": "Selisih",
     "note": "Catatan (opsional)",
+    "check": "Cek hitungan",
+    "recount": "Hitung ulang",
+    "recountHint": "Ada selisih. Hitung sekali lagi kalau ragu, atau simpan.",
     "save": "Simpan hitungan",
     "hint": "Hitung uang di laci, lalu isi jumlahnya."
   },
@@ -108,7 +112,8 @@
     "hintAmount": "Isi jumlahnya.",
     "hintReason": "Isi keterangannya.",
     "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya.",
-    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu."
+    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu.",
+    "aboveDrawerBlind": "Lebih dari uang di laci. Kurangi jumlahnya dulu."
   },
   "settle": {
     "title": "Selisih kas",

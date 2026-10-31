@@ -64,6 +64,7 @@
   "kas": {
     "title": "Cash",
     "expected": "Should be in the drawer",
+    "drawer": "Cash drawer",
     "notCounted": "Drawer not counted today",
     "counted": "Drawer counted at {time}",
     "count": "Count drawer",
@@ -97,6 +98,9 @@
     "counted": "Cash in the drawer",
     "difference": "Difference",
     "note": "Note (optional)",
+    "check": "Check count",
+    "recount": "Count again",
+    "recountHint": "It is off. Count once more if unsure, or save.",
     "save": "Save count",
     "hint": "Count the drawer, then enter the amount."
   },
@@ -108,7 +112,8 @@
     "hintAmount": "Enter the amount.",
     "hintReason": "Enter a description.",
     "noAccount": "The store has no bank account yet. Ask an owner to add one.",
-    "aboveDrawer": "The drawer only has {amount}. Lower the amount first."
+    "aboveDrawer": "The drawer only has {amount}. Lower the amount first.",
+    "aboveDrawerBlind": "That is more than the drawer has. Lower the amount first."
   },
   "settle": {
     "title": "Cash difference",
