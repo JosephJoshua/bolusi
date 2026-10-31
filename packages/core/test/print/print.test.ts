@@ -381,8 +381,32 @@ describe('a link beside the signatures', () => {
   it('is drawn with the address on plain paper', () => {
     const html = renderHtml(sampleDoc({ link: LINK }), PAPER_PRESETS.a4);
     expect(html).toContain('<svg class="qr"');
-    expect(html).toContain('bolusi.id/c/K7M2Q9XA4BRS');
+    // It may break before the code, never inside it: a customer types the code.
+    expect(html).toContain('bolusi.id/c/<wbr><span class="link-code">K7M2Q9XA4BRS</span>');
+    expect(html).toContain('.link-code { white-space: nowrap; }');
     expect(renderHtml(sampleDoc(), PAPER_PRESETS.a4)).not.toContain('<svg');
+  });
+
+  it('keeps the code whole on a dot-matrix when the address needs two lines', () => {
+    const long = { ...LINK, address: 'status.bolusi-servis-sorong.co.id/c/K7M2Q9XA4BRS' };
+    const paper: PaperSettings = {
+      ...PAPER_PRESETS.continuous_half,
+      preset: 'custom',
+      widthMm: 100,
+    };
+    const { pages } = layoutGrid(sampleDoc({ link: long }), paper);
+    const leads = pages
+      .flat()
+      .filter((row) => row.kind === 'image')
+      .map((row) => leadText(row).trim());
+    expect(leads.some((lead) => lead.endsWith('K7M2Q9XA4BRS'))).toBe(true);
+    expect(leads.some((lead) => lead.endsWith('/c/'))).toBe(true);
+  });
+
+  it('keeps a signature picture inside its space on a small sheet', () => {
+    // A5 scales the vertical room by 0.7: the 20 mm space is 14 mm, so the picture is held to 13.3.
+    expect(renderHtml(sampleDoc(), PAPER_PRESETS.a5)).toContain('.sig-img { max-height: 13.3mm;');
+    expect(renderHtml(sampleDoc(), PAPER_PRESETS.a4)).toContain('.sig-img { max-height: 19mm;');
   });
 
   it('scales each module to a block of dots', () => {

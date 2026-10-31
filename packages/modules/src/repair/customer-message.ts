@@ -55,11 +55,10 @@ export function customerMessageUrl(
   ticket: TicketDetailRow,
   storeName: string | null,
   site: string | null = null,
+  link: (number: string, text: string) => string = whatsAppUrl,
 ): string | null {
   const number = whatsAppNumber(ticket.customerPhone);
-  return number === null
-    ? null
-    : whatsAppUrl(number, customerMessage(kind, ticket, storeName, site));
+  return number === null ? null : link(number, customerMessage(kind, ticket, storeName, site));
 }
 
 function device(ticket: Pick<TicketDetailRow, 'deviceBrand' | 'deviceModel'>): string {
@@ -101,7 +100,8 @@ export function customerMessage(
   storeName: string | null,
   site: string | null = null,
 ): string {
-  const name = ticket.customerName.trim();
+  // "Kak Yakobus", not "Kak Yakobus Mandowen": the first name is how the counter greets them.
+  const name = ticket.customerName.trim().split(/\s+/)[0] ?? '';
   const phone = device(ticket);
   const number = tn('repair.message.number', { number: ticket.ticketNumber });
   const link = linkOf(ticket, site);

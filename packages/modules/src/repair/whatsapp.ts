@@ -27,6 +27,15 @@ export function whatsAppNumber(phone: string | null): string | null {
   return number.length >= 10 && number.length <= 15 ? number : null;
 }
 
+/** The web link: WhatsApp's app when one is installed, else its site (the PC, the status page). */
 export function whatsAppUrl(number: string, text: string): string {
   return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * The app link, for a phone. Unlike wa.me it never falls back to a browser: with no WhatsApp (or
+ * WhatsApp Business) installed, opening it fails, so the screen can say so.
+ */
+export function whatsAppAppUrl(number: string, text: string): string {
+  return `whatsapp://send?phone=${number}&text=${encodeURIComponent(text)}`;
 }

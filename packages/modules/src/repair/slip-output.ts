@@ -55,8 +55,11 @@ function send(
   paper: PaperSettings,
   how: 'print' | 'share',
 ): Promise<SlipOutcome> {
+  // A PDF that is sent goes to the customer, so it is their copy only (the last; the store's comes
+  // first). A print keeps every copy: the store tears off its own.
+  const sent = how === 'share' ? { ...doc, copies: doc.copies.slice(-1) } : doc;
   return printing.output(
-    { html: renderHtml(doc, paper), document: doc, jobName: doc.jobName, paper },
+    { html: renderHtml(sent, paper), document: sent, jobName: sent.jobName, paper },
     how,
   );
 }

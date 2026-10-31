@@ -331,6 +331,19 @@ function bandOf(bitmap: MonoBitmap, band: number): MonoBitmap {
 }
 
 /**
+ * A link's address in lines of `width`, broken only before its last part (the code a reader types)
+ * while that part fits a line, so the code is never split across two.
+ */
+function addressLines(address: string, width: number): string[] {
+  if (address.length <= width) return [address];
+  const cut = address.lastIndexOf('/') + 1;
+  if (cut === 0 || cut === address.length || address.length - cut > width) {
+    return wrapText(address, width);
+  }
+  return [...wrapText(address.slice(0, cut), width), address.slice(cut)];
+}
+
+/**
  * The link's QR code at the right edge, its title and address beside it, and the signatures to
  * their left when `signatures` is given and they fit; printed band by band, so the text and the
  * code share the same lines of the form.
@@ -361,7 +374,9 @@ function linkGroup(
   const captionCell = besideSignatures ? captionWidth : offset - COLUMN_GAP;
   const captionRows = [
     ...wrapText(link.title, captionWidth).map((line) => text(padLeft(line, captionCell))),
-    ...wrapText(link.address, captionWidth).map((line) => text(padLeft(line, captionCell), true)),
+    ...addressLines(link.address, captionWidth).map((line) =>
+      text(padLeft(line, captionCell), true),
+    ),
   ];
   const qrBands = Math.ceil(bitmap.height / 8);
   const captionSpan = (captionRows.length - 1) * BANDS_PER_TEXT_LINE + 1;

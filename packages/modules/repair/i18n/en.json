@@ -727,7 +727,7 @@
   "message": {
     "notify": "Message customer",
     "ask": "Ask customer",
-    "openFailed": "Couldn’t open WhatsApp on this device.",
+    "openFailed": "WhatsApp isn’t installed on this device.",
     "ready": "Hi {name}, your {device} is repaired and ready to collect.",
     "readyAt": "Hi {name}, your {device} is repaired and ready to collect at {store}.",
     "cancelled": "Hi {name}, the repair of your {device} was cancelled. You can collect the phone.",

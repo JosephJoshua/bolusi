@@ -4,7 +4,7 @@
 //
 // Built from what the ticket recorded, in the current language. The phone's unlock code is never
 // printed: the slip leaves the store and the code is stored encrypted for a reason.
-import { formatDate, formatDateTime, formatMoney } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatPhone } from '@bolusi/i18n';
 import type {
   PrintAmountRow,
   PrintBlock,
@@ -99,7 +99,7 @@ function customerFields(ticket: TicketDetailRow): PrintField[] {
     { label: tn('repair.slip.field.customer'), value: ticket.customerName },
   ];
   if (ticket.customerPhone !== null && ticket.customerPhone !== '') {
-    fields.push({ label: tn('repair.slip.field.phone'), value: ticket.customerPhone });
+    fields.push({ label: tn('repair.slip.field.phone'), value: formatPhone(ticket.customerPhone) });
   }
   fields.push({ label: tn('repair.slip.field.device'), value: deviceName(ticket) });
   if (ticket.deviceImei !== null && ticket.deviceImei !== '') {

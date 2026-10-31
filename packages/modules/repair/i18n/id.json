@@ -727,7 +727,7 @@
   "message": {
     "notify": "Kabari pelanggan",
     "ask": "Tanya pelanggan",
-    "openFailed": "WhatsApp tidak bisa dibuka di perangkat ini.",
+    "openFailed": "WhatsApp belum terpasang di perangkat ini.",
     "ready": "Halo Kak {name}, HP {device} sudah selesai diservis dan bisa diambil.",
     "readyAt": "Halo Kak {name}, HP {device} sudah selesai diservis dan bisa diambil di {store}.",
     "cancelled": "Halo Kak {name}, servisan HP {device} dibatalkan. HP-nya bisa diambil kembali.",

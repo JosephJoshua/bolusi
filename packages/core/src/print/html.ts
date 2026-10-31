@@ -102,10 +102,21 @@ function qrSvg(modules: PrintLink['modules']): string {
   return `<svg class="qr" viewBox="0 0 ${String(size)} ${String(size)}" shape-rendering="crispEdges" aria-hidden="true"><path d="${runs.join('')}"/></svg>`;
 }
 
+/**
+ * The address, breakable only before its last part (the code a customer types), which stays whole:
+ * `bolusi.id/c/` and `K7M2Q9XA4BRS` on two lines, never `…/K7M2Q9XA4` and `BRS`.
+ */
+function address(value: string): string {
+  const cut = value.lastIndexOf('/') + 1;
+  return cut === 0 || cut === value.length
+    ? esc(value)
+    : `${esc(value.slice(0, cut))}<wbr><span class="link-code">${esc(value.slice(cut))}</span>`;
+}
+
 function link(value: PrintLink): string {
   return `<div class="link">${qrSvg(value.modules)}<div class="link-text"><div class="link-title">${esc(
     value.title,
-  )}</div><div class="link-address">${esc(value.address)}</div></div></div>`;
+  )}</div><div class="link-address">${address(value.address)}</div></div></div>`;
 }
 
 /** The signatures, and the link beside them. */
@@ -193,11 +204,12 @@ main.columns h2:first-child, aside > h2:first-child { margin-top: ${v(4)}; }
 .qr { width: ${small ? 20 : 24}mm; height: ${small ? 20 : 24}mm; display: block; }
 .link-title { font-size: 7.5pt; color: #444; }
 .link-address { font-size: 8.5pt; font-weight: 700; overflow-wrap: anywhere; }
+.link-code { white-space: nowrap; }
 .signatures { display: flex; gap: 12mm; padding-top: ${v(4)}; }
 .sig { flex: 1; min-width: 0; text-align: center; }
 .sig-role { font-size: 8pt; color: #444; overflow-wrap: anywhere; }
 .sig-space { height: ${v(20)}; display: flex; align-items: flex-end; justify-content: center; }
-.sig-img { max-height: 19mm; max-width: 100%; object-fit: contain; }
+.sig-img { max-height: ${v(19)}; max-width: 100%; object-fit: contain; }
 .sig-line { border-top: 0.8pt solid #111; padding-top: 1.2mm; min-height: 5mm; font-weight: 500; overflow-wrap: anywhere; }
 .ruler { border: 0.8pt solid #111; padding: 3mm; margin: 4mm 0 3mm; }
 .ruler-scale { display: flex; height: 4mm; overflow: hidden; border-right: 0.3mm solid #111; }
