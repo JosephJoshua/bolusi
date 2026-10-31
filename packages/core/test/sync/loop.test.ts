@@ -39,6 +39,7 @@ import {
   makeSignedNoteOp,
   openSyncHarness,
   prngFor,
+  seedDeviceRegistry,
   uuidV4,
   uuidV7,
   type SyncHarness,
@@ -202,6 +203,41 @@ describe('a full cycle walks idle → pushing → pulling → idle (03 §10)', (
       SELECT last_server_time FROM sync_state WHERE id = 1
     `.execute(harness.db);
     expect(Number(server.rows[0]?.lastServerTime)).toBe(1_726_000_777_000);
+  });
+
+  it('a change from a newer app: pull waits with APP_UPDATE_REQUIRED, staff and PINs still refresh', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id, knowsOp: () => false });
+    const prng = prngFor(9100);
+    const newer = makeSignedNoteOp({
+      device,
+      seq: 1,
+      timestamp: 1_726_000_000_000,
+      tenantId,
+      storeId,
+      userId,
+      entityId: uuidV7(prng, 1_726_000_000_000),
+      prng,
+    });
+    await seedDeviceRegistry(harness.db, [
+      {
+        id: device.id,
+        storeId,
+        kind: 'member',
+        signingKeyPublic: device.publicKeyBase64,
+        status: 'active',
+        revokedAt: null,
+      },
+    ]);
+    harness.transport.scriptPull({ ops: [newer], nextCursor: 9, hasMore: false, serverTime: 1 });
+    loop.requestSync('manual');
+    await loop.settle();
+
+    const state = await syncStateRow();
+    expect(state.lastSyncError).toBe('APP_UPDATE_REQUIRED');
+    expect(state.lastSuccessfulSyncAt).toBeNull();
+    expect(loop.state).toBe('backoff');
+    // A dismissed employee's PIN must stop working here even while the pull waits for an update.
+    expect(harness.bundleRefreshes()).toBe(1);
   });
 
   it('pulls until drained, looping while hasMore (api/01 §4)', async () => {

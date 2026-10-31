@@ -166,6 +166,7 @@ async function build(options: { online?: boolean } = {}): Promise<Built> {
     bundle: { refresh: () => Promise.resolve('unchanged') },
     applyPulledOp: () => Promise.resolve(),
     refoldRefused: () => Promise.resolve(),
+    knowsOp: () => true,
     crypto: noblePort,
     clock: clockT,
     timer,

@@ -491,6 +491,17 @@ describe('manual sync (§8.4 item 3)', () => {
   });
 });
 
+describe('a change from a newer app', () => {
+  test('asks for an app update, and only while the pull is waiting on it', () => {
+    const waiting = input({ state: state({ lastSyncError: 'APP_UPDATE_REQUIRED' }) });
+    expect(syncProblems(waiting)).toEqual([{ kind: 'appUpdateNeeded' }]);
+    expect(syncChipState(waiting)).toBe('attention');
+    // A network failure is not a version problem, and a successful pull clears the code.
+    expect(syncProblems(input({ state: state({ lastSyncError: 'NETWORK' }) }))).toEqual([]);
+    expect(syncProblems(input({ state: state({ lastSyncError: null }) }))).toEqual([]);
+  });
+});
+
 describe('rejected + quarantined surfacing (§8.4 items 4/5)', () => {
   test('the rejected section renders only when non-empty', () => {
     expect(showsRejectedSection(input())).toBe(false);

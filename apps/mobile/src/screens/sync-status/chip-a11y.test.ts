@@ -22,4 +22,10 @@ describe('syncChipAccessibilityLabels', () => {
       t('sync.status.lastSynced', { relative: '4 menit lalu' }),
     );
   });
+
+  test('attention says something needs a look, never "rejected": an update needed rejects nothing', () => {
+    const attention = syncChipAccessibilityLabels({ pendingCount: 0 }).attention;
+    expect(attention).toBe(t('sync.status.titleAttention'));
+    expect(attention).not.toBe(t('sync.chip.rejected'));
+  });
 });

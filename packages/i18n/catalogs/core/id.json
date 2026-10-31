@@ -89,7 +89,8 @@
     "STORAGE_ERROR": "Server gagal menyimpan foto. Aplikasi akan mencoba lagi.",
     "LOCAL_CORRUPT": "Foto ini rusak di perangkat dan tidak bisa dikirim. Ambil foto baru.",
     "AUTH_TOKEN_MISSING": "Masuk lagi untuk melanjutkan pengiriman foto.",
-    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto."
+    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.",
+    "APP_UPDATE_REQUIRED": "Perbarui aplikasi dulu agar data terbaru bisa masuk."
   },
   "rejection": {
     "BAD_SIGNATURE": "Gagal diverifikasi server. Kabari pemilik toko.",

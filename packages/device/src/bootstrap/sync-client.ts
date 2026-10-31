@@ -31,6 +31,7 @@ import {
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
+  type OperationRegistry,
   type SyncLoopState,
   type SyncState,
   type SyncSchedulerPort,
@@ -83,6 +84,8 @@ export interface SyncClientDeps {
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   /** `ProjectionEngine.refoldRefused` — the push phase takes a refused op out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
+  /** Can this build fold the op? One from a newer app pauses the pull until this app updates. */
+  readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -221,6 +224,7 @@ class SyncClientImpl implements SyncClient {
       timer: deps.timer,
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
+      knowsOp: deps.knowsOp,
       refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
@@ -529,6 +533,7 @@ export function createSyncClientForApp(
     transport,
     bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
+    knowsOp: (op) => knowsOp(app.registry.operations, op),
     refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,
@@ -555,4 +560,13 @@ export function createSyncClientForApp(
         ...(config.fetchImpl === undefined ? {} : { sseFetchImpl: config.fetchImpl }),
       }),
   });
+}
+
+/** Is `op` a type this build registers, at a schemaVersion it can fold? */
+export function knowsOp(
+  operations: Pick<OperationRegistry, 'schemaVersionFor'>,
+  op: Pick<SignedOperation, 'type' | 'schemaVersion'>,
+): boolean {
+  const known = operations.schemaVersionFor(op.type);
+  return known !== undefined && op.schemaVersion <= known;
 }

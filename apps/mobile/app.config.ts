@@ -3,10 +3,15 @@
 // FCM wiring (android.googleServicesFile) lands with task 21; it is EAS-managed, never committed.
 import type { ExpoConfig } from 'expo/config';
 
+const API_URL = process.env['EXPO_PUBLIC_API_URL']?.replace(/\/+$/, '') ?? '';
+// Test builds run the code they were built from, so QA never picks up an update mid-run.
+const OTA_UPDATES = API_URL !== '' && process.env['EXPO_PUBLIC_BOLUSI_TEST_HARNESS'] !== '1';
+
 const config: ExpoConfig = {
   name: 'Bolusi',
   slug: 'bolusi',
-  version: '0.0.0',
+  // Set by the Play release workflow from its tag (`mobile-v1.2.0`) and run number.
+  version: process.env['BOLUSI_APP_VERSION'] ?? '0.0.0',
   // Every orientation here, then phones are locked upright at start (src/ports/orientation.ts):
   // tablets turn, and in landscape the servisan board sits beside the open ticket.
   orientation: 'default',
@@ -23,6 +28,7 @@ const config: ExpoConfig = {
   platforms: ['android', 'ios', 'web'],
   android: {
     package: 'com.bolusi.app',
+    versionCode: Number(process.env['BOLUSI_VERSION_CODE'] ?? '1'),
     // Auto-backup carries nothing off this device (security-guide §6.2:194; api/02-auth §7.4).
     // Android defaults this to TRUE, so omitting it is a decision to back up — not a neutral
     // silence. Every record is server-synced, so there is nothing here worth restoring — and since
@@ -62,6 +68,20 @@ const config: ExpoConfig = {
   experiments: { baseUrl: process.env['EXPO_BASE_URL'] ?? '' },
   extra: {
     apiUrl: process.env['EXPO_PUBLIC_API_URL'] ?? null,
+  },
+  // Over-the-air updates (docs/app-updates.md): checked against our server on every start,
+  // downloaded in the background, and run from the next start (src/bootstrap/app-updates.ts).
+  // Only an update signed with the key behind `updates/certificate.pem` is accepted. The
+  // fingerprint ties each update to the native build it was made for, so a JS change that needs a
+  // new native library only ever reaches phones through a store release.
+  runtimeVersion: { policy: 'fingerprint' },
+  updates: {
+    enabled: OTA_UPDATES,
+    url: `${API_URL}/updates/manifest`,
+    checkAutomatically: 'ON_LOAD',
+    fallbackToCacheTimeout: 0,
+    codeSigningCertificate: './updates/certificate.pem',
+    codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' },
   },
   plugins: [
     // `configureAndroidBackup` is expo-secure-store's DEFAULT (true), and is spelled out here
@@ -179,6 +199,8 @@ const config: ExpoConfig = {
     // fit drops its last word. See withTextViewBoundsForWidth.ts.
     // The app is light-only; keep the Android window and system bars light in dark mode too.
     './plugins/withLightTheme',
+    // Release builds signed with the Play upload key when the build has it. See withReleaseSigning.ts.
+    './plugins/withReleaseSigning',
     './plugins/withTextViewBoundsForWidth',
   ],
 };
