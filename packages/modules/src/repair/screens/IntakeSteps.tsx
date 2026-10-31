@@ -785,6 +785,7 @@ export function PriceStep({
       <DownPaymentRows
         total={intakeTotal(draft.lines)}
         downPayment={intakeDownPayment(draft)}
+        typing
         testID={testID}
       />
       <Section title={tn('repair.ticket.readyBy')}>

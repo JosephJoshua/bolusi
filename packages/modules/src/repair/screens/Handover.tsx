@@ -11,6 +11,7 @@ import {
   Button,
   Card,
   PhotoSlot,
+  RollingText,
   TextButton,
   TextInput,
   ToggleChip,
@@ -272,13 +273,14 @@ export function Handover({
                 <Text style={[styles.totalLabel, repairStyles.rowText]}>
                   {tn(shown.outcome === 'cancelled' ? 'repair.cancel.fee' : 'repair.price.total')}
                 </Text>
-                <Text
+                <RollingText
+                  value={amountOwed(shown) + shown.reduced}
                   style={[repairStyles.heading, repairStyles.rowValue]}
                   testID={`${testID}.total`}
                 >
                   {/* Before any reduction, which the rows below take off. */}
                   {formatMoney(amountOwed(shown) + shown.reduced)}
-                </Text>
+                </RollingText>
               </View>
               {shown.outcome === 'cancelled' ? (
                 <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>

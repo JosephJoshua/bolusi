@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
 import { FontScaleProvider } from '@bolusi/ui';
@@ -622,6 +623,14 @@ function buildRootProps(): RootProps {
     videoPlatform: createExpoVideoPlatform(),
     cameraPermission: expoCameraPermission,
     localeStore: fileLocaleStore,
+    // Synchronous, so the splash lets go on this frame even while loading keeps the JS thread busy.
+    hideSplash: () => {
+      try {
+        SplashScreen.hide();
+      } catch {
+        // No splash to hide (already gone): nothing to do.
+      }
+    },
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process
     // facts, not DB values); the deviceId + names come from meta_kv.
@@ -646,6 +655,11 @@ function Bootstrapped(): React.JSX.Element | null {
 
 // Before the first screen, so a phone held sideways at launch turns upright straight away.
 lockPhonesToPortrait();
+// The splash stays until the opening cover (BrandIntro) is drawn over it, so no blank frame shows.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+// The cover is the splash's exact twin, so the splash goes at once rather than with its default
+// 400 ms fade, which kept it on top of the cover's whole intro on Android.
+SplashScreen.setOptions({ duration: 0, fade: false });
 // Over-the-air updates apply on a fresh start or after a long break (src/bootstrap/app-updates.ts).
 startAppUpdates({
   updates: expoUpdatesPort,

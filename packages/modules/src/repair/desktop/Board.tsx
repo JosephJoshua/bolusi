@@ -87,6 +87,8 @@ export interface RepairBoardPageProps {
   /** The repair open beside the table, owned by the app so a new intake can open its ticket. */
   readonly selectedTicketId: string | null;
   readonly onSelectTicket: (ticketId: string | null) => void;
+  /** The servisan an intake opened just now: its number is stamped in when its pane shows. */
+  readonly justOpenedTicketId?: string | null | undefined;
   readonly onNewIntake: () => void;
   /** An unsaved intake or warranty claim this person left: "Servisan baru" says it carries on with it. */
   readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
@@ -153,6 +155,7 @@ function fuzzyOptions(options: readonly FilterOption[], text: string): FilterOpt
 export function RepairBoardPage({
   selectedTicketId,
   onSelectTicket,
+  justOpenedTicketId = null,
   onNewIntake,
   waitingDraft = null,
   onStartClaim,
@@ -627,6 +630,7 @@ export function RepairBoardPage({
                 // A fresh pane per ticket: nothing said about the last one carries over.
                 key={selectedTicketId}
                 ticketId={selectedTicketId}
+                justOpened={selectedTicketId === justOpenedTicketId}
                 now={clock}
                 onClose={closePane}
                 onOpenSyncStatus={onOpenSyncStatus}

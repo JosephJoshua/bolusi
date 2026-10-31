@@ -10,6 +10,7 @@ import {
   CaptureTile,
   ConfirmDialog,
   Dialog,
+  RollingText,
   Segmented,
   TextArea,
   TextField,
@@ -1371,7 +1372,7 @@ export function HandoverDialog({
               className="tabular text-title font-bold text-text"
               data-testid="repair.desk.handover.total"
             >
-              {formatMoney(amount)}
+              <RollingText value={amount}>{formatMoney(amount)}</RollingText>
             </p>
           </div>
           {(downPayment ?? 0) === 0 && reduced === 0 ? null : (
@@ -1391,7 +1392,9 @@ export function HandoverDialog({
                 <>
                   {/* The DP and anything paid at this counter already (a QR): all of it is paid. */}
                   <dt className="text-text-muted">{tn('repair.price.paid')}</dt>
-                  <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
+                  <dd className="tabular text-right text-text">
+                    <RollingText value={downPayment}>{formatMoney(-downPayment)}</RollingText>
+                  </dd>
                 </>
               )}
               {split.length === 0 ? (
@@ -1403,7 +1406,9 @@ export function HandoverDialog({
                     className="tabular text-right font-semibold text-text"
                     data-testid="repair.desk.handover.balance"
                   >
-                    {formatMoney(balance.amount)}
+                    <RollingText value={balance.kind === 'due' ? balance.amount : -balance.amount}>
+                      {formatMoney(balance.amount)}
+                    </RollingText>
                   </dd>
                 </>
               ) : (

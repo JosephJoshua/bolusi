@@ -14,6 +14,7 @@ import {
   Icon,
   ListRow,
   PatternLock,
+  RollingText,
   Sheet,
   TextButton,
   Timeline,
@@ -170,6 +171,8 @@ export interface TicketDetailProps {
   readonly onBack: () => void;
   /** Beside the board on a tablet there is nothing to go back to: the board is already in view. */
   readonly hideBack?: boolean | undefined;
+  /** It was opened just now by an intake: its number lands like a stamp once it shows. */
+  readonly justOpened?: boolean | undefined;
   readonly onHandover: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
   /** Starts a warranty claim's intake from this servisan; without it the claim is not offered. */
@@ -196,6 +199,7 @@ export function TicketDetail({
   now,
   onBack,
   hideBack = false,
+  justOpened = false,
   onHandover,
   onOpenSyncStatus,
   onStartClaim,
@@ -622,6 +626,7 @@ export function TicketDetail({
       scrollable
       title={ticket?.ticketNumber ?? tn('repair.ticket.title')}
       titleVariant="detail"
+      stampTitle={justOpened && ticket !== undefined}
       onBack={hideBack ? undefined : onBack}
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
@@ -1030,7 +1035,8 @@ export function TicketDetail({
           <Text style={[cancelled ? styles.notCharged : styles.totalLabel, repairStyles.rowText]}>
             {tn('repair.price.total')}
           </Text>
-          <Text
+          <RollingText
+            value={row.quoteTotal}
             style={[
               cancelled ? styles.notCharged : styles.totalValue,
               styles.amount,
@@ -1039,7 +1045,7 @@ export function TicketDetail({
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
-          </Text>
+          </RollingText>
         </View>
         {cancelled ? (
           // The repair price stays as quiet history; the number that leads is what the customer

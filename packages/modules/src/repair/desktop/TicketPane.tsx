@@ -14,6 +14,7 @@ import {
   PatternPad,
   PhotoTile,
   PhotoViewer,
+  RollingText,
   Section,
   StatePanel,
   Timeline,
@@ -160,6 +161,8 @@ interface LoadedTicket {
 
 export interface TicketPaneProps {
   readonly ticketId: string;
+  /** An intake opened it just now: the number lands like a stamp. */
+  readonly justOpened?: boolean | undefined;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
   readonly onClose: () => void;
@@ -173,6 +176,7 @@ export interface TicketPaneProps {
 
 export function TicketPane({
   ticketId,
+  justOpened = false,
   now,
   onClose,
   onOpenSyncStatus,
@@ -404,7 +408,9 @@ export function TicketPane({
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
-              className="tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted"
+              className={`tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted${
+                justOpened ? ' animate-stamp' : ''
+              }`}
               data-testid="repair.desk.ticket.number"
             >
               {row.ticketNumber}
@@ -712,7 +718,7 @@ export function TicketPane({
             className={`tabular ${cancelled ? 'text-small text-text-muted line-through' : 'text-title font-bold text-text'}`}
             data-testid="repair.desk.ticket.total"
           >
-            {formatMoney(row.quoteTotal)}
+            <RollingText value={row.quoteTotal}>{formatMoney(row.quoteTotal)}</RollingText>
           </p>
         </div>
         {cancelled ? (
@@ -1434,13 +1440,17 @@ function DownPaymentLines({
               ) : null}
             </dt>
             <dd className="tabular" data-testid="repair.desk.ticket.paid">
-              {paidText.amount}
+              <RollingText value={paid}>{paidText.amount}</RollingText>
             </dd>
           </div>
         )}
         <div className="flex justify-between gap-4 text-body font-semibold text-text">
           <dt>{tn(balanceLabelKey(balance.kind, returned))}</dt>
-          <dd className="tabular">{formatMoney(balance.amount)}</dd>
+          <dd className="tabular">
+            <RollingText value={balance.kind === 'due' ? balance.amount : -balance.amount}>
+              {formatMoney(balance.amount)}
+            </RollingText>
+          </dd>
         </div>
       </dl>
       {paid === 0 ? record : null}

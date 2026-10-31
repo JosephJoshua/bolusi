@@ -17,6 +17,9 @@ export default defineConfig({
   resolve: {
     alias: {
       'react-native': fileURLToPath(new URL('./test/doubles/react-native.tsx', import.meta.url)),
+      'react-native-svg': fileURLToPath(
+        new URL('./test/doubles/react-native-svg.tsx', import.meta.url),
+      ),
       // Exact subpath: `Icon.tsx` imports the single icon family rather than the barrel, so the
       // 2 GB-device bundle never carries every glyph set (design-system §0 dependency weight).
       '@expo/vector-icons/MaterialCommunityIcons.js': fileURLToPath(

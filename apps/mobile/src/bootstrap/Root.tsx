@@ -55,6 +55,7 @@ import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
 import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import type { UpdateCheckResult } from './app-updates.js';
 import { createNotificationChannels } from './notifications.js';
+import { BrandIntro } from './BrandIntro.js';
 import {
   answerNotificationAsk,
   shouldAskForNotifications,
@@ -315,8 +316,21 @@ export interface RootProps {
    * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
    */
   readonly notificationPermission?: NotificationPermissionPort | undefined;
+  /** Hides the native splash once the opening cover is drawn over it (index.ts). */
+  readonly hideSplash?: (() => void) | undefined;
   /** The camera permission, asked up front by the new-phone setup. `undefined` ⇒ not asked there. */
   readonly cameraPermission?: PermissionPort | undefined;
+}
+
+/** The longest the data layer waits for the opening hop to start (BrandIntro `onPlaying`). */
+const INTRO_WAIT_MS = 600;
+
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 export function Root({
@@ -339,6 +353,7 @@ export function Root({
   scanPlatform,
   videoPlatform,
   notificationPermission,
+  hideSplash,
   checkForUpdate,
   cameraPermission,
 }: RootProps): React.JSX.Element | null {
@@ -351,6 +366,8 @@ export function Root({
   // The name is the guard that remains: with the two spellings distinct, a future import of the real
   // applier cannot be masked, and a reader can see which of the two things a call site does.
   const [locale, setLocaleState] = useState<Locale | null>(null);
+  const [firstScreenShown, setFirstScreenShown] = useState(false);
+  const introPlaying = useRef(deferred()).current;
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   /** The owner this phone's first-run setup waits for (core device-setup.ts), or null. */
@@ -708,6 +725,15 @@ export function Root({
       // a success — and the app boots half-enrolled, throwing AEAD errors deep in the UI. That is the
       // `KNOWN GAP SINCE D22` in recovery.ts, filed as task 160 (a decrypt-probe at boot). Do not read
       // this no-catch as covering the restore case: it covers only a DB that fails to open at all.
+      // The opening hop first: loading holds the JS thread, and the hop must already be running on
+      // the UI thread by then (BrandIntro `onPlaying`). Never more than a moment's wait, and only
+      // where there is a native splash to hand over from (not on web or in tests).
+      if (hideSplash !== undefined) {
+        await Promise.race([
+          introPlaying.promise,
+          new Promise((done) => setTimeout(done, INTRO_WAIT_MS)),
+        ]);
+      }
       const booting = await boot();
 
       // Wire the enrollment caller over the booted app. `onEnrolled` fires AFTER `runEnrollment`
@@ -1111,7 +1137,25 @@ export function Root({
   // (07-i18n §1.2) — and a frame of the shell over a database that is not open is the other thing
   // worth never showing. `deviceInfo` resolves in the same boot pass (from the same booted app), so
   // gating on it here costs no extra wait and keeps the Settings screen from rendering blanks.
-  if (locale === null || app === null || deviceInfo === null) return null;
+  // The opening cover stays over everything until then, in the same place in the tree either way, so
+  // its animation carries on from the splash instead of restarting when the app appears.
+  // The cover leaves once the first screen is laid out under it, not merely rendered: on a cheap
+  // phone mounting that screen holds the UI thread, and a fade started then would be skipped.
+  const opening = (content: React.JSX.Element | null): React.JSX.Element => (
+    <View style={FILL}>
+      {content === null ? null : (
+        <View style={FILL} onLayout={() => setFirstScreenShown(true)}>
+          {content}
+        </View>
+      )}
+      <BrandIntro
+        ready={content !== null && firstScreenShown}
+        onCovered={hideSplash}
+        onPlaying={introPlaying.resolve}
+      />
+    </View>
+  );
+  if (locale === null || app === null || deviceInfo === null) return opening(null);
 
   const shell = resolveShellInputs(app, sync, systemClock.now(), syncReads);
   const openSession = sessionSnapshot?.session ?? null;
@@ -1133,7 +1177,7 @@ export function Root({
       ? (notes.repair ?? undefined)
       : undefined;
 
-  return (
+  return opening(
     /**
      * THE ACTIVITY RESET (api/02-auth §6.4 — "any interaction resets the idle deadline"), as RN's
      * gesture-responder CAPTURE phase.
@@ -1322,7 +1366,7 @@ export function Root({
         cameraPermission={cameraPermission}
         notificationPermission={notificationPermission}
       />
-    </View>
+    </View>,
   );
 }
 

@@ -19,6 +19,7 @@ export function AppShell({
   titleBar,
   sidebar,
   collapsed = false,
+  pageKey,
   children,
   testId,
 }: {
@@ -27,6 +28,8 @@ export function AppShell({
   readonly sidebar: ReactNode;
   /** The sidebar shows icons only, leaving the page the room. */
   readonly collapsed?: boolean;
+  /** Names the page on show; a new page rises into place instead of snapping in. */
+  readonly pageKey?: string | undefined;
   readonly children: ReactNode;
   readonly testId?: string | undefined;
 }): React.JSX.Element {
@@ -41,7 +44,15 @@ export function AppShell({
       )}
     >
       {sidebar}
-      <main className="flex min-h-0 min-w-0 flex-col">{children}</main>
+      <main className="flex min-h-0 min-w-0 flex-col">
+        {pageKey === undefined ? (
+          children
+        ) : (
+          <div key={pageKey} className="flex min-h-0 min-w-0 flex-1 animate-rise-in flex-col">
+            {children}
+          </div>
+        )}
+      </main>
     </div>
   );
   if (titleBar === undefined) return shell;
