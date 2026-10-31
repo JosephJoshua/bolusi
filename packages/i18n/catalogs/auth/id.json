@@ -1,8 +1,8 @@
 {
   "switcher": {
     "title": "Siapa yang pakai?",
-    "addUser": "Tambah Pengguna",
-    "reenroll": "Daftarkan Ulang Perangkat",
+    "addUser": "Tambah pengguna",
+    "reenroll": "Daftarkan ulang",
     "emptyUsers": "Belum ada pengguna di HP ini. Minta pemilik toko menambahkannya.",
     "idleLocked": "Terkunci karena lama tidak dipakai. Pekerjaanmu aman.",
     "search": "Cari nama",
@@ -90,7 +90,7 @@
     "ownerSelf": "Saya",
     "ownerSharedHint": "Semua karyawan toko bisa masuk.",
     "ownerSelfHint": "Hanya kamu yang bisa masuk.",
-    "ownerPersonHint": "Hanya {name} yang bisa masuk.",
+    "ownerPersonHint": "Hanya {name} yang bisa masuk, pemilik pun tidak bisa. Untuk mengubahnya, daftarkan ulang HP ini.",
     "bind": "Daftarkan ke {store}",
     "bindWithoutStore": "Daftarkan",
     "pickStoreFirst": "Pilih tokonya dulu.",
@@ -101,6 +101,7 @@
     "success": "Pendaftaran selesai",
     "successStore": "Terdaftar di",
     "successNext": "Berikutnya, pilih siapa yang pakai.",
+    "successNextPersonal": "Berikutnya, masuk pakai PIN.",
     "finish": "Lanjut",
     "discardTitle": "Batalkan pendaftaran?",
     "discardMessage": "Yang sudah kamu isi akan hilang.",

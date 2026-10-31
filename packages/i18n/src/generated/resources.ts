@@ -187,8 +187,8 @@ const source = {
     auth: {
       switcher: {
         title: 'Siapa yang pakai?',
-        addUser: 'Tambah Pengguna',
-        reenroll: 'Daftarkan Ulang Perangkat',
+        addUser: 'Tambah pengguna',
+        reenroll: 'Daftarkan ulang',
         emptyUsers: 'Belum ada pengguna di HP ini. Minta pemilik toko menambahkannya.',
         idleLocked: 'Terkunci karena lama tidak dipakai. Pekerjaanmu aman.',
         search: 'Cari nama',
@@ -276,7 +276,8 @@ const source = {
         ownerSelf: 'Saya',
         ownerSharedHint: 'Semua karyawan toko bisa masuk.',
         ownerSelfHint: 'Hanya kamu yang bisa masuk.',
-        ownerPersonHint: 'Hanya {name} yang bisa masuk.',
+        ownerPersonHint:
+          'Hanya {name} yang bisa masuk, pemilik pun tidak bisa. Untuk mengubahnya, daftarkan ulang HP ini.',
         bind: 'Daftarkan ke {store}',
         bindWithoutStore: 'Daftarkan',
         pickStoreFirst: 'Pilih tokonya dulu.',
@@ -287,6 +288,7 @@ const source = {
         success: 'Pendaftaran selesai',
         successStore: 'Terdaftar di',
         successNext: 'Berikutnya, pilih siapa yang pakai.',
+        successNextPersonal: 'Berikutnya, masuk pakai PIN.',
         finish: 'Lanjut',
         discardTitle: 'Batalkan pendaftaran?',
         discardMessage: 'Yang sudah kamu isi akan hilang.',
@@ -979,8 +981,8 @@ export const resources = {
       auth: {
         switcher: {
           title: 'Who’s using this?',
-          addUser: 'Add User',
-          reenroll: 'Re-enroll Device',
+          addUser: 'Add user',
+          reenroll: 'Re-enroll',
           emptyUsers: 'No one is set up on this phone yet. Ask the store owner to add people.',
           idleLocked: 'Locked after a while unused. Your work is safe.',
           search: 'Search name',
@@ -1068,7 +1070,8 @@ export const resources = {
           ownerSelf: 'Mine',
           ownerSharedHint: 'Everyone at the store can sign in.',
           ownerSelfHint: 'Only you can sign in.',
-          ownerPersonHint: 'Only {name} can sign in.',
+          ownerPersonHint:
+            'Only {name} can sign in, not even an owner. To change that, re-enroll this phone.',
           bind: 'Enroll in {store}',
           bindWithoutStore: 'Enroll',
           pickStoreFirst: 'Choose a store first.',
@@ -1079,6 +1082,7 @@ export const resources = {
           success: 'All set',
           successStore: 'Enrolled in',
           successNext: 'Next, choose who’s using it.',
+          successNextPersonal: 'Next, sign in with the PIN.',
           finish: 'Continue',
           discardTitle: 'Cancel enrollment?',
           discardMessage: 'What you entered will be lost.',

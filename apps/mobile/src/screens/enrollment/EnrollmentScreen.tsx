@@ -303,8 +303,15 @@ function DoneStep({ state }: EnrollmentScreenProps): React.JSX.Element {
         </>
       )}
       {/* §4.4: enrollment logs nobody in. Next is the switcher, where the enrolling owner makes
-          their own PIN if they have none yet; everyone else gets theirs from an owner (§6.6). */}
-      <Text style={styles.doneNext}>{t('auth.enroll.successNext')}</Text>
+          their own PIN if they have none yet; everyone else gets theirs from an owner (§6.6). A
+          personal phone has only its person to pick, so it just says to sign in. */}
+      <Text style={styles.doneNext}>
+        {t(
+          state.personalUserId === null
+            ? 'auth.enroll.successNext'
+            : 'auth.enroll.successNextPersonal',
+        )}
+      </Text>
     </View>
   );
 }

@@ -172,6 +172,16 @@ describe('the done step', () => {
     const screen = renderScreen(onA({ step: 'done' }), vi.fn());
     expect(textsIn(screen.get('enroll-store-name'))).toEqual([STORE_A.name]);
   });
+
+  test('a shared phone says to pick who uses it; a personal one only to sign in', () => {
+    const shared = renderScreen(onA({ step: 'done' }), vi.fn());
+    expect(textsIn(shared.get('enroll-step-done'))).toContain(t('auth.enroll.successNext'));
+    shared.unmount();
+    const personal = renderScreen(onA({ step: 'done', personalUserId: 'u-budi' }), vi.fn());
+    const texts = textsIn(personal.get('enroll-step-done'));
+    expect(texts).toContain(t('auth.enroll.successNextPersonal'));
+    expect(texts).not.toContain(t('auth.enroll.successNext'));
+  });
 });
 
 describe('before enrolment there is no sync to report', () => {

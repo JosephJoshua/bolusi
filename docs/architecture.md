@@ -134,7 +134,9 @@ fails a build, a boot or a test rather than waiting for review:
   A device is sent only the ops its read set covers (`sync/read-scope.ts`); a shared
   store device gets what the business's staff roles may read, so owner-only data never
   lands on it. A phone set up as one person's own (`devices.personal_user_id`, chosen at
-  setup) gets what that person may read, and only they sign in on it. When the set shrinks, the device drops those pulled ops and re-folds;
+  setup) gets what that person may read, and only they sign in on it. The server
+  takes its ops only as that person (its genesis and re-enrolment record aside), so a
+  deactivated person's phone writes nothing more. When the set shrinks, the device drops those pulled ops and re-folds;
   when it grows, it catches up on the older ones. `null` is for records every device
   needs (sign-in, PIN, device). A record with fields for different readers is split
   into separate op types, one per reader (part costs live apart from stock moves).
