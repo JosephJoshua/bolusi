@@ -47,6 +47,7 @@ import {
   AUTH_PERMISSION,
   changePin as changePinFlow,
   firstPinUserOnThisDevice,
+  listSignInUsers,
   setFirstPin as setFirstPinFlow,
   clearPinLockoutFlow as clearLockoutFlow,
   createLockedOutEmitter,
@@ -410,7 +411,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     async refresh(): Promise<void> {
       try {
         const [directory, firstPinUserId] = await Promise.all([
-          listSwitcherUsers(db),
+          listSignInUsers(db),
           firstPinUserOnThisDevice(db),
         ]);
         // Someone who left the roster can never unlock again: drop their saved drafts. Best
