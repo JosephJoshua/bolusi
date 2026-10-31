@@ -255,7 +255,7 @@ describe('history', () => {
   });
 
   test('a payment or a cash move still standing can be cancelled, each by whoever may', () => {
-    const owner = { payments: true, cashMoves: true };
+    const owner = { payments: true, askPayments: false, cashMoves: true };
     expect(voidable(entry({}), owner)).toBe(true);
     const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
     expect(voidable(voided, owner)).toBe(false);
