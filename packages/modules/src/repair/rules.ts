@@ -11,7 +11,7 @@
 import { sql, type Kysely } from 'kysely';
 import type { z } from 'zod';
 
-import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
+import { defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { approvedPermit } from '../approvals/permits.js';
@@ -69,7 +69,7 @@ import type {
 } from './operations.js';
 import type { RepairDatabase } from './schema.js';
 import { statusCodeFor } from './status-link.js';
-import { deviceCode, ticketCounter } from './ticket-number.js';
+import { requireDeviceNumber } from '../shared/device-number.js';
 
 type Rule = OpRule<RepairDatabase>;
 type Db = Parameters<Rule>[1]['db'];
@@ -545,27 +545,6 @@ async function pendingProposals(db: Db, op: SignedOperation): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
-/**
- * Whether this device already opened a ticket with this number. Bound to the device through the op
- * log, which both sides keep with the same columns: two devices may share a 3-letter code
- * (ticket-number.ts), and that rare collision must not refuse an honest ticket.
- */
-async function deviceUsedNumber(
-  db: Db,
-  op: SignedOperation,
-  ticketNumber: string,
-  devices: readonly string[],
-) {
-  const { rows } = await sql<{ one: number }>`
-    SELECT 1 AS one FROM repair_tickets t
-    JOIN operations o ON o.entity_id = t.id AND o.type = ${op.type}
-    WHERE t.store_id = ${storeOf(op)} AND t.ticket_number = ${ticketNumber}
-      AND o.device_id IN (${sql.join(devices)})
-    LIMIT 1
-  `.execute(db);
-  return rows.length > 0;
-}
-
 // ── the rules, one per op type ──────────────────────────────────────────────────────────────────
 
 type Payload<S extends z.ZodType> = z.output<S>;
@@ -977,24 +956,26 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
       throw alreadyRecorded('quoteLines', line.lineId);
     }
   }
-  const number = payload.ticketNumber;
   // A re-enrolled phone carries over tickets its earlier registration numbered offline.
-  const devices = await carriedRegistrations(db, op.deviceId);
-  const minted = devices.some((device) => number.startsWith(`${deviceCode(device)}-`));
-  if (!minted || ticketCounter(number) === null) {
-    throw refuse('numberNotThisDevice', {
-      code: 'VALIDATION_FAILED',
-      details: { field: 'ticketNumber', issue: 'not minted by this device' },
-      message: `ticket number ${number} does not belong to device ${op.deviceId}`,
-    });
-  }
-  if (await deviceUsedNumber(db, op, number, devices)) {
-    throw refuse('numberUsed', {
-      code: 'VALIDATION_FAILED',
-      details: { field: 'ticketNumber', issue: 'already used' },
-      message: `ticket number ${number} is already used by this device`,
-    });
-  }
+  const number = payload.ticketNumber;
+  await requireDeviceNumber(db, op, {
+    number,
+    prefix: '',
+    table: 'repair_tickets',
+    column: 'ticket_number',
+    notThisDevice: () =>
+      refuse('numberNotThisDevice', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'ticketNumber', issue: 'not minted by this device' },
+        message: `ticket number ${number} does not belong to device ${op.deviceId}`,
+      }),
+    used: () =>
+      refuse('numberUsed', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'ticketNumber', issue: 'already used' },
+        message: `ticket number ${number} is already used by this device`,
+      }),
+  });
 };
 
 export const ticketClaimedRule: Rule = async (op, { db }) => {

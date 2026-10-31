@@ -9,6 +9,8 @@ export {
 export * from './constants.js';
 export type * from './schema.js';
 export type { PartUseCheck, PartUseTarget, PartUseTargets } from './part-use.js';
+export type { StockSourceCheck, StockSourceTarget, StockSourceTargets } from './stock-source.js';
+export { stockReceivedOp } from './commands.js';
 export { INVENTORY_REFUSALS } from './rules.js';
 export { itemSearchSource } from './search.js';
 export {

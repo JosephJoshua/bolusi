@@ -1,9 +1,10 @@
 // What a device may receive (permission-scoped sync, owner decisions 2026-10-31): the read
 // permissions its pulls are filtered by.
-//   - A shared store device gets staff-level data: what the business's staff roles may read.
-//     Owner-only data, such as part costs, never lands on it; owners see that online. Roles, not
-//     people, decide it, so a store whose only staff so far is its owner still gets what a cashier
-//     would need at the counter.
+//   - A shared store device gets staff-level data: what the business's staff roles may read, and
+//     what the role editor can give a staff role (Belanja's orders and suppliers, even before any
+//     staff role has it, so the owner's orders reach the counter PC). Owner-only data, such as part
+//     costs, never lands on it; owners see that online. Roles, not people, decide it, so a store
+//     whose only staff so far is its owner still gets what a cashier would need at the counter.
 //   - A personal device (one person's own phone) gets what that person may read at its store, and
 //     nothing once they are deactivated.
 import {
@@ -13,6 +14,7 @@ import {
   type ReadScopeRegistry,
 } from '@bolusi/core';
 import type { TenantDb } from '@bolusi/db-server';
+import { ROLE_ABILITIES } from '@bolusi/modules';
 
 import { loadUserDirectory } from '../auth/permissions.js';
 
@@ -47,7 +49,15 @@ async function personalDeviceReadSet(
   return readSetOf(registry, new Set([...effective.tenantScope, ...effective.storeScope]));
 }
 
-/** The read set of a shared store device: the read permissions any non-owner role holds. */
+/** Every permission the role editor's switches can give a staff role. */
+const STAFF_GRANTABLE: readonly string[] = ROLE_ABILITIES.flatMap(
+  (ability) => ability.permissionIds,
+);
+
+/**
+ * The read set of a shared store device: the read permissions any non-owner role holds or can be
+ * given.
+ */
 export async function sharedDeviceReadSet(
   db: TenantDb,
   tenantId: string,
@@ -69,7 +79,7 @@ export async function sharedDeviceReadSet(
     list.push(grant.permissionId);
     byRole.set(grant.roleId, list);
   }
-  const held = new Set<string>();
+  const held = new Set<string>(STAFF_GRANTABLE);
   for (const role of roles) {
     const permissions = byRole.get(role.id) ?? [];
     if (isOwnerRoleOf(role.scopeType, permissions)) continue;

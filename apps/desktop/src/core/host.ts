@@ -68,7 +68,7 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import { approvalsModule, inventoryModule, moneyModule } from '@bolusi/modules';
+import { approvalsModule, inventoryModule, moneyModule, purchasingModule } from '@bolusi/modules';
 import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
@@ -101,6 +101,7 @@ import { nodeRealtimeSocket } from './websocket.js';
 /** The repair runtime the core builds for whoever is signed in. */
 type RepairRuntime = ReturnType<typeof createSessionRepairRuntime>;
 type InventoryRuntime = NonNullable<RepairRuntime['inventory']>;
+type PurchasingRuntime = NonNullable<RepairRuntime['purchasing']>;
 
 import { nodeColumnAead, nodeCryptoPort } from './crypto.js';
 import { createDesktopMediaFiles, createDesktopPhonePhotoFiles } from './media-files.js';
@@ -436,6 +437,12 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const inventory = repairFor(userId).inventory;
     if (inventory === undefined) throw new Error('stock is not running on this PC');
     return inventory;
+  }
+
+  function purchasingFor(userId: string): PurchasingRuntime {
+    const purchasing = repairFor(userId).purchasing;
+    if (purchasing === undefined) throw new Error('buying is not running on this PC');
+    return purchasing;
   }
 
   /** Who a photo or signature from the window is stamped with: the person signed in now. */
@@ -905,6 +912,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       untyped(inventoryFor(userId).query)(knownName(inventoryModule.queries, name), input),
     'inventory.run': (userId: string, name: string, input: unknown) =>
       untyped(inventoryFor(userId).run)(knownName(inventoryModule.commands, name), input),
+    // Orders to suppliers and their deliveries, for the same person.
+    'purchasing.query': (userId: string, name: string, input: unknown) =>
+      untyped(purchasingFor(userId).query)(knownName(purchasingModule.queries, name), input),
+    'purchasing.run': (userId: string, name: string, input: unknown) =>
+      untyped(purchasingFor(userId).run)(knownName(purchasingModule.commands, name), input),
+    'purchasing.storeName': (userId: string) =>
+      purchasingFor(userId).storeName?.() ?? Promise.resolve(null),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),

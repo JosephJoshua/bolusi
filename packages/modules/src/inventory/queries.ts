@@ -20,6 +20,7 @@ import {
   TAG_FACET,
   type MovementKind,
   type PartUseKind,
+  type StockSourceKind,
 } from './constants.js';
 import type { InventoryDatabase } from './schema.js';
 import { itemSearchSource } from './search.js';
@@ -46,7 +47,8 @@ export interface MovementRow {
   /** Signed change to stock. */
   readonly qty: number;
   readonly counted: number | null;
-  readonly useKind: PartUseKind | null;
+  /** What it was for (a part use) or where it came from (a stock source). */
+  readonly useKind: PartUseKind | StockSourceKind | null;
   readonly useId: string | null;
   readonly useLabel: string | null;
   readonly note: string | null;
@@ -204,7 +206,7 @@ async function toMovements(
     kind: row.kind as MovementKind,
     qty: Number(row.qty),
     counted: row.counted === null ? null : Number(row.counted),
-    useKind: row.useKind as PartUseKind | null,
+    useKind: row.useKind as PartUseKind | StockSourceKind | null,
     useId: row.useId,
     useLabel: row.useLabel,
     note: row.note,

@@ -122,6 +122,8 @@ export const ICON_GLYPHS = Object.freeze({
   conceal: 'eye-off-outline',
   /** Sparepart and stock: the parts list. */
   parts: 'package-variant-closed',
+  /** Buying parts from suppliers ("Belanja"). */
+  buy: 'cart-outline',
   /** QuantityStepper: one fewer. (`add` is one more.) */
   decrease: 'minus',
   /** Stock: a count of what is on the shelf. */

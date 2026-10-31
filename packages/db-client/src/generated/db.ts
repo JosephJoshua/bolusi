@@ -321,6 +321,65 @@ export interface ProjectionWatermarks {
   moduleId: string | null;
 }
 
+export interface PurchasingOrderLines {
+  itemId: string;
+  itemName: string;
+  orderId: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+}
+
+export interface PurchasingOrders {
+  cancelledAt: number | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  createdAt: number;
+  createdBy: string;
+  id: string | null;
+  note: string | null;
+  orderedAt: number | null;
+  orderedBy: string | null;
+  orderNumber: string;
+  status: string;
+  storeId: string;
+  supplierId: string;
+  tenantId: string;
+  updatedAt: number;
+}
+
+export interface PurchasingReceiptLines {
+  itemId: string;
+  orderId: string;
+  position: number;
+  qty: number;
+  receiptId: string;
+  tenantId: string;
+}
+
+export interface PurchasingReceipts {
+  at: number;
+  id: string | null;
+  note: string | null;
+  orderId: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+}
+
+export interface PurchasingSuppliers {
+  archived: number;
+  createdAt: number;
+  createdBy: string;
+  id: string | null;
+  name: string;
+  note: string | null;
+  phone: string | null;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export interface QuarantinedOps {
   deviceId: string;
   hash: string;
@@ -566,6 +625,11 @@ export interface DB {
   pinAttemptState: PinAttemptState;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
+  purchasingOrderLines: PurchasingOrderLines;
+  purchasingOrders: PurchasingOrders;
+  purchasingReceiptLines: PurchasingReceiptLines;
+  purchasingReceipts: PurchasingReceipts;
+  purchasingSuppliers: PurchasingSuppliers;
   quarantinedOps: QuarantinedOps;
   repairCustomers: RepairCustomers;
   repairIntakeOptions: RepairIntakeOptions;

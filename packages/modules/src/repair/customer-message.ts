@@ -9,8 +9,8 @@ import { formatMoney } from '@bolusi/i18n';
 import { amountOwed, balanceAfterDownPayment, type RepairAbilities } from './flows.js';
 import { tn, type RepairKey } from './i18n.js';
 import type { QuoteLineRow, TicketDetailRow } from './queries.js';
+import { whatsAppNumber, whatsAppUrl } from '../shared/whatsapp.js';
 import { statusLink } from './status-link.js';
-import { whatsAppNumber, whatsAppUrl } from './whatsapp.js';
 
 export { whatsAppNumber, whatsAppUrl };
 

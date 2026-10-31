@@ -13,6 +13,7 @@ import { APPROVAL_PERMISSION } from './approvals/constants.js';
 import { INVENTORY_PERMISSION } from './inventory/constants.js';
 import { MONEY_PERMISSION } from './money/constants.js';
 import { NOTES_PERMISSION } from './notes/constants.js';
+import { PURCHASING_PERMISSION } from './purchasing/constants.js';
 import { REPAIR_PERMISSION } from './repair/constants.js';
 
 const R = REPAIR_PERMISSION;
@@ -80,6 +81,12 @@ export const ROLE_ABILITY_GROUPS = [
       { id: 'stockCount', permissionIds: [I.count], requires: ['stockView'] },
       { id: 'stockCorrect', permissionIds: [I.correctUse], requires: ['stockView'] },
       { id: 'stockManage', permissionIds: [I.manageItems], requires: ['stockView'] },
+      // "Belanja sparepart": suppliers, orders and receiving what arrives into stock.
+      {
+        id: 'stockBuy',
+        permissionIds: [PURCHASING_PERMISSION.buy, I.receive],
+        requires: ['stockView'],
+      },
     ],
   },
   {

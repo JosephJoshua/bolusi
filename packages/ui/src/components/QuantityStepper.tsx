@@ -42,7 +42,8 @@ const styles = StyleSheet.create({
   input: {
     ...type.heading,
     minWidth: size.stepperValue,
-    height: touch.min,
+    // Grows with a large font instead of clipping the number.
+    minHeight: touch.min,
     paddingHorizontal: space.md,
     borderRadius: radius.md,
     backgroundColor: color.surfaceAlt,

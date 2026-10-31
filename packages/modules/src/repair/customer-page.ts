@@ -7,7 +7,7 @@
 import { formatDate, formatDateTime, formatMoney } from '@bolusi/i18n';
 import type { PublicRepairStatus, RepairStatusStep } from '@bolusi/schemas';
 
-import { whatsAppNumber, whatsAppUrl } from './whatsapp.js';
+import { whatsAppNumber, whatsAppUrl } from '../shared/whatsapp.js';
 import { tn, type RepairKey } from './i18n.js';
 import { warrantyLine } from './labels.js';
 

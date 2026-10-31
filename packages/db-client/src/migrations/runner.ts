@@ -22,6 +22,7 @@ import { roleLimitsMigration } from './021-role-limits.js';
 import { approvalsMigration } from './023-approvals.js';
 import { repairStatusLinkMigration } from './024-repair-status-link.js';
 import { readScopeMigration } from './028-read-scope.js';
+import { purchasingMigration } from './029-purchasing.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
@@ -48,6 +49,7 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   approvalsMigration,
   repairStatusLinkMigration,
   readScopeMigration,
+  purchasingMigration,
 ];
 
 export interface RunMigrationsOptions {

@@ -14,6 +14,13 @@ import {
 import { KasPage, MONEY_PERMISSION, MoneyRuntimeProvider, tm } from '@bolusi/modules/money/desktop';
 import { keptIntakeDraft, startedByOther } from '@bolusi/modules/repair';
 import {
+  OrdersPage,
+  PURCHASING_PERMISSION,
+  PurchasingRuntimeProvider,
+  tp,
+  type OrderFilter,
+} from '@bolusi/modules/purchasing/desktop';
+import {
   IntakePage,
   RepairBoardPage,
   moneyRuntimeOf,
@@ -31,7 +38,7 @@ import {
   SidebarToggle,
   type MenuItem,
 } from '@bolusi/ui-web';
-import { Banknote, ChevronDown, Package, Settings, Wrench } from 'lucide-react';
+import { Banknote, ChevronDown, Package, Settings, ShoppingCart, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { SettingsAccess } from './settings/access.js';
@@ -46,6 +53,7 @@ type Page =
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
   | { readonly kind: 'parts' }
+  | { readonly kind: 'purchasing' }
   | { readonly kind: 'kas' }
   | { readonly kind: 'settings'; readonly section?: 'computer' | StoreBasicSetting }
   // The first-run setup of this PC (setup/DeviceSetupPage.tsx).
@@ -177,6 +185,11 @@ export function Counter({
   const inventory = repair.inventory;
   const showsParts = inventory?.hasPermission(INVENTORY_PERMISSION.read) === true;
   const [partsFilter, setPartsFilter] = useState<ListFilter>(NO_FILTER);
+  // Belanja, for whoever orders from suppliers; it picks parts from the same list.
+  const purchasing = repair.purchasing;
+  const showsPurchasing =
+    showsParts && purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true;
+  const [ordersFilter, setOrdersFilter] = useState<OrderFilter>('open');
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
   const showsKas =
     money.hasPermission(MONEY_PERMISSION.read) || money.hasPermission(MONEY_PERMISSION.countCash);
@@ -269,7 +282,8 @@ export function Counter({
                 page.kind === 'board' ||
                 page.kind === 'intake' ||
                 (page.kind === 'kas' && !showsKas) ||
-                (page.kind === 'parts' && !showsParts),
+                (page.kind === 'parts' && !showsParts) ||
+                (page.kind === 'purchasing' && !showsPurchasing),
               onSelect: () => go({ kind: 'board' }),
             },
             ...(showsParts
@@ -280,6 +294,17 @@ export function Counter({
                     icon: Package,
                     active: page.kind === 'parts',
                     onSelect: () => go({ kind: 'parts' }),
+                  },
+                ]
+              : []),
+            ...(showsPurchasing
+              ? [
+                  {
+                    key: 'purchasing',
+                    label: tp('purchasing.list.title'),
+                    icon: ShoppingCart,
+                    active: page.kind === 'purchasing',
+                    onSelect: () => go({ kind: 'purchasing' }),
                   },
                 ]
               : []),
@@ -326,6 +351,15 @@ export function Counter({
       ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
         <InventoryRuntimeProvider runtime={inventory}>
           <PartsPage filter={partsFilter} onFilterChange={setPartsFilter} />
+        </InventoryRuntimeProvider>
+      ) : page.kind === 'purchasing' &&
+        showsPurchasing &&
+        inventory !== undefined &&
+        purchasing !== undefined ? (
+        <InventoryRuntimeProvider runtime={inventory}>
+          <PurchasingRuntimeProvider runtime={purchasing}>
+            <OrdersPage filter={ordersFilter} onFilterChange={setOrdersFilter} />
+          </PurchasingRuntimeProvider>
         </InventoryRuntimeProvider>
       ) : page.kind === 'kas' && showsKas ? (
         <KasPage now={Date.now} />

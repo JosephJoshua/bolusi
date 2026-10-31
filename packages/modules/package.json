@@ -57,6 +57,18 @@
       "types": "./dist/inventory/desktop/index.d.ts",
       "default": "./dist/inventory/desktop/index.js"
     },
+    "./purchasing": {
+      "types": "./dist/purchasing/index.d.ts",
+      "default": "./dist/purchasing/index.js"
+    },
+    "./purchasing/screens": {
+      "types": "./dist/purchasing/screens/index.d.ts",
+      "default": "./dist/purchasing/screens/index.js"
+    },
+    "./purchasing/desktop": {
+      "types": "./dist/purchasing/desktop/index.d.ts",
+      "default": "./dist/purchasing/desktop/index.js"
+    },
     "./money": {
       "types": "./dist/money/index.d.ts",
       "default": "./dist/money/index.js"
@@ -91,6 +103,8 @@
     "./repair/i18n/en.json": "./repair/i18n/en.json",
     "./inventory/i18n/id.json": "./inventory/i18n/id.json",
     "./inventory/i18n/en.json": "./inventory/i18n/en.json",
+    "./purchasing/i18n/id.json": "./purchasing/i18n/id.json",
+    "./purchasing/i18n/en.json": "./purchasing/i18n/en.json",
     "./money/i18n/id.json": "./money/i18n/id.json",
     "./money/i18n/en.json": "./money/i18n/en.json",
     "./approvals/i18n/id.json": "./approvals/i18n/id.json",
@@ -101,6 +115,7 @@
     "notes/i18n",
     "repair/i18n",
     "inventory/i18n",
+    "purchasing/i18n",
     "money/i18n",
     "approvals/i18n"
   ],

@@ -12,7 +12,7 @@ import {
   whatsAppUrl,
 } from '../src/repair/customer-message.js';
 import { registerRepairCatalog } from '../src/repair/i18n.js';
-import { whatsAppAppUrl } from '../src/repair/whatsapp.js';
+import { whatsAppAppUrl } from '../src/shared/whatsapp.js';
 
 import { line, sampleTicket } from './support/repair-rows.js';
 

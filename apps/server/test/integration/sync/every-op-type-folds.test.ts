@@ -179,6 +179,77 @@ function journey(world: ChainWorld): OpSpec[] {
       movement(3, 'inventory.item_put_back', { itemId: part, qty: 1, use }),
     ];
   };
+  /** A supplier, an order drafted, edited and placed, a delivery and the stock it brings in; then
+   *  a second order cancelled. Uses the part above. */
+  const purchasing = (): OpSpec[] => {
+    const supplier = id(0x600);
+    const order = id(0x601);
+    const dropped = id(0x602);
+    const receipt = id(0x603);
+    const lines = [{ itemId: part, name: 'LCD Samsung A14', qty: 3 }];
+    const orderOp = (type: string, entityId: string, payload: Record<string, unknown>): OpSpec => ({
+      type,
+      entityType: 'purchasing_order',
+      entityId,
+      payload,
+    });
+    return [
+      {
+        type: 'purchasing.supplier_added',
+        entityType: 'purchasing_supplier',
+        entityId: supplier,
+        storeId: null,
+        payload: { name: 'Sumber Jaya', phone: '0812 3456 7890', note: null },
+      },
+      {
+        type: 'purchasing.supplier_edited',
+        entityType: 'purchasing_supplier',
+        entityId: supplier,
+        storeId: null,
+        payload: {
+          name: 'Sumber Jaya Sorong',
+          phone: '0812 3456 7890',
+          note: 'Buka jam 9',
+          archived: false,
+        },
+      },
+      orderOp('purchasing.order_drafted', order, {
+        orderNumber: `PO-${formatTicketNumber(world.deviceId, 1)}`,
+        supplierId: supplier,
+        note: null,
+        lines,
+      }),
+      orderOp('purchasing.order_edited', order, { supplierId: supplier, note: 'Original', lines }),
+      orderOp('purchasing.order_placed', order, {}),
+      {
+        type: 'purchasing.order_received',
+        entityType: 'purchasing_receipt',
+        entityId: receipt,
+        payload: { orderId: order, note: null, lines: [{ itemId: part, qty: 2 }] },
+      },
+      {
+        type: 'inventory.stock_received',
+        entityType: 'inventory_movement',
+        entityId: id(0x604),
+        payload: {
+          itemId: part,
+          qty: 2,
+          source: {
+            kind: 'purchase_receipt',
+            id: receipt,
+            label: `PO-${formatTicketNumber(world.deviceId, 1)}`,
+          },
+        },
+      },
+      orderOp('purchasing.order_drafted', dropped, {
+        orderNumber: `PO-${formatTicketNumber(world.deviceId, 2)}`,
+        supplierId: supplier,
+        note: null,
+        lines,
+      }),
+      orderOp('purchasing.order_cancelled', dropped, { reason: 'Salah supplier' }),
+    ];
+  };
   /** The current version, with the repair types picked at intake (none when left out). */
   const opened = (
     ticketId: string,
@@ -411,6 +482,7 @@ function journey(world: ChainWorld): OpSpec[] {
       repairTypes: [screen, { item: 'battery', label: null, warrantyDays: 30, needsVideo: false }],
     }),
     ...partsUsed(),
+    ...purchasing(),
     onTicket('repair.quote_change_proposed', {
       lineId: id(0x201),
       kind: 'part',

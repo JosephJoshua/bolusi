@@ -6,7 +6,8 @@
     "itemTaken": "Part taken",
     "itemPutBack": "Part put back",
     "categoryAdded": "Category added",
-    "categoryEdited": "Category changed"
+    "categoryEdited": "Category changed",
+    "stockReceived": "Parts received"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -15,7 +16,8 @@
     "moreThanTaken": "That is more than this repair took.",
     "wrongUse": "The repair details don’t match. Try again.",
     "categoryNotFound": "This category doesn’t exist.",
-    "categoryInvalid": "This category’s fields or name format aren’t right yet."
+    "categoryInvalid": "This category’s fields or name format aren’t right yet.",
+    "wrongSource": "The order details do not match."
   },
   "list": {
     "title": "Items",
@@ -106,7 +108,8 @@
   "movement": {
     "counted": "Corrected to {count}",
     "taken": "Taken for {use}",
-    "putBack": "Put back from {use}"
+    "putBack": "Put back from {use}",
+    "received": "Received on {source}"
   },
   "stepper": {
     "decrease": "Fewer",
