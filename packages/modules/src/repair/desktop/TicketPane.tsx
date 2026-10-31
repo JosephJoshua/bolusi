@@ -53,12 +53,14 @@ import {
   arrangeTicketActions,
   balanceAfterDownPayment,
   canSetRepairTypes,
+  canUseParts,
   claimIntakeDraft,
   CONTEXTUAL_ACTIONS,
   FINAL_ACTIONS,
   downPaymentAction,
   downPaymentStale,
   paidLabelKey,
+  partUse,
   photoInSlot,
   repairTypesStale,
   photoThumbnailRef,
@@ -107,6 +109,9 @@ import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import { tm } from '../../money/i18n.js';
 import { ReduceChargeDialog, RefundDialog } from '../../money/desktop/KasDialogs.js';
 import { MoneyRuntimeProvider } from '../../money/runtime.js';
+import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
+import { UsedPartsSection } from '../../inventory/desktop/UsedParts.js';
+import { InventoryRuntimeProvider } from '../../inventory/runtime.js';
 import { CatalogPhoto, DeviceSpecs, StatusChip, photoLabels, usePhotoState } from './parts.js';
 import {
   AssignDialog,
@@ -591,6 +596,7 @@ export function TicketPane({
         )}
 
         {renderPrice(row)}
+        {renderParts(row)}
         <TicketPhotos ticket={row} />
         <TicketVideoSection ticket={row} runner={runner} testId="repair.desk.ticket.video" />
         {renderCondition(row)}
@@ -921,6 +927,24 @@ export function TicketPane({
         testId="repair.desk.ticket.claimLink"
       />
     ));
+  }
+
+  /** The parts taken for it: the store's own record, never on the bill. */
+  function renderParts(row: TicketDetailRow): React.JSX.Element | null {
+    const inventory = runtime.inventory;
+    if (inventory === undefined || !inventory.hasPermission(INVENTORY_PERMISSION.read)) return null;
+    return (
+      <InventoryRuntimeProvider runtime={inventory}>
+        <UsedPartsSection
+          use={partUse(row)}
+          device={{ brand: row.deviceBrand, model: row.deviceModel }}
+          editable={canUseParts(row, runtime.userId, inventory.hasPermission)}
+          flagUnreturned={row.outcome === 'cancelled'}
+          onDone={setDone}
+          testId="repair.desk.ticket.parts"
+        />
+      </InventoryRuntimeProvider>
+    );
   }
 
   function renderStep(row: TicketDetailRow): React.JSX.Element | null {

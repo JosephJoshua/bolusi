@@ -65,7 +65,7 @@ import {
   type TicketFacets,
 } from '../table.js';
 
-import { QueryPanel } from '../../screen-kit/desktop/index.js';
+import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
 import { StatusChip } from './parts.js';
 import { TicketPane } from './TicketPane.js';
 
@@ -137,12 +137,6 @@ interface LoadedBoard {
   /** Servisan waiting on this user's approval, and those with any waiting request they see. */
   readonly approvalIds: readonly string[];
   readonly approvalWaiting: ReadonlySet<string>;
-}
-
-/** Whether a key press was meant for a field rather than for the page. */
-function typingInField(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
 /** The filter options matching typed text, best first, with the app's typo-tolerant search. */
@@ -290,8 +284,7 @@ export function RepairBoardPage({
       // Page shortcuts are off while a dialog or menu is up; it owns the keyboard, Escape included.
       // Listening in the capture phase sees the key before the dialog closes itself on it.
       // (A filter's popover is a dialog too; a tooltip is not, so hovering never mutes the keys.)
-      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') !== null)
-        return;
+      if (overlayOpen()) return;
       if (event.key === 'F2' && can.intake) {
         event.preventDefault();
         onNewIntake();
