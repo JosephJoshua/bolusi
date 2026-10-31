@@ -32,7 +32,8 @@ type RepairView =
   | { readonly kind: 'board' }
   /** A warranty claim's intake starts from a draft made from the servisan it claims on. */
   | { readonly kind: 'intake'; readonly draft?: IntakeDraft }
-  | { readonly kind: 'ticket'; readonly ticketId: string }
+  /** `print`: just opened or handed over, so it opens on the customer's slip. */
+  | { readonly kind: 'ticket'; readonly ticketId: string; readonly print?: true }
   | { readonly kind: 'handover'; readonly ticketId: string };
 
 /**
@@ -139,6 +140,7 @@ export function RepairHome({
         // A new ticket is a new screen: its open step and scroll position stay with the last one.
         key={view.ticketId}
         ticketId={view.ticketId}
+        printFirst={view.print === true}
         chrome={chrome}
         now={now}
         hideBack={split}
@@ -155,7 +157,7 @@ export function RepairHome({
         key={view.ticketId}
         ticketId={view.ticketId}
         chrome={chrome}
-        onDone={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
+        onDone={() => setView({ kind: 'ticket', ticketId: view.ticketId, print: true })}
         onCancel={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
         onRegisterDiscardGuard={registerDiscardGuard}
       />
@@ -198,7 +200,7 @@ export function RepairHome({
             onDraftChange={onDraftChange}
             onRegisterDiscardGuard={registerDiscardGuard}
             onRegisterStepBack={registerStepBack}
-            onOpened={(ticketId) => setView({ kind: 'ticket', ticketId })}
+            onOpened={(ticketId) => setView({ kind: 'ticket', ticketId, print: true })}
             onCancel={() => setView({ kind: 'board' })}
           />
         ) : null}

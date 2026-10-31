@@ -16,11 +16,13 @@ export const SearchField = forwardRef<
     readonly label: string;
     readonly clearLabel: string;
     readonly shortcut?: string | undefined;
+    /** Enter or ArrowDown: go on to the results, such as the first row of the table under it. */
+    readonly onPick?: (() => void) | undefined;
     readonly className?: string | undefined;
     readonly testId?: string | undefined;
   }
 >(function SearchField(
-  { value, onChange, placeholder, label, clearLabel, shortcut, className, testId },
+  { value, onChange, placeholder, label, clearLabel, shortcut, onPick, className, testId },
   ref,
 ) {
   return (
@@ -41,6 +43,9 @@ export const SearchField = forwardRef<
           if (event.key === 'Escape' && value !== '') {
             event.stopPropagation();
             onChange('');
+          } else if ((event.key === 'Enter' || event.key === 'ArrowDown') && onPick !== undefined) {
+            event.preventDefault();
+            onPick();
           }
         }}
         data-testid={testId}

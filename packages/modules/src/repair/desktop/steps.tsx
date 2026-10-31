@@ -9,6 +9,7 @@ import {
   Banner,
   Button,
   CaptureTile,
+  ChoiceList,
   ConfirmDialog,
   Dialog,
   Segmented,
@@ -161,8 +162,9 @@ function StepDialog({
   );
 }
 
+/** "Kembali", never "Batal": beside "Batalkan servisan" a "Batal" reads as the same thing. */
 function CancelButton({ onClick }: { readonly onClick: () => void }): React.JSX.Element {
-  return <Button label={t('core.action.cancel')} onClick={onClick} />;
+  return <Button label={t('core.action.back')} onClick={onClick} />;
 }
 
 /** Leaving a step that holds photos or notes asks first, so a mis-click does not lose them. */
@@ -539,7 +541,7 @@ export function CancelDialog({
   return (
     <>
       <StepDialog
-        title={tn(holds ? 'repair.action.cancel' : 'repair.approval.askCancel')}
+        title={tn('repair.cancel.title')}
         description={
           cancelRefund(downPayment, charged) > 0
             ? tn('repair.cancel.refundsDp', {
@@ -1009,7 +1011,7 @@ export function PriceChangeDialog({
   return (
     <>
       <StepDialog
-        title={tn(mode === 'change' ? 'repair.action.changePrice' : 'repair.action.proposePrice')}
+        title={tn('repair.price.editTitle')}
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
@@ -1320,7 +1322,7 @@ export function HandoverDialog({
   return (
     <>
       <StepDialog
-        title={tn('repair.action.handover')}
+        title={tn('repair.handover.title')}
         // Which phone it is, as the phone app shows it: a customer with two ready names both.
         description={
           <span data-testid="repair.desk.handover.phone">
@@ -1735,7 +1737,7 @@ export function PrintDialog({
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
   const { paper } = useDevicePaper(printing, DESK_PAPERS);
-  const { state: printers } = useDevicePrinters(printing.printers);
+  const { state: printers, choose } = useDevicePrinters(printing.printers);
   const [problem, catchProblem, clearProblem] = usePrinterProblem();
   const [asking, setAsking] = useState(false);
   const testId = 'repair.desk.print';
@@ -1824,6 +1826,25 @@ export function PrintDialog({
             problem={shownProblem}
             onDismiss={problem === null ? undefined : clearProblem}
           />
+          {/* No printer yet, or the one picked is gone: picked right here, and kept for next time
+              as in Settings, so the customer is not kept waiting on a trip there. */}
+          {!(unpicked || missing) || printers.kind !== 'ready' ? null : printers.printers.length ===
+            0 ? (
+            <p className="text-body text-text-muted" data-testid={`${testId}.noPrinters`}>
+              {tn('repair.printer.none')}
+            </p>
+          ) : (
+            <ChoiceList
+              label={tn('repair.printer.printer')}
+              options={printers.printers.map((p) => ({ value: p.name, label: p.label }))}
+              value={null}
+              onChange={(name) => {
+                clearProblem();
+                void choose(name);
+              }}
+              testId={`${testId}.printers`}
+            />
+          )}
         </div>
       </StepDialog>
       <ConfirmDialog

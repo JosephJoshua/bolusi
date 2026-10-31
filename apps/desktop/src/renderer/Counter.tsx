@@ -121,6 +121,8 @@ export function Counter({
         : { kind: 'intake' },
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // The servisan an intake just saved: its pane offers the slip once.
+  const [openedTicketId, setOpenedTicketId] = useState<string | null>(null);
   // The queue and search the person was on are still there when they come back from an intake.
   const [filters, setFilters] = useState<BoardFilters | null>(null);
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
@@ -272,6 +274,7 @@ export function Counter({
           onOpened={(ticketId) => {
             if (page.claim === undefined) onDraftChange(null);
             setSelectedTicketId(ticketId);
+            setOpenedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
           onCancel={() => setPage({ kind: 'board' })}
@@ -280,6 +283,8 @@ export function Counter({
         <RepairBoardPage
           selectedTicketId={selectedTicketId}
           onSelectTicket={setSelectedTicketId}
+          openedTicketId={openedTicketId}
+          onOpenedShown={() => setOpenedTicketId(null)}
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
