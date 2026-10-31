@@ -1530,7 +1530,6 @@ export function demoRepairRuntime(
   // reviewer sees the very page a phone would print. "Share" downloads the same page.
   const printing: RepairPrinting = {
     storeName: () => Promise.resolve('Bolusi Wamena'),
-    userName: () => Promise.resolve(actor.name),
     readPaper: () => Promise.resolve(paper),
     writePaper: (next) => {
       paper = next;
@@ -1724,6 +1723,24 @@ export function demoRepairRuntime(
         targetId: (input) => String(input['ticketId']),
         apply: (input) => commands['correctDownPayment']!(input),
       },
+      // A payment cancelled from Kas, asked about its servisan.
+      'money.voidPayment': {
+        permission: MONEY_PERMISSION.voidPayment,
+        commandPermission: MONEY_PERMISSION.voidPayment,
+        amount: (input) =>
+          ledger
+            .documentMoney(String((input['document'] as { id: string }).id))
+            ?.entries.find((e) => e.id === input['entryId'])?.amount ?? 0,
+        targetId: (input) => String((input['document'] as { id: string }).id),
+        apply: async (input) => {
+          const result = await ledger.run('voidPayment', {
+            entryId: input['entryId'],
+            reason: input['reason'],
+          });
+          syncTicketMoney(String((input['document'] as { id: string }).id));
+          return result;
+        },
+      },
     },
     actor: () => ({ userId: actor.userId, name: actor.name, can: (id) => permitted.has(id) }),
     now: () => HARNESS_NOW,
@@ -1841,6 +1858,8 @@ export function demoRepairRuntime(
     playVideo: () => Promise.resolve(),
     printing,
     loadModelPhoto: demoModelPhoto,
+    // An example site, so the demo's slips and servisan show a link as a store's would.
+    statusSite: 'https://bolusi.example',
     loadThumbnail: (ref: ThumbnailRef) =>
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.

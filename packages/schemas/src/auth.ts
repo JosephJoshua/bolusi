@@ -86,7 +86,12 @@ export interface LoginRes {
   /** The tenant's display name — the enrollment CONFIRM step renders it (api/02-auth §4.2). */
   tenantName: string;
   user: { id: string; name: string };
-  stores: Array<{ id: string; name: string }>;
+  /**
+   * `people`: who this device may be set up for as their own phone (permission-scoped sync): the
+   * store's active people who already have a PIN, and the signed-in owner. Absent from an older
+   * server, which only sets up shared devices.
+   */
+  stores: Array<{ id: string; name: string; people?: Array<{ id: string; name: string }> }>;
 }
 
 // ============ POST /v1/auth/password (§5.4) ============
@@ -123,6 +128,11 @@ export const EnrollReq = z
      * enrolment, where there is nothing to replace.
      */
     replacesDeviceId: zId.optional(),
+    /**
+     * Whose own phone this is (permission-scoped sync): it then syncs what that person may read, and
+     * only they sign in on it. Omitted for a device the store shares. One of the store's `people`.
+     */
+    personalUserId: zId.optional(),
   })
   .strict();
 export type EnrollReq = z.infer<typeof EnrollReq>;
@@ -215,6 +225,8 @@ export const DeviceBundleSchema = z
     // device-side clamp (`applyBundle` → clampIdleLockSeconds), which swallows out-of-range values
     // rather than rejecting the bundle over them (§6.4). `.int()` only: the server always truncates.
     settings: z.object({ idleLockSeconds: z.number().int() }).strict(),
+    // Whose own device this is: only they sign in on it. Null or absent for a shared device.
+    personalUserId: zBundleId.nullable().optional(),
     users: z.array(
       z
         .object({

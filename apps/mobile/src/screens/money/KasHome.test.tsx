@@ -39,6 +39,7 @@ function moneyRuntimeFor(harness: RepairHarness, userId: string): MoneyRuntime {
   const repair = repairRuntimeFor(harness, userId);
   return {
     ...repair.money,
+    approvals: repair.approvals,
     subscribe: repair.subscribe,
     nameOf: (id) => (id === harness.cashierId ? USER_NAMES.cashier : null),
     customersOf: (documents) => servisanCustomers(repair, documents),
@@ -655,12 +656,18 @@ describe('Riwayat', () => {
     await press(screen, 'money.void.primary');
 
     // Back on the day's records: the payment is still there, cancelled, and no longer pressable.
-    expect(text(screen, row)).toContain('Dibatalkan: Salah metode');
+    expect(text(screen, row)).toContain('Pembayaran dibatalkan');
+    expect(text(screen, row)).toContain('Salah metode');
     await press(screen, 'money.history.back');
     expect(text(screen, 'money.kas.expected')).toBe('Rp 0');
   });
 
-  test('a manager sees their cancel limit before cancelling a payment', async () => {
+  /** The waiting requests `userId` may answer or asked. */
+  async function waiting(harness: RepairHarness, userId: string) {
+    return (await harness.approvalsQuery('approvalRequests', {}, userId)).rows;
+  }
+
+  test('a manager beyond their cancel limit asks an owner, whose yes cancels the payment', async () => {
     h = await openRepairScreenHarness(5415);
     const entryId = await paid(h);
     const screen = await mount(h, h.managerId);
@@ -668,20 +675,137 @@ describe('Riwayat', () => {
     await press(screen, `money.history.entry.${entryId}`);
     // The manager's refund limit in the harness, which voids count against too.
     expect(text(screen, 'money.void.limit')).toBe('Batas pembatalanmu Rp 30.000 per servisan.');
-    // Rp 200.000 is beyond it: refused before any reason is typed, not after submitting.
+    // Rp 200.000 is beyond it: said before any reason is typed, and it goes to an owner.
+    await settle();
+    expect(text(screen, 'money.void.asks')).toBe('Melebihi batasmu, jadi perlu persetujuan.');
+    expect(text(screen, 'money.void.primary')).toBe('Minta persetujuan');
     type(screen, 'money.void.reason', 'Salah metode');
     await settle();
-    expect(screen.all('money.void.primary')[0]!.props['disabled']).toBe(true);
-    expect(text(screen, 'money.void.primaryHint')).toBe('Melebihi batasmu. Minta pemilik toko.');
+    await press(screen, 'money.void.primary');
+    expect(text(screen, 'money.history.notice')).toBe(
+      'Permintaan dibuat. Pemilik toko akan memutuskan.',
+    );
+    const [request] = await waiting(h, h.storeOwnerId);
+    expect(request).toMatchObject({ kind: 'money.voidPayment', amount: 200_000 });
+    await h.approvals('approveRequest', { requestId: request!.id }, h.storeOwnerId);
+    const entry = await h.db
+      .selectFrom('moneyEntries')
+      .select(['voidedBy', 'voidReason'])
+      .where('id', '=', entryId)
+      .executeTakeFirstOrThrow();
+    expect(entry).toMatchObject({ voidedBy: h.storeOwnerId, voidReason: 'Salah metode' });
   });
 
-  test('the counter reads the records but cannot cancel one', async () => {
+  test('a manager’s limit counts what was already taken off the servisan, and says so', async () => {
+    h = await openRepairScreenHarness(5416);
+    const entryId = await paid(h);
+    const ticket = await h.db
+      .selectFrom('moneyEntries')
+      .select(['documentId', 'documentLabel'])
+      .where('id', '=', entryId)
+      .executeTakeFirstOrThrow();
+    const document = {
+      kind: 'repair.ticket',
+      id: ticket.documentId!,
+      label: ticket.documentLabel!,
+    };
+    const pay = async (amount: number) => {
+      await h!.money(
+        'receivePayments',
+        { document, payments: [{ account: 'cash', amount }] },
+        h!.cashierId,
+      );
+      return (
+        await h!.db
+          .selectFrom('moneyEntries')
+          .select('id')
+          .where('kind', '=', 'payment_received')
+          .where('amount', '=', amount)
+          .executeTakeFirstOrThrow()
+      ).id!;
+    };
+    const first = await pay(15_000);
+    const second = await pay(20_000);
+    // Rp 15.000 cancelled already: Rp 20.000 more is Rp 35.000, beyond the manager's Rp 30.000.
+    await h.money('voidPayment', { entryId: first, reason: 'Salah metode' }, h.storeOwnerId);
+    const screen = await mount(h, h.managerId);
+    await press(screen, 'money.kas.history');
+    await press(screen, `money.history.entry.${second}`);
+    await settle();
+    expect(text(screen, 'money.void.withEarlier')).toMatch(
+      /^Bersama pengurangan sebelumnya di servisan ini, totalnya Rp\s?35\.000\.$/,
+    );
+    expect(text(screen, 'money.void.primary')).toBe('Minta persetujuan');
+  });
+
+  test('the counter hears on Kas when an owner turns a cancel down, and may ask again', async () => {
+    h = await openRepairScreenHarness(5417);
+    const entryId = await paid(h);
+    const ticket = await h.db
+      .selectFrom('moneyEntries')
+      .select(['documentId'])
+      .where('id', '=', entryId)
+      .executeTakeFirstOrThrow();
+    const requestId = (
+      (await h.approvals(
+        'requestApproval',
+        {
+          kind: 'money.voidPayment',
+          input: {
+            entryId,
+            reason: 'Tercatat dua kali',
+            document: { kind: 'repair.ticket', id: ticket.documentId! },
+          },
+          reason: 'Tercatat dua kali',
+        },
+        h.cashierId,
+      )) as { requestId: string }
+    ).requestId;
+    await h.approvals('rejectRequest', { requestId, note: 'Uangnya ada' }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId);
+    // Told on the board, with who said no and why.
+    expect(text(screen, `money.kas.turnedDown.${requestId}`)).toContain(USER_NAMES.storeOwner);
+    expect(text(screen, `money.kas.turnedDown.${requestId}`)).toContain('Uangnya ada');
+    await press(screen, `money.kas.turnedDown.${requestId}`);
+    // In Riwayat the payment says so too, and can be asked about again.
+    expect(text(screen, `money.history.entry.${entryId}`)).toContain('Ditolak oleh');
+    await press(screen, `money.history.entry.${entryId}`);
+    // The cancel step names the customer, not only the servisan number.
+    expect(text(screen, 'money.void')).toContain('Yohanis Wenda');
+    expect(text(screen, 'money.void.primary')).toBe('Minta persetujuan');
+  });
+
+  test('the counter cannot cancel a payment, only ask an owner to', async () => {
     h = await openRepairScreenHarness(5413);
     const entryId = await paid(h);
     const screen = await mount(h, h.cashierId);
     await press(screen, 'money.kas.history');
-    const row = screen.all(`money.history.entry.${entryId}`)[0]!;
-    expect(row.props['onPress']).toBeUndefined();
+    await press(screen, `money.history.entry.${entryId}`);
+    await settle();
+    expect(screen.query('money.void.limit')).toBeNull();
+    expect(text(screen, 'money.void.asks')).toBe('Perlu persetujuan pemilik toko.');
+    type(screen, 'money.void.reason', 'Tercatat dua kali');
+    await settle();
+    await press(screen, 'money.void.primary');
+    const [request] = await waiting(h, h.storeOwnerId);
+    expect(request).toMatchObject({ kind: 'money.voidPayment', reason: 'Tercatat dua kali' });
+    // Back in Riwayat the payment says it waits, and is not asked about twice.
+    await settle();
+    expect(text(screen, `money.history.entry.${entryId}`)).toContain('Menunggu persetujuan');
+    await expect(press(screen, `money.history.entry.${entryId}`)).rejects.toThrow(/no onPress/);
+    // Once the owner answers, "an owner was asked" goes rather than sit above the answer.
+    expect(screen.query('money.history.notice')).not.toBeNull();
+    await h.approvals('rejectRequest', { requestId: request!.id }, h.storeOwnerId);
+    await settle();
+    expect(screen.query('money.history.notice')).toBeNull();
+    expect(text(screen, `money.history.entry.${entryId}`)).toContain('Ditolak oleh');
+    // Nothing is cancelled until an owner says yes.
+    const entry = await h.db
+      .selectFrom('moneyEntries')
+      .select('voidedBy')
+      .where('id', '=', entryId)
+      .executeTakeFirstOrThrow();
+    expect(entry.voidedBy).toBeNull();
   });
 
   test('the day before is its own page', async () => {

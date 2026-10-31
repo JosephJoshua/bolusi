@@ -74,6 +74,7 @@ async function loadDevice(db: TenantDb, deviceId: string): Promise<DeviceRecord 
       'lastSeq',
       'lastHash',
       'lastSyncAt',
+      'personalUserId',
     ])
     .where('id', '=', deviceId)
     .executeTakeFirst();
@@ -89,6 +90,7 @@ async function loadDevice(db: TenantDb, deviceId: string): Promise<DeviceRecord 
     lastSeq: Number(row.lastSeq),
     lastHash: row.lastHash,
     lastSyncAt: row.lastSyncAt === null ? null : Number(row.lastSyncAt),
+    personalUserId: row.personalUserId,
   };
 }
 

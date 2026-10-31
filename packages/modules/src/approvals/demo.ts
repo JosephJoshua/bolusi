@@ -141,9 +141,11 @@ export function demoApprovals(options: {
         const targetId = input['targetId'];
         const rows = requests.map(rowOf);
         return page(
-          typeof targetId === 'string'
-            ? rows.filter((row) => row.targetId === targetId)
-            : rows.filter((row) => row.status === 'waiting' && (row.mine || row.canDecide)),
+          input['mine'] === true
+            ? rows.filter((row) => row.mine)
+            : typeof targetId === 'string'
+              ? rows.filter((row) => row.targetId === targetId)
+              : rows.filter((row) => row.status === 'waiting' && (row.mine || row.canDecide)),
         );
       }
       if (name === 'approvalRequest') return page([rowOf(find(String(input['requestId'])))]);

@@ -281,6 +281,23 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
           return page([drawer()]);
         case 'openBalances':
           return page(openBalances());
+        case 'voidCount': {
+          const entry = entries.find(
+            (e) =>
+              e.id === input['entryId'] && e.kind === 'payment_received' && e.voidedAt === null,
+          );
+          if (entry === undefined) return page([]);
+          // Roughly as the rule counts it: what was already taken off the servisan, with this one.
+          const earlier = entries
+            .filter((e) => e.documentId === entry.documentId && e.id !== entry.id)
+            .filter(
+              (e) =>
+                (e.kind === 'payment_received' && e.voidedAt !== null) ||
+                e.kind === 'charge_reduced',
+            )
+            .reduce((sum, e) => sum + e.amount, 0);
+          return page([{ counted: earlier + entry.amount }]);
+        }
         case 'moneyEntries': {
           const from = Number(input['from']);
           const to = Number(input['to']);

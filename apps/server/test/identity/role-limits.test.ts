@@ -148,3 +148,13 @@ test('amounts are whole, never negative, and bounded', async () => {
     expect(res.status).toBe(422);
   }
 });
+
+test('the Manajer settles no drawer shortage: owners keep money.adjust_cash', async () => {
+  const { manager } = await setup();
+  const held = await h.idb.db
+    .selectFrom('rolePermissions')
+    .select('permissionId')
+    .where('roleId', '=', manager)
+    .execute();
+  expect(held.map((r) => r.permissionId)).not.toContain('money.adjust_cash');
+});

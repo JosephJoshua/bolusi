@@ -47,6 +47,7 @@ import {
   afterLogin,
   canSubmitConfirm,
   canSubmitCredentials,
+  chosenPersonalUserId,
   chosenStoreId,
   classifyFailure,
   initialEnrollmentState,
@@ -768,10 +769,11 @@ export default function App(props: AppProps): React.JSX.Element {
     const storeId = chosenStoreId(enrollment);
     if (login === null || storeId === null) return;
     const deviceName = enrollment.deviceName.trim();
+    const personalUserId = chosenPersonalUserId(enrollment);
     enrollRequestRef.current = true;
     setEnrollment((s) => ({ ...s, busy: true, failure: null }));
     props.enrollment
-      .enroll({ login, storeId, deviceName })
+      .enroll({ login, storeId, deviceName, personalUserId })
       // The done step names the store from `selectedStoreId`, so it is set to what was bound.
       .then(() =>
         setEnrollment((s) => ({ ...s, busy: false, step: 'done', selectedStoreId: storeId })),

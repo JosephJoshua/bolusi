@@ -9,6 +9,8 @@ import { registerMoneyCatalog } from '../src/money/i18n.js';
 import { methodStores, methodSummary } from '../src/money/methods.js';
 import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
+import { turnedDownLines } from '../src/money/void-ask.js';
+import type { ApprovalRow } from '../src/approvals/queries.js';
 
 import {
   cashMoveCheck,
@@ -275,12 +277,9 @@ describe('history', () => {
       [qris],
       'Yulianus Wenda',
     );
-    expect(line.details).toEqual([
-      'Yulianus Wenda',
-      'B7B-0001',
-      'QRIS BCA',
-      'Dibatalkan: Salah metode',
-    ]);
+    expect(line.details).toEqual(['Yulianus Wenda', 'B7B-0001', 'QRIS BCA', 'Salah metode']);
+    // Its title says it was cancelled, so the reason stands alone.
+    expect(line.label).toBe('money.opType.paymentVoided');
   });
 
   test('the day before and after start at local midnight', () => {
@@ -290,7 +289,7 @@ describe('history', () => {
   });
 
   test('a payment or a cash move still standing can be cancelled, each by whoever may', () => {
-    const owner = { payments: true, cashMoves: true };
+    const owner = { payments: true, askPayments: false, cashMoves: true };
     expect(voidable(entry({}), owner)).toBe(true);
     const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
     expect(voidable(voided, owner)).toBe(false);
@@ -301,15 +300,24 @@ describe('history', () => {
     const move = entry({ kind: 'cash_moved', subKind: 'float' });
     expect(voidable(move, owner)).toBe(true);
     // A manager may cancel a payment within limits, but settling the drawer is the owner's.
-    expect(voidable(move, { payments: true, cashMoves: false })).toBe(false);
+    expect(voidable(move, { payments: true, askPayments: true, cashMoves: false })).toBe(false);
     expect(voidKind(move).command).toBe('voidCashMove');
   });
 
   test('a void limit of 0 cancels no payment, the same as not holding it', () => {
     const holds = (id: string) => id === MONEY_PERMISSION.voidPayment;
-    expect(voidAbilities(holds, () => 100_000)).toEqual({ payments: true, cashMoves: false });
+    expect(voidAbilities(holds, () => 100_000)).toEqual({
+      payments: true,
+      askPayments: false,
+      cashMoves: false,
+    });
     expect(voidAbilities(holds, () => 0).payments).toBe(false);
     expect(voidAbilities(holds).payments).toBe(true);
+    // Still offered to ask an owner instead, as the void step allows.
+    const zero = voidAbilities(holds, () => 0, true);
+    expect(zero.askPayments).toBe(true);
+    expect(voidable(entry({ documentId: 'doc-1' }), zero)).toBe(true);
+    expect(voidable(entry({ documentId: null }), zero)).toBe(false);
     expect(voidKind(entry({})).command).toBe('voidPayment');
   });
 });
@@ -405,5 +413,46 @@ describe('the blind count', () => {
     expect(cashMoveCheck({ ...move, blind: true }).missing).toBeNull();
     expect(cashMoveCheck({ ...move, amount: 700_000, blind: true }).missing).toBeNull();
     expect(cashMoveCheck({ ...move, blind: true }).missingValues).toBeUndefined();
+  });
+});
+
+describe('cancels an owner turned down', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const rejected = (over: Partial<ApprovalRow>): ApprovalRow =>
+    ({
+      id: 'r1',
+      kind: 'money.voidPayment',
+      input: { entryId: 'e1' },
+      amount: 80_000,
+      status: 'rejected',
+      decidedByName: 'Yohana Pemilik',
+      decidedAt: 1_000,
+      note: null,
+      ...over,
+    }) as ApprovalRow;
+
+  test('says who said no and why, for those answered since the day began', () => {
+    const asks = {
+      waiting: new Set<string>(),
+      rejected: new Map([
+        ['e1', rejected({})],
+        ['e2', rejected({ id: 'r2', note: 'Uangnya ada', amount: 25_000 })],
+        ['e3', rejected({ id: 'r3', decidedAt: 10 })],
+      ]),
+    };
+    expect(turnedDownLines(asks, 500)).toEqual([
+      {
+        id: 'r1',
+        text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(80_000)}.`,
+      },
+      {
+        id: 'r2',
+        text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(25_000)}: Uangnya ada`,
+      },
+    ]);
   });
 });

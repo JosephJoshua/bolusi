@@ -62,6 +62,7 @@
     "currency": "Rp"
   },
   "kas": {
+    "turnedDown": "Turned down by the owner",
     "title": "Cash",
     "expected": "Should be in the drawer",
     "drawer": "Cash drawer",
@@ -119,7 +120,7 @@
     "countedBy": "Counted by {name}, {time}",
     "reason": "Reason",
     "save": "Settle difference",
-    "hint": "Enter the reason.",
+    "hint": "Enter the reason first.",
     "closed": "This difference is already settled, or there is a newer count."
   },
   "receive": {
@@ -158,13 +159,19 @@
   "void": {
     "title": "Payment cancellation",
     "save": "Cancel payment",
-    "hint": "Enter the reason.",
+    "hint": "Enter the reason first.",
     "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
     "reason": "Reason",
     "limit": "Your cancel limit is {amount} per repair.",
+    "waiting": "Waiting for approval",
+    "rejected": "{name} turned down cancelling the {amount} payment.",
+    "rejectedNote": "{name} turned down cancelling the {amount} payment: {note}",
     "cashTitle": "Cash record cancellation",
     "cashSave": "Cancel record",
-    "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts."
+    "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts.",
+    "needsApproval": "Needs the store owner’s approval.",
+    "overLimit": "Over your limit, so it needs approval.",
+    "withEarlier": "With earlier reductions on this servisan, the total is {amount}."
   },
   "kind": {
     "qris": "QRIS",

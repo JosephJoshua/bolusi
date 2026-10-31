@@ -239,8 +239,13 @@ Motion explains what changed; it never decorates or makes anyone wait.
   their frames. Never animate width, height, colour or layout.
 - Reduce motion in the OS means no movement: things appear in place.
 - Sheets rise as the scrim dims; toasts rise in; pressed buttons shrink a
-  touch; a success disc lands with a small overshoot. A spinner is never
-  the logo.
+  touch; a success disc lands with a small overshoot and its tick draws in.
+  A spinner is never the logo.
+- Intake steps slide in from the side they come from. A new servisan number
+  lands like a stamp, on its first open only.
+- A money figure that changes while on screen (a balance after a QR payment,
+  a total after a price change) uses `RollingText`: a rise rolls in from
+  below, a drop from above. Never roll a figure the person is typing.
 
 ## References
 

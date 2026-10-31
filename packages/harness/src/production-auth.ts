@@ -25,10 +25,12 @@ import {
   deviceByTokenHashQuery,
   loginCredentialQuery,
   mapControlSessionRow,
+  statusLinkQuery,
   type ControlSessionAuthRecord,
   type DB,
   type DeviceAuthRecord,
   type LoginCredentialRecord,
+  type StatusLinkRecord,
 } from '@bolusi/db-server';
 
 /**
@@ -44,6 +46,7 @@ export interface PgliteAuthDirectory {
     tokenHashHex: string,
   ): Promise<ControlSessionAuthRecord | undefined>;
   findLoginCredential(loginIdentifier: string): Promise<LoginCredentialRecord | undefined>;
+  findStatusLink(code: string): Promise<StatusLinkRecord | undefined>;
 }
 
 /**
@@ -74,6 +77,10 @@ export function createPgliteAuthDirectory(db: Kysely<DB>): PgliteAuthDirectory {
     async findLoginCredential(loginIdentifier) {
       const { rows } = await loginCredentialQuery(loginIdentifier).execute(db);
       return rows[0];
+    },
+    async findStatusLink(code) {
+      const { rows } = await statusLinkQuery(code).execute(db);
+      return rows.length === 1 ? rows[0] : undefined;
     },
   };
 }

@@ -68,6 +68,17 @@ export const DEVICE_ID_META_KEY = 'deviceId';
  */
 export const FIRST_PIN_USER_META_KEY = 'auth.firstPinUserId';
 
+/**
+ * `meta_kv` key naming the person whose own device this is (permission-scoped sync), absent on a
+ * device the store shares. Only they sign in here. Written by `applyBundle` alone, from the bundle.
+ */
+export const PERSONAL_USER_META_KEY = 'auth.personalUserId';
+
+/** Whose own device this is, or null for a shared one. */
+export async function readPersonalUserId<DB>(db: Kysely<DB>): Promise<string | null> {
+  return readMeta(db, PERSONAL_USER_META_KEY);
+}
+
 export { STORE_ID_META_KEY };
 
 /**
@@ -484,6 +495,17 @@ export async function listSwitcherUsers<DB>(
   return rows.rows
     .map((r) => ({ id: r.id, name: r.name, photoMediaId: r.photoMediaId }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Who may sign in on this device, as the switcher lists them: the active roster, or on someone's own
+ * device (`PERSONAL_USER_META_KEY`) only that person. Names elsewhere still come from the full roster.
+ */
+export async function listSignInUsers<DB>(
+  db: Kysely<DB>,
+): Promise<{ id: string; name: string; photoMediaId: string | null }[]> {
+  const [roster, personal] = await Promise.all([listSwitcherUsers(db), readPersonalUserId(db)]);
+  return personal === null ? roster : roster.filter((user) => user.id === personal);
 }
 
 /** Resolve ANY user's display name from the directory — including a deactivated one (for history). */

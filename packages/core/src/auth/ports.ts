@@ -62,6 +62,8 @@ export interface DeviceBundle {
   /** Every store of the business; absent from an older server. */
   readonly stores?: readonly { readonly id: string; readonly name: string }[] | undefined;
   readonly settings: { readonly idleLockSeconds: number };
+  /** Whose own device this is; null or absent on a shared one. */
+  readonly personalUserId?: string | null | undefined;
   readonly users: readonly BundleUser[];
   readonly rolesSnapshot: readonly BundleRole[];
   readonly permissionsSnapshot: readonly BundlePermission[];
@@ -105,6 +107,8 @@ export interface EnrollRequest {
   readonly appVersion: string;
   /** The still-active registration this one replaces; the server revokes it in the same step. */
   readonly replacesDeviceId?: string;
+  /** Whose own phone this is; left out for one the store shares. */
+  readonly personalUserId?: string;
 }
 
 /**

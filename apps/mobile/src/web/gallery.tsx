@@ -18,13 +18,14 @@
  * placeholder) — must NOT go through @bolusi/i18n: the catalog is for shipping UI and is guarded by
  * the id/en parity gate (07-i18n §7.3), which pollution with dev copy would corrupt. The REAL screens
  * this harness renders resolve every user-visible label through the catalog, unchanged. */
-import { getLocale, setLocale, type Locale } from '@bolusi/i18n';
+import { formatMoney, getLocale, setLocale, type Locale } from '@bolusi/i18n';
 import type { PinAttemptRow } from '@bolusi/core';
-import { border, color, space, type, Text } from '@bolusi/ui';
-import { useReducer, useState, type ReactNode } from 'react';
+import { OutcomeState, RollingText, Text, border, color, space, type } from '@bolusi/ui';
+import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import App from '../../App.js';
+import { BrandIntro } from '../bootstrap/BrandIntro.js';
 import { CaptureScreen, type CaptureScreenState } from '../media/CaptureScreen.js';
 import { SignaturePadScreen, type SignaturePadState } from '../media/SignaturePadScreen.js';
 import {
@@ -118,6 +119,47 @@ function slot(testID: string): ReactNode {
  * this is the browser approximation, never the device lane. Rendered in the DOM so it is captured in
  * every screenshot and assertable by the suite.
  */
+function BrandIntroDemo(): React.JSX.Element {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const ms = Number(new URLSearchParams(window.location.search).get('ready') ?? 800);
+    const timer = setTimeout(() => setReady(true), ms);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <View style={{ height: 560 }}>
+      <View style={{ padding: space.lg }}>
+        <Text style={{ ...type.title, color: color.text }}>Pilih siapa yang pakai</Text>
+      </View>
+      <BrandIntro ready={ready} />
+    </View>
+  );
+}
+
+/** The payment moments: the paid tick drawing itself, then the balance rolling down to Rp 0. */
+function PaidDemo(): React.JSX.Element {
+  const [balance, setBalance] = useState(250_000);
+  useEffect(() => {
+    const timer = setTimeout(() => setBalance(0), 600);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <View style={{ padding: space.lg, gap: space.lg }}>
+      <OutcomeState tone="success" icon="success" title="Pembayaran diterima" />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ ...type.body, color: color.text }}>Sisa</Text>
+        <RollingText
+          value={balance}
+          style={{ ...type.heading, color: color.text }}
+          testID="paid.balance"
+        >
+          {formatMoney(balance)}
+        </RollingText>
+      </View>
+    </View>
+  );
+}
+
 function ApproxFrame({
   screen,
   state,
@@ -773,6 +815,29 @@ export const ENTRIES: readonly HarnessEntry[] = [
     ),
   })),
 
+  // The opening cover over the splash: holds, then the app is "ready" after `?ready=<ms>` (default
+  // 800), so the disc hop and the fade can be watched or captured frame by frame.
+  {
+    screen: 'brand-intro',
+    state: 'play',
+    render: () => (
+      <ApproxFrame screen="brand-intro" state="play">
+        <BrandIntroDemo />
+      </ApproxFrame>
+    ),
+  },
+
+  // The paid tick and the rolling balance, to watch frame by frame.
+  {
+    screen: 'paid',
+    state: 'play',
+    render: () => (
+      <ApproxFrame screen="paid" state="play">
+        <PaidDemo />
+      </ApproxFrame>
+    ),
+  },
+
   // Tugas karyawan (main owner) — the roles, each opening its switches; offline refuses saving.
   ...(
     [
@@ -883,6 +948,24 @@ export const ENTRIES: readonly HarnessEntry[] = [
           revoked={false}
           step="confirm"
           over={{ selectedStoreId: DEMO_LOGIN.stores[1]?.id ?? null, deviceName: 'HP Kasir 1' }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    // Set up as a staff member's own phone: only they sign in, and it holds what they may see.
+    screen: 'enrollment',
+    state: 'confirmPersonal',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="confirmPersonal">
+        <EnrollmentInteractive
+          revoked={false}
+          step="confirm"
+          over={{
+            selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
+            personalUserId: 'staff-yosua',
+            deviceName: 'HP Yosua',
+          }}
         />
       </ApproxFrame>
     ),

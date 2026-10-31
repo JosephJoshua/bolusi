@@ -62,6 +62,7 @@
     "currency": "Rp"
   },
   "kas": {
+    "turnedDown": "Tidak disetujui pemilik",
     "title": "Kas",
     "expected": "Seharusnya di laci",
     "drawer": "Laci kas",
@@ -119,7 +120,7 @@
     "countedBy": "Dihitung {name}, {time}",
     "reason": "Alasan",
     "save": "Selesaikan selisih",
-    "hint": "Isi alasannya.",
+    "hint": "Tulis alasannya dulu.",
     "closed": "Selisih ini sudah diselesaikan atau ada hitungan yang lebih baru."
   },
   "receive": {
@@ -158,13 +159,19 @@
   "void": {
     "title": "Pembatalan pembayaran",
     "save": "Batalkan pembayaran",
-    "hint": "Isi alasannya.",
+    "hint": "Tulis alasannya dulu.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
     "reason": "Alasan",
     "limit": "Batas pembatalanmu {amount} per servisan.",
+    "waiting": "Menunggu persetujuan",
+    "rejected": "{name} menolak membatalkan pembayaran {amount}.",
+    "rejectedNote": "{name} menolak membatalkan pembayaran {amount}: {note}",
     "cashTitle": "Pembatalan catatan kas",
     "cashSave": "Batalkan catatan",
-    "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya."
+    "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya.",
+    "needsApproval": "Perlu persetujuan pemilik toko.",
+    "overLimit": "Melebihi batasmu, jadi perlu persetujuan.",
+    "withEarlier": "Bersama pengurangan sebelumnya di servisan ini, totalnya {amount}."
   },
   "kind": {
     "qris": "QRIS",

@@ -223,7 +223,12 @@ export function historyLine(
 ): HistoryLine {
   // The drawer's own moves read as the board lists them.
   const move = drawerMoves([entry])[0];
-  const label = move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived';
+  const voided = entry.voidedAt !== null;
+  // A cancelled payment says so in its title, so its line gives just the reason.
+  const voidedPayment = voided && entry.kind === 'payment_received';
+  const label = voidedPayment
+    ? 'money.opType.paymentVoided'
+    : (move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived');
   const method =
     entry.account === null ||
     !['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind)
@@ -235,16 +240,17 @@ export function historyLine(
       : entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
         ? -entry.amount
         : entry.amount;
-  const voided = entry.voidedAt !== null;
   return {
     label,
     details: [
       customer,
       entry.documentLabel,
       method,
-      voided
-        ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
-        : reasonText(entry.reason),
+      voidedPayment
+        ? entry.voidReason
+        : voided
+          ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
+          : reasonText(entry.reason),
       entry.createdByName,
     ].filter((part): part is string => part !== null && part !== ''),
     amount: formatMoney(signed),
@@ -254,33 +260,40 @@ export function historyLine(
 
 /**
  * What the person may cancel in Riwayat: payments (`voidPayment`), cash moves (`adjustCash`).
- A void limit of 0 (`ModulePort.limitOf(money.void_payment)`) cancels nothing, the same as not
- * holding it; any other limit is said in the void step, which stops a payment beyond it.
+ * A void limit of 0 (`ModulePort.limitOf(money.void_payment)`) cancels nothing, the same as not
+ * holding it; any other limit is said in the void step, which asks an owner beyond it.
  */
 export interface VoidAbilities {
   readonly payments: boolean;
+  /** May ask an owner to cancel a payment on a servisan instead (as `useVoidAsk` allows). */
+  readonly askPayments: boolean;
   readonly cashMoves: boolean;
 }
 
 export function voidAbilities(
   hasPermission: (id: string) => boolean,
   limitOf: (id: string) => number | null = () => null,
+  /** Approvals' own check: whether this person may ask for decisions at all. */
+  mayAsk = false,
 ): VoidAbilities {
   return {
     payments:
       hasPermission(MONEY_PERMISSION.voidPayment) && limitOf(MONEY_PERMISSION.voidPayment) !== 0,
+    askPayments:
+      (hasPermission(MONEY_PERMISSION.receive) || hasPermission(MONEY_PERMISSION.voidPayment)) &&
+      mayAsk,
     cashMoves: hasPermission(MONEY_PERMISSION.adjustCash),
   };
 }
 
 /**
- * Whether this person may still cancel this record: a payment, or money put in or taken out of
- * the drawer by hand, not cancelled yet.
+ * Whether this person may still cancel this record, or ask an owner to: a payment, or money put in
+ * or taken out of the drawer by hand, not cancelled yet.
  */
 export function voidable(entry: MoneyEntryRow, can: VoidAbilities): boolean {
   if (entry.voidedAt !== null) return false;
   return entry.kind === 'payment_received'
-    ? can.payments
+    ? can.payments || (can.askPayments && entry.documentId !== null)
     : entry.kind === 'cash_moved' && can.cashMoves;
 }
 

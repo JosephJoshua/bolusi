@@ -234,10 +234,11 @@ Agreed with the owner before building printing.
 - **Layout:** on landscape paper the money and terms sit beside the customer and
   phone details. Every field is printed whole at its longest allowed length,
   wrapping rather than cutting. An ordinary slip fits one half form at the
-  printer's default 6 lines per inch, a line down from the perforation; only a
-  longer one tightens to 8 lines per inch (only 1/6" and 1/8" mean the same on
-  9-pin and 24-pin Epsons) before spilling onto a second form. Spare lines go
-  above the signatures. Plain paper gets more spacing. A cancelled servisan's
+  printer's default 6 lines per inch, a line down from the perforation. A
+  longer one stays at 6 lines per inch and is spread evenly over two forms, so
+  no form holds just a few lines (recommended 2026-10-29; 8 lines per inch
+  looked cramped, and 7 is not portable across 9-pin and 24-pin Epsons). Spare
+  lines go above the signatures. Plain paper gets more spacing. A cancelled servisan's
   slip has no warranty terms.
 - **Two documents:** the intake receipt ("Tanda terima servisan") and the
   handover slip ("Nota servisan") for a pickup or a cancel, which is also the
@@ -540,14 +541,17 @@ governance notes in "Decision" where they differ.
   contact. No photos, customer details, notes or staff names.
 - The page closes 30 days after the longest warranty ends (or 30 days after
   pickup when there is none). Lookups are rate limited per IP and never indexed.
-- Slips: dot-matrix strikes both sheets, so the QR is not on one copy only. It
-  sits beside the signatures with the short link and code in bold underneath,
-  and must keep each slip on its form at every paper size. "Kirim link" on
-  WhatsApp at intake is the main way the link reaches the customer. (Slip QR and
-  sending the link follow in a second change.)
-- The site's address is a setting, so the domain can be chosen later. `apps/web`
-  is the start of the later back-office web app: customer pages need no sign-in,
-  staff screens join it with their own routes.
+- Slips: dot-matrix strikes both sheets, so the QR is on every copy. It sits at
+  the right of the signatures with "Cek status servisan" and the address in
+  bold beside it (on narrow paper the signatures move above it), and every paper
+  size keeps the same number of forms. Intake and handover slips both carry it.
+- "Kirim link status" on WhatsApp is the counter's message for a phone in the
+  store when nothing else is due, the main way the link reaches the customer;
+  the ready and price-change messages carry the link too.
+- The link is under the server the device syncs with, which also serves the
+  page, so a new domain needs no app change.
+- `apps/web` is the start of the later back-office web app: customer pages need
+  no sign-in, staff screens join it with their own routes.
 
 ## Open product choices
 

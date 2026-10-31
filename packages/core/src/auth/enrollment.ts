@@ -93,6 +93,8 @@ export interface EnrollmentParams {
    * server revoked or forgot it, since there is nothing left to revoke.
    */
   readonly replacesDeviceId?: string;
+  /** Whose own phone this is (permission-scoped sync). Left out for one the store shares. */
+  readonly personalUserId?: string;
 }
 
 export interface EnrollmentResult {
@@ -133,6 +135,7 @@ export async function runEnrollment<DB>(
     platform: params.platform,
     appVersion: params.appVersion,
     ...(params.replacesDeviceId === undefined ? {} : { replacesDeviceId: params.replacesDeviceId }),
+    ...(params.personalUserId === undefined ? {} : { personalUserId: params.personalUserId }),
   });
 
   // Step 4 — token to SecureStore, THEN the bundle into the directory tables. The directory persist
@@ -194,8 +197,14 @@ export async function runEnrollment<DB>(
   await writeMeta(deps.db, STORE_ID_META_KEY, response.store.id);
   // The enrolling owner proved who they are with a password just now, so they alone may make their
   // own first PIN here, and only if the server has none for them (pin-flows.ts `setFirstPin`).
+  // Not on someone else's own phone, where the owner will never sign in.
   const owner = response.bundle.users.find((user) => user.id === params.ownerUserId);
-  if (owner !== undefined && owner.pinVerifier === null) {
+  const personal = response.bundle.personalUserId ?? null;
+  if (
+    owner !== undefined &&
+    owner.pinVerifier === null &&
+    (personal === null || personal === params.ownerUserId)
+  ) {
     await writeMeta(deps.db, FIRST_PIN_USER_META_KEY, params.ownerUserId);
   }
   // The same owner then sets the device up (printer, camera, ...) once they are in.

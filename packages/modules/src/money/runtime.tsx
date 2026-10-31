@@ -11,6 +11,8 @@ import {
   type QueryState,
 } from '../screen-kit/index.js';
 
+import type { ApprovalsPort } from '../approvals/runtime.js';
+
 import type { MoneyModule } from './manifest.js';
 import type { QrisPort } from './qris.js';
 
@@ -29,6 +31,8 @@ export interface MoneyPort extends ModulePort<MoneyModule> {
 }
 
 export interface MoneyRuntime extends MoneyPort, LiveSource {
+  /** Approval requests: a cancel this person may not make is asked of an owner instead. */
+  readonly approvals: ApprovalsPort;
   /** A colleague's name for "counted by"; null for someone this device does not know. */
   nameOf(userId: string): string | null;
   /**

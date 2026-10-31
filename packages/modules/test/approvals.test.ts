@@ -274,6 +274,11 @@ describe('a cancel asked for by the counter', () => {
       note: 'Telepon dulu',
     });
     expect((await ticket(h, ticketId)).outcome).toBe('received');
+    // The asker reads their own answered requests back; nobody else's come with them.
+    const mine = await h.approvalsQuery('approvalRequests', { mine: true }, h.cashierId);
+    expect(mine.rows).toMatchObject([{ id: requestId, status: 'rejected', mine: true }]);
+    const owners = await h.approvalsQuery('approvalRequests', { mine: true }, h.storeOwnerId);
+    expect(owners.rows).toEqual([]);
   });
 });
 
@@ -451,6 +456,85 @@ describe('a down payment fix asked for by the counter', () => {
     const requestId = await ask(h, 'repair.downPayment', fix(ticketId, 80_000), h.cashierId);
     await h.run('correctDownPayment', fix(ticketId, 90_000), h.storeOwnerId);
     expect((await request(h, requestId, h.cashierId)).status).toBe('closed');
+    await refused(
+      h.approvals('approveRequest', { requestId }, h.storeOwnerId),
+      'approvals.refusal.changed',
+    );
+  });
+});
+
+describe('cancelling a payment, asked from Kas', () => {
+  async function paidTwice(harness: RepairHarness) {
+    const ticketId = await openTicket(harness);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'T-1' };
+    const pay = async (amount: number) => {
+      await harness.money(
+        'receivePayments',
+        { document, payments: [{ account: 'cash', amount }] },
+        harness.cashierId,
+      );
+      return (
+        await harness.db
+          .selectFrom('moneyEntries')
+          .select('id')
+          .where('kind', '=', 'payment_received')
+          .where('amount', '=', amount)
+          .executeTakeFirstOrThrow()
+      ).id!;
+    };
+    return { document, first: await pay(15_000), second: await pay(20_000) };
+  }
+
+  const voidInput = (entryId: string, document: { kind: string; id: string }) => ({
+    entryId,
+    reason: 'Tercatat dua kali',
+    document: { kind: document.kind, id: document.id },
+  });
+
+  test('the counter asks, and an owner’s yes cancels it as the owner’s', async () => {
+    h = await openRepairHarness(9541);
+    const { document, second } = await paidTwice(h);
+    await expect(
+      h.money('voidPayment', { entryId: second, reason: 'Salah' }, h.cashierId),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+    const requestId = await ask(h, 'money.voidPayment', voidInput(second, document), h.cashierId);
+    expect(await request(h, requestId, h.storeOwnerId)).toMatchObject({
+      targetId: document.id,
+      amount: 20_000,
+    });
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+    const entry = await h.db
+      .selectFrom('moneyEntries')
+      .select(['voidedBy', 'voidReason'])
+      .where('id', '=', second)
+      .executeTakeFirstOrThrow();
+    expect(entry).toMatchObject({ voidedBy: h.storeOwnerId, voidReason: 'Tercatat dua kali' });
+  });
+
+  test('a manager’s limit counts what was already taken off, as the void’s rule does', async () => {
+    h = await openRepairHarness(9542);
+    const { document, first, second } = await paidTwice(h);
+    await h.money('voidPayment', { entryId: first, reason: 'Salah metode' }, h.storeOwnerId);
+    // Rp 20.000 alone fits the manager's Rp 30.000; with the Rp 15.000 cancelled before, it does not.
+    const counted = await h.moneyQuery('voidCount', { entryId: second }, h.managerId);
+    expect(counted.rows).toEqual([{ counted: 35_000 }]);
+    await expect(
+      h.money('voidPayment', { entryId: second, reason: 'Salah' }, h.managerId),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+    const requestId = await ask(h, 'money.voidPayment', voidInput(second, document), h.managerId);
+    expect(await request(h, requestId, h.ownerId)).toMatchObject({
+      amount: 20_000,
+      counted: 35_000,
+    });
+    await h.approvals('approveRequest', { requestId }, h.ownerId);
+  });
+
+  test('closes once the payment is cancelled another way', async () => {
+    h = await openRepairHarness(9543);
+    const { document, second } = await paidTwice(h);
+    const requestId = await ask(h, 'money.voidPayment', voidInput(second, document), h.cashierId);
+    await h.money('voidPayment', { entryId: second, reason: 'Salah' }, h.storeOwnerId);
+    expect((await request(h, requestId, h.storeOwnerId)).status).toBe('closed');
     await refused(
       h.approvals('approveRequest', { requestId }, h.storeOwnerId),
       'approvals.refusal.changed',

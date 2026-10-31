@@ -10,6 +10,7 @@ import {
   Button,
   Icon,
   LoadingState,
+  RollingText,
   border,
   color,
   radius,
@@ -24,10 +25,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
 import { tm } from '../i18n.js';
-import { accountLabel, differenceText, type NamedBalance } from '../kas.js';
+import { accountLabel, dayStart, differenceText, type NamedBalance } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
 import type { CashCountRow } from '../queries.js';
 import { useMoneyRuntime } from '../runtime.js';
+import { useVoidRequests } from '../void-ask.js';
+import { ta } from '../../approvals/i18n.js';
 
 export interface KasBoardProps {
   readonly chrome: ScreenChrome;
@@ -69,6 +72,11 @@ export function KasBoard({
     may,
   } = useKasDay(now);
   const { count: mayCount, settle: maySettle, receive: mayReceive, read: mayRead } = may;
+  // Cancels this person asked for that an owner turned down today: told here, not only in Riwayat.
+  const since = dayStart(now());
+  const turnedDown = [...useVoidRequests().rejected.values()].filter(
+    (row) => (row.decidedAt ?? 0) >= since,
+  );
 
   return (
     <AppShell
@@ -90,9 +98,13 @@ export function KasBoard({
           {may.seeExpected ? (
             <>
               <Text style={styles.label}>{tm('money.kas.expected')}</Text>
-              <Text style={styles.expected} testID={`${testID}.expected`}>
+              <RollingText
+                value={drawerData.expected}
+                style={styles.expected}
+                testID={`${testID}.expected`}
+              >
                 {formatMoney(drawerData.expected)}
-              </Text>
+              </RollingText>
             </>
           ) : (
             <Text style={styles.label}>{tm('money.kas.drawer')}</Text>
@@ -125,6 +137,21 @@ export function KasBoard({
             </View>
           ) : null}
         </View>
+      )}
+
+      {turnedDown.length === 0 ? null : (
+        <Section title={tm('money.kas.turnedDown')} testID={`${testID}.turnedDown`}>
+          {turnedDown.map((row) => (
+            <Row
+              key={row.id}
+              label={ta('approvals.kind.moneyVoidPayment')}
+              detail={[row.decidedByName, row.note].filter(Boolean).join(': ')}
+              value={formatMoney(row.amount)}
+              onPress={onHistory}
+              testID={`${testID}.turnedDown.${row.id}`}
+            />
+          ))}
+        </Section>
       )}
 
       {difference === null ? null : (

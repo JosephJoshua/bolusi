@@ -55,6 +55,8 @@ export interface EnrollmentController {
     readonly login: LoginResult;
     readonly storeId: string;
     readonly deviceName: string;
+    /** Whose own phone this is; null for one the store shares. */
+    readonly personalUserId: string | null;
   }): Promise<void>;
   /** Step 3 (§8.5): the owner acknowledges the success step ("Continue"). ONLY now does `onEnrolled`
    *  fire — the zone flips to the switcher and the sync loop / push registration start. Splitting this
@@ -188,6 +190,7 @@ export function createAppEnrollment(
           platform: platform.platform,
           appVersion: platform.appVersion,
           ...(replacesDeviceId === null ? {} : { replacesDeviceId }),
+          ...(req.personalUserId === null ? {} : { personalUserId: req.personalUserId }),
         },
       );
       // Persist the owner-typed device name to meta_kv (task 94), AFTER core wrote the ids AND ran

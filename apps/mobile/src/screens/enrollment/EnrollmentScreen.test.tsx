@@ -172,6 +172,16 @@ describe('the done step', () => {
     const screen = renderScreen(onA({ step: 'done' }), vi.fn());
     expect(textsIn(screen.get('enroll-store-name'))).toEqual([STORE_A.name]);
   });
+
+  test('a shared phone says to pick who uses it; a personal one only to sign in', () => {
+    const shared = renderScreen(onA({ step: 'done' }), vi.fn());
+    expect(textsIn(shared.get('enroll-step-done'))).toContain(t('auth.enroll.successNext'));
+    shared.unmount();
+    const personal = renderScreen(onA({ step: 'done', personalUserId: 'u-budi' }), vi.fn());
+    const texts = textsIn(personal.get('enroll-step-done'));
+    expect(texts).toContain(t('auth.enroll.successNextPersonal'));
+    expect(texts).not.toContain(t('auth.enroll.successNext'));
+  });
 });
 
 describe('before enrolment there is no sync to report', () => {
@@ -236,5 +246,44 @@ describe('re-enrolling a phone that still holds unsent changes', () => {
   test('says nothing when every change reached the server', () => {
     const screen = renderScreen(onA({ phone: { ...phone, unsynced: [] } }), vi.fn());
     expect(screen.query('enroll-unsynced')).toBeNull();
+  });
+});
+
+describe('whose phone this is', () => {
+  const people = [
+    { id: 'user-1', name: 'Pak Owner' },
+    { id: 'user-budi', name: 'Budi' },
+  ];
+  const withPeople = (over: Partial<EnrollmentState> = {}) =>
+    onA({
+      login: { ...onA().login!, stores: [{ ...STORE_A, people }, STORE_B] },
+      ...over,
+    });
+
+  test('defaults to the store’s phone, the owner reads as Saya, and says who signs in', () => {
+    const screen = renderScreen(withPeople(), vi.fn());
+    expect(screen.get('enroll-owner-shared').props['accessibilityState']).toEqual({
+      checked: true,
+    });
+    expect(textsIn(screen.get('enroll-owner-user-1'))).toContain(t('auth.enroll.ownerSelf'));
+    expect(textsIn(screen.get('enroll-owner-hint'))).toContain(t('auth.enroll.ownerSharedHint'));
+  });
+
+  test('picking a person makes it theirs; picking them again gives it back to the store', () => {
+    const onChange = vi.fn();
+    const screen = renderScreen(withPeople(), onChange);
+    fire(screen.get('enroll-owner-user-budi'), 'onPress');
+    expect(onChange).toHaveBeenCalledWith({ personalUserId: 'user-budi' });
+
+    const picked = renderScreen(withPeople({ personalUserId: 'user-budi' }), onChange);
+    expect(textsIn(picked.get('enroll-owner-hint'))).toContain(
+      t('auth.enroll.ownerPersonHint', { name: 'Budi' }),
+    );
+    fire(picked.get('enroll-owner-user-budi'), 'onPress');
+    expect(onChange).toHaveBeenLastCalledWith({ personalUserId: null });
+  });
+
+  test('hidden when the server offers nobody', () => {
+    expect(renderScreen(onA(), vi.fn()).query('enroll-owner')).toBeNull();
   });
 });

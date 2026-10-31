@@ -12,12 +12,22 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
-import { MAX_REASON, MONEY_PERMISSION } from '../constants.js';
+import { MAX_REASON } from '../constants.js';
+import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { tm } from '../i18n.js';
 import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
+import {
+  useVoidAsk,
+  useEntryCustomer,
+  useOnVoidDecided,
+  useVoidRequests,
+  voidRequest,
+} from '../void-ask.js';
+import { approvalByLine } from '../../approvals/copy.js';
+import { ta } from '../../approvals/i18n.js';
 
 import { Row } from './Kas.js';
 
@@ -28,8 +38,13 @@ export interface KasHistoryProps {
   readonly day: number | null;
   readonly onDay: (day: number) => void;
   readonly onBack: () => void;
-  /** An owner opens a payment to cancel it. */
+  /** An owner opens a payment to cancel it (the counter, to ask an owner to). */
   readonly onVoid: (entry: MoneyEntryRow) => void;
+  /** Said back from a record, e.g. that an owner was asked. */
+  readonly notice?: string | null | undefined;
+  /** The payment that notice asked about: once an owner answers, the notice goes. */
+  readonly noticeEntryId?: string | null | undefined;
+  readonly onClearNotice?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -40,18 +55,26 @@ export function KasHistory({
   onDay,
   onBack,
   onVoid,
+  notice,
+  noticeEntryId = null,
+  onClearNotice,
   testID = 'money.history',
 }: KasHistoryProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const can = voidAbilities(
     (id) => runtime.hasPermission(id),
     (id) => runtime.limitOf(id),
+    runtime.approvals.hasPermission(APPROVAL_PERMISSION.use),
   );
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const today = dayStart(now());
   const day = chosen ?? today;
   const records = useDayRecords(day, pages, nonce);
+  const asks = useVoidRequests();
+  useOnVoidDecided(notice === null || notice === undefined ? null : noticeEntryId, () =>
+    onClearNotice?.(),
+  );
 
   const goTo = (next: number): void => {
     setPages(1);
@@ -63,6 +86,8 @@ export function KasHistory({
       chrome={chrome}
       title={tm('money.history.title')}
       onBack={onBack}
+      notice={notice}
+      onClearNotice={onClearNotice}
       busy={false}
       errorCode={null}
       onClearError={() => undefined}
@@ -101,14 +126,22 @@ export function KasHistory({
                   accounts,
                   entry.documentId === null ? null : (customers.get(entry.documentId) ?? null),
                 );
+                const standing = entry.voidedAt === null;
+                const asked = standing && asks.waiting.has(entry.id);
+                const turnedDown = standing ? asks.rejected.get(entry.id) : undefined;
                 return (
                   <Row
                     key={entry.id}
                     label={tm(line.label)}
-                    detail={[formatTime(entry.createdAt), ...line.details].join(' · ')}
+                    detail={[
+                      formatTime(entry.createdAt),
+                      ...line.details,
+                      ...(asked ? [tm('money.void.waiting')] : []),
+                      ...(!asked && turnedDown !== undefined ? [approvalByLine(turnedDown)] : []),
+                    ].join(' · ')}
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
-                    onPress={voidable(entry, can) ? () => onVoid(entry) : undefined}
+                    onPress={!asked && voidable(entry, can) ? () => onVoid(entry) : undefined}
                     testID={`${testID}.entry.${entry.id}`}
                   />
                 );
@@ -131,12 +164,14 @@ export function KasHistory({
   );
 }
 
-// ── an owner cancels a payment ─────────────────────────────────────────────────────────────────
+// ── an owner cancels a payment (the counter asks one to) ───────────────────────────────────────
 
 export interface VoidPaymentStepProps {
   readonly chrome: ScreenChrome;
   readonly entry: MoneyEntryRow;
   readonly onDone: () => void;
+  /** An owner was asked to cancel it instead. */
+  readonly onAsked: () => void;
   readonly onCancel: () => void;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   readonly testID?: string | undefined;
@@ -150,6 +185,7 @@ export function VoidPaymentStep({
   chrome,
   entry,
   onDone,
+  onAsked,
   onCancel,
   onRegisterDiscardGuard,
   testID = 'money.void',
@@ -162,11 +198,11 @@ export function VoidPaymentStep({
   );
   const [reason, setReason] = useState('');
   const kind = voidKind(entry);
-  // A limited role (a manager) sees what it may cancel of a payment before the server refuses it.
-  const limit =
-    kind.command === 'voidPayment' ? runtime.limitOf(MONEY_PERMISSION.voidPayment) : null;
-  // A void counts in full against that limit (with any earlier ones on the same servisan).
-  const beyond = limit !== null && entry.amount > limit;
+  // A limited role (a manager) sees its limit up front; beyond it, or without the decision, an
+  // owner is asked instead.
+  const ask = useVoidAsk(entry);
+  const customer = useEntryCustomer(entry);
+  const blocked = ask.asking && !ask.mayAsk;
   const discard = useDiscardConfirm({
     dirty: reason.trim() !== '',
     copy: {
@@ -184,11 +220,15 @@ export function VoidPaymentStep({
   );
 
   const submit = (): void => {
-    if (reason.trim() === '' || beyond) return;
+    if (reason.trim() === '' || blocked || ask.pending) return;
     void runner
-      .run(() => runtime.run(kind.command, { entryId: entry.id, reason }))
+      .run<unknown>(() =>
+        ask.asking
+          ? runtime.approvals.run('requestApproval', voidRequest(entry, reason))
+          : runtime.run(kind.command, { entryId: entry.id, reason }),
+      )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result !== undefined) (ask.asking ? onAsked : onDone)();
       });
   };
 
@@ -198,11 +238,11 @@ export function VoidPaymentStep({
       title={tm(kind.title)}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
-      primaryLabel={tm(kind.save)}
-      primaryVariant="destructive"
+      primaryLabel={ask.asking ? ta('approvals.action.ask') : tm(kind.save)}
+      primaryVariant={ask.asking ? 'primary' : 'destructive'}
       onPrimary={submit}
-      primaryDisabled={reason.trim() === '' || beyond}
-      primaryHint={tm(beyond ? 'money.refusal.overLimit' : 'money.void.hint')}
+      primaryDisabled={reason.trim() === '' || blocked || ask.pending}
+      primaryHint={tm(blocked ? 'money.refusal.overLimit' : 'money.void.hint')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -212,16 +252,26 @@ export function VoidPaymentStep({
         {formatMoney(entry.amount)}
       </Text>
       <Text style={styles.muted}>
-        {[method, entry.documentLabel, formatDateTime(entry.createdAt)]
+        {[customer, method, entry.documentLabel, formatDateTime(entry.createdAt)]
           .filter((part) => part !== null && part !== '')
           .join(' · ')}
       </Text>
       <Text style={styles.body}>{tm(kind.explain)}</Text>
-      {limit === null ? null : (
+      {ask.limit === null ? null : (
         <Text style={styles.muted} testID={`${testID}.limit`}>
-          {tm('money.void.limit', { amount: formatMoney(limit) })}
+          {tm('money.void.limit', { amount: formatMoney(ask.limit) })}
         </Text>
       )}
+      {ask.withEarlier === null ? null : (
+        <Text style={styles.muted} testID={`${testID}.withEarlier`}>
+          {tm('money.void.withEarlier', { amount: formatMoney(ask.withEarlier) })}
+        </Text>
+      )}
+      {ask.asking && ask.mayAsk ? (
+        <Text style={styles.muted} testID={`${testID}.asks`}>
+          {tm(ask.because)}
+        </Text>
+      ) : null}
       <View style={styles.gap}>
         <TextInput
           label={tm('money.void.reason')}

@@ -23,6 +23,7 @@ import {
 import { sql, type Kysely } from 'kysely';
 
 import { operationFromSignedCoreJcs } from '../crypto/signed-core.js';
+import { releaseRefusedOpMedia } from '../media/repository.js';
 import {
   markSyncResult,
   type OpBookkeepingDatabase,
@@ -246,12 +247,16 @@ async function applyPushResult<DB>(
   }
 
   // A rejected op is not in the server's log and never will be, so it comes out of this device's
-  // records too, atomically with the verdict: the op stays in the log as a chain link only.
+  // records too, atomically with the verdict: the op stays in the log as a chain link only. Its
+  // captures have nothing to be filed under on the server, so they leave the upload queue with it.
   const marked = await markOp(
     deps,
     result.id,
     { kind: 'rejected', rejectionCode: code, rejectionReason: reason },
-    () => deps.refoldRefused(op),
+    async () => {
+      await deps.refoldRefused(op);
+      await releaseRefusedOpMedia(deps.db, result.id);
+    },
   );
   if (!marked) return 'ignored';
 

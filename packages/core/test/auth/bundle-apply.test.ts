@@ -25,6 +25,8 @@ import {
   writeVerifier,
   DEVICE_ID_META_KEY,
   FIRST_PIN_USER_META_KEY,
+  PERSONAL_USER_META_KEY,
+  listSignInUsers,
   type BundleUser,
   type CanonicalRef,
   type DeviceBundle,
@@ -348,6 +350,46 @@ describe('applyBundle — §5.3 merge & §5.2 minimization', () => {
     const server = await verifier('222222', { timestamp: 9000, deviceId: NIL, seq: 0 });
     await applyBundle(k, bundle([mkUser('u-owner', server)]));
     expect(await readMeta(k, FIRST_PIN_USER_META_KEY)).toBeNull();
+  });
+
+  it('on someone’s own phone only their PIN is kept, even one made here for a colleague', async () => {
+    const k = await open();
+    await writeMeta(k, DEVICE_ID_META_KEY, REAL_DEVICE);
+    // An owner made a colleague's PIN in Settings on this phone; it is not on the server yet.
+    await writeVerifier(
+      k,
+      'u-staff',
+      await verifier('333333', { timestamp: 5000, deviceId: REAL_DEVICE, seq: 4 }),
+    );
+    const server = await verifier('111111', { timestamp: 1, deviceId: NIL, seq: 0 });
+    await applyBundle(
+      k,
+      bundle([mkUser('u-owner', server), mkUser('u-staff', null)], { personalUserId: 'u-owner' }),
+    );
+    expect(await readMeta(k, PERSONAL_USER_META_KEY)).toBe('u-owner');
+    expect(await readVerifier(k, 'u-owner')).not.toBeNull();
+    expect(await readVerifier(k, 'u-staff')).toBeNull();
+    // The colleague is still in the directory: their name shows in history.
+    expect(await count(k, 'users_directory')).toBe(2);
+  });
+
+  it('someone’s own phone offers only them at sign-in; a shared one offers everyone', async () => {
+    const k = await open();
+    const users = [mkUser('u-owner', null), mkUser('u-staff', null)];
+    await applyBundle(k, bundle(users, { personalUserId: 'u-staff' }));
+    expect((await listSignInUsers(k)).map((user) => user.id)).toEqual(['u-staff']);
+    await applyBundle(k, bundle(users));
+    expect((await listSignInUsers(k)).map((user) => user.id).sort()).toEqual([
+      'u-owner',
+      'u-staff',
+    ]);
+  });
+
+  it('a shared phone’s bundle clears any person', async () => {
+    const k = await open();
+    await writeMeta(k, PERSONAL_USER_META_KEY, 'u-owner');
+    await applyBundle(k, bundle([mkUser('u-owner', null)]));
+    expect(await readMeta(k, PERSONAL_USER_META_KEY)).toBeNull();
   });
 
   it('a user unassigned from the store (absent from the bundle) loses their verifier row', async () => {
