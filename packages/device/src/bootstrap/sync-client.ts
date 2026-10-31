@@ -28,6 +28,7 @@ import {
   readSyncState,
   SyncLoop,
   type PulledBatch,
+  type PullReadScope,
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
@@ -86,6 +87,8 @@ export interface SyncClientDeps {
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   /** Can this build fold the op? One from a newer app pauses the pull until this app updates. */
   readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
+  /** Follow the server's read set: drop what this device may no longer read, catch up on the new. */
+  readonly readScope: PullReadScope;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -225,6 +228,7 @@ class SyncClientImpl implements SyncClient {
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
       knowsOp: deps.knowsOp,
+      readScope: deps.readScope,
       refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
@@ -486,6 +490,22 @@ export interface SyncClientForAppConfig {
 }
 
 /**
+ * How a booted app follows its read set (permission-scoped sync): which permission reads each op
+ * type, and how to rebuild a record or move the watermarks after a drop. The registry is read
+ * lazily, like `knowsOp`: it is looked up when a pull needs it.
+ */
+export function readScopeOf(app: Pick<Bootstrapped, 'registry' | 'engine'>): PullReadScope {
+  return {
+    registry: {
+      types: () => app.registry.operations.types(),
+      readPermissionFor: (type) => app.registry.operations.readPermissionFor(type),
+    },
+    refold: (record) => app.engine.refoldEntityOf(record),
+    catchUpWatermarks: () => app.engine.catchUpPulledWatermarks(),
+  };
+}
+
+/**
  * Build the real sync client over a booted app. This is the platform-facing assembly: the fetch
  * transport (api/01-sync §3/§4) and the bundle producer (api/02-auth §5.2) are built here from the
  * one connection + the token reader; the loop's projection seam is the boot's own engine.
@@ -534,6 +554,7 @@ export function createSyncClientForApp(
     bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
     knowsOp: (op) => knowsOp(app.registry.operations, op),
+    readScope: readScopeOf(app),
     refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,
