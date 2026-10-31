@@ -74,7 +74,12 @@ import { View } from 'react-native';
 import type { CameraCapturePort, CameraShot } from '@bolusi/device/media/capture';
 import type { CapturePlatform } from '../src/media/CaptureHost.js';
 import type { MediaClient, MediaStartReport } from '@bolusi/device/media/client';
-import { createSyncClient, knowsOp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import {
+  createSyncClient,
+  knowsOp,
+  readScopeOf,
+  type SyncClient,
+} from '@bolusi/device/bootstrap/sync-client';
 import type { NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 import type { RootProps } from '../src/bootstrap/Root.js';
 import {
@@ -335,6 +340,7 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
       client = createSyncClient({
         db: booted.db,
         deviceId: booted.deviceId,
+        readScope: readScopeOf(booted),
         transport: new RejectingTransport(),
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
@@ -469,6 +475,7 @@ describe('quarantined ops (api/01-sync §4.2) — a held-out pull batch reaches 
       client = createSyncClient({
         db: booted.db,
         deviceId: booted.deviceId,
+        readScope: readScopeOf(booted),
         transport: new QuarantiningTransport(),
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
