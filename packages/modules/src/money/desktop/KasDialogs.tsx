@@ -674,7 +674,7 @@ export function VoidPaymentDialog({
   const testId = 'money.desk.void';
 
   const submit = (): void => {
-    if (reason.trim() === '' || blocked) return;
+    if (reason.trim() === '' || blocked || ask.pending) return;
     void runner
       .run<unknown>(() =>
         ask.asking
@@ -694,7 +694,7 @@ export function VoidPaymentDialog({
       onClose={onClose}
       submitLabel={ask.asking ? ta('approvals.action.ask') : tm(kind.save)}
       onSubmit={submit}
-      submitDisabled={reason.trim() === '' || blocked}
+      submitDisabled={reason.trim() === '' || blocked || ask.pending}
       hint={blocked ? tm('money.refusal.overLimit') : null}
       destructive={!ask.asking}
       testId={testId}

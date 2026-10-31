@@ -266,7 +266,7 @@ describe('history', () => {
     const move = entry({ kind: 'cash_moved', subKind: 'float' });
     expect(voidable(move, owner)).toBe(true);
     // A manager may cancel a payment within limits, but settling the drawer is the owner's.
-    expect(voidable(move, { payments: true, cashMoves: false })).toBe(false);
+    expect(voidable(move, { payments: true, askPayments: true, cashMoves: false })).toBe(false);
     expect(voidKind(move).command).toBe('voidCashMove');
   });
 
@@ -279,6 +279,11 @@ describe('history', () => {
     });
     expect(voidAbilities(holds, () => 0).payments).toBe(false);
     expect(voidAbilities(holds).payments).toBe(true);
+    // Still offered to ask an owner instead, as the void step allows.
+    const zero = voidAbilities(holds, () => 0, true);
+    expect(zero.askPayments).toBe(true);
+    expect(voidable(entry({ documentId: 'doc-1' }), zero)).toBe(true);
+    expect(voidable(entry({ documentId: null }), zero)).toBe(false);
     expect(voidKind(entry({})).command).toBe('voidPayment');
   });
 });

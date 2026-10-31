@@ -15,6 +15,8 @@ export interface VoidAsk {
   readonly asking: boolean;
   /** Asking is open to this person for this record (a payment on a servisan). */
   readonly mayAsk: boolean;
+  /** The count against a limit is still being read (or failed): neither save nor ask yet. */
+  readonly pending: boolean;
   readonly because: MoneyKey;
   /** How much this person may take off a servisan's money, null when not limited. */
   readonly limit: number | null;
@@ -38,6 +40,7 @@ export function useVoidAsk(entry: MoneyEntryRow): VoidAsk {
   );
   const counted = count.status === 'ready' ? count.data : entry.amount;
   return {
+    pending: limit !== null && count.status !== 'ready',
     asking: payment && (!holds || (limit !== null && counted > limit)),
     mayAsk: payment && mayAskVoid(runtime, entry),
     because: holds ? 'money.void.overLimit' : 'money.void.needsApproval',

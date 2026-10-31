@@ -250,7 +250,7 @@ export function historyLine(
  */
 export interface VoidAbilities {
   readonly payments: boolean;
-  /** May ask an owner to cancel a payment on a servisan instead (whoever takes payments). */
+  /** May ask an owner to cancel a payment on a servisan instead (as `useVoidAsk` allows). */
   readonly askPayments: boolean;
   readonly cashMoves: boolean;
 }
@@ -264,7 +264,9 @@ export function voidAbilities(
   return {
     payments:
       hasPermission(MONEY_PERMISSION.voidPayment) && limitOf(MONEY_PERMISSION.voidPayment) !== 0,
-    askPayments: hasPermission(MONEY_PERMISSION.receive) && mayAsk,
+    askPayments:
+      (hasPermission(MONEY_PERMISSION.receive) || hasPermission(MONEY_PERMISSION.voidPayment)) &&
+      mayAsk,
     cashMoves: hasPermission(MONEY_PERMISSION.adjustCash),
   };
 }

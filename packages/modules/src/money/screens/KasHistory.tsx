@@ -197,7 +197,7 @@ export function VoidPaymentStep({
   );
 
   const submit = (): void => {
-    if (reason.trim() === '' || blocked) return;
+    if (reason.trim() === '' || blocked || ask.pending) return;
     void runner
       .run<unknown>(() =>
         ask.asking
@@ -218,7 +218,7 @@ export function VoidPaymentStep({
       primaryLabel={ask.asking ? ta('approvals.action.ask') : tm(kind.save)}
       primaryVariant={ask.asking ? 'primary' : 'destructive'}
       onPrimary={submit}
-      primaryDisabled={reason.trim() === '' || blocked}
+      primaryDisabled={reason.trim() === '' || blocked || ask.pending}
       primaryHint={tm(blocked ? 'money.refusal.overLimit' : 'money.void.hint')}
       busy={runner.busy}
       errorCode={runner.errorCode}
