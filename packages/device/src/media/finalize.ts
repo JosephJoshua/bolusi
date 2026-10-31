@@ -17,6 +17,8 @@ import { insertMediaItem } from './queue.js';
 /** The ports steps 5–8 need. A structural subset of both `CaptureDeps` and `SignatureCaptureDeps`. */
 export interface FinalizeMediaDeps<DB> {
   readonly db: Kysely<DB>;
+  /** The connection's transaction queue (db-client `ClientDb.transaction`), for the row. */
+  readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
   readonly identity: CaptureIdentity;
   readonly files: MediaFilePort;
   /** `moveCaptureToDocumentDir` (files.ts) — injected so the ordering is assertable under Node. */
@@ -60,20 +62,24 @@ export async function finalizeMediaCapture<DB, R extends AnyMediaRef>(
   const sizeBytes = await deps.files.sizeOf(localPath);
 
   // Step 7 — the row.
-  await insertMediaItem(deps.db, {
-    id: input.mediaId,
-    tenantId: deps.identity.tenantId,
-    storeId: deps.identity.storeId,
-    userId: deps.identity.userId,
-    deviceId: deps.identity.deviceId,
-    type: input.type,
-    mime: input.mime,
-    sizeBytes,
-    sha256,
-    capturedAt: input.capturedAt,
-    location: input.location,
-    localPath,
-  });
+  await insertMediaItem(
+    deps.db,
+    {
+      id: input.mediaId,
+      tenantId: deps.identity.tenantId,
+      storeId: deps.identity.storeId,
+      userId: deps.identity.userId,
+      deviceId: deps.identity.deviceId,
+      type: input.type,
+      mime: input.mime,
+      sizeBytes,
+      sha256,
+      capturedAt: input.capturedAt,
+      location: input.location,
+      localPath,
+    },
+    deps.transaction,
+  );
 
   // 06 §5.2 (b). After the commit, so the pass it schedules can see the row.
   deps.onCaptured();

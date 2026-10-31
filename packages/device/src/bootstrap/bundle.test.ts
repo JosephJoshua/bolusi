@@ -61,6 +61,24 @@ function producer(fetchImpl: typeof fetch, token: string | null = 'bdt_secret') 
 }
 
 describe('the conditional GET /v1/devices/me/bundle (api/02-auth §5.2)', () => {
+  test('a server that never answers fails as a network error, so the cycle can end', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const hung = vi.fn(() => new Promise<Response>(() => undefined));
+      const outcome = producer(hung as unknown as typeof fetch)
+        .refresh()
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      await vi.waitFor(() => expect(hung).toHaveBeenCalled());
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(await outcome).toMatchObject({ name: 'SyncTransportError', code: null, status: null });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('200 APPLIES the bundle and stores the ETag, returns "refreshed"', async () => {
     const doFetch = vi.fn(async () =>
       jsonResponse(200, { bundle: BUNDLE, etag: 'etag-2', serverTime: 5 }),

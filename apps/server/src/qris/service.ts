@@ -490,6 +490,7 @@ export async function createCharge(
       { storeId },
       ready.opRegistry,
       createAuthorLookup(db, acting.tenantId),
+      ready.serverCrypto,
     );
     if (refused !== null) throw new ApiError('CHANGE_REFUSED', { reason: refused.reason });
     const key = await connectionOf(ready, db, acting.tenantId, body.accountId);

@@ -2,8 +2,9 @@
 //
 // Token verification (every request) and login must resolve the tenant FROM an opaque credential
 // — a bdt_/bcs_ bearer token, or a globally-unique loginIdentifier — BEFORE the tenant is known,
-// which forTenant cannot express (it requires the tenant and scopes RLS to it). These three
-// functions are the narrow, sanctioned exception: each invokes a SECURITY DEFINER SQL function
+// which forTenant cannot express (it requires the tenant and scopes RLS to it). So must a
+// customer's status page, whose link code is its only credential. These four functions are the
+// narrow, sanctioned exception: each invokes a SECURITY DEFINER SQL function
 // (owner bolusi_auth, BYPASSRLS) whose fixed body does ONE keyed lookup and returns the minimal
 // fields of the single matched row, nothing on no-match (fail closed). The connecting role stays
 // NOBYPASSRLS and can read no byte beyond what the function body returns — an arbitrary
@@ -18,6 +19,8 @@ import {
   loginCredentialQuery,
   mapControlSessionRow,
 } from './auth-lookup-queries.js';
+import { sql } from 'kysely';
+
 import { getDb } from './db.js';
 
 /** Minimal device auth row for `verifyToken` (bdt_) — api/02-auth §8. */
@@ -73,4 +76,23 @@ export async function findLoginCredential(
 ): Promise<LoginCredentialRecord | undefined> {
   const { rows } = await loginCredentialQuery(loginIdentifier).execute(getDb());
   return rows[0];
+}
+
+/** Where a customer's status link points: the servisan and its tenant (migration 0028). */
+export interface StatusLinkRecord {
+  readonly tenantId: string;
+  readonly storeId: string;
+  readonly ticketId: string;
+}
+
+/**
+ * Resolve a customer's status link code (the only credential the public page has) to its servisan.
+ * Cross-tenant, definer-gated. Undefined when no servisan, or more than one, carries the code.
+ */
+export async function findStatusLink(code: string): Promise<StatusLinkRecord | undefined> {
+  const { rows } = await sql<StatusLinkRecord>`
+    SELECT tenant_id AS "tenantId", store_id AS "storeId", ticket_id AS "ticketId"
+      FROM public_find_status_link(${code})
+  `.execute(getDb());
+  return rows.length === 1 ? rows[0] : undefined;
 }

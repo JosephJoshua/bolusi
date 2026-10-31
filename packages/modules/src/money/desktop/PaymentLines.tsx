@@ -15,8 +15,8 @@ import {
   digitsOf,
   digitsText,
   lineKind,
+  methodOffered,
   newPaymentLine,
-  offeredAccount,
   paidByQr,
   paymentMethods,
   type PaymentEntry,
@@ -69,7 +69,9 @@ export function PaymentLines({
       ) : null}
       {lines.map((line, index) => {
         const id = `${testId}.line${String(index)}`;
-        const account = offeredAccount(line.account, accounts);
+        const account = line.account;
+        // A method switched off since it was picked: no chip is on, and the line asks again.
+        const offered = methodOffered(account, accounts);
         const kind = lineKind(account, accounts);
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
@@ -81,7 +83,7 @@ export function PaymentLines({
             className={index > 0 ? 'border-t border-border pt-4' : undefined}
             data-testid={id}
           >
-            {methods.length > 1 ? (
+            {methods.length > 1 || !offered ? (
               <div
                 className="mb-3 flex gap-2 overflow-x-auto"
                 role="group"
@@ -117,7 +119,11 @@ export function PaymentLines({
                 onChange={(event) => digits(line.key, 'amount')(event.target.value)}
                 data-testid={`${id}.amount`}
               />
-              {kind === 'cash' ? (
+              {!offered ? (
+                <p className="self-end text-small text-danger" data-testid={`${id}.methodGone`}>
+                  {tm('money.pay.problem.method')}
+                </p>
+              ) : kind === 'cash' ? (
                 <TextField
                   label={tm('money.pay.tendered')}
                   prefix={tm('money.pay.currency')}
@@ -182,7 +188,8 @@ export function PaymentLines({
                   data-testid={`${id}.useQr`}
                 />
               ) : null}
-              {kind === 'cash' && line.tendered !== '' && tendered >= amount && amount > 0 ? (
+              {/* Handed over exactly: no change to give, so nothing to say. */}
+              {kind === 'cash' && line.tendered !== '' && tendered > amount && amount > 0 ? (
                 <p className="text-body text-text" data-testid={`${id}.change`}>
                   <span className="text-text-muted">{tm('money.pay.change')} </span>
                   <span className="tabular font-semibold">{formatMoney(tendered - amount)}</span>

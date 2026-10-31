@@ -503,6 +503,30 @@ governance notes in "Decision" where they differ.
   of it through another). Refunds beyond an overpayment and voids from Kas are
   not requestable: no counter screen starts them.
 
+## Customers follow their repair online (2026-10-28)
+
+- Each servisan gets a 12-character link code (Crockford base32) made on the
+  device at intake, so it works offline. The code is the only credential: no
+  lookup by servisan number or phone number, and access logs mask it. It appears
+  on the page once the servisan has synced. The code is a hash of a random nonce
+  and the servisan's tenant, store and id, so a code copied off a slip cannot be
+  recorded on another store's servisan to break or hijack the link.
+- The page (`<site>/c/<code>`, served by our server from `apps/web`) shows the
+  status and its history, the phone model, Total, paid and Sisa, price changes
+  waiting for the customer's yes (read only; they answer the store on WhatsApp),
+  the warranty (its end date after pickup) and the store's name, address and
+  contact. No photos, customer details, notes or staff names.
+- The page closes 30 days after the longest warranty ends (or 30 days after
+  pickup when there is none). Lookups are rate limited per IP and never indexed.
+- Slips: dot-matrix strikes both sheets, so the QR is not on one copy only. It
+  sits beside the signatures with the short link and code in bold underneath,
+  and must keep each slip on its form at every paper size. "Kirim link" on
+  WhatsApp at intake is the main way the link reaches the customer. (Slip QR and
+  sending the link follow in a second change.)
+- The site's address is a setting, so the domain can be chosen later. `apps/web`
+  is the start of the later back-office web app: customer pages need no sign-in,
+  staff screens join it with their own routes.
+
 ## Open product choices
 
 - Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.

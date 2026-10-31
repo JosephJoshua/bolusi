@@ -43,7 +43,10 @@ export function KasHistory({
   testID = 'money.history',
 }: KasHistoryProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const can = voidAbilities((id) => runtime.hasPermission(id));
+  const can = voidAbilities(
+    (id) => runtime.hasPermission(id),
+    (id) => runtime.limitOf(id),
+  );
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const today = dayStart(now());

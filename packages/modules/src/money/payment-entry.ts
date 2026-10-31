@@ -27,8 +27,11 @@ export interface PaymentLine {
   readonly manual?: boolean | undefined;
 }
 
-/** `qr`: still to be paid by the customer scanning its QR. */
-export type PaymentLineProblem = 'amount' | 'reference' | 'tendered' | 'qr';
+/**
+ * `method`: the store switched the line's method off since it was picked.
+ * `qr`: still to be paid by the customer scanning its QR.
+ */
+export type PaymentLineProblem = 'amount' | 'method' | 'reference' | 'tendered' | 'qr';
 
 export interface PaymentEntry {
   /** The payments to record, once every line is complete; empty while one is not. */
@@ -110,9 +113,13 @@ export function paymentEntry(
       continue;
     }
     paid += amount;
-    // A method switched off while the line was open counts as the drawer, as its chips show.
-    const account = offeredAccount(line.account, accounts);
-    if (account === line.account && paidByQr(line, qrAccounts)) {
+    // A method switched off while the line was open is picked again, never booked to the drawer.
+    const account = line.account;
+    if (!methodOffered(account, accounts)) {
+      problems[line.key] = 'method';
+      continue;
+    }
+    if (paidByQr(line, qrAccounts)) {
       problems[line.key] = 'qr';
       continue;
     }
@@ -162,12 +169,17 @@ export function newPaymentLine(
   };
 }
 
+/** Whether the store still offers a method picked earlier: the drawer always. */
+export function methodOffered(account: string, accounts: readonly PaymentAccountRow[]): boolean {
+  return account === CASH_ACCOUNT || accounts.some((row) => `account:${row.id}` === account);
+}
+
 /**
  * The method a payment goes through, as offered here: the one picked while the store still offers
  * it, the drawer otherwise (an account switched off since a draft picked it).
  */
 export function offeredAccount(account: string, accounts: readonly PaymentAccountRow[]): string {
-  return accounts.some((row) => `account:${row.id}` === account) ? account : CASH_ACCOUNT;
+  return methodOffered(account, accounts) ? account : CASH_ACCOUNT;
 }
 
 /** Whether a single payment (a DP) still needs the reference its method asks for (an EDC code). */

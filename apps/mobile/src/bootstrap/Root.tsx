@@ -105,12 +105,16 @@ import {
 } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
-import type {
-  PhotoCapture,
-  SignatureCapture,
-  VideoCapture,
-  VideoPlayback,
+import {
+  useTick,
+  type PhotoCapture,
+  type SignatureCapture,
+  type VideoCapture,
+  type VideoPlayback,
 } from '@bolusi/modules/screen-kit';
+
+/** How often the sync line's age is read again without anything else moving. */
+const SYNC_AGE_REFRESH_MS = 30_000;
 
 /**
  * The fallback enrollment controller when none is injected (Node-driven Root with no `createEnrollment`).
@@ -415,6 +419,9 @@ export function Root({
   // Read as `syncTick` since task 130: the §8.4 derived reads need the same "something moved" signal
   // the render already keys off, and a counter nobody reads cannot be a dependency.
   const [syncTick, bump] = useReducer((n: number) => n + 1, 0);
+  // The render reads the clock (`systemClock.now()` below), so it is read again on this beat:
+  // "Terakhir terhubung baru saja" and the staleness must age while a hung server sends nothing.
+  useTick(SYNC_AGE_REFRESH_MS);
   // The sync client lives OUTSIDE the effect's re-run cycle: it is constructed at most once (at boot
   // if enrolled, or on enroll success), and only stopped on unmount. Holding it in a ref rather than
   // reconstructing it per render is what lets `onEnrolled` start the loop WITHOUT the boot effect

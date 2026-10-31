@@ -22,11 +22,14 @@ export function useDiscardConfirm({
   dirty,
   copy,
   onRegisterDiscardGuard,
+  onDiscard,
   testID,
 }: {
   readonly dirty: boolean;
   readonly copy: DiscardCopy;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
+  /** The person chose to drop what they filled in, whichever back they used. */
+  readonly onDiscard?: (() => void) | undefined;
   readonly testID: string;
 }): { readonly requestLeave: DiscardGuard; readonly overlay: ReactNode } {
   const [pending, setPending] = useState<(() => void) | null>(null);
@@ -46,6 +49,9 @@ export function useDiscardConfirm({
         confirmLabel={copy.confirm}
         onConfirm={() => {
           setPending(null);
+          // The user said to drop it: a parent whose leave asks this guard must not ask again.
+          onRegisterDiscardGuard?.(null);
+          onDiscard?.();
           pending();
         }}
         cancelLabel={copy.keep}

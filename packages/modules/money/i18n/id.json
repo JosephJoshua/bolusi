@@ -30,10 +30,12 @@
     "notThisStore": "Ini milik toko lain.",
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
+    "countRequired": "Selisih kas hanya diselesaikan dari hitungan kas.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
     "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
     "overLimit": "Melebihi batasmu. Minta pemilik toko.",
+    "moveAboveDrawer": "Uang di laci tidak cukup.",
     "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
     "laterCountSettled": "Selisih hitungan kas sesudahnya sudah diselesaikan, jadi catatan ini tidak bisa dibatalkan lagi."
   },
@@ -52,6 +54,7 @@
     "remaining": "Kurang {amount}",
     "overpaid": "Lebih {amount}. Kurangi jumlahnya dulu.",
     "problem": {
+      "method": "Metode ini sudah tidak tersedia. Pilih metode lain.",
       "tendered": "Uang diterima kurang dari jumlahnya."
     },
     "method": "Metode pembayaran",
@@ -67,6 +70,7 @@
     "waitingOwner": "Menunggu pemilik",
     "inToday": "Masuk hari ini",
     "nothingIn": "Belum ada uang masuk hari ini.",
+    "refunded": "Dikembalikan ke pelanggan",
     "total": "Total",
     "movesToday": "Keluar/masuk laci hari ini",
     "owed": "Belum lunas",
@@ -102,7 +106,8 @@
     "save": "Simpan",
     "hintAmount": "Isi jumlahnya.",
     "hintReason": "Isi keterangannya.",
-    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya."
+    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya.",
+    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu."
   },
   "settle": {
     "title": "Selesaikan selisih",
@@ -134,6 +139,7 @@
     "nextDay": "Berikutnya",
     "none": "Belum ada catatan di hari ini.",
     "voided": "Dibatalkan: {reason}",
+    "handoverRefund": "Sisa DP saat HP diambil",
     "more": "Muat lagi",
     "void": "Batalkan",
     "col": {

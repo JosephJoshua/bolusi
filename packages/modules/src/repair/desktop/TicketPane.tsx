@@ -52,6 +52,7 @@ import {
   amountOwed,
   arrangeTicketActions,
   balanceAfterDownPayment,
+  balanceLabelKey,
   canSetRepairTypes,
   canUseParts,
   claimIntakeDraft,
@@ -93,6 +94,7 @@ import {
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
+  paidRow,
   warrantyLine,
 } from '../labels.js';
 import {
@@ -455,7 +457,8 @@ export function TicketPane({
         messageKind === null &&
         claimAction === null ? null : (
           // The next step leads; printing and the rarer moves ("Lainnya") wait quietly at the end.
-          <div className="flex items-center gap-2">
+          // A narrow pane wraps them rather than push the last one out of sight.
+          <div className="flex flex-wrap items-center gap-2">
             {layout.next === null ? null : (
               <Button
                 label={label(layout.next)}
@@ -730,9 +733,10 @@ export function TicketPane({
         ) : null}
         <DownPaymentLines
           total={amountOwed(row)}
-          downPayment={row.downPayment}
           reduced={row.reduced}
+          downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
+          returned={row.location === 'returned'}
           action={downPaymentAction(row, can)}
           correctLabel={tn(downPaymentTitleKey('correct', can.correctDownPayment))}
           disabled={runner.busy}
@@ -1097,9 +1101,6 @@ export function TicketPane({
             {...common}
             ticket={row}
             customerName={row.customerName}
-            cancelled={row.outcome === 'cancelled'}
-            amount={amountOwed(row)}
-            downPayment={row.downPayment}
             onDone={() => finishStep(DONE_KEY.handover)}
           />
         );
@@ -1362,9 +1363,10 @@ function lineCaption(line: QuoteLineRow): string {
  */
 function DownPaymentLines({
   total,
-  downPayment,
   reduced,
+  downPayment,
   paidLabel,
+  returned,
   action,
   correctLabel,
   disabled,
@@ -1372,19 +1374,20 @@ function DownPaymentLines({
 }: {
   /** What is owed, already less `reduced`. */
   readonly total: number;
-  readonly downPayment: number | null;
   /** What an owner took off the bill, shown above what was paid. */
   readonly reduced: number;
+  readonly downPayment: number | null;
   readonly paidLabel: RepairKey;
+  /** The phone went home: what is left to give back is still owed. */
+  readonly returned: boolean;
   readonly action: 'record' | 'correct' | null;
   /** "Ubah DP", or for the counter, asking an owner to. */
   readonly correctLabel: string;
   readonly disabled: boolean;
   readonly onAction: (mode: 'record' | 'correct') => void;
 }): React.JSX.Element | null {
-  const paid = downPayment ?? 0;
-  if (paid === 0 && reduced === 0) {
-    return action === 'record' ? (
+  const record =
+    action === 'record' ? (
       <Button
         label={tn('repair.downPayment.recordTitle')}
         icon={Plus}
@@ -1396,47 +1399,51 @@ function DownPaymentLines({
         data-testid="repair.desk.ticket.downPayment.record"
       />
     ) : null;
-  }
+  const paid = downPayment ?? 0;
+  if (paid === 0 && reduced === 0) return record;
   const balance = balanceAfterDownPayment(total, paid);
-  // Before pickup an overpaid DP goes back at the handover; after it, it is still owed back.
-  const owedBackLabel: RepairKey =
-    paidLabel === 'repair.price.paid' ? 'repair.price.owedBack' : 'repair.price.refund';
+  const paidText = paidRow(paid, paidLabel);
   return (
-    <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
-      {reduced === 0 ? null : (
-        <div className="flex justify-between gap-4 text-body text-text-muted">
-          <dt>{tn('repair.price.reduced')}</dt>
-          <dd className="tabular" data-testid="repair.desk.ticket.reduced">
-            {formatMoney(-reduced)}
-          </dd>
+    <>
+      <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
+        {reduced === 0 ? null : (
+          <div className="flex items-center justify-between gap-4 text-body text-text-muted">
+            <dt>{tn('repair.price.reduced')}</dt>
+            <dd className="tabular" data-testid="repair.desk.ticket.reduced">
+              {formatMoney(-reduced)}
+            </dd>
+          </div>
+        )}
+        {paid === 0 ? null : (
+          <div className="flex items-center justify-between gap-4 text-body text-text-muted">
+            <dt className="flex items-center gap-2">
+              {paidText.label}
+              {action === 'correct' ? (
+                <Tooltip label={correctLabel}>
+                  <Button
+                    label={tn('repair.downPayment.change')}
+                    aria-label={correctLabel}
+                    variant="text"
+                    size="sm"
+                    className="-my-1"
+                    onClick={() => onAction('correct')}
+                    disabled={disabled}
+                    data-testid="repair.desk.ticket.downPayment.correct"
+                  />
+                </Tooltip>
+              ) : null}
+            </dt>
+            <dd className="tabular" data-testid="repair.desk.ticket.paid">
+              {paidText.amount}
+            </dd>
+          </div>
+        )}
+        <div className="flex justify-between gap-4 text-body font-semibold text-text">
+          <dt>{tn(balanceLabelKey(balance.kind, returned))}</dt>
+          <dd className="tabular">{formatMoney(balance.amount)}</dd>
         </div>
-      )}
-      {paid === 0 ? null : (
-        <div className="flex items-center justify-between gap-4 text-body text-text-muted">
-          <dt className="flex items-center gap-2">
-            {tn(paidLabel)}
-            {action === 'correct' ? (
-              <Tooltip label={correctLabel}>
-                <Button
-                  label={tn('repair.downPayment.change')}
-                  aria-label={correctLabel}
-                  variant="text"
-                  size="sm"
-                  className="-my-1"
-                  onClick={() => onAction('correct')}
-                  disabled={disabled}
-                  data-testid="repair.desk.ticket.downPayment.correct"
-                />
-              </Tooltip>
-            ) : null}
-          </dt>
-          <dd className="tabular">{formatMoney(-paid)}</dd>
-        </div>
-      )}
-      <div className="flex justify-between gap-4 text-body font-semibold text-text">
-        <dt>{tn(balance.kind === 'due' ? 'repair.price.balance' : owedBackLabel)}</dt>
-        <dd className="tabular">{formatMoney(balance.amount)}</dd>
-      </div>
-    </dl>
+      </dl>
+      {paid === 0 ? record : null}
+    </>
   );
 }

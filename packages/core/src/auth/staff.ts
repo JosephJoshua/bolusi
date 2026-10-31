@@ -17,8 +17,17 @@ import { STORE_ID_META_KEY } from '../authz/directory.js';
 import { AUTH_PERMISSION } from './operations.js';
 import { holdsMainOwnerRole } from './repo.js';
 
-/** The preset roles an owner picks from, in the order they are offered. Made roles follow. */
-export const STAFF_ROLE_KEYS = ['cashier', 'technician', 'manager', 'store_owner'] as const;
+/**
+ * The preset roles an owner picks from, in the order they are offered. Made roles follow. "Staf"
+ * starts with notes only: a base the main owner fills in the role editor.
+ */
+export const STAFF_ROLE_KEYS = [
+  'cashier',
+  'technician',
+  'manager',
+  'staff',
+  'store_owner',
+] as const;
 export type StaffRoleKey = (typeof STAFF_ROLE_KEYS)[number];
 
 export interface StaffRole {

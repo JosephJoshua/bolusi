@@ -736,6 +736,21 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   'GET /h/:key/next': PHONE_PAGE,
   'POST /h/:key/send': PHONE_PAGE,
 
+  // ── customer status page ──────────────────────────────────────────────────────────────────────
+  'GET /v1/public/status/:code': {
+    crossTenant: {
+      kind: 'absent',
+      reason:
+        'no tenant-scoped id: the random link code names one servisan in one tenant, and only its customer view comes back (apps/server public-status.test.ts)',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the code carries no store scope' },
+    unauthenticated: {
+      kind: 'absent',
+      reason:
+        'bearer-exempt by design: the customer has no account, so the link code printed on their slip is the credential',
+    },
+    unauthenticatedRequest: unauthLeg('GET', () => '/v1/public/status/0000000000'),
+  },
   // ── app updates ───────────────────────────────────────────────────────────────────────────────
   'GET /updates/manifest': {
     crossTenant: {

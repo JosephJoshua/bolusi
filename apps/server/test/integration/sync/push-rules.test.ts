@@ -657,12 +657,65 @@ describe('money: the counter cannot take cash out through the ledger', () => {
       'rejected',
     ]);
     expect(result.results[0]).toMatchObject({ reason: 'money.refusal.notChargeable' });
-    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.notCharged' });
+    // More than the customer paid goes back to nobody, owner or not.
+    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.refundAbovePaid' });
     expect(result.results[3]).toMatchObject({ reason: 'money.refusal.notCharged' });
     const cash = await sql<{ net: string }>`
       SELECT COALESCE(SUM(debit - credit), 0) AS net FROM money_lines WHERE account = 'cash'
     `.execute(db);
     expect(Number(cash.rows[0]!.net)).toBe(100_000);
+  });
+});
+
+describe('money: not even an owner takes out what never came in', () => {
+  test('two refunds of one DP, and a cash correction with no count, are refused', async () => {
+    const { world, builder } = await setupWorld(3365);
+    const document = { kind: 'repair.ticket', id: TICKET, label: 'ABC-0001' };
+    const entry = (n: number, type: string, payload: Record<string, unknown>) =>
+      builder.append({
+        type,
+        entityType: 'money_entry',
+        entityId: `01920000-0000-7000-8000-0000000e0d0${n}`,
+        payload,
+      });
+    const refund = (n: number) =>
+      entry(n, 'money.refund_paid', {
+        document,
+        account: 'cash',
+        amount: 100_000,
+        reason: 'Batal',
+        reference: null,
+      });
+    const dp = entry(1, 'money.payment_received', {
+      document,
+      account: 'cash',
+      amount: 100_000,
+      reference: null,
+      tendered: null,
+    });
+    // Two owner phones each handed the same DP back while offline.
+    const first = refund(2);
+    const second = refund(3);
+    const unbound = entry(4, 'money.cash_adjusted', {
+      amount: 50_000,
+      countId: null,
+      reason: 'Tambah',
+    });
+
+    const result = await push(world, [dp, first, second, unbound]);
+
+    expect(result.results.map((r) => r.status)).toEqual([
+      'accepted',
+      'accepted',
+      'rejected',
+      'rejected',
+    ]);
+    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.refundAbovePaid' });
+    expect(result.results[3]).toMatchObject({ reason: 'money.refusal.countRequired' });
+    const cash = await sql<{ net: string }>`
+      SELECT COALESCE(SUM(debit - credit), 0) AS net FROM money_lines WHERE account = 'cash'
+    `.execute(db);
+    expect(Number(cash.rows[0]!.net)).toBe(0);
   });
 });
 

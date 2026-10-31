@@ -9,7 +9,7 @@ const source = {
         cancel: 'Batal',
         retry: 'Coba lagi',
         delete: 'Hapus',
-        confirm: 'Ya, Lanjutkan',
+        confirm: 'Ya, lanjutkan',
         back: 'Kembali',
         close: 'Tutup',
         edit: 'Ubah',
@@ -98,7 +98,7 @@ const source = {
         CHAIN_GAP: 'Ada yang tertinggal. Dikirim ulang otomatis.',
         CHAIN_HALTED: 'Menunggu perubahan sebelumnya beres.',
         CLOCK_AHEAD:
-          'Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
+          'Jam perangkat ini terlalu cepat saat perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
         DEVICE_REVOKED: 'Perangkat ini sudah diblokir. Daftarkan ulang.',
         PERMISSION_DENIED: 'Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.',
         RULE_VIOLATED:
@@ -325,6 +325,7 @@ const source = {
           cashier: 'Terima HP, atur harga, dan serahkan HP ke pelanggan',
           technician: 'Kerjakan servisan, termasuk foto sebelum dan sesudah',
           manager: 'Tugas kasir dan teknisi, plus diskon dan refund terbatas',
+          staff: 'Hanya menulis catatan',
           storeOwner: 'Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan',
         },
         save: 'Simpan',
@@ -791,7 +792,7 @@ export const resources = {
           cancel: 'Cancel',
           retry: 'Try again',
           delete: 'Delete',
-          confirm: 'Yes, Continue',
+          confirm: 'Yes, continue',
           back: 'Back',
           close: 'Close',
           edit: 'Edit',
@@ -885,7 +886,7 @@ export const resources = {
           CHAIN_GAP: 'Something was missing. Resending automatically.',
           CHAIN_HALTED: 'Waiting on an earlier change.',
           CLOCK_AHEAD:
-            'This phone’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
+            'This device’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
           DEVICE_REVOKED: 'This device is blocked. Enroll it again.',
           PERMISSION_DENIED: 'Whoever made it wasn’t allowed to. Ask someone who is to redo it.',
           RULE_VIOLATED:
@@ -1112,6 +1113,7 @@ export const resources = {
             cashier: 'Take in devices, set prices and hand devices back',
             technician: 'Work on repairs, including before and after photos',
             manager: 'Cashier and technician work, plus limited discounts and refunds',
+            staff: 'Notes only',
             storeOwner:
               'Everything in the store, including staff, discounts and cancelling repairs',
           },

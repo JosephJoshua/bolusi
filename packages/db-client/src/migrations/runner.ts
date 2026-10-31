@@ -20,6 +20,7 @@ import { inventoryMigration } from './019-inventory.js';
 import { repairTypesMigration } from './020-repair-types.js';
 import { roleLimitsMigration } from './021-role-limits.js';
 import { approvalsMigration } from './023-approvals.js';
+import { repairStatusLinkMigration } from './024-repair-status-link.js';
 import { readScopeMigration } from './028-read-scope.js';
 import type { ClientMigration } from './types.js';
 
@@ -45,6 +46,7 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   repairTypesMigration,
   roleLimitsMigration,
   approvalsMigration,
+  repairStatusLinkMigration,
   readScopeMigration,
 ];
 

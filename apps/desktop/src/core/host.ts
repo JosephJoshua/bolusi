@@ -83,7 +83,7 @@ import {
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingDeviceAdmin, actingSession, actingStaffAdmin } from './acting.js';
+import { actingDeviceAdmin, actingSession, actingStaffAdmin, readForActing } from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
@@ -347,17 +347,31 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     return repair !== null && repair.userId === active.userId ? repair.runtime : null;
   }
 
+  /** Rebuild the repair runtime for whoever is signed in now. Run unawaited, so it never rejects. */
   async function bindRepair(): Promise<void> {
-    const active = session?.snapshot().session ?? null;
-    if (app === null || enrollment === null || active === null) {
-      repair = null;
-      return;
+    try {
+      const active = session?.snapshot().session ?? null;
+      if (app === null || enrollment === null || active === null) {
+        repair = null;
+        return;
+      }
+      if (repair?.userId === active.userId) return;
+      const booted = app;
+      const enroll = enrollment;
+      const identity = await readForActing(
+        () => session,
+        active.userId,
+        (userId) => readSessionIdentity(booted, userId),
+      );
+      // Dropped when someone else signed in or the PC was re-registered while the read ran; the
+      // change that did it has already asked for a fresh bind.
+      if (identity === null || app !== booted || enrollment !== enroll) return;
+      if (repair?.userId === active.userId) return;
+      repair = { userId: active.userId, identity, runtime: buildRepair(booted, enroll, identity) };
+      emit();
+    } catch (error) {
+      warn('repair runtime could not be built', error);
     }
-    if (repair?.userId === active.userId) return;
-    const identity = await readSessionIdentity(app, active.userId);
-    if (identity === null) return;
-    repair = { userId: active.userId, identity, runtime: buildRepair(app, enrollment, identity) };
-    emit();
   }
 
   function buildRepair(
@@ -794,7 +808,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       sessionFor(userId).clearLockout(targetUserId),
     'session.resetPin': (userId: string, targetUserId: string, newPin: string) =>
       sessionFor(userId).resetPin(targetUserId, newPin),
-    'session.lock': () => requireSession().lockNow(),
+    // The screen locks even when `session_ended` cannot be written; the lost record is logged.
+    'session.lock': () =>
+      requireSession()
+        .lockNow()
+        .catch((error: unknown) => warn('manual lock was not recorded', error)),
     'session.recordActivity'() {
       session?.recordActivity();
     },

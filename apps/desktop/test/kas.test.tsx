@@ -124,7 +124,7 @@ describe('Kas on the PC', () => {
     const move = within(byTestId('money.desk.kas.moves'))
       .getByText(/Beli lakban/)
       .closest('[data-testid^="money.desk.kas.moves."]')!;
-    expect(move.textContent!.replace(/\s/g, '')).toMatch(/^Biayatoko.*Belilakban−Rp25\.000$/);
+    expect(move.textContent!.replace(/\s/g, '')).toMatch(/^Biayatoko.*Belilakban-Rp25\.000$/);
   });
 
   it('takes a debt paid later, then an owner cancels it in Riwayat and the debt is back', async () => {

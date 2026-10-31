@@ -47,6 +47,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm i18n:check
       - run: pnpm test
+      # The web app the server serves (the customer's status page): it must build for production.
+      - run: pnpm --filter @bolusi/web build
       # The counter PC app in a real Electron window (keyboard handling, layout at common sizes).
       - run: xvfb-run -a pnpm --filter @bolusi/desktop e2e
       - name: Verify database types

@@ -46,9 +46,18 @@ export interface HandoverPayment {
   /** The counter has typed something worth asking about before leaving. */
   readonly touched: boolean;
   /** The money part of `returnDevice`. */
-  readonly input: Pick<ReturnDeviceInput, 'payments' | 'unpaidReason' | 'refundReason'>;
+  readonly input: Pick<ReturnDeviceInput, 'payments' | 'unpaidReason'>;
   /** Asks an owner to let the phone go unpaid, with the reason typed. */
   readonly askPayLater: () => Promise<unknown>;
+  /** What was entered, as a kept handover holds it (`HandoverDraft`). */
+  readonly draft: HandoverPaymentDraft;
+}
+
+export interface HandoverPaymentDraft {
+  /** The lines as typed; null while the counter has not touched them. */
+  readonly lines: readonly PaymentLine[] | null;
+  readonly payLater: boolean;
+  readonly unpaidReason: string;
 }
 
 /** Whether this person may let the phone go unpaid, read live so an approval shows as it lands. */
@@ -83,6 +92,8 @@ export function useHandoverPayment(
   due: number,
   accounts: readonly PaymentAccountRow[],
   qrisInput: HandoverQris,
+  /** A kept handover's payment, restored as it was entered. */
+  restored?: HandoverPaymentDraft | null,
 ): HandoverPayment {
   const runtime = useRepairRuntime();
   // Someone who cannot do it at all has no limit to show (`limitOf` reads it as 0).
@@ -91,10 +102,11 @@ export function useHandoverPayment(
     : null;
   const access = usePayLaterAccess(ticketId, due, limit);
   // Null until the counter touches the payment: the first line follows what is due as it loads.
-  const [typedLines, setLines] = useState<readonly PaymentLine[] | null>(null);
-  const [payLater, setPayLater] = useState(false);
-  const [unpaidReason, setUnpaidReason] = useState('');
-  const keys = useRef(0);
+  const [typedLines, setLines] = useState<readonly PaymentLine[] | null>(restored?.lines ?? null);
+  const [payLater, setPayLater] = useState(restored?.payLater ?? false);
+  const [unpaidReason, setUnpaidReason] = useState(restored?.unpaidReason ?? '');
+  // New lines are keyed past the restored ones, so no two lines share a key.
+  const keys = useRef(restored?.lines?.length ?? 0);
   const qris = useQrisCheckout({
     ...qrisInput,
     lines: typedLines ?? (due > 0 ? [newPaymentLine('line0', due)] : []),
@@ -123,7 +135,6 @@ export function useHandoverPayment(
     input: {
       payments: unpaid ? [] : [...entry.payments],
       unpaidReason: unpaid ? unpaidReason : null,
-      refundReason: tn('repair.handover.refundReason'),
     },
     askPayLater: () =>
       runtime.approvals.run('requestApproval', {
@@ -131,6 +142,7 @@ export function useHandoverPayment(
         input: { ticketId },
         reason: unpaidReason.trim(),
       }),
+    draft: { lines: typedLines, payLater, unpaidReason },
   };
 }
 
@@ -198,15 +210,4 @@ export function payLaterHintKey(payment: Pick<HandoverPayment, 'access' | 'unpai
   if (payment.access.kind === 'ask') return 'repair.hint.payLaterAsk';
   // Theirs to do, or approved: only the reason is missing.
   return 'repair.hint.reason';
-}
-
-/** What the counter must hand back before the phone goes (`useHandoverRefunds`), or null. */
-export function giveBackText(
-  refunds: readonly { readonly label: string; readonly amount: number }[],
-): string | null {
-  if (refunds.length === 0) return null;
-  const parts = refunds.map((refund) =>
-    tn('repair.handover.giveBackVia', { amount: formatMoney(refund.amount), method: refund.label }),
-  );
-  return tn('repair.handover.giveBack', { refunds: parts.join(', ') });
 }

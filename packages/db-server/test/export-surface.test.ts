@@ -42,6 +42,9 @@ const EXPECTED_EXPORTS = [
   'findDeviceByTokenHash',
   'findControlSessionByTokenHash',
   'findLoginCredential',
+  // Migration 0028: the customer's status page resolves its link code the same way, through one
+  // definer function that returns where the servisan lives and nothing else.
+  'findStatusLink',
   // Task 204 (approach 1): the three lookups' SQL as UNEXECUTED query builders, so @bolusi/harness
   // can run the production statement against its own handle instead of a hand-copied mirror.
   // Deliberately NOT functions that accept a `Kysely` — threading an external executor into this

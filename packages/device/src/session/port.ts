@@ -48,7 +48,10 @@ export interface SessionPort<TWork> {
     readonly ops: readonly unknown[];
   }>;
 
-  /** Manual lock (§6.4): `reason: 'manual_lock'`, `source: 'ui'`. */
+  /**
+   * Manual lock (§6.4): `reason: 'manual_lock'`, `source: 'ui'`. Clears `current` synchronously, on
+   * the call, so a rejected append loses only the record and never the lock.
+   */
   manualLock(): Promise<readonly unknown[]>;
 
   /**

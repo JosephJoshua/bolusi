@@ -55,20 +55,24 @@ test('media_items.location is ciphertext at rest; local_path and sha256 stay pla
   await runClientMigrations(db.driver, { now: () => 1 });
 
   // THE REAL capture-side writer (06 §2.2 step 7) — not a re-implementation of its SQL.
-  await insertMediaItem(db.db, {
-    id: 'media-1',
-    tenantId: 'tenant-1',
-    storeId: 'store-1',
-    userId: 'user-1',
-    deviceId: 'device-1',
-    type: 'image',
-    mime: 'image/jpeg',
-    sizeBytes: 1234,
-    sha256: 'a'.repeat(64),
-    capturedAt: 1_700_000_000_000,
-    location: { lat: PLAIN_LOCATION_MARKER, lng: 106.8, accuracyMeters: 5 },
-    localPath: '/documents/media-1.jpg',
-  });
+  await insertMediaItem(
+    db.db,
+    {
+      id: 'media-1',
+      tenantId: 'tenant-1',
+      storeId: 'store-1',
+      userId: 'user-1',
+      deviceId: 'device-1',
+      type: 'image',
+      mime: 'image/jpeg',
+      sizeBytes: 1234,
+      sha256: 'a'.repeat(64),
+      capturedAt: 1_700_000_000_000,
+      location: { lat: PLAIN_LOCATION_MARKER, lng: 106.8, accuracyMeters: 5 },
+      localPath: '/documents/media-1.jpg',
+    },
+    (fn) => db.transaction(() => fn()),
+  );
 
   // The physical cell is a marked AEAD blob…
   const raw = await db.driver.execute(`SELECT location, local_path, sha256 FROM media_items`);

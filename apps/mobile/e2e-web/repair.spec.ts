@@ -360,7 +360,15 @@ test('a cancelled servisan gives back the DP less its fee, with nothing to pay',
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-5');
   await tap(page, 'repair.ticket.action.handover');
-  await expect(page.getByTestId('repair.handover.balance')).toHaveText('Rp 50.000');
+  // The DP came in partly by QRIS: what goes back is split by the method each part came in by.
+  await expect(page.getByTestId('repair.handover.balance')).toHaveCount(0);
+  await expect(page.getByTestId('repair.handover.refund.cash')).toContainText('Kembalikan tunai');
+  await expect(page.getByTestId('repair.handover.refund.cash')).toContainText('Rp 20.000');
+  const qris = page.getByTestId(
+    'repair.handover.refund.account:01920000-0000-7000-8000-00000000a001',
+  );
+  await expect(qris).toContainText('Kembalikan lewat QRIS BCA');
+  await expect(qris).toContainText('Rp 30.000');
   await expect(page.getByTestId('repair.handover.payment')).toHaveCount(0);
   await shoot(page, 'handover-cancelled-refund');
 });
@@ -644,7 +652,17 @@ test('a phone back under warranty opens a free claim linked to its servisan', as
   await expect(page.getByTestId('repair.intake.claim.ended')).toHaveCount(0);
   await shoot(page, 'claim-intake');
   await tap(page, 'repair.intake.primary');
-  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Redmi Note 12');
+  // The claimed phone is shown fixed, its IMEI too: nothing to retype or change.
+  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveCount(0);
+  await expect(
+    page
+      .getByTestId('repair.intake.device.modelMatch')
+      .or(page.getByTestId('repair.intake.device.claimDevice')),
+  ).toContainText('Redmi Note 12');
+  await expect(page.getByTestId('repair.intake.device.claimDevice.note')).toBeVisible();
+  await expect(page.getByTestId('repair.intake.device.imei')).toHaveText('356789104455660');
+  await expect(page.getByTestId('repair.intake.device.imei.field')).toHaveCount(0);
+  await shoot(page, 'claim-device');
   await tap(page, 'repair.intake.primary');
   await fill(page, 'repair.intake.condition.complaint', 'Layar berkedip lagi');
   // A claim repairs what its servisan did: it picks no types of its own.
@@ -831,7 +849,7 @@ test('a down payment at intake shows what is left to pay, and opens with the tic
   await page.getByTestId('repair.intake.price.downPaymentMethod').scrollIntoViewIfNeeded();
   await shoot(page, 'dp-intake-edc');
   await tap(page, 'repair.intake.primary');
-  await expect(page.getByText('Isi kode approval dari mesin EDC.').first()).toBeVisible();
+  await expect(page.getByText('Isi kode approval dari struk EDC.').first()).toBeVisible();
   await fill(page, 'repair.intake.price.downPaymentMethod.reference', '004512');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.balance')).toHaveText('Rp 450.000');

@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -43,6 +43,10 @@ import {
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
 import { paidOnDocumentSql, reducedOnDocumentSql } from '../money/queries.js';
+import { CASH_ACCOUNT, paymentAccountIdOf } from '../money/constants.js';
+import { refundSplit } from '../money/rules.js';
+import { amountOwed } from './flows.js';
+import type { MoneyDatabase } from '../money/schema.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
@@ -156,6 +160,12 @@ export interface ClaimedTicket {
   readonly returnedAt: number | null;
 }
 
+export interface TicketRefund {
+  readonly account: string;
+  readonly name: string | null;
+  readonly amount: number;
+}
+
 export interface TicketDetailRow extends TicketSummaryRow {
   readonly devicePasscode: string | null;
   readonly intakeNotes: string;
@@ -169,6 +179,8 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly claimOf: ClaimedTicket | null;
   /** The warranty claims opened on this servisan, oldest first. */
   readonly claims: readonly { readonly id: string; readonly ticketNumber: string }[];
+  /** The code of the customer's status link (status-link.ts); null on servisan made before it. */
+  readonly statusCode: string | null;
   readonly intakePhotos: readonly IntakePhotoAngle[];
   readonly createdBy: string;
   readonly createdByName: string | null;
@@ -179,6 +191,12 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly workStarted: boolean;
   /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
   readonly slipPrints: Readonly<Record<SlipKind, number>>;
+  /**
+   * What goes back to the customer at handover, through each method that overpaid
+   * (`refundSplit`), as the handover records it; empty when nothing does or once handed back.
+   * `name` is the method's name, null for cash.
+   */
+  readonly refunds: readonly TicketRefund[];
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -639,6 +657,45 @@ function intakePhotoAngles(json: string | null): readonly IntakePhotoAngle[] {
   return parseJson<IntakePhotoAngle[]>(json, []);
 }
 
+/**
+ * What a servisan's handover would give back through each method: what was paid beyond the bill
+ * (`amountOwed`), split as `returnDevice` records it.
+ */
+async function ticketRefunds(qctx: Qctx, ticket: TicketSummaryRow): Promise<TicketRefund[]> {
+  const db = qctx.db as unknown as Kysely<MoneyDatabase>;
+  const entries = (
+    await db
+      .selectFrom('moneyEntries')
+      .select(['kind', 'account', 'amount', 'voidedBy'])
+      .where('storeId', '=', qctx.storeId ?? '')
+      .where('documentKind', '=', REPAIR_DOCUMENT_KIND)
+      .where('documentId', '=', ticket.id)
+      .orderBy('createdAt')
+      .orderBy('id')
+      .execute()
+  ).map((entry) => ({ ...entry, amount: Number(entry.amount) }));
+  const bill = amountOwed(ticket);
+  const credit = (ticket.downPayment ?? 0) - bill;
+  const split =
+    ticket.location === 'returned' || credit <= 0 ? [] : refundSplit(entries, credit, bill);
+  const ids = split.flatMap(({ account }) => paymentAccountIdOf(account) ?? []);
+  const names =
+    ids.length === 0
+      ? []
+      : await db
+          .selectFrom('moneyAccounts')
+          .select(['id', 'name'])
+          .where('tenantId', '=', qctx.tenantId)
+          .where('id', 'in', ids)
+          .execute();
+  return split.map((refund) => ({
+    ...refund,
+    name:
+      names.find((row) => row.id === paymentAccountIdOf(refund.account))?.name ??
+      (refund.account === CASH_ACCOUNT ? null : refund.account),
+  }));
+}
+
 export async function getTicketHandler(
   input: GetTicketInput,
   qctx: Qctx,
@@ -661,6 +718,7 @@ export async function getTicketHandler(
       'peripheralsJson',
       'repairTypesJson',
       'claimOfTicketId',
+      'statusCode',
       'intakePhotosJson',
       'createdBy',
       'returnedBy',
@@ -719,6 +777,7 @@ export async function getTicketHandler(
     detail.createdBy,
     ...events.map((event) => event.actorId),
   ]);
+  const refunds = await ticketRefunds(qctx, toSummary(summary, names));
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -739,6 +798,7 @@ export async function getTicketHandler(
         peripherals: parseJson<unknown[]>(detail.peripheralsJson, []).map(recordedOption),
         repairTypes: parseJson<RecordedRepairType[]>(detail.repairTypesJson, []),
         claimOfTicketId: detail.claimOfTicketId,
+        statusCode: detail.statusCode,
         claimOf:
           claimed === undefined
             ? null
@@ -757,6 +817,7 @@ export async function getTicketHandler(
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
         slipPrints,
+        refunds,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,

@@ -59,6 +59,33 @@ describe('intake slip', () => {
     expect(text).toMatch(/Sisa bayar\s+Rp 750\.000/);
   });
 
+  it('a reprint after the price changed shows what was paid but no balance against the estimate', () => {
+    const raised = sampleTicket({
+      quoteTotal: 1_250_000,
+      downPayment: 1_000_000,
+      quoteLines: [
+        line({ id: 'l1' }),
+        line({ id: 'l2', kind: 'labour', description: 'Jasa pasang', amount: 100_000 }),
+        line({ id: 'l3', description: 'Ganti baterai', amount: 300_000, status: 'applied' }),
+      ],
+    });
+    const text = allText(intakeSlip(raised, ctx));
+    expect(text).toMatch(/Estimasi total\s+Rp 950\.000/);
+    expect(text).toMatch(/DP\s+-Rp 1\.000\.000/);
+    expect(text).not.toContain('Dikembalikan');
+    expect(text).not.toContain('Sisa bayar');
+
+    const cancelled = sampleTicket({
+      outcome: 'cancelled',
+      cancelFee: 50_000,
+      downPayment: 50_000,
+      location: 'returned',
+    });
+    const cancelledText = allText(intakeSlip(cancelled, ctx));
+    expect(cancelledText).toMatch(/Sudah dibayar\s+-Rp 50\.000/);
+    expect(cancelledText).not.toContain('Sisa bayar');
+  });
+
   it('numbers the reprints after the first by how many came before', () => {
     const slip = (intake: number) =>
       allText(intakeSlip(sampleTicket({ slipPrints: { intake, handover: 0 } }), ctx));
@@ -137,6 +164,23 @@ describe('handover slip', () => {
     expect(text).toMatch(/Sisa bayar\s+Rp 30\.000/);
     // No repair, so no warranty terms.
     expect(text).not.toContain('KETENTUAN');
+  });
+
+  it('says which method each part of a refund goes back through', () => {
+    const cancelled = sampleTicket({
+      outcome: 'cancelled',
+      cancelFee: 50_000,
+      downPayment: 200_000,
+      refunds: [
+        { account: 'cash', name: null, amount: 50_000 },
+        { account: 'account:q', name: 'QRIS toko', amount: 100_000 },
+      ],
+    });
+    const text = allText(
+      handoverSlip(cancelled, { ...ctx, handedOverByName: null, signature: null }),
+    );
+    expect(text).toMatch(/Dikembalikan tunai\s+Rp 50\.000/);
+    expect(text).toMatch(/Dikembalikan lewat QRIS toko\s+Rp 100\.000/);
   });
 
   it('takes what an owner lowered off the bill, so a reprint after a refund owes nothing', () => {

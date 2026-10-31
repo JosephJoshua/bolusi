@@ -122,5 +122,6 @@ export const ROLE_HINT_KEY = {
   cashier: 'auth.staff.roleHint.cashier',
   technician: 'auth.staff.roleHint.technician',
   manager: 'auth.staff.roleHint.manager',
+  staff: 'auth.staff.roleHint.staff',
   store_owner: 'auth.staff.roleHint.storeOwner',
 } as const satisfies Record<StaffRoleKey, string>;

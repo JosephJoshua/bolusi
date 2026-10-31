@@ -185,13 +185,31 @@ describe('whose phone, and when', () => {
       color: 'Hitam',
       imei: '350000000000006',
     };
+    // Another IMEI is named as the reason, so the counter knows what to check.
     await expectRefusal(
       claim(h, original, h.ownerId, { device: otherPhone }),
       'VALIDATION_FAILED',
-      'claimOtherPhone',
+      'claimOtherImei',
     );
     // A phone whose IMEI was not written down can still be claimed on.
     await claim(h, original, h.cashierId, { device: { ...otherPhone, imei: '' } });
+    // But not another model brought in under its number (PC exploratory QA, F6).
+    await expectRefusal(
+      claim(h, original, h.ownerId, {
+        device: { brand: 'Apple', model: 'iPhone 15 Pro Max', color: 'Hitam', imei: '' },
+      }),
+      'VALIDATION_FAILED',
+      'claimOtherPhone',
+    );
+    await expectRefusal(
+      claim(h, original, h.ownerId, { device: { ...otherPhone, model: 'Galaxy A54', imei: '' } }),
+      'VALIDATION_FAILED',
+      'claimOtherPhone',
+    );
+    // The same phone written another way is the same phone.
+    await claim(h, original, h.cashierId, {
+      device: { ...otherPhone, brand: 'samsung', model: 'A14', imei: '' },
+    });
   });
 
   test('a claim signed before the phone went home is not covered', async () => {
@@ -283,6 +301,7 @@ describe('the counter’s claim button and intake', () => {
       ticketId: home.id,
       ticketNumber: home.ticketNumber,
       warrantyUntil: returnedAt + 30 * DAY,
+      imei: home.deviceImei ?? '',
     });
     // Judged when shown: an intake kept past the warranty's last day says it ended.
     expect(claimWarrantyEnded(draft.claimOf!, returnedAt + 30 * DAY)).toBe(false);
@@ -292,6 +311,18 @@ describe('the counter’s claim button and intake', () => {
       DEFAULT_INTAKE_OPTIONS,
       returnedAt + DAY,
     );
+    expect(input.claimOf).toBe(home.id);
+    // The IMEI is the claimed phone's, whatever an old draft's device field says.
+    const kept = toOpenTicketInput(
+      {
+        ...draft,
+        claimOf: { ...draft.claimOf!, imei: '356789104455667' },
+        device: { ...draft.device, imei: '350000000000001' },
+      },
+      DEFAULT_INTAKE_OPTIONS,
+      returnedAt + DAY,
+    );
+    expect(kept.device.imei).toBe('356789104455667');
     expect(input.claimOf).toBe(home.id);
     expect(input.repairTypes).toEqual([]);
     expect(input.quoteLines).toEqual([{ kind: 'labour', description: 'Klaim garansi', amount: 0 }]);

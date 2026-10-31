@@ -25,6 +25,9 @@ const zConfig = z.object({
   // `pushPortFromConfig` FAILS CLOSED and LOUD when it is missing. Set it, or the server refuses to
   // boot.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  // OPTIONAL. The web app's build (apps/web/dist) to serve at the site root: the customer's repair
+  // status page the slip's QR opens. Unset ⇒ the server answers the API only (web.ts).
+  WEB_DIR: z.string().min(1).optional(),
   // OPTIONAL. `owner/name` of the GitHub repository whose `mobile-ota-*` pre-releases carry the
   // phones' signed over-the-air updates (app-updates/releases.ts). Unset ⇒ phones are told there
   // is nothing newer.
@@ -54,6 +57,8 @@ export type ServerConfig = {
   /** Expo push bearer token (api/04-push §7). Absent ⇒ `pushPortFromConfig` fails closed at boot —
    *  push has no silent no-op (task 134). */
   readonly expoAccessToken?: string;
+  /** The web app's build directory, served at the site root; absent ⇒ API only. */
+  readonly webDir?: string;
   /** GitHub `owner/name` holding phone over-the-air updates; absent ⇒ none offered. */
   readonly appUpdatesRepo?: string;
   /** Whether cookies are marked Secure: true unless PUBLIC_URL is a plain-http origin. */
@@ -94,6 +99,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     ...(parsed.data.EXPO_ACCESS_TOKEN === undefined
       ? {}
       : { expoAccessToken: parsed.data.EXPO_ACCESS_TOKEN }),
+    ...(parsed.data.WEB_DIR === undefined ? {} : { webDir: parsed.data.WEB_DIR }),
     ...(parsed.data.APP_UPDATES_REPO === undefined
       ? {}
       : { appUpdatesRepo: parsed.data.APP_UPDATES_REPO }),
