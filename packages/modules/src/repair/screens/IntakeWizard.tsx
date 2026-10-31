@@ -72,6 +72,8 @@ export interface IntakeWizardProps {
   /** Read when the ticket is opened, so a wizard left open for hours still dates it correctly. */
   readonly now: () => number;
   readonly restoredDraft?: IntakeDraft | null | undefined;
+  /** The colleague who started this intake, when it was not the person carrying on with it. */
+  readonly startedBy?: string | null | undefined;
   readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   /** Hardware back moves one step back; at the first step it is the surface's leave (with confirm). */
@@ -85,6 +87,7 @@ export function IntakeWizard({
   chrome,
   now,
   restoredDraft,
+  startedBy = null,
   onDraftChange,
   onRegisterDiscardGuard,
   onRegisterStepBack,
@@ -355,6 +358,11 @@ export function IntakeWizard({
       />
       <StepTransition from={stepFrom}>
         <View style={styles.body} testID={`${testID}.step.${step}`}>
+          {startedBy === null ? null : (
+            <Text style={[repairStyles.caption, styles.check]} testID={`${testID}.startedBy`}>
+              {tn('repair.intake.startedBy', { name: startedBy })}
+            </Text>
+          )}
           {photosExpired && step === 'photos' ? (
             <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.photosExpired`}>
               {tn('repair.photo.expired')}

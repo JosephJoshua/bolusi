@@ -117,6 +117,7 @@ export function session(over: Partial<SessionView> = {}): SessionView {
     locked: false,
     lockReason: null,
     workspace: null,
+    deviceDrafts: null,
     canUnlock: true,
     canReset: true,
     canManageStaff: true,

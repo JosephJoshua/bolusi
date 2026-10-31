@@ -2,12 +2,14 @@
  * A half-entered servisan survives the app being torn down: Android recreating the activity (the
  * React tree remounts in the same JS context) or killing the process (the same, plus a fresh boot of
  * the database). Either way `Root` mounts again, boots the database from disk, and opens at the
- * switcher; the work comes back only when the user who typed it unlocks with their PIN.
+ * switcher; nothing of the work shows before a PIN. An unfinished intake belongs to the device
+ * (Joseph, 2026-10-31): whoever unlocks may carry on with it, and it says who started it.
  *
  * Drives the real `Root`, the real repair intake and real PIN verifies over a file-backed database
  * with the production column cipher. Node lane: it proves the composition, not that a device
  * delivers its lifecycle events (device QA covers that).
  */
+import { DEVICE_WORK_KEY } from '@bolusi/core';
 import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -125,6 +127,7 @@ function valueOf(target: RenderResult, testID: string): unknown {
 
 /** The saved row, decrypted by the connection's cipher, or null when nothing reached disk yet. */
 async function savedWork(target: Fixture, userId: string): Promise<string | null> {
+  // An intake is kept under the device's own key, not a person's.
   const result = await sql<{ work: string }>`
     SELECT work FROM user_work WHERE user_id = ${userId}
   `.execute(target.app.db.db);
@@ -147,7 +150,7 @@ async function typeHalfAnIntake(target: Fixture): Promise<void> {
   // Denominator: the draft is on disk before the app goes away, so a pass below is a real restore.
   expect(
     await waitUntil(
-      async () => (await savedWork(target, target.userId))?.includes(PASSCODE) === true,
+      async () => (await savedWork(target, DEVICE_WORK_KEY))?.includes(PASSCODE) === true,
     ),
   ).toBe(true);
   // Activity recreation or process death: the tree goes away with nothing flushed on the way out.
@@ -174,35 +177,65 @@ describe('a half-entered servisan survives the app being torn down', () => {
     );
     expect(valueOf(app.screen, 'repair.intake.device.brand')).toBe('Samsung');
     expect(valueOf(app.screen, 'repair.intake.device.lock.pin')).toBe(PASSCODE);
-    expect(app.controller.snapshot().workspace?.drafts['repair']).toMatchObject({
+    expect(app.controller.snapshot().deviceDrafts?.['repair']).toMatchObject({
       customer: { name: CUSTOMER, phone: PHONE },
+      startedBy: { userId: fixture.userId, name: 'Andi Pratama' },
     });
+    // Their own intake, so no "started by" line.
+    expect(app.screen.query('repair.intake.startedBy')).toBeNull();
   });
 
-  test('a different user unlocking after the restart sees none of it, and the owner still gets it back', async () => {
+  test('a colleague unlocking after the restart finds it waiting on the board and may carry on with it', async () => {
     fixture = await bootFixture();
     await enrolledDevice(fixture);
     await seedTwoUsers(fixture, 300, COUNTER_PERMISSIONS);
     await typeHalfAnIntake(fixture);
 
-    const first = await start(fixture);
-    screen = first.screen;
-    expect(await unlockAs(first.screen, SECOND_USER_ID)).toBe(true);
-    expect(await waitUntil(() => first.screen.query('repair.board.newIntake') !== null)).toBe(true);
-    expect(first.screen.query('repair.intake.step.device')).toBeNull();
-    expect(first.controller.snapshot().workspace?.ownerUserId).toBe(SECOND_USER_ID);
-    expect(first.controller.snapshot().workspace?.drafts['repair'] ?? null).toBeNull();
-    const shown = textsIn(first.screen.container);
-    expect(shown.some((s) => s.includes(CUSTOMER) || s.includes(PASSCODE))).toBe(false);
+    const app = await start(fixture);
+    screen = app.screen;
+    expect(await unlockAs(app.screen, SECOND_USER_ID)).toBe(true);
+    // It does not open by itself: it waits on the board's button.
+    expect(await waitUntil(() => app.screen.query('repair.board.newIntake') !== null)).toBe(true);
+    expect(app.screen.query('repair.intake.step.device')).toBeNull();
+    expect(textsIn(app.screen.container)).toContain('Lanjutkan servisan baru');
+    // B's own workspace holds none of it.
+    expect(app.controller.snapshot().workspace?.ownerUserId).toBe(SECOND_USER_ID);
+    expect(app.controller.snapshot().workspace?.drafts['repair'] ?? null).toBeNull();
 
-    // B's session did not overwrite A's saved work: after another restart A gets it back.
-    first.screen.unmount();
-    const second = await start(fixture);
-    screen = second.screen;
-    expect(await unlockAs(second.screen, fixture.userId)).toBe(true);
-    expect(await waitUntil(() => second.screen.query('repair.intake.step.device') !== null)).toBe(
+    await press(app.screen, 'repair.board.newIntake');
+    expect(await waitUntil(() => app.screen.query('repair.intake.step.device') !== null)).toBe(
       true,
     );
-    expect(valueOf(second.screen, 'repair.intake.device.lock.pin')).toBe(PASSCODE);
+    expect(valueOf(app.screen, 'repair.intake.device.lock.pin')).toBe(PASSCODE);
+    expect(textsIn(app.screen.get('repair.intake.startedBy'))).toContain(
+      'Dimulai oleh Andi Pratama',
+    );
+  });
+
+  test('handing the phone over mid-intake asks nothing, and the colleague carries on with it', async () => {
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedTwoUsers(fixture, 300, COUNTER_PERMISSIONS);
+    const app = await start(fixture);
+    screen = app.screen;
+    expect(await unlockAs(app.screen, fixture.userId)).toBe(true);
+    expect(await waitUntil(() => app.screen.query('repair.board.newIntake') !== null)).toBe(true);
+    await press(app.screen, 'repair.board.newIntake');
+    await type(app.screen, 'repair.intake.customer.name', CUSTOMER);
+    await type(app.screen, 'repair.intake.customer.phone', PHONE);
+    // The avatar is on the intake itself, and switching keeps the intake rather than asking.
+    fireOn(app.screen, 'ui.avatarButton');
+    fireOn(app.screen, 'account-menu-switch-user');
+    await settle();
+    expect(app.screen.query('repair.intake.discard')).toBeNull();
+    expect(await waitUntil(() => app.screen.query('switcher-screen') !== null)).toBe(true);
+
+    expect(await unlockAs(app.screen, SECOND_USER_ID)).toBe(true);
+    expect(await waitUntil(() => app.screen.query('repair.board.newIntake') !== null)).toBe(true);
+    await press(app.screen, 'repair.board.newIntake');
+    expect(valueOf(app.screen, 'repair.intake.customer.name')).toBe(CUSTOMER);
+    expect(textsIn(app.screen.get('repair.intake.startedBy'))).toContain(
+      'Dimulai oleh Andi Pratama',
+    );
   });
 });

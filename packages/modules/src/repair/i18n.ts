@@ -194,6 +194,7 @@ export const REPAIR_KEYS = [
   'repair.intake.discardTitle',
   'repair.intake.keepEditing',
   'repair.intake.progress',
+  'repair.intake.startedBy',
   'repair.intake.step.condition',
   'repair.intake.step.customer',
   'repair.intake.step.device',

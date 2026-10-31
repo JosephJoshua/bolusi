@@ -119,6 +119,8 @@ export interface AppSessionSnapshot {
   readonly lockReason: LockReason | null;
   /** The ACTIVE user's retained work (SEC-AUTH-08), or null at the switcher/lock. */
   readonly workspace: UserWorkspace | null;
+  /** Drafts that belong to the device (an intake anyone here may carry on), or null when locked. */
+  readonly deviceDrafts: Readonly<Record<string, unknown>> | null;
   /**
    * Does the ACTIVE user hold `auth.pin_unlock` (02-permissions §5.4.6)? Gates the Settings "Unlock a
    * PIN" entry (task 186b). Recomputed from the enforcement point each snapshot, so a user switch (which
@@ -241,6 +243,8 @@ export interface AppSessionController {
    * person who is actually signed in.
    */
   updateWorkspace(next: UserWorkspace): void;
+  /** Keep a draft that belongs to the device (null drops it); ignored while nobody is signed in. */
+  updateDeviceDraft(moduleId: string, draft: unknown): void;
   /**
    * Re-read the tenant's `idleLockSeconds` after a bundle refresh (§6.4) and hand it to
    * `SessionManager`. Wired to the sync client's `onBundleRefreshed` — without it a tenant tightening
@@ -383,6 +387,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         locked: shellState.locked,
         lockReason: shellState.lockReason,
         workspace: shellState.workspace,
+        deviceDrafts: shellState.deviceDrafts,
         canUnlock: actingUserHolds(AUTH_PERMISSION.pinUnlock),
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
         canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
@@ -403,6 +408,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     recordActivity: () => shell.recordActivity(),
 
     updateWorkspace: (next) => shell.updateWorkspace(next),
+    updateDeviceDraft: (moduleId, draft) => shell.updateDeviceDraft(moduleId, draft),
 
     async refreshSettings(): Promise<void> {
       manager.setIdleLockSeconds(await readIdleLockSeconds(db));

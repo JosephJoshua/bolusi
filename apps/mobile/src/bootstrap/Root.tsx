@@ -904,6 +904,10 @@ export function Root({
   const handleWorkspaceChange = useCallback((next: UserWorkspace): void => {
     sessionRef.current?.updateWorkspace(next);
   }, []);
+  /** A draft that belongs to the device (an unfinished intake), stable for the same reason. */
+  const handleDeviceDraftChange = useCallback((moduleId: string, draft: unknown): void => {
+    sessionRef.current?.updateDeviceDraft(moduleId, draft);
+  }, []);
 
   /**
    * THE IN-APP CAMERA (06 §2.1; task 130) — the production consumer `MediaClient.capturePhoto()` and
@@ -1254,6 +1258,9 @@ export function Root({
         // ignored. Optional chaining because an unenrolled device has no controller to retain into.
         workspace={sessionSnapshot?.workspace ?? null}
         onWorkspaceChange={handleWorkspaceChange}
+        // An unfinished intake belongs to the phone: whoever signs in may carry on with it.
+        deviceDrafts={sessionSnapshot?.deviceDrafts ?? null}
+        onDeviceDraftChange={handleDeviceDraftChange}
         // The PIN pad's one egress (task 24's PinPad contract), and — since task 133 — the UNLOCK
         // path too: the controller runs the REAL `verifyPin` and, on success, `ShellSession.unlock`,
         // which restores this user's retained workspace and clears the lock. The subscription above

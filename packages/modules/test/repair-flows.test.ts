@@ -25,7 +25,9 @@ import {
   intakeDirty,
   intakeTotal,
   nextMissingPhoto,
+  keptIntakeDraft,
   parseIntakeDraft,
+  startedByOther,
   acceptsRupiahText,
   parseRupiah,
   phoneText,
@@ -1092,5 +1094,30 @@ describe('asking an owner instead', () => {
     expect(boardViews(can)).not.toContain('approvals');
     expect(boardViews(can, 2)[0]).toBe('approvals');
     expect(boardFilter('approvals', 'u1', 0, ['t-1', 't-2'])).toEqual({ ids: ['t-1', 't-2'] });
+  });
+});
+
+describe('an intake that belongs to the device', () => {
+  const andi = { userId: 'u-andi', name: 'Andi' };
+  test('names who started it the first time it is kept, and keeps that name after', () => {
+    const kept = keptIntakeDraft(emptyIntakeDraft(), andi);
+    expect(kept.startedBy).toEqual(andi);
+    expect(keptIntakeDraft(kept, { userId: 'u-budi', name: 'Budi' }).startedBy).toEqual(andi);
+    // A name not yet known waits for the next change rather than recording a blank one.
+    expect(
+      keptIntakeDraft(emptyIntakeDraft(), { userId: 'u-andi', name: '' }).startedBy,
+    ).toBeNull();
+  });
+  test('says who started it only to someone else', () => {
+    const kept = keptIntakeDraft(emptyIntakeDraft(), andi);
+    expect(startedByOther(kept, 'u-budi')).toBe('Andi');
+    expect(startedByOther(kept, 'u-andi')).toBeNull();
+    expect(startedByOther(emptyIntakeDraft(), 'u-budi')).toBeNull();
+    expect(startedByOther(null, 'u-budi')).toBeNull();
+  });
+  test('a draft kept before it named its starter still reads', () => {
+    const old: Record<string, unknown> = { ...keptIntakeDraft(emptyIntakeDraft(), andi) };
+    delete old['startedBy'];
+    expect(parseIntakeDraft(old)?.startedBy).toBeNull();
   });
 });

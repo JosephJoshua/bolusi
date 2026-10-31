@@ -318,6 +318,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       locked: snapshot.locked,
       lockReason: snapshot.lockReason,
       workspace: snapshot.workspace,
+      deviceDrafts: snapshot.deviceDrafts,
       canUnlock: snapshot.canUnlock,
       canReset: snapshot.canReset,
       canManageStaff: snapshot.canManageStaff,
@@ -830,6 +831,9 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     },
     'session.updateWorkspace'(next: UserWorkspace) {
       session?.updateWorkspace(next);
+    },
+    'session.updateDeviceDraft'(moduleId: string, draft: unknown) {
+      session?.updateDeviceDraft(moduleId, draft);
     },
 
     // ── Karyawan (online only; each change is a server call as the signed-in owner) ────────────

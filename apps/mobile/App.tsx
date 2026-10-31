@@ -103,7 +103,10 @@ import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
   REPAIR_PERMISSION,
+  keptIntakeDraft,
+  parseIntakeDraft,
   parseRepairDraft,
+  startedByOther,
   type RepairDraft,
 } from '@bolusi/modules/repair';
 import { moneyRuntimeOf, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
@@ -211,6 +214,12 @@ export interface AppProps {
    * for anyone else — so this seam cannot be used to smuggle one user's work into another's slot.
    */
   readonly onWorkspaceChange?: ((next: UserWorkspace) => void) | undefined;
+  /**
+   * Drafts that belong to the device, by module id: an unfinished intake anyone signed in here may
+   * carry on with (Joseph, 2026-10-31). Null when nobody is signed in; absent without a session.
+   */
+  readonly deviceDrafts?: Readonly<Record<string, unknown>> | null;
+  readonly onDeviceDraftChange?: ((moduleId: string, draft: unknown) => void) | undefined;
   readonly onSelectLocale: (locale: Locale) => void;
   /**
    * Change the signed-in user's PIN (api/02-auth §6.6; task 186a), driven by the session controller.
@@ -482,22 +491,66 @@ export default function App(props: AppProps): React.JSX.Element {
     [publishWorkspace],
   );
 
-  /** The repair intake or handover in progress, retained across a lock exactly like a notes draft. */
-  const restoredRepairDraft = useMemo<RepairDraft | null>(
-    () => (workspace === null ? null : parseRepairDraft(workspace.drafts[REPAIR_MODULE_ID])),
-    [workspace],
+  /**
+   * The repair draft to restore. A handover in progress is this person's own, retained in their
+   * workspace like a notes draft. An unfinished intake belongs to the device: whoever signs in may
+   * carry on with it, and it names who started it. One an older version kept in the workspace still
+   * comes back, and moves to the device on its next change.
+   */
+  const deviceIntake = useMemo(
+    () =>
+      sessionUserId === null ? null : parseIntakeDraft(props.deviceDrafts?.[REPAIR_MODULE_ID]),
+    [sessionUserId, props.deviceDrafts],
   );
+  const restoredRepairDraft = useMemo<RepairDraft | null>(() => {
+    const own = workspace === null ? null : parseRepairDraft(workspace.drafts[REPAIR_MODULE_ID]);
+    return own?.kind === 'handover' ? own : (deviceIntake ?? own);
+  }, [workspace, deviceIntake]);
+  const intakeStartedBy =
+    sessionUserId === null ? null : startedByOther(deviceIntake, sessionUserId);
+
+  const sessionName = (props.users ?? []).find((user) => user.id === sessionUserId)?.name ?? '';
+  const sessionNameRef = useRef(sessionName);
+  sessionNameRef.current = sessionName;
+  const deviceIntakeRef = useRef<unknown>(props.deviceDrafts?.[REPAIR_MODULE_ID] ?? null);
+  deviceIntakeRef.current = props.deviceDrafts?.[REPAIR_MODULE_ID] ?? null;
+  // A null clears the slot of whatever this person last kept: the intake's on the device, a
+  // handover's here. Never a colleague's: an empty handover a colleague opens must not drop the
+  // intake waiting on the device.
+  const lastRepairKind = useRef<{ userId: string | null; kind: RepairDraft['kind'] | null }>({
+    userId: sessionUserId,
+    kind: null,
+  });
+  if (lastRepairKind.current.userId !== sessionUserId) {
+    lastRepairKind.current = { userId: sessionUserId, kind: null };
+  }
+  const onDeviceDraftChange = props.onDeviceDraftChange;
 
   const publishRepairDraft = useCallback(
     (draft: RepairDraft | null): void => {
+      const userId = userIdRef.current;
+      const kind = draft?.kind ?? lastRepairKind.current.kind;
+      if (draft !== null) lastRepairKind.current = { userId, kind: draft.kind };
+      if (kind === 'intake' && userId !== null && onDeviceDraftChange !== undefined) {
+        const kept =
+          draft === null || draft.kind !== 'intake'
+            ? null
+            : keptIntakeDraft(draft, { userId, name: sessionNameRef.current });
+        // Structural, for the same reason as `publishNotesDraft`: an equal re-publish is a no-op.
+        if (JSON.stringify(deviceIntakeRef.current) !== JSON.stringify(kept)) {
+          deviceIntakeRef.current = kept;
+          onDeviceDraftChange(REPAIR_MODULE_ID, kept);
+        }
+      }
       publishWorkspace((base) => {
         const current = base.drafts[REPAIR_MODULE_ID] ?? null;
-        // Structural, for the same reason as `publishNotesDraft`: an equal re-publish is a no-op.
-        if (JSON.stringify(current) === JSON.stringify(draft)) return base;
-        return withDraft(base, REPAIR_MODULE_ID, draft);
+        // The intake no longer lives here; a handover does.
+        const mine = kind === 'intake' && onDeviceDraftChange !== undefined ? null : draft;
+        if (JSON.stringify(current) === JSON.stringify(mine)) return base;
+        return withDraft(base, REPAIR_MODULE_ID, mine);
       });
     },
-    [publishWorkspace],
+    [publishWorkspace, onDeviceDraftChange],
   );
 
   // Record where this user is, continuously (never on a lock signal — by then the shell no longer
@@ -1560,6 +1613,7 @@ export default function App(props: AppProps): React.JSX.Element {
                     now={props.clock ?? systemClock.now}
                     onRegisterSurfaceNav={registerRepairNav}
                     restoredDraft={restoredRepairDraft}
+                    intakeStartedBy={intakeStartedBy}
                     onDraftChange={publishRepairDraft}
                     onOpenSyncStatus={openSyncStatus}
                     syncChip={homeSyncChip}
@@ -1655,7 +1709,10 @@ export default function App(props: AppProps): React.JSX.Element {
               primaryText={t('core.account.switchUser')}
               onPress={() => {
                 setAccountMenu(false);
-                leaveHome(() => setSwitching(true));
+                // An intake carries on for whoever signs in next, so handing the phone over asks
+                // nothing; anything else asks before it is dropped.
+                if (surfaceNavRef.current?.keepsWorkOnSwitch === true) setSwitching(true);
+                else leaveHome(() => setSwitching(true));
               }}
               testID="account-menu-switch-user"
             />

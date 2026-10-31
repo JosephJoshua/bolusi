@@ -10,6 +10,7 @@ import {
   createLockedOutEmitter,
   createWorkStore,
   deleteWorkExcept,
+  DEVICE_WORK_KEY,
   listSwitcherUsers,
   resolveUserName,
   SessionManager,
@@ -364,5 +365,34 @@ describe('work outlives the app process', () => {
 
     await deleteWorkExcept(s.h.db, []);
     expect(await store.load(s.h.ownerId)).toBeUndefined();
+  });
+
+  it("the device's own work stays while anyone can sign in, and goes with the last of them", async () => {
+    const s = await setup(15);
+    const store = sqliteStore(s.h);
+    await store.save(DEVICE_WORK_KEY, { draft: 'servisan setengah jadi' });
+    await deleteWorkExcept(s.h.db, [s.h.ownerId]);
+    expect(await store.load(DEVICE_WORK_KEY)).toEqual({ draft: 'servisan setengah jadi' });
+    await deleteWorkExcept(s.h.db, []);
+    expect(await store.load(DEVICE_WORK_KEY)).toBeUndefined();
+  });
+
+  it("the device's own work is read and kept only while someone is signed in, across a restart", async () => {
+    const s = await setup(16);
+    const store = sqliteStore(s.h);
+    const sm = restarted(s.h, store);
+    sm.saveDeviceWork({ draft: 'terkunci' });
+    expect(await store.load(DEVICE_WORK_KEY)).toBeUndefined();
+    await sm.switchTo(s.h.staffId);
+    sm.saveDeviceWork({ draft: 'dimulai staf' });
+    await sm.flushWork();
+    await sm.manualLock();
+    expect(await sm.deviceWork()).toBeUndefined();
+
+    const next = restarted(s.h, store);
+    await next.switchTo(s.h.ownerId);
+    expect(await next.deviceWork()).toEqual({ draft: 'dimulai staf' });
+    // Still nobody else's own work.
+    expect((await next.switchTo(s.h.ownerId)).work).toBeUndefined();
   });
 });

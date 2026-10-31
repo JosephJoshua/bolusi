@@ -69,6 +69,12 @@ export interface SessionPort<TWork> {
 
   /** This user's retained work, or undefined. NEVER another user's — the key is the userId. */
   work(userId: string): TWork | undefined;
+
+  /** The device's own work, which anyone signed in here may carry on with; none while locked. */
+  deviceWork(): Promise<TWork | undefined>;
+
+  /** Keep the device's own work; ignored while nobody is signed in. */
+  saveDeviceWork(work: TWork): void;
 }
 
 /**

@@ -229,6 +229,7 @@ describe('counter intake', () => {
       lines: [],
       downPayment: '',
       downPaymentAccount: 'cash',
+      startedBy: null,
       downPaymentReference: '',
       ready: 'tomorrow',
     };
@@ -1553,6 +1554,7 @@ describe('price and assignment details', () => {
       lines: [],
       downPayment: '',
       downPaymentAccount: 'cash',
+      startedBy: null,
       downPaymentReference: '',
       ready: 'tomorrow',
     };
@@ -1585,6 +1587,7 @@ describe('price and assignment details', () => {
       lines: [],
       downPayment: '',
       downPaymentAccount: 'cash',
+      startedBy: null,
       downPaymentReference: '',
       ready: 'tomorrow',
     };
@@ -1633,6 +1636,7 @@ describe('price and assignment details', () => {
       lines: [],
       downPayment: '',
       downPaymentAccount: 'cash',
+      startedBy: null,
       downPaymentReference: '',
       ready: 'tomorrow',
     };
