@@ -236,6 +236,7 @@ export const CHECK_STATE_KEY: Readonly<Record<ChecklistState, RepairKey>> = {
 export const DOWN_PAYMENT_GAP_KEY: Readonly<Record<DownPaymentGap, RepairKey>> = {
   aboveTotal: 'repair.problem.downPaymentAboveTotal',
   amount: 'repair.hint.downPayment',
+  method: 'repair.problem.downPaymentMethod',
   reference: 'repair.problem.downPaymentReference',
   correctAmount: 'repair.hint.downPaymentCorrect',
   same: 'repair.hint.downPaymentSame',

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
 import { MONEY_OP } from '../src/money/index.js';
+import type { MoneyEntryRow } from '../src/money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from '../src/repair/index.js';
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
@@ -142,6 +143,28 @@ describe('charges follow the servisan', () => {
 });
 
 describe('payments', () => {
+  test("each record carries the name of who recorded it, from the device's staff list", async () => {
+    h = await openRepairHarness(530);
+    const document = await openTicket(h);
+    await h.db
+      .insertInto('usersDirectory')
+      .values({ id: h.cashierId, name: 'Dewi', status: 'active', photoMediaId: null })
+      .execute();
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 50_000 }] },
+      h.cashierId,
+    );
+    const { rows } = await h.moneyQuery(
+      'moneyEntries',
+      { from: 0, to: Date.now() + 60_000 },
+      h.cashierId,
+    );
+    const paid = (rows as MoneyEntryRow[]).find((row) => row.kind === 'payment_received')!;
+    expect(paid.createdByName).toBe('Dewi');
+    expect((await documentMoney(h, document)).entries[0]).toMatchObject({ createdByName: 'Dewi' });
+  });
+
   test('a DP paid ahead leaves the servisan in credit, and a split pays the rest', async () => {
     h = await openRepairHarness(503);
     const document = await openTicket(h);
@@ -876,17 +899,32 @@ describe('the drawer', () => {
     ]);
   });
 
-  test('cash out above what the drawer holds is stopped on the device', async () => {
+  test('cash out above what the drawer holds is stopped on the device, for whoever sees the drawer', async () => {
     h = await openRepairHarness(514);
     await h.money('moveCash', { kind: 'float', amount: 700_000, reason: 'Modal' }, h.cashierId);
     const out = (kind: string, amount: number) =>
-      h!.money('moveCash', { kind, amount, reason: 'Setor ke pemilik' }, h!.cashierId);
+      h!.money('moveCash', { kind, amount, reason: 'Setor ke pemilik' }, h!.storeOwnerId);
     await expectRefused(out('withdrawal', 900_000), 'VALIDATION_FAILED', 'moveAboveDrawer');
     await expectRefused(out('expense', 700_001), 'VALIDATION_FAILED', 'moveAboveDrawer');
     await out('withdrawal', 700_000);
     expect((await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0].expected).toBe(0);
     // Putting change money in is never limited.
     await out('float', 50_000);
+    await expectBalancedBooks(h);
+  });
+
+  test('someone who counts blind is not stopped, so a refusal cannot give the drawer away', async () => {
+    h = await openRepairHarness(515);
+    await h.money('moveCash', { kind: 'float', amount: 50_000, reason: 'Modal' }, h.cashierId);
+    // Just above what is there is taken like any other amount; a wrong record shows at the count.
+    await h.money('moveCash', { kind: 'expense', amount: 50_001, reason: 'Bensin' }, h.cashierId);
+    const { entryId: countId } = (await h.money(
+      'countCash',
+      { counted: 0, note: '' },
+      h.cashierId,
+    )) as { entryId: string };
+    const drawer = (await h.moneyQuery('cashDrawer', {}, h.storeOwnerId)).rows[0];
+    expect(drawer.counts[0]).toMatchObject({ id: countId, expected: -1, difference: 1 });
     await expectBalancedBooks(h);
   });
 

@@ -23,7 +23,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
-import { shiftDay, useDayRecords } from '../day-records.js';
+import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
 import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { tm } from '../i18n.js';
 import { ta } from '../../approvals/i18n.js';
@@ -226,15 +226,21 @@ function Today({
             {() =>
               drawer === null ? null : (
                 <Card testId={`${testId}.drawer`}>
-                  <p className="text-body text-text-muted">{tm('money.kas.expected')}</p>
-                  <p
-                    className="tabular mt-1 text-display font-bold text-text"
-                    data-testid={`${testId}.expected`}
-                  >
-                    <RollingText value={drawer.expected}>
-                      {formatMoney(drawer.expected)}
-                    </RollingText>
-                  </p>
+                  {may.seeExpected ? (
+                    <>
+                      <p className="text-body text-text-muted">{tm('money.kas.expected')}</p>
+                      <p
+                        className="tabular mt-1 text-display font-bold text-text"
+                        data-testid={`${testId}.expected`}
+                      >
+                        <RollingText value={drawer.expected}>
+                          {formatMoney(drawer.expected)}
+                        </RollingText>
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-heading font-semibold text-text">{tm('money.kas.drawer')}</p>
+                  )}
                   <p className="mt-1 text-body text-text-muted" data-testid={`${testId}.lastCount`}>
                     {counted === null
                       ? tm('money.kas.notCounted')
@@ -287,7 +293,8 @@ function Today({
             </Section>
           )}
 
-          {entriesReady ? (
+          {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+          {entriesReady && may.seeExpected ? (
             <Section title={tm('money.kas.inToday')} testId={`${testId}.in`}>
               <Card>
                 {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
@@ -656,7 +663,7 @@ function History({
           empty={
             <StatePanel
               icon={day === today ? Inbox : ReceiptText}
-              title={tm('money.history.none')}
+              title={tm(historyEmptyKey(day, today))}
               testId={`${testId}.empty`}
             />
           }

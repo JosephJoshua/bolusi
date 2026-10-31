@@ -12,6 +12,7 @@ import {
   drawerMoves,
   moneyIn,
   nameBalances,
+  seesExpected,
   splitOpenBalances,
   type DrawerMove,
   type MoneyIn,
@@ -49,6 +50,8 @@ export interface KasDay {
     readonly count: boolean;
     readonly move: boolean;
     readonly settle: boolean;
+    /** Sees what should be in the drawer; otherwise counts blind (`seesExpected`). */
+    readonly seeExpected: boolean;
     readonly receive: boolean;
   };
 }
@@ -113,6 +116,8 @@ export function useKasDay(now: () => number): KasDay {
       count: can(MONEY_PERMISSION.countCash),
       move: can(MONEY_PERMISSION.moveCash),
       settle: can(MONEY_PERMISSION.adjustCash),
+      // Who counts blind does not see the drawer's figure here either, or the count would copy it.
+      seeExpected: seesExpected(can, (permission) => runtime.limitOf(permission)),
       receive: can(MONEY_PERMISSION.receive),
     },
   };
