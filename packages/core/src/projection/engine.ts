@@ -182,7 +182,13 @@ export class ProjectionEngine<DB> {
     }
 
     const written = new Set(entityTables.map((ref) => ref.table));
-    this.invalidation.emit(written, { entityType: op.entityType, entityId: op.entityId });
+    const concerns = source === 'pull' ? module.concerns?.[op.type]?.(op) : undefined;
+    this.invalidation.emit(written, {
+      entityType: op.entityType,
+      entityId: op.entityId,
+      ...(source === 'pull' ? { remote: true } : {}),
+      ...(concerns !== undefined && concerns.length > 0 ? { concerns } : {}),
+    });
     return { module: module.id, mode, writtenTables: [...written] };
   }
 

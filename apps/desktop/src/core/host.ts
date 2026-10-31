@@ -7,6 +7,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 import {
+  changedRemotely,
   createUuidV7Generator,
   DomainError,
   finishDeviceSetup,
@@ -89,6 +90,7 @@ import type {
   CoreVideoLoad,
   CoreVideoOutcome,
   HandoffEvent,
+  RepairChange,
   SessionView,
 } from './api.js';
 import { createHandoffClient } from './handoff.js';
@@ -128,8 +130,11 @@ export interface CoreHost {
   onState(listener: (state: CoreState) => void): () => void;
   /** Sync now (the PC woke up, or someone asked). */
   requestSync(): void;
-  /** Fires when a repair read may have changed (the live-query signal). */
-  onRepairChanged(listener: () => void): () => void;
+  /**
+   * Fires when a repair read may have changed (the live-query signal), naming the record when the
+   * change came from another device so the window can let it glow.
+   */
+  onRepairChanged(listener: (change: RepairChange | null) => void): () => void;
   /** Fires with what the paired phone did (the phone handoff). */
   onHandoff(listener: (event: HandoffEvent) => void): () => void;
   stop(): Promise<void>;
@@ -241,7 +246,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   let generation = 0;
 
   const stateListeners = new Set<(state: CoreState) => void>();
-  const repairListeners = new Set<() => void>();
+  const repairListeners = new Set<(change: RepairChange | null) => void>();
   const handoffListeners = new Set<(event: HandoffEvent) => void>();
   // The phone handoff talks to the server with this PC's token, so it lives here; the window gets
   // ids and what the phone sent, and keeps that through `media.*` like its own capture.
@@ -725,8 +730,10 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     );
     enrollment = enroll;
     cleanups.push(
-      booting.invalidation.subscribe(() => {
-        for (const listener of repairListeners) listener();
+      booting.invalidation.subscribe((_tables, change) => {
+        const freshIds = changedRemotely(change);
+        const fresh: RepairChange | null = freshIds.length > 0 ? { freshIds } : null;
+        for (const listener of repairListeners) listener(fresh);
         void rereadSyncStatus();
       }),
     );

@@ -8,6 +8,7 @@ import type { Kysely } from 'kysely';
 
 import type { MoneyDocumentSource } from '../money/documents.js';
 import { SYSTEM_ACCOUNT, type RevenueAccount } from '../money/constants.js';
+import { REPAIR_TICKET_ENTITY } from './constants.js';
 import type { RepairDatabase } from './schema.js';
 
 /** The document kind money records name a servisan by. */
@@ -27,6 +28,8 @@ function ticketQuery(
 }
 
 export const repairMoneyDocument: MoneyDocumentSource = {
+  entityType: REPAIR_TICKET_ENTITY,
+
   async exists(db, lookup) {
     return (await ticketQuery(db, lookup)) !== undefined;
   },

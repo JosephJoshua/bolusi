@@ -27,6 +27,7 @@ export { Icon } from './Icon.js';
 export { List } from './List.js';
 export { ListRow } from './ListRow.js';
 export { LoadingState } from './LoadingState.js';
+export { FreshGlow } from './FreshGlow.js';
 export { OutcomeState } from './OutcomeState.js';
 export { PhotoSlot } from './PhotoSlot.js';
 export { PatternLock } from './PatternLock.js';

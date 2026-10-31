@@ -4,6 +4,7 @@
 // an injected `ProjectionDb` (Kysely) + store ports (08 §3.2).
 export type {
   ModuleProjectionManifest,
+  OperationConcerns,
   ProjectionApplier,
   ProjectionColumnType,
   ProjectionDb,
@@ -64,7 +65,9 @@ export {
 export {
   InvalidationBus,
   OP_SYNC_STATUS_TABLE,
+  changedRemotely,
   type EntityChange,
+  type EntityRef,
   type InvalidationListener,
   type TableInvalidationListener,
   type TransactionBoundaries,

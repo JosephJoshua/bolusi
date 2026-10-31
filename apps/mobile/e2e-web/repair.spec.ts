@@ -743,7 +743,17 @@ test("a colleague's change shows on the open ticket at once", async ({ page }) =
   await expect(page.getByTestId('repair.ticket.technician')).toContainText('Belum ada teknisi');
   await colleague(page, 'assignTechnician', { ticketId: 't-1', technicianId: 'u-yosua' });
   await expect(page.getByTestId('repair.ticket.technician')).toContainText('Yosua Wonda');
+  // It glows once, so the eye finds what changed.
+  await expect(page.getByTestId('repair.ticket.summary.fresh')).toHaveCount(1);
   await shoot(page, 'live-assigned-elsewhere');
+});
+
+test("a colleague's change glows on the board row, and only that row", async ({ page }) => {
+  await open(page, 'counter');
+  await expect(page.getByTestId('repair.board.row.t-1')).toBeVisible();
+  await colleague(page, 'assignTechnician', { ticketId: 't-1', technicianId: 'u-yosua' });
+  await expect(page.getByTestId('repair.board.row.t-1.fresh')).toHaveCount(1);
+  await expect(page.locator('[data-testid$=".fresh"]')).toHaveCount(1);
 });
 
 test('a repair cancelled on another device stops the open step', async ({ page }) => {

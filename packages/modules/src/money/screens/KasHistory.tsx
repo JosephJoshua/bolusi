@@ -142,6 +142,7 @@ export function KasHistory({
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
                     onPress={!asked && voidable(entry, can) ? () => onVoid(entry) : undefined}
+                    freshId={entry.id}
                     testID={`${testID}.entry.${entry.id}`}
                   />
                 );
