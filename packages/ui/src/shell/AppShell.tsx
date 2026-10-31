@@ -24,10 +24,11 @@
  * this component only surfaces the affordance.
  */
 import { useMemo, useState, type ReactNode } from 'react';
-import { Text } from '../text.js';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AnimatedText, Text } from '../text.js';
+import { Pressable, ScrollView, StyleSheet, View, type TextStyle } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
+import { useStamp } from '../motion.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
 import { RevealProvider, useKeyboardLift, useRevealingScroll } from './keyboard.js';
 import { ScrollLockContext } from './scroll-lock.js';
@@ -37,6 +38,8 @@ export interface AppShellProps {
   readonly title: string;
   /** §8.1: list roots use `type.title`; detail screens use `type.heading`. */
   readonly titleVariant?: 'root' | 'detail' | undefined;
+  /** The title lands like a stamp: the number of a servisan that was just opened. */
+  readonly stampTitle?: boolean | undefined;
   /** Omit on roots that have nothing to go back to. */
   readonly onBack?: (() => void) | undefined;
   /** Already-localized accessibility label for the back control. */
@@ -115,6 +118,21 @@ const styles = StyleSheet.create({
   },
   titleRoot: { ...type.title, color: color.text, flex: 1, marginHorizontal: space.sm },
   titleDetail: { ...type.heading, color: color.text, flex: 1, marginHorizontal: space.sm },
+  stampSlot: { flex: 1, alignItems: 'flex-start' },
+  // The titles above without `flex`: a stamped title hugs its words inside `stampSlot`.
+  // Grown from its leading edge, so the big first frame of the stamp never covers the back button.
+  stampRoot: {
+    ...type.title,
+    color: color.text,
+    marginHorizontal: space.sm,
+    transformOrigin: 'left center',
+  },
+  stampDetail: {
+    ...type.heading,
+    color: color.text,
+    marginHorizontal: space.sm,
+    transformOrigin: 'left center',
+  },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
   content: { flex: 1 },
   /**
@@ -148,9 +166,33 @@ const styles = StyleSheet.create({
   columnFill: { flex: 1 },
 });
 
+/**
+ * The title as a stamp. It keeps the title's room in the bar, but the text itself only hugs its
+ * words, so it lands about its own middle rather than the middle of the bar.
+ */
+function StampedTitle({
+  title,
+  style,
+  testID,
+}: {
+  readonly title: string;
+  readonly style: TextStyle;
+  readonly testID: string;
+}): React.JSX.Element {
+  const stamp = useStamp();
+  return (
+    <View style={styles.stampSlot}>
+      <AnimatedText testID={testID} numberOfLines={2} style={[style, stamp]}>
+        {title}
+      </AnimatedText>
+    </View>
+  );
+}
+
 export function AppShell({
   title,
   titleVariant = 'root',
+  stampTitle = false,
   onBack,
   backLabel,
   syncChip,
@@ -203,16 +245,24 @@ export function AppShell({
             </Pressable>
           )}
 
-          <Text
-            testID={`${testID}.title`}
-            // Labels never truncate (design guide): at a large font a long title takes a second line
-            // instead of losing its end ("Siapa yang ..."); the bar grows to hold it.
-            numberOfLines={2}
-            ellipsizeMode="tail"
-            style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
-          >
-            {title}
-          </Text>
+          {stampTitle ? (
+            <StampedTitle
+              title={title}
+              style={titleVariant === 'root' ? styles.stampRoot : styles.stampDetail}
+              testID={`${testID}.title`}
+            />
+          ) : (
+            <Text
+              testID={`${testID}.title`}
+              // Labels never truncate (design guide): at a large font a long title takes a second
+              // line instead of losing its end ("Siapa yang ..."); the bar grows to hold it.
+              numberOfLines={2}
+              ellipsizeMode="tail"
+              style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
+            >
+              {title}
+            </Text>
+          )}
 
           <View testID={`${testID}.headerRight`} style={styles.headerRight}>
             {syncChip}
