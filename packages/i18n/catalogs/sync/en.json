@@ -65,5 +65,14 @@
     "mediaFailed": "{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}",
     "rejectedExplain": "Also undone on this computer. Redo them if they’re still needed.",
     "rejectedBanner": "{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}"
+  },
+  "updateNeeded": {
+    "title": "Update the app",
+    "body": "Another device runs a newer version. New data from other devices waits until this app is updated. Changes made here still sync.",
+    "check": "Check for updates",
+    "checking": "Checking for updates…",
+    "none": "No update for this phone yet. Try again later.",
+    "failed": "Couldn’t check for updates. Check the connection, then try again.",
+    "lastArrived": "New data last arrived {relative}"
   }
 }

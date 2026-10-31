@@ -57,6 +57,7 @@ export function syncChipAccessibilityLabels(
         ? t('sync.status.syncing')
         : t('sync.firstSync.chip', { percent: input.firstSyncPercent }),
     offline: t('sync.status.offline'),
-    attention: t('sync.chip.rejected'),
+    // Every problem, not only refusals: an app update needed rejects nothing.
+    attention: t('sync.status.titleAttention'),
   };
 }

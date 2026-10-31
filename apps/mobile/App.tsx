@@ -77,6 +77,7 @@ import {
   type SwitcherUser,
 } from '@bolusi/device/models/switcher/model';
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
+import type { UpdateCheckResult } from './src/bootstrap/app-updates.js';
 import {
   firstSyncPercent,
   syncChipState,
@@ -140,6 +141,8 @@ export interface AppProps {
    * do nothing to that photo or restart something the user did not ask for.
    */
   readonly onRetryMedia: () => void;
+  /** "Cek pembaruan" when another device runs a newer app; absent where updates are off. */
+  readonly onCheckForUpdate?: (() => Promise<UpdateCheckResult>) | undefined;
   /**
    * §5's Error retry on the User Switcher — re-run the directory read (`AppSessionController.refresh`).
    *
@@ -1201,6 +1204,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   // there is no per-item retry to call and pretending otherwise would be a control
                   // that looks more precise than the engine underneath it.
                   onRetryMedia={props.onRetryMedia}
+                  onCheckForUpdate={props.onCheckForUpdate}
                   onOpenSwitcher={() => leaveSyncStatusThen(() => setSwitching(true))}
                   onReenroll={() => leaveSyncStatusThen(() => setReenrolling(true))}
                 />
