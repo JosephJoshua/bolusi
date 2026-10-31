@@ -2,7 +2,7 @@
 // Every read is scoped to the runtime-minted tenant and store.
 //
 // What an order has received is the sum of its receipts, read here, never stored on the order.
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
 import { normalizeText, type QueryContext, type QueryPage } from '@bolusi/core';
@@ -385,17 +385,21 @@ export async function nextOrderNumberHandler(
   qctx: Qctx,
 ): Promise<QueryPage<{ readonly orderNumber: string }>> {
   const prefix = `PO-${deviceCode(input.deviceId)}-`;
-  const rows = await qctx.db
+  const row = await qctx.db
     .selectFrom('purchasingOrders')
-    .select('orderNumber')
+    .select(
+      // As repair's ticket counter: only well-formed numbers (4 to 9 digits after the prefix) count.
+      sql<
+        number | null
+      >`MAX(CASE WHEN length(order_number) BETWEEN 11 AND 16 AND substr(order_number, 8) NOT GLOB '*[^0-9]*' THEN CAST(substr(order_number, 8) AS INTEGER) END)`.as(
+        'counter',
+      ),
+    )
     .where('tenantId', '=', qctx.tenantId)
     .where('storeId', '=', qctx.storeId)
-    .where('orderNumber', 'like', `${prefix}%`)
-    .execute();
-  const highest = rows.reduce((max, row) => {
-    const counter = Number(row.orderNumber.slice(prefix.length));
-    return Number.isSafeInteger(counter) && counter > max ? counter : max;
-  }, 0);
+    .where(sql<string>`substr(order_number, 1, 7)`, '=', prefix)
+    .executeTakeFirst();
+  const highest = Number(row?.counter ?? 0);
   return {
     rows: [{ orderNumber: `${prefix}${String(highest + 1).padStart(4, '0')}` }],
     nextCursor: null,

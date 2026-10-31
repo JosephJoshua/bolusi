@@ -25,7 +25,6 @@ import {
   type StockSourceKind,
 } from './constants.js';
 
-type OpDraft = ReturnType<CommandContext['op']>;
 import { MAX_BARCODE, MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME, zPartFit } from './operations.js';
 import { compactModel } from '../shared/model-key.js';
 import {
@@ -36,6 +35,9 @@ import {
   type ItemDetailRow,
 } from './queries.js';
 import { zOptionalText } from '../shared/optional-text.js';
+
+/** A change a command is about to record, as `ctx.op` makes it. */
+export type OpDraft = ReturnType<CommandContext['op']>;
 
 const zPartDetails = z
   .object({

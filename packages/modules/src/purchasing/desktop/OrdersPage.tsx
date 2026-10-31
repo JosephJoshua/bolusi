@@ -18,7 +18,7 @@ import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop
 import { tp, type PurchasingKey } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
 import { ORDER_FILTERS, type OrderFilter, type OrderRow } from '../queries.js';
-import { usePurchasingQuery } from '../runtime.js';
+import { loadOrderPages, usePurchasingQuery } from '../runtime.js';
 import { OrderDialog, SuppliersDialog } from './dialogs.js';
 import { OrderPane } from './OrderPane.js';
 import { STAGE_ICON } from './stage.js';
@@ -43,8 +43,7 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
 
   const query = usePurchasingQuery(
     async (rt) => {
-      const page = await rt.query('listOrders', { filter, limit: PAGE * pages });
-      return { filter, rows: page.rows, hasMore: page.nextCursor !== null };
+      return { filter, ...(await loadOrderPages(rt, filter, pages, PAGE)) };
     },
     `desk.orders:${filter}:${String(pages)}:${String(reloadNonce)}`,
   );

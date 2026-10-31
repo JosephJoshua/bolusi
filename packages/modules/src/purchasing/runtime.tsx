@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { ModulePort } from '@bolusi/core';
 
 import type { PurchasingModule } from './manifest.js';
+import type { OrderFilter, OrderRow } from './queries.js';
 import {
   createRuntimeContext,
   useLiveQuery,
@@ -43,6 +44,27 @@ export function usePurchasingQuery<TData>(
   key: string,
 ): QueryState<TData> {
   return useLiveQuery(usePurchasingRuntime(), run, key);
+}
+
+/**
+ * The first `pages` pages of orders, re-read whole on each refresh so a live list stays complete.
+ * One page at a time, as the query caps its page size.
+ */
+export async function loadOrderPages(
+  rt: PurchasingRuntime,
+  filter: OrderFilter,
+  pages: number,
+  pageSize: number,
+): Promise<{ readonly rows: readonly OrderRow[]; readonly hasMore: boolean }> {
+  let rows: OrderRow[] = [];
+  let next: string | null = '0';
+  for (let n = 0; n < pages && next !== null; n += 1) {
+    const page: { readonly rows: readonly OrderRow[]; readonly nextCursor: string | null } =
+      await rt.query('listOrders', { filter, limit: pageSize, offset: Number(next) });
+    rows = [...rows, ...page.rows];
+    next = page.nextCursor;
+  }
+  return { rows, hasMore: next !== null };
 }
 
 /** The store's name for the order message; null while it loads or when it has none. */

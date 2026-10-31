@@ -17,6 +17,7 @@ import {
   orderStage,
   type OrderDetailRow,
 } from '../src/purchasing/index.js';
+import { loadOrderPages, type PurchasingRuntime } from '../src/purchasing/runtime.js';
 import { openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
 beforeAll(() => {
@@ -528,5 +529,61 @@ describe('review round 1 (2026-10-31)', () => {
       h.purchasing('editOrder', { orderId, ...draft, place: true }, h.storeOwnerId),
       'VALIDATION_FAILED',
     );
+  });
+});
+
+describe('review round 2 (2026-10-31)', () => {
+  test('placing a draft whose part was archived since says which kind of problem it is', async () => {
+    const h = await harness(7124);
+    const supplierId = await addSupplier(h);
+    const lcd = await addItem(h, 'LCD Redmi Note 10 + frame');
+    const draft = { supplierId, note: null, lines: [{ itemId: lcd, qty: 1 }] };
+    const { orderId } = (await h.purchasing('draftOrder', draft, h.storeOwnerId)) as {
+      orderId: string;
+    };
+    await h.runInventory(
+      'editItem',
+      { itemId: lcd, name: 'LCD Redmi Note 10 + frame', code: null, fits: [], archived: true },
+      h.storeOwnerId,
+    );
+    await expectRefused(
+      h.purchasing('editOrder', { orderId, ...draft, place: true }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'purchasing.refusal.partArchived',
+    );
+  });
+
+  test('order numbers keep counting past the highest this device has', async () => {
+    const h = await harness(7125);
+    const first = await placed(h);
+    const second = (await h.purchasing(
+      'draftOrder',
+      { supplierId: first.supplierId, note: null, lines: [{ itemId: first.lcd, qty: 1 }] },
+      h.storeOwnerId,
+    )) as { orderNumber: string };
+    const counter = (n: string) => Number(n.slice(7));
+    expect(counter(second.orderNumber)).toBe(counter(first.orderNumber) + 1);
+    expect(second.orderNumber.slice(0, 7)).toBe(first.orderNumber.slice(0, 7));
+  });
+
+  test('the order list pages past the query’s page cap', async () => {
+    const pages = [
+      { rows: [{ id: 'a' }, { id: 'b' }], nextCursor: '2' },
+      { rows: [{ id: 'c' }], nextCursor: null },
+    ];
+    const asked: unknown[] = [];
+    const rt = {
+      query: (_name: string, input: unknown) => {
+        asked.push(input);
+        return Promise.resolve(pages[asked.length - 1]);
+      },
+    } as unknown as PurchasingRuntime;
+    const loaded = await loadOrderPages(rt, 'done', 5, 2);
+    expect(loaded.rows.map((row) => row.id)).toEqual(['a', 'b', 'c']);
+    expect(loaded.hasMore).toBe(false);
+    expect(asked).toEqual([
+      { filter: 'done', limit: 2, offset: 0 },
+      { filter: 'done', limit: 2, offset: 2 },
+    ]);
   });
 });

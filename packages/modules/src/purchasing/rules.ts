@@ -22,6 +22,8 @@ import {
   PURCHASING_SUPPLIER_ENTITY,
   type OrderStatus,
 } from './constants.js';
+import { orderActions } from './order-form.js';
+import { orderStage } from './queries.js';
 import type { PurchasingDatabase } from './schema.js';
 
 type Rule = OpRule<PurchasingDatabase>;
@@ -41,6 +43,8 @@ export const PURCHASING_REFUSALS = defineRefusals('purchasing', [
   'nothingToCancel',
   'numberNotThisDevice',
   'numberUsed',
+  // A command's own check: a draft names a part archived since it was written.
+  'partArchived',
 ] as const);
 const { refuse } = PURCHASING_REFUSALS;
 
@@ -198,7 +202,11 @@ export const orderCancelledRule: Rule = async (op, { db }) => {
   }
   // Once every part came there is nothing to stop waiting for, and an order that came over keeps
   // saying so until the owner corrects the stock.
-  if (order.status === 'ordered' && (await nothingToCome(db, op, order.id))) {
+  // The same stage and actions the screens offer, so the device never offers a cancel refused here.
+  if (
+    order.status === 'ordered' &&
+    !orderActions(orderStage(order.status, await linesArrived(db, op, order.id))).includes('cancel')
+  ) {
     throw refuse('nothingToCancel', {
       details: { entityType: PURCHASING_ORDER_ENTITY, entityId: op.entityId },
       message: `order ${order.orderNumber} has arrived in full`,
@@ -206,8 +214,12 @@ export const orderCancelledRule: Rule = async (op, { db }) => {
   }
 };
 
-/** Whether every line of the order has arrived in full. */
-async function nothingToCome(db: Db, op: SignedOperation, orderId: string): Promise<boolean> {
+/** Each line of the order with what has arrived of it. */
+async function linesArrived(
+  db: Db,
+  op: SignedOperation,
+  orderId: string,
+): Promise<{ readonly qty: number; readonly received: number }[]> {
   const lines = await db
     .selectFrom('purchasingOrderLines')
     .select(['itemId', 'qty'])
@@ -223,7 +235,7 @@ async function nothingToCome(db: Db, op: SignedOperation, orderId: string): Prom
     .groupBy('l.itemId')
     .execute();
   const arrived = new Map(came.map((row) => [row.itemId, Number(row.qty)]));
-  return lines.every((line) => (arrived.get(line.itemId) ?? 0) >= line.qty);
+  return lines.map((line) => ({ qty: line.qty, received: arrived.get(line.itemId) ?? 0 }));
 }
 
 export const orderReceivedRule: Rule = async (op, { db }) => {

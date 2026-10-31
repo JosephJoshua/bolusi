@@ -10,7 +10,7 @@
 // tolerated rather than prevented: tickets are keyed by id, and a search for a number simply
 // shows both matches.
 
-import { deviceCode } from '../shared/device-code.js';
+import { deviceCode, deviceCounter } from '../shared/device-code.js';
 
 export { deviceCode };
 
@@ -20,6 +20,5 @@ export function formatTicketNumber(deviceId: string, counter: number): string {
 
 /** The per-device counter part of a ticket number, or null if it is not one of ours. */
 export function ticketCounter(ticketNumber: string): number | null {
-  const match = /^[0-9A-Z]{3}-(\d{4,})$/.exec(ticketNumber);
-  return match === null ? null : Number(match[1]);
+  return deviceCounter(ticketNumber);
 }

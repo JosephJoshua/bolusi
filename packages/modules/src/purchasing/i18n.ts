@@ -26,6 +26,7 @@ export const PURCHASING_KEYS = [
   'purchasing.refusal.nothingToCancel',
   'purchasing.refusal.numberNotThisDevice',
   'purchasing.refusal.numberUsed',
+  'purchasing.refusal.partArchived',
   'purchasing.stage.draft',
   'purchasing.stage.ordered',
   'purchasing.stage.partial',

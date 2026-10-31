@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
 
-import { stockReceivedOp } from '../inventory/commands.js';
+import { stockReceivedOp, type OpDraft } from '../inventory/commands.js';
 import {
   MAX_LINE_NAME,
   MAX_LINE_QTY,
@@ -29,8 +29,7 @@ import {
 } from './queries.js';
 import { zOptionalText } from '../shared/optional-text.js';
 import { orderActions } from './order-form.js';
-
-type OpDraft = ReturnType<CommandContext['op']>;
+import { PURCHASING_REFUSALS } from './rules.js';
 
 function invalid(field: string, issue: string): DomainError {
   return new DomainError('VALIDATION_FAILED', { field, issue });
@@ -162,7 +161,11 @@ async function orderLines(ctx: CommandContext, lines: z.output<typeof zLines>) {
         entityId: line.itemId,
       });
     }
-    if (item.archived) throw invalid('lines', 'archived part');
+    if (item.archived) {
+      throw PURCHASING_REFUSALS.refuse('partArchived', {
+        details: { entityType: 'inventory_item', entityId: line.itemId },
+      });
+    }
     return { itemId: line.itemId, name: item.name.slice(0, MAX_LINE_NAME), qty: line.qty };
   });
 }

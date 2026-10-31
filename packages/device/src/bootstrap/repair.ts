@@ -8,7 +8,12 @@
 import type { CommandIdentity } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import type { QrisPort } from '@bolusi/modules/money';
-import { REPAIR_TICKET_ENTITY, catalogModelSearch, tn } from '@bolusi/modules/repair';
+import {
+  REPAIR_PERMISSION,
+  REPAIR_TICKET_ENTITY,
+  catalogModelSearch,
+  tn,
+} from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { PhotoCapture } from '@bolusi/modules/screen-kit';
 import type { Kysely } from 'kysely';
@@ -117,8 +122,11 @@ export function createSessionRepairRuntime(deps: {
     runtime,
     invalidation: app.invalidation,
     identity,
+    // The slips' business name needs repair's read; a buyer without it signs with the store's.
     storeName: async () =>
-      (await repair!.query('printSettings', {})).rows[0]?.name ??
+      (runtime.commands.enforcementPoint.hasPermission(identity, REPAIR_PERMISSION.read)
+        ? (await repair!.query('printSettings', {})).rows[0]?.name
+        : null) ??
       (await printing?.storeName()) ??
       null,
   });

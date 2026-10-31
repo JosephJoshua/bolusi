@@ -20,7 +20,8 @@
     "receiptMismatch": "The quantity does not match what was received.",
     "nothingToCancel": "Everything on this order has arrived, so it can’t be cancelled.",
     "numberNotThisDevice": "This order number wasn’t made on this device.",
-    "numberUsed": "This order number is already used."
+    "numberUsed": "This order number is already used.",
+    "partArchived": "A part on this order is archived. Remove it from the order first."
   },
   "stage": {
     "draft": "Draft",

@@ -26,7 +26,7 @@ import type { ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
 import type { OrderFilter, OrderRow } from '../queries.js';
-import { usePurchasingQuery } from '../runtime.js';
+import { loadOrderPages, usePurchasingQuery } from '../runtime.js';
 
 const PAGE = 50;
 
@@ -55,8 +55,7 @@ export function OrderList({
   const [reloadNonce, setReloadNonce] = useState(0);
   const query = usePurchasingQuery(
     async (rt) => {
-      const page = await rt.query('listOrders', { filter, limit: PAGE * pages });
-      return { rows: page.rows, hasMore: page.nextCursor !== null };
+      return loadOrderPages(rt, filter, pages, PAGE);
     },
     `orders:${filter}:${String(pages)}:${String(reloadNonce)}`,
   );

@@ -16,3 +16,9 @@ export function deviceCode(deviceId: string): string {
   }
   return code;
 }
+
+/** The counter in `<device code>-<counter>` (`K7Q-0042` is 42), or null if it is not that shape. */
+export function deviceCounter(text: string): number | null {
+  const match = /^[0-9A-Z]{3}-(\d{4,})$/.exec(text);
+  return match === null ? null : Number(match[1]);
+}

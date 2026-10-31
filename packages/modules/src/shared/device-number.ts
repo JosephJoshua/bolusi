@@ -7,7 +7,7 @@ import { carriedRegistrations } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
 
-import { deviceCode } from './device-code.js';
+import { deviceCode, deviceCounter } from './device-code.js';
 
 export interface DeviceNumberCheck {
   readonly number: string;
@@ -32,13 +32,13 @@ export async function requireDeviceNumber<DB>(
   const devices = await carriedRegistrations(db, op.deviceId);
   const counter = check.number.slice(check.prefix.length);
   const minted = devices.some((device) => counter.startsWith(`${deviceCode(device)}-`));
-  if (!check.number.startsWith(check.prefix) || !minted || !/^[0-9A-Z]{3}-\d{4,}$/.test(counter)) {
+  if (!check.number.startsWith(check.prefix) || !minted || deviceCounter(counter) === null) {
     throw check.notThisDevice();
   }
   const { rows } = await sql<{ one: number }>`
     SELECT 1 AS one FROM ${sql.table(check.table)} t
     JOIN operations o ON o.entity_id = t.id AND o.type = ${op.type}
-    WHERE t.store_id = ${op.storeId} AND ${sql.ref(`t.${check.column}`)} = ${check.number}
+    WHERE t.store_id = ${op.storeId ?? ''} AND ${sql.ref(`t.${check.column}`)} = ${check.number}
       AND o.device_id IN (${sql.join(devices)})
     LIMIT 1
   `.execute(db);

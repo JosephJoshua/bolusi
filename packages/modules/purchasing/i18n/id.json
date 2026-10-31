@@ -20,7 +20,8 @@
     "receiptMismatch": "Jumlah barangnya tidak sesuai dengan yang diterima.",
     "nothingToCancel": "Semua barang pesanan ini sudah datang, jadi tidak bisa dibatalkan.",
     "numberNotThisDevice": "Nomor pesanan ini bukan dari HP ini.",
-    "numberUsed": "Nomor pesanan ini sudah dipakai."
+    "numberUsed": "Nomor pesanan ini sudah dipakai.",
+    "partArchived": "Ada barang di pesanan ini yang sudah diarsipkan. Hapus dulu dari pesanannya."
   },
   "stage": {
     "draft": "Draf",
