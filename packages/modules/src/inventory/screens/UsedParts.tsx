@@ -31,22 +31,14 @@ import {
   Section,
   type ScreenChrome,
 } from '../../screen-kit/screens/views.js';
-import { MAX_MOVEMENT_QTY, type PartUseKind } from '../constants.js';
+import { MAX_MOVEMENT_QTY } from '../constants.js';
 import { stockText } from '../labels.js';
 import { ti } from '../i18n.js';
 import type { ItemRow, UsedPartRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
+import { partForCode, useTakeChoices, type PartUse } from '../take-part.js';
 
-/** What the parts are for, as the stock rules record it. */
-export interface PartUse {
-  readonly kind: PartUseKind;
-  readonly id: string;
-  /** How it reads in stock history: the servisan number. */
-  readonly label: string;
-}
-
-/** How many parts the take step lists before the user narrows it with search. */
-const PICK_LIMIT = 30;
+export type { PartUse };
 
 export interface UsedPartsSectionProps {
   readonly use: PartUse;
@@ -163,25 +155,7 @@ export function TakePartStep({
   const typed = text.trim();
   const settled = useSettledValue(typed);
   const searchText = typed === '' ? '' : settled;
-  const fitsDevice = searchText === '' && device !== undefined && device.model.trim() !== '';
-  const query = useInventoryQuery(
-    async (rt) => {
-      const all = (
-        await rt.query('listItems', {
-          text: searchText,
-          filter: 'active',
-          partsOnly: true,
-          limit: PICK_LIMIT,
-        })
-      ).rows;
-      if (!fitsDevice) return { fitting: [] as readonly ItemRow[], rest: all };
-      const fitting = (await rt.query('itemsFitting', { brand: device.brand, model: device.model }))
-        .rows;
-      const ids = new Set(fitting.map((row) => row.id));
-      return { fitting, rest: all.filter((row) => !ids.has(row.id)) };
-    },
-    `take:${searchText}:${fitsDevice ? `${device.brand}\u0000${device.model}` : ''}:${String(reloadNonce)}`,
-  );
+  const query = useTakeChoices(searchText, device, reloadNonce);
 
   const choice = (row: ItemRow): React.JSX.Element => {
     const selected = picked?.id === row.id;
@@ -223,14 +197,8 @@ export function TakePartStep({
     const code = (await runtime.scanCode?.())?.trim() ?? '';
     if (code === '') return;
     setText(code);
-    const [found, parts] = await Promise.all([
-      runtime.query('findByCode', { code }).then((page) => page.rows),
-      runtime.query('listItems', { text: code, partsOnly: true, limit: 20 }).then((p) => p.rows),
-    ]).catch(() => [[], []] as const);
-    const only = found.length === 1 ? found[0] : undefined;
-    // Only a sparepart on the list can be taken, as when picked by hand.
-    const part = parts.find((row) => row.id === only?.id);
-    if (part !== undefined && !part.archived) {
+    const part = await partForCode(runtime, code);
+    if (part !== null) {
       setPicked(part);
       setQty(1);
     }

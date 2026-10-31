@@ -25,6 +25,8 @@ const CORE_ENTRY = fileURLToPath(new URL('./core.js', import.meta.url));
 const ONLINE_POLL_MS = 5_000;
 /** A core that keeps dying is not restarted forever; the page then says the app must restart. */
 const MAX_RESTARTS = 3;
+/** A core that ran this long before it died was not dying in a loop: it gets the full budget again. */
+const STABLE_RUN_MS = 10 * 60_000;
 /** How long a closing core may take to finish its last write before it is stopped anyway. */
 const SHUTDOWN_GRACE_MS = 5_000;
 
@@ -55,6 +57,7 @@ export function registerCore(config: CoreProcessConfig): CoreProcess {
 
   const start = (): void => {
     const forked = utilityProcess.fork(CORE_ENTRY, [], { serviceName: 'Bolusi core' });
+    const startedAt = Date.now();
     const { port1, port2 } = new MessageChannelMain();
     const server = serve(mainPortChannel(port1), {
       [MAIN_CALLS.secretGet]: (name: string) => secrets.get(name),
@@ -78,6 +81,7 @@ export function registerCore(config: CoreProcessConfig): CoreProcess {
       }
       if (stopping) return;
       console.error(`core process exited with code ${String(code)}`);
+      if (Date.now() - startedAt >= STABLE_RUN_MS) restarts = 0;
       if (restarts >= MAX_RESTARTS) return;
       restarts += 1;
       start();

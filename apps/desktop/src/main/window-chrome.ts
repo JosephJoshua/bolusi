@@ -17,6 +17,23 @@ export const TITLE_BAR = Object.freeze({
   symbolColor: '#F8FAFC',
 });
 
+/**
+ * The window's size: 1366×768 where the screen has room, else the screen's work area, and never
+ * held larger than a small counter screen (1024×600, or 1366×768 at 125% scaling) can show. The
+ * page lays itself out down to the minimum, so nothing is cut off at the bottom.
+ */
+export function windowSize(workArea: {
+  readonly width: number;
+  readonly height: number;
+}): Pick<BrowserWindowConstructorOptions, 'width' | 'height' | 'minWidth' | 'minHeight'> {
+  return {
+    width: Math.min(1366, workArea.width),
+    height: Math.min(768, workArea.height),
+    minWidth: Math.min(1024, workArea.width),
+    minHeight: Math.min(520, workArea.height),
+  };
+}
+
 /** Windows' own caption buttons laid over the page's bar. */
 export function frameOptions(
   platform: NodeJS.Platform,

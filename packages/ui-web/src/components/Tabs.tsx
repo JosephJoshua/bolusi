@@ -26,19 +26,28 @@ export function Tabs<T extends string>({
     .map((item) => `${item.value}:${item.label}:${String(item.count)}`)
     .join('|');
   // One underline that glides to the chosen tab, measured from the tab itself so any label fits.
-  const [bar, setBar] = useState<{ left: number; width: number } | null>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const [bar, setBar] = useState<{ left: number; top: number; width: number } | null>(null);
   useLayoutEffect(() => {
     const tab = refs.current.get(value);
     const measure = (): void =>
       setBar((last) => {
         if (tab === undefined) return null;
-        const next = { left: tab.offsetLeft, width: tab.offsetWidth };
-        return last?.left === next.left && last.width === next.width ? last : next;
+        const next = {
+          left: tab.offsetLeft,
+          top: tab.offsetTop + tab.offsetHeight,
+          width: tab.offsetWidth,
+        };
+        return last?.left === next.left && last.top === next.top && last.width === next.width
+          ? last
+          : next;
       });
     measure();
     if (tab === undefined) return;
     const observer = new ResizeObserver(measure);
     observer.observe(tab);
+    // A narrower list moves the tab to another row without changing its size.
+    if (list.current !== null) observer.observe(list.current);
     return () => observer.disconnect();
   }, [value, layoutKey]);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -61,8 +70,10 @@ export function Tabs<T extends string>({
       aria-label={label}
       onKeyDown={onKeyDown}
       data-testid={testId}
-      // The rule under the tabs is a shadow so a scrolling strip clips nothing.
-      className="relative flex min-w-0 gap-6 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--b-border)]"
+      ref={list}
+      // Tabs that do not fit wrap to a second row: every view stays in sight, none behind a
+      // sideways scroll. The rule under them is a shadow, so it draws under the last row.
+      className="relative flex min-w-0 flex-wrap gap-x-6 shadow-[inset_0_-1px_0_var(--b-border)]"
     >
       {items.map((item) => {
         const active = item.value === value;
@@ -102,8 +113,8 @@ export function Tabs<T extends string>({
       {bar === null ? null : (
         <span
           aria-hidden
-          className="pointer-events-none absolute bottom-0 h-0.5 bg-primary transition-[left,width] duration-200 ease-out"
-          style={{ left: bar.left, width: bar.width }}
+          className="pointer-events-none absolute h-0.5 -translate-y-full bg-primary transition-[left,top,width] duration-200 ease-out"
+          style={{ left: bar.left, top: bar.top, width: bar.width }}
         />
       )}
     </div>

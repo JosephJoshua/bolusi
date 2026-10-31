@@ -4,7 +4,7 @@
     "cancel": "Batal",
     "retry": "Coba lagi",
     "delete": "Hapus",
-    "confirm": "Ya, Lanjutkan",
+    "confirm": "Ya, lanjutkan",
     "back": "Kembali",
     "close": "Tutup",
     "edit": "Ubah",
@@ -89,14 +89,15 @@
     "STORAGE_ERROR": "Server gagal menyimpan foto. Aplikasi akan mencoba lagi.",
     "LOCAL_CORRUPT": "Foto ini rusak di perangkat dan tidak bisa dikirim. Ambil foto baru.",
     "AUTH_TOKEN_MISSING": "Masuk lagi untuk melanjutkan pengiriman foto.",
-    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto."
+    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.",
+    "APP_UPDATE_REQUIRED": "Perbarui aplikasi dulu agar data terbaru bisa masuk."
   },
   "rejection": {
     "BAD_SIGNATURE": "Gagal diverifikasi server. Kabari pemilik toko.",
     "CHAIN_BROKEN": "Riwayat di perangkat ini rusak, pengiriman berhenti. Segera kabari pemilik toko.",
     "CHAIN_GAP": "Ada yang tertinggal. Dikirim ulang otomatis.",
     "CHAIN_HALTED": "Menunggu perubahan sebelumnya beres.",
-    "CLOCK_AHEAD": "Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.",
+    "CLOCK_AHEAD": "Jam perangkat ini terlalu cepat saat perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.",
     "DEVICE_REVOKED": "Perangkat ini sudah diblokir. Daftarkan ulang.",
     "PERMISSION_DENIED": "Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.",
     "RULE_VIOLATED": "Datanya sudah berubah di perangkat lain. Cek lagi, lalu ulangi kalau masih perlu.",

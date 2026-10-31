@@ -9,6 +9,7 @@ import {
   Banner,
   CaptureTile,
   ConfirmDialog,
+  Fact,
   IconButton,
   Kbd,
   PageHeader,
@@ -125,6 +126,11 @@ export interface IntakePageProps {
   /** Read when the ticket is opened, so a page left open for hours still dates it correctly. */
   readonly now: () => number;
   readonly restoredDraft?: IntakeDraft | null | undefined;
+  /**
+   * `restoredDraft` is a new warranty claim filled in from its servisan, not something the person
+   * typed: it is kept, and leaving asks, only once they change something.
+   */
+  readonly prefilled?: boolean | undefined;
   readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
   readonly onOpened: (ticketId: string) => void;
   readonly onCancel: () => void;
@@ -136,6 +142,7 @@ const SAVE_KEYS = 'Ctrl+Enter';
 export function IntakePage({
   now,
   restoredDraft,
+  prefilled = false,
   onDraftChange,
   onOpened,
   onCancel,
@@ -145,6 +152,7 @@ export function IntakePage({
   // "Simpan servisan" does not spin under the camera or the video player.
   const media = useCapture(runner);
   const [draft, setDraft] = useState<IntakeDraft>(() => restoredDraft ?? emptyIntakeDraft());
+  const [startedAs] = useState(draft);
   const [showProblems, setShowProblems] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [photosExpired, setPhotosExpired] = useState(false);
@@ -166,7 +174,8 @@ export function IntakePage({
   );
   const update = (patch: Partial<IntakeDraft>): void =>
     setDraft((current) => ({ ...current, ...patch }));
-  const dirty = intakeDirty(draft);
+  // A claim filled in from its servisan is not yet anything the person typed.
+  const dirty = intakeDirty(draft) && (!prefilled || draft !== startedAs);
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
@@ -678,47 +687,59 @@ export function DeviceFields({
     update({ device: { ...device, ...patch } });
   const picker = useModelPicker(device, set);
   const { matched, colours, memory } = picker;
+  const claim = draft.claimOf !== null;
+  const fixedImei = draft.claimOf?.imei ?? '';
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
-        <ModelField
-          value={device.model}
-          onChange={(model) => set({ model })}
-          picker={picker}
-          error={modelError}
-        />
-        <div className="flex flex-col gap-2">
-          <TextField
-            label={tn('repair.device.brand')}
-            value={device.brand}
-            onChange={(event) => set({ brand: event.target.value })}
-            error={brandError}
-            autoComplete="off"
-            data-testid="repair.desk.intake.brand"
+      {/* A claim is for the phone its servisan repaired: shown, never retyped. */}
+      {!claim ? (
+        <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+          <ModelField
+            value={device.model}
+            onChange={(model) => set({ model })}
+            picker={picker}
+            error={modelError}
           />
-          {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
-          {matched !== null ? null : (
-            <div
-              className="flex flex-wrap gap-2"
-              aria-label={tn('repair.options.list.brands')}
-              role="group"
-            >
-              {options.brands.map((option) => {
-                const brand = optionLabel('brands', option);
-                return (
-                  <ToggleChip
-                    key={option.id}
-                    label={brand}
-                    selected={device.brand === brand}
-                    onToggle={() => set({ brand })}
-                    skipTab
-                  />
-                );
-              })}
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <TextField
+              label={tn('repair.device.brand')}
+              value={device.brand}
+              onChange={(event) => set({ brand: event.target.value })}
+              error={brandError}
+              autoComplete="off"
+              data-testid="repair.desk.intake.brand"
+            />
+            {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
+            {matched !== null ? null : (
+              <div
+                className="flex flex-wrap gap-2"
+                aria-label={tn('repair.options.list.brands')}
+                role="group"
+              >
+                {options.brands.map((option) => {
+                  const brand = optionLabel('brands', option);
+                  return (
+                    <ToggleChip
+                      key={option.id}
+                      label={brand}
+                      selected={device.brand === brand}
+                      onToggle={() => set({ brand })}
+                      skipTab
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : matched === null ? (
+        <p
+          className="text-body font-semibold text-text"
+          data-testid="repair.desk.intake.claimDevice"
+        >
+          {device.brand} {device.model}
+        </p>
+      ) : null}
       {matched === null ? null : (
         <div
           className="flex items-center gap-4 rounded-sm bg-surface-alt px-4 py-3"
@@ -740,6 +761,11 @@ export function DeviceFields({
           </div>
         </div>
       )}
+      {claim ? (
+        <p className="text-small text-text-muted" data-testid="repair.desk.intake.claimDevice.note">
+          {tn('repair.warrantyClaim.sameDevice')}
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
         <div className="flex flex-col gap-2">
           <TextField
@@ -767,16 +793,27 @@ export function DeviceFields({
             </div>
           )}
         </div>
-        <TextField
-          label={tn('repair.device.imeiField')}
-          value={device.imei}
-          onChange={(event) => set({ imei: event.target.value.replace(/[^\d\s-]/g, '') })}
-          inputMode="numeric"
-          error={imeiError}
-          autoComplete="off"
-          inputClassName="tabular"
-          data-testid="repair.desk.intake.imei"
-        />
+        {/* A claim's phone keeps the IMEI its servisan wrote down: shown, never retyped. */}
+        {fixedImei === '' ? (
+          <TextField
+            label={tn('repair.device.imeiField')}
+            value={device.imei}
+            onChange={(event) => set({ imei: event.target.value.replace(/[^\d\s-]/g, '') })}
+            inputMode="numeric"
+            error={imeiError}
+            autoComplete="off"
+            inputClassName="tabular"
+            data-testid="repair.desk.intake.imei"
+          />
+        ) : (
+          <dl>
+            <Fact
+              label={tn('repair.device.imei')}
+              value={<span className="tabular">{fixedImei}</span>}
+              testId="repair.desk.intake.imei"
+            />
+          </dl>
+        )}
       </div>
       <ScreenLockFields
         kind={device.lockKind}

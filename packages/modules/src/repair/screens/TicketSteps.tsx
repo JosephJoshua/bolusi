@@ -45,6 +45,7 @@ import {
   DOWN_PAYMENT_GAP_KEY,
   PRICE_KIND_KEY,
   discountLimitHint,
+  downPaymentChangeLine,
   downPaymentTitleKey,
   optionLabel,
 } from '../labels.js';
@@ -81,7 +82,8 @@ import {
   useRepairQuery,
   useRepairRuntime,
 } from '../runtime.js';
-import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { accountLabel } from '../../money/kas.js';
+import { chosenMethod, offeredAccount, referenceMissing } from '../../money/payment-entry.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 export interface StepProps {
@@ -226,11 +228,17 @@ export function WaitForPartsStep({
   stale,
   onDone,
   onCancel,
+  onRegisterDiscardGuard,
   testID = 'repair.note.waitForParts',
 }: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [text, setText] = useState('');
+  const discard = useDiscardConfirm({
+    dirty: stale === null && text.trim() !== '',
+    onRegisterDiscardGuard,
+    testID,
+  });
 
   const submit = (): void => {
     void runner
@@ -244,9 +252,10 @@ export function WaitForPartsStep({
     <FlowScreen
       chrome={chrome}
       title={tn('repair.action.waitForParts')}
-      onBack={onCancel}
+      onBack={() => discard.requestLeave(onCancel)}
       primaryLabel={tn('repair.action.waitForParts')}
       onPrimary={submit}
+      overlay={discard.overlay}
       busy={runner.busy}
       errorCode={runner.errorCode}
       stale={stale}
@@ -282,6 +291,7 @@ export function CancelStep({
   onDone,
   onAsked,
   onCancel,
+  onRegisterDiscardGuard,
   testID = 'repair.cancel',
 }: StepProps & {
   readonly workStarted: boolean;
@@ -301,6 +311,12 @@ export function CancelStep({
   const [reason, setReason] = useState('');
   // Null until the owner taps "Ubah"; the store's fee applies until then.
   const [feeText, setFeeText] = useState<string | null>(null);
+  const discard = useDiscardConfirm({
+    dirty: stale === null && (reason.trim() !== '' || feeText !== null),
+    onRegisterDiscardGuard,
+    testID,
+  });
+  const leave = (): void => discard.requestLeave(onCancel);
 
   const standard =
     fees.status === 'ready'
@@ -341,11 +357,12 @@ export function CancelStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn('repair.cancel.title')}
-      onBack={onCancel}
+      title={tn(holds ? 'repair.cancel.title' : 'repair.approval.askCancel')}
+      onBack={leave}
       primaryLabel={asking ? ta('approvals.action.ask') : tn('repair.action.cancel')}
       primaryVariant={asking ? 'primary' : 'destructive'}
       onPrimary={submit}
+      overlay={discard.overlay}
       primaryDisabled={!complete}
       primaryHint={tn(
         feeText !== null && fee === null ? 'repair.hint.cancelFee' : 'repair.hint.reason',
@@ -368,7 +385,7 @@ export function CancelStep({
       ) : null}
       <QueryView
         query={fees}
-        onBack={onCancel}
+        onBack={leave}
         onRetry={() => setReloadNonce((n) => n + 1)}
         testID={`${testID}.fees`}
       >
@@ -518,6 +535,7 @@ export function DownPaymentStep({
   onDone,
   onAsked,
   onCancel,
+  onRegisterDiscardGuard,
   testID = 'repair.downPayment',
 }: StepProps & {
   readonly mode: 'record' | 'correct';
@@ -534,6 +552,11 @@ export function DownPaymentStep({
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
   const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
+  const discard = useDiscardConfirm({
+    dirty: stale === null && (amountText !== '' || reason.trim() !== ''),
+    onRegisterDiscardGuard,
+    testID,
+  });
   // Until the store's methods load, a method picked earlier would read as cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
@@ -547,6 +570,11 @@ export function DownPaymentStep({
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const complete = gap === null && loadedAccounts !== null;
+  const changeLine = downPaymentChangeLine(
+    current,
+    amount,
+    accountLabel(offeredAccount(method.account, accounts), accounts),
+  );
   const fix =
     correcting && complete && amount !== null
       ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
@@ -588,9 +616,10 @@ export function DownPaymentStep({
       title={tn(
         downPaymentTitleKey(mode, runtime.hasPermission(REPAIR_PERMISSION.correctDownPayment)),
       )}
-      onBack={onCancel}
+      onBack={() => discard.requestLeave(onCancel)}
       primaryLabel={asking ? ta('approvals.action.ask') : tn('repair.downPayment.save')}
       onPrimary={submit}
+      overlay={discard.overlay}
       primaryDisabled={!complete}
       primaryHint={gap === null ? undefined : tn(DOWN_PAYMENT_GAP_KEY[gap])}
       busy={runner.busy}
@@ -631,6 +660,11 @@ export function DownPaymentStep({
             onChange={setMethod}
             testID={`${testID}.method`}
           />
+          {correcting && changeLine !== null ? (
+            <Text style={repairStyles.caption} testID={`${testID}.change`}>
+              {changeLine}
+            </Text>
+          ) : null}
         </View>
       )}
       {correcting ? (
@@ -858,6 +892,7 @@ export function PriceChangeStep({
   onDone,
   onAsked,
   onCancel,
+  onRegisterDiscardGuard,
   testID = `repair.price.${mode}`,
 }: StepProps & {
   readonly mode: 'change' | 'propose';
@@ -879,6 +914,12 @@ export function PriceChangeStep({
   const [reason, setReason] = useState('');
   const amount = parseRupiah(amountText);
   const complete = description.trim() !== '' && amount !== null && reason.trim() !== '';
+  const discard = useDiscardConfirm({
+    dirty:
+      stale === null && (description.trim() !== '' || amountText !== '' || reason.trim() !== ''),
+    onRegisterDiscardGuard,
+    testID,
+  });
   const asking =
     onAsked !== undefined &&
     kind === 'discount' &&
@@ -909,8 +950,9 @@ export function PriceChangeStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn('repair.price.editTitle')}
-      onBack={onCancel}
+      title={tn(mode === 'change' ? 'repair.price.editTitle' : 'repair.action.proposePrice')}
+      onBack={() => discard.requestLeave(onCancel)}
+      overlay={discard.overlay}
       question={deciding ? tn('repair.price.alreadyAgreed') : undefined}
       primaryLabel={
         asking
@@ -953,7 +995,7 @@ export function PriceChangeStep({
       </View>
       <View style={repairStyles.gap}>
         <TextInput
-          label={tn('repair.price.amount')}
+          label={tn(kind === 'discount' ? 'repair.price.discountAmount' : 'repair.price.amount')}
           value={amountText}
           onChangeText={(text) => {
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
@@ -1009,6 +1051,7 @@ export function ProposalStep({
   total,
   onDone,
   onCancel,
+  onRegisterDiscardGuard,
   testID = 'repair.proposal',
 }: StepProps & {
   readonly line: QuoteLineRow;
@@ -1019,6 +1062,11 @@ export function ProposalStep({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [note, setNote] = useState('');
+  const discard = useDiscardConfirm({
+    dirty: stale === null && note.trim() !== '',
+    onRegisterDiscardGuard,
+    testID,
+  });
   // A line that lowers the price is an owner's to apply; anyone deciding may still decline it.
   const mayApply = line.amount >= 0 || runtime.hasPermission(REPAIR_PERMISSION.discount);
 
@@ -1043,7 +1091,8 @@ export function ProposalStep({
     <FlowScreen
       chrome={chrome}
       title={tn('repair.price.proposalTitle')}
-      onBack={onCancel}
+      onBack={() => discard.requestLeave(onCancel)}
+      overlay={discard.overlay}
       question={tn('repair.price.customerAgrees')}
       primaryLabel={tn('repair.action.agreeApply')}
       onPrimary={() => decide('agreed')}

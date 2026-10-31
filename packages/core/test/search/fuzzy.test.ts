@@ -244,6 +244,18 @@ describe('ticket search', () => {
     expect(ids(searchTickets(tickets, '356789104455668'))).toEqual(['t3', 't1']);
   });
 
+  test('an IMEI or serial is matched as typed, not read as a phone number', () => {
+    // 86… and 62… look like the start of a phone number; on an IMEI they are just its digits.
+    const imei = ticket({ id: 'imei', phone: null, deviceImei: '861234567890123' });
+    const serial = ticket({ id: 'serial', phone: null, deviceImei: '6201234567' });
+    const query = compileQuery('861234567890123')!;
+    expect(scoreDocument(query, ticketDoc(imei))).toBe(1);
+    expect(scoreDocument(compileQuery('6201234567')!, ticketDoc(serial))).toBe(1);
+    expect(ids(searchTickets([imei, serial], '6201234567'))[0]).toBe('serial');
+    // A phone typed with its country code still finds the 08… number.
+    expect(ids(searchTickets(tickets, '6281244556677'))[0]).toBe('t3');
+  });
+
   test('model and brand words', () => {
     expect(ids(searchTickets(tickets, 'oppo a57'))).toEqual(['t2']);
     expect(ids(searchTickets(tickets, 'galaxy a05'))[0]).toBe('t3');

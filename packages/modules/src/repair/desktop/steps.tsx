@@ -18,21 +18,17 @@ import {
   ToggleChip,
 } from '@bolusi/ui-web';
 import { Check, Printer, Signature } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 
 import { PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { QrisDialog } from '../../money/desktop/QrisDialog.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
-import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
+import { accountLabel } from '../../money/kas.js';
+import { chosenMethod, offeredAccount, referenceMissing } from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
-import {
-  giveBackText,
-  payLaterHintKey,
-  payLaterLines,
-  useHandoverPayment,
-} from '../handover-payment.js';
+import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, useCapture, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_APPROVAL_KIND,
@@ -43,10 +39,12 @@ import {
 } from '../constants.js';
 import { useDownPaymentAsk } from '../down-payment-ask.js';
 import {
+  amountOwed,
   askedBecauseKey,
   asksApproval,
+  balanceLabelKey,
   INTAKE_PROBLEM_KEY,
-  balanceAfterDownPayment,
+  ticketBalance,
   capturedThumbnailRef,
   correctionDraft,
   correctionOptions,
@@ -78,14 +76,15 @@ import {
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
   discountLimitHint,
+  downPaymentChangeLine,
   downPaymentTitleKey,
   optionLabel,
+  refundLabel,
 } from '../labels.js';
 import {
   useCancelFees,
   useIntakeOptionSettings,
   useDownPaymentMethod,
-  useHandoverRefunds,
   usePaymentAccounts,
   useTicketQris,
   useRepairQuery,
@@ -93,7 +92,7 @@ import {
   type RepairPrinting,
 } from '../runtime.js';
 import { DESK_PAPERS, paperLabel, useDevicePaper, useDevicePrinters } from '../paper.js';
-import { outputSlip } from '../slip-output.js';
+import { logSlipPrinted, outputSlip } from '../slip-output.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import { AccessoryChips, CustomerFields, DeviceFields } from './Intake.js';
@@ -1076,7 +1075,7 @@ export function PriceChangeDialog({
             />
             <MoneyField
               // The field already shows "Rp", so the label does not repeat it.
-              label={tn('repair.desk.price')}
+              label={tn(kind === 'discount' ? 'repair.price.kind.discount' : 'repair.desk.price')}
               hint={
                 amount === null || kind !== 'discount'
                   ? undefined
@@ -1236,29 +1235,28 @@ export function HandoverDialog({
   ticketId,
   stale,
   customerName,
-  amount,
-  downPayment,
-  cancelled,
   onDone,
   onClose,
 }: StepDialogProps & {
-  /** What the checklist is made of: whether it was repaired, and what was left with it. */
+  /**
+   * What the checklist is made of (whether it was repaired, what was left with it), and what the
+   * customer is billed, paid already and gets back through each method.
+   */
   readonly ticket: Pick<
     TicketDetailRow,
     | 'outcome'
     | 'peripherals'
     | 'quoteTotal'
+    | 'cancelFee'
+    | 'reduced'
+    | 'downPayment'
+    | 'refunds'
     | 'claimOfTicketId'
     | 'ticketNumber'
     | 'deviceBrand'
     | 'deviceModel'
   >;
   readonly customerName: string;
-  /** What the customer pays in all: the price, or a cancelled servisan's fee. */
-  readonly amount: number;
-  /** What they paid already (the DP), from the money ledger. */
-  readonly downPayment: number | null;
-  readonly cancelled: boolean;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
@@ -1268,11 +1266,13 @@ export function HandoverDialog({
   // Until the store's methods load, a method picked earlier would read as cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
-  const balance = balanceAfterDownPayment(amount, downPayment ?? 0);
+  const cancelled = ticket.outcome === 'cancelled';
+  const { downPayment, reduced } = ticket;
+  /** The price, or a cancelled servisan's fee, before any reduction (shown beneath it). */
+  const amount = amountOwed(ticket) + reduced;
+  const balance = ticketBalance(ticket);
+  const split = balance.kind === 'refund' ? ticket.refunds : [];
   const due = balance.kind === 'due' ? balance.amount : 0;
-  const giveBack = giveBackText(
-    useHandoverRefunds(ticketId, balance.kind === 'refund' ? balance.amount : 0, accounts),
-  );
   const qris = useTicketQris(ticketId, ticket.ticketNumber);
   const payment = useHandoverPayment(ticketId, due, accounts, qris);
   const { settled } = payment;
@@ -1379,31 +1379,57 @@ export function HandoverDialog({
               {formatMoney(amount)}
             </p>
           </div>
-          {downPayment === null || downPayment === 0 ? null : (
+          {(downPayment ?? 0) === 0 && reduced === 0 ? null : (
             <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t border-border pt-2 text-body">
-              {/* The DP and anything paid at this counter already (a QR): all of it is paid. */}
-              <dt className="text-text-muted">{tn('repair.price.paid')}</dt>
-              <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
-              <dt className="font-semibold text-text">
-                {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
-              </dt>
-              <dd
-                className="tabular text-right font-semibold text-text"
-                data-testid="repair.desk.handover.balance"
-              >
-                {formatMoney(balance.amount)}
-              </dd>
+              {reduced === 0 ? null : (
+                <>
+                  <dt className="text-text-muted">{tn('repair.price.reduced')}</dt>
+                  <dd
+                    className="tabular text-right text-text"
+                    data-testid="repair.desk.handover.reduced"
+                  >
+                    {formatMoney(-reduced)}
+                  </dd>
+                </>
+              )}
+              {downPayment === null || downPayment === 0 ? null : (
+                <>
+                  {/* The DP and anything paid at this counter already (a QR): all of it is paid. */}
+                  <dt className="text-text-muted">{tn('repair.price.paid')}</dt>
+                  <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
+                </>
+              )}
+              {split.length === 0 ? (
+                <>
+                  <dt className="font-semibold text-text">
+                    {tn(balanceLabelKey(balance.kind, false))}
+                  </dt>
+                  <dd
+                    className="tabular text-right font-semibold text-text"
+                    data-testid="repair.desk.handover.balance"
+                  >
+                    {formatMoney(balance.amount)}
+                  </dd>
+                </>
+              ) : (
+                split.map((refund) => (
+                  <Fragment key={refund.account}>
+                    <dt className="font-semibold text-text">{refundLabel(refund, 'screen')}</dt>
+                    <dd
+                      className="tabular text-right font-semibold text-text"
+                      data-testid={`repair.desk.handover.refund.${refund.account}`}
+                    >
+                      {formatMoney(refund.amount)}
+                    </dd>
+                  </Fragment>
+                ))
+              )}
             </dl>
           )}
         </div>
         {cancelled ? (
           <p className="mt-2 text-small text-text-muted">{tn('repair.handover.cancelled')}</p>
         ) : null}
-        {giveBack === null || stale !== null ? null : (
-          <div className="mt-3" data-testid="repair.desk.handover.giveBack">
-            <Banner tone="info" message={giveBack} />
-          </div>
-        )}
         {checks.lines.length === 0 || stale !== null ? null : (
           <section className="mt-4" data-testid="repair.desk.handover.checks">
             <h3 className="mb-2 text-body font-semibold text-text">
@@ -1578,6 +1604,11 @@ export function DownPaymentDialog({
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const testId = `repair.desk.downPayment.${mode}`;
+  const changeLine = downPaymentChangeLine(
+    current,
+    amount,
+    accountLabel(offeredAccount(method.account, accounts), accounts),
+  );
   const fix =
     correcting && gap === null && amount !== null && loadedAccounts !== null
       ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
@@ -1679,6 +1710,11 @@ export function DownPaymentDialog({
               testId={`${testId}.method`}
             />
           )}
+          {correcting && changeLine !== null ? (
+            <p className="text-small text-text-muted" data-testid={`${testId}.change`}>
+              {changeLine}
+            </p>
+          ) : null}
           {correcting ? (
             <TextArea
               label={tn('repair.downPayment.reason')}
@@ -1768,7 +1804,7 @@ export function PrintDialog({
   const confirmPrinted = (): void => {
     setAsking(false);
     void runner
-      .run(() => runtime.run('recordSlipPrinted', { ticketId: ticket.id, slip }))
+      .run(() => logSlipPrinted(runtime, ticket.id, slip))
       .then((result) => {
         if (result !== undefined) onDone();
       });

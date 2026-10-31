@@ -3,7 +3,12 @@
 // step of a destructive action and a text form for the entry point, which is set apart.
 import { clsx } from 'clsx';
 import type { LucideIcon } from 'lucide-react';
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import {
+  forwardRef,
+  type AnchorHTMLAttributes,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from 'react';
 
 import { Kbd } from './Kbd.js';
 import { Spinner } from './Spinner.js';
@@ -48,6 +53,14 @@ const TEXT_SIZE: Readonly<Record<ButtonSize, string>> = {
   lg: 'h-11 px-3 text-body',
 };
 
+const BASE =
+  'inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-sm font-semibold transition-[color,background-color,border-color,box-shadow,scale] duration-150';
+
+function buttonClass(variant: ButtonVariant, size: ButtonSize): string {
+  const textual = variant === 'text' || variant === 'dangerText';
+  return clsx(BASE, VARIANT[variant], (textual ? TEXT_SIZE : SIZE)[size]);
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     label,
@@ -64,7 +77,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   },
   ref,
 ) {
-  const textual = variant === 'text' || variant === 'dangerText';
   return (
     <button
       ref={ref}
@@ -72,9 +84,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled === true || busy}
       aria-busy={busy || undefined}
       className={clsx(
-        'inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-sm font-semibold transition-[color,background-color,border-color,box-shadow,scale] duration-150 enabled:active:scale-[0.98] disabled:cursor-not-allowed',
-        VARIANT[variant],
-        (textual ? TEXT_SIZE : SIZE)[size],
+        buttonClass(variant, size),
+        'enabled:active:scale-[0.98] disabled:cursor-not-allowed',
         className,
       )}
       {...rest}
@@ -97,3 +108,28 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     </button>
   );
 });
+
+export interface ButtonLinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'children'> {
+  readonly label: string;
+  readonly href: string;
+  readonly variant?: Exclude<ButtonVariant, 'danger' | 'dangerText'> | undefined;
+  readonly size?: ButtonSize | undefined;
+  readonly icon?: LucideIcon | undefined;
+}
+
+/** A link that looks like a button: an action that leaves the page (WhatsApp, a call). */
+export function ButtonLink({
+  label,
+  variant = 'secondary',
+  size = 'md',
+  icon: Icon,
+  className,
+  ...rest
+}: ButtonLinkProps): React.JSX.Element {
+  return (
+    <a className={clsx(buttonClass(variant, size), 'active:scale-[0.98]', className)} {...rest}>
+      {Icon === undefined ? null : <Icon size={16} aria-hidden />}
+      <span>{label}</span>
+    </a>
+  );
+}

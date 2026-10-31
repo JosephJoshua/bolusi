@@ -2,11 +2,14 @@
 // the production per-IP key source (node-server's getConnInfo — a real socket address, read past
 // X-Forwarded-For only when that address is a configured trusted proxy), and serves via
 // @hono/node-server.
+import { resolve } from 'node:path';
+
 import { assertRowSecurityRole } from '@bolusi/db-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
 import { createApp } from './app.js';
+import { gitHubReleaseSource } from './app-updates/releases.js';
 import { loadConfig } from './config.js';
 import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
@@ -61,7 +64,11 @@ const app = createApp({
   clientIp: productionClientIp,
   secureCookies: config.secureCookies,
   pushPort,
+  ...(config.webDir === undefined ? {} : { webDir: resolve(config.webDir) }),
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
+  ...(config.appUpdatesRepo === undefined
+    ? {}
+    : { appUpdates: gitHubReleaseSource({ repo: config.appUpdatesRepo }) }),
   ...(qris === undefined ? {} : { qris }),
 });
 

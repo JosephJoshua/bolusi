@@ -69,6 +69,7 @@ import {
   FINAL_ACTIONS,
   canSetRepairTypes,
   canUseParts,
+  partUse,
   claimIntakeDraft,
   downPaymentAction,
   downPaymentStale,
@@ -125,12 +126,7 @@ import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
 import { ti } from '../../inventory/i18n.js';
 import type { UsedPartRow } from '../../inventory/queries.js';
 import { InventoryRuntimeProvider } from '../../inventory/runtime.js';
-import {
-  PutBackStep,
-  TakePartStep,
-  UsedPartsSection,
-  type PartUse,
-} from '../../inventory/screens/UsedParts.js';
+import { PutBackStep, TakePartStep, UsedPartsSection } from '../../inventory/screens/UsedParts.js';
 import {
   AssignStep,
   CancelStep,
@@ -142,11 +138,6 @@ import {
   RepairTypesStep,
   WorkPhotosStep,
 } from './TicketSteps.js';
-
-/** The servisan as stock records it: parts taken for it carry its number. */
-function partUse(ticket: Pick<TicketDetailRow, 'id' | 'ticketNumber'>): PartUse {
-  return { kind: 'repair_ticket', id: ticket.id, label: ticket.ticketNumber };
-}
 
 /** What an action that runs in place says once it lands, in the fixed banner slot. */
 const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
@@ -1075,9 +1066,10 @@ export function TicketDetail({
         )}
         <DownPaymentRows
           total={amountOwed(row)}
-          downPayment={row.downPayment}
           reduced={row.reduced}
+          downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
+          returned={row.location === 'returned'}
           action={
             paymentAction === 'correct' ? (
               <TextButton

@@ -87,6 +87,11 @@ behind adapters. Node tests do not establish native performance or correctness.
 - A change stamped more than 10 minutes ahead of the server clock is refused, so
   a wrong clock cannot win last-writer-wins. A device whose last sync found its
   clock that far ahead saves nothing until the clock is fixed.
+- Old and new app versions share one tenant. A pulled change this build cannot fold
+  (an unknown type, or a newer `schemaVersion`) stops the pull before its batch with
+  `APP_UPDATE_REQUIRED`; the device keeps working and pushing, sync status asks for an
+  update, and the updated app resumes from the same cursor. The server keeps every older
+  version, so release the server before the apps that emit a new type or version.
 - Pending, rejected, and conflicting offline work stays visible and recoverable.
 - A phone whose token the server refuses (401 `AUTH_TOKEN_INVALID`) 3 times over
   10+ minutes stops syncing (`device_unrecognised`) but keeps working; the sync
@@ -156,8 +161,10 @@ customers registers a document source (`money/documents.ts`) in
 
 The server judges each pushed op alone, not a command's ops as a group, so each
 money rule is safe on its own: a charge equals the document's price, a refund by
-the counter returns at most the overpayment through the account it came in by,
-and lowering a bill, voiding a payment or settling a cash difference are owners'.
+the counter returns at most the overpayment through the account it came in by
+(payments cover the bill in the order they came in, `overpaidByAccount`), nobody
+refunds more than was paid, and lowering a bill, voiding a payment or settling a
+cash difference are owners'. Settling a cash difference always names its count.
 A cash count records what was counted; the difference is computed against the
 book at the count's time, so late-synced cash shows up correctly. Stock and
 purchasing post through the same module (reserved accounts in `constants.ts`).

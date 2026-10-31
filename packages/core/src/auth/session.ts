@@ -234,7 +234,12 @@ export class SessionManager<TWork = unknown> {
   ): Promise<readonly AppendedOp[]> {
     const current = this.#current;
     if (current === null) return [];
-    const ops = await this.#runtime.emitRuntimeOp({
+    // Fail closed: the identity is cleared BEFORE the op is appended (and synchronously, so a caller
+    // sees it the moment this is called). A failed append then loses the audit record, never the
+    // lock: an open session left behind a failed write would hand the till to the next person.
+    // Only the active-identity context is cleared; #workByUser is retained (SEC-AUTH-08).
+    this.#current = null;
+    return this.#runtime.emitRuntimeOp({
       type: AUTH_OP.sessionEnded,
       entityType: AUTH_ENTITY.authSession,
       entityId: current.sessionId,
@@ -242,9 +247,6 @@ export class SessionManager<TWork = unknown> {
       userId: current.userId,
       source,
     });
-    // Only the active-identity context is cleared; #workByUser is retained (SEC-AUTH-08).
-    this.#current = null;
-    return ops;
   }
 }
 

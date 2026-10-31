@@ -38,7 +38,12 @@ import { fakeBackgroundPlatform } from './_background-platform.test.js';
 import { SYNC_BACKGROUND_TASK } from './background-sync.js';
 import { createBackgroundHost, type BackgroundBinding } from './background-task.js';
 import type { Bootstrapped } from './bootstrap.js';
-import { createSyncClient, createSyncClientForApp, type SyncClientDeps } from './sync-client.js';
+import {
+  createSyncClient,
+  createSyncClientForApp,
+  knowsOp,
+  type SyncClientDeps,
+} from './sync-client.js';
 import { APPEND_DEBOUNCE_MS } from './triggers.js';
 
 const KEY = 'a'.repeat(64);
@@ -205,6 +210,7 @@ async function build(options: BuildOptions = {}) {
       return Promise.resolve();
     },
     refoldRefused: () => Promise.resolve(),
+    knowsOp: () => true,
     crypto: noblePort,
     clock: { now: () => T },
     timer,
@@ -362,6 +368,54 @@ describe('falsification — each wiring broken makes the cycle FAIL LOUDLY (§2.
     await client.settle();
     expect(transport.pulls.length).toBeGreaterThan(0);
     expect((await readSyncState(db.db)).lastSuccessfulSyncAt).toBe(T);
+    client.stop();
+  });
+});
+
+describe('"Kirim sekarang" answers the press (round 2 QA, F11)', () => {
+  test('sending shows at once, and a hung attempt that times out says it failed', async () => {
+    const { client, transport } = await build({ online: true });
+    await client.start();
+    await client.settle();
+
+    // The server stops answering: the pull hangs until the request deadline gives up.
+    let giveUp: (error: Error) => void = () => undefined;
+    transport.pull = (request) => {
+      transport.pulls.push(request);
+      return new Promise((_, reject) => {
+        giveUp = reject;
+      });
+    };
+    const seen: { state: string; busy: boolean; error: string | null }[] = [];
+    client.subscribe(() => seen.push({ state: client.state(), ...client.manualSync() }));
+    const pulled = transport.pulls.length;
+    client.requestManual();
+    // Told before any answer comes back: the screens show it is sending.
+    expect(seen.at(-1)).toEqual({ state: 'pushing', busy: true, error: null });
+
+    await vi.waitFor(() => expect(transport.pulls.length).toBe(pulled + 1));
+    expect(client.state()).not.toBe('idle');
+    giveUp(new SyncTransportError('no answer within 60000 ms', { code: null, status: null }));
+    await vi.waitFor(() => expect(client.manualSync().busy).toBe(false));
+    // No longer "sending": backed off, with a failure line for the press.
+    expect(client.state()).toBe('backoff');
+    expect(client.manualSync()).toEqual({ busy: false, error: 'NETWORK' });
+    expect(seen.at(-1)).toEqual({ state: 'backoff', busy: false, error: 'NETWORK' });
+    client.stop();
+  });
+
+  test('a press that gets through clears the failure line', async () => {
+    const { client, transport } = await build({ online: true, pullRejects: true });
+    await client.start();
+    client.requestManual();
+    await client.settle();
+    await vi.waitFor(() => expect(client.manualSync().error).toBe('INTERNAL'));
+
+    transport.pullRejects = false;
+    client.requestManual();
+    expect(client.manualSync()).toEqual({ busy: true, error: null });
+    await vi.waitFor(() => expect(client.manualSync()).toEqual({ busy: false, error: null }));
+    expect(client.state()).toBe('idle');
     client.stop();
   });
 });
@@ -690,5 +744,21 @@ describe('trigger (d): the OS background task drives the started client', () => 
     expect(client.backgroundRegistration()).toEqual({ kind: 'restricted' });
     expect(platform.registered).toHaveLength(0);
     client.stop();
+  });
+});
+
+describe('knowsOp: can this build fold a pulled op?', () => {
+  const operations = {
+    schemaVersionFor: (type: string) => (type === 'repair.ticket_opened' ? 4 : undefined),
+  };
+
+  test('folds any version up to the one it declares', () => {
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 1 })).toBe(true);
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 4 })).toBe(true);
+  });
+
+  test('a newer version or an unknown type comes from a newer app', () => {
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 5 })).toBe(false);
+    expect(knowsOp(operations, { type: 'stock.item_received', schemaVersion: 1 })).toBe(false);
   });
 });

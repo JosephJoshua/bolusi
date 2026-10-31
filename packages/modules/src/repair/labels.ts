@@ -22,6 +22,7 @@ import { tn, type RepairKey } from './i18n.js';
 import type { DownPaymentGap, IntakeStep, StaleStep, TicketAction, TicketStatus } from './flows.js';
 import type { SpecFactKey } from './device-specs.js';
 import type { ScreenLockKind } from './screen-lock.js';
+import type { TicketRefund } from './queries.js';
 import {
   READY_UNKNOWN,
   readyDays,
@@ -375,6 +376,58 @@ export function historyEntry(event: TicketEventRow): {
     meta: [formatDateTime(event.at), event.actorName].filter((part) => part !== null).join(' · '),
     ...(detail === '' ? {} : { detail }),
   };
+}
+
+/**
+ * One method's part of what goes back at handover: "Kembalikan lewat Transfer BCA" to the counter,
+ * "Dikembalikan lewat Transfer BCA" on the slip; cash reads "Kembalikan tunai".
+ */
+export function refundLabel(refund: Pick<TicketRefund, 'name'>, on: 'screen' | 'slip'): string {
+  if (refund.name === null) {
+    return tn(on === 'slip' ? 'repair.slip.refundCash' : 'repair.price.refundCash');
+  }
+  return tn(on === 'slip' ? 'repair.slip.refundVia' : 'repair.price.refundVia', {
+    method: refund.name,
+  });
+}
+
+/**
+ * What saving a corrected DP does to the payments taken, as the dialog says it under the method:
+ * a higher DP adds only the difference there, a lower one replaces what was taken. Nothing to say
+ * until a new amount is typed, or when it removes the DP (the hint under the reason says that).
+ */
+export function downPaymentChangeLine(
+  current: number | null,
+  amount: number | null,
+  method: string,
+): string | null {
+  const recorded = current ?? 0;
+  if (amount === null || amount === 0 || amount === recorded) return null;
+  return amount > recorded
+    ? tn('repair.downPayment.raised', {
+        added: formatMoney(amount - recorded),
+        method,
+        current: formatMoney(recorded),
+      })
+    : tn('repair.downPayment.replaced', {
+        current: formatMoney(recorded),
+        amount: formatMoney(amount),
+        method,
+      });
+}
+
+/**
+ * The row for what was paid on a servisan, which comes off the total. When more went back than
+ * came in (a payment voided after its money was handed back), the net is negative: it is named
+ * as given back and adds to what is left to pay, so the rows still add up.
+ */
+export function paidRow(
+  paid: number,
+  paidLabel: RepairKey,
+): { readonly label: string; readonly amount: string } {
+  return paid < 0
+    ? { label: tn('repair.price.givenBack'), amount: `+${formatMoney(-paid)}` }
+    : { label: tn(paidLabel), amount: formatMoney(-paid) };
 }
 
 /** A limited role's discount limit, or what is left of it once the servisan has discounts. */

@@ -18,11 +18,24 @@ export const SearchField = forwardRef<
     readonly shortcut?: string | undefined;
     /** Enter or ArrowDown: go on to the results, such as the first row of the table under it. */
     readonly onPick?: (() => void) | undefined;
+    /** Takes the keyboard when it appears, such as the search a dialog opens on. */
+    readonly autoFocus?: boolean | undefined;
     readonly className?: string | undefined;
     readonly testId?: string | undefined;
   }
 >(function SearchField(
-  { value, onChange, placeholder, label, clearLabel, shortcut, onPick, className, testId },
+  {
+    value,
+    onChange,
+    placeholder,
+    label,
+    clearLabel,
+    shortcut,
+    onPick,
+    autoFocus,
+    className,
+    testId,
+  },
   ref,
 ) {
   return (
@@ -35,6 +48,7 @@ export const SearchField = forwardRef<
       <input
         ref={ref}
         type="search"
+        autoFocus={autoFocus}
         aria-label={label}
         value={value}
         placeholder={placeholder}

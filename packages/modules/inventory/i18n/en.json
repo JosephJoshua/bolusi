@@ -210,5 +210,23 @@
     "removeOption": "Remove choice {option}",
     "addToName": "Add {label} to the name",
     "noOptions": "No choices yet. New ones can also be typed when filling in an item."
+  },
+  "desk": {
+    "col": {
+      "name": "Item",
+      "category": "Category",
+      "fits": "Fits",
+      "stock": "Stock"
+    },
+    "filter": {
+      "category": "Category",
+      "clear": "Clear filter",
+      "reset": "Clear all filters",
+      "search": "Search",
+      "noMatches": "No matches",
+      "chosen": "{count} chosen"
+    },
+    "results": "{count} items",
+    "closePart": "Close item"
   }
 }

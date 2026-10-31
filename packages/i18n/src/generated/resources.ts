@@ -9,7 +9,7 @@ const source = {
         cancel: 'Batal',
         retry: 'Coba lagi',
         delete: 'Hapus',
-        confirm: 'Ya, Lanjutkan',
+        confirm: 'Ya, lanjutkan',
         back: 'Kembali',
         close: 'Tutup',
         edit: 'Ubah',
@@ -89,6 +89,7 @@ const source = {
         AUTH_TOKEN_MISSING: 'Masuk lagi untuk melanjutkan pengiriman foto.',
         AUTH_TOKEN_INVALID:
           'Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.',
+        APP_UPDATE_REQUIRED: 'Perbarui aplikasi dulu agar data terbaru bisa masuk.',
       },
       rejection: {
         BAD_SIGNATURE: 'Gagal diverifikasi server. Kabari pemilik toko.',
@@ -97,7 +98,7 @@ const source = {
         CHAIN_GAP: 'Ada yang tertinggal. Dikirim ulang otomatis.',
         CHAIN_HALTED: 'Menunggu perubahan sebelumnya beres.',
         CLOCK_AHEAD:
-          'Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
+          'Jam perangkat ini terlalu cepat saat perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
         DEVICE_REVOKED: 'Perangkat ini sudah diblokir. Daftarkan ulang.',
         PERMISSION_DENIED: 'Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.',
         RULE_VIOLATED:
@@ -672,6 +673,15 @@ const source = {
         rejectedExplain: 'Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.',
         rejectedBanner: '{count} perubahan ditolak server.',
       },
+      updateNeeded: {
+        title: 'Perbarui aplikasi',
+        body: 'Perangkat lain sudah pakai versi baru. Data baru dari perangkat lain tertahan sampai aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron.',
+        check: 'Cek pembaruan',
+        checking: 'Mengecek pembaruan…',
+        none: 'Belum ada pembaruan untuk HP ini. Coba lagi nanti.',
+        failed: 'Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.',
+        lastArrived: 'Data baru terakhir masuk {relative}',
+      },
     },
     conflict: {
       list: { banner: '{count} data bentrok butuh keputusan', title: 'Data Bentrok' },
@@ -694,10 +704,10 @@ const source = {
         waitingForConnection: 'Menunggu koneksi',
       },
       action: {
-        takePhoto: 'Ambil Foto',
-        retake: 'Foto Ulang',
-        usePhoto: 'Pakai Foto Ini',
-        retryUpload: 'Kirim Ulang',
+        takePhoto: 'Ambil foto',
+        retake: 'Foto ulang',
+        usePhoto: 'Pakai foto ini',
+        retryUpload: 'Kirim ulang',
       },
       permission: {
         camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
@@ -783,7 +793,7 @@ export const resources = {
           cancel: 'Cancel',
           retry: 'Try again',
           delete: 'Delete',
-          confirm: 'Yes, Continue',
+          confirm: 'Yes, continue',
           back: 'Back',
           close: 'Close',
           edit: 'Edit',
@@ -868,6 +878,7 @@ export const resources = {
           AUTH_TOKEN_MISSING: 'Sign in again to keep sending photos.',
           AUTH_TOKEN_INVALID:
             'This device’s session has ended. Sign in again to keep sending photos.',
+          APP_UPDATE_REQUIRED: 'Update the app to receive the latest data.',
         },
         rejection: {
           BAD_SIGNATURE: 'Failed the server check. Tell the store owner.',
@@ -876,7 +887,7 @@ export const resources = {
           CHAIN_GAP: 'Something was missing. Resending automatically.',
           CHAIN_HALTED: 'Waiting on an earlier change.',
           CLOCK_AHEAD:
-            'This phone’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
+            'This device’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
           DEVICE_REVOKED: 'This device is blocked. Enroll it again.',
           PERMISSION_DENIED: 'Whoever made it wasn’t allowed to. Ask someone who is to redo it.',
           RULE_VIOLATED:
@@ -1462,6 +1473,15 @@ export const resources = {
           rejectedBanner:
             '{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}',
         },
+        updateNeeded: {
+          title: 'Update the app',
+          body: 'Another device runs a newer version. New data from other devices waits until this app is updated. Changes made here still sync.',
+          check: 'Check for updates',
+          checking: 'Checking for updates…',
+          none: 'No update for this phone yet. Try again later.',
+          failed: 'Couldn’t check for updates. Check the connection, then try again.',
+          lastArrived: 'New data last arrived {relative}',
+        },
       },
       conflict: {
         list: {
@@ -1488,10 +1508,10 @@ export const resources = {
           waitingForConnection: 'Waiting for connection',
         },
         action: {
-          takePhoto: 'Take Photo',
+          takePhoto: 'Take photo',
           retake: 'Retake',
-          usePhoto: 'Use This Photo',
-          retryUpload: 'Send Again',
+          usePhoto: 'Use this photo',
+          retryUpload: 'Send again',
         },
         permission: {
           camera: 'Allow the app to use the camera to take photos.',

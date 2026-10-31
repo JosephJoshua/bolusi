@@ -10,6 +10,8 @@ export {
   centralStoreIds,
   documentBalance,
   documentTotal,
+  overpaidByAccount,
+  type OverpaymentEntry,
 } from './rules.js';
 export {
   chargeOp,

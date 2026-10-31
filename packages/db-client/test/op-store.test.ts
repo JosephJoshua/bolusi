@@ -23,12 +23,18 @@ import {
   createUuidV7Generator,
   GenesisRuleError,
   operationFromSignedCoreJcs,
+  runPushPhase,
   verifyChain,
   verifyOp,
   type AppendContext,
   type OpDraft,
 } from '@bolusi/core';
-import { GENESIS_PREVIOUS_HASH, type SignedOperation } from '@bolusi/schemas';
+import {
+  GENESIS_PREVIOUS_HASH,
+  type PushRequest,
+  type PushResponse,
+  type SignedOperation,
+} from '@bolusi/schemas';
 import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -87,7 +93,7 @@ function noteDraft(entityId: string): OpDraft {
 
 interface AppendOverrides {
   readonly drafts?: readonly OpDraft[];
-  readonly applyProjection?: (op: SignedOperation) => void;
+  readonly applyProjection?: (op: SignedOperation) => void | Promise<void>;
   readonly newId?: () => string;
 }
 
@@ -243,4 +249,104 @@ test('a real second op chains from the genesis and the whole chain verifies', as
     { ...(chain[1] as SignedOperation), previousHash: 'b'.repeat(64) },
   ];
   expect(verifyChain(spliced, keypair.publicKey, noblePort).ok).toBe(false);
+});
+
+// ── The push phase reads and marks only COMMITTED ops ─────────────────────────────────────────────
+//
+// The one connection runs a statement outside a transaction immediately (connection.ts
+// `serializeTransactions`), so a push read taken while a command's append transaction was still open
+// saw that command's uncommitted op. When the command then failed and rolled back, the server held
+// an op the device no longer had: the next command re-signed the same seq, the server answered
+// CHAIN_BROKEN, and pulling the server's copy back hit UNIQUE(device_id, seq). The same hazard ran
+// the other way: a result mark written while a command's transaction was open was discarded by that
+// command's rollback. Real connection, op store, append path and push phase; only the network is a
+// stub.
+
+/** A command whose projection step waits for `release`, then fails: its append rolls back. */
+function heldFailingCommand(release: Promise<void>, inserted: () => void): Promise<unknown> {
+  return append({
+    drafts: [noteDraft(ids())],
+    applyProjection: async () => {
+      inserted();
+      await release;
+      throw new Error('applier failed');
+    },
+  });
+}
+
+function pushPhase(push: (request: PushRequest) => Promise<PushResponse>) {
+  return runPushPhase({
+    db: db.db,
+    transaction: (fn) => db.transaction(() => fn()),
+    transport: { push, pull: () => Promise.reject(new Error('not used')) },
+    surface: { emit: () => undefined },
+    clock: { now: () => T },
+    deviceId,
+    onChainBroken: () => Promise.resolve(),
+    refoldRefused: () => Promise.resolve(),
+  });
+}
+
+const acceptAll = (request: PushRequest): PushResponse => ({
+  results: request.ops.map((op) => ({ id: op.id, status: 'accepted' as const })),
+  serverTime: T,
+});
+
+async function syncStatuses(): Promise<Array<{ seq: number; status: string }>> {
+  const result = await sql<{ seq: number; status: string }>`
+    SELECT seq, sync_status AS status FROM operations ORDER BY seq`.execute(db.db);
+  return result.rows.map((row) => ({ seq: Number(row.seq), status: row.status }));
+}
+
+function signal(): { promise: Promise<void>; fire: () => void } {
+  let fire!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    fire = resolve;
+  });
+  return { promise, fire };
+}
+
+const yieldTurn = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('a push started while a command is mid-append never sends that command’s op', async () => {
+  await append(); // genesis, committed
+  const release = signal();
+  const inserted = signal();
+  const command = heldFailingCommand(release.promise, inserted.fire);
+  await inserted.promise; // seq 2 is in the table, its transaction still open
+
+  const sent: SignedOperation[] = [];
+  const push = pushPhase(async (request) => {
+    sent.push(...request.ops);
+    return acceptAll(request);
+  });
+  await yieldTurn();
+  release.fire();
+  await expect(command).rejects.toThrow('applier failed');
+  await push;
+
+  // Only the committed genesis went to the server; the rolled-back seq 2 never left the device.
+  expect(sent.map((op) => op.seq)).toEqual([1]);
+  expect(await syncStatuses()).toEqual([{ seq: 1, status: 'synced' }]);
+});
+
+test('a push result is not written into a command’s open transaction, so its rollback keeps the mark', async () => {
+  await append(); // genesis, committed
+  const release = signal();
+  const inserted = signal();
+  let command: Promise<unknown> | null = null;
+
+  // The server's answer arrives while a command is mid-append.
+  const push = pushPhase(async (request) => {
+    command = heldFailingCommand(release.promise, inserted.fire);
+    await inserted.promise;
+    return acceptAll(request);
+  });
+  await inserted.promise;
+  await yieldTurn();
+  release.fire();
+  await expect(command).rejects.toThrow('applier failed');
+  await push;
+
+  expect(await syncStatuses()).toEqual([{ seq: 1, status: 'synced' }]);
 });

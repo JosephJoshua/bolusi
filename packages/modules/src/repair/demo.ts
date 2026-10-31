@@ -14,7 +14,7 @@ import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import { demoApprovals } from '../approvals/demo.js';
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
-import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
+import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, MONEY_PERMISSION } from '../money/constants.js';
 import { demoMoneyLedger, demoQris } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
@@ -44,6 +44,7 @@ import { refundsFor } from './commands.js';
 import { amountOwed } from './flows.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { REPAIR_REFUSALS, claimProblem, freeHandoverNeedsOwner } from './rules.js';
+import { statusCodeFor } from './status-link.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -309,6 +310,8 @@ function ticket(spec: {
   returnedHoursAgo?: number;
   /** Repair type ids from the default list. */
   repairTypes?: readonly string[];
+  /** What its handover gives back through each method. */
+  refunds?: TicketDetailRow['refunds'];
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -360,6 +363,13 @@ function ticket(spec: {
     claimOfTicketId: null,
     claimOf: null,
     claims: [],
+    // A fixed code per demo servisan, so a preview's QR and link stay the same between reloads. The
+    // demo has no crypto port, and its codes only need to differ, so the "hash" is the input's tail.
+    statusCode: statusCodeFor(
+      { tenantId: 'demo', storeId: 'demo', ticketId: spec.id },
+      '',
+      (data) => data.subarray(-8),
+    ),
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',
@@ -375,6 +385,7 @@ function ticket(spec: {
     downPayment: spec.downPayment ?? null,
     reduced: 0,
     slipPrints: { intake: 1, handover: 0 },
+    refunds: spec.refunds ?? [],
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
     events: [
@@ -487,6 +498,15 @@ function seedTickets(): TicketDetailRow[] {
       hoursAgo: 90,
       extraPhotos: [photoRow('before:m6')],
       downPayment: 100_000,
+      // The DP came in partly by QRIS, so part of what goes back goes back through it.
+      refunds: [
+        { account: 'cash', name: null, amount: 20_000 },
+        {
+          account: 'account:01920000-0000-7000-8000-00000000a001',
+          name: 'QRIS BCA',
+          amount: 30_000,
+        },
+      ],
       cancel: {
         fee: 50_000,
         standardFee: 50_000,
@@ -1107,6 +1127,8 @@ export function demoRepairRuntime(
         const problem = claimProblem(find(claimOf), {
           customerId: customer.customerId ?? '',
           imei: (input['device'] as { imei?: string | null }).imei ?? null,
+          brand: device.brand,
+          model: device.model,
           repairTypes: (input['repairTypes'] as string[] | undefined) ?? [],
           total: lines.reduce((sum, l) => sum + l.amount, 0),
           at: HARNESS_NOW,
@@ -1157,6 +1179,7 @@ export function demoRepairRuntime(
         createdAt: HARNESS_NOW,
         downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
         slipPrints: { intake: 0, handover: 0 },
+        refunds: [],
         quoteLines: lines.map((l) =>
           line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
         ),
@@ -1325,6 +1348,7 @@ export function demoRepairRuntime(
         {
           downPayment: paid === 0 ? null : paid,
           location: 'returned',
+          refunds: [],
           returnedBy: actor.userId,
           returnedByName: actor.name,
           returnedAt: t.returnedAt ?? HARNESS_NOW,
@@ -1614,11 +1638,11 @@ export function demoRepairRuntime(
     // As the real handover: what was paid beyond the bill goes back through how it came in.
     const money = ledger.documentMoney(t.id);
     if (money === null || money.balance >= 0) return;
-    for (const refund of refundsFor(money, -money.balance)) {
+    for (const refund of refundsFor(money, -money.balance, money.charged - money.reduced)) {
       void ledger.run('refund', {
         document,
         ...refund,
-        reason: 'Dikembalikan saat diambil',
+        reason: HANDOVER_REFUND_REASON,
         reference: null,
       });
     }
@@ -1723,6 +1747,8 @@ export function demoRepairRuntime(
   });
   const runtime = {
     inventory,
+    // The demo keeps no log; the apps wire their diagnostics channel.
+    diagnostics: { warn: () => {} },
     get userId() {
       return actor.userId;
     },

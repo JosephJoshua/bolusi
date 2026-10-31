@@ -31,6 +31,7 @@ import {
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
+  type OperationRegistry,
   type SyncLoopState,
   type SyncState,
   type SyncSchedulerPort,
@@ -83,6 +84,8 @@ export interface SyncClientDeps {
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   /** `ProjectionEngine.refoldRefused` — the push phase takes a refused op out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
+  /** Can this build fold the op? One from a newer app pauses the pull until this app updates. */
+  readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -133,6 +136,12 @@ export interface SyncClient {
   startForBackgroundPass(): Promise<void>;
   /** (e) pull-to-refresh. */
   requestManual(): void;
+  /**
+   * What became of the last "Kirim sekarang": still sending, or the bare error code its attempt
+   * failed with (null once it got through), so the screen answers the press instead of waiting for
+   * the next automatic try to say anything.
+   */
+  manualSync(): ManualSyncStatus;
   /** (d) one background-task pass. */
   requestBackground(): void;
   /** Stop the running cycle at its next committed pull batch, for a background pass out of time. */
@@ -160,6 +169,15 @@ export interface SyncClient {
   settle(): Promise<void>;
 }
 
+/** The last manual sync's outcome, as `SyncStatusInput.manualSyncBusy` / `manualSyncError`. */
+export interface ManualSyncStatus {
+  readonly busy: boolean;
+  readonly error: string | null;
+}
+
+/** The code a failed manual sync shows when the loop recorded none (a bundle refresh, say). */
+const MANUAL_SYNC_FALLBACK_ERROR = 'NETWORK';
+
 class SyncClientImpl implements SyncClient {
   private readonly loop: SyncLoop<ClientDatabase>;
   private readonly triggers: SyncTriggers;
@@ -175,6 +193,9 @@ class SyncClientImpl implements SyncClient {
   private background: BackgroundRegistration | null = null;
   private lease: BackgroundLease | null = null;
   private stopped = false;
+  private manual: ManualSyncStatus = { busy: false, error: null };
+  /** Counts presses, so only the latest one's outcome is shown. */
+  private manualPresses = 0;
 
   constructor(private readonly deps: SyncClientDeps) {
     this.currentSyncState = deps.initialSyncState;
@@ -203,6 +224,7 @@ class SyncClientImpl implements SyncClient {
       timer: deps.timer,
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
+      knowsOp: deps.knowsOp,
       refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
@@ -278,7 +300,15 @@ class SyncClientImpl implements SyncClient {
   }
 
   requestManual(): void {
+    this.manualPresses += 1;
+    const press = this.manualPresses;
+    this.manual = { busy: true, error: null };
     this.triggers.requestManual();
+    void this.afterManual(press);
+  }
+
+  manualSync(): ManualSyncStatus {
+    return this.manual;
   }
 
   requestBackground(): void {
@@ -343,7 +373,26 @@ class SyncClientImpl implements SyncClient {
 
   private request(reason: SyncTriggerReason): void {
     this.loop.requestSync(reason);
+    // Say at once that a cycle is running: a hung server answers nothing for up to a minute.
+    this.notify();
     void this.afterCycle();
+  }
+
+  /**
+   * Once the press's attempt (and a retry it asked for) has settled: through unless the loop backed
+   * off, in which case the error it recorded.
+   */
+  private async afterManual(press: number): Promise<void> {
+    await this.loop.settle().catch(() => undefined);
+    const state = await readSyncState(this.deps.db.db).catch(() => this.currentSyncState);
+    if (press !== this.manualPresses) return;
+    const failed = this.loop.state === 'backoff' && !state.syncDisabled;
+    this.manual = {
+      busy: false,
+      error: failed ? (state.lastSyncError ?? MANUAL_SYNC_FALLBACK_ERROR) : null,
+    };
+    this.currentSyncState = state;
+    this.notify();
   }
 
   /**
@@ -484,6 +533,7 @@ export function createSyncClientForApp(
     transport,
     bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
+    knowsOp: (op) => knowsOp(app.registry.operations, op),
     refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,
@@ -510,4 +560,13 @@ export function createSyncClientForApp(
         ...(config.fetchImpl === undefined ? {} : { sseFetchImpl: config.fetchImpl }),
       }),
   });
+}
+
+/** Is `op` a type this build registers, at a schemaVersion it can fold? */
+export function knowsOp(
+  operations: Pick<OperationRegistry, 'schemaVersionFor'>,
+  op: Pick<SignedOperation, 'type' | 'schemaVersion'>,
+): boolean {
+  const known = operations.schemaVersionFor(op.type);
+  return known !== undefined && op.schemaVersion <= known;
 }

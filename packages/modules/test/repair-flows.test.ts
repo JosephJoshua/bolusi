@@ -1,13 +1,19 @@
 // The decisions behind the repair phone screens: which actions a ticket offers, and how an intake
 // draft becomes an `openTicket` input. Both are checked against the real runtime, so a button the
 // screens show never leads to a refusal the commands would give.
-import { afterEach, describe, expect, test } from 'vitest';
+import { initI18n } from '@bolusi/i18n';
+import { afterEach, beforeAll, describe, expect, test } from 'vitest';
+
+import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
+import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
+import { registerRepairCatalog, tn } from '../src/repair/i18n.js';
 
 import {
   arrangeTicketActions,
   asksApproval,
   payLaterAccess,
   balanceAfterDownPayment,
+  balanceLabelKey,
   discountsStanding,
   downPaymentAction,
   downPaymentEntry,
@@ -35,6 +41,7 @@ import {
   type TicketAction,
 } from '../src/repair/flows.js';
 import type { PaymentAccountRow } from '../src/money/queries.js';
+import { downPaymentChangeLine } from '../src/repair/labels.js';
 import { HANDOVER_UNDO_WINDOW_MS, INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
 import { decodeScreenLock } from '../src/repair/screen-lock.js';
@@ -447,6 +454,15 @@ describe('down payment and slips', () => {
     ]);
     expect(balanceAfterDownPayment(50_000, 100_000)).toEqual({ kind: 'refund', amount: 50_000 });
     expect(balanceAfterDownPayment(50_000, 50_000)).toEqual({ kind: 'due', amount: 0 });
+  });
+
+  test('money to give back on a phone that went home reads as still owed', () => {
+    initI18n({ locale: 'id' });
+    registerRepairCatalog({ id: idCatalog, en: enCatalog });
+    // What a handover gave back is already off what was paid, so whatever is left is owed.
+    expect(tn(balanceLabelKey('refund', true))).toBe('Lebih bayar');
+    expect(tn(balanceLabelKey('refund', false))).toBe('Kembalikan');
+    expect(tn(balanceLabelKey('due', true))).toBe('Sisa bayar');
   });
 });
 
@@ -964,6 +980,24 @@ describe('downPaymentEntry', () => {
       aboveTotal: false,
       gap: null,
     });
+  });
+});
+
+describe('downPaymentChangeLine', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerRepairCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  test('a correction says whether it adds the difference or replaces what was taken', () => {
+    expect(downPaymentChangeLine(200_000, 500_000, 'QRIS')).toBe(
+      'Tambahannya Rp 300.000 dicatat lewat QRIS. DP Rp 200.000 tetap seperti tercatat.',
+    );
+    expect(downPaymentChangeLine(200_000, 150_000, 'QRIS')).toBe(
+      'DP Rp 200.000 dibatalkan, lalu Rp 150.000 dicatat lewat QRIS.',
+    );
+    expect(downPaymentChangeLine(200_000, 0, 'QRIS')).toBeNull();
+    expect(downPaymentChangeLine(200_000, null, 'QRIS')).toBeNull();
   });
 });
 

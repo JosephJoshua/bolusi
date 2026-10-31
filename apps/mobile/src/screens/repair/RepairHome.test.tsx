@@ -6,7 +6,12 @@ import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
-import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import {
+  emptyIntakeDraft,
+  INTAKE_PHOTO_SLOTS,
+  parseRepairDraft,
+  type IntakeDraft,
+} from '@bolusi/modules/repair';
 import { PrinterProblem, type RepairPrinting, tn } from '@bolusi/modules/repair/screens';
 import { color } from '@bolusi/ui';
 import { StyleSheet } from 'react-native';
@@ -238,6 +243,32 @@ describe('counter intake', () => {
   });
 });
 
+test('a warranty claim shows the phone of its servisan instead of asking for another', async () => {
+  h = await openRepairScreenHarness(5105);
+  const base = emptyIntakeDraft();
+  const draft: IntakeDraft = {
+    ...base,
+    step: 1,
+    customer: { kind: 'existing', customerId: 'c-1', name: 'Ester', phone: '' },
+    device: { ...base.device, brand: 'Samsung', model: 'Galaxy A54' },
+    claimOf: {
+      ticketId: 't-1',
+      ticketNumber: 'ZQ1-0001',
+      warrantyUntil: null,
+      imei: '356789104455667',
+    },
+  };
+  const screen = await mount(h, h.cashierId, { restoredDraft: draft });
+  expect(screen.query('repair.intake.step.device')).not.toBeNull();
+  expect(screen.query('repair.intake.device.model')).toBeNull();
+  expect(screen.query('repair.intake.device.brand')).toBeNull();
+  expect(text(screen, 'repair.intake.device.claimDevice')).toBe('Samsung Galaxy A54');
+  expect(text(screen, 'repair.intake.device.claimDevice.note')).toBe('Klaim hanya untuk HP ini.');
+  // Its IMEI is fixed too: shown, not a field to type another phone's into.
+  expect(text(screen, 'repair.intake.device.imei')).toBe('356789104455667');
+  expect(screen.query('repair.intake.device.imei.field')).toBeNull();
+});
+
 describe('an intake restored after the app died mid-submit', () => {
   const restored = (ticketId: string): IntakeDraft => {
     const base = emptyIntakeDraft();
@@ -423,7 +454,7 @@ describe('price changes and handover', () => {
     await press(screen, 'repair.board.views.pickup');
     await press(screen, `repair.board.row.${ticketId}`);
     await press(screen, 'repair.ticket.action.handover');
-    expect(text(screen, 'repair.handover.giveBack')).toContain('80.000 lewat Tunai');
+    expect(text(screen, 'repair.handover.refund.cash')).toMatch(/Kembalikan tunai.*80\.000/);
   });
 
   test('leaving the handover after taking a photo asks first', async () => {
@@ -474,6 +505,114 @@ describe('price changes and handover', () => {
     // The ticket now shows the handover photo and signature with the rest of its photos.
     expect(screen.query('repair.ticket.photos.strip.handover')).not.toBeNull();
     expect(screen.query('repair.ticket.photos.strip.signature')).not.toBeNull();
+  });
+
+  test('a half-filled handover survives the screens remounting (a system font change)', async () => {
+    h = await openRepairScreenHarness(5307);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(40)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(41)] }, h.technicianId);
+
+    const onDraftChange = vi.fn();
+    const before = await mount(h, h.cashierId, { onDraftChange });
+    await press(before, 'repair.board.views.pickup');
+    await press(before, `repair.board.row.${ticketId}`);
+    await press(before, 'repair.ticket.action.handover');
+    await press(before, 'repair.handover.photo.press');
+    await press(before, 'repair.handover.signature.press');
+    for (const line of [
+      'check.customerTried',
+      'check.repairWorks',
+      'accessory.charger',
+      'accessory.case',
+    ]) {
+      await press(before, `repair.handover.check.${line}`);
+    }
+    type(before, 'repair.handover.note', 'Casing tergores sedikit');
+    await settleTyping();
+    // What the shell writes to the workspace, read back as the next mount reads it.
+    const kept = parseRepairDraft(JSON.parse(JSON.stringify(onDraftChange.mock.lastCall?.[0])));
+    expect(kept).toEqual(expect.objectContaining({ kind: 'handover', ticketId }));
+    // The shell remounts every screen when the font size changes; the draft is all that is left.
+    before.unmount();
+
+    // The photo and signature are still on disk, so the kept refs load.
+    const runtime = repairRuntimeFor(h, h.cashierId);
+    const after = await mount(h, h.cashierId, {
+      restoredDraft: kept,
+      onDraftChange,
+      runtime: {
+        ...runtime,
+        loadThumbnail: () => Promise.resolve({ kind: 'ready', uri: 'file:///kept.jpg' }),
+      },
+    });
+    expect(after.query('repair.handover')).not.toBeNull();
+    expect(after.query('repair.handover.photoThumb.image')).not.toBeNull();
+    expect(after.query('repair.handover.signatureThumb.image')).not.toBeNull();
+    expect(after.get('repair.handover.note.field').props['value']).toBe('Casing tergores sedikit');
+    // Every check is still ticked, so the counter does not have to go through them again.
+    expect(after.all('repair.handover.primary')[0]!.props['disabled']).toBe(false);
+    await press(after, 'repair.handover.primary');
+
+    expect((await ticketRow(h, ticketId)).location).toBe('returned');
+    expect(onDraftChange).toHaveBeenLastCalledWith(null);
+  });
+
+  // A manager's credit limit is said before the handover, not refused at the end (round 2 QA, F6).
+  test('a manager is told the Bayar nanti limit, and asks an owner beyond it', async () => {
+    h = await openRepairScreenHarness(5309);
+    const repairedTicket = async (downPayment: number | null): Promise<string> => {
+      const { ticketId } = (await h!.run(
+        'openTicket',
+        intake(h!, downPayment === null ? {} : { downPayment }),
+        h!.cashierId,
+      )) as { ticketId: string };
+      await h!.run('startWork', { ticketId, beforePhotos: [h!.photo(40)] }, h!.technicianId);
+      await h!.run('markRepaired', { ticketId, afterPhotos: [h!.photo(41)] }, h!.technicianId);
+      return ticketId;
+    };
+    const big = await repairedTicket(null);
+    const small = await repairedTicket(700_000);
+    const screen = await mount(h, h.managerId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${big}`);
+    await press(screen, 'repair.ticket.action.handover');
+    // Rp 750.000 due is above the Rp 100.000 limit: an owner is asked, and the limit is said.
+    await press(screen, 'repair.handover.payLater');
+    expect(text(screen, 'repair.handover.asks')).toBe('Melebihi batasmu, jadi perlu persetujuan.');
+    expect(text(screen, 'repair.handover.limit')).toBe('Batas bayar nantimu Rp 100.000.');
+    expect(screen.query('repair.handover.askPayLater')).not.toBeNull();
+    screen.unmount();
+    const again = await mount(h, h.managerId);
+    await press(again, 'repair.board.views.pickup');
+    await press(again, `repair.board.row.${small}`);
+    await press(again, 'repair.ticket.action.handover');
+    await press(again, 'repair.handover.payLater');
+    expect(text(again, 'repair.handover.limit')).toBe('Batas bayar nantimu Rp 100.000.');
+    expect(again.query('repair.handover.asks')).toBeNull();
+  });
+
+  test('a kept handover whose photo is gone asks for it again instead of sending it missing', async () => {
+    h = await openRepairScreenHarness(5308);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: {
+        kind: 'handover',
+        ticketId,
+        photo: h.photo(60),
+        signature: null,
+        note: 'Ambil besok',
+        ticked: [],
+        payment: { lines: null, payLater: false, unpaidReason: '' },
+      },
+    });
+    await settle();
+    expect(screen.query('repair.handover')).not.toBeNull();
+    expect(screen.get('repair.handover.note.field').props['value']).toBe('Ambil besok');
+    // This runtime's thumbnails never load, as for a capture deleted after a day unsaved.
+    expect(screen.query('repair.handover.photoThumb.unavailable')).toBeNull();
+    expect(screen.query('repair.handover.photoThumb.loading')).toBeNull();
   });
 });
 
@@ -1273,6 +1412,61 @@ describe('hardware back', () => {
     expect(screen.query('repair.board')).not.toBeNull();
   });
 
+  test('leaving a ticket step with something typed asks first, and one yes leaves', async () => {
+    h = await openRepairScreenHarness(5511);
+    const ticketId = await openTicket(h);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      h.technicianId,
+    );
+    const { screen, back } = await mountWithBack(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+
+    // Nothing typed: back simply leaves.
+    await press(screen, 'repair.ticket.action.changePrice');
+    await press(screen, 'repair.price.change.back');
+    expect(screen.query('repair.price.change')).toBeNull();
+
+    await press(screen, 'repair.ticket.action.changePrice');
+    type(screen, 'repair.price.change.reason', 'Ganti konektor');
+    await settle();
+    await press(screen, 'repair.price.change.back');
+    expect(screen.query('repair.price.change.discard')).not.toBeNull();
+    await press(screen, 'repair.price.change.discard.cancel');
+    expect(screen.query('repair.price.change.discard')).toBeNull();
+    expect(screen.query('repair.price.change')).not.toBeNull();
+    // Hardware back asks the same, and one confirm closes the step.
+    await back();
+    await press(screen, 'repair.price.change.discard.confirm');
+    expect(screen.query('repair.price.change.discard')).toBeNull();
+    expect(screen.query('repair.price.change')).toBeNull();
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+
+    await press(screen, 'repair.ticket.action.decidePrice');
+    type(screen, 'repair.proposal.note', 'Pelanggan mau pikir dulu');
+    await settle();
+    await press(screen, 'repair.proposal.back');
+    expect(screen.query('repair.proposal.discard')).not.toBeNull();
+    // From the header back too, one confirm is enough.
+    await press(screen, 'repair.proposal.discard.confirm');
+    expect(screen.query('repair.proposal.discard')).toBeNull();
+    expect(screen.query('repair.proposal')).toBeNull();
+  });
+
+  test('a cancel with a reason typed asks before it is dropped', async () => {
+    h = await openRepairScreenHarness(5512);
+    const ticketId = await openTicket(h);
+    const { screen, back } = await mountWithBack(h, h.storeOwnerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    type(screen, 'repair.cancel.reason', 'Pelanggan batal');
+    await settle();
+    await back();
+    expect(screen.query('repair.cancel.discard')).not.toBeNull();
+    expect(screen.query('repair.cancel')).not.toBeNull();
+  });
+
   test('back in the intake goes one step back, and asks before dropping a started intake', async () => {
     h = await openRepairScreenHarness(5502);
     const { screen, back } = await mountWithBack(h, h.cashierId);
@@ -1292,6 +1486,55 @@ describe('hardware back', () => {
 });
 
 describe('price and assignment details', () => {
+  test('a DP still to go back says so until the phone is handed over', async () => {
+    h = await openRepairScreenHarness(5603);
+    const opened = (await h.run(
+      'openTicket',
+      intake(h, { downPayment: 100_000 }),
+      h.cashierId,
+    )) as { ticketId: string };
+    await h.run(
+      'cancelTicket',
+      { ticketId: opened.ticketId, reason: 'Pelanggan batal', fee: 0 },
+      h.storeOwnerId,
+    );
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${opened.ticketId}`);
+    const rows = text(screen, 'repair.ticket.downPaymentRows');
+    expect(rows).toContain('KembalikanRp 100.000');
+    expect(rows).not.toContain('Dikembalikan');
+  });
+
+  // A payment voided after its money was handed back leaves less than nothing paid: the row says
+  // it was given back and adds it, instead of showing it as paid and taking it off.
+  test('more given back than paid reads as given back, and the rows add up', async () => {
+    h = await openRepairScreenHarness(5602);
+    const opened = (await h.run(
+      'openTicket',
+      intake(h, { downPayment: 200_000 }),
+      h.cashierId,
+    )) as { ticketId: string };
+    const ticketId = opened.ticketId;
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 200_000, reason: 'Batal servis' },
+      h.storeOwnerId,
+    );
+    const money = (
+      await h.moneyQuery('documentMoney', { kind: 'repair.ticket', id: ticketId }, h.storeOwnerId)
+    ).rows[0] as { entries: { id: string; kind: string }[] };
+    const payment = money.entries.find((entry) => entry.kind === 'payment_received')!;
+    await h.money('voidPayment', { entryId: payment.id, reason: 'Salah catat' }, h.storeOwnerId);
+
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(text(screen, 'repair.ticket.downPaymentRows')).toContain('Sudah dikembalikan');
+    expect(text(screen, 'repair.ticket.downPayment')).toBe('+Rp 200.000');
+    expect(text(screen, 'repair.ticket.balance')).toBe('Rp 950.000');
+  });
+
   test('an amount typed without a description is named instead of silently dropped', async () => {
     h = await openRepairScreenHarness(5601);
     const draft: IntakeDraft = {

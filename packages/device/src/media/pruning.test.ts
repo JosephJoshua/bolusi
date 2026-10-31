@@ -38,20 +38,24 @@ async function seed(options: {
   uploadedAt?: number | null;
   localPath?: string | null;
 }): Promise<void> {
-  await insertMediaItem(db.db, {
-    id: options.id,
-    tenantId: 'tenant-1',
-    storeId: null,
-    userId: 'user-1',
-    deviceId: 'device-1',
-    type: 'image',
-    mime: 'image/jpeg',
-    sizeBytes: 1234,
-    sha256: 'a'.repeat(64),
-    capturedAt: options.capturedAt,
-    location: null,
-    localPath: `/documents/media/${options.id}.jpg`,
-  });
+  await insertMediaItem(
+    db.db,
+    {
+      id: options.id,
+      tenantId: 'tenant-1',
+      storeId: null,
+      userId: 'user-1',
+      deviceId: 'device-1',
+      type: 'image',
+      mime: 'image/jpeg',
+      sizeBytes: 1234,
+      sha256: 'a'.repeat(64),
+      capturedAt: options.capturedAt,
+      location: null,
+      localPath: `/documents/media/${options.id}.jpg`,
+    },
+    (fn) => db.transaction(() => fn()),
+  );
   if (options.attached) {
     await attachMediaToOperation(
       db.db,

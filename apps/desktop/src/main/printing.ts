@@ -96,6 +96,11 @@ async function printPage(
   }
 }
 
+export interface Printing {
+  /** Is a print job still on its way to the printer? An update waits for it. */
+  busy(): boolean;
+}
+
 /**
  * Answers the counter window's print calls. `trusted` says whether a call comes from the app's own
  * page; anything else gets nothing.
@@ -103,7 +108,8 @@ async function printPage(
 export function registerPrinting(
   settings: DeviceSettingsFile,
   trusted: (event: IpcMainInvokeEvent) => boolean,
-): void {
+): Printing {
+  let printing = 0;
   const handle = (
     channel: string,
     run: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<unknown>,
@@ -112,6 +118,14 @@ export function registerPrinting(
       if (!trusted(event)) throw new Error(`${channel}: refused`);
       return run(event, ...args);
     });
+  };
+  const job = async (send: () => Promise<PrintResult>): Promise<PrintResult> => {
+    printing += 1;
+    try {
+      return await send();
+    } finally {
+      printing -= 1;
+    }
   };
 
   handle('printers:list', (event) => printers(event.sender));
@@ -130,17 +144,22 @@ export function registerPrinting(
     if (!(bytes instanceof Uint8Array) || bytes.length === 0 || bytes.length > MAX_RAW_BYTES) {
       throw new Error('printers:raw: bad job');
     }
-    const to = await target(event.sender, settings);
-    if ('problem' in to) return { ok: false, problem: to.problem };
-    return sendRaw(to.name, bytes, jobNameOf(jobName));
+    return job(async () => {
+      const to = await target(event.sender, settings);
+      if ('problem' in to) return { ok: false, problem: to.problem };
+      return sendRaw(to.name, bytes, jobNameOf(jobName));
+    });
   });
   handle('printers:page', async (event, html, paper): Promise<PrintResult> => {
     const size = paperSizeOf(paper);
     if (typeof html !== 'string' || html.length > MAX_HTML_CHARS || size === null) {
       throw new Error('printers:page: bad page');
     }
-    const to = await target(event.sender, settings);
-    if ('problem' in to) return { ok: false, problem: to.problem };
-    return printPage(html, to.name, size);
+    return job(async () => {
+      const to = await target(event.sender, settings);
+      if ('problem' in to) return { ok: false, problem: to.problem };
+      return printPage(html, to.name, size);
+    });
   });
+  return { busy: () => printing > 0 };
 }

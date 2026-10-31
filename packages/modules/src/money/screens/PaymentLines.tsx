@@ -28,8 +28,8 @@ import {
   digitsOf,
   digitsText,
   lineKind,
+  methodOffered,
   newPaymentLine,
-  offeredAccount,
   paidByQr,
   paymentMethods,
   type PaymentEntry,
@@ -84,7 +84,9 @@ export function PaymentLines({
       ) : null}
       {lines.map((line, index) => {
         const id = `${testID}.line${String(index)}`;
-        const account = offeredAccount(line.account, accounts);
+        const account = line.account;
+        // A method switched off since it was picked: no chip is on, and the line asks again.
+        const offered = methodOffered(account, accounts);
         const kind = lineKind(account, accounts);
         const problem = entry.problems[line.key];
         const amount = Number(line.amount === '' ? 0 : line.amount);
@@ -93,7 +95,7 @@ export function PaymentLines({
         const byQr = connected && paidByQr(line, qris.qrAccounts);
         return (
           <View key={line.key} style={[styles.line, index > 0 && styles.nextLine]} testID={id}>
-            {methods.length > 1 ? (
+            {methods.length > 1 || !offered ? (
               <ChipRow testID={`${id}.methods`}>
                 {methods.map((method) => (
                   <ToggleChip
@@ -122,7 +124,11 @@ export function PaymentLines({
               selectTextOnFocus
               testID={`${id}.amount`}
             />
-            {kind === 'cash' ? (
+            {!offered ? (
+              <Text style={styles.problem} testID={`${id}.methodGone`}>
+                {tm('money.pay.problem.method')}
+              </Text>
+            ) : kind === 'cash' ? (
               <View style={styles.field}>
                 <TextInput
                   label={tm('money.pay.tendered')}
@@ -135,7 +141,8 @@ export function PaymentLines({
                   }
                   testID={`${id}.tendered`}
                 />
-                {line.tendered !== '' && tendered >= amount && amount > 0 ? (
+                {/* Handed over exactly: no change to give, so nothing to say. */}
+                {line.tendered !== '' && tendered > amount && amount > 0 ? (
                   <View style={styles.changeRow}>
                     <Text style={styles.changeLabel}>{tm('money.pay.change')}</Text>
                     <Text style={styles.changeValue} testID={`${id}.change`}>
@@ -254,6 +261,7 @@ const styles = StyleSheet.create({
   remaining: { marginTop: -space.md },
   remainingText: { ...type.bodySm, color: color.textMuted },
   overpaid: { ...type.bodySm, color: color.danger, marginTop: -space.md },
+  problem: { ...type.bodySm, color: color.danger },
   // The text, not the hit box, lines up with the fields above.
   add: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: -space.md },
 });

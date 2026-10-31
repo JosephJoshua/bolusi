@@ -1,0 +1,32 @@
+{
+  "name": "@bolusi/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The web app: React DOM screens on the shared design system, served by the server. Starts with the customer's repair status page; back-office screens join it later",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@bolusi/i18n": "workspace:*",
+    "@bolusi/modules": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
+    "@bolusi/tsconfig": "workspace:*",
+    "@bolusi/ui-web": "workspace:*",
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/react": "16.3.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.2",
+    "clsx": "2.1.1",
+    "jsdom": "30.1.2",
+    "lucide-react": "1.55.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.4"
+  }
+}

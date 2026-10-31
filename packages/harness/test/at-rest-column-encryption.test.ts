@@ -929,6 +929,7 @@ describe('at-rest column encryption — drafts kept across app restarts', () => 
       opened.db.db,
       (value) => value as typeof work,
       () => 1,
+      (fn) => opened.db.transaction(() => fn()),
     );
     await store.save('user-1', work);
     expect(await store.load('user-1')).toEqual(work);

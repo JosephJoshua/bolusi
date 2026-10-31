@@ -10,8 +10,8 @@ import {
   type QrisConnection,
 } from '@bolusi/schemas';
 
-import { CASH_ACCOUNT, type CashMoveKind, type EntryKind } from './constants.js';
-import { dayStart, movesOut } from './kas.js';
+import { CASH_ACCOUNT, movesOut, type CashMoveKind, type EntryKind } from './constants.js';
+import { dayStart } from './kas.js';
 import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDocument } from './documents.js';
 import { QrisError, type QrisPort } from './qris.js';

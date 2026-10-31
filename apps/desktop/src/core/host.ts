@@ -67,7 +67,7 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import { approvalsModule, moneyModule } from '@bolusi/modules';
+import { approvalsModule, inventoryModule, moneyModule } from '@bolusi/modules';
 import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
@@ -83,7 +83,7 @@ import {
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingDeviceAdmin, actingSession, actingStaffAdmin } from './acting.js';
+import { actingDeviceAdmin, actingSession, actingStaffAdmin, readForActing } from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
@@ -98,6 +98,7 @@ import { nodeRealtimeSocket } from './websocket.js';
 
 /** The repair runtime the core builds for whoever is signed in. */
 type RepairRuntime = ReturnType<typeof createSessionRepairRuntime>;
+type InventoryRuntime = NonNullable<RepairRuntime['inventory']>;
 
 import { nodeColumnAead, nodeCryptoPort } from './crypto.js';
 import { createDesktopMediaFiles, createDesktopPhonePhotoFiles } from './media-files.js';
@@ -346,17 +347,31 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     return repair !== null && repair.userId === active.userId ? repair.runtime : null;
   }
 
+  /** Rebuild the repair runtime for whoever is signed in now. Run unawaited, so it never rejects. */
   async function bindRepair(): Promise<void> {
-    const active = session?.snapshot().session ?? null;
-    if (app === null || enrollment === null || active === null) {
-      repair = null;
-      return;
+    try {
+      const active = session?.snapshot().session ?? null;
+      if (app === null || enrollment === null || active === null) {
+        repair = null;
+        return;
+      }
+      if (repair?.userId === active.userId) return;
+      const booted = app;
+      const enroll = enrollment;
+      const identity = await readForActing(
+        () => session,
+        active.userId,
+        (userId) => readSessionIdentity(booted, userId),
+      );
+      // Dropped when someone else signed in or the PC was re-registered while the read ran; the
+      // change that did it has already asked for a fresh bind.
+      if (identity === null || app !== booted || enrollment !== enroll) return;
+      if (repair?.userId === active.userId) return;
+      repair = { userId: active.userId, identity, runtime: buildRepair(booted, enroll, identity) };
+      emit();
+    } catch (error) {
+      warn('repair runtime could not be built', error);
     }
-    if (repair?.userId === active.userId) return;
-    const identity = await readSessionIdentity(app, active.userId);
-    if (identity === null) return;
-    repair = { userId: active.userId, identity, runtime: buildRepair(app, enrollment, identity) };
-    emit();
   }
 
   function buildRepair(
@@ -406,6 +421,12 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const port = repairFor(userId).money.qris;
     if (port === undefined) throw new QrisError('unavailable');
     return port;
+  }
+
+  function inventoryFor(userId: string): InventoryRuntime {
+    const inventory = repairFor(userId).inventory;
+    if (inventory === undefined) throw new Error('stock is not running on this PC');
+    return inventory;
   }
 
   /** Who a photo or signature from the window is stamped with: the person signed in now. */
@@ -787,7 +808,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       sessionFor(userId).clearLockout(targetUserId),
     'session.resetPin': (userId: string, targetUserId: string, newPin: string) =>
       sessionFor(userId).resetPin(targetUserId, newPin),
-    'session.lock': () => requireSession().lockNow(),
+    // The screen locks even when `session_ended` cannot be written; the lost record is logged.
+    'session.lock': () =>
+      requireSession()
+        .lockNow()
+        .catch((error: unknown) => warn('manual lock was not recorded', error)),
     'session.recordActivity'() {
       session?.recordActivity();
     },
@@ -859,6 +884,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       untyped(repairFor(userId).approvals.query)(knownName(approvalsModule.queries, name), input),
     'approvals.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).approvals.run)(knownName(approvalsModule.commands, name), input),
+    // The parts list and each servisan's parts, for the same person.
+    'inventory.query': (userId: string, name: string, input: unknown) =>
+      untyped(inventoryFor(userId).query)(knownName(inventoryModule.queries, name), input),
+    'inventory.run': (userId: string, name: string, input: unknown) =>
+      untyped(inventoryFor(userId).run)(knownName(inventoryModule.commands, name), input),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),

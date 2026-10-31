@@ -19,23 +19,19 @@ import {
   type,
   Text,
 } from '@bolusi/ui';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import type { DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
-import {
-  MAX_FIELD_VALUE,
-  formatItemName,
-  type CategoryField,
-  type FieldValues,
-} from '../categories.js';
-import { INVENTORY_PERMISSION, MAX_COUNTED_QTY, TAG_FACET } from '../constants.js';
+import { MAX_FIELD_VALUE, type CategoryField } from '../categories.js';
+import { MAX_COUNTED_QTY, TAG_FACET } from '../constants.js';
 import { ti } from '../i18n.js';
 import { MAX_BARCODE, MAX_PART_CODE, MAX_PART_NAME } from '../operations.js';
-import type { CategoryRow, FacetValueRow, ItemDetailRow, ItemFitRow } from '../queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
+import { useItemForm } from '../item-form.js';
+import type { ItemDetailRow, ItemFitRow } from '../queries.js';
+import { useInventoryRuntime } from '../runtime.js';
 import { ModelsField } from './ModelsField.js';
 
 export interface PartFormProps {
@@ -50,90 +46,23 @@ export interface PartFormProps {
   readonly testID?: string | undefined;
 }
 
-interface Draft {
-  readonly categoryId: string | null;
-  readonly values: FieldValues;
-  readonly fits: readonly ItemFitRow[];
-  /** True while the name is the category's format filled in. */
-  readonly nameAuto: boolean;
-  /** The typed name; unused while `nameAuto`. */
-  readonly name: string;
-  readonly code: string;
-  readonly barcode: string;
-  readonly tags: readonly string[];
-}
-
-function draftOf(part: ItemDetailRow | undefined, categoryId: string | null): Draft {
-  return {
-    categoryId: part?.categoryId ?? categoryId,
-    values: part?.values ?? {},
-    fits: part?.models ?? [],
-    nameAuto: part?.nameAuto ?? true,
-    name: part?.name ?? '',
-    code: part?.code ?? '',
-    barcode: part?.barcode ?? '',
-    tags: part?.tags ?? [],
-  };
-}
-
 export function PartForm({
   chrome,
   part,
-  categoryId: startCategory = null,
+  categoryId,
   onDone,
   onCancel,
   onRegisterDiscardGuard,
   testID = 'inventory.form',
 }: PartFormProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const adding = part === undefined;
-  const canCount = adding && runtime.hasPermission(INVENTORY_PERMISSION.count);
-  const [draft, setDraft] = useState<Draft>(() => draftOf(part, startCategory));
-  // What the form was when it (re)started, so what "Tambah lagi" keeps is nothing to discard.
-  const [base, setBase] = useState<Draft>(draft);
-  const [stock, setStock] = useState(0);
-  const [tried, setTried] = useState(false);
+  const form = useItemForm({ part, categoryId });
+  const { draft, set, runner, category, categories, fields, autoName, builtName, nameMissing } =
+    form;
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
-  const addedRef = useRef<{ readonly itemId: string; readonly saved: string } | null>(null);
-  const set = (patch: Partial<Draft>): void => setDraft((current) => ({ ...current, ...patch }));
 
-  // An archived category stays listed only for an item already in it.
-  const categoryList = useInventoryQuery<readonly CategoryRow[]>(
-    async (rt) => (await rt.query('listCategories', { includeArchived: true })).rows,
-    'itemFormCategories',
-  );
-  // Field ids belong to their category, so its fields offer what its own items hold; tags are the
-  // whole list's. Read apart from the categories so picking one never blanks the form.
-  const facetList = useInventoryQuery<readonly FacetValueRow[]>(
-    async (rt) => [
-      ...(draft.categoryId === null
-        ? []
-        : (await rt.query('facetValues', { categoryId: draft.categoryId })).rows.filter(
-            (row) => row.facet !== TAG_FACET,
-          )),
-      ...(await rt.query('facetValues', {})).rows.filter((row) => row.facet === TAG_FACET),
-    ],
-    `itemFormFacets:${draft.categoryId ?? ''}`,
-  );
-  const loaded = {
-    categories: categoryList.status === 'ready' ? categoryList.data : [],
-    facets: facetList.status === 'ready' ? facetList.data : [],
-  };
-  const categories = loaded.categories.filter(
-    (category) => !category.archived || category.id === draft.categoryId,
-  );
-  const category = categories.find((c) => c.id === draft.categoryId) ?? null;
-  const fields = category?.fields ?? [];
-  const hasPhones = category === null || fields.some((field) => field.kind === 'phones');
-  const autoName = category !== null && draft.nameAuto;
-  const builtName = category === null ? '' : formatItemName(category, draft.values, draft.fits);
-  const name = autoName ? builtName : draft.name.trim();
-  const nameMissing = name === '';
-
-  const dirty = JSON.stringify(draft) !== JSON.stringify(base) || stock !== 0;
   const discard = useDiscardConfirm({
-    dirty,
+    dirty: form.dirty,
     copy: {
       title: ti('inventory.discard.title'),
       message: ti('inventory.discard.message'),
@@ -144,85 +73,29 @@ export function PartForm({
     testID,
   });
 
-  /** Values in use for a field (or the tags), beyond the ones its category lists: most used first. */
-  const usedValues = (facet: string): string[] =>
-    loaded.facets.filter((row) => row.facet === facet).map((row) => row.value);
-
   const scan = async (): Promise<void> => {
     const code = await runtime.scanCode?.();
     if (code !== null && code !== undefined) set({ barcode: code });
   };
 
-  /** Save; with `another`, stay on a fresh form that keeps the category, fields and phones. */
   const save = (another = false): void => {
-    setTried(true);
     setSavedNotice(null);
-    if (nameMissing) return;
-    const details = {
-      name: autoName ? '' : draft.name,
-      nameAuto: autoName,
-      code: draft.code === '' ? null : draft.code,
-      barcode: draft.barcode === '' ? null : draft.barcode,
-      categoryId: draft.categoryId,
-      values: Object.fromEntries(Object.entries(draft.values).map(([id, v]) => [id, [...v]])),
-      tags: [...draft.tags],
-      fits: hasPhones ? [...draft.fits] : [],
-    };
-    void runner
-      .run(async () => {
-        if (part !== undefined) {
-          return runtime.run('editItem', { itemId: part.id, archived: part.archived, ...details });
-        }
-        // Kept, so a retry after the count failed saves the count, not a second copy of the item;
-        // details changed before the retry go on as an edit.
-        const saved = JSON.stringify(details);
-        if (addedRef.current === null) {
-          const { itemId } = await runtime.run('addItem', details);
-          addedRef.current = { itemId, saved };
-        } else if (addedRef.current.saved !== saved) {
-          await runtime.run('editItem', {
-            itemId: addedRef.current.itemId,
-            archived: false,
-            ...details,
-          });
-          addedRef.current = { itemId: addedRef.current.itemId, saved };
-        }
-        const { itemId } = addedRef.current;
-        if (stock > 0) await runtime.run('countStock', { counts: [{ itemId, counted: stock }] });
-        return { itemId };
-      })
-      .then((result) => {
-        if (result === undefined) return;
-        if (!another) {
-          onDone(result.itemId);
-          return;
-        }
-        // Items often come in a run (one phone's LCD, battery, connector; one LCD in three
-        // qualities): the category, fields and phones stay, and the next one changes what differs.
-        addedRef.current = null;
-        setSavedNotice(ti('inventory.form.savedAnother', { name }));
-        const next: Draft = { ...draft, name: '', code: '', barcode: '' };
-        setDraft(next);
-        setBase(next);
-        setStock(0);
-        setTried(false);
-      });
-  };
-
-  const pickCategory = (id: string | null): void => {
-    // Values of the old category's fields go; a typed name stays typed.
-    set({ categoryId: id, values: {}, nameAuto: draft.nameAuto || draft.name.trim() === '' });
+    void form.save(another).then((saved) => {
+      if (saved === undefined) return;
+      if (another) setSavedNotice(ti('inventory.form.savedAnother', { name: saved.name }));
+      else onDone(saved.itemId);
+    });
   };
 
   return (
     <FlowScreen
       chrome={chrome}
-      title={ti(adding ? 'inventory.form.addTitle' : 'inventory.form.editTitle')}
+      title={ti(form.adding ? 'inventory.form.addTitle' : 'inventory.form.editTitle')}
       onBack={() => discard.requestLeave(onCancel)}
       primaryLabel={ti('inventory.action.save')}
       onPrimary={() => save()}
       secondary={
-        adding
+        form.adding
           ? {
               label: ti('inventory.form.addAnother'),
               onPress: () => save(true),
@@ -249,7 +122,7 @@ export function PartForm({
                   key={c.id}
                   label={c.name}
                   selected={c.id === draft.categoryId}
-                  onToggle={() => pickCategory(c.id === draft.categoryId ? null : c.id)}
+                  onToggle={() => form.pickCategory(c.id === draft.categoryId ? null : c.id)}
                   testID={`${testID}.category.${c.id}`}
                 />
               ))}
@@ -261,7 +134,7 @@ export function PartForm({
             key={field.id}
             field={field}
             values={draft.values[field.id] ?? []}
-            used={usedValues(field.id)}
+            used={form.usedValues(field.id)}
             fits={draft.fits}
             onValues={(values) => set({ values: { ...draft.values, [field.id]: values } })}
             onFits={(fits) => set({ fits })}
@@ -286,14 +159,14 @@ export function PartForm({
                 {nameMissing ? ti('inventory.form.autoNameEmpty') : builtName}
               </Text>
             </View>
-            {tried && nameMissing ? (
+            {form.tried && nameMissing ? (
               <Text style={styles.error}>{ti('inventory.form.nameRequired')}</Text>
             ) : null}
             <View style={styles.inlineAction}>
               <TextButton
                 label={ti('inventory.form.editName')}
                 icon="edit"
-                onPress={() => set({ nameAuto: false, name: builtName })}
+                onPress={form.editName}
                 testID={`${testID}.editName`}
               />
             </View>
@@ -307,7 +180,9 @@ export function PartForm({
               onChangeText={(text) => set({ name: text })}
               maxLength={MAX_PART_NAME}
               autoCorrect={false}
-              errorMessage={tried && nameMissing ? ti('inventory.form.nameRequired') : undefined}
+              errorMessage={
+                form.tried && nameMissing ? ti('inventory.form.nameRequired') : undefined
+              }
               testID={`${testID}.name`}
             />
             {category === null ? null : (
@@ -353,7 +228,7 @@ export function PartForm({
         </View>
         <ChoiceChips
           label={ti('inventory.form.tags')}
-          options={usedValues(TAG_FACET)}
+          options={form.usedValues(TAG_FACET)}
           value={draft.tags}
           onChange={(tags) => set({ tags })}
           multiple
@@ -362,11 +237,11 @@ export function PartForm({
           maxLength={MAX_FIELD_VALUE}
           testID={`${testID}.tags`}
         />
-        {canCount ? (
+        {form.canCount ? (
           <QuantityStepper
             label={ti('inventory.form.stock')}
-            value={stock}
-            onChange={setStock}
+            value={form.stock}
+            onChange={form.setStock}
             max={MAX_COUNTED_QTY}
             decreaseLabel={ti('inventory.stepper.decrease')}
             increaseLabel={ti('inventory.stepper.increase')}

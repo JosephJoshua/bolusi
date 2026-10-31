@@ -103,8 +103,9 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
       // future edit turns probes into `absent` rows to quiet a red leg, the count drops and fails.
       expect(census.crossTenantProbes).toBeGreaterThanOrEqual(15);
       expect(census.unassignedStoreProbes).toBeGreaterThanOrEqual(12);
-      // Bearer-exempt: login, the phone handoff page whose path key is the credential, and Xendit's
-      // callback, whose QR's callback token is.
+      // Bearer-exempt: login, the phone handoff page and the customer status page, whose path key is
+      // the credential, Xendit's callback, whose QR's callback token is, and the signed, tenant-free
+      // app update manifest.
       expect(
         Object.entries(PROBE_REGISTRY)
           .filter(([, row]) => row.unauthenticated.kind === 'absent')
@@ -113,11 +114,13 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
       ).toEqual([
         'GET /h/:key',
         'GET /h/:key/next',
+        'GET /updates/manifest',
+        'GET /v1/public/status/:code',
         'POST /h/:key/send',
         'POST /v1/auth/login',
         'POST /xendit/qr/:tenantId',
       ]);
-      expect(census.unauthenticatedProbes).toBe(endpoints.length - 5);
+      expect(census.unauthenticatedProbes).toBe(endpoints.length - 7);
     } finally {
       await fixture.close();
     }
@@ -291,12 +294,15 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
         devices: { id: string; storeId: string | null }[];
       };
       // The sidecar directory is part of the pull page and is the easier thing to leak: it must
-      // carry only THIS tenant's devices, and only ones in the bearer device's store (or none).
+      // carry only THIS tenant's devices. Every store's devices are in it, because tenant-wide ops
+      // (storeId null) signed at another store must verify here too.
       expect(
         body.devices.length,
         'the pull page carried no directory — a vacuous scope check',
       ).toBeGreaterThan(0);
-      expect(body.devices.map((d) => d.id).sort()).toEqual([ctx.tenantADeviceId]);
+      expect(body.devices.map((d) => d.id).sort()).toEqual(
+        [ctx.tenantADeviceId, ctx.tenantAStore2DeviceId].sort(),
+      );
       for (const op of body.ops) {
         expect(op.tenantId).not.toBe(ctx.tenantBTenantId);
         expect(op.storeId === null || op.storeId === ctx.tenantAStore1Id).toBe(true);

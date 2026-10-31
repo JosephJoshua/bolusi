@@ -53,6 +53,7 @@ function buildDeps(
 
   const deps: CaptureDeps<never> = {
     db: db.db as never,
+    transaction: (fn) => db.transaction(() => fn()),
     identity: IDENTITY,
     camera,
     compressor,

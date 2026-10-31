@@ -160,7 +160,25 @@ describe('the drawer', () => {
     expect(text(screen, 'money.kas.expected')).toBe('Rp 80.000');
     expect(text(screen, 'money.kas.moves')).toContain('Biaya toko');
     expect(text(screen, 'money.kas.moves')).toContain('Bensin');
-    expect(text(screen, 'money.kas.moves')).toContain('−Rp 20.000');
+    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp 20.000');
+  });
+
+  test('cash out stops at what the drawer holds', async () => {
+    h = await openRepairScreenHarness(5409);
+    await float(h, 700_000);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'money.kas.move');
+    type(screen, 'money.move.amount', '900000');
+    type(screen, 'money.move.reason', 'Setor ke pemilik');
+    await settle();
+    expect(screen.all('money.move.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(screen, 'money.move.primaryHint')).toBe(
+      'Di laci cuma ada Rp 700.000. Kurangi jumlahnya dulu.',
+    );
+    type(screen, 'money.move.amount', '700000');
+    await settle();
+    await press(screen, 'money.move.primary');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp 0');
   });
 
   // QA: a system font size change sent the phone back to the board and dropped the open form.
@@ -194,6 +212,7 @@ describe('the drawer', () => {
 
   test('a bank deposit asks for an account the store does not have yet', async () => {
     h = await openRepairScreenHarness(5404);
+    await float(h, 100_000);
     const screen = await mount(h, h.cashierId);
     await press(screen, 'money.kas.move');
     await press(screen, 'money.move.kind.deposit');
@@ -305,7 +324,7 @@ describe('the drawer', () => {
     const screen = await mount(h, h.cashierId);
     expect(text(screen, 'money.kas.moves')).toContain('Selisih kas diselesaikan');
     expect(text(screen, 'money.kas.moves')).toContain('Salah kembalian');
-    expect(text(screen, 'money.kas.moves')).toContain('−Rp 5.000');
+    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp 5.000');
     expect(text(screen, 'money.kas.expected')).toBe('Rp 95.000');
   });
 });
@@ -341,12 +360,45 @@ describe('what customers owe', () => {
     expect(text(screen, 'money.receive')).toContain('Yohanis Wenda');
     // Part of it today.
     type(screen, 'money.receive.pay.line0.amount', '500000');
+    // Handed over exactly: no "Kembalian Rp 0" (round 2 QA, F14); more shows the change.
+    type(screen, 'money.receive.pay.line0.tendered', '500000');
     await settle();
+    expect(screen.query('money.receive.pay.line0.change')).toBeNull();
+    type(screen, 'money.receive.pay.line0.tendered', '600000');
+    await settle();
+    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp 100.000');
     expect(text(screen, 'money.receive.primary')).toContain('Terima Rp 500.000');
     await press(screen, 'money.receive.primary');
 
     expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 250.000');
     expect(text(screen, 'money.kas.in.cash.value')).toBe('Rp 500.000');
+  });
+
+  // Round 2 QA, F14: what went back read as a method's negative money in.
+  test('money handed back today is its own line under money in, and the total is net', async () => {
+    h = await openRepairScreenHarness(5408);
+    const { ticketId } = (await h.run(
+      'openTicket',
+      intake(h, { downPayment: 200_000 }),
+      h.cashierId,
+    )) as {
+      ticketId: string;
+    };
+    await h.money(
+      'refund',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        account: 'cash',
+        amount: 50_000,
+        reason: 'Batal sebagian',
+      },
+      h.storeOwnerId,
+    );
+    const screen = await mount(h, h.storeOwnerId);
+    expect(text(screen, 'money.kas.in.cash.value')).toBe('Rp 200.000');
+    expect(text(screen, 'money.kas.in.refunded')).toContain('Dikembalikan ke pelanggan');
+    expect(text(screen, 'money.kas.in.refunded.value')).toBe('\u2212Rp 50.000');
+    expect(text(screen, 'money.kas.in.total.value')).toBe('Rp 150.000');
   });
 
   test('more than what is owed cannot be taken', async () => {
@@ -373,6 +425,11 @@ describe('what customers owe', () => {
     type(screen, 'money.receive.pay.line0.amount', '800000');
     await settle();
     expect(screen.all('money.receive.primary')[0]!.props['disabled']).toBe(true);
+    // Said once, under the payment: not again as the button's hint (round 2 QA, F14).
+    expect(text(screen, 'money.receive.pay.overpaid')).toBe(
+      'Lebih Rp 50.000. Kurangi jumlahnya dulu.',
+    );
+    expect(screen.query('money.receive.primaryHint')).toBeNull();
   });
 });
 
@@ -493,7 +550,7 @@ describe('money back and lowered bills', () => {
 });
 
 describe('Riwayat', () => {
-  async function paid(harness: RepairHarness): Promise<string> {
+  async function paid(harness: RepairHarness, amount = 200_000): Promise<string> {
     const { ticketId, ticketNumber } = (await harness.run(
       'openTicket',
       intake(harness),
@@ -503,7 +560,7 @@ describe('Riwayat', () => {
       'receivePayments',
       {
         document: { kind: 'repair.ticket', id: ticketId, label: ticketNumber },
-        payments: [{ account: 'cash', amount: 200_000 }],
+        payments: [{ account: 'cash', amount }],
       },
       harness.cashierId,
     );
