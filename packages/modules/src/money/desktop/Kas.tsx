@@ -37,7 +37,7 @@ import {
   type NamedBalance,
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
-import { turnedDownLines, useVoidRequests } from '../void-ask.js';
+import { turnedDownLines, useOnVoidDecided, useVoidRequests } from '../void-ask.js';
 import { approvalByLine } from '../../approvals/copy.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { targetOf, type MoneyTarget } from '../refund.js';
@@ -80,6 +80,9 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   const close = (): void => setTask(null);
   // Said once an owner has been asked to cancel a payment.
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeEntryId, setNoticeEntryId] = useState<string | null>(null);
+  // Once an owner answers that ask, its notice goes rather than sit above the answer.
+  useOnVoidDecided(notice === null ? null : noticeEntryId, () => setNotice(null));
   // Cancels this person asked for that an owner turned down today, until closed.
   const asks = useVoidRequests();
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
@@ -181,6 +184,7 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           accounts={task.accounts}
           onDone={close}
           onAsked={() => {
+            setNoticeEntryId(task.entry.id);
             close();
             setNotice(ta('approvals.done.asked'));
           }}

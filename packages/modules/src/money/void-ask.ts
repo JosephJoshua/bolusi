@@ -4,7 +4,7 @@
 // (`voidCounted`, with what was already taken off the servisan), so the screen asks exactly when
 // saving would be refused.
 import { formatMoney } from '@bolusi/i18n';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import type { ApprovalRow } from '../approvals/queries.js';
@@ -158,4 +158,26 @@ export function useEntryCustomer(entry: MoneyEntryRow): string | null {
     `customer:${entry.documentId ?? ''}`,
   );
   return read.status === 'ready' ? read.data : null;
+}
+
+/**
+ * Calls `onDecided` once the ask about `entryId` is answered (approved, turned down, or closed),
+ * so a "an owner was asked" notice never sits above its own answer. Null asks about nothing.
+ */
+export function useOnVoidDecided(entryId: string | null, onDecided: () => void): void {
+  const asks = useVoidRequests();
+  const seenWaiting = useRef(false);
+  const decided = useRef(onDecided);
+  decided.current = onDecided;
+  useEffect(() => {
+    seenWaiting.current = false;
+  }, [entryId]);
+  useEffect(() => {
+    if (entryId === null) return;
+    if (asks.waiting.has(entryId)) {
+      seenWaiting.current = true;
+      return;
+    }
+    if (seenWaiting.current || asks.rejected.has(entryId)) decided.current();
+  }, [asks, entryId]);
 }

@@ -19,7 +19,13 @@ import { shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
-import { useVoidAsk, useEntryCustomer, useVoidRequests, voidRequest } from '../void-ask.js';
+import {
+  useVoidAsk,
+  useEntryCustomer,
+  useOnVoidDecided,
+  useVoidRequests,
+  voidRequest,
+} from '../void-ask.js';
 import { approvalByLine } from '../../approvals/copy.js';
 import { ta } from '../../approvals/i18n.js';
 
@@ -36,6 +42,8 @@ export interface KasHistoryProps {
   readonly onVoid: (entry: MoneyEntryRow) => void;
   /** Said back from a record, e.g. that an owner was asked. */
   readonly notice?: string | null | undefined;
+  /** The payment that notice asked about: once an owner answers, the notice goes. */
+  readonly noticeEntryId?: string | null | undefined;
   readonly onClearNotice?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
@@ -48,6 +56,7 @@ export function KasHistory({
   onBack,
   onVoid,
   notice,
+  noticeEntryId = null,
   onClearNotice,
   testID = 'money.history',
 }: KasHistoryProps): React.JSX.Element {
@@ -63,6 +72,9 @@ export function KasHistory({
   const day = chosen ?? today;
   const records = useDayRecords(day, pages, nonce);
   const asks = useVoidRequests();
+  useOnVoidDecided(notice === null || notice === undefined ? null : noticeEntryId, () =>
+    onClearNotice?.(),
+  );
 
   const goTo = (next: number): void => {
     setPages(1);

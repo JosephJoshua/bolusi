@@ -733,6 +733,12 @@ describe('Riwayat', () => {
     await settle();
     expect(text(screen, `money.history.entry.${entryId}`)).toContain('Menunggu persetujuan');
     await expect(press(screen, `money.history.entry.${entryId}`)).rejects.toThrow(/no onPress/);
+    // Once the owner answers, "an owner was asked" goes rather than sit above the answer.
+    expect(screen.query('money.history.notice')).not.toBeNull();
+    await h.approvals('rejectRequest', { requestId: request!.id }, h.storeOwnerId);
+    await settle();
+    expect(screen.query('money.history.notice')).toBeNull();
+    expect(text(screen, `money.history.entry.${entryId}`)).toContain('Ditolak oleh');
     // Nothing is cancelled until an owner says yes.
     const entry = await h.db
       .selectFrom('moneyEntries')
