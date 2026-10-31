@@ -133,6 +133,8 @@ export interface TicketEventRow {
   readonly kind: string;
   readonly actorId: string;
   readonly actorName: string | null;
+  /** The technician an assignment gave the work to, by name; null for every other event. */
+  readonly technicianName: string | null;
   readonly at: number;
   readonly detail: Readonly<Record<string, unknown>>;
 }
@@ -772,10 +774,16 @@ export async function getTicketHandler(
     .orderBy('id', 'asc')
     .execute();
 
+  const assignedTo = (event: (typeof events)[number]): string | null => {
+    if (event.kind !== REPAIR_OP.technicianAssigned) return null;
+    const { technicianId } = parseJson<{ technicianId?: unknown }>(event.detailJson, {});
+    return typeof technicianId === 'string' ? technicianId : null;
+  };
   const names = await userNames(qctx.db, [
     summary.technicianId,
     detail.createdBy,
     ...events.map((event) => event.actorId),
+    ...events.flatMap((event) => assignedTo(event) ?? []),
   ]);
   const refunds = await ticketRefunds(qctx, toSummary(summary, names));
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
@@ -838,6 +846,7 @@ export async function getTicketHandler(
           kind: event.kind,
           actorId: event.actorId,
           actorName: names.get(event.actorId) ?? null,
+          technicianName: names.get(assignedTo(event) ?? '') ?? null,
           at: Number(event.at),
           detail: parseJson(event.detailJson, {}),
         })),
@@ -951,30 +960,40 @@ export async function intakeOptionSettingsHandler(
   _input: z.infer<typeof intakeOptionSettingsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<IntakeOptionSettings>> {
+  const settings = await readIntakeOptionSettings(qctx.db, qctx.tenantId, qctx.storeId);
+  return { rows: [settings], nextCursor: null };
+}
+
+/** The franchise's intake lists and one store's hidden items, as these records hold them now. */
+export async function readIntakeOptionSettings(
+  db: Qctx['db'],
+  tenantId: string,
+  storeId: string | null,
+): Promise<IntakeOptionSettings> {
   const known = (list: string): list is IntakeOptionList =>
     (INTAKE_OPTION_LISTS as readonly string[]).includes(list);
 
   const lists: Record<IntakeOptionList, readonly IntakeOption[]> = { ...DEFAULT_INTAKE_OPTIONS };
-  const franchise = await qctx.db
+  const franchise = await db
     .selectFrom('repairIntakeOptions')
     .select(['list', 'itemsJson'])
-    .where('tenantId', '=', qctx.tenantId)
+    .where('tenantId', '=', tenantId)
     .execute();
   for (const row of franchise) {
     if (known(row.list)) lists[row.list] = parseJson<IntakeOption[]>(row.itemsJson, []);
   }
 
   const hidden: Record<IntakeOptionList, readonly string[]> = { ...NOTHING_HIDDEN };
-  const store = await qctx.db
+  const store = await db
     .selectFrom('repairStoreIntakeOptions')
     .select(['list', 'hiddenJson'])
-    .where('storeId', '=', qctx.storeId)
+    .where('storeId', '=', storeId)
     .execute();
   for (const row of store) {
     if (known(row.list)) hidden[row.list] = parseJson<string[]>(row.hiddenJson, []);
   }
 
-  return { rows: [{ lists, hidden }], nextCursor: null };
+  return { lists, hidden };
 }
 
 export const intakeOptionSettingsQuery = {

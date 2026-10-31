@@ -45,7 +45,7 @@ export function runI18nVectors(): VectorResult[] {
   setLocale('id');
   check('formatMoney(0)', 'Rp 0', formatMoney(0));
   check('formatMoney(1500500)', 'Rp 1.500.500', formatMoney(1500500));
-  check('formatMoney(-50000)', '-Rp 50.000', formatMoney(-50000));
+  check('formatMoney(-50000)', '\u2212Rp 50.000', formatMoney(-50000));
   check('formatTime(14:30) [id]', '14.30', formatTime(VECTOR_INSTANT_MS));
   check('formatNumber(1234567) [id]', '1.234.567', formatNumber(1234567));
 

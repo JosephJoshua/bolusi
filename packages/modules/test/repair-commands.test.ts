@@ -1140,6 +1140,47 @@ describe('undoing a handover', () => {
     );
   });
 
+  test('the server holds an undo to the day by when it received it, not the phone’s clock', async () => {
+    h = await openRepairHarness(38);
+    const server = await openRepairHarness(39, {
+      tenantId: h.tenantId,
+      storeId: h.storeId,
+      users: [
+        h.cashierId,
+        h.technicianId,
+        h.technician2Id,
+        h.zeroUserId,
+        h.ownerId,
+        h.storeOwnerId,
+      ],
+    });
+    try {
+      const { ticketId } = await open(h);
+      await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+      await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+      await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
+      const handedOver = (await ticket(h, ticketId)).returnedAt as number;
+      await h.run('undoHandover', { ticketId, reason: 'Salah servisan' }, h.ownerId);
+      const ops = await h.ownOps();
+      const undo = ops.at(-1)!;
+      expect(undo.type).toBe(REPAIR_OP.handoverReversed);
+      let arrival = 0;
+      for (const op of ops.slice(0, -1)) await server.deliverPulled(op, (arrival += 1));
+      const judge = (receivedAt?: number) =>
+        server.checkRule(undo, undefined, receivedAt === undefined ? {} : { receivedAt });
+      // A device judges by the op's own time; the server also by when the undo reached it.
+      await judge();
+      await judge(handedOver + HANDOVER_UNDO_WINDOW_MS);
+      await expectCode(
+        judge(handedOver + HANDOVER_UNDO_WINDOW_MS + 1),
+        'INVALID_TRANSITION',
+        'undoTooLate',
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
   test('a handover taken back is never cancelled, nor moved to another customer or phone', async () => {
     h = await openRepairHarness(37);
     const { ticketId } = await open(h);

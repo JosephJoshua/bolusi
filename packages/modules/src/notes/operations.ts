@@ -133,6 +133,7 @@ export const notesOperations: Readonly<Record<string, OperationDeclaration<Notes
     apply: noteCreatedApplier,
     rule: noteCreatedRule,
     permission: NOTES_PERMISSION.create,
+    read: NOTES_PERMISSION.read,
     entityType: NOTE_ENTITY,
     // No `conflict`: two devices creating a note mint two DIFFERENT entities (fresh entityId each),
     // so there is nothing to collide on. Store-scoped by default (01 §9).
@@ -146,6 +147,7 @@ export const notesOperations: Readonly<Record<string, OperationDeclaration<Notes
     apply: noteBodyEditedApplier,
     rule: existingNoteRule,
     permission: NOTES_PERMISSION.edit,
+    read: NOTES_PERMISSION.read,
     entityType: NOTE_ENTITY,
     // 01 §8.1: two accepted body edits on one note collide on `note.body`. minor (01 §8.3):
     // canonical-order LWW already produced a nothing-lost outcome; recorded for reporting, surfaced
@@ -161,6 +163,7 @@ export const notesOperations: Readonly<Record<string, OperationDeclaration<Notes
     apply: noteArchivedApplier,
     rule: existingNoteRule,
     permission: NOTES_PERMISSION.archive,
+    read: NOTES_PERMISSION.read,
     entityType: NOTE_ENTITY,
     // No `conflict`: archive is terminal and idempotent, so two archives of one note are a
     // sequence, not a collision. The edit-after-archive case is Rule-2 (conflict-checks.ts).

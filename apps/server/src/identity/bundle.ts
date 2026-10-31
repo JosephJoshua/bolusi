@@ -9,12 +9,7 @@
 //   - VERIFIER MINIMIZATION (§5.1, security-guide §5.2): only this store's ACTIVE users carry a
 //     verifier; deactivated users appear with pinVerifier: null; a user unassigned from the store
 //     disappears entirely.
-import {
-  canonicalizeJcs,
-  NO_LIMIT_AMOUNTS,
-  OWNER_POWER_PERMISSIONS,
-  type JsonValue,
-} from '@bolusi/core';
+import { canonicalizeJcs, isOwnerRoleOf, NO_LIMIT_AMOUNTS, type JsonValue } from '@bolusi/core';
 import type { TenantDb } from '@bolusi/db-server';
 
 import { sha256Hex } from '../crypto/index.js';
@@ -155,13 +150,7 @@ export async function buildBundle(
   // every store (auth/permissions `holdsOwnerPowers`), so the device must see it too. The evaluator
   // reads a grant at another store as granting nothing here.
   const ownerRoleIds = new Set(
-    roles
-      .filter(
-        (r) =>
-          r.scopeType === 'tenant' ||
-          (permsByRole.get(r.id) ?? []).some((p) => OWNER_POWER_PERMISSIONS.includes(p)),
-      )
-      .map((r) => r.id),
+    roles.filter((r) => isOwnerRoleOf(r.scopeType, permsByRole.get(r.id) ?? [])).map((r) => r.id),
   );
   const grants = allGrants.filter(
     (g) => g.storeId === storeId || g.storeId === null || ownerRoleIds.has(g.roleId),

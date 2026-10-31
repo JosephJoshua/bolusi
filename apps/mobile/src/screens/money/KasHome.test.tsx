@@ -161,7 +161,7 @@ describe('the drawer', () => {
     expect(text(screen, 'money.kas.expected')).toBe('Rp 80.000');
     expect(text(screen, 'money.kas.moves')).toContain('Biaya toko');
     expect(text(screen, 'money.kas.moves')).toContain('Bensin');
-    expect(text(screen, 'money.kas.moves')).toContain('-Rp 20.000');
+    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp 20.000');
   });
 
   test('cash out stops at what the drawer holds', async () => {
@@ -325,7 +325,7 @@ describe('the drawer', () => {
     const screen = await mount(h, h.cashierId);
     expect(text(screen, 'money.kas.moves')).toContain('Selisih kas diselesaikan');
     expect(text(screen, 'money.kas.moves')).toContain('Salah kembalian');
-    expect(text(screen, 'money.kas.moves')).toContain('-Rp 5.000');
+    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp 5.000');
     expect(text(screen, 'money.kas.expected')).toBe('Rp 95.000');
   });
 });
@@ -398,7 +398,7 @@ describe('what customers owe', () => {
     const screen = await mount(h, h.storeOwnerId);
     expect(text(screen, 'money.kas.in.cash.value')).toBe('Rp 200.000');
     expect(text(screen, 'money.kas.in.refunded')).toContain('Dikembalikan ke pelanggan');
-    expect(text(screen, 'money.kas.in.refunded.value')).toBe('-Rp 50.000');
+    expect(text(screen, 'money.kas.in.refunded.value')).toBe('\u2212Rp 50.000');
     expect(text(screen, 'money.kas.in.total.value')).toBe('Rp 150.000');
   });
 

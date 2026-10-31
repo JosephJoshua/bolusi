@@ -44,6 +44,30 @@ export function useActionRunner(): ActionRunner {
 }
 
 /**
+ * A camera, signature pad or player opened through the step's runner: one thing at a time, and a
+ * failure shows where the step's failures do, but `busy` stays false so the step's own button does
+ * not spin under the camera as if it were saving.
+ */
+export function useCapture(runner: ActionRunner): {
+  readonly busy: boolean;
+  readonly capture: <T>(take: () => Promise<T>) => Promise<T | undefined>;
+} {
+  const [capturing, setCapturing] = useState(false);
+  const capture = useCallback(
+    async <T>(take: () => Promise<T>): Promise<T | undefined> => {
+      setCapturing(true);
+      try {
+        return await runner.run(take);
+      } finally {
+        setCapturing(false);
+      }
+    },
+    [runner],
+  );
+  return { busy: runner.busy && !capturing, capture };
+}
+
+/**
  * Ask a live form whether the user may leave (design-system §8.1). The form runs its own
  * dirty-check and confirm, and calls `proceed` only once the user agrees.
  */

@@ -59,6 +59,8 @@ function state(overrides: Partial<SyncState> = {}): SyncState {
     backoffUntil: null,
     tokenRejectedSince: null,
     tokenRejectedCount: 0,
+    readSet: null,
+    backfill: null,
     lastServerTime: NOW,
     lastServerTimeReceivedAt: NOW,
     ...overrides,
@@ -223,6 +225,7 @@ describe('the counters are DERIVED — no stored count column exists to read (01
     // absent for the same reason the counts are: 03 §10 keeps the loop state in memory, so it is
     // not a column — the record and the DDL agree by construction.
     expect(Object.keys(record).sort()).toEqual([
+      'backfill',
       'backoffUntil',
       'cursor',
       'devicesDirectoryVersion',
@@ -233,6 +236,7 @@ describe('the counters are DERIVED — no stored count column exists to read (01
       'lastSuccessfulSyncAt',
       'lastSyncError',
       'pushHalted',
+      'readSet',
       'syncDisabled',
       'syncDisabledReason',
       'tokenRejectedCount',

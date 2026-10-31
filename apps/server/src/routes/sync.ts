@@ -44,7 +44,7 @@ export function createSyncRouter(deps: ServerDeps) {
       deps.onStub?.('sync.pull');
       const device = c.get('device');
       const body: PullResponse = await runPull(
-        { forTenant: deps.forTenant, now: deps.now },
+        { forTenant: deps.forTenant, now: deps.now, readScope: deps.readScope },
         { deviceId: device.deviceId, tenantId: device.tenantId, storeId: device.storeId },
         c.req.valid('json'),
       );

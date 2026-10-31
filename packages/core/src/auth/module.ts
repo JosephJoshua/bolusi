@@ -157,6 +157,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // The device genesis: its shape is checked by the server's scope step, against no record.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.deviceEnrolled],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.deviceEnrolled],
   },
   [AUTH_OP.userSwitched]: {
@@ -168,6 +169,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // A session record. Who may be signed in at this store is the authorization step's check.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.userSwitched],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.userSwitched],
   },
   [AUTH_OP.sessionEnded]: {
@@ -178,6 +180,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // A session record; it constrains nothing else.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.sessionEnded],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.sessionEnded],
   },
   [AUTH_OP.pinChanged]: {
@@ -189,6 +192,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // Self only, which the server's scope step enforces; the verifier replaces any before it.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.pinChanged],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.pinChanged],
   },
   [AUTH_OP.pinReset]: {
@@ -200,6 +204,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // The main-owner restriction is the server's scope step; a reset replaces any verifier.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.pinReset],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.pinReset],
   },
   [AUTH_OP.pinLockedOut]: {
@@ -211,6 +216,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // A fact this device observed; no other record can contradict it.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.pinLockedOut],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.pinLockedOut],
   },
   [AUTH_OP.pinLockoutCleared]: {
@@ -221,6 +227,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // Clearing an already-cleared lockout is a harmless repeat, not worth a sync problem.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.pinLockoutCleared],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.pinLockoutCleared],
   },
   [AUTH_OP.deviceChangesTransferred]: {
@@ -232,6 +239,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // An audit fact about the device chain; every carried change is still checked on its own.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.deviceChangesTransferred],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.deviceChangesTransferred],
   },
   [AUTH_OP.permissionDenied]: {
@@ -242,6 +250,7 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     // An audit fact; refusing it would lose the audit.
     rule: null,
     permission: AUTH_OP_PERMISSION[AUTH_OP.permissionDenied],
+    read: null,
     entityType: AUTH_OP_ENTITY[AUTH_OP.permissionDenied],
   },
 };

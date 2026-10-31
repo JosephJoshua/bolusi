@@ -34,13 +34,24 @@ import {
   handoverProblem,
   intakeListProblems,
   needsOwnershipVideo,
+  DEFAULT_INTAKE_OPTIONS,
   recordedOption,
+  storeIntakeOptions,
   warrantyUntil,
+  type IntakeOption,
+  type IntakeOptionList,
+  type IntakeOptionSettings,
   type RecordedRepairType,
 } from './intake-options.js';
 import { sameModelAnySpelling } from './device-models.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
-import { cancelDrop, NO_CANCEL_FEES, standardCancelFee } from './queries.js';
+import {
+  cancelDrop,
+  NO_CANCEL_FEES,
+  readIntakeOptionSettings,
+  standardCancelFee,
+  type CancelFees,
+} from './queries.js';
 import type {
   deviceReturnedPayload,
   downPaymentCorrectedPayload,
@@ -126,6 +137,9 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'handedOverBefore',
   'customerShared',
   'customerMismatch',
+  'cancelFeeChanged',
+  'repairTypeTerms',
+  'intakePhotoMissing',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -603,6 +617,128 @@ async function requireRenamable(db: Db, op: SignedOperation, customerId: string)
 }
 
 /**
+ * Every payload of `type` the log holds for `entityId`, oldest first. Both sides keep each op's
+ * signed text, so a rule can see what a setting was before its last change: a device that was
+ * offline acted on one of those, and refusing it would lose work done in good faith.
+ */
+async function pastPayloads<T>(db: Db, type: string, entityId: string): Promise<T[]> {
+  const { rows } = await sql<{ signedCoreJcs: string }>`
+    SELECT signed_core_jcs AS "signedCoreJcs" FROM operations
+    WHERE type = ${type} AND entity_id = ${entityId}
+    ORDER BY timestamp_ms, device_id, seq
+  `.execute(db);
+  return rows.map((row) => (JSON.parse(row.signedCoreJcs) as { payload: T }).payload);
+}
+
+/**
+ * Every version one franchise intake list has had: the built-in one, each one the owner saved, and
+ * the one these records hold now.
+ */
+async function listVersions(
+  db: Db,
+  op: SignedOperation,
+  list: IntakeOptionList,
+  current: readonly IntakeOption[],
+): Promise<(readonly IntakeOption[])[]> {
+  const saved = await pastPayloads<{ list: string; items: IntakeOption[] }>(
+    db,
+    REPAIR_OP.intakeOptionsChanged,
+    op.tenantId,
+  );
+  return [
+    DEFAULT_INTAKE_OPTIONS[list],
+    ...saved.filter((payload) => payload.list === list).map((payload) => payload.items),
+    current,
+  ];
+}
+
+/**
+ * Whether a repair type newly put on a servisan carries terms the owner gave it: some version of
+ * the franchise list had it under that name with at least as much warranty, and no more need for
+ * the ownership video, than recorded. Any version counts, since the counter may have picked it
+ * offline before the owner changed the list; terms no version ever gave (more warranty days, or
+ * no video for a type that always needed one) were not the owner's.
+ */
+function hasListTerms(
+  type: RecordedRepairType,
+  versions: readonly (readonly IntakeOption[])[],
+): boolean {
+  return versions.some((offered) => {
+    const option = offered.find((item) => item.id === type.item);
+    return (
+      option !== undefined &&
+      option.label === type.label &&
+      type.warrantyDays <= (option.warrantyDays ?? 0) &&
+      (type.needsVideo || option.needsVideo !== true)
+    );
+  });
+}
+
+/**
+ * The repair types an op records take their terms from the owner's list, never from the device that
+ * signed it: one already on the servisan (`kept`) keeps exactly the terms it was given, so a promise
+ * already made never changes, and a new one has terms some version of the list gave it.
+ */
+function requireRepairTypeTerms(
+  types: readonly RecordedRepairType[],
+  versions: readonly (readonly IntakeOption[])[],
+  kept: readonly RecordedRepairType[] = [],
+): void {
+  for (const type of types) {
+    const recorded = kept.find((other) => other.item === type.item);
+    const ok =
+      recorded === undefined
+        ? hasListTerms(type, versions)
+        : type.warrantyDays === recorded.warrantyDays && type.needsVideo === recorded.needsVideo;
+    if (!ok) {
+      throw refuse('repairTypeTerms', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'repairTypes', issue: `${type.item} does not carry the list's terms` },
+      });
+    }
+  }
+}
+
+/**
+ * An intake has a photo for every angle the store asked for in some version of its lists (the
+ * franchise's angles, less what the store hid then), so one taken offline before the owner added
+ * an angle still counts: the phone is in the store and its ticket must not be lost.
+ */
+async function requireIntakePhotos(
+  db: Db,
+  op: SignedOperation,
+  settings: IntakeOptionSettings,
+  slots: readonly string[],
+): Promise<void> {
+  const taken = new Set(slots);
+  const angles = await listVersions(db, op, 'photoAngles', settings.lists.photoAngles);
+  const hidden = await pastPayloads<{ list: string; hidden: string[] }>(
+    db,
+    REPAIR_OP.storeIntakeOptionsChanged,
+    storeOf(op),
+  );
+  const hiddenVersions = [
+    [],
+    ...hidden.filter((payload) => payload.list === 'photoAngles').map((payload) => payload.hidden),
+    settings.hidden.photoAngles,
+  ];
+  const covered = angles.some((photoAngles) =>
+    hiddenVersions.some((hiddenAngles) =>
+      storeIntakeOptions({
+        lists: { ...settings.lists, photoAngles },
+        hidden: { ...settings.hidden, photoAngles: hiddenAngles },
+      }).photoAngles.every((angle) => taken.has(angle.id)),
+    ),
+  );
+  if (!covered) {
+    throw refuse('intakePhotoMissing', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'photos', issue: 'a photo angle the store asks for is missing' },
+    });
+  }
+}
+
+/**
  * The repair types of an open servisan, set after the diagnosis: by the counter, who took it in, or
  * a technician, who found what is wrong. Not once the phone left or the servisan was cancelled,
  * since the warranty the customer took home must not change, and never on a warranty claim.
@@ -618,16 +754,27 @@ export const ticketRepairTypesChangedRule: Rule = async (op, { db, holdsPermissi
     });
   }
   if (
-    (await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) ||
-    (await holdsPermission(op.userId, REPAIR_PERMISSION.work))
+    !(await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) &&
+    !(await holdsPermission(op.userId, REPAIR_PERMISSION.work))
   ) {
-    return;
+    throw refuse('repairTypesNotYours', {
+      code: 'PERMISSION_DENIED',
+      details: { permissionId: REPAIR_PERMISSION.work },
+      message: `user ${op.userId} neither takes in nor works on phones`,
+    });
   }
-  throw refuse('repairTypesNotYours', {
-    code: 'PERMISSION_DENIED',
-    details: { permissionId: REPAIR_PERMISSION.work },
-    message: `user ${op.userId} neither takes in nor works on phones`,
-  });
+  const { repairTypes } = payloadOf<{ repairTypes: RecordedRepairType[] }>(op);
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('repairTypesJson')
+    .where('id', '=', ticket.id)
+    .executeTakeFirstOrThrow();
+  const { lists } = await readIntakeOptionSettings(db, op.tenantId, storeOf(op));
+  requireRepairTypeTerms(
+    repairTypes,
+    await listVersions(db, op, 'repairTypes', lists.repairTypes),
+    JSON.parse(row.repairTypesJson) as RecordedRepairType[],
+  );
 };
 
 /** The servisan a claim names, as far as the claim rule needs it. */
@@ -653,6 +800,8 @@ export interface ClaimRequest {
   readonly total: number;
   /** When it was signed. */
   readonly at: number;
+  /** When the server received it; absent on a device, which goes by `at`. */
+  readonly receivedAt?: number | undefined;
 }
 
 /**
@@ -697,12 +846,15 @@ export function claimProblem(
   if (claim.total > 0) return { reason: 'claimChargeOwnerOnly', owner: true };
   const until = warrantyUntil(original.repairTypes, original.returnedAt);
   // Signed between pickup and the warranty's end: a phone clock set back before pickup proves
-  // nothing about when the claim was made.
+  // nothing about when the claim was made. The server also holds the end to when it received the
+  // claim, so a phone set back cannot open a free claim after the warranty ended; a claim taken
+  // offline that reaches it late is then an owner's call too.
+  const latest = Math.max(claim.at, claim.receivedAt ?? claim.at);
   const covered =
     until !== null &&
     original.returnedAt !== null &&
     claim.at >= original.returnedAt &&
-    claim.at <= until;
+    latest <= until;
   return covered ? null : { reason: 'warrantyEnded', owner: true };
 }
 
@@ -710,8 +862,8 @@ async function requireClaimable(
   db: Db,
   op: SignedOperation,
   claimOf: string,
-  claim: Omit<ClaimRequest, 'at'>,
-  holdsPermission: Parameters<Rule>[1]['holdsPermission'],
+  claim: Omit<ClaimRequest, 'at' | 'receivedAt'>,
+  { holdsPermission, receivedAt }: Pick<Parameters<Rule>[1], 'holdsPermission' | 'receivedAt'>,
 ): Promise<void> {
   const original = await db
     .selectFrom('repairTickets')
@@ -737,7 +889,7 @@ async function requireClaimable(
       returnedAt: original.returnedAt === null ? null : Number(original.returnedAt),
       repairTypes: JSON.parse(original.repairTypesJson) as RecordedRepairType[],
     },
-    { ...claim, at: op.timestamp },
+    { ...claim, at: op.timestamp, receivedAt },
   );
   if (problem === null) return;
   if (!problem.owner) {
@@ -761,7 +913,7 @@ async function requireClaimable(
  * but never another device's to reuse.
  */
 export const ticketOpenedRule: Rule = async (op, ctx) => {
-  const { db, holdsPermission } = ctx;
+  const { db } = ctx;
   const payload = payloadOf<Payload<typeof ticketOpenedPayload>>(op);
   if (await idTaken(db, 'repairTickets', op.entityId)) {
     throw alreadyRecorded('ticketId', op.entityId);
@@ -777,6 +929,23 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
   );
   const total = payload.quoteLines.reduce((sum, line) => sum + line.amount, 0);
   checkTotal(0, total);
+  // From v2 a ticket names its photo angles and from v3 its repair types, each as some version of
+  // the store's lists asked (v1 had the six fixed angles and no types).
+  if (op.schemaVersion >= 2) {
+    const settings = await readIntakeOptionSettings(db, op.tenantId, storeOf(op));
+    await requireIntakePhotos(
+      db,
+      op,
+      settings,
+      payload.photos.map((photo) => photo.slot),
+    );
+    if (op.schemaVersion >= 3 && payload.repairTypes.length > 0) {
+      requireRepairTypeTerms(
+        payload.repairTypes,
+        await listVersions(db, op, 'repairTypes', settings.lists.repairTypes),
+      );
+    }
+  }
   // From v4 the customer's ownership video comes with the intake that needs one.
   if (
     op.schemaVersion >= 4 &&
@@ -800,7 +969,7 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
         repairTypes: payload.repairTypes,
         total,
       },
-      holdsPermission,
+      ctx,
     );
   }
   for (const line of payload.quoteLines) {
@@ -907,8 +1076,31 @@ export const ticketCancelledRule: Rule = async (op, ctx) => {
   }
   // v1, from before fees, names no fee and charges nothing (the applier records no fee): a drop
   // of the whole standard fee, which an older phone must not get past the limit with.
-  const fee = payloadOf<{ fee?: number }>(op).fee ?? 0;
+  const { fee: named, standardFee } = payloadOf<{ fee?: number; standardFee?: number }>(op);
+  const fee = named ?? 0;
   const standard = await standardFeeOf(ctx.db, op, ticket);
+  // The record keeps both fees, and the owners' cancel list flags a fee below the store's, so the
+  // store's fee recorded must be one the store has had: a device offline may have known an older
+  // one, or not yet known that work started. A fee the store never had was forged. Whatever it
+  // names, a limited role's drop is measured from the store's fee now.
+  const versions = [
+    NO_CANCEL_FEES,
+    ...(await pastPayloads<CancelFees>(ctx.db, REPAIR_OP.storeCancelFeesChanged, storeOf(op))),
+  ];
+  const known = versions.some((version) =>
+    [false, true].some(
+      (workStarted) =>
+        standardCancelFee({ workStarted, claimOfTicketId: ticket.claimOfTicketId }, version) ===
+        standardFee,
+    ),
+  );
+  if (named !== undefined && standardFee !== standard && !known) {
+    throw refuse('cancelFeeChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'standardFee', issue: `the store never had a fee of ${standardFee}` },
+      message: `ticket ${ticket.ticketNumber}: the store's cancellation fee is ${standard}`,
+    });
+  }
   const counted = cancelDrop(standard, fee, await discountsStanding(ctx.db, op));
   await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, counted);
 };
@@ -1066,8 +1258,10 @@ export const handoverReversedRule: Rule = async (op, ctx) => {
   if (ticket.location !== 'returned') {
     throw invalidTransition(ticket, op.type, 'notReturned', 'the phone has not been handed over');
   }
-  // Counted from the first handover, so taking it back again and again never stretches it.
-  if (ticket.returnedAt === null || op.timestamp - ticket.returnedAt > HANDOVER_UNDO_WINDOW_MS) {
+  // Counted from the first handover, so taking it back again and again never stretches it. The
+  // server holds it to when it received the undo too, so a phone clock set back cannot stretch it.
+  const at = Math.max(op.timestamp, ctx.receivedAt ?? op.timestamp);
+  if (ticket.returnedAt === null || at - ticket.returnedAt > HANDOVER_UNDO_WINDOW_MS) {
     throw invalidTransition(ticket, op.type, 'undoTooLate', 'the handover was too long ago');
   }
   // What went home is at stake: a limited role (a manager) only within its cancel limit.

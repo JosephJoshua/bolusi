@@ -138,6 +138,8 @@ export function Counter({
         : { kind: 'intake' },
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // The servisan an intake just saved: its pane offers the slip once.
+  const [openedTicketId, setOpenedTicketId] = useState<string | null>(null);
   // A claim asked for while another intake waits unsaved: it would take that intake's place.
   const [claimAsked, setClaimAsked] = useState<IntakeDraft | null>(null);
   const startClaim = (claim: IntakeDraft): void => {
@@ -323,6 +325,7 @@ export function Counter({
           onOpened={(ticketId) => {
             onDraftChange(null);
             setSelectedTicketId(ticketId);
+            setOpenedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
           onCancel={() => setPage({ kind: 'board' })}
@@ -331,6 +334,8 @@ export function Counter({
         <RepairBoardPage
           selectedTicketId={selectedTicketId}
           onSelectTicket={setSelectedTicketId}
+          openedTicketId={openedTicketId}
+          onOpenedShown={() => setOpenedTicketId(null)}
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}

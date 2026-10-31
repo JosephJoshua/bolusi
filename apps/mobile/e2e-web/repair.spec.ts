@@ -856,7 +856,7 @@ test('a down payment at intake shows what is left to pay, and opens with the tic
   await page.getByTestId('repair.intake.review.balance').scrollIntoViewIfNeeded();
   await shoot(page, 'dp-intake-review');
   await tap(page, 'repair.intake.primary');
-  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 200.000');
+  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('−Rp 200.000');
   await expect(page.getByTestId('repair.ticket.balance')).toHaveText('Rp 450.000');
   // Recorded once; the counter cannot change it afterwards.
   await expect(page.getByTestId('repair.ticket.downPayment.correct')).toHaveCount(0);
@@ -876,7 +876,7 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await fill(page, 'repair.downPayment.method.reference', '004512');
   await shoot(page, 'dp-record');
   await tap(page, 'repair.downPayment.primary');
-  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 100.000');
+  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('−Rp 100.000');
   await expect(page.getByTestId('repair.ticket.downPayment.record')).toHaveCount(0);
 
   await open(page, 'owner');
@@ -892,7 +892,7 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await fill(page, 'repair.downPayment.reason', 'Salah ketik, pelanggan bayar 30 ribu.');
   await shoot(page, 'dp-correct');
   await tap(page, 'repair.downPayment.primary');
-  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 30.000');
+  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('−Rp 30.000');
   await page.getByTestId('repair.ticket.balance').scrollIntoViewIfNeeded();
   await shoot(page, 'dp-ticket-owner');
 });

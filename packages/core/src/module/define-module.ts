@@ -143,6 +143,17 @@ export interface OperationDeclaration<DB> {
    */
   readonly permission: string | null;
   /**
+   * The permission a person must hold to SEE ops of this type. The server sends a device only the
+   * ops its people may read (permission-scoped sync, owner decision 2026-10-31): an owner's own
+   * phone gets what that owner may read, a shared store device what the store's staff may read.
+   * Hiding a screen is not enough, since a device's data can be read off the device.
+   *
+   * Required, like `permission`, so every type states its answer. `null` when every device of the
+   * op's scope needs it whoever uses it (sign-in, PIN and device records). A record whose fields
+   * have different readers is written as separate op types, one per reader.
+   */
+  readonly read: string | null;
+  /**
    * The kind of record every op of this type is about (`repair_ticket`, `note`, …). Fixed per type:
    * the projection engine re-folds a record by its entity type and id, so an op claiming another
    * type would be folded into the wrong record's history. Devices write it from here and the server
@@ -383,6 +394,13 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
     if (permission !== null && (typeof permission !== 'string' || permission.length === 0)) {
       throw new ModuleDefinitionError(
         `op type ${type} declares no permission — state the permission its author must hold, or null for a type no command emits`,
+      );
+    }
+
+    const { read } = declaration;
+    if (read !== null && (typeof read !== 'string' || read.length === 0)) {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares no read permission — state the permission a person needs to see its ops, or null when every device of its scope needs them`,
       );
     }
 

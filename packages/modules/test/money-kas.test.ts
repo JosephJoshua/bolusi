@@ -218,10 +218,10 @@ describe('history', () => {
     expect(expense.label).toBe('money.moveKind.expense');
     expect(expense.details).toEqual(['Bensin']);
     // One minus sign everywhere: the one formatMoney writes (round 2 QA, F14).
-    expect(expense.amount).toBe('-Rp 25.000');
+    expect(expense.amount).toBe('\u2212Rp 25.000');
     expect(expense.amount).toBe(formatMoney(-25_000));
     const refund = historyLine(entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }), []);
-    expect(refund.amount).toBe('-Rp 20.000');
+    expect(refund.amount).toBe('\u2212Rp 20.000');
     expect(refund.details).toContain('Batal');
     // A handover refund is saved as a code, and older ones in fixed English: both read localized.
     for (const reason of ['handover_refund', 'Returned at handover']) {
@@ -231,7 +231,7 @@ describe('history', () => {
     }
     const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
     expect(short.label).toBe('money.kas.adjusted');
-    expect(short.amount).toBe('-Rp 5.000');
+    expect(short.amount).toBe('\u2212Rp 5.000');
   });
 
   test('a cancelled payment keeps its customer, servisan and method, and says why', () => {

@@ -34,6 +34,8 @@ function input(): SyncStatusInput {
     backoffUntil: null,
     tokenRejectedSince: null,
     tokenRejectedCount: 0,
+    readSet: null,
+    backfill: null,
     lastServerTime: NOW,
     lastServerTimeReceivedAt: NOW,
   };

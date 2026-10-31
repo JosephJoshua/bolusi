@@ -85,7 +85,17 @@
     "cancelledBy": "by {name}",
     "feeChanged": "Fee changed",
     "pickTicket": "Pick a repair to see its details.",
-    "waited": "Not collected for {days} days"
+    "waited": "Not collected for {days} days",
+    "empty": {
+      "approvals": "Nothing is waiting for approval.",
+      "active": "No active repairs yet.",
+      "mine": "Your queue is empty.",
+      "unassigned": "Every repair has a technician.",
+      "pickup": "No phones are ready for pickup.",
+      "uncollected": "No phones left uncollected.",
+      "returned": "No phones picked up yet.",
+      "cancelled": "No cancelled repairs."
+    }
   },
   "cancel": {
     "refundsDp": "At pickup, the customer gets {amount} of the DP back.",
@@ -99,7 +109,8 @@
     "feeInput": "Fee the customer pays",
     "storeFee": "This store’s usual fee: {amount}",
     "feeChangedHint": "Also say why you changed the fee.",
-    "claimFree": "Warranty claim, no fee"
+    "claimFree": "Warranty claim, no fee",
+    "title": "Cancelling the repair"
   },
   "check": {
     "biometrics": "Fingerprint or face unlock",
@@ -169,7 +180,8 @@
     "payLaterPermitted": "Approved by {name}.",
     "payLaterWaiting": "Waiting for the store owner’s approval.",
     "payLaterRejected": "Rejected by {name}.",
-    "payLaterRejectedNote": "Rejected by {name}: {note}"
+    "payLaterRejectedNote": "Rejected by {name}: {note}",
+    "title": "Phone pickup"
   },
   "intake": {
     "discard": "Discard intake",
@@ -225,6 +237,7 @@
   },
   "price": {
     "amount": "Amount (Rp)",
+    "discountAmount": "Discount (Rp)",
     "paid": "Paid",
     "decisionNote": "Note (optional)",
     "description": "Description",
@@ -260,7 +273,8 @@
     "newTotal": "Total becomes {from} → {to}",
     "reduced": "Taken off",
     "givenBack": "Given back",
-    "owedBack": "Overpaid"
+    "owedBack": "Overpaid",
+    "editTitle": "New price"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -303,12 +317,12 @@
     "unassigned": "Not assigned"
   },
   "work": {
-    "afterHint": "Take at least one photo of the repaired phone.",
+    "afterHint": "At least one, once the phone is fixed.",
     "afterShot": "After photo {n}",
-    "afterTitle": "Mark repaired",
-    "beforeHint": "Take at least one photo before you open the phone.",
+    "afterTitle": "Photos after the repair",
+    "beforeHint": "At least one, before you open the phone.",
     "beforeShot": "Before photo {n}",
-    "beforeTitle": "Start repair",
+    "beforeTitle": "Photos before the repair",
     "partsNote": "Which part is needed? (optional)",
     "repairNote": "What was done (optional)"
   },
@@ -323,7 +337,8 @@
     "corrected": "Servisan details saved.",
     "handoverUndone": "Handover undone. The phone is back in the store.",
     "refund": "Money given back.",
-    "reduce": "Bill lowered."
+    "reduce": "Bill lowered.",
+    "repairedPriceWaiting": "Repair done. The customer still needs to confirm the new price."
   },
   "passcode": {
     "show": "Show",
@@ -509,7 +524,7 @@
     },
     "plyNote": "Pink: store, yellow: customer.",
     "terms": {
-      "intake": "Bring this receipt to collect the phone.\nThe price is an estimate. The store checks with you before it goes up.\nThe store is not responsible for lost data.\nThe store is not responsible for a phone left 30 days after you are told.",
+      "intake": "Bring this receipt to collect the phone.\nThe price is an estimate. The store checks with you before it goes up.\nThe store is not responsible for lost data.\nThe store is not responsible for a phone left 60 days after it is ready.",
       "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and parts only. Bring this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
     },
     "refund": "Still to give back",
@@ -538,8 +553,8 @@
     "onPaper": "{paper} paper",
     "onPrinter": "Prints on {printer}, {paper} paper",
     "problem": {
-      "noPrinter": "Choose a printer in Settings first.",
-      "printerMissing": "Printer not found. Check its cable and power, or choose another printer in Settings.",
+      "noPrinter": "Choose a printer first.",
+      "printerMissing": "Printer not found. Check its cable and power, or choose another printer.",
       "failed": "Couldn’t print. Check the printer, then try again.",
       "stuck": "Couldn’t get the slip ready. Try again."
     },
@@ -716,7 +731,10 @@
     "undoTooLate": "This handover was more than a day ago, so it can’t be undone.",
     "handedOverBefore": "This servisan was handed over before. Its customer and phone can’t change, and it can’t be cancelled.",
     "customerShared": "This customer has other servisans. Try the change again.",
-    "customerMismatch": "The customer details don’t match. Try again."
+    "customerMismatch": "The customer details don’t match. Try again.",
+    "cancelFeeChanged": "The store’s cancellation fee has changed. Cancel again with the new fee.",
+    "repairTypeTerms": "The owner changed this repair type. Pick the repair types again.",
+    "intakePhotoMissing": "Take photos of the phone from every angle the store asks for first."
   },
   "paper": {
     "title": "Slip paper",
@@ -929,5 +947,8 @@
     "line": "{field}: {from} → {to}",
     "only": "{field} changed",
     "empty": "empty"
+  },
+  "history": {
+    "technician": "Technician: {name}"
   }
 }

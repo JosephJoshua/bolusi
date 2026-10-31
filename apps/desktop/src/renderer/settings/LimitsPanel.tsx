@@ -6,6 +6,7 @@ import { staffAdminFailure, type LimitAmounts } from '@bolusi/core';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import {
   LIMIT_FIELDS,
+  limitHintKey,
   limitRoles,
   sameLimits,
   type LimitRole,
@@ -161,13 +162,14 @@ export function LimitsPanel({
             <Card key={role.id} testId={`desktop.settings.limits.${role.key}`}>
               <h3 className="pb-3 text-body font-semibold text-text">{roleName(role)}</h3>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
-                {LIMIT_FIELDS.map(({ kind, label, hint }) => {
+                {LIMIT_FIELDS.map((field) => {
+                  const { kind, label } = field;
                   const value = draft[role.id]?.[kind] ?? null;
                   return (
                     <MoneyField
                       key={kind}
                       label={t(label)}
-                      hint={t(hint)}
+                      hint={t(limitHintKey(field, value))}
                       value={value}
                       onChange={(next) => {
                         setNotice(null);
