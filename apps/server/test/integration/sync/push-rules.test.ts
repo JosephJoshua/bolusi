@@ -122,7 +122,12 @@ function ticketOp(
 }
 
 const cancel = (builder: ChainBuilder, extra?: { readonly timestamp?: number }) =>
-  ticketOp(builder, 'repair.ticket_cancelled', { reason: 'Pelanggan batal' }, extra);
+  ticketOp(
+    builder,
+    'repair.ticket_cancelled',
+    { reason: 'Pelanggan batal', fee: 0, standardFee: 0 },
+    { ...extra, schemaVersion: 2 },
+  );
 
 async function outcome(ticketId = TICKET): Promise<string | undefined> {
   const row = await db
@@ -176,16 +181,15 @@ function openTicket(
       peripherals: [],
       estimatedReadyAt: null,
       quoteLines: [{ lineId, kind: 'labour', description: 'Ganti konektor', amount: 150_000 }],
-      photos: {
-        front: photo(world, 1),
-        back: photo(world, 2),
-        left: photo(world, 3),
-        right: photo(world, 4),
-        top: photo(world, 5),
-        bottom: photo(world, 6),
-      },
+      photos: [
+        { slot: 'front', label: null, ref: photo(world, 1) },
+        { slot: 'back', label: null, ref: photo(world, 2) },
+      ],
+      repairTypes: [],
+      claimOf: null,
+      ownershipVideo: null,
     },
-    { entityId: ticketId },
+    { entityId: ticketId, schemaVersion: 4 },
   );
 }
 
@@ -244,8 +248,8 @@ describe('a pushed repair op must be legal against the server`s records', () => 
     const op = ticketOp(
       builder,
       'repair.ticket_cancelled',
-      { reason: 'x' },
-      { entityId: otherTicket },
+      { reason: 'x', fee: 0, standardFee: 0 },
+      { entityId: otherTicket, schemaVersion: 2 },
     );
     const result = await push(world, [op]);
 
@@ -396,15 +400,21 @@ describe('a pushed repair op must be legal against the server`s records', () => 
   test('a discount line that raises the price is refused', async () => {
     const { world, builder } = await setupWorld(3305);
     const line = (lineId: string, amount: number) =>
-      ticketOp(builder, 'repair.quote_changed', {
-        lineId,
-        kind: 'discount',
-        description: 'Diskon',
-        amount,
-        reason: 'Langganan',
-        customerAgreed: true,
-        fromProposal: false,
-      });
+      ticketOp(
+        builder,
+        'repair.quote_changed',
+        {
+          lineId,
+          kind: 'discount',
+          description: 'Diskon',
+          amount,
+          reason: 'Langganan',
+          customerAgreed: true,
+          fromProposal: false,
+          waitsForCustomer: false,
+        },
+        { schemaVersion: 2 },
+      );
 
     const result = await push(world, [
       line('01920000-0000-7000-8000-0000000e0a01', 50_000),
@@ -466,6 +476,82 @@ describe('owner-only prices and settings', () => {
         reason: 'repair.refusal.discountOwnerOnly',
       });
     }
+  });
+
+  test('a limited role discounts within its store limit, judged by the server’s current limit', async () => {
+    const { world, builder } = await setupWorld(3343, 'none');
+    const roleId = testId(3344);
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId,
+      roleName: 'manager',
+      permissionIds: ['repair.quote_change', 'repair.discount'],
+    });
+    await db.updateTable('roles').set({ limited: true }).where('id', '=', roleId).execute();
+    const setLimit = (amount: number) =>
+      db
+        .insertInto('roleLimits')
+        .values({
+          tenantId: world.tenantId,
+          roleId,
+          storeId: world.storeId,
+          kind: 'priceDrop',
+          amount: BigInt(amount),
+          updatedBy: world.userId,
+          updatedAt: 1n,
+        })
+        .onConflict((oc) =>
+          oc.columns(['roleId', 'storeId', 'kind']).doUpdateSet({ amount: BigInt(amount) }),
+        )
+        .execute();
+    await setLimit(10_000);
+    const line = (n: number, kind: string, amount: number) =>
+      ticketOp(
+        builder,
+        'repair.quote_changed',
+        {
+          lineId: `01920000-0000-7000-8000-0000000e0d0${n}`,
+          kind,
+          description: kind === 'part' ? 'LCD' : 'Diskon',
+          amount,
+          reason: 'Langganan',
+          customerAgreed: true,
+          fromProposal: false,
+          waitsForCustomer: false,
+        },
+        { schemaVersion: 2 },
+      );
+    const discount = (n: number, amount: number) => line(n, 'discount', -amount);
+
+    // 6.000 and 4.000 make the 10.000 limit on this servisan; one rupiah more is over it.
+    const first = await push(world, [
+      line(0, 'part', 80_000),
+      discount(1, 6_000),
+      discount(2, 4_000),
+      discount(3, 1),
+    ]);
+    expect(first.results.map((r) => r.status)).toEqual([
+      'accepted',
+      'accepted',
+      'accepted',
+      'rejected',
+    ]);
+    expect(first.results[3]).toMatchObject({
+      code: 'RULE_VIOLATED',
+      reason: 'repair.refusal.overLimit',
+    });
+
+    // The owner raises it, then lowers it again before the next push: the server's limit counts.
+    await setLimit(20_000);
+    const raised = await push(world, [discount(4, 5_000)]);
+    expect(raised.results[0]?.status).toBe('accepted');
+    await setLimit(0);
+    const lowered = await push(world, [discount(5, 1_000)]);
+    expect(lowered.results[0]).toMatchObject({
+      status: 'rejected',
+      reason: 'repair.refusal.overLimit',
+    });
   });
 
   test('a price change waits exactly when the customer has not agreed yet', async () => {
@@ -580,8 +666,8 @@ describe('money: the counter cannot take cash out through the ledger', () => {
   });
 });
 
-describe('a phone goes home paid, whatever version sent it', () => {
-  test('a version-1 handover of an unpaid repaired phone is refused', async () => {
+describe('a phone goes home paid', () => {
+  test('a handover of an unpaid repaired phone is refused', async () => {
     const { world, builder } = await setupWorld(3370);
     await db
       .updateTable('repairTickets')
@@ -591,8 +677,14 @@ describe('a phone goes home paid, whatever version sent it', () => {
     const handover = ticketOp(
       builder,
       'repair.device_returned',
-      { handoverPhoto: photo(world, 7), signature: photo(world, 8), note: '' },
-      { schemaVersion: 1 },
+      {
+        handoverPhoto: photo(world, 7),
+        signature: photo(world, 8),
+        note: '',
+        unpaidReason: null,
+        checklist: [],
+      },
+      { schemaVersion: 3 },
     );
 
     const result = await push(world, [handover]);
@@ -602,6 +694,85 @@ describe('a phone goes home paid, whatever version sent it', () => {
       code: 'RULE_VIOLATED',
       reason: 'repair.refusal.notPaid',
     });
+  });
+});
+
+describe('Bayar nanti', () => {
+  test('the counter leaves a debt only with an owner’s approved Bayar nanti that covers it', async () => {
+    const { world, builder } = await setupWorld(3380, 'none');
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId: testId(3381),
+      roleName: 'cashier',
+      permissionIds: ['repair.read', 'repair.handover', 'money.read', 'money.receive'],
+    });
+    await db
+      .updateTable('repairTickets')
+      .set({ outcome: 'repaired' })
+      .where('id', '=', TICKET)
+      .execute();
+    const permit = async (id: string, amount: number) =>
+      db
+        .insertInto('approvalRequests')
+        .values({
+          id,
+          tenantId: world.tenantId,
+          storeId: world.storeId,
+          kind: 'repair.payLater',
+          targetType: 'repair_ticket',
+          targetId: TICKET,
+          inputJson: JSON.stringify({ ticketId: TICKET }),
+          amount: BigInt(amount),
+          reason: 'Gajian Jumat',
+          basis: 'x',
+          requestedBy: world.userId,
+          requestedAt: BigInt(NOW),
+          status: 'approved',
+          decidedBy: testId(3382),
+          decidedAt: BigInt(NOW),
+          note: null,
+        })
+        .execute();
+    const charge = builder.append({
+      type: 'money.charge_recorded',
+      entityType: 'money_entry',
+      entityId: '01920000-0000-7000-8000-0000000e0d01',
+      payload: {
+        document: { kind: 'repair.ticket', id: TICKET, label: 'SEED-0001' },
+        amount: 650_000,
+        account: 'service_revenue',
+      },
+    });
+    const handover = () =>
+      ticketOp(
+        builder,
+        'repair.device_returned',
+        {
+          handoverPhoto: photo(world, 7),
+          signature: photo(world, 8),
+          note: '',
+          unpaidReason: 'Gajian Jumat',
+          checklist: [],
+        },
+        { schemaVersion: 3 },
+      );
+
+    // Approved for less than is left: refused like no approval at all.
+    await permit('01920000-0000-7000-8000-0000000e0d10', 600_000);
+    const first = await push(world, [charge, handover()]);
+    expect(first.results.map((r) => r.status)).toEqual(['accepted', 'rejected']);
+    expect(first.results[1]).toMatchObject({ reason: 'repair.refusal.unpaidOwnerOnly' });
+
+    await permit('01920000-0000-7000-8000-0000000e0d11', 650_000);
+    const second = await push(world, [handover()]);
+    expect(second.results[0]).toMatchObject({ status: 'accepted' });
+    const row = await db
+      .selectFrom('repairTickets')
+      .select('location')
+      .where('id', '=', TICKET)
+      .executeTakeFirst();
+    expect(row?.location).toBe('returned');
   });
 });
 

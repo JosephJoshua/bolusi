@@ -17,6 +17,7 @@ import {
   Icon,
   ListRow,
   SyncChip,
+  TextButton,
   border,
   color,
   radius,
@@ -25,9 +26,10 @@ import {
   type,
   type IconName,
   type SyncChipState,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 import { initialsOf } from '@bolusi/device/models/switcher/model';
@@ -74,6 +76,10 @@ export interface SettingsScreenProps {
   readonly onOpenSwitcher: () => void;
   /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
   readonly onOpenChangePin: () => void;
+  /** Rename this phone, for someone who may register devices here; absent for everyone else. */
+  readonly onRenameDevice?: (() => void) | undefined;
+  /** Open this phone's setup guide again (permissions, paper); absent where there is none. */
+  readonly onOpenSetup?: (() => void) | undefined;
   /**
    * Open the owner's staff PIN screen (unlock / reset) — present ONLY when the acting user may do
    * either, so the row is absent for everyone else rather than shown-and-denied. Core still enforces.
@@ -86,6 +92,10 @@ export interface SettingsScreenProps {
    * here (`auth.user_create`), so the row is absent for everyone else. The server still decides.
    */
   readonly onOpenStaff?: (() => void) | undefined;
+  /** Open "Batas wewenang" — present ONLY for someone who may set limits here. */
+  readonly onOpenLimits?: (() => void) | undefined;
+  /** The main owner's role editor ("Tugas karyawan"); absent for anyone else. */
+  readonly onOpenRoles?: (() => void) | undefined;
   /**
    * The modules' settings (repair's intake lists and fees, money's payment methods) — each row present
    * ONLY for someone who may change it at this store, and a section absent when it has no rows; core
@@ -108,9 +118,13 @@ export function SettingsScreen({
   onBack,
   onOpenSwitcher,
   onOpenChangePin,
+  onRenameDevice,
+  onOpenSetup,
   onOpenStaffPins,
   lockedStaffCount = 0,
   onOpenStaff,
+  onOpenLimits,
+  onOpenRoles,
   modules = [],
   syncChip,
   pendingCount,
@@ -161,7 +175,10 @@ export function SettingsScreen({
         />
       </Section>
 
-      {onOpenStaff === undefined && onOpenStaffPins === undefined ? null : (
+      {onOpenStaff === undefined &&
+      onOpenStaffPins === undefined &&
+      onOpenLimits === undefined &&
+      onOpenRoles === undefined ? null : (
         // The owner's people: who works here, and their PINs.
         <Section title={t('core.settings.team')} testID="settings-section-team">
           {onOpenStaff === undefined ? null : (
@@ -171,6 +188,24 @@ export function SettingsScreen({
               secondaryText={t('auth.staff.settingsSummary')}
               onPress={onOpenStaff}
               testID="settings-staff"
+            />
+          )}
+          {onOpenLimits === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="limits" />}
+              primaryText={t('auth.limits.title')}
+              secondaryText={t('auth.limits.settingsSummary')}
+              onPress={onOpenLimits}
+              testID="settings-limits"
+            />
+          )}
+          {onOpenRoles === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="roles" />}
+              primaryText={t('auth.roles.title')}
+              secondaryText={t('auth.roles.settingsSummary')}
+              onPress={onOpenRoles}
+              testID="settings-roles"
             />
           )}
           {onOpenStaffPins === undefined ? null : (
@@ -245,12 +280,39 @@ export function SettingsScreen({
         ))}
       </Section>
 
-      <Section title={t('core.settings.device')} rows={false} testID="settings-section-device">
+      <Section
+        title={t('core.settings.device')}
+        rows={false}
+        above={
+          onOpenSetup === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="phoneDevice" />}
+              primaryText={t('auth.setup.reopen')}
+              secondaryText={t('auth.setup.reopenSummary')}
+              onPress={onOpenSetup}
+              testID="settings-setup"
+            />
+          )
+        }
+        testID="settings-section-device"
+      >
         <View style={styles.facts} testID="settings-device-info">
           <FactGrid>
             <Fact
               label={t('core.settings.deviceName')}
               value={device.deviceName}
+              // With the action, the name takes the row, so "Ubah" sits at the end of its label.
+              wide={onRenameDevice !== undefined}
+              action={
+                onRenameDevice === undefined ? undefined : (
+                  <TextButton
+                    label={t('core.action.edit')}
+                    accessibilityLabel={t('auth.rename.titlePhone')}
+                    onPress={onRenameDevice}
+                    testID="settings-device-rename"
+                  />
+                )
+              }
               testID="settings-device-name"
             />
             <Fact
@@ -288,12 +350,15 @@ function Section({
   title,
   children,
   rows = true,
+  above,
   testID,
 }: {
   readonly title: string;
   readonly children: ReactNode;
   /** False for content that is not a list of rows (the device facts). */
   readonly rows?: boolean;
+  /** Rows above content that is not rows (the setup guide over the device facts). */
+  readonly above?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element {
   return (
@@ -301,6 +366,7 @@ function Section({
       <Text style={styles.sectionTitle} accessibilityRole="header" testID={testID}>
         {title}
       </Text>
+      {above === undefined || above === null ? null : <View style={styles.rows}>{above}</View>}
       <View style={rows ? styles.rows : styles.plain}>{children}</View>
     </View>
   );

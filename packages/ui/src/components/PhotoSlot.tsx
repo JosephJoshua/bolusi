@@ -5,7 +5,8 @@
  * in both states, so a person always knows which angle a tile is.
  */
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
@@ -18,7 +19,7 @@ export interface PhotoSlotProps {
   /** Already-localized; read out with the label, e.g. "Ambil foto" / "Ambil ulang". */
   readonly actionLabel: string;
   /** What an empty slot asks for; a camera unless the slot takes something else (a signature). */
-  readonly emptyIcon?: 'camera' | 'signature' | undefined;
+  readonly emptyIcon?: 'camera' | 'signature' | 'video' | undefined;
   /** Absent ⇒ the slot is read-only (a ticket's recorded evidence). */
   readonly onPress?: (() => void) | undefined;
   readonly testID?: string | undefined;

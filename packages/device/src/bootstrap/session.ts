@@ -56,6 +56,7 @@ import {
   DomainError,
   errorCodeOrUnexpected,
   listSwitcherUsers,
+  mayManageOwnerPin,
   resolveDisplayRoleKeys,
   readIdleLockSeconds,
   readPinAttempt,
@@ -136,6 +137,16 @@ export interface AppSessionSnapshot {
    * "Karyawan" entry. A UX gate like the two above: the server decides every staff change.
    */
   readonly canManageStaff: boolean;
+  /**
+   * Does the ACTIVE user hold `auth.limit_manage` here? Gates "Batas wewenang", a UX gate like the
+   * others: the server decides every change.
+   */
+  readonly canSetLimits: boolean;
+  /**
+   * Does the ACTIVE user hold `auth.device_enroll` here? Gates renaming this device in Settings, a UX
+   * gate like the others: the server decides.
+   */
+  readonly canRenameDevice: boolean;
   /**
    * Is the ACTIVE user a tenant admin (tenant-wide `auth.role_manage`, the main owner)? Only they are
    * offered owner roles and other owners to manage; the server enforces the same rule.
@@ -369,6 +380,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         canUnlock: actingUserHolds(AUTH_PERMISSION.pinUnlock),
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
         canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
+        canSetLimits: actingUserHolds(AUTH_PERMISSION.limitManage),
+        canRenameDevice: actingUserHolds(AUTH_PERMISSION.deviceEnroll),
         tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };
     },
@@ -546,7 +559,18 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       ) {
         throw new DomainError('PERMISSION_DENIED');
       }
-      const directory = await listSwitcherUsers(db);
+      // An owner's PIN is the main owner's to manage (core `mayManageOwnerPin`, which the PIN
+      // commands and the server also apply): a store owner is not offered a peer owner at all.
+      const actorUserId = manager.current?.userId;
+      const directory = (
+        await Promise.all(
+          (await listSwitcherUsers(db)).map(async (user) =>
+            actorUserId !== undefined && (await mayManageOwnerPin(db, actorUserId, user.id))
+              ? [user]
+              : [],
+          ),
+        )
+      ).flat();
       return Promise.all(
         directory.map(async (user) => {
           const [roleKeys, attempt, verifier] = await Promise.all([

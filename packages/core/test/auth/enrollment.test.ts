@@ -16,6 +16,8 @@ import {
   createDirectorySource,
   createUuidV7Generator,
   DEVICE_ID_META_KEY,
+  DEVICE_SETUP_META_KEY,
+  readDeviceSetupFor,
   DomainError,
   FIRST_PIN_USER_META_KEY,
   IDLE_LOCK_SECONDS_META_KEY,
@@ -27,6 +29,10 @@ import {
   operationFromSignedCoreJcs,
   readHeldPhone,
   carriedRegistrations,
+  enqueuePendingVerifier,
+  readPendingVerifiers,
+  readVerifier,
+  writeVerifier,
   readSyncState,
   verifyOp,
   PermissionEvaluator,
@@ -462,7 +468,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     expect(await readStoreId(restarted)).toBe(fx.params.storeId);
   });
 
-  it('after enrollment meta_kv holds EXACTLY {firstPinUserId, idleLockSeconds, storeName, stores, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
+  it('after enrollment meta_kv holds EXACTLY {deviceSetup, firstPinUserId, idleLockSeconds, storeName, stores, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
     // A presence spot-check would pass on a row that also wrote keys nobody declared; assert the whole
     // set. deviceId/storeId are task 88's; tenantId, the store/tenant DISPLAY NAMES and (task 133) the
     // tenant's idleLockSeconds are applyBundle's — every one of them re-delivered on each refresh, so
@@ -471,6 +477,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     fx = await fixture(12);
     await runEnrollment(fx.deps, fx.params);
     expect(await metaKeys(fx.db)).toStrictEqual([
+      DEVICE_SETUP_META_KEY,
       FIRST_PIN_USER_META_KEY,
       IDLE_LOCK_SECONDS_META_KEY,
       STORE_NAME_META_KEY,
@@ -484,6 +491,8 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     expect([DEVICE_ID_META_KEY, STORE_ID_META_KEY]).toStrictEqual(['deviceId', 'storeId']);
     // The enrolling owner, the one user who may make their own first PIN here (pin-flows.ts).
     expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBe(fx.params.ownerUserId);
+    // The same owner sets the new device up once they are in (device-setup.ts).
+    expect(await readDeviceSetupFor(fx.db)).toBe(fx.params.ownerUserId);
     expect([STORE_NAME_META_KEY, TENANT_NAME_META_KEY, IDLE_LOCK_SECONDS_META_KEY]).toStrictEqual([
       'auth.storeName',
       'auth.tenantName',
@@ -509,6 +518,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     // The draft is NOT gone (the delete never ran) — identity is recoverable from BOTH places. The
     // store/tenant names persisted by applyBundle (task 109), which runs BEFORE the draft delete, survive.
     expect(await metaKeys(restarted)).toStrictEqual([
+      DEVICE_SETUP_META_KEY,
       'auth.enrollment_draft',
       FIRST_PIN_USER_META_KEY,
       IDLE_LOCK_SECONDS_META_KEY,
@@ -877,6 +887,35 @@ describe('re-enrolling a phone that still holds unsynced changes', () => {
       [mediaId]: second.deviceId,
       [uploadedId]: oldDeviceId,
     });
+  });
+
+  it('moves a PIN verifier still waiting for upload to the new device, with its local copy', async () => {
+    // The server takes a verifier only at a position on the posting device's own log, so one queued
+    // under the old registration would be refused for good once the phone posts as the new one.
+    const { f, oldDeviceId } = await enrolledWithBacklog(48);
+    fx = f;
+    const asOf = { timestamp: START + 5_000, deviceId: oldDeviceId, seq: 3 };
+    const verifier = {
+      algorithm: 'argon2id' as const,
+      saltB64: Buffer.alloc(16, 1).toString('base64'),
+      mKiB: 19456,
+      t: 2,
+      p: 1 as const,
+      hashB64: Buffer.alloc(32, 2).toString('base64'),
+      asOf,
+    };
+    await enqueuePendingVerifier(f.db, {
+      userId: f.ownerId,
+      actorUserId: f.ownerId,
+      verifierRef: 'ref-1',
+      verifier,
+    });
+    await writeVerifier(f.db, f.ownerId, verifier);
+
+    const second = await runEnrollment(f.deps, f.params);
+    const moved = { ...asOf, deviceId: second.deviceId };
+    expect((await readPendingVerifiers(f.db)).map((p) => p.verifier.asOf)).toEqual([moved]);
+    expect((await readVerifier(f.db, f.ownerId))?.asOf).toEqual(moved);
   });
 
   it('refuses to bind a phone holding one store’s data to another store, before calling the server', async () => {

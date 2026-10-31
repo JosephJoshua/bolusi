@@ -5,6 +5,7 @@
 import {
   app,
   BrowserWindow,
+  Menu,
   session,
   shell,
   type IpcMainEvent,
@@ -17,7 +18,10 @@ import { fileURLToPath } from 'node:url';
 import { quitAfter, registerCore } from './core-process.js';
 import { DeviceSettingsFile } from './device-settings.js';
 import { opensExternally } from './external-links.js';
+import { registerMediaChoice } from './media-choice.js';
 import { registerPrinting } from './printing.js';
+import { serverAddress } from './server-address.js';
+import { registerStartup } from './startup.js';
 import { registerUpdates } from './updater.js';
 import { frameOptions, registerWindowChrome, reportFullscreen } from './window-chrome.js';
 
@@ -38,7 +42,8 @@ if (DATA_DIR_OVERRIDE !== undefined) app.setPath('userData', join(DATA_DIR_OVERR
 
 /**
  * Where this build syncs: `BOLUSI_API_URL` when the build ran (written beside main by the core's
- * build, so an installed app carries it), or from the shell when developing.
+ * build, so an installed app carries it), or from the shell when developing. An installed app
+ * takes only an https address.
  */
 function apiBaseUrl(): string {
   const fromShell = app.isPackaged ? undefined : process.env['BOLUSI_API_URL'];
@@ -49,7 +54,7 @@ function apiBaseUrl(): string {
   } catch {
     built = undefined;
   }
-  return (fromShell ?? built ?? '').replace(/\/+$/, '');
+  return serverAddress(fromShell ?? built ?? '', app.isPackaged);
 }
 
 /** The counter windows this process opened; only their own page may call in. */
@@ -77,6 +82,8 @@ function createWindow(): void {
       nodeIntegration: false,
       webviewTag: false,
       spellcheck: false,
+      // An installed app opens no developer tools, also not from the keyboard.
+      devTools: !app.isPackaged,
       preload: PRELOAD,
     },
   });
@@ -97,6 +104,25 @@ function createWindow(): void {
   else void window.loadFile(RENDERER_INDEX);
 }
 
+/**
+ * An installed app's menu, in place of Electron's default whose View menu opens the developer tools
+ * and reloads the page. The bar stays hidden; only the shortcuts the counter uses remain: editing
+ * keys in fields, zoom, and F11 for fullscreen.
+ */
+const INSTALLED_MENU: Electron.MenuItemConstructorOptions[] = [
+  { role: 'editMenu' },
+  {
+    label: 'View',
+    submenu: [
+      { role: 'resetZoom' },
+      { role: 'zoomIn' },
+      { role: 'zoomOut' },
+      { type: 'separator' },
+      { role: 'togglefullscreen' },
+    ],
+  },
+];
+
 // Indonesian for what Chromium draws itself, such as a date field's dd/mm/yyyy order.
 app.commandLine.appendSwitch('lang', 'id');
 
@@ -113,16 +139,18 @@ app.on('second-instance', () => {
 
 void app.whenReady().then(() => {
   if (!primary) return;
-  // Only copying (a phone number) and the webcam are allowed: no microphone, location or other
-  // device.
+  if (app.isPackaged) Menu.setApplicationMenu(Menu.buildFromTemplate(INSTALLED_MENU));
+  // Only copying (a phone number), the webcam and its microphone are allowed: no location, screen
+  // capture or other device.
   const counter = (contents: Electron.WebContents | null): boolean =>
     contents !== null && [...counterWindows].some((window) => window.webContents === contents);
-  // The webcam for intake and handover photos, video only and only for the counter's own page.
+  // The webcam for intake and handover photos, and with the microphone for the ownership video
+  // (the customer says the phone is theirs), only for the counter's own page.
   const camera = (permission: string, kinds: readonly string[] | undefined): boolean =>
     permission === 'media' &&
     kinds !== undefined &&
     kinds.length > 0 &&
-    kinds.every((kind) => kind === 'video');
+    kinds.every((kind) => kind === 'video' || kind === 'audio');
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
     const kinds = 'mediaTypes' in details ? details.mediaTypes : undefined;
     callback(
@@ -139,13 +167,19 @@ void app.whenReady().then(() => {
         camera(permission, kind === undefined ? undefined : [kind]))
     );
   });
-  registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
+  // One file object, so the printer's and the camera's writes queue behind each other.
+  const deviceSettings = new DeviceSettingsFile(app.getPath('userData'));
+  registerPrinting(deviceSettings, trusted);
+  registerMediaChoice(deviceSettings, trusted);
   const pages = (): Electron.WebContents[] =>
     [...counterWindows].map((window) => window.webContents);
   registerUpdates(trusted, pages);
   registerWindowChrome(trusted);
+  registerStartup(trusted);
   if (!DEMO && API_BASE_URL === '')
-    console.error('BOLUSI_API_URL is not set: nothing to sync with');
+    console.error(
+      'BOLUSI_API_URL is not set, or not https in an installed app: nothing to sync with',
+    );
   quitAfter(
     registerCore({
       dataDir: app.getPath('userData'),

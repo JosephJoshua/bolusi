@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
+import { FontScaleProvider } from '@bolusi/ui';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
@@ -34,6 +35,7 @@ import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
+import { createFetchQris } from '@bolusi/device/bootstrap/qris-transport';
 import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root, type RootProps } from './src/bootstrap/Root.js';
@@ -50,7 +52,12 @@ import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstra
 import { MEDIA_DRAIN_TASK } from '@bolusi/device/media/background-task';
 import type { MediaClient } from '@bolusi/device/media/client';
 import { createMediaClientForApp } from './src/media/native.js';
-import { createExpoCapturePlatform, createExpoScanPlatform } from './src/media/native-capture.js';
+import {
+  createExpoCapturePlatform,
+  createExpoScanPlatform,
+  expoCameraPermission,
+} from './src/media/native-capture.js';
+import { createExpoVideoPlatform } from './src/media/native-video.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from '@bolusi/device/media/transport';
@@ -437,7 +444,10 @@ function createRepair(
   runtime: AppRuntime,
   identity: CommandIdentity,
   media: MediaClient | null,
-  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'> & {
+  capture: Pick<
+    RepairMediaSeams,
+    'capturePhoto' | 'captureSignature' | 'recordVideo' | 'playVideo'
+  > & {
     readonly scanCode: (() => Promise<string | null>) | undefined;
   },
 ): RepairRuntime {
@@ -461,6 +471,8 @@ function createRepair(
     ),
     print: expoPrintPlatform,
     scanCode,
+    // QRIS through Xendit: online-only server calls as the signed-in person, on the device bearer.
+    qris: createFetchQris({ baseUrl: apiBaseUrl(), deviceToken: () => keystore.loadDeviceToken() }),
   });
 }
 
@@ -604,6 +616,8 @@ function buildRootProps(): RootProps {
     // what gives 06 §7's storage banners their first production render.
     capturePlatform: createExpoCapturePlatform(),
     scanPlatform: createExpoScanPlatform(),
+    videoPlatform: createExpoVideoPlatform(),
+    cameraPermission: expoCameraPermission,
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process
@@ -619,7 +633,12 @@ function buildRootProps(): RootProps {
 function Bootstrapped(): React.JSX.Element | null {
   rootProps ??= buildRootProps();
   // Live system insets for the shell, so the header follows the status bar when a tablet turns.
-  return createElement(SafeAreaProvider, null, Root(rootProps));
+  // The font scale redraws every text after a system font size change (packages/ui/src/text.tsx).
+  return createElement(
+    SafeAreaProvider,
+    null,
+    createElement(FontScaleProvider, null, Root(rootProps)),
+  );
 }
 
 // Before the first screen, so a phone held sideways at launch turns upright straight away.

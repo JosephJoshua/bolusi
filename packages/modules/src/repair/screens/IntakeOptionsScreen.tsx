@@ -18,9 +18,10 @@ import {
   space,
   touch,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
 

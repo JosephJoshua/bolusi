@@ -6,6 +6,7 @@
 // constructible on Node from fakes (the task's headless-on-Node requirement).
 import type { DevicePlatform } from '@bolusi/schemas';
 import type { PinVerifier } from './verifier.js';
+import type { LimitAmounts } from '../authz/limits.js';
 
 /**
  * The device's SecureStore surface (api/02-auth §3): the two credentials this surface owns —
@@ -81,6 +82,8 @@ export interface BundleRole {
   readonly scopeType: 'tenant' | 'store';
   readonly isSystemDefault: boolean;
   readonly permissionIds: readonly string[];
+  /** A limited role's amounts at this store; null or absent (older server) for none. */
+  readonly limits?: LimitAmounts | null | undefined;
 }
 
 export interface BundlePermission {

@@ -11,6 +11,7 @@
 // and one of them would eventually solve it by giving the query runtime its OWN evaluator — which
 // type-checks, passes its tests, and quietly creates a second enforcement point (runtime/enforce.ts
 // explains what that costs). Composing it once here is CLAUDE.md §2.8 applied to wiring.
+import { allowanceCovers } from '../authz/limits.js';
 import { CommandRuntime, type CommandRuntimeOptions } from '../runtime/execute.js';
 import type { CommandIdentity, QueryExecutorPort, QueryHandle } from '../runtime/ctx.js';
 import { QueryRuntime } from '../query/execute.js';
@@ -100,6 +101,18 @@ export function createModuleRuntime<DB>(
             }).allowed,
           ),
         sha256: (data) => options.crypto.sha256(data),
+        withinLimit: (userId, permissionId, amount) =>
+          Promise.resolve(
+            allowanceCovers(
+              options.evaluator.allowance({
+                userId,
+                tenantId: op.tenantId,
+                storeId: op.storeId,
+                permissionId,
+              }),
+              amount,
+            ),
+          ),
       }),
   });
 

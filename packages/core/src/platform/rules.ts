@@ -8,6 +8,8 @@ type Rule = OpRule<PlatformDatabase>;
 export const PLATFORM_REFUSALS = defineRefusals('platform', [
   'conflictNotFound',
   'notYourPreference',
+  // The server's apply step: an op's fold hit a unique key that is already taken.
+  'idTaken',
 ] as const);
 const { refuse } = PLATFORM_REFUSALS;
 

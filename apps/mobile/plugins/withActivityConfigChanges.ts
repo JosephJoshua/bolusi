@@ -6,8 +6,8 @@
 //
 // Handling the change ourselves means finishing what React Native leaves out on the new
 // architecture: it tells JS the new font scale only on the next resume, so a live change never
-// reached `useWindowDimensions` (App.tsx remounts the screens on it). `FONT_SCALE_SYNC_KOTLIN` does
-// three steps each time the font scale changes, in this order:
+// reached `useWindowDimensions` (the text nodes remount on it, packages/ui/src/text.tsx).
+// `FONT_SCALE_SYNC_KOTLIN` does three steps each time the font scale changes, in this order:
 //   1. Refresh the display metrics at once. Back from Settings, a measure pass can run before
 //      anything posted, and text measured with the old metrics is cached under the new scale.
 //   2. Measure every React root at once too, so the surface's layout carries the new scale before

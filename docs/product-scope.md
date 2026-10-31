@@ -164,6 +164,45 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   phone cannot be handed back while a change waits. Technicians keep proposing,
   since they find the extra fault once the phone is open.
 
+## Putting staff mistakes right (2026-10-29)
+
+From PC exploratory QA round 2. Corrections are their own recorded steps, never
+silent edits, and each one names who did it and what it was before.
+
+- **Intake's record while the phone is in the store:** the counter (repair
+  intake) can correct the customer's name and number, the phone (brand, model,
+  colour, IMEI), its lock, the complaint and the accessories, with an optional
+  reason. The history lists each change as before and after; the lock's code is
+  never shown, only that it changed. After pickup the signed slip is the record,
+  so nothing here can be changed.
+- **Customers are never renamed under other servisans:** a correction renames
+  the customer's record only when this servisan is the only one it names and it
+  was never handed over. Otherwise, or when the typed details match another
+  customer, the servisan moves to that customer (found, or made like at intake),
+  and other servisans keep their own. The history must name the customer it
+  moves to.
+- **Warranty claims keep their phone:** a claim's brand, model and IMEI cannot
+  change, and a handover with a claim on it cannot be taken back.
+- **Taking a handover back is an owner's decision** (the cancel permission; a
+  manager only within the cancel limit, against what the servisan charged): for
+  a phone marked as handed over by mistake that is still in the store, within a
+  day of the first handover. A reason is required. The handover photo and
+  signature stop counting and payments stay; a payment booked to the wrong
+  servisan is cancelled in Kas under its own rules. The warranty still counts
+  from the first handover, the servisan can no longer be cancelled (it can only
+  be handed over again), and its customer, brand, model and IMEI stay as on the
+  signed slip. The day is judged by the time the device signs the undo, so an
+  owner's device with its clock set back could undo later; managers stay bound
+  by their limit either way. Accepted: owners already hold the cash decisions.
+- **A mistyped cash move is voided by an owner** (adjust cash) with a reason,
+  until a later count of the drawer was settled. The void dates back to the move,
+  so a count taken after it reads as if the move never happened.
+- **Checks at entry:** phone numbers must be callable (stored one way, 0812…),
+  an IMEI must be 15 digits with a valid check digit, a retyped returning
+  customer is reused, and PINs that are easy to guess (111111, 123456, common
+  ones) are refused on every device. The server only sees PIN verifiers, so it
+  cannot check this itself.
+
 ## Printing repair slips (2026-10-26)
 
 Agreed with the owner before building printing.
@@ -232,7 +271,11 @@ Agreed with the owner after reviewing what the repair release still lacks.
   never extends it. A later price rise on a claim also needs an owner.
 - **Ownership video:** taken by the counter at intake when a chosen type needs it. It
   shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
-  720p; it uploads in the background like photos.
+  720p (about 2 Mbit/s: MP4, or WebM from a PC whose browser engine cannot record MP4); it uploads in the
+  background like photos. It is taken only at intake (Joseph, 2026-10-28): the servisan
+  only plays it back, and a type that needs one added later asks for nothing more. The
+  handover's proof is its photo. A warranty claim needs none. A PC without a webcam
+  records it on the paired store phone, like its photos.
 - **No separate QC step:** the technician's after photo stays, and the counter tests
   the phone with the customer at handover from a short checklist: the owner's
   "Cek saat serah terima" list (default: the customer tried the phone, the repaired
@@ -271,6 +314,10 @@ book for repairs and starts the store's money ledger.
 - **Paid in full at pickup:** the phone goes back once what is left (Sisa) is
   paid. Only an owner can let it go unpaid ("Bayar nanti", with a reason). It
   then stays as a debt on the owners' unpaid list until the customer pays.
+- **Free repairs are owners'** (2026-10-28): a repaired servisan that totals
+  Rp 0 and is not a warranty claim goes home only with an owner (the
+  warranty-exception permission). A Rp 0 intake ("cek dulu") stays open to the
+  counter, and a cancelled phone is unchanged.
 - **Methods:** Tunai, QRIS (the store's own QR, marked received by the counter),
   EDC and Transfer, and one payment may be split across them. Owners set each
   store's methods and name the account the money lands in. An account belongs to
@@ -397,6 +444,65 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
   will be seen only by owners and whoever records purchases; a sell price per
   store waits for the shop POS.
 
+## Managers, limits, approvals and roles (2026-10-28)
+
+Agreed with the owner. This replaces the October 14-16 manager, limit and role
+governance notes in "Decision" where they differ.
+
+- **Manajer:** a store role with everything a Kasir and a Teknisi do, plus the
+  owners' decisions (cancel, discount or other price drop, lower a DP, refund,
+  void a payment, hand over unpaid with "Bayar nanti", warranty exceptions)
+  within limits. Settings, employees, payment methods and part costs stay with
+  owners unless the main owner changes the role.
+- **Every role is editable:** only the main owner edits roles. Each permission
+  is a plain-language switch in groups (risky ones marked), and a new role
+  starts as a copy of another ("Kasir senior"). Store owners give the roles to
+  their own staff. In the app a role is a "Tugas". The owner roles are fixed,
+  and power over people, devices, limits and the audit log is never a switch.
+  A made role can be renamed, and deleted only while nobody holds it. A role
+  that gets its first discount, cancel, DP, refund, void or Bayar nanti switch
+  becomes limited (Rp 0 until limits are set); the main owner can turn that off.
+- **Limits belong to a role in a store:** a role is either free of limits (the
+  owners) or limited. For a limited role, each store owner sets three amounts
+  for their store in "Batas wewenang": price drops (discounts and a smaller
+  cancel fee), refunds (including voided payments; a corrected DP counts only
+  what it went down by, unless it moves to another payment method) and Bayar
+  nanti. Each one counts everything of its kind on one
+  servisan together. A new limit is Rp 0, so a limited role does none of these
+  until the owner sets one. Someone holding two roles gets the higher limit, and
+  nobody sets the limits of a role they hold.
+- **Approval requests:** anyone who can start one of these actions may ask for
+  approval with a reason; a limited role asks only above its limit. The store's
+  owner, the main owner, or another person whose limit covers it approves or
+  rejects it with a note, never the person who asked (not even through a second
+  role), and without changing the amount. An approved request applies itself
+  and never expires. A waiting request closes if the servisan changes so it no
+  longer fits (paid, picked up, repriced), and the asker can withdraw it. An
+  approved price drop still waits for the customer's yes; a refund request names
+  how the money goes back and is recorded when approved.
+- **Offline:** a request reaches the approver when both phones sync. With no
+  signal, an owner or manager at the counter can approve on the same phone with
+  their PIN. Role and limit changes are online only and reach phones with the
+  next sync; the server judges each synced action by the current roles and
+  limits and refuses one over them, which the owner sees.
+- **Approvals as built (first part):** a discount and a cancel. The counter's
+  "Batalkan" and a discount past someone's limit (counting the servisan's other
+  discounts) become "Minta persetujuan". The request shows on the servisan, and
+  approvers get a "Persetujuan (n)" queue on the board. Approving runs the
+  action as the approver, checked by the same rules and their own limit. A
+  waiting request of a kind blocks a second one on the same servisan, and any
+  change to the servisan (even one that leaves the total as it was) closes it.
+  Two approvers answering one request while offline cannot apply it twice: the
+  decision is named after the request, so the second is refused at sync.
+- **Approvals as built (second part):** Bayar nanti and DP fixes. At handover,
+  "Bayar nanti" beyond someone (or past their limit, shown up front) asks with
+  the reason typed; once approved, anyone at the counter may leave that
+  servisan's debt up to the approved amount, and a higher bill needs asking
+  again. The counter's "Ubah DP" asks too; a fix counts against the refund
+  limit by what its voids take off (the decrease through the same method, all
+  of it through another). Refunds beyond an overpayment and voids from Kas are
+  not requestable: no counter screen starts them.
+
 ## Customers follow their repair online (2026-10-28)
 
 - Each servisan gets a 12-character link code (Crockford base32) made on the
@@ -423,7 +529,7 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
 
 ## Open product choices
 
-- Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, the user-facing v1 permission/grant matrix and server/offline enforcement of high-risk approvals, manager refund/price-override caps and per-store limits, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
+- Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
 - Choose and verify a QRIS integration provider, onboarding and merchant-account model, fees/settlement and verification/reconciliation semantics; test both central and per-store account needs. No provider (including Midtrans) is selected here.
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
 

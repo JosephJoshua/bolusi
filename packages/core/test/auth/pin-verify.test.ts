@@ -43,7 +43,7 @@ interface Setup {
   flowDeps(): PinFlowDeps<ClientDatabase>;
 }
 
-const PIN = '111111';
+const PIN = '482915';
 
 async function setup(seed: number): Promise<Setup> {
   const spy = spyKdf(makeFastCrypto());
@@ -60,7 +60,7 @@ async function setup(seed: number): Promise<Setup> {
     async failPastWindow() {
       const row = await readPinAttempt(h.db, h.staffId, h.deviceId);
       if (row?.notBefore != null && h.clock.now() < row.notBefore) h.clock.set(row.notBefore);
-      return verifyPin(deps, { userId: h.staffId, pin: '000000' });
+      return verifyPin(deps, { userId: h.staffId, pin: '805139' });
     },
     flowDeps: () => ({
       runtime: h.runtime,
@@ -88,7 +88,7 @@ describe('SEC-AUTH-02 — escalating lockout schedule; KDF never runs during a w
   it('3 free attempts, then delay−1ms throws PIN_RATE_LIMITED without running the KDF', async () => {
     const s = await setup(1);
     // Three free wrong attempts — each runs the KDF (evaluated).
-    for (let i = 0; i < 3; i += 1) expect((await s.attempt('000000')).ok).toBe(false);
+    for (let i = 0; i < 3; i += 1) expect((await s.attempt('805139')).ok).toBe(false);
     expect(s.kdf(), 'the 3 free attempts each ran the KDF').toBe(3);
 
     const row = await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId);
@@ -97,14 +97,14 @@ describe('SEC-AUTH-02 — escalating lockout schedule; KDF never runs during a w
 
     // At delay − 1 ms: refused, NO KDF (wrong OR correct PIN).
     s.h.clock.set(row!.notBefore! - 1);
-    const err = await expectDomain(s.attempt('000000'), 'PIN_RATE_LIMITED');
+    const err = await expectDomain(s.attempt('805139'), 'PIN_RATE_LIMITED');
     expect(err.details).toMatchObject({ retryAt: row!.notBefore });
     await expectDomain(s.attempt(PIN), 'PIN_RATE_LIMITED'); // the CORRECT PIN is refused too
     expect(s.kdf(), 'no KDF ran during the delay window').toBe(3);
 
     // At exactly delay: evaluated again (KDF runs), count advances to 4.
     s.h.clock.set(row!.notBefore!);
-    expect((await s.attempt('000000')).ok).toBe(false);
+    expect((await s.attempt('805139')).ok).toBe(false);
     expect(s.kdf()).toBe(4);
     expect((await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures).toBe(4);
   });
@@ -195,11 +195,11 @@ describe('SEC-AUTH-05 — hard lock at the 10th failure + offline recovery', () 
     await resetPin(s.flowDeps(), {
       actorUserId: s.h.ownerId,
       targetUserId: s.h.staffId,
-      newPin: '222222',
+      newPin: '593026',
     });
 
     // Lockout cleared; the NEW PIN verifies, the OLD PIN does not.
-    expect((await s.attempt('222222')).ok).toBe(true);
+    expect((await s.attempt('593026')).ok).toBe(true);
     expect((await s.attempt(PIN)).ok).toBe(false); // old PIN invalid everywhere the new verifier reached
   });
 });
@@ -221,7 +221,7 @@ async function measureBudget(
     if (row?.notBefore != null && s.h.clock.now() < row.notBefore) s.h.clock.set(row.notBefore);
     const results = await Promise.all(
       Array.from({ length: concurrency }, () =>
-        s.attempt('000000').then(
+        s.attempt('805139').then(
           (r) => r as unknown,
           (e: unknown) => e,
         ),
@@ -258,7 +258,7 @@ describe('SEC-AUTH-02 — per-(userId, deviceId) isolation on a shared terminal'
     const spy = spyKdf(makeFastCrypto());
     const h = await openAuthHarness(24, {
       crypto: spy.crypto,
-      verifiers: { staff: PIN, storeOwner: '999999' },
+      verifiers: { staff: PIN, storeOwner: '917362' },
     });
     harness = h;
     const deps = {
@@ -273,7 +273,7 @@ describe('SEC-AUTH-02 — per-(userId, deviceId) isolation on a shared terminal'
     for (let i = 0; i < 10; i += 1) {
       const row = await readPinAttempt(h.db, h.staffId, h.deviceId);
       if (row?.notBefore != null && h.clock.now() < row.notBefore) h.clock.set(row.notBefore);
-      await verifyPin(deps, { userId: h.staffId, pin: '000000' });
+      await verifyPin(deps, { userId: h.staffId, pin: '805139' });
     }
     await expectDomain(verifyPin(deps, { userId: h.staffId, pin: PIN }), 'PIN_LOCKED');
 
@@ -281,7 +281,7 @@ describe('SEC-AUTH-02 — per-(userId, deviceId) isolation on a shared terminal'
     expect((await readPinAttempt(h.db, h.storeOwnerId, h.deviceId))?.consecutiveFailures ?? 0).toBe(
       0,
     );
-    expect((await verifyPin(deps, { userId: h.storeOwnerId, pin: '999999' })).ok).toBe(true);
+    expect((await verifyPin(deps, { userId: h.storeOwnerId, pin: '917362' })).ok).toBe(true);
   });
 });
 
@@ -330,8 +330,8 @@ describe('SEC-AUTH-02 — a kill mid-KDF fails closed (the attempt is counted, n
     const emitter = createLockedOutEmitter(h.runtime);
     const deps = { db: h.db, crypto: h.crypto, clock: h.clock, deviceId: h.deviceId, emitter };
 
-    await verifyPin(deps, { userId: h.staffId, pin: '000000' });
-    await verifyPin(deps, { userId: h.staffId, pin: '000000' });
+    await verifyPin(deps, { userId: h.staffId, pin: '805139' });
+    await verifyPin(deps, { userId: h.staffId, pin: '805139' });
     expect((await readPinAttempt(h.db, h.staffId, h.deviceId))?.consecutiveFailures).toBe(2);
 
     // The device dies mid-derivation. Under the OPTIMISTIC order this guess would have been free —
@@ -463,7 +463,7 @@ describe('SEC-AUTH-02 attempt-lock scope — the sibling pin_attempt_state write
     for (let i = 0; i < 9; i += 1) {
       const row = await readPinAttempt(h.db, h.staffId, h.deviceId);
       if (row?.notBefore != null && h.clock.now() < row.notBefore) h.clock.set(row.notBefore);
-      await verifyPin(deps, { userId: h.staffId, pin: '000000' });
+      await verifyPin(deps, { userId: h.staffId, pin: '805139' });
     }
     const pre = await readPinAttempt(h.db, h.staffId, h.deviceId);
     expect(pre?.consecutiveFailures).toBe(9);
@@ -473,7 +473,7 @@ describe('SEC-AUTH-02 attempt-lock scope — the sibling pin_attempt_state write
     const enteredKdf = new Promise<void>((r) => (sawKdf = r));
     gateArmed = true;
     const order: string[] = [];
-    const attemptP = verifyPin(deps, { userId: h.staffId, pin: '000000' }).then((r) => {
+    const attemptP = verifyPin(deps, { userId: h.staffId, pin: '805139' }).then((r) => {
       order.push('attempt');
       return r;
     });
@@ -513,7 +513,7 @@ describe('SEC-AUTH-02 attempt-lock scope — the sibling pin_attempt_state write
     const resetP = resetPin(s.flowDeps(), {
       actorUserId: s.h.ownerId,
       targetUserId: s.h.staffId,
-      newPin: '222222',
+      newPin: '593026',
     }).then(() => {
       resetDone = true;
     });
@@ -529,6 +529,6 @@ describe('SEC-AUTH-02 attempt-lock scope — the sibling pin_attempt_state write
     expect(
       (await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures ?? 0,
     ).toBe(0);
-    expect((await s.attempt('222222')).ok).toBe(true);
+    expect((await s.attempt('593026')).ok).toBe(true);
   });
 });

@@ -52,6 +52,8 @@ export interface PaymentDraft {
   readonly amount: number;
   readonly reference: string | null;
   readonly tendered: number | null;
+  /** The payment this one is recorded in place of; void that one right after. */
+  readonly replaces?: string;
 }
 
 /** What a customer is charged for a document: exactly what its module says (documents.ts). */
@@ -71,6 +73,7 @@ export function paymentOp(ctx: CommandContext, document: MoneyDocument, payment:
     amount: payment.amount,
     reference: payment.reference,
     tendered: payment.tendered,
+    ...(payment.replaces === undefined ? {} : { replaces: payment.replaces }),
   });
 }
 
@@ -182,6 +185,20 @@ export function voidPaymentHandler(
 ): CommandHandlerResult<null> {
   return {
     ops: [voidOp(ctx, input.entryId, input.reason)],
+    result: null,
+  };
+}
+
+export const voidCashMoveInput = voidPaymentInput;
+export type VoidCashMoveInput = z.input<typeof voidCashMoveInput>;
+
+/** An owner cancels a cash move typed wrong; the drawer reads as if it was never recorded. */
+export function voidCashMoveHandler(
+  input: z.output<typeof voidCashMoveInput>,
+  ctx: CommandContext,
+): CommandHandlerResult<null> {
+  return {
+    ops: [entryOp(ctx, MONEY_OP.cashMoveVoided, { reason: input.reason }, input.entryId)],
     result: null,
   };
 }

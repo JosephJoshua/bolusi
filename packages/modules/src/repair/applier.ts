@@ -11,7 +11,7 @@
 // returning a device, a proposal approved and declined at once). Commands refuse those locally;
 // the fold must still accept whatever the server accepted, and the declared conflict keys surface
 // the collision for review.
-import { sql } from 'kysely';
+import { sql, type RawBuilder } from 'kysely';
 
 import {
   canonicalizeJcs,
@@ -20,7 +20,7 @@ import {
   type ProjectionOperation,
   type ProjectionTableManifest,
 } from '@bolusi/core';
-import type { MediaRef } from '@bolusi/schemas';
+import type { AnyMediaRef, MediaRef, VideoRef } from '@bolusi/schemas';
 
 import {
   INTAKE_PHOTO_SLOTS,
@@ -31,6 +31,7 @@ import {
   REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_STORE_UNCOLLECTED_ENTITY,
   REPAIR_TICKET_ENTITY,
+  ownershipVideoSlot,
   workPhotoSlot,
   type DeviceLocation,
   type RepairOutcome,
@@ -286,12 +287,13 @@ export interface TicketOpenedPayload {
   readonly photos: readonly { slot: string; label: string | null; ref: MediaRef }[];
   readonly repairTypes: readonly RecordedRepairType[];
   readonly claimOf: string | null;
+  readonly ownershipVideo: VideoRef | null;
 }
 
 /** v1: checks without labels, accessories as plain keys, exactly the six default photo angles. */
 interface TicketOpenedV1Payload extends Omit<
   TicketOpenedPayload,
-  'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
+  'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf' | 'ownershipVideo'
 > {
   readonly checklist: readonly { item: string; state: string; note: string }[];
   readonly peripherals: readonly string[];
@@ -354,7 +356,7 @@ async function updateTicket(
     location: DeviceLocation;
     technicianId: string;
     returnedBy: string;
-    returnedAt: number;
+    returnedAt: number | RawBuilder<number>;
     cancelFee: number | null;
     cancelStandardFee: number | null;
     cancelledBy: string;
@@ -393,7 +395,7 @@ async function refreshQuoteTotal(db: Db, op: ProjectionOperation): Promise<void>
 async function insertPhotos(
   db: Db,
   op: ProjectionOperation,
-  photos: readonly (readonly [slot: string, ref: MediaRef])[],
+  photos: readonly (readonly [slot: string, ref: AnyMediaRef])[],
 ): Promise<void> {
   const storeId = storeIdOf(op);
   await db
@@ -464,7 +466,7 @@ export const customerDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> 
 function ticketOpenedRows(op: ProjectionOperation): {
   payload: Omit<
     TicketOpenedPayload,
-    'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
+    'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf' | 'ownershipVideo'
   >;
   checklist: readonly object[];
   peripherals: readonly unknown[];
@@ -472,6 +474,7 @@ function ticketOpenedRows(op: ProjectionOperation): {
   intakePhotos: readonly { slot: string; label: string | null }[] | null;
   repairTypes: readonly object[];
   claimOf: string | null;
+  ownershipVideo: VideoRef | null;
 } {
   switch (op.schemaVersion) {
     case 1: {
@@ -484,10 +487,12 @@ function ticketOpenedRows(op: ProjectionOperation): {
         intakePhotos: null,
         repairTypes: [],
         claimOf: null,
+        ownershipVideo: null,
       };
     }
     case 2:
-    case 3: {
+    case 3:
+    case 4: {
       const payload = payloadOf<TicketOpenedPayload>(op);
       return {
         payload,
@@ -496,8 +501,10 @@ function ticketOpenedRows(op: ProjectionOperation): {
         photos: payload.photos,
         intakePhotos: payload.photos.map(({ slot, label }) => ({ slot, label })),
         // v2 tickets were opened before repair types.
-        repairTypes: op.schemaVersion === 3 ? payload.repairTypes : [],
-        claimOf: op.schemaVersion === 3 ? payload.claimOf : null,
+        repairTypes: op.schemaVersion >= 3 ? payload.repairTypes : [],
+        claimOf: op.schemaVersion >= 3 ? payload.claimOf : null,
+        // Before v4 no repair type asked for a video.
+        ownershipVideo: op.schemaVersion >= 4 ? payload.ownershipVideo : null,
       };
     }
     default:
@@ -509,8 +516,16 @@ function ticketOpenedRows(op: ProjectionOperation): {
 }
 
 export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { payload, checklist, peripherals, photos, intakePhotos, repairTypes, claimOf } =
-    ticketOpenedRows(op);
+  const {
+    payload,
+    checklist,
+    peripherals,
+    photos,
+    intakePhotos,
+    repairTypes,
+    claimOf,
+    ownershipVideo,
+  } = ticketOpenedRows(op);
   const storeId = storeIdOf(op);
   await db
     .insertInto('repairTickets')
@@ -579,11 +594,12 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       .execute();
   }
 
-  await insertPhotos(
-    db,
-    op,
-    photos.map(({ slot, ref }) => [slot, ref] as const),
-  );
+  await insertPhotos(db, op, [
+    ...photos.map(({ slot, ref }) => [slot, ref] as const),
+    ...(ownershipVideo === null
+      ? []
+      : [[ownershipVideoSlot(ownershipVideo.mediaId), ownershipVideo] as const]),
+  ]);
   await recordEvent(db, op, {});
 };
 
@@ -783,7 +799,8 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
   await updateTicket(db, op, {
     location: 'returned',
     returnedBy: op.userId,
-    returnedAt: op.timestamp,
+    // A handover taken back and made again keeps the first one's time (handover_reversed).
+    returnedAt: sql<number>`coalesce(returned_at, ${op.timestamp})`,
   });
   await insertPhotos(db, op, [
     ['handover', payload.handoverPhoto],
@@ -796,6 +813,125 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
       ? { note: payload.note }
       : { note: payload.note, checklist: payload.checklist },
   );
+};
+
+/**
+ * A handover taken back by an owner: the phone never left. It is in the store again, the handover
+ * photo and signature are no longer this servisan's (the next handover takes its own), and the
+ * warranty has not started. What was paid stays paid; the history keeps both entries.
+ */
+export const handoverReversedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { reason } = payloadOf<{ reason: string }>(op);
+  // `returnedAt` stays: the warranty counts from the first handover, and so does the undo window.
+  await db
+    .updateTable('repairTickets')
+    .set({ location: 'in_store', returnedBy: null, updatedAt: op.timestamp })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+  await db
+    .deleteFrom('repairTicketPhotos')
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('slot', 'in', ['handover', 'signature'])
+    .execute();
+  await recordEvent(db, op, { reason });
+};
+
+/** One corrected fact, as the history shows it: what intake wrote and what it is now. */
+export interface DetailChange {
+  readonly field: string;
+  /** Absent for the screen lock, whose code the history never shows. */
+  readonly from?: string | null;
+  readonly to?: string | null;
+}
+
+/**
+ * Intake's record corrected. The history entry lists each fact that changed with its old and new
+ * value, read from the ticket as it stood, so it cannot claim a "before" that was never there.
+ */
+export const ticketDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<{
+    customer?: { name: string; phone: string | null };
+    customerId?: string;
+    device?: { brand: string; model: string; color: string; imei: string | null };
+    passcode?: string | null;
+    complaint?: string;
+    peripherals?: readonly { item: string; label: string | null }[];
+    reason: string;
+  }>(op);
+  const ticket = await db
+    .selectFrom('repairTickets')
+    .selectAll()
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .executeTakeFirst();
+  if (ticket === undefined) return;
+  const changes: DetailChange[] = [];
+  const note = (field: string, from: string | null, to: string | null): void => {
+    if (from !== to) changes.push({ field, from, to });
+  };
+  if (payload.customer !== undefined) {
+    const customer = await db
+      .selectFrom('repairCustomers')
+      .select(['name', 'phone'])
+      .where('id', '=', ticket.customerId)
+      .where('storeId', '=', storeIdOf(op))
+      .executeTakeFirst();
+    note('customerName', customer?.name ?? null, payload.customer.name);
+    note('customerPhone', customer?.phone ?? null, payload.customer.phone);
+  }
+  if (payload.device !== undefined) {
+    note('brand', ticket.deviceBrand, payload.device.brand);
+    note('model', ticket.deviceModel, payload.device.model);
+    note('color', ticket.deviceColor, payload.device.color);
+    note('imei', ticket.deviceImei, payload.device.imei);
+  }
+  if (payload.passcode !== undefined && payload.passcode !== ticket.devicePasscode) {
+    changes.push({ field: 'passcode' });
+  }
+  if (payload.complaint !== undefined) note('complaint', ticket.complaint, payload.complaint);
+  const peripherals =
+    payload.peripherals === undefined ? undefined : canonicalJson(payload.peripherals);
+  if (peripherals !== undefined && peripherals !== ticket.peripheralsJson) {
+    changes.push({ field: 'peripherals' });
+  }
+  // Without a move, the servisan's own customer is renamed: the rule allowed it only for a
+  // customer this servisan alone names.
+  if (payload.customer !== undefined && payload.customerId === undefined) {
+    await db
+      .updateTable('repairCustomers')
+      .set({
+        name: payload.customer.name,
+        phone: payload.customer.phone,
+        updatedBy: op.userId,
+        updatedAt: op.timestamp,
+      })
+      .where('id', '=', ticket.customerId)
+      .where('storeId', '=', storeIdOf(op))
+      .execute();
+  }
+  await db
+    .updateTable('repairTickets')
+    .set({
+      ...(payload.customerId === undefined ? {} : { customerId: payload.customerId }),
+      ...(payload.device === undefined
+        ? {}
+        : {
+            deviceBrand: payload.device.brand,
+            deviceModel: payload.device.model,
+            deviceColor: payload.device.color,
+            deviceImei: payload.device.imei,
+          }),
+      ...(payload.passcode === undefined ? {} : { devicePasscode: payload.passcode }),
+      ...(payload.complaint === undefined ? {} : { complaint: payload.complaint }),
+      ...(peripherals === undefined ? {} : { peripheralsJson: peripherals }),
+      updatedAt: op.timestamp,
+    })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+  await recordEvent(db, op, { changes, reason: payload.reason });
 };
 
 // ── down payment and printing ─────────────────────────────────────────────────────────────────

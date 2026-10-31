@@ -18,7 +18,7 @@
  * layer in tasks 24/25.
  */
 import type { ReactNode } from 'react';
-import { Text } from 'react-native';
+import { Text } from '../text.js';
 
 import * as componentInventory from '../components/index.js';
 import * as shellInventory from '../shell/index.js';
@@ -660,6 +660,19 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           value=""
           onChange={noop}
           accessibilityLabel={l.primaryText}
+        />
+      ),
+    },
+  ],
+
+  QrCode: [
+    {
+      id: 'payment',
+      render: (l) => (
+        <componentInventory.QrCode
+          value="00020101021226670016COM.NOBUBANK.WWW01189360050300000898240214123456789012345204599953033605405150005802ID5911TOKO BOLUSI6007MANOKWARI6304ABCD"
+          accessibilityLabel={l.primaryText}
+          size={200}
         />
       ),
     },

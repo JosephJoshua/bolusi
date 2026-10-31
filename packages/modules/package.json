@@ -3,11 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "defineModule manifests (04-module-contract). Split exports: ./notes = platform-free manifest, ./notes/screens = RN (08 §3.2)",
+  "description": "defineModule manifests (04-module-contract). Split exports: ./notes = platform-free manifest, ./notes/screens = RN (08 \u00a73.2)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./roles": {
+      "types": "./dist/role-abilities.d.ts",
+      "default": "./dist/role-abilities.js"
     },
     "./notes": {
       "types": "./dist/notes/index.d.ts",
@@ -61,6 +65,18 @@
       "types": "./dist/money/desktop/index.d.ts",
       "default": "./dist/money/desktop/index.js"
     },
+    "./approvals": {
+      "types": "./dist/approvals/index.d.ts",
+      "default": "./dist/approvals/index.js"
+    },
+    "./approvals/screens": {
+      "types": "./dist/approvals/screens/index.d.ts",
+      "default": "./dist/approvals/screens/index.js"
+    },
+    "./approvals/desktop": {
+      "types": "./dist/approvals/desktop/index.d.ts",
+      "default": "./dist/approvals/desktop/index.js"
+    },
     "./screen-kit": {
       "types": "./dist/screen-kit/index.d.ts",
       "default": "./dist/screen-kit/index.js"
@@ -72,14 +88,17 @@
     "./inventory/i18n/id.json": "./inventory/i18n/id.json",
     "./inventory/i18n/en.json": "./inventory/i18n/en.json",
     "./money/i18n/id.json": "./money/i18n/id.json",
-    "./money/i18n/en.json": "./money/i18n/en.json"
+    "./money/i18n/en.json": "./money/i18n/en.json",
+    "./approvals/i18n/id.json": "./approvals/i18n/id.json",
+    "./approvals/i18n/en.json": "./approvals/i18n/en.json"
   },
   "files": [
     "dist",
     "notes/i18n",
     "repair/i18n",
     "inventory/i18n",
-    "money/i18n"
+    "money/i18n",
+    "approvals/i18n"
   ],
   "dependencies": {
     "@bolusi/core": "workspace:*",

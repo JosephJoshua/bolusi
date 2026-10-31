@@ -5,13 +5,18 @@
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
 
-import { ConfirmSheet, StepHeader, color, space, type } from '@bolusi/ui';
+import { ConfirmSheet, StepHeader, color, space, type, Text } from '@bolusi/ui';
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
+import {
+  useActionRunner,
+  type DiscardGuard,
+  type StepBack,
+  type VideoMediaRef,
+} from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import { INTAKE_STEP_KEY, optionLabel } from '../labels.js';
 import {
   INTAKE_STEPS,
@@ -19,10 +24,12 @@ import {
   claimWarrantyEnded,
   emptyIntakeDraft,
   intakeDirty,
+  intakeNeedsVideo,
   nextMissingPhoto,
   stepProblems,
   toOpenTicketInput,
   type IntakeDraft,
+  INTAKE_PROBLEM_KEY,
   type IntakeProblem,
 } from '../flows.js';
 import {
@@ -32,6 +39,7 @@ import {
 } from '../intake-options.js';
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
 import { usePhotoBrowser } from './photos.js';
+import { useOwnershipVideo, useRestoredVideoCheck } from '../ownership-video.js';
 import { useIntakeOptionSettings, usePaymentAccounts, useRepairRuntime } from '../runtime.js';
 
 import {
@@ -42,20 +50,6 @@ import {
   PriceStep,
   ReviewStep,
 } from './IntakeSteps.js';
-
-const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
-  customerName: 'repair.problem.customerName',
-  deviceBrand: 'repair.problem.deviceBrand',
-  deviceModel: 'repair.problem.deviceModel',
-  screenLock: 'repair.problem.screenLock',
-  complaint: 'repair.problem.complaint',
-  photos: 'repair.problem.photos',
-  quoteLines: 'repair.problem.quoteLines',
-  incompleteLine: 'repair.problem.incompleteLine',
-  negativeTotal: 'repair.problem.negativeTotal',
-  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
-  downPaymentReference: 'repair.problem.downPaymentReference',
-};
 
 /** Problems said on their own field rather than in the step's list. */
 const FIELD_PROBLEMS: ReadonlySet<IntakeProblem> = new Set([
@@ -98,6 +92,11 @@ export function IntakeWizard({
   const [showProblems, setShowProblems] = useState(false);
   const [restoredOnce] = useState(restoredDraft ?? null);
   const [photosExpired, setPhotosExpired] = useState(false);
+  const [videoExpired, setVideoExpired] = useState(false);
+  useRestoredVideoCheck(restoredOnce, () => {
+    setDraft((d) => ({ ...d, ownershipVideo: null }));
+    setVideoExpired(true);
+  });
 
   // A draft kept across a lock can outlive its photos: a capture no saved ticket refers to is
   // deleted a day after it was taken (06 §7). Restored photos that no longer load are dropped, so
@@ -236,12 +235,39 @@ export function IntakeWizard({
         setDraft((d) => ({ ...d, photos: { ...d.photos, [angle.id]: captured.mediaRef } }));
       });
   };
-  // On the photos step the primary action walks round the phone: it takes the next missing shot.
+  const video = useOwnershipVideo();
+  const needsVideo = intakeNeedsVideo(draft, options);
+  const recordVideo =
+    video.record === undefined
+      ? undefined
+      : (): void => {
+          const record = video.record!;
+          void runner.run(record).then((captured) => {
+            if (captured === undefined || captured === null) return;
+            setDraft((d) => ({ ...d, ownershipVideo: captured.videoRef }));
+          });
+        };
+  const playVideo =
+    video.play === undefined
+      ? undefined
+      : (ref: VideoMediaRef): void => void runner.run(() => video.play!(ref));
+  // On the photos step the primary action walks round the phone: it takes the next missing shot,
+  // then the ownership video when a picked type asks for one.
   const missingPhoto = step === 'photos' ? nextMissingPhoto(draft, options.photoAngles) : null;
+  const videoNext =
+    step === 'photos' &&
+    missingPhoto === null &&
+    needsVideo &&
+    draft.ownershipVideo === null &&
+    recordVideo !== undefined;
 
   const next = (): void => {
     if (missingPhoto !== null) {
       takePhoto(missingPhoto);
+      return;
+    }
+    if (videoNext) {
+      recordVideo();
       return;
     }
     if (problems.length > 0) {
@@ -264,7 +290,7 @@ export function IntakeWizard({
 
   const back = (): void => (stepIndex === 0 ? requestLeave(onCancel) : goTo(stepIndex - 1));
   const problemText = (problem: IntakeProblem): string | undefined =>
-    showProblems && problems.includes(problem) ? tn(PROBLEM_KEY[problem]) : undefined;
+    showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
 
   return (
     <FlowScreen
@@ -275,9 +301,11 @@ export function IntakeWizard({
       primaryLabel={
         missingPhoto !== null
           ? tn('repair.photo.takeNext', { slot: optionLabel('photoAngles', missingPhoto) })
-          : step === 'review'
-            ? tn('repair.action.openTicket')
-            : tn('repair.action.next')
+          : videoNext
+            ? tn('repair.video.recordNext')
+            : step === 'review'
+              ? tn('repair.action.openTicket')
+              : tn('repair.action.next')
       }
       onPrimary={next}
       busy={runner.busy}
@@ -321,6 +349,11 @@ export function IntakeWizard({
             {tn('repair.photo.expired')}
           </Text>
         ) : null}
+        {videoExpired && step === 'photos' && draft.ownershipVideo === null ? (
+          <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.videoExpired`}>
+            {tn('repair.video.expired')}
+          </Text>
+        ) : null}
         {draft.claimOf !== null && (step === 'customer' || step === 'review') ? (
           // Said where the intake starts and again before it opens, not on every step.
           <View style={[repairStyles.gap, styles.check]} testID={`${testID}.claim`}>
@@ -343,7 +376,7 @@ export function IntakeWizard({
             .filter((problem) => !FIELD_PROBLEMS.has(problem))
             .map((problem) => (
               <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
-                {tn(PROBLEM_KEY[problem])}
+                {tn(INTAKE_PROBLEM_KEY[problem])}
               </Text>
             ))}
         </View>
@@ -360,6 +393,7 @@ export function IntakeWizard({
             update={update}
             options={options}
             nameError={problemText('customerName')}
+            phoneError={problemText('customerPhone')}
             testID={`${testID}.customer`}
           />
         );
@@ -371,6 +405,7 @@ export function IntakeWizard({
             options={options}
             brandError={problemText('deviceBrand')}
             modelError={problemText('deviceModel')}
+            imeiError={problemText('deviceImei')}
             lockError={problemText('screenLock')}
             testID={`${testID}.device`}
           />
@@ -391,6 +426,9 @@ export function IntakeWizard({
             draft={draft}
             angles={options.photoAngles}
             onTake={takePhoto}
+            needsVideo={needsVideo}
+            onRecordVideo={recordVideo}
+            onPlayVideo={playVideo}
             testID={`${testID}.photos`}
           />
         );
@@ -406,7 +444,7 @@ export function IntakeWizard({
             // Wrong as soon as it is typed, not merely unfinished, so it shows straight away.
             downPaymentError={
               problems.includes('downPaymentAboveTotal')
-                ? tn(PROBLEM_KEY.downPaymentAboveTotal)
+                ? tn(INTAKE_PROBLEM_KEY.downPaymentAboveTotal)
                 : undefined
             }
             testID={`${testID}.price`}

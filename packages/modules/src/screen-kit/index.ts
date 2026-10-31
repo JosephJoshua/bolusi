@@ -10,7 +10,16 @@ export {
   type ModuleCatalogs,
   type ModuleCatalogTree,
 } from './i18n.js';
-export type { CaptureRequest, CapturedMedia, PhotoCapture, SignatureCapture } from './media.js';
+export type {
+  CaptureRequest,
+  CapturedMedia,
+  CapturedVideo,
+  PhotoCapture,
+  SignatureCapture,
+  VideoCapture,
+  VideoMediaRef,
+  VideoPlayback,
+} from './media.js';
 export { useLiveQuery, type LiveSource, type QueryState } from './live.js';
 export { TYPING_PAUSE_MS, useSettledValue } from './settled.js';
 export { useTick } from './tick.js';

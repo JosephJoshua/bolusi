@@ -22,7 +22,7 @@ import {
   type PermissionEntry,
   type PermissionRegistry,
 } from '@bolusi/core';
-import { ALL_MODULES } from '@bolusi/modules';
+import { ALL_MODULES, PRESET_ROLE_ABILITIES, permissionsFor } from '@bolusi/modules';
 
 /**
  * The assembled v0 permission registry — the ONE vocabulary (02 §3/§11), from the module manifests.
@@ -58,12 +58,14 @@ export const PERM = AUTH_PERMISSION;
  */
 export const TENANT_ADMIN_PERMISSION = AUTH_PERMISSION.roleManage;
 
-export type RoleKey = 'main_owner' | 'store_owner' | 'staff' | 'cashier' | 'technician';
+export type RoleKey = 'main_owner' | 'store_owner' | 'staff' | 'cashier' | 'technician' | 'manager';
 
 export interface DefaultRoleDef {
   readonly key: RoleKey;
   readonly scopeType: 'tenant' | 'store';
   readonly permissionIds: readonly string[];
+  /** Its money decisions go only as far as each store sets (core authz/limits.ts). */
+  readonly limited?: boolean;
 }
 
 const ALL_IDS = PERMISSIONS.map((p) => p.id);
@@ -72,38 +74,15 @@ const ALL_IDS = PERMISSIONS.map((p) => p.id);
 // store-scoped one (a store grant can never satisfy a tenant permission such as role_manage,
 // tenant_configure or repair.manage_intake_options); staff holds pin_change, notes.*, set_locale.
 const STORE_OWNER_PERMS = PERMISSIONS.filter((p) => p.scope === 'store').map((p) => p.id);
-const STAFF_PERMS = [
-  AUTH_PERMISSION.pinChange,
-  'notes.create',
-  'notes.edit',
-  'notes.archive',
-  'notes.read',
-  'platform.set_locale',
-];
-
-// Repair presets (product-scope.md slice 1): the cashier takes devices in, prices, assigns and hands
-// back; the technician works tickets and may only propose price changes. Cancelling and discounts are
-// the owners' alone ("Cancelling a servisan"): both are how counter staff kept customers' cash.
-const PERSONAL_PERMS = [AUTH_PERMISSION.pinChange, 'platform.set_locale'];
-// Parts (owner decision, 2026-10-28): technicians and the counter see stock and take parts for a
-// servisan in work. Editing the list, counting and correcting a finished servisan are the owners'.
-const PARTS_USER_PERMS = ['inventory.read', 'inventory.use_parts'];
-const CASHIER_PERMS = [
-  ...PERSONAL_PERMS,
-  'repair.read',
-  'repair.intake',
-  'repair.assign',
-  'repair.quote_change',
-  'repair.handover',
-  ...PARTS_USER_PERMS,
-  // Money (product-scope.md, "Repair payments"): the counter takes payments, gives back overpayments,
-  // moves and counts cash. Bigger refunds, lower bills, voids and cash adjustments are owners'.
-  'money.read',
-  'money.receive',
-  'money.move_cash',
-  'money.count_cash',
-];
-const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work', ...PARTS_USER_PERMS];
+// The other presets are the role editor's switches (@bolusi/modules role-abilities), so a preset
+// always opens in the editor exactly as it was seeded. Migration 0025 seeds the manager's list for
+// businesses that existed before.
+const presetPermissions = (key: keyof typeof PRESET_ROLE_ABILITIES): readonly string[] =>
+  permissionsFor(new Set(PRESET_ROLE_ABILITIES[key]));
+const STAFF_PERMS = presetPermissions('staff');
+const CASHIER_PERMS = presetPermissions('cashier');
+const TECHNICIAN_PERMS = presetPermissions('technician');
+const MANAGER_PERMS = presetPermissions('manager');
 
 /** 02 §10 — the system-default roles, seeded at provisioning. Store owners can edit grants later. */
 export const DEFAULT_ROLES: readonly DefaultRoleDef[] = [
@@ -112,4 +91,5 @@ export const DEFAULT_ROLES: readonly DefaultRoleDef[] = [
   { key: 'staff', scopeType: 'store', permissionIds: STAFF_PERMS },
   { key: 'cashier', scopeType: 'store', permissionIds: CASHIER_PERMS },
   { key: 'technician', scopeType: 'store', permissionIds: TECHNICIAN_PERMS },
+  { key: 'manager', scopeType: 'store', permissionIds: MANAGER_PERMS, limited: true },
 ];

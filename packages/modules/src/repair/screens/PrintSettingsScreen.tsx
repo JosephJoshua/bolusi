@@ -13,10 +13,11 @@ import {
   radius,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { MediaRefMime } from '@bolusi/schemas';
 

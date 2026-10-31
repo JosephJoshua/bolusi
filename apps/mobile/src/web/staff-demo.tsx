@@ -13,17 +13,50 @@ import {
 import { useRef, useState } from 'react';
 
 import { StaffPinScreen } from '../screens/pin/StaffPinScreen.js';
+import { LimitsScreen } from '../screens/staff/LimitsScreen.js';
+import { RolesScreen } from '../screens/staff/RolesScreen.js';
 import { StaffScreen } from '../screens/staff/StaffScreen.js';
+import { PRESET_ROLE_ABILITIES, permissionsFor } from '@bolusi/modules/roles';
 
 const ROLES: readonly StaffRole[] = [
-  { id: 'r-cashier', key: 'cashier', ownerRole: false },
-  { id: 'r-tech', key: 'technician', ownerRole: false },
-  { id: 'r-store', key: 'store_owner', ownerRole: true },
+  {
+    id: 'r-cashier',
+    key: 'cashier',
+    custom: false,
+    permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.cashier)),
+    ownerRole: false,
+    limits: null,
+  },
+  {
+    id: 'r-tech',
+    key: 'technician',
+    custom: false,
+    permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.technician)),
+    ownerRole: false,
+    limits: null,
+  },
+  {
+    id: 'r-manager',
+    key: 'manager',
+    custom: false,
+    permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.manager)),
+    ownerRole: false,
+    limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+  },
+  {
+    id: 'r-store',
+    key: 'store_owner',
+    custom: false,
+    permissionIds: [],
+    ownerRole: true,
+    limits: null,
+  },
 ];
 
 const KEY_BY_ID: Record<string, string> = {
   'r-cashier': 'cashier',
   'r-tech': 'technician',
+  'r-manager': 'manager',
   'r-store': 'store_owner',
   'r-main': 'main_owner',
 };
@@ -55,6 +88,7 @@ export const STAFF_DEMO: readonly StaffMember[] = [
   member('u-ocep', 'Ocep Wanggai', ['r-main']),
   member('u-yohanis', 'Yohanis Mandowen', ['r-cashier', 'r-tech']),
   member('u-maria', 'Maria Kogoya', ['r-tech']),
+  member('u-daniel', 'Daniel Rumaropen', ['r-manager']),
   member('u-petrus', 'Petrus Yikwa', ['r-cashier'], { hasPin: false }),
   member('u-selfina', 'Selfina Ayomi', ['r-cashier'], { active: false, hasPin: false }),
 ];
@@ -165,6 +199,125 @@ export function StaffDemo({
         change((all) => all.map((m) => (m.id === userId ? { ...m, active } : m)));
       }}
       onMakePin={setPinFor}
+      onClose={() => undefined}
+    />
+  );
+}
+
+/**
+ * "Batas wewenang" in the visual harness: the real `LimitsScreen` over the same in-memory server.
+ * `extraRole` adds a second limited role, for the list a business with custom roles sees.
+ */
+export function LimitsDemo({
+  offline = false,
+  extraRole = false,
+}: {
+  readonly offline?: boolean;
+  readonly extraRole?: boolean;
+}): React.JSX.Element {
+  const latest = useRef<StaffDirectory>({
+    roles: extraRole
+      ? [
+          ...ROLES,
+          {
+            id: 'r-senior',
+            key: 'Kasir senior',
+            custom: true,
+            permissionIds: permissionsFor(
+              new Set([...PRESET_ROLE_ABILITIES.cashier, 'repairDiscount']),
+            ),
+            ownerRole: false,
+            limits: { priceDrop: 25_000, refund: 0, credit: 0 },
+          },
+        ]
+      : ROLES,
+    members: sortMembers(STAFF_DEMO),
+  });
+  return (
+    <LimitsScreen
+      actor={{ userId: STAFF_ACTOR, tenantAdmin: false }}
+      load={() => Promise.resolve(latest.current)}
+      onSave={async (roleId, limits) => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        if (offline) throw new StaffAdminError('offline');
+        latest.current = {
+          ...latest.current,
+          roles: latest.current.roles.map((role) =>
+            role.id === roleId ? { ...role, limits } : role,
+          ),
+        };
+      }}
+      onClose={() => undefined}
+    />
+  );
+}
+
+/**
+ * "Tugas karyawan" in the visual harness: the real `RolesScreen` over an in-memory stand-in for the
+ * server, with one made role ("Kasir senior") held by nobody, so it can be deleted.
+ */
+export function RolesDemo({ offline = false }: { readonly offline?: boolean }): React.JSX.Element {
+  const latest = useRef<StaffDirectory>({
+    roles: [
+      ...ROLES.slice(0, 3),
+      {
+        id: 'r-senior',
+        key: 'Kasir senior',
+        custom: true,
+        permissionIds: permissionsFor(
+          new Set([...PRESET_ROLE_ABILITIES.cashier, 'repairDiscount']),
+        ),
+        ownerRole: false,
+        limits: { priceDrop: 0, refund: 0, credit: 0 },
+      },
+      ...ROLES.slice(3),
+    ],
+    members: sortMembers(STAFF_DEMO),
+  });
+  const server = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    if (offline) throw new StaffAdminError('offline');
+  };
+  return (
+    <RolesScreen
+      load={() => Promise.resolve(latest.current)}
+      onCreate={async (name, copyFromRoleId) => {
+        await server();
+        const source = latest.current.roles.find((role) => role.id === copyFromRoleId)!;
+        const roleId = `r-made-${String(latest.current.roles.length)}`;
+        latest.current = {
+          ...latest.current,
+          roles: [...latest.current.roles, { ...source, id: roleId, key: name, custom: true }],
+        };
+        return { roleId };
+      }}
+      onUpdate={async (roleId, change) => {
+        await server();
+        latest.current = {
+          ...latest.current,
+          roles: latest.current.roles.map((role) =>
+            role.id !== roleId
+              ? role
+              : {
+                  ...role,
+                  ...(change.name === undefined ? {} : { key: change.name }),
+                  ...(change.permissionIds === undefined
+                    ? {}
+                    : { permissionIds: change.permissionIds }),
+                  ...(change.limited === undefined
+                    ? {}
+                    : { limits: change.limited ? { priceDrop: 0, refund: 0, credit: 0 } : null }),
+                },
+          ),
+        };
+      }}
+      onDelete={async (roleId) => {
+        await server();
+        latest.current = {
+          ...latest.current,
+          roles: latest.current.roles.filter((role) => role.id !== roleId),
+        };
+      }}
       onClose={() => undefined}
     />
   );

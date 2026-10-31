@@ -15,7 +15,8 @@
  * text, never placed in an accessibility label, and never handed to any other prop.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, Vibration } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet, View, Vibration } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';

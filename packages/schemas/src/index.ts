@@ -14,3 +14,4 @@ export * from './push.js';
 export * from './catalog.js';
 export * from './handoff.js';
 export * from './repair-status.js';
+export * from './qris.js';

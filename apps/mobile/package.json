@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "main": "index",
-  "description": "Expo SDK 57 app (dev-client only \u2014 Expo Go is forbidden, 08 \u00a71). Screens/ports/sync wiring land in tasks 14/15/18/24.",
+  "description": "Expo SDK 57 app (dev-client only — Expo Go is forbidden, 08 §1). Screens/ports/sync wiring land in tasks 14/15/18/24.",
   "scripts": {
     "dev": "expo start",
     "web": "expo start --web",
@@ -46,6 +46,7 @@
     "expo-status-bar": "57.0.0",
     "expo-system-ui": "57.0.1",
     "expo-task-manager": "57.0.2",
+    "expo-video": "57.0.5",
     "kysely": "catalog:",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -66,5 +67,14 @@
     "better-sqlite3": "catalog:",
     "test-renderer": "1.2.0",
     "typescript": "catalog:"
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-print"
+        ]
+      }
+    }
   }
 }

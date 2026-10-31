@@ -1,7 +1,7 @@
 // @vitest-environment node
 // The PC's side of the phone handoff against a stand-in server: what it sends, and how the
 // server's answers reach the window.
-import type { HandoffPageLabels, HandoffWireEvent } from '@bolusi/schemas';
+import type { HandoffAsk, HandoffPageLabels, HandoffWireEvent } from '@bolusi/schemas';
 import { describe, expect, it } from 'vitest';
 
 import type { HandoffEvent } from '../src/core/api.js';
@@ -14,6 +14,8 @@ const BASE = 'https://api.test';
 function server() {
   const calls: { method: string; path: string; body: unknown; auth: string | null }[] = [];
   const feed: (HandoffWireEvent[] | 'ended' | 'offline' | 'gone')[] = [];
+  /** How each clip fetch is answered, in turn: the bytes, offline, or no longer held. */
+  const clips: (Uint8Array<ArrayBuffer> | 'offline' | 'gone')[] = [];
   let release: (() => void) | null = null;
   const fetchImpl = (async (input: string, init: RequestInit = {}) => {
     const url = new URL(input);
@@ -30,6 +32,12 @@ function server() {
     }
     if (path.startsWith('/gone')) return Response.json({}, { status: 404 });
     if (path.endsWith('/ask')) return Response.json({ seq: 7 });
+    if (path.includes('/clip/')) {
+      const next = clips.shift() ?? 'gone';
+      if (next === 'offline') throw new TypeError('fetch failed');
+      if (next === 'gone') return Response.json({}, { status: 404 });
+      return new Response(next, { headers: { 'Content-Type': 'video/mp4' } });
+    }
     if (path.includes('/events')) {
       while (feed.length === 0) {
         if (init.signal?.aborted) throw new DOMException('aborted', 'AbortError');
@@ -48,7 +56,7 @@ function server() {
     feed.push(item);
     release?.();
   };
-  return { calls, fetchImpl, push };
+  return { calls, fetchImpl, push, clips };
 }
 
 function client(token: string | null = 'bdt_pc') {
@@ -119,6 +127,39 @@ describe('the PC side of the phone handoff', () => {
     handoff.stop();
   });
 
+  it('fetches a clip the phone sent on its own, trying again while offline', async () => {
+    const { handoff, push, events, calls, clips, naps, settled } = client();
+    await handoff.pair(LABELS);
+    const clip = new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]);
+    clips.push('offline', clip);
+    push([{ n: 1, type: 'video', seq: 5, mime: 'video/mp4', sizeBytes: clip.length }]);
+    await settled();
+    expect(events).toEqual([{ id: 'p1', type: 'video', seq: 5, bytes: clip, mime: 'video/mp4' }]);
+    expect(calls.filter((call) => call.path.includes('/clip/')).map((call) => call.path)).toEqual([
+      '/p1/clip/5',
+      '/p1/clip/5',
+    ]);
+    expect(naps).toEqual([1_000]);
+    // A clip the server let go (the PC moved on) is dropped, and listening goes on.
+    push([{ n: 2, type: 'video', seq: 6, mime: 'video/webm', sizeBytes: 9 }]);
+    push([{ n: 3, type: 'paired' }]);
+    await settled();
+    expect(events.map((event) => event.type)).toEqual(['video', 'paired']);
+    handoff.stop();
+  });
+
+  it('sends a video step with its hint and limit', async () => {
+    const { handoff, calls } = client();
+    const ask: HandoffAsk = {
+      kind: 'video',
+      title: 'Video',
+      hint: 'Bilang HP ini miliknya.',
+      maxMs: 60_000,
+    };
+    expect(await handoff.ask('p1', ask)).toBe(7);
+    expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/p1/ask', body: ask });
+  });
+
   it('keeps listening through a dropped connection, and says so when the pairing ends', async () => {
     const { handoff, push, events, naps, settled } = client();
     await handoff.pair(LABELS);
@@ -137,13 +178,13 @@ describe('the PC side of the phone handoff', () => {
 
   it('asks for a step, and hears when the pairing is already over', async () => {
     const { handoff, calls } = client();
-    expect(await handoff.ask('p1', 'photo', 'Depan')).toBe(7);
+    expect(await handoff.ask('p1', { kind: 'photo', title: 'Depan' })).toBe(7);
     expect(calls.at(-1)).toMatchObject({
       method: 'POST',
       path: '/p1/ask',
       body: { kind: 'photo', title: 'Depan' },
     });
-    expect(await handoff.ask('gone', 'photo', 'Depan')).toBeNull();
+    expect(await handoff.ask('gone', { kind: 'photo', title: 'Depan' })).toBeNull();
   });
 
   it('withdraws and unpairs, and stops listening to an ended pairing', async () => {

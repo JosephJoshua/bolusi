@@ -87,6 +87,10 @@ export {
   type PhoneModelRecord,
 } from './phone-catalog.js';
 
+// The server's boot check: refuse to serve when DATABASE_URL is a superuser or BYPASSRLS role,
+// which would skip every RLS policy. It runs one fixed catalog query and returns nothing.
+export { assertRowSecurityRole } from './connection-role.js';
+
 // Task 49 — the SERVER projection engine factory (10-db §3 step 6, 04 §4). Same D7 weighing as
 // the watermark store: it CONSUMES a `forTenant` handle rather than producing one, and returns a
 // `ProjectionEngine` (apply/rebuild methods, no `selectFrom`), so the export-surface `queryish`

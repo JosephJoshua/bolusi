@@ -49,6 +49,7 @@ export function sampleTicket(overrides: Partial<TicketDetailRow> = {}): TicketDe
     cancelledByName: null,
     cancelledAt: null,
     downPayment: null,
+    reduced: 0,
     readyAt: null,
     repairTypes: [],
     claimOfTicketId: null,

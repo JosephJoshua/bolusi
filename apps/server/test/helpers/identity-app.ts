@@ -5,6 +5,7 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 
 import { createApp } from '../../src/app.js';
+import type { ServerDeps } from '../../src/deps.js';
 import { noblePasswordKdf, sha256Hex, type PasswordKdf } from '../../src/crypto/index.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
@@ -32,7 +33,11 @@ export interface IdentityHarness {
 }
 
 export async function makeIdentityHarness(
-  opts: { realKdf?: boolean } = {},
+  opts: {
+    realKdf?: boolean;
+    /** More dependencies for the app, given the harness's clock (QRIS, a system key store). */
+    deps?: (clock: FakeClock) => Partial<ServerDeps>;
+  } = {},
 ): Promise<IdentityHarness> {
   const idb = await makeIdentityDb();
   const clock = makeFakeClock();
@@ -52,6 +57,7 @@ export async function makeIdentityHarness(
     passwordKdf: kdf,
     identityRateStore: rateStore,
     revocationHooks: hooks,
+    ...opts.deps?.(clock),
   });
   return { app, idb, clock, rateStore, hooks, kdf, dummyCalls, pokes, close: () => idb.close() };
 }

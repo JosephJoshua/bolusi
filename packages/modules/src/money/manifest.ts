@@ -25,6 +25,8 @@ import {
   saveCentralAccountInput,
   voidPaymentHandler,
   voidPaymentInput,
+  voidCashMoveHandler,
+  voidCashMoveInput,
 } from './commands.js';
 import { MONEY_MODULE_ID, MONEY_PERMISSION, MONEY_TABLE } from './constants.js';
 import type { MoneyDocumentSources } from './documents.js';
@@ -73,11 +75,13 @@ function moneyManifest(sources: MoneyDocumentSources) {
         // Money back beyond an overpayment, or a lower bill, is how cash goes missing.
         isDangerous: true,
         description: 'Can give customers money back and lower what a customer owes.',
+        limit: 'refund',
       },
       [MONEY_PERMISSION.voidPayment]: {
         scope: 'store',
         isDangerous: true,
         description: 'Can cancel a payment that was recorded by mistake.',
+        limit: 'refund',
       },
       [MONEY_PERMISSION.moveCash]: {
         scope: 'store',
@@ -99,6 +103,7 @@ function moneyManifest(sources: MoneyDocumentSources) {
         scope: 'store',
         isDangerous: true,
         description: 'Can let a customer take their phone before paying in full, leaving a debt.',
+        limit: 'credit',
       },
       [MONEY_PERMISSION.manageAccounts]: {
         scope: 'store',
@@ -158,6 +163,11 @@ function moneyManifest(sources: MoneyDocumentSources) {
         permission: MONEY_PERMISSION.adjustCash,
         input: adjustCashInput,
         handler: adjustCashHandler,
+      },
+      voidCashMove: {
+        permission: MONEY_PERMISSION.adjustCash,
+        input: voidCashMoveInput,
+        handler: voidCashMoveHandler,
       },
     },
 

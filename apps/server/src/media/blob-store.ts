@@ -63,7 +63,9 @@ function resolveWithinRoot(root: string, key: string): string {
   return target;
 }
 
-/** v0 blob store: server-local disk rooted at `MEDIA_STORAGE_DIR` (api/03-media §6). */
+/** v0 blob store: server-local disk rooted at `MEDIA_STORAGE_DIR` (api/03-media §6). Directories
+ *  are created 0700 and blobs 0600 (media is customer evidence), and every path is resolved through
+ *  the filesystem's real path so a symlink planted inside the root cannot redirect a read or write. */
 export class LocalDiskBlobStore implements BlobStore {
   readonly #root: string;
 
@@ -76,29 +78,58 @@ export class LocalDiskBlobStore implements BlobStore {
     return this.#root;
   }
 
+  /** The real path of an existing `target`, refused unless it sits under the root's real path.
+   *  `resolveWithinRoot` only compares text; this follows symlinks. Rejects ENOENT if absent. */
+  async #realWithinRoot(target: string, key: string): Promise<string> {
+    const realRoot = await fs.realpath(this.#root);
+    const real = await fs.realpath(target);
+    if (real !== realRoot && !real.startsWith(realRoot + path.sep)) {
+      throw new UnsafeBlobKeyError(key);
+    }
+    return real;
+  }
+
+  /** Creates `key`'s parent directories 0700 one level at a time, refusing any level that is not a
+   *  real directory (a planted symlink), so `mkdir -p` never builds through a link. */
+  async #ensureParentDirs(key: string): Promise<void> {
+    await fs.mkdir(this.#root, { recursive: true, mode: 0o700 });
+    let dir = this.#root;
+    for (const segment of key.split('/').slice(0, -1)) {
+      dir = path.join(dir, segment);
+      try {
+        await fs.mkdir(dir, { mode: 0o700 });
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      }
+      if (!(await fs.lstat(dir)).isDirectory()) throw new UnsafeBlobKeyError(key);
+    }
+  }
+
   async put(key: string, data: Uint8Array): Promise<void> {
     const target = resolveWithinRoot(this.#root, key);
-    await fs.mkdir(path.dirname(target), { recursive: true });
+    await this.#ensureParentDirs(key);
+    const dir = await this.#realWithinRoot(path.dirname(target), key);
+    const finalPath = path.join(dir, path.basename(target));
     // Atomic publish: write a unique temp file in the same directory, then rename over the key.
     // rename(2) within a directory is atomic, so a reader never observes a partial object and a
     // crash mid-write leaves either the old object or none — never a torn one (§6 "no partial
-    // writes visible"). The temp name is server-generated; no client input touches it.
-    const tmp = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    await fs.writeFile(tmp, data);
-    await fs.rename(tmp, target);
+    // writes visible"). The temp name is server-generated; no client input touches it. `wx`
+    // refuses to follow anything already at that name.
+    const tmp = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await fs.writeFile(tmp, data, { mode: 0o600, flag: 'wx' });
+    await fs.rename(tmp, finalPath);
   }
 
   async getStream(key: string): Promise<ReadableStream<Uint8Array>> {
-    const target = resolveWithinRoot(this.#root, key);
     // Surface a missing object as a rejected promise so the download handler maps it to
     // STORAGE_ERROR rather than streaming an empty body under a complete media row.
-    await fs.access(target);
-    return Readable.toWeb(createReadStream(target)) as ReadableStream<Uint8Array>;
+    const real = await this.#realWithinRoot(resolveWithinRoot(this.#root, key), key);
+    return Readable.toWeb(createReadStream(real)) as ReadableStream<Uint8Array>;
   }
 
   async exists(key: string): Promise<boolean> {
     try {
-      await fs.access(resolveWithinRoot(this.#root, key));
+      await this.#realWithinRoot(resolveWithinRoot(this.#root, key), key);
       return true;
     } catch {
       return false;
@@ -106,8 +137,10 @@ export class LocalDiskBlobStore implements BlobStore {
   }
 
   async delete(key: string): Promise<void> {
+    const target = resolveWithinRoot(this.#root, key);
     try {
-      await fs.rm(resolveWithinRoot(this.#root, key));
+      const dir = await this.#realWithinRoot(path.dirname(target), key);
+      await fs.rm(path.join(dir, path.basename(target)));
     } catch (err) {
       // Absent is fine (idempotent delete); anything else propagates.
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;

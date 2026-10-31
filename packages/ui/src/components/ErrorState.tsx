@@ -9,7 +9,8 @@
  * The code is rendered verbatim and is NOT localized — it is an identifier (07-i18n §4.2: `code` is
  * the contract, `message` is developer-facing and never rendered).
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, size, space, type } from '../tokens.js';
 import { Button } from './Button.js';

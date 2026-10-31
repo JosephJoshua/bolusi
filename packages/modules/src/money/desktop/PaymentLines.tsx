@@ -1,11 +1,13 @@
 /**
  * PaymentLines — taking a payment at the counter PC: the phone's step (money/screens) in the
  * desktop's denser form, over the same `paymentEntry` arithmetic. Each method is a row of chips,
- * then its amount beside what that method needs (cash handed over, an EDC's approval code).
+ * then its amount beside what that method needs (cash handed over, an EDC's approval code). On a
+ * QRIS method connected to Xendit that is the QR instead (`qris`, QrisDialog).
  */
 import { formatMoney } from '@bolusi/i18n';
+import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';
 import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
-import { Plus } from 'lucide-react';
+import { Plus, QrCode } from 'lucide-react';
 
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
@@ -15,11 +17,13 @@ import {
   lineKind,
   newPaymentLine,
   offeredAccount,
+  paidByQr,
   paymentMethods,
   type PaymentEntry,
   type PaymentLine,
 } from '../payment-entry.js';
 import type { PaymentAccountRow } from '../queries.js';
+import { qrAmountOk, unresolvedText, type QrisCheckout } from '../qris-hooks.js';
 
 export interface PaymentLinesProps {
   readonly lines: readonly PaymentLine[];
@@ -27,6 +31,8 @@ export interface PaymentLinesProps {
   readonly accounts: readonly PaymentAccountRow[];
   readonly onChange: (lines: readonly PaymentLine[]) => void;
   readonly newKey: () => string;
+  /** QRIS through Xendit; absent where payments are only taken by hand. */
+  readonly qris?: QrisCheckout | undefined;
   readonly testId?: string | undefined;
 }
 
@@ -36,6 +42,7 @@ export function PaymentLines({
   accounts,
   onChange,
   newKey,
+  qris,
   testId = 'money.desk.payment',
 }: PaymentLinesProps): React.JSX.Element {
   const methods = paymentMethods(accounts);
@@ -50,12 +57,24 @@ export function PaymentLines({
 
   return (
     <div className="flex flex-col gap-4" data-testid={testId}>
+      {qris !== undefined && qris.received > 0 ? (
+        <p className="text-body text-success" data-testid={`${testId}.qrisReceived`}>
+          {tm('money.qris.received', { amount: formatMoney(qris.received) })}
+        </p>
+      ) : null}
+      {qris !== undefined && qris.unresolved.length > 0 ? (
+        <p className="text-body text-warning" data-testid={`${testId}.qrisUnresolved`}>
+          {unresolvedText(qris.unresolved)}
+        </p>
+      ) : null}
       {lines.map((line, index) => {
         const id = `${testId}.line${String(index)}`;
         const account = offeredAccount(line.account, accounts);
         const kind = lineKind(account, accounts);
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
+        const connected = qris?.qrAccounts.has(account) === true;
+        const byQr = connected && paidByQr(line, qris.qrAccounts);
         return (
           <div
             key={line.key}
@@ -75,7 +94,13 @@ export function PaymentLines({
                     label={method.label}
                     selected={account === method.account}
                     onToggle={() =>
-                      set(line.key, { account: method.account, tendered: '', reference: '' })
+                      set(line.key, {
+                        account: method.account,
+                        tendered: '',
+                        reference: '',
+                        qr: undefined,
+                        manual: false,
+                      })
                     }
                   />
                 ))}
@@ -86,6 +111,7 @@ export function PaymentLines({
                 label={tm('money.pay.amount')}
                 prefix={tm('money.pay.currency')}
                 inputMode="numeric"
+                selectOnFocus
                 inputClassName="tabular text-right"
                 value={digitsText(line.amount)}
                 onChange={(event) => digits(line.key, 'amount')(event.target.value)}
@@ -96,6 +122,7 @@ export function PaymentLines({
                   label={tm('money.pay.tendered')}
                   prefix={tm('money.pay.currency')}
                   inputMode="numeric"
+                  selectOnFocus
                   inputClassName="tabular text-right"
                   value={digitsText(line.tendered)}
                   onChange={(event) => digits(line.key, 'tendered')(event.target.value)}
@@ -106,6 +133,16 @@ export function PaymentLines({
                   }
                   data-testid={`${id}.tendered`}
                 />
+              ) : byQr ? (
+                <div className="flex flex-col justify-end gap-1">
+                  <Button
+                    label={tm('money.qris.show')}
+                    icon={QrCode}
+                    disabled={!qrAmountOk(line) || entry.overpaid > 0}
+                    onClick={() => qris.show(line.key)}
+                    data-testid={`${id}.showQr`}
+                  />
+                </div>
               ) : (
                 <TextField
                   label={tm(
@@ -132,6 +169,19 @@ export function PaymentLines({
               ) : (
                 <span />
               )}
+              {connected && !byQr && line.manual !== true ? (
+                <p className="text-small text-text-muted" data-testid={`${id}.qrMinimum`}>
+                  {tm('money.qris.minimum', { amount: formatMoney(QRIS_MIN_AMOUNT) })}
+                </p>
+              ) : connected && !byQr ? (
+                <Button
+                  label={tm('money.qris.useQr')}
+                  variant="text"
+                  size="sm"
+                  onClick={() => qris.useQr(line.key)}
+                  data-testid={`${id}.useQr`}
+                />
+              ) : null}
               {kind === 'cash' && line.tendered !== '' && tendered >= amount && amount > 0 ? (
                 <p className="text-body text-text" data-testid={`${id}.change`}>
                   <span className="text-text-muted">{tm('money.pay.change')} </span>

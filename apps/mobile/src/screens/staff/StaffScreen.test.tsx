@@ -16,9 +16,30 @@ import { fire, isUnwired, render, textsIn } from '../../../../../packages/ui/tes
 import { StaffScreen, type StaffScreenProps } from './StaffScreen.js';
 
 const ROLES: StaffRole[] = [
-  { id: 'r-cashier', key: 'cashier', ownerRole: false },
-  { id: 'r-tech', key: 'technician', ownerRole: false },
-  { id: 'r-store', key: 'store_owner', ownerRole: true },
+  {
+    id: 'r-cashier',
+    key: 'cashier',
+    custom: false,
+    permissionIds: [],
+    ownerRole: false,
+    limits: null,
+  },
+  {
+    id: 'r-tech',
+    key: 'technician',
+    custom: false,
+    permissionIds: [],
+    ownerRole: false,
+    limits: null,
+  },
+  {
+    id: 'r-store',
+    key: 'store_owner',
+    custom: false,
+    permissionIds: [],
+    ownerRole: true,
+    limits: null,
+  },
 ];
 
 function person(id: string, name: string, over: Partial<StaffMember> = {}): StaffMember {

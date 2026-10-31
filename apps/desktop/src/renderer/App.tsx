@@ -27,39 +27,53 @@ import { EnrolScreen } from './auth/EnrolScreen.js';
 import { AuthLayout } from './auth/AuthLayout.js';
 import { FirstPinScreen, PinScreen, type PinSubmitResult } from './auth/PinScreen.js';
 import { SwitcherScreen } from './auth/SwitcherScreen.js';
-import { createCaptureDialogs } from './capture-dialogs.js';
+import { createCaptureDialogs, type CaptureDialogs } from './capture-dialogs.js';
+import { CloseGuard } from './close-guard.js';
 import { windowHandoff } from './phone-handoff.js';
 import type { PcCapture } from './capture.js';
 import { createCoreRepairRuntime } from './core-runtime.js';
 import type { SettingsAccess } from './settings/access.js';
 import { Counter } from './Counter.js';
-import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from './demo.js';
+import {
+  DEMO_PEOPLE,
+  DEMO_STORE_NAME,
+  demoRuntimeFor,
+  demoStaffFor,
+  type DemoPerson,
+} from './demo.js';
 import { SyncStatusButton } from './SyncStatus.js';
 import { useCore } from './use-core.js';
 
 /** How often typing and clicking count as "still here" for the idle lock. */
 const ACTIVITY_EVERY_MS = 5_000;
+/**
+ * How long a photo or signature being waited for (the customer signing on the paired phone) keeps
+ * the idle lock away without a click: a hand-off takes minutes, a PC left open must still lock.
+ */
+const CAPTURE_KEEPS_AWAKE_MS = 15 * 60_000;
 
 export function App(): React.JSX.Element {
   // The webcam, signature and phone dialogs, once for the window; leaving the counter backs out.
   const [dialogs] = useState(() => createCaptureDialogs(windowHandoff()));
   return (
     <>
-      <Gate capture={dialogs.capture} />
+      <Gate dialogs={dialogs} />
       <dialogs.Host />
+      <CloseGuard />
     </>
   );
 }
 
-function Gate({ capture }: { readonly capture: PcCapture }): React.JSX.Element {
+function Gate({ dialogs }: { readonly dialogs: CaptureDialogs }): React.JSX.Element {
   const core = useCore();
+  const capture = dialogs.capture;
   if (core.mode === 'demo') return <DemoApp capture={capture} />;
   if (core.mode === 'connecting') return <BootScreen failed={false} />;
   if (core.mode === 'unavailable') return <BootScreen failed />;
   const { state } = core;
   if (state === null || state.phase === 'booting') return <BootScreen failed={false} />;
   if (state.phase === 'failed') return <BootScreen failed />;
-  return <LiveApp client={core.client} state={state} capture={capture} />;
+  return <LiveApp client={core.client} state={state} dialogs={dialogs} />;
 }
 
 function BootScreen({ failed }: { readonly failed: boolean }): React.JSX.Element {
@@ -90,12 +104,13 @@ function roleOf(user: SwitcherUser | undefined): string {
 function LiveApp({
   client,
   state,
-  capture,
+  dialogs,
 }: {
   readonly client: Client;
   readonly state: CoreState;
-  readonly capture: PcCapture;
+  readonly dialogs: CaptureDialogs;
 }): React.JSX.Element {
+  const capture = dialogs.capture;
   const session = state.session;
   const active = session?.active ?? null;
   const [pinFor, setPinFor] = useState<string | null>(null);
@@ -135,11 +150,23 @@ function LiveApp({
     };
     window.addEventListener('pointerdown', onActivity, true);
     window.addEventListener('keydown', onActivity, true);
+    // Waiting on the customer to sign or a photo from the phone is being here too, for a while.
+    const waiting = window.setInterval(() => {
+      const since = dialogs.waitingSince();
+      if (since !== null && Date.now() - since < CAPTURE_KEEPS_AWAKE_MS) onActivity();
+    }, ACTIVITY_EVERY_MS);
     return () => {
       window.removeEventListener('pointerdown', onActivity, true);
       window.removeEventListener('keydown', onActivity, true);
+      window.clearInterval(waiting);
     };
-  }, [client]);
+  }, [client, dialogs]);
+
+  // Locked or switched: whatever was being captured is backed out of, not left over the lock.
+  const inShell = zone.kind === 'shell';
+  useEffect(() => {
+    if (!inShell) dialogs.cancel();
+  }, [inShell, dialogs]);
 
   const storeName = state.deviceInfo?.storeName ?? null;
   const users = session?.users ?? null;
@@ -294,16 +321,23 @@ function LiveCounter({
   readonly onReenrol: () => void;
 }): React.JSX.Element {
   const storeName = state.deviceInfo?.storeName ?? '';
+  // Locking or switching away closes an open capture: nothing of this person's stays on screen,
+  // and a phone still recording for it is told the computer stopped waiting instead of "sent".
+  useEffect(() => () => capture.backOut(), [capture]);
   // A new runtime when the person's grants change, so every screen re-derives what it offers.
   const grants = JSON.stringify({
     permissions: session.permissions,
     colleaguePermissions: session.colleaguePermissions,
+    limits: session.limits,
   });
   const runtime = useMemo(
     () =>
       createCoreRepairRuntime({
         client,
-        session: JSON.parse(grants) as Pick<SessionView, 'permissions' | 'colleaguePermissions'>,
+        session: JSON.parse(grants) as Pick<
+          SessionView,
+          'permissions' | 'colleaguePermissions' | 'limits'
+        >,
         userId,
         storeName,
         capture,
@@ -370,6 +404,8 @@ function LiveCounter({
         settings={settings}
         restoredDraft={restoredDraft}
         onDraftChange={onDraftChange}
+        setupPending={state.setupFor === userId}
+        onSetupDone={() => void client.call('device.finishSetup').catch(() => undefined)}
       />
     </RepairRuntimeProvider>
   );
@@ -386,7 +422,15 @@ function useSettingsAccess(
   session: SessionView,
   userId: string,
 ): SettingsAccess {
-  const { canUnlock, canReset, canManageStaff, tenantAdmin, pinRows } = session;
+  const {
+    canUnlock,
+    canReset,
+    canManageStaff,
+    canSetLimits,
+    canRenameDevice,
+    tenantAdmin,
+    pinRows,
+  } = session;
   // Colleagues whose PIN is locked here, from the same lockout machine as the PIN pad.
   const lockedCount = Object.entries(pinRows).filter(
     ([id, row]) => id !== userId && derivePinAuthState(row) === 'locked_out',
@@ -402,6 +446,12 @@ function useSettingsAccess(
           onCreate: (draft) => call<{ readonly userId: string }>('staff.create', draft),
           onUpdate: (memberId, change) => call<void>('staff.update', memberId, change),
           onSetActive: (memberId, active) => call<void>('staff.setActive', memberId, active),
+          canSetLimits,
+          onSetLimits: (roleId, limits) => call<void>('staff.setLimits', roleId, limits),
+          onCreateRole: (name, copyFromRoleId) =>
+            call<{ readonly roleId: string }>('staff.createRole', name, copyFromRoleId),
+          onUpdateRole: (roleId, change) => call<void>('staff.updateRole', roleId, change),
+          onDeleteRole: (roleId) => call<void>('staff.deleteRole', roleId),
         }
       : undefined;
     return {
@@ -420,8 +470,20 @@ function useSettingsAccess(
           : undefined,
       staff,
       device,
+      renameDevice: canRenameDevice ? (name) => call<void>('device.rename', name) : undefined,
     };
-  }, [client, userId, canUnlock, canReset, canManageStaff, tenantAdmin, lockedCount, device]);
+  }, [
+    client,
+    userId,
+    canUnlock,
+    canReset,
+    canManageStaff,
+    canSetLimits,
+    canRenameDevice,
+    tenantAdmin,
+    lockedCount,
+    device,
+  ]);
 }
 
 function demoNameOf(userId: string): string | null {
@@ -434,6 +496,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
   // Each person's intake waits for them, as the core's workspaces do.
   const [drafts, setDrafts] = useState<Readonly<Record<string, IntakeDraft | null>>>({});
   const runtime = useMemo(() => demoRuntimeFor(person, capture), [person, capture]);
+  const settings = useMemo((): SettingsAccess => ({ staff: demoStaffFor(person) }), [person]);
   const onDraftChange = useCallback(
     (draft: IntakeDraft | null) => setDrafts((all) => ({ ...all, [person.userId]: draft })),
     [person.userId],
@@ -461,6 +524,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
         }))}
         restoredDraft={drafts[person.userId] ?? null}
         onDraftChange={onDraftChange}
+        settings={settings}
       />
     </RepairRuntimeProvider>
   );

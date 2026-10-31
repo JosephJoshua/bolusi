@@ -1,16 +1,16 @@
 // The deferred behind an evidence capture (06 §2): a screen awaits a promise while the shell shows
-// the camera or the signature pad. Shared by both hosts so they settle, refuse a second request and
-// guard against a user switch the same way.
+// the camera, the signature pad or the video recorder. Shared by the hosts so they settle, refuse a
+// second request and guard against a user switch the same way.
 import type { CapturedMedia } from '@bolusi/modules/screen-kit';
 import { useCallback, useEffect, useRef } from 'react';
 
 import type { CaptureIdentity } from '@bolusi/device/media/capture';
 
-export interface PendingCapture {
+export interface PendingCapture<T = CapturedMedia> {
   /** Start a capture for the acting user. Rejects when one is already open. */
-  readonly open: () => Promise<CapturedMedia | null>;
+  readonly open: () => Promise<T | null>;
   /** Close the surface and hand the caller its answer. Idempotent: a double tap resolves once. */
-  readonly settle: (value: CapturedMedia | null) => void;
+  readonly settle: (value: T | null) => void;
   /** Whether a caller is still waiting (false once settled or backed out). */
   readonly isOpen: () => boolean;
   /**
@@ -24,18 +24,18 @@ export interface PendingCapture {
   readonly identity: () => CaptureIdentity | null;
 }
 
-export function usePendingCapture(
+export function usePendingCapture<T = CapturedMedia>(
   identity: CaptureIdentity | null,
   onClose: () => void,
-): PendingCapture {
-  const settleRef = useRef<((value: CapturedMedia | null) => void) | null>(null);
+): PendingCapture<T> {
+  const settleRef = useRef<((value: T | null) => void) | null>(null);
   const openedForUserRef = useRef<string | null>(null);
   const identityRef = useRef<CaptureIdentity | null>(identity);
   identityRef.current = identity;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  const settle = useCallback((value: CapturedMedia | null): void => {
+  const settle = useCallback((value: T | null): void => {
     const resolve = settleRef.current;
     settleRef.current = null;
     openedForUserRef.current = null;
@@ -43,12 +43,12 @@ export function usePendingCapture(
     resolve?.(value);
   }, []);
 
-  const open = useCallback((): Promise<CapturedMedia | null> => {
+  const open = useCallback((): Promise<T | null> => {
     if (settleRef.current !== null) {
       // Replacing would strand the first caller's promise forever.
       return Promise.reject(new Error('a capture is already in progress'));
     }
-    const pending = new Promise<CapturedMedia | null>((resolve) => {
+    const pending = new Promise<T | null>((resolve) => {
       settleRef.current = resolve;
     });
     openedForUserRef.current = identityRef.current?.userId ?? null;

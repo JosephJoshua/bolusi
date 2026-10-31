@@ -7,10 +7,15 @@
 // Used by the identity endpoints before they mutate and by the push pipeline for every synced op.
 import {
   computeEffectiveSet,
+  evaluateAllowance,
   evaluatePermission,
+  OWNER_POWER_PERMISSIONS,
+  parseLimitAmounts,
   type DirectoryGrant,
   type DirectoryRole,
   type DirectorySnapshot,
+  type LimitAmounts,
+  type PermissionAllowance,
   type PermissionQuery,
   type PermissionResult,
 } from '@bolusi/core';
@@ -34,19 +39,36 @@ export async function loadUserDirectory(
     .select(['status'])
     .where('id', '=', userId)
     .executeTakeFirst();
-  const grantRows = await db
-    .selectFrom('userRoles')
-    .select(['roleId', 'storeId'])
-    .where('userId', '=', userId)
-    .execute();
+  // A store grant counts only where the user is a member: a grant left behind at a store they were
+  // moved out of must not keep its powers there.
+  const memberOf = new Set(
+    (
+      await db.selectFrom('userStores').select('storeId').where('userId', '=', userId).execute()
+    ).map((m) => m.storeId),
+  );
+  const grantRows = (
+    await db
+      .selectFrom('userRoles')
+      .select(['roleId', 'storeId'])
+      .where('userId', '=', userId)
+      .execute()
+  ).filter((g) => g.storeId === null || memberOf.has(g.storeId));
   const roleIds = [...new Set(grantRows.map((g) => g.roleId))];
   const roleRows =
     roleIds.length === 0
       ? []
       : await db
           .selectFrom('roles')
-          .select(['id', 'scopeType'])
+          .select(['id', 'scopeType', 'limited'])
           .where('id', 'in', roleIds)
+          .execute();
+  const limitRows =
+    roleIds.length === 0
+      ? []
+      : await db
+          .selectFrom('roleLimits')
+          .select(['roleId', 'storeId', 'kind', 'amount'])
+          .where('roleId', 'in', roleIds)
           .execute();
   const permissionRows =
     roleIds.length === 0
@@ -60,7 +82,11 @@ export async function loadUserDirectory(
   const roles = new Map<string, DirectoryRole>();
   for (const role of roleRows) {
     const ids = permissionRows.filter((p) => p.roleId === role.id).map((p) => p.permissionId);
-    roles.set(role.id, { scopeType: role.scopeType, permissionIdsJson: JSON.stringify(ids) });
+    roles.set(role.id, {
+      scopeType: role.scopeType,
+      permissionIdsJson: JSON.stringify(ids),
+      limits: role.limited ? limitsByStore(limitRows.filter((l) => l.roleId === role.id)) : null,
+    });
   }
   const grants: DirectoryGrant[] = grantRows.map((g) => ({ roleId: g.roleId, storeId: g.storeId }));
 
@@ -70,6 +96,27 @@ export async function loadUserDirectory(
     roles,
     grantsByUser: new Map([[userId, grants]]),
   };
+}
+
+/** A limited role's `role_limits` rows as amounts per store; an unset kind is Rp 0. */
+export function limitsByStore(
+  rows: readonly { storeId: string; kind: string; amount: string | number | bigint }[],
+): ReadonlyMap<string, LimitAmounts> {
+  const raw = new Map<string, Record<string, number>>();
+  for (const row of rows) {
+    const store = raw.get(row.storeId) ?? {};
+    store[row.kind] = Number(row.amount);
+    raw.set(row.storeId, store);
+  }
+  return new Map([...raw].map(([storeId, amounts]) => [storeId, parseLimitAmounts(amounts)]));
+}
+
+/** How far the user may use a permission (core authz/limits.ts), by a loaded directory. */
+export function allowanceWithDirectory(
+  directory: DirectorySnapshot,
+  query: PermissionQuery,
+): PermissionAllowance {
+  return evaluateAllowance(permissionRegistry, directory, query);
 }
 
 /** Evaluate one query against a loaded directory, with the server's permission registry. */
@@ -206,4 +253,56 @@ export async function isTenantAdmin(
     storeId: null,
     permissionId: TENANT_ADMIN_PERMISSION,
   });
+}
+
+/**
+ * Owner powers (owner decision 2026-10-27): only a tenant admin, the main owner, may make someone an
+ * owner, or rename, re-role, deactivate or reactivate an owner, or reset or unlock an owner's PIN.
+ * An owner role is one that is
+ * tenant-wide or holds power over other accounts (core `OWNER_POWER_PERMISSIONS`, which the device
+ * uses to decide what to offer). A store owner manages the cashiers and technicians of their own
+ * store, never a peer owner, so two store owners cannot remove each other.
+ */
+export async function rolesConferOwnerPowers(
+  db: TenantDb,
+  roles: readonly { readonly id: string; readonly scopeType: string }[],
+): Promise<boolean> {
+  if (roles.some((r) => r.scopeType === 'tenant')) return true;
+  if (roles.length === 0) return false;
+  const row = await db
+    .selectFrom('rolePermissions')
+    .select('roleId')
+    .where(
+      'roleId',
+      'in',
+      roles.map((r) => r.id),
+    )
+    .where('permissionId', 'in', OWNER_POWER_PERMISSIONS)
+    .executeTakeFirst();
+  return row !== undefined;
+}
+
+/** Whether `userId` holds an owner role (see {@link rolesConferOwnerPowers}). */
+export async function holdsOwnerPowers(db: TenantDb, userId: string): Promise<boolean> {
+  const roles = await db
+    .selectFrom('userRoles')
+    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
+    .select(['roles.id', 'roles.scopeType'])
+    .where('userRoles.userId', '=', userId)
+    .execute();
+  return rolesConferOwnerPowers(db, roles);
+}
+
+/**
+ * May `actorUserId` reset or unlock `targetUserId`'s PIN as far as owner powers go? An owner's PIN is
+ * the main owner's to manage: handing it over is handing over the account. The permission itself
+ * is checked separately.
+ */
+export async function mayManageOwnerPin(
+  db: TenantDb,
+  tenantId: string,
+  actorUserId: string,
+  targetUserId: string,
+): Promise<boolean> {
+  return !(await holdsOwnerPowers(db, targetUserId)) || isTenantAdmin(db, tenantId, actorUserId);
 }

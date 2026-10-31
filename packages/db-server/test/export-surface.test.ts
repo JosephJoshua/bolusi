@@ -87,6 +87,8 @@ const EXPECTED_EXPORTS = [
   'createPhoneCatalogWriterOn',
   'readPhoneModelPhotoFrom',
   'readPhoneModelsFrom',
+  // The server's boot check that it connects as a row-security-bound role. Returns nothing.
+  'assertRowSecurityRole',
 ].sort();
 
 test('the package exports exactly the curated surface', () => {

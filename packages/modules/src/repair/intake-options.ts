@@ -277,6 +277,13 @@ export interface RecordedRepairType {
   readonly needsVideo: boolean;
 }
 
+/** Whether any of these repair types asks for the customer's ownership video. */
+export function needsOwnershipVideo(
+  types: readonly Pick<RecordedRepairType, 'needsVideo'>[],
+): boolean {
+  return types.some((type) => type.needsVideo);
+}
+
 /**
  * The repair types picked by id, as a servisan records them. A type the servisan already has keeps
  * the terms it was given, so the owner changing a warranty later never changes one already promised;

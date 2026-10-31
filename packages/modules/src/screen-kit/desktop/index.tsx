@@ -1,6 +1,6 @@
 // Pieces every desktop module screen shares (React DOM, apps/desktop only): a read's states and
 // a refused action's banner.
-import { t, translateErrorCode } from '@bolusi/i18n';
+import { t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import { Banner, StatePanel } from '@bolusi/ui-web';
 import { FileQuestion, LoaderCircle, Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -19,7 +19,7 @@ export function ActionError({
   return (
     <Banner
       tone="danger"
-      message={translateErrorCode(errorCode)}
+      message={translateFailure(errorCode)}
       onDismiss={onDismiss}
       dismissLabel={t('core.action.close')}
     />

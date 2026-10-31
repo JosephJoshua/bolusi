@@ -10,6 +10,11 @@ function port(): StaffAdminPort {
     create: vi.fn(() => Promise.resolve({ userId: 'u-new' })),
     update: vi.fn(() => Promise.resolve()),
     setActive: vi.fn(() => Promise.resolve()),
+    setLimits: vi.fn(() => Promise.resolve()),
+    renameDevice: vi.fn(() => Promise.resolve()),
+    createRole: vi.fn(() => Promise.resolve({ roleId: 'r-new' })),
+    updateRole: vi.fn(() => Promise.resolve()),
+    deleteRole: vi.fn(() => Promise.resolve()),
   };
 }
 
@@ -26,6 +31,7 @@ describe('createStaffControls', () => {
     const controls = createStaffControls({
       port: admin,
       tenantAdmin: false,
+      canSetLimits: false,
       load: () => Promise.resolve(EMPTY),
       context: () => ({ actingUserId: 'u-owner', storeId: 's-1' }),
       refreshDirectory: () => {
@@ -57,6 +63,34 @@ describe('createStaffControls', () => {
       userId: 'u-1',
       active: false,
     });
+
+    const limits = { priceDrop: 50_000, refund: 0, credit: 100_000 };
+    await controls.onSetLimits('r-manager', limits);
+    expect(admin.setLimits).toHaveBeenCalledWith({
+      actingUserId: 'u-owner',
+      storeId: 's-1',
+      roleId: 'r-manager',
+      limits,
+    });
+    expect(order).toEqual(['server', 'refresh', 'refresh', 'refresh', 'refresh']);
+
+    await expect(controls.onCreateRole('Kasir senior', 'r-cashier')).resolves.toEqual({
+      roleId: 'r-new',
+    });
+    expect(admin.createRole).toHaveBeenCalledWith({
+      actingUserId: 'u-owner',
+      name: 'Kasir senior',
+      copyFromRoleId: 'r-cashier',
+    });
+    await controls.onUpdateRole('r-new', { limited: true });
+    expect(admin.updateRole).toHaveBeenCalledWith({
+      actingUserId: 'u-owner',
+      roleId: 'r-new',
+      limited: true,
+    });
+    await controls.onDeleteRole('r-new');
+    expect(admin.deleteRole).toHaveBeenCalledWith({ actingUserId: 'u-owner', roleId: 'r-new' });
+    expect(order.filter((step) => step === 'refresh')).toHaveLength(7);
   });
 
   test('a refused change is not followed by a refresh, and a failed refresh does not undo a change', async () => {
@@ -66,6 +100,7 @@ describe('createStaffControls', () => {
     const controls = createStaffControls({
       port: admin,
       tenantAdmin: true,
+      canSetLimits: true,
       load: () => Promise.resolve(EMPTY),
       context: () => ({ actingUserId: 'u-owner', storeId: 's-1' }),
       refreshDirectory,
@@ -84,6 +119,7 @@ describe('createStaffControls', () => {
     const controls = createStaffControls({
       port: admin,
       tenantAdmin: false,
+      canSetLimits: false,
       load: () => Promise.resolve(EMPTY),
       context: () => null,
       refreshDirectory: () => Promise.resolve(),

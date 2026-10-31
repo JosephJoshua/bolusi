@@ -11,10 +11,15 @@ import {
   applyBundle,
   canManageMember,
   grantableRoles,
+  mayManageOwnerPin,
   readStaffDirectory,
+  resolveDisplayRoleKeys,
+  settableLimitRoles,
   staffAdminFailure,
   StaffAdminError,
   staffDraftProblem,
+  STORE_ID_META_KEY,
+  writeMeta,
   type BundleUser,
   type DeviceBundle,
   type StaffMember,
@@ -71,6 +76,14 @@ const ROLES: DeviceBundle['rolesSnapshot'] = [
     permissionIds: ['repair.read', 'repair.work'],
   },
   {
+    id: 'r-manager',
+    name: 'manager',
+    scopeType: 'store',
+    isSystemDefault: true,
+    permissionIds: ['repair.read', 'repair.discount'],
+    limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+  },
+  {
     id: 'r-staff',
     name: 'staff',
     scopeType: 'store',
@@ -121,6 +134,7 @@ describe('readStaffDirectory', () => {
     expect(directory.roles.map((role) => [role.key, role.ownerRole])).toEqual([
       ['cashier', false],
       ['technician', false],
+      ['manager', false],
       ['store_owner', true],
     ]);
     expect(directory.members.map((m) => [m.name, m.active, m.owner, m.roleKeys.join('+')])).toEqual(
@@ -134,6 +148,52 @@ describe('readStaffDirectory', () => {
     );
     // Nobody in this bundle carries a PIN yet.
     expect(directory.members.every((m) => !m.hasPin)).toBe(true);
+  });
+});
+
+describe('an owner at another store', () => {
+  it('is an owner here too, though the roles shown are the ones held here', async () => {
+    const elsewhere: BundleUser = {
+      ...user('u-both', 'Ana', ['r-cashier']),
+      // The bundle carries an owner-role grant at another store, as the server judges owners there.
+      grants: [
+        { roleId: 'r-cashier', storeId: STORE },
+        { roleId: 'r-store', storeId: 'store-2' },
+      ],
+    };
+    const db = await seeded([user('u-so', 'Budi', ['r-store']), elsewhere]);
+    await writeMeta(db, STORE_ID_META_KEY, STORE);
+
+    const ana = (await readStaffDirectory(db)).members.find((m) => m.id === 'u-both');
+    expect(ana).toMatchObject({ owner: true, roleKeys: ['cashier'], roleIds: ['r-cashier'] });
+    expect(await resolveDisplayRoleKeys(db, 'u-both')).toEqual(['cashier']);
+    // This store's owner is not offered her PIN, which the server would refuse.
+    expect(await mayManageOwnerPin(db, 'u-so', 'u-both')).toBe(false);
+  });
+});
+
+describe('limited roles', () => {
+  it('reads a limited role’s amounts here; a role free of limits has none', async () => {
+    const { roles } = await readStaffDirectory(await seeded([]));
+    expect(roles.find((role) => role.key === 'manager')?.limits).toEqual({
+      priceDrop: 50_000,
+      refund: 0,
+      credit: 100_000,
+    });
+    expect(roles.find((role) => role.key === 'cashier')?.limits).toBeNull();
+  });
+
+  it('an owner sets a limited role’s amounts, but never one they hold themselves', async () => {
+    const directory = await readStaffDirectory(
+      await seeded([
+        user('u-so', 'Budi', ['r-store']),
+        user('u-both', 'Ana', ['r-store', 'r-manager']),
+      ]),
+    );
+    expect(
+      settableLimitRoles(directory, { userId: 'u-so', tenantAdmin: false }).map((r) => r.key),
+    ).toEqual(['manager']);
+    expect(settableLimitRoles(directory, { userId: 'u-both', tenantAdmin: false })).toEqual([]);
   });
 });
 
@@ -154,10 +214,15 @@ describe('who may manage what', () => {
   it('offers owner roles only to a main owner', async () => {
     const db = await seeded([]);
     const { roles } = await readStaffDirectory(db);
-    expect(grantableRoles(roles, storeOwner).map((r) => r.key)).toEqual(['cashier', 'technician']);
+    expect(grantableRoles(roles, storeOwner).map((r) => r.key)).toEqual([
+      'cashier',
+      'technician',
+      'manager',
+    ]);
     expect(grantableRoles(roles, mainOwner).map((r) => r.key)).toEqual([
       'cashier',
       'technician',
+      'manager',
       'store_owner',
     ]);
   });

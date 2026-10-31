@@ -221,6 +221,33 @@ export default tseslint.config(
     },
   },
   {
+    // A live system font size change remounts only the text nodes, through @bolusi/ui's wrappers
+    // (packages/ui/src/text.tsx). A raw react-native Text keeps drawing at the old size.
+    name: 'bolusi/font-scaled-text',
+    files: [
+      'apps/mobile/**/*.{ts,tsx}',
+      'packages/modules/src/**/*.{ts,tsx}',
+      'packages/ui/src/**/*.{ts,tsx}',
+    ],
+    ignores: ['packages/ui/src/text.tsx', '**/*.test.{ts,tsx}', '**/test/**'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react-native',
+              importNames: ['Text', 'TextInput'],
+              allowTypeImports: true,
+              message:
+                'Use Text from @bolusi/ui (and its TextInput field), so text redraws at a new system font size.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     name: 'bolusi/oplog-no-http',
     files: ['apps/server/src/oplog/**/*.ts'],
     rules: {

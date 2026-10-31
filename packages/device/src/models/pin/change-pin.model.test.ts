@@ -23,27 +23,27 @@ function run(
 describe('changePinReducer — collect current → new → repeat → submit', () => {
   test('the happy path reaches `submitting` carrying BOTH the current and the confirmed new PIN', () => {
     const phase = run(CHANGE_PIN_START, [
-      { kind: 'enteredCurrent', pin: '111111' },
-      { kind: 'enteredNew', pin: '222222' },
-      { kind: 'enteredNew', pin: '222222' },
+      { kind: 'enteredCurrent', pin: '571938' },
+      { kind: 'enteredNew', pin: '593026' },
+      { kind: 'enteredNew', pin: '593026' },
     ]);
-    expect(phase).toEqual({ kind: 'submitting', currentPin: '111111', newPin: '222222' });
+    expect(phase).toEqual({ kind: 'submitting', currentPin: '571938', newPin: '593026' });
   });
 
   test('a mismatched repeat NEVER submits — it stays in `new`, never reaching `submitting`', () => {
     const phase = run(CHANGE_PIN_START, [
-      { kind: 'enteredCurrent', pin: '111111' },
-      { kind: 'enteredNew', pin: '222222' },
-      { kind: 'enteredNew', pin: '333333' },
+      { kind: 'enteredCurrent', pin: '571938' },
+      { kind: 'enteredNew', pin: '593026' },
+      { kind: 'enteredNew', pin: '361548' },
     ]);
     expect(phase.kind).toBe('new');
     // The confirmed value is discarded; the sub-flow is back to a fresh first entry, flagged mismatch.
-    expect(phase).toMatchObject({ kind: 'new', entry: { kind: 'first', afterMismatch: true } });
+    expect(phase).toMatchObject({ kind: 'new', entry: { kind: 'first', problem: 'mismatch' } });
   });
 
   test('a successful settle reaches `done`', () => {
     const phase = changePinReducer(
-      { kind: 'submitting', currentPin: '111111', newPin: '222222' },
+      { kind: 'submitting', currentPin: '571938', newPin: '593026' },
       { kind: 'settled', result: { ok: true } },
     );
     expect(phase).toEqual({ kind: 'done' });
@@ -52,7 +52,7 @@ describe('changePinReducer — collect current → new → repeat → submit', (
   test('a FAILED settle never reaches `done` — it returns to the current step carrying the reason', () => {
     for (const reason of ['wrongCurrent', 'locked', 'rateLimited', 'error'] as const) {
       const phase = changePinReducer(
-        { kind: 'submitting', currentPin: '111111', newPin: '222222' },
+        { kind: 'submitting', currentPin: '571938', newPin: '593026' },
         { kind: 'settled', result: { ok: false, reason } },
       );
       expect(phase).toEqual({ kind: 'current', feedback: reason });
@@ -64,7 +64,7 @@ describe('changePinReducer — collect current → new → repeat → submit', (
 
   test('an out-of-phase event is ignored rather than corrupting the phase', () => {
     // A late new-PIN completion arriving while we are still on the current step changes nothing.
-    expect(changePinReducer(CHANGE_PIN_START, { kind: 'enteredNew', pin: '222222' })).toBe(
+    expect(changePinReducer(CHANGE_PIN_START, { kind: 'enteredNew', pin: '593026' })).toBe(
       CHANGE_PIN_START,
     );
     // A stray current-entry after we have started submitting does not restart entry.
@@ -116,7 +116,7 @@ describe('changePadState — the hard lock is the only state that disables the k
       changePadState({
         kind: 'new',
         currentPin: '1',
-        entry: { kind: 'first', afterMismatch: false },
+        entry: { kind: 'first', problem: null },
       }),
     ).toBe('entry');
   });
@@ -126,7 +126,7 @@ describe('changePadState — the hard lock is the only state that disables the k
       changePadState({
         kind: 'new',
         currentPin: '1',
-        entry: { kind: 'first', afterMismatch: true },
+        entry: { kind: 'first', problem: 'mismatch' },
       }),
     ).toBe('error');
   });

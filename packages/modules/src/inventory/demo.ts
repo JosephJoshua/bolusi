@@ -632,6 +632,7 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): InventoryRu
     },
     hasPermission: (id: string) => actor().permissions.includes(id),
     colleagueHasPermission: () => false,
+    limitOf: (id: string) => (actor().permissions.includes(id) ? null : 0),
     newId: () => newId('new'),
     subscribe: options.subscribe,
     searchModels: options.searchModels,

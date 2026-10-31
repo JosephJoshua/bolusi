@@ -3,6 +3,7 @@
 // the server's answer, not a guess. NODE-SAFE: core types and injected functions only.
 import {
   StaffAdminError,
+  type LimitAmounts,
   type StaffAdminPort,
   type StaffDirectory,
   type StaffDraft,
@@ -21,11 +22,29 @@ export interface StaffControls {
     change: { readonly name?: string; readonly roleIds?: readonly string[] },
   ) => Promise<void>;
   readonly onSetActive: (userId: string, active: boolean) => Promise<void>;
+  /** The signed-in user may set limited roles' amounts at this store (`auth.limit_manage`). */
+  readonly canSetLimits: boolean;
+  readonly onSetLimits: (roleId: string, limits: LimitAmounts) => Promise<void>;
+  /** The role editor, for the main owner ({@link tenantAdmin}) only. */
+  readonly onCreateRole: (
+    name: string,
+    copyFromRoleId: string,
+  ) => Promise<{ readonly roleId: string }>;
+  readonly onUpdateRole: (roleId: string, change: RoleChange) => Promise<void>;
+  readonly onDeleteRole: (roleId: string) => Promise<void>;
+}
+
+/** What the role editor changes about a role; anything left out stays. */
+export interface RoleChange {
+  readonly name?: string;
+  readonly permissionIds?: readonly string[];
+  readonly limited?: boolean;
 }
 
 export interface StaffControlsDeps {
   readonly port: StaffAdminPort;
   readonly tenantAdmin: boolean;
+  readonly canSetLimits: boolean;
   readonly load: () => Promise<StaffDirectory>;
   /** The signed-in owner and this device's store; null with no session. */
   readonly context: () => { readonly actingUserId: string; readonly storeId: string } | null;
@@ -62,5 +81,20 @@ export function createStaffControls(deps: StaffControlsDeps): StaffControls {
       thenRefresh(deps.port.update({ actingUserId: context().actingUserId, userId, ...change })),
     onSetActive: async (userId, active) =>
       thenRefresh(deps.port.setActive({ actingUserId: context().actingUserId, userId, active })),
+    canSetLimits: deps.canSetLimits,
+    onSetLimits: async (roleId, limits) => {
+      const { actingUserId, storeId } = context();
+      return thenRefresh(deps.port.setLimits({ actingUserId, storeId, roleId, limits }));
+    },
+    onCreateRole: async (name, copyFromRoleId) =>
+      thenRefresh(
+        deps.port.createRole({ actingUserId: context().actingUserId, name, copyFromRoleId }),
+      ),
+    onUpdateRole: async (roleId, change) =>
+      thenRefresh(
+        deps.port.updateRole({ actingUserId: context().actingUserId, roleId, ...change }),
+      ),
+    onDeleteRole: async (roleId) =>
+      thenRefresh(deps.port.deleteRole({ actingUserId: context().actingUserId, roleId })),
   };
 }

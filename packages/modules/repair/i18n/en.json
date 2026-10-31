@@ -23,7 +23,9 @@
     "statusLinkMade": "Status link made",
     "storePrintSettingsChanged": "Slip details changed",
     "storeUncollectedDaysChanged": "Not-collected limit changed",
-    "ticketRepairTypesChanged": "Repair type changed"
+    "ticketRepairTypesChanged": "Repair type changed",
+    "handoverReversed": "Handover undone",
+    "ticketDetailsCorrected": "Details corrected"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -51,7 +53,9 @@
     "applyUnconfirmed": "Not yet",
     "agreedYes": "Yes",
     "takeOver": "Take over",
-    "more": "More"
+    "more": "More",
+    "correctDetails": "Edit details",
+    "undoHandover": "Undo handover"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -61,9 +65,11 @@
     "emptyHint": "Repairs you take in or work on appear here.",
     "noMatches": "No repair matches that search.",
     "priceChangeWaiting": "Price needs confirming",
+    "approvalWaiting": "Awaiting approval",
     "searchHint": "Name, phone, ticket, IMEI, model",
     "title": "Repairs",
     "view": {
+      "approvals": "Approvals ({count})",
       "active": "In progress",
       "mine": "Mine",
       "pickup": "Ready for pickup",
@@ -80,6 +86,7 @@
     "waited": "Not collected for {days} days"
   },
   "cancel": {
+    "refundsDp": "At pickup, the customer gets {amount} of the DP back.",
     "reason": "Why is it cancelled?",
     "consequence": "The customer only pays the cancellation fee when collecting the phone.",
     "fee": "Cancellation fee",
@@ -139,6 +146,8 @@
     "watch": "Smartwatch"
   },
   "handover": {
+    "giveBack": "Give {refunds} back to the customer.",
+    "giveBackVia": "{amount} through {method}",
     "note": "Note (optional)",
     "photo": "Handover photo",
     "sign": "Customer signs",
@@ -156,7 +165,12 @@
     "accessoryBack": "{name} returned",
     "noteNeeded": "Note",
     "checked": "Checked: {items}",
-    "unchecked": "Not done: {items}"
+    "unchecked": "Not done: {items}",
+    "payLaterLimit": "Your pay-later limit is {amount}.",
+    "payLaterPermitted": "Approved by {name}.",
+    "payLaterWaiting": "Waiting for the store owner’s approval.",
+    "payLaterRejected": "Rejected by {name}.",
+    "payLaterRejectedNote": "Rejected by {name}: {note}"
   },
   "intake": {
     "discard": "Discard intake",
@@ -241,7 +255,10 @@
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Refunded"
+    "refund": "Refunded",
+    "newTotal": "Total becomes {from} → {to}",
+    "reduced": "Taken off",
+    "owedBack": "Overpaid"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -254,7 +271,10 @@
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
     "downPaymentAboveTotal": "The down payment is more than the total.",
     "downPaymentReference": "Enter the approval code from the EDC machine.",
-    "screenLock": "Enter the screen lock, or choose None."
+    "screenLock": "Enter the screen lock, or choose None.",
+    "ownershipVideo": "The ownership video isn’t recorded yet.",
+    "customerPhone": "This phone number doesn’t look right. Check the digits.",
+    "deviceImei": "This IMEI isn’t right. Check it against the 15 digits *#06# shows."
   },
   "ready": {
     "today": "Today",
@@ -297,7 +317,11 @@
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved.",
-    "repairTypes": "Repair type saved."
+    "repairTypes": "Repair type saved.",
+    "corrected": "Servisan details saved.",
+    "handoverUndone": "Handover undone. The phone is back in the store.",
+    "refund": "Money given back.",
+    "reduce": "Bill lowered."
   },
   "passcode": {
     "show": "Show",
@@ -313,8 +337,17 @@
     "downPayment": "Enter the amount first.",
     "downPaymentCorrect": "Enter the correct down payment first.",
     "downPaymentSame": "The amount has not changed.",
+    "handoverFree": "This servisan is free. Ask an owner to hand it over.",
     "handoverPayment": "Complete the payment first.",
-    "handoverChecks": "Tick everything, or write why not."
+    "discountLimit": "Your discount limit is {amount} per servisan.",
+    "discountLeft": "{amount} of your discount limit is left on this repair.",
+    "handoverChecks": "Tick everything, or write why not.",
+    "payLaterWaiting": "Wait for approval, or pay now.",
+    "payLaterAsk": "Ask for approval, or pay now.",
+    "downPaymentLimit": "You can take up to {amount} off the money taken in.",
+    "cancelLimit": "You can cut the fee by up to {amount}.",
+    "downPaymentWithEarlier": "With earlier DP changes, that’s {amount} in total.",
+    "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -418,7 +451,7 @@
   "fees": {
     "title": "Cancellation fees",
     "summary": "Before and after work starts",
-    "intro": "What the customer pays when a repair is cancelled. Owners can still change it when cancelling.",
+    "intro": "What the customer pays when a repair is cancelled. It can still be changed when cancelling.",
     "beforeWork": "Work hasn’t started",
     "afterWork": "Work has started",
     "save": "Save",
@@ -436,6 +469,7 @@
     "readyBy": "Ready by {date}",
     "returned": "Collected {date}",
     "reprint": "Reprint no. {count}",
+    "reprintFirst": "Reprint",
     "printed": "Printed {date}",
     "printedBy": "Printed {date} by {name}",
     "field": {
@@ -491,7 +525,7 @@
     "handover": "Repair bill",
     "intakeAbout": "Proof the store received the phone.",
     "handoverAbout": "The bill and proof of pickup.",
-    "reprint": "Printed {count} times already.",
+    "reprint": "{count, plural, one {Printed once already.} other {Printed # times already.}}",
     "paper": "Paper",
     "paperHalf": "Half form",
     "paperFull": "Full form",
@@ -502,8 +536,16 @@
     "problem": {
       "noPrinter": "Choose a printer in Settings first.",
       "printerMissing": "Printer not found. Check its cable and power, or choose another printer in Settings.",
-      "failed": "Couldn’t print. Check the printer, then try again."
-    }
+      "failed": "Couldn’t print. Check the printer, then try again.",
+      "stuck": "Couldn’t get the slip ready. Try again."
+    },
+    "paperCustom": "Other size",
+    "paperSize": "{width} × {height} mm",
+    "paperWidth": "Width (mm)",
+    "paperHeight": "Height (mm)",
+    "paperContinuous": "Continuous paper",
+    "paperContinuousHint": "Punched strips on both sides, for a dot-matrix printer.",
+    "paperRange": "Width {minWidth}–{maxWidth} mm, height {minHeight}–{maxHeight} mm."
   },
   "downPayment": {
     "recordTitle": "Record down payment",
@@ -515,7 +557,8 @@
     "current": "Recorded down payment",
     "ofTotal": "Total {amount}",
     "reason": "Reason for the change",
-    "removeHint": "Enter 0 if the down payment is void."
+    "removeHint": "Enter 0 if the down payment is void.",
+    "askTitle": "Ask to change the down payment"
   },
   "printSettings": {
     "title": "Slip details",
@@ -645,6 +688,7 @@
     "partsNotYours": "Another technician is working on this repair.",
     "notPaid": "This servisan isn’t paid in full yet.",
     "unpaidOwnerOnly": "Only an owner can hand over a phone that isn’t paid.",
+    "freeHandoverOwnerOnly": "Only an owner can hand over a free servisan.",
     "downPaymentRefunded": "Part of this down payment was already given back, so it can’t be changed.",
     "repairTypesNotYours": "Only the counter or a technician can change the repair type.",
     "claimNotReturned": "A warranty claim is only for a phone that was repaired and collected.",
@@ -653,9 +697,19 @@
     "warrantyEnded": "The warranty has ended. Only an owner can open this claim.",
     "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
     "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan.",
+    "overLimit": "Over your limit. Ask a store owner.",
     "handoverAccessories": "An accessory is missing from the handover list.",
     "handoverNoteNeeded": "Something isn’t ticked. Write a note first.",
-    "statusLinkMismatch": "This repair’s status link isn’t valid."
+    "statusLinkMismatch": "This repair’s status link isn’t valid.",
+    "ownershipVideoNeeded": "Record the ownership video first.",
+    "notReturned": "This phone hasn’t been handed over.",
+    "handoverHasClaim": "A warranty claim names this servisan, so its handover can’t be undone.",
+    "claimSamePhone": "A warranty claim is for the same phone. Its brand, model and IMEI can’t change.",
+    "nothingChanged": "Nothing has changed yet.",
+    "undoTooLate": "This handover was more than a day ago, so it can’t be undone.",
+    "handedOverBefore": "This servisan was handed over before. Its customer and phone can’t change, and it can’t be cancelled.",
+    "customerShared": "This customer has other servisans. Try the change again.",
+    "customerMismatch": "The customer details don’t match. Try again."
   },
   "paper": {
     "title": "Slip paper",
@@ -809,5 +863,59 @@
       "submit": "Check",
       "invalid": "The code is 12 letters and numbers. Please check it."
     }
+  },
+  "video": {
+    "title": "Ownership video",
+    "hint": "Ask the customer to say on video that the phone is theirs. Up to 1 minute.",
+    "record": "Record video",
+    "retake": "Record again",
+    "play": "Play",
+    "recordNext": "Record ownership video",
+    "recorded": "Recorded",
+    "recordedAt": "Recorded {at}",
+    "noCamera": "Record it on a store phone: open this servisan there.",
+    "label": "Video",
+    "expired": "The ownership video was deleted. Record it again."
+  },
+  "approval": {
+    "discountAfter": "Once approved, the customer still has to confirm this discount.",
+    "cancelBelow": "{amount} below the store’s usual fee.",
+    "cancelStoreFee": "The store’s usual cancellation fee.",
+    "askCancel": "Ask to cancel",
+    "needsApproval": "Needs the store owner’s approval.",
+    "overLimit": "Above your limit, so it needs approval.",
+    "payLaterDebt": "Left to pay later",
+    "payLaterAfter": "Once approved, the counter can hand the phone over unpaid.",
+    "downPaymentNew": "Correct down payment",
+    "downPaymentTakenOff": "Takes {amount} in total off the money taken in on this repair."
+  },
+  "basics": {
+    "title": "Finish the store details",
+    "slipHeader": "Store address and phone",
+    "slipHeaderSummary": "Not on the slips yet",
+    "logo": "Store logo",
+    "logoSummary": "Not on the slips yet",
+    "terms": "Slip terms",
+    "termsSummary": "Still the default terms",
+    "paymentMethods": "Payment methods",
+    "paymentMethodsSummary": "Cash only so far"
+  },
+  "correct": {
+    "title": "Edit servisan details",
+    "about": "The change is kept in the history, with what it was before.",
+    "reason": "Why the change? (optional)",
+    "save": "Save changes",
+    "claimDevice": "This is a warranty claim, so the phone stays the one from the original servisan.",
+    "handedOverLocked": "This servisan was handed over before, so its customer and phone can’t change."
+  },
+  "undoHandover": {
+    "title": "Undo this handover?",
+    "explain": "The phone is recorded as back in the store and can be handed over again. Payments stay recorded. If a payment went to the wrong servisan, cancel it in Kas.",
+    "reason": "Why undo it?"
+  },
+  "changed": {
+    "line": "{field}: {from} → {to}",
+    "only": "{field} changed",
+    "empty": "empty"
   }
 }

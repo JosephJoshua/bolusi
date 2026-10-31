@@ -39,6 +39,13 @@ const DEV_USER = 'bolusi';
 const DEV_PASSWORD = 'bolusi';
 
 /**
+ * The server connects as the row-security-bound app role (it refuses a superuser at boot). Its
+ * migration creates it without a password, so `--app-url` sets this local-only one first.
+ */
+const APP_USER = 'bolusi_app';
+const APP_PASSWORD = 'bolusi_app';
+
+/**
  * Runs a command with inherited stdio and returns its status.
  *
  * stdio is 'inherit' deliberately: the caller sees the tool's OWN output (§2.1). Do not
@@ -195,13 +202,14 @@ function main() {
   const command = separator === -1 ? [] : argv.slice(separator + 1);
 
   let database = 'bolusi_rls_test';
-  /** @type {'up' | 'down' | 'url' | 'exec'} */
+  /** @type {'up' | 'down' | 'url' | 'app-url' | 'exec'} */
   let mode = 'exec';
 
   for (const flag of flags) {
     if (flag === '--up') mode = 'up';
     else if (flag === '--down') mode = 'down';
     else if (flag === '--url') mode = 'url';
+    else if (flag === '--app-url') mode = 'app-url';
     else if (flag.startsWith('--db=')) {
       database = flag.slice('--db='.length);
       if (!KNOWN_DATABASES.has(database)) {
@@ -227,6 +235,14 @@ function main() {
     return;
   }
 
+  if (mode === 'app-url') {
+    if (process.env['DATABASE_URL'] !== undefined && process.env['DATABASE_URL'] !== '') {
+      fail('--app-url serves the local compose database only; unset DATABASE_URL');
+    }
+    printAppUrl(database);
+    return;
+  }
+
   const { url, owner, lane } = resolveTarget(database);
 
   if (mode === 'url') {
@@ -247,6 +263,36 @@ function main() {
   if (owner !== undefined) env.BOLUSI_DB_OWNER = owner;
   const status = run(executable, args, env);
   process.exit(status);
+}
+
+/**
+ * Sets the app role's local password (the role exists once `db:migrate` has run) and prints its
+ * URL on stdout, so `DATABASE_URL=$(pnpm -s db:app-url) pnpm dev:server` runs under RLS.
+ * @param {string} database
+ */
+function printAppUrl(database) {
+  composeProject();
+  composeUp();
+  const port = composePort();
+  const { status, stderr } = capture('docker', [
+    'compose',
+    'exec',
+    '-T',
+    'postgres',
+    'psql',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-U',
+    DEV_USER,
+    '-d',
+    database,
+    '-c',
+    `ALTER ROLE ${APP_USER} PASSWORD '${APP_PASSWORD}'`,
+  ]);
+  if (status !== 0) {
+    fail(`could not set the ${APP_USER} password (run 'pnpm db:migrate' first?)\n${stderr}`);
+  }
+  console.log(`postgres://${APP_USER}:${APP_PASSWORD}@127.0.0.1:${port}/${database}`);
 }
 
 /**

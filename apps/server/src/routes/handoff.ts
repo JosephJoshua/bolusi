@@ -2,22 +2,31 @@
 // the store phone's page outside it, reached only by the pairing's secret key.
 //
 //   POST   /v1/handoff                 a new pairing (and QR) for this PC → { id, path }
-//   POST   /v1/handoff/:id/ask         put a photo or signature step in front of the phone → { seq }
+//   POST   /v1/handoff/:id/ask         put a photo, signature or video step in front of the phone → { seq }
 //   POST   /v1/handoff/:id/withdraw    the PC backed out of that step
 //   GET    /v1/handoff/:id/events      what the phone did since `after`, held open a while
+//   GET    /v1/handoff/:id/clip/:seq   the clip the phone sent for that step, as its bytes
 //   DELETE /v1/handoff/:id             end the pairing
 //
 //   GET    /h/:key                     the phone page
 //   GET    /h/:key/next?v=             the phone's current step, held open until it changes
-//   POST   /h/:key/send?seq=           a JPEG or signature strokes for that step
+//   POST   /h/:key/send?seq=           a JPEG, signature strokes or a clip for that step
 //
 // The phone routes answer with bare statuses the page reads (410 the pairing is over, 409 the step
 // was withdrawn or replaced, 413/415/400 a send it cannot take). A wrong key gets the same 410 as
 // an ended one, so keys cannot be probed.
+//
+// The key alone works once. The first browser whose page script asks /next gets a phone secret in
+// an HttpOnly cookie scoped to /h/<key>; /next, /send and any reopen need it after that, so someone
+// who photographed the QR gets 410 once the store phone opened it. The same phone reloading still
+// works. Serving the page binds nothing: a HEAD or a link preview must not take the pairing. SameSite is
+// Lax, not Strict: a phone that opened the page from a QR scanner app and reloads it is a
+// cross-site navigation, and Strict would drop the cookie there.
 import { randomBytes } from 'node:crypto';
 
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 
 import {
@@ -35,7 +44,7 @@ import type { ServerDeps } from '../deps.js';
 import type { AppEnv, DevicePrincipal } from '../env.js';
 import { ApiError } from '../errors.js';
 import { handoffPage } from '../handoff/page.js';
-import type { HandoffSession } from '../handoff/relay.js';
+import { sendLimit, type HandoffSession } from '../handoff/relay.js';
 import { zJson, zQuery } from '../middleware/validator-hook.js';
 
 const KEY = /^[A-Za-z0-9_-]{32}$/;
@@ -62,8 +71,7 @@ export function createHandoffRouter(deps: ServerDeps) {
       return c.json(body);
     })
     .post('/:id/ask', zJson(zHandoffAskBody), (c) => {
-      const { kind, title } = c.req.valid('json');
-      const body: HandoffAskResponse = { seq: relay.ask(own(c), kind, title) };
+      const body: HandoffAskResponse = { seq: relay.ask(own(c), c.req.valid('json')) };
       return c.json(body);
     })
     .post('/:id/withdraw', zJson(zHandoffWithdrawBody), (c) => {
@@ -77,6 +85,13 @@ export function createHandoffRouter(deps: ServerDeps) {
       const events = await relay.collect(session, c.req.valid('query').after, c.req.raw.signal);
       const body: HandoffEventsResponse = { events, ended: session.ended };
       return c.json(body);
+    })
+    .get('/:id/clip/:seq', (c) => {
+      const clip = relay.clip(own(c), Number(c.req.param('seq')));
+      if (clip === null) throw new ApiError('NOT_FOUND');
+      c.header('Content-Type', clip.mime);
+      c.header('Cache-Control', 'no-store');
+      return c.body(clip.bytes as Uint8Array<ArrayBuffer>);
     })
     .delete('/:id', (c) => {
       relay.end(own(c));
@@ -96,30 +111,55 @@ function bare(c: Context<AppEnv>, status: 204 | 400 | 409 | 410 | 413 | 415): Re
   return c.body(null, status);
 }
 
+/** The cookie holding the paired phone's secret; its path keeps it to that one pairing. */
+const PHONE_COOKIE = 'handoff_phone';
+
 export function createHandoffPageRouter(deps: ServerDeps) {
   const relay = deps.handoffRelay;
   const sessionOf = (c: Context<AppEnv>): HandoffSession | null => {
     const key = c.req.param('key') ?? '';
     return KEY.test(key) ? relay.forKey(key) : null;
   };
+  /** The pairing, only when this request comes from the phone that opened it. */
+  const phoneSessionOf = (c: Context<AppEnv>): HandoffSession | null => {
+    const session = sessionOf(c);
+    return session !== null && relay.isPhone(session, getCookie(c, PHONE_COOKIE)) ? session : null;
+  };
 
   return new Hono<AppEnv>()
     .get('/:key', (c) => {
+      // Serving the page binds nothing, so a HEAD, a link preview or a QR scanner's prefetch cannot
+      // take the pairing from the browser the person opens it in. Once bound, only that phone.
       const session = sessionOf(c);
       if (session === null) return bare(c, 410);
+      if (session.phoneSecret !== null && !relay.isPhone(session, getCookie(c, PHONE_COOKIE))) {
+        return bare(c, 410);
+      }
       const nonce = randomBytes(16).toString('base64');
       for (const [name, value] of Object.entries(PHONE_HEADERS)) c.header(name, value);
       c.header(
         'Content-Security-Policy',
-        `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'`,
+        `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src blob:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'`,
       );
-      const html = handoffPage(session.labels, nonce, HANDOFF_PAD, HANDOFF_LIMITS);
-      relay.opened(session);
-      return c.html(html);
+      return c.html(handoffPage(session.labels, nonce, HANDOFF_PAD, HANDOFF_LIMITS));
     })
     .get('/:key/next', async (c) => {
-      const session = sessionOf(c);
-      if (session === null) return bare(c, 410);
+      // The page's script asks for its step first, so the first browser that runs it is the phone.
+      let session = phoneSessionOf(c);
+      if (session === null) {
+        const unbound = sessionOf(c);
+        if (unbound === null || unbound.phoneSecret !== null) return bare(c, 410);
+        const secret = relay.opened(unbound, undefined);
+        if (secret === null) return bare(c, 410);
+        setCookie(c, PHONE_COOKIE, secret, {
+          path: `/h/${unbound.key}`,
+          httpOnly: true,
+          sameSite: 'Lax',
+          // From config: behind the TLS-terminating proxy the request URL is always http.
+          secure: deps.secureCookies,
+        });
+        session = unbound;
+      }
       const seen = Number(c.req.query('v') ?? '-1');
       await relay.waitForStep(session, seen, c.req.raw.signal);
       if (session.ended) return bare(c, 410);
@@ -128,12 +168,25 @@ export function createHandoffPageRouter(deps: ServerDeps) {
     })
     .post(
       '/:key/send',
-      bodyLimit({
-        maxSize: HANDOFF_LIMITS.photoBytes,
-        onError: (c) => bare(c, 413),
-      }),
+      // Refused before a byte is read: a send for a step that is gone, or while another is still
+      // coming in. What a send may carry depends on the step: a clip is far bigger than a photo.
+      async (c, next) => {
+        const session = phoneSessionOf(c);
+        if (session === null) return bare(c, 410);
+        const seq = Number(c.req.query('seq') ?? '0');
+        if (session.ask?.seq !== seq || session.receiving) return bare(c, 409);
+        session.receiving = true;
+        try {
+          return await bodyLimit({
+            maxSize: sendLimit(session.ask),
+            onError: (c) => bare(c, 413),
+          })(c, next);
+        } finally {
+          session.receiving = false;
+        }
+      },
       async (c) => {
-        const session = sessionOf(c);
+        const session = phoneSessionOf(c);
         if (session === null) return bare(c, 410);
         const body = new Uint8Array(await c.req.arrayBuffer());
         if (session.ended) return bare(c, 410);

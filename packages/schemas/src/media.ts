@@ -86,6 +86,68 @@ export const zMediaRef = z.strictObject({
 export type MediaRef = z.infer<typeof zMediaRef>;
 
 /**
+ * A video clip (v1: the ownership video a repair type can ask for, docs/product-scope.md "Warranty,
+ * phones not collected and customer messages"). Its own ref rather than wider enums on `mediaRef`,
+ * so a photo slot can never be signed with a clip in it. Phones record MP4; a counter PC's webcam
+ * records WebM, which Chromium's recorder writes natively, so neither side transcodes.
+ */
+export const VIDEO_MIMES = ['video/mp4', 'video/webm'] as const;
+export const zVideoMime = z.enum(VIDEO_MIMES);
+export type VideoMime = z.infer<typeof zVideoMime>;
+
+export const zVideoRef = zMediaRef.extend({ mime: zVideoMime, type: z.literal('video') });
+export type VideoRef = z.infer<typeof zVideoRef>;
+
+/** Every mime a media item may have: what the pipeline stores and uploads, and the server accepts. */
+export const MEDIA_MIMES = [...MEDIA_REF_MIMES, ...VIDEO_MIMES] as const;
+export type MediaMime = (typeof MEDIA_MIMES)[number];
+
+/** Any signed media fragment: a photo or signature `mediaRef`, or a video clip. */
+export const zAnyMediaRef = z.union([zMediaRef, zVideoRef]);
+export type AnyMediaRef = z.infer<typeof zAnyMediaRef>;
+
+/** The file extension a media item is kept under, by mime. */
+export const MEDIA_EXTENSION: Readonly<Record<MediaMime, string>> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+};
+
+/**
+ * A video clip's cap: a 60 s ownership video at 720p is about 15 to 25 MB from a phone or a
+ * webcam, so this leaves room for a high-bitrate camera without letting a device park anything.
+ * The server refuses a bigger upload for good, so a device refuses to keep one.
+ */
+export const VIDEO_MAX_SIZE_BYTES = 48 * 1024 * 1024;
+
+/**
+ * How a browser records a clip (the PC's webcam, or a store phone's page through the handoff):
+ * 720p at about 2 Mbit/s, as the phone app records, so a minute is some 15 MB. MP4 (H.264 and AAC)
+ * first, the phones' own format, which every phone and PC plays back; WebM where the recorder
+ * cannot. The server checks the file's header against the type.
+ */
+export const VIDEO_RECORDING = {
+  width: 1280,
+  height: 720,
+  videoBitsPerSecond: 2_000_000,
+  audioBitsPerSecond: 64_000,
+  types: [
+    { type: 'video/mp4;codecs=avc1.42E01F,mp4a.40.2', mime: 'video/mp4' },
+    { type: 'video/mp4', mime: 'video/mp4' },
+    { type: 'video/webm;codecs=vp8,opus', mime: 'video/webm' },
+    { type: 'video/webm', mime: 'video/webm' },
+  ],
+} as const satisfies {
+  readonly types: readonly { readonly type: string; readonly mime: VideoMime }[];
+  readonly [key: string]: unknown;
+};
+
+export function isVideoMime(mime: string): mime is VideoMime {
+  return (VIDEO_MIMES as readonly string[]).includes(mime);
+}
+
+/**
  * What a renderer hands the media client to resolve one attachment (06 §6).
  *
  * Two arms, because an attachment is NOT always accompanied by a signed hash, and the difference

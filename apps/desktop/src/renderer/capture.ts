@@ -1,4 +1,4 @@
-// Taking photos and signatures on the PC. The window owns the devices (a webcam, a file on disk,
+// Taking photos, signatures and the ownership video on the PC. The window owns the devices (a webcam, a file on disk,
 // the signature pad); what it hands the core is the finished JPEG and the pad's strokes, and the
 // core runs the phone's own finalisation (hash, seal, queue, signed ref).
 //
@@ -12,6 +12,7 @@ import {
 } from '@bolusi/device/media/compression';
 import type { PadSize, SignatureStroke } from '@bolusi/device/media/signature-png';
 import type { CaptureRequest } from '@bolusi/modules/screen-kit';
+import type { VideoMime } from '@bolusi/schemas';
 
 /** A picture as the webcam or a file gave it; the runtime compresses it before the core keeps it. */
 export interface PcPhoto {
@@ -24,10 +25,41 @@ export interface PcSignature {
   readonly pad: PadSize;
 }
 
+/** A clip as the webcam recorded it, kept as it is: the core encrypts and queues it. */
+export interface PcVideo {
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly mime: VideoMime;
+}
+
+export interface PcVideoRequest extends CaptureRequest {
+  readonly hint: string;
+  readonly maxMs: number;
+}
+
+/** A stored clip as the player needs it: a playable url, or why there is none. */
+export type PcVideoSource =
+  { readonly kind: 'ready'; readonly url: string } | { readonly kind: 'unavailable' | 'failed' };
+
+/** A loaded clip as a url the page may play (`media-src blob:`); the player revokes it. */
+export function playableVideo(
+  loaded:
+    | { readonly kind: 'ready'; readonly bytes: Uint8Array; readonly mime: string }
+    | { readonly kind: 'unavailable' | 'failed' },
+): PcVideoSource {
+  if (loaded.kind !== 'ready') return loaded;
+  const clip = new Blob([loaded.bytes as Uint8Array<ArrayBuffer>], { type: loaded.mime });
+  return { kind: 'ready', url: URL.createObjectURL(clip) };
+}
+
 /** The window's capture devices. Each resolves null when the person backs out. */
 export interface PcCapture {
   photo(request?: CaptureRequest): Promise<PcPhoto | null>;
   signature(request?: CaptureRequest): Promise<PcSignature | null>;
+  video(request: PcVideoRequest): Promise<PcVideo | null>;
+  /** Plays a stored clip; `load` is asked again on retry. Resolves when the player is closed. */
+  play(request: CaptureRequest, load: () => Promise<PcVideoSource>): Promise<void>;
+  /** Backs out of whatever capture or clip is open, as if the person closed it. */
+  backOut(): void;
 }
 
 function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {

@@ -19,7 +19,6 @@ import {
   formRoles,
   hasOtherStaff,
   PROBLEM_KEY,
-  ROLE_HINT_KEY,
   staffChange,
   staffDraftProblem,
   staffListItems,
@@ -27,6 +26,7 @@ import {
   type StaffListItem,
   type StaffStep,
 } from '@bolusi/device/models/staff/model';
+import { roleHint, roleName } from '@bolusi/device/models/staff/roles';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { t } from '@bolusi/i18n';
 import {
@@ -532,12 +532,8 @@ function PersonDialog({
                       {checked ? <Check size={14} strokeWidth={3} /> : null}
                     </span>
                     <span className="flex min-w-0 flex-col">
-                      <span className="text-body font-semibold text-text">
-                        {t(`role.${role.key}.name` as 'role.cashier.name')}
-                      </span>
-                      <span className="text-small text-text-muted">
-                        {t(ROLE_HINT_KEY[role.key])}
-                      </span>
+                      <span className="text-body font-semibold text-text">{roleName(role)}</span>
+                      <span className="text-small text-text-muted">{roleHint(role)}</span>
                     </span>
                   </label>
                 );

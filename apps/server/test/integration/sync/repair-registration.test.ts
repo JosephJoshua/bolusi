@@ -103,24 +103,25 @@ test('a pushed repair journey folds into the server projections', async () => {
       type: 'repair.ticket_opened',
       entityType: 'repair_ticket',
       entityId: ticketId,
+      schemaVersion: 4,
       payload: {
         ticketNumber,
         customerId,
         device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },
         complaint: 'Layar retak',
         intakeNotes: '',
-        checklist: [{ item: 'screen', state: 'issue', note: '' }],
-        peripherals: ['charger'],
+        checklist: [{ item: 'screen', label: null, state: 'issue', note: '' }],
+        peripherals: [{ item: 'charger', label: null }],
         estimatedReadyAt: 1_726_200_000_000,
         quoteLines: [{ lineId, kind: 'part', description: 'LCD', amount: 650_000 }],
-        photos: {
-          front: photo(1),
-          back: photo(2),
-          left: photo(3),
-          right: photo(4),
-          top: photo(5),
-          bottom: photo(6),
-        },
+        photos: (['front', 'back', 'left', 'right', 'top', 'bottom'] as const).map((slot, i) => ({
+          slot,
+          label: null,
+          ref: photo(i + 1),
+        })),
+        repairTypes: [],
+        claimOf: null,
+        ownershipVideo: null,
       },
     }),
     builder.append({
@@ -145,6 +146,7 @@ test('a pushed repair journey folds into the server projections', async () => {
       type: 'repair.quote_changed',
       entityType: 'repair_ticket',
       entityId: ticketId,
+      schemaVersion: 2,
       payload: {
         lineId: changeId,
         kind: 'discount',
@@ -153,6 +155,7 @@ test('a pushed repair journey folds into the server projections', async () => {
         reason: 'Langganan',
         customerAgreed: true,
         fromProposal: false,
+        waitsForCustomer: false,
       },
     }),
     builder.append({
@@ -184,7 +187,14 @@ test('a pushed repair journey folds into the server projections', async () => {
       type: 'repair.device_returned',
       entityType: 'repair_ticket',
       entityId: ticketId,
-      payload: { handoverPhoto: photo(7), signature: photo(8), note: '' },
+      schemaVersion: 3,
+      payload: {
+        handoverPhoto: photo(7),
+        signature: photo(8),
+        note: '',
+        unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
+      },
     }),
   ];
 
@@ -218,6 +228,7 @@ test('a ticket payload missing a required photo is rejected and folds nothing', 
   const op = builder.append({
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
+    schemaVersion: 4,
     payload: {
       ticketNumber: 'K7Q-0001',
       customerId: '01920000-0000-7000-8000-0000000c0001',
@@ -235,7 +246,10 @@ test('a ticket payload missing a required photo is rejected and folds nothing', 
           amount: 1,
         },
       ],
-      photos: {},
+      photos: [],
+      repairTypes: [],
+      claimOf: null,
+      ownershipVideo: null,
     },
   });
   const result = await processPushBatch(

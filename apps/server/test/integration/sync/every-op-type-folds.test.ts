@@ -21,7 +21,7 @@ import { resolveDeps, SERVER_MODULES } from '../../../src/deps.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { grantRole, seedWorld } from '../oplog/helpers.js';
+import { grantRole, seedUser, seedWorld } from '../oplog/helpers.js';
 
 /** A status link as a phone makes it: a nonce and the code it gives this servisan. */
 function statusLink(world: ChainWorld, ticketId: string): { code: string; nonce: string } {
@@ -79,6 +79,9 @@ afterEach(async () => {
 
 const id = (n: number): string =>
   `01920000-0000-7000-8000-0000000c${n.toString(16).padStart(4, '0')}`;
+
+/** A colleague who asks for approvals; only someone else may answer them. */
+const ASKER = id(0x5ff);
 
 /** One legal journey per module, in push order, touching every op type a device can push. */
 function journey(world: ChainWorld): OpSpec[] {
@@ -175,19 +178,21 @@ function journey(world: ChainWorld): OpSpec[] {
       movement(3, 'inventory.item_put_back', { itemId: part, qty: 1, use }),
     ];
   };
-  /** v3 with the repair types picked at intake; without them, the v2 an older app signs. */
+  /** The current version, with the repair types picked at intake (none when left out). */
   const opened = (
     ticketId: string,
     ticketNumber: string,
     lineId: string,
-    repairTypes?: readonly object[],
+    repairTypes: readonly object[] = [],
   ): OpSpec => ({
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
     entityId: ticketId,
-    schemaVersion: repairTypes === undefined ? 2 : 3,
+    schemaVersion: 4,
     payload: {
-      ...(repairTypes === undefined ? {} : { repairTypes, claimOf: null }),
+      repairTypes,
+      claimOf: null,
+      ownershipVideo: null,
       ticketNumber,
       customerId: customer,
       device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },
@@ -203,6 +208,63 @@ function journey(world: ChainWorld): OpSpec[] {
       ],
     },
   });
+  /** Discount requests on the open second servisan: one line (650.000) until the third applies. */
+  const approvals = (): OpSpec[] => {
+    const line = {
+      ticketId: cancelledTicket,
+      kind: 'discount',
+      description: 'Diskon langganan',
+      amount: -10_000,
+      reason: 'Langganan',
+      customerAgreed: false,
+    };
+    const asked = (n: number): OpSpec => ({
+      type: 'approvals.request_made',
+      entityType: 'approval_request',
+      entityId: id(n),
+      userId: ASKER,
+      payload: {
+        kind: 'repair.discount',
+        target: { entityType: 'repair_ticket', entityId: cancelledTicket },
+        input: line,
+        amount: 10_000,
+        reason: 'Langganan',
+        basis: 'received|in_store|650000|1',
+      },
+    });
+    const answered = (type: string, n: number, userId = world.userId): OpSpec => ({
+      type,
+      entityType: 'approval_request',
+      entityId: id(n),
+      userId,
+      payload: type === 'approvals.request_withdrawn' ? {} : { note: null },
+    });
+    return [
+      asked(0x500),
+      answered('approvals.request_rejected', 0x500),
+      asked(0x501),
+      answered('approvals.request_withdrawn', 0x501, ASKER),
+      asked(0x502),
+      answered('approvals.request_approved', 0x502),
+      // The decision, as the approver's, on a line named after the request.
+      {
+        type: 'repair.quote_changed',
+        entityType: 'repair_ticket',
+        entityId: cancelledTicket,
+        schemaVersion: 2,
+        payload: {
+          lineId: id(0x502),
+          kind: 'discount',
+          description: 'Diskon langganan',
+          amount: -10_000,
+          reason: 'Langganan',
+          customerAgreed: false,
+          fromProposal: false,
+          waitsForCustomer: true,
+        },
+      },
+    ];
+  };
   const onTicket = (type: string, payload: Record<string, unknown>): OpSpec => ({
     type,
     entityType: 'repair_ticket',
@@ -371,6 +433,10 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.work_started', {}),
     onTicket('repair.work_photos_added', { stage: 'after', photos: [photo(8)] }),
     onTicket('repair.marked_repaired', { note: '' }),
+    onTicket('repair.ticket_details_corrected', {
+      device: { brand: 'Samsung', model: 'Galaxy A15', color: 'Hitam', imei: null },
+      reason: 'Salah ketik',
+    }),
 
     // money: a DP, the charge, a split payment, an owner's refund, a void, and the drawer
     {
@@ -393,6 +459,29 @@ function journey(world: ChainWorld): OpSpec[] {
       reference: null,
       tendered: 150_000,
     }),
+    // A DP fix asked against that payment (read on Postgres the way the device reads it), then
+    // taken back.
+    {
+      type: 'approvals.request_made',
+      entityType: 'approval_request',
+      entityId: id(0x503),
+      userId: ASKER,
+      payload: {
+        kind: 'repair.downPayment',
+        target: { entityType: 'repair_ticket', entityId: ticket },
+        input: { ticketId: ticket, amount: 80_000, reason: 'Salah ketik', reference: null },
+        amount: 20_000,
+        reason: 'Salah ketik',
+        basis: `repaired|in_store|600000|3|${id(0x402)}`,
+      },
+    },
+    {
+      type: 'approvals.request_withdrawn',
+      entityType: 'approval_request',
+      entityId: id(0x503),
+      userId: ASKER,
+      payload: {},
+    },
     money('money.charge_recorded', 0x403, {
       document,
       amount: 600_000,
@@ -427,6 +516,13 @@ function journey(world: ChainWorld): OpSpec[] {
       reason: 'Setor ke pemilik',
       account: null,
     }),
+    money('money.cash_moved', 0x40b, {
+      kind: 'float',
+      amount: 5_000_000,
+      reason: 'Uang kembalian',
+      account: null,
+    }),
+    money('money.cash_move_voided', 0x40b, { reason: 'Kelebihan nol' }),
     money('money.cash_counted', 0x409, { counted: 30_000, note: '' }),
     money('money.cash_adjusted', 0x40a, { amount: -10_000, countId: id(0x409), reason: 'Kurang' }),
 
@@ -437,10 +533,23 @@ function journey(world: ChainWorld): OpSpec[] {
         signature: photo(11),
         note: '',
         unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
       }),
-      schemaVersion: 2,
+      schemaVersion: 3,
     },
     onTicket('repair.slip_printed', { slip: 'handover' }),
+    // Handed over by mistake, then handed over again.
+    onTicket('repair.handover_reversed', { reason: 'Salah servisan' }),
+    {
+      ...onTicket('repair.device_returned', {
+        handoverPhoto: photo(13),
+        signature: photo(14),
+        note: '',
+        unpaidReason: null,
+        checklist: [{ item: 'charger', label: null, kind: 'accessory', done: true }],
+      }),
+      schemaVersion: 3,
+    },
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {
       type: 'repair.technician_assigned',
@@ -448,6 +557,8 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId: cancelledTicket,
       payload: { technicianId: world.userId },
     },
+    // approvals: a colleague asks for a discount three times; it is rejected, withdrawn, approved
+    ...approvals(),
     {
       type: 'repair.ticket_cancelled',
       entityType: 'repair_ticket',
@@ -519,6 +630,14 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
     roleId: id(7),
     roleName: 'store_owner',
     permissionIds: SERVER_MODULES.flatMap((module) => Object.keys(module.permissions ?? {})),
+  });
+  await seedUser(db, world.tenantId, ASKER);
+  await grantRole(db, {
+    tenantId: world.tenantId,
+    userId: ASKER,
+    roleId: id(0x5fe),
+    roleName: 'cashier',
+    permissionIds: ['approvals.use', 'repair.read', 'repair.quote_change', 'repair.intake'],
   });
   // Conflicts are recorded only by the server, so the one the journey acknowledges is seeded.
   await db

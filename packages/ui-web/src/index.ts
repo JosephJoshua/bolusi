@@ -12,7 +12,24 @@ export {
   type ButtonSize,
   type ButtonVariant,
 } from './components/Button.js';
-export { CameraDialog, type CameraLabels } from './components/Camera.js';
+export { CameraDialog, CameraPreview, type CameraLabels } from './components/Camera.js';
+export {
+  findMediaInput,
+  WebcamChoiceProvider,
+  type MediaInputChoice,
+  type WebcamChoices,
+  type WebcamState,
+} from './components/webcam.js';
+export { useMediaInputs, type MediaInputs } from './components/media-inputs.js';
+export { MicrophoneMeter, type MicrophoneMeterLabels } from './components/MicrophoneMeter.js';
+export {
+  VideoPlayerDialog,
+  VideoRecorderDialog,
+  type RecordedClip,
+  type RecordedVideoMime,
+  type VideoPlayerSource,
+  type VideoRecorderLabels,
+} from './components/Video.js';
 export { Chip, ToggleChip, type ChipTone } from './components/Chip.js';
 export { ChoiceList, type ChoiceOption } from './components/ChoiceList.js';
 export { ConfirmDialog } from './components/ConfirmDialog.js';
@@ -29,6 +46,7 @@ export {
   TextArea,
   TextField,
   controlClass,
+  useSelectOnFocus,
   type SecretFieldProps,
   type TextAreaProps,
   type TextFieldProps,

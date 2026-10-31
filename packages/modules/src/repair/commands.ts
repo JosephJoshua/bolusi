@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
-import { zMediaRef, type MediaRef } from '@bolusi/schemas';
+import { zMediaRef, zVideoRef, type MediaRef } from '@bolusi/schemas';
 
 import {
   MAX_LINE_AMOUNT,
@@ -56,6 +56,8 @@ import {
   intakeOptionSettingsQuery,
   nextTicketCounterQuery,
   printSettingsQuery,
+  countTicketsQuery,
+  searchCustomersQuery,
   standardCancelFee,
   uncollectedDaysQuery,
   type CancelFees,
@@ -77,6 +79,13 @@ import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { STATUS_NONCE_BYTES, statusCodeFor, statusNonceFrom } from './status-link.js';
 import { formatTicketNumber } from './ticket-number.js';
+import {
+  imeiInvalid,
+  normalizeImei,
+  normalizePhone,
+  phoneInvalid,
+  sameCustomer,
+} from './contact.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
 
@@ -89,12 +98,22 @@ function statusLinkFor(ctx: CommandContext, ticketId: string): { code: string; n
 
 const zText = (max: number) => z.string().trim().max(max);
 const zRequiredText = (max: number) => z.string().trim().min(1).max(max);
+/** A customer's number, stored one way (`normalizePhone`); one that can't be dialled is refused. */
 const zPhone = z
   .string()
   .trim()
   .max(40)
   .nullable()
-  .transform((phone) => (phone === null || phone === '' ? null : phone));
+  .refine((phone) => phone === null || !phoneInvalid(phone), { message: 'not a phone number' })
+  .transform((phone) => (phone === null ? null : normalizePhone(phone)));
+/** 15 digits with a valid check digit, or nothing. */
+const zImei = z
+  .string()
+  .trim()
+  .max(40)
+  .nullable()
+  .refine((imei) => imei === null || !imeiInvalid(imei), { message: 'not an IMEI' })
+  .transform((imei) => (imei === null ? null : normalizeImei(imei)));
 const zAmountInput = z.number().int().min(-MAX_LINE_AMOUNT).max(MAX_LINE_AMOUNT);
 
 const zLineInput = z
@@ -137,6 +156,16 @@ async function ticketMoney(ctx: CommandContext, ticketId: string): Promise<Docum
 }
 
 // ── customers ──────────────────────────────────────────────────────────────────────────────────
+
+/** A customer of this store with this name and number, found by the number. */
+async function findSameCustomer(
+  ctx: CommandContext,
+  customer: { readonly name: string; readonly phone: string | null },
+): Promise<{ readonly id: string; readonly name: string; readonly phone: string | null } | null> {
+  if (customer.phone === null) return null;
+  const found = await ctx.query(searchCustomersQuery, { text: customer.phone, limit: 20 });
+  return found.rows.find((row) => sameCustomer(row, customer)) ?? null;
+}
 
 export const registerCustomerInput = z
   .object({ name: zRequiredText(200), phone: zPhone.default(null) })
@@ -215,7 +244,7 @@ export const openTicketInput = z
       brand: zRequiredText(100),
       model: zRequiredText(100),
       color: zText(200).default(''),
-      imei: zPhone.default(null),
+      imei: zImei.default(null),
       passcode: z
         .string()
         .max(200)
@@ -238,6 +267,8 @@ export const openTicketInput = z
     quoteLines: z.array(zLineInput).min(1).max(100),
     /** One photo per angle the store asks for, labelled as the counter saw it. */
     photos: zIntakePhotosV2,
+    /** The customer saying the phone is theirs, when a picked repair type asks for it. */
+    ownershipVideo: zVideoRef.nullable().default(null),
     /** Integer IDR the customer paid up front; 0 when nothing was. */
     downPayment: z.number().int().min(0).max(MAX_LINE_AMOUNT).default(0),
     /** How the DP was paid: the drawer or one of the store's accounts. */
@@ -286,15 +317,19 @@ export async function openTicketHandler(
     customerId = (await ctx.query(getCustomerQuery, { customerId: input.customer.customerId }))
       .rows[0]!.id;
   } else {
-    customerId = ctx.newId();
-    ops.push(
-      ctx.op({
-        type: REPAIR_OP.customerRegistered,
-        entityType: REPAIR_CUSTOMER_ENTITY,
-        entityId: customerId,
-        payload: { name: input.customer.name, phone: input.customer.phone },
-      }),
-    );
+    // Retyping a returning customer (the "Pakai" card ignored) must not make them twice.
+    const known = (await findSameCustomer(ctx, input.customer))?.id ?? null;
+    customerId = known ?? ctx.newId();
+    if (known === null) {
+      ops.push(
+        ctx.op({
+          type: REPAIR_OP.customerRegistered,
+          entityType: REPAIR_CUSTOMER_ENTITY,
+          entityId: customerId,
+          payload: { name: input.customer.name, phone: input.customer.phone },
+        }),
+      );
+    }
   }
 
   // "Samsung" + "A15" is the catalog's Galaxy A15: store it the catalog's way, whichever screen or
@@ -326,6 +361,7 @@ export async function openTicketHandler(
       claimOf: input.claimOf,
       quoteLines: input.quoteLines.map((line) => ({ lineId: ctx.newId(), ...line })),
       photos: input.photos,
+      ownershipVideo: input.ownershipVideo,
     }),
     ticketOp(ctx, ticketId, REPAIR_OP.statusLinkMade, statusLinkFor(ctx, ticketId)),
   );
@@ -848,6 +884,174 @@ export async function returnDeviceHandler(
   return { ops, result: { ticketId: ticket.id } };
 }
 
+export const undoHandoverInput = z
+  .object({ ticketId: z.string().min(1), reason: zRequiredText(500) })
+  .strict();
+export type UndoHandoverInput = z.input<typeof undoHandoverInput>;
+
+/**
+ * An owner takes back a handover recorded by mistake (the wrong servisan, the phone still on the
+ * shelf). The phone is in the store again and can be handed over properly; the payments stay on
+ * this servisan, and one booked here by mistake is cancelled in Kas, under its own rules.
+ */
+export async function undoHandoverHandler(
+  input: z.output<typeof undoHandoverInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.handoverReversed, { reason: input.reason })],
+    result: { ticketId: ticket.id },
+  };
+}
+
+export const correctTicketDetailsInput = z
+  .object({
+    ticketId: z.string().min(1),
+    // Typed details, or a customer picked from the store's list (intake's "Pakai").
+    customer: z
+      .union([
+        z.object({ name: zRequiredText(200), phone: zPhone }).strict(),
+        z.object({ customerId: z.string().min(1) }).strict(),
+      ])
+      .optional(),
+    device: z
+      .object({
+        brand: zRequiredText(100),
+        model: zRequiredText(100),
+        color: zText(200),
+        imei: zImei,
+      })
+      .strict()
+      .optional(),
+    passcode: z
+      .string()
+      .max(200)
+      .nullable()
+      .optional()
+      .transform((value) => (value === '' ? null : value)),
+    complaint: zRequiredText(2000).optional(),
+    peripherals: z.array(zRecordedOption).max(50).optional(),
+    reason: zText(500).default(''),
+  })
+  .strict();
+export type CorrectTicketDetailsInput = z.input<typeof correctTicketDetailsInput>;
+
+/**
+ * The counter corrects what intake wrote down while the phone is in the store: the customer's
+ * name or number, the phone itself, its lock, the complaint, what was left with it. Only what
+ * differs is sent, and the servisan's history lists each change with what it was before.
+ */
+export async function correctTicketDetailsHandler(
+  input: z.output<typeof correctTicketDetailsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  const changes: Record<string, unknown> = {};
+  const ops: OpDraft[] = [];
+  // A picked customer moves the servisan to them, whatever their details say.
+  if (
+    input.customer !== undefined &&
+    'customerId' in input.customer &&
+    input.customer.customerId !== ticket.customerId
+  ) {
+    // Throws ENTITY_NOT_FOUND for a customer not visible in this store.
+    const picked = (await ctx.query(getCustomerQuery, { customerId: input.customer.customerId }))
+      .rows[0]!;
+    changes['customer'] = { name: picked.name, phone: picked.phone };
+    changes['customerId'] = picked.id;
+  }
+  const customer =
+    input.customer !== undefined && 'name' in input.customer ? input.customer : undefined;
+  const customerChanged =
+    customer !== undefined &&
+    (customer.name !== ticket.customerName || customer.phone !== ticket.customerPhone);
+  // The customer's own record is corrected only when this servisan is all it names: another
+  // servisan of theirs would be renamed too, and intake may have picked the wrong person. Then the
+  // servisan moves to the customer the details name, found or made like at intake.
+  if (customerChanged) {
+    const known = await findSameCustomer(ctx, customer);
+    if (known !== null && known.id !== ticket.customerId) {
+      // Moved to the customer the details name, the history says them as their record reads.
+      changes['customer'] = { name: known.name, phone: known.phone };
+      changes['customerId'] = known.id;
+    } else {
+      changes['customer'] = customer;
+      // Spelled the way this record already is: renamed in place. Otherwise a shared record moves
+      // this servisan to a new customer, made like at intake.
+      const shared =
+        known === null &&
+        (await ctx.query(countTicketsQuery, { filter: { customerId: ticket.customerId } })).rows[0]!
+          .count > 1;
+      if (shared) {
+        const customerId = ctx.newId();
+        changes['customerId'] = customerId;
+        ops.push(
+          ctx.op({
+            type: REPAIR_OP.customerRegistered,
+            entityType: REPAIR_CUSTOMER_ENTITY,
+            entityId: customerId,
+            payload: { name: customer.name, phone: customer.phone },
+          }),
+        );
+      }
+    }
+  }
+  if (input.device !== undefined) {
+    const catalog = (
+      await ctx.query(findDeviceModelQuery, {
+        brand: input.device.brand,
+        model: input.device.model,
+      })
+    ).rows[0];
+    const device =
+      catalog === undefined
+        ? input.device
+        : { ...input.device, brand: catalog.brand, model: catalog.model };
+    if (
+      device.brand !== ticket.deviceBrand ||
+      device.model !== ticket.deviceModel ||
+      device.color !== ticket.deviceColor ||
+      device.imei !== ticket.deviceImei
+    ) {
+      changes['device'] = device;
+    }
+  }
+  if (input.passcode !== undefined && input.passcode !== ticket.devicePasscode) {
+    changes['passcode'] = input.passcode;
+  }
+  if (input.complaint !== undefined && input.complaint !== ticket.complaint) {
+    changes['complaint'] = input.complaint;
+  }
+  if (
+    input.peripherals !== undefined &&
+    JSON.stringify(input.peripherals) !== JSON.stringify(ticket.peripherals)
+  ) {
+    changes['peripherals'] = input.peripherals;
+  }
+  if (Object.keys(changes).length === 0) throw nothingChanged('device');
+  ops.push(
+    ticketOp(ctx, ticket.id, REPAIR_OP.ticketDetailsCorrected, {
+      ...changes,
+      reason: input.reason,
+    }),
+  );
+  // Without a move the servisan's entry renames its customer itself (its applier), so its history
+  // cannot say one thing and do another. The customer's own entry after it says the same, so the
+  // devices' customer search picks up the new name and number.
+  if (customerChanged && changes['customerId'] === undefined) {
+    ops.push(
+      ctx.op({
+        type: REPAIR_OP.customerDetailsCorrected,
+        entityType: REPAIR_CUSTOMER_ENTITY,
+        entityId: ticket.customerId,
+        payload: { name: customer.name, phone: customer.phone },
+      }),
+    );
+  }
+  return { ops, result: { ticketId: ticket.id } };
+}
+
 // ── down payment, printing and the store's slip settings ──────────────────────────────────────
 
 export const recordDownPaymentInput = z
@@ -888,6 +1092,22 @@ export async function recordDownPaymentHandler(
   };
 }
 
+/**
+ * The payment a down payment fix records its new one in place of: the largest live one through the
+ * same account (`correctDownPaymentHandler`, and what an approval of the fix counts).
+ */
+export function replacedPayment<
+  Entry extends { readonly account: string | null; readonly amount: number },
+>(live: readonly Entry[], account: string): Entry | undefined {
+  return live
+    .filter((entry) => entry.account === account)
+    .reduce<Entry | undefined>(
+      (largest, entry) =>
+        largest === undefined || entry.amount > largest.amount ? entry : largest,
+      undefined,
+    );
+}
+
 export const correctDownPaymentInput = z
   .object({
     ticketId: z.string().min(1),
@@ -924,21 +1144,26 @@ export async function correctDownPaymentHandler(
   const live = money.entries.filter(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
   );
-  const ops: OpDraft[] = live.map((entry) => voidOp(ctx, entry.id, input.reason));
+  const ops: OpDraft[] = [];
   if (input.amount > 0) {
     const first = live[0];
     const method =
       input.account === undefined
         ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
         : { account: input.account, reference: input.reference };
+    // Recorded first, in place of the largest payment through the same account, so a limited
+    // role's refund limit counts only what the DP went down by there.
+    const replaced = replacedPayment(live, method.account);
     ops.push(
       paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
         ...method,
         amount: input.amount,
         tendered: null,
+        ...(replaced === undefined ? {} : { replaces: replaced.id }),
       }),
     );
   }
+  for (const entry of live) ops.push(voidOp(ctx, entry.id, input.reason));
   return { ops, result: { ticketId: ticket.id } };
 }
 

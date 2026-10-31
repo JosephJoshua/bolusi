@@ -21,10 +21,11 @@ import {
   type,
   type ListState,
   type OperationSyncStatus,
+  Text,
 } from '@bolusi/ui';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { TicketSummaryRow } from '../queries.js';
 import {
@@ -36,7 +37,9 @@ import {
 
 import { tn, type RepairKey } from '../i18n.js';
 import {
+  APPROVALS_VIEW_MAX,
   boardFilter,
+  amountOwed,
   boardSort,
   boardViews,
   defaultBoardView,
@@ -50,13 +53,14 @@ import {
 } from '../flows.js';
 import { statusLabel } from '../labels.js';
 import { StatusChip, repairStyles } from './parts.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { readApprovals, useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 const PAGE = 50;
 /** Search is ranked, so its best matches come first and one page is enough. */
 const SEARCH_LIMIT = 100;
 
 const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
+  approvals: 'repair.board.view.approvals',
   active: 'repair.board.view.active',
   mine: 'repair.board.view.mine',
   unassigned: 'repair.board.view.unassigned',
@@ -89,6 +93,9 @@ interface LoadedBoard {
   /** The store's not-collected limit in days, and the time the board was read against it. */
   readonly uncollectedLimit: number;
   readonly readAt: number;
+  /** Servisan waiting on this user's approval, and those with any waiting request they see. */
+  readonly approvalIds: readonly string[];
+  readonly approvalWaiting: ReadonlySet<string>;
 }
 
 export function RepairBoard({
@@ -121,10 +128,28 @@ export function RepairBoard({
       let hasMore = false;
       const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
       const readAt = now();
+      const requests = await readApprovals(rt);
+      const approvalIds = [
+        ...new Set(requests.filter((row) => row.canDecide).map((row) => row.targetId)),
+      ];
+      const approvalWaiting = new Set(requests.map((row) => row.targetId));
       if (searching) {
         rows = [
           ...(await rt.query('searchTickets', { text: searchText, limit: SEARCH_LIMIT })).rows,
         ];
+      } else if (view === 'approvals') {
+        // A short list, read whole; it empties as requests are answered.
+        if (approvalIds.length > 0) {
+          rows = [
+            ...(
+              await rt.query('listTickets', {
+                filter: boardFilter(view, rt.userId, 0, approvalIds),
+                sort: boardSort(view),
+                limit: APPROVALS_VIEW_MAX,
+              })
+            ).rows,
+          ];
+        }
       } else {
         // Every page the user has scrolled to, re-read on each refresh so the live board stays whole.
         let cursor: string | null = null;
@@ -145,7 +170,7 @@ export function RepairBoard({
         hasMore = cursor !== null;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
-      return { rows, statuses, hasMore, uncollectedLimit, readAt };
+      return { rows, statuses, hasMore, uncollectedLimit, readAt, approvalIds, approvalWaiting };
     },
     `board:${searching ? `q:${searchText}` : view}:${String(pages)}:${String(reloadNonce)}:${String(hour)}`,
   );
@@ -192,6 +217,13 @@ export function RepairBoard({
 
   const loaded = query.status === 'ready' ? query.data : null;
   const statuses = loaded?.statuses;
+  const waitingApprovals = loaded?.approvalIds.length ?? 0;
+  const approvalWaiting = loaded?.approvalWaiting;
+  // Every request answered: the approvals view goes, and the board returns to its usual queue.
+  const viewGone = loaded !== null && view === 'approvals' && waitingApprovals === 0;
+  useEffect(() => {
+    if (viewGone) setView(defaultBoardView(can));
+  }, [viewGone, can]);
   const showCancel = !searching && view === 'cancelled';
   // The counter and owners call the customer about a phone left too long; technicians need not.
   const flagUncollected = flagsUncollected(can);
@@ -212,6 +244,7 @@ export function RepairBoard({
             : null
         }
         syncStatuses={statusesFor(statuses ?? {}, row.id)}
+        approvalWaiting={approvalWaiting?.has(row.id) === true}
         onOpen={openTicket}
         onOpenSyncStatus={openSyncStatus}
         testID={`${testID}.row.${row.id}`}
@@ -224,6 +257,7 @@ export function RepairBoard({
       flagUncollected,
       loaded,
       statuses,
+      approvalWaiting,
       openTicket,
       openSyncStatus,
       testID,
@@ -262,7 +296,10 @@ export function RepairBoard({
       {searching ? null : (
         <View style={styles.views}>
           <SegmentedControl
-            options={boardViews(can).map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
+            options={boardViews(can, waitingApprovals).map((value) => ({
+              value,
+              label: tn(VIEW_KEY[value], { count: waitingApprovals }),
+            }))}
             value={view}
             // One compact row that scrolls sideways and runs to the screen edges: the cut-off pill
             // at the edge shows there are more queues, and the list keeps the screen.
@@ -308,6 +345,8 @@ interface TicketRowProps {
   /** Days a finished phone has waited past the store's limit; null when it is not flagged. */
   readonly waitedDays: number | null;
   readonly syncStatuses: readonly OperationSyncStatus[];
+  /** A request on it waits on an owner's answer (one this user asked, or may give). */
+  readonly approvalWaiting: boolean;
   readonly onOpen: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
   readonly testID: string;
@@ -324,6 +363,7 @@ function sameRow(prev: TicketRowProps, next: TicketRowProps): boolean {
     prev.selected === next.selected &&
     prev.showCancel === next.showCancel &&
     prev.waitedDays === next.waitedDays &&
+    prev.approvalWaiting === next.approvalWaiting &&
     prev.onOpen === next.onOpen &&
     prev.onOpenSyncStatus === next.onOpenSyncStatus &&
     prev.testID === next.testID &&
@@ -346,6 +386,7 @@ const TicketRow = memo(function TicketRow({
   showCancel,
   waitedDays,
   syncStatuses,
+  approvalWaiting,
   onOpen,
   onOpenSyncStatus,
   testID,
@@ -360,7 +401,7 @@ const TicketRow = memo(function TicketRow({
   const details = [device, who].filter((s) => s !== null && s !== '').join(' · ');
   const reason = showCancel ? row.outcomeNote : null;
   // A cancelled servisan costs the customer its fee, never the repair price (none before fees).
-  const amount = row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+  const amount = amountOwed(row);
   const feeChanged =
     showCancel &&
     row.cancelFee !== null &&
@@ -377,6 +418,7 @@ const TicketRow = memo(function TicketRow({
     feeChanged ? tn('repair.board.feeChanged') : '',
     row.cancelledAt !== null && showCancel ? formatDateTime(row.cancelledAt) : '',
     row.pendingProposals > 0 ? tn('repair.board.priceChangeWaiting') : '',
+    approvalWaiting ? tn('repair.board.approvalWaiting') : '',
     waitedDays === null ? '' : tn('repair.board.waited', { days: waitedDays }),
   ]
     .filter((s) => s !== '')
@@ -429,6 +471,14 @@ const TicketRow = memo(function TicketRow({
               icon="warning"
               tone="warning"
               testID={`${testID}.priceWaiting`}
+            />
+          ) : null}
+          {approvalWaiting ? (
+            <Chip
+              label={tn('repair.board.approvalWaiting')}
+              icon="pending"
+              tone="warning"
+              testID={`${testID}.approvalWaiting`}
             />
           ) : null}
           {waitedDays === null ? null : (

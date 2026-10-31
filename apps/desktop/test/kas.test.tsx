@@ -10,17 +10,28 @@ import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { forgetShownQrs } from '@bolusi/modules/money';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
 
 beforeEach(() => {
+  // The demo's payments are a few hours old, so "today" must not have just begun: run at noon.
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+  vi.setSystemTime(noon);
   window.localStorage.clear();
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  // Each test opens fresh demo data: QRs shown in one are not the next one's.
+  forgetShownQrs();
+});
 
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
 /** An element's text without spaces: amounts print "Rp" and the figure apart. */
@@ -150,6 +161,8 @@ describe('Kas on the PC', () => {
     fireEvent.click(voidButton!);
     await screen.findByTestId('money.desk.void');
     expect(text('money.desk.void.amount')).toBe('Rp200.000');
+    // An owner has no limit to show.
+    expect(screen.queryByTestId('money.desk.void.limit')).toBeNull();
     fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
     fireEvent.click(byTestId('money.desk.void.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.void')).toBeNull());
@@ -163,6 +176,133 @@ describe('Kas on the PC', () => {
     fireEvent.mouseDown(byTestId('money.desk.kas.tabs.today'), { button: 0 });
     fireEvent.click(byTestId('money.desk.kas.tabs.today'));
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp450.000'));
+  });
+
+  it('offers lowering a debt to owners only', async () => {
+    await openKas();
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    expect(screen.queryByTestId('money.desk.receive.reduce')).toBeNull();
+  });
+
+  it('lets an owner lower a debt past what is left, then give back what is owed back', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '200000' },
+    });
+    fireEvent.click(byTestId('money.desk.receive.submit'));
+    await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
+
+    // Lowered over the payment it was about to take, which waits underneath if left.
+    fireEvent.click(byTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.click(byTestId('money.desk.receive.reduce'));
+    await screen.findByTestId('money.desk.reduce');
+    // The whole debt is filled in; the bill comes down at most by what was charged.
+    expect(byTestId('money.desk.reduce.amount')).toHaveProperty('value', '250.000');
+    expect(text('money.desk.reduce.after')).toBe('Rp0');
+    fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '500000' } });
+    expect(text('money.desk.reduce')).toContain('PalingbanyakRp450.000');
+    expect(screen.queryByTestId('money.desk.reduce.hint')).toBeNull();
+    expect(byTestId('money.desk.reduce.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '300000' } });
+    expect(byTestId('money.desk.reduce.becomesCredit').textContent).toContain('50.000');
+    fireEvent.change(byTestId('money.desk.reduce.reason'), { target: { value: 'Pelanggan lama' } });
+    fireEvent.click(byTestId('money.desk.reduce.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.reduce')).toBeNull());
+    expect(screen.queryByTestId('money.desk.receive')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+    expect(text('money.desk.kas.owedBack.t-9.value')).toBe('Rp50.000');
+
+    // It goes back through how it came in, the overpayment filled in.
+    const drawer = Number(text('money.desk.kas.expected').replace(/\D/g, ''));
+    fireEvent.click(byTestId('money.desk.kas.owedBack.t-9.refund'));
+    await screen.findByTestId('money.desk.refund');
+    expect(text('money.desk.refund.credit')).toBe('Rp50.000');
+    expect(text('money.desk.refund.paid')).toBe('Rp200.000');
+    expect(byTestId('money.desk.refund.amount')).toHaveProperty('value', '50.000');
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '250000' } });
+    expect(byTestId('money.desk.refund.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '50000' } });
+    fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Kelebihan' } });
+    fireEvent.click(byTestId('money.desk.refund.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.refund')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owedBack')).toBeNull());
+    expect(Number(text('money.desk.kas.expected').replace(/\D/g, ''))).toBe(drawer - 50_000);
+  });
+
+  it('takes a whole debt by QRIS, recorded by the server, and the step just closes', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    const methods = within(byTestId('money.desk.receive.pay.line0.methods'));
+    fireEvent.click(methods.getByRole('button', { name: 'QRIS BCA' }));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.pay.line0.showQr'));
+    expect(text('money.desk.receive.qris.amount')).toBe('Rp450.000');
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.simulate'));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.done'));
+    await waitFor(() => expect(text('money.desk.receive.owed')).toBe('Rp0'));
+    expect(byTestId('money.desk.receive.submit').textContent).toBe('Selesai');
+    fireEvent.click(byTestId('money.desk.receive.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+  });
+
+  it('takes part of a debt by QRIS and the rest in cash, taking a sum below what QRIS takes by hand', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    const methods = within(byTestId('money.desk.receive.pay.line0.methods'));
+    fireEvent.click(methods.getByRole('button', { name: 'QRIS BCA' }));
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '1000' },
+    });
+    // Below what QRIS takes, the line is taken by hand with its reference.
+    expect(screen.queryByTestId('money.desk.receive.pay.line0.showQr')).toBeNull();
+    expect(byTestId('money.desk.receive.pay.line0.reference')).toBeTruthy();
+    expect(byTestId('money.desk.receive.pay.line0.qrMinimum').textContent).toContain('1.500');
+    // No QR for more than is owed: Xendit gives no change.
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '500000' },
+    });
+    expect(byTestId('money.desk.receive.pay.line0.showQr')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '100000' },
+    });
+    // A QR line is only paid once the customer pays its QR.
+    expect(byTestId('money.desk.receive.submit')).toHaveProperty('disabled', true);
+    fireEvent.click(byTestId('money.desk.receive.pay.line0.showQr'));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.simulate'));
+    fireEvent.click(await screen.findByTestId('money.desk.receive.qris.done'));
+    await waitFor(() => expect(text('money.desk.receive.owed')).toBe('Rp350.000'));
+    fireEvent.click(byTestId('money.desk.receive.pay.add'));
+    expect(byTestId('money.desk.receive.pay.line0.amount')).toHaveProperty('value', '350.000');
+    fireEvent.click(byTestId('money.desk.receive.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+  });
+
+  it('shows a manager their cancel limit before they cancel a payment', async () => {
+    await openKas('Maria Kogoya');
+    fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });
+    fireEvent.click(byTestId('money.desk.kas.tabs.history'));
+    const table = await screen.findByTestId('money.desk.history.table');
+    const [voidButton] = await within(table).findAllByRole('button', {
+      name: /^Batalkan pembayaran/,
+    });
+    fireEvent.click(voidButton!);
+    await screen.findByTestId('money.desk.void');
+    expect(byTestId('money.desk.void.limit').textContent).toBe(
+      'Batas pembatalanmu Rp 30.000 per servisan.',
+    );
+    // Every payment today is beyond it: refused up front, not after submitting.
+    fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
+    expect(byTestId('money.desk.void.submit')).toHaveProperty('disabled', true);
+    expect(byTestId('money.desk.void.hint').textContent).toBe(
+      'Melebihi batasmu. Minta pemilik toko.',
+    );
   });
 
   it('offers cancelling a payment to owners only', async () => {
@@ -231,6 +371,33 @@ describe('payment methods in PC Settings', () => {
     expect(await screen.findByText('QRIS Pusat disimpan.')).toBeTruthy();
     const row = within(byTestId('money.desk.methods.list')).getByText('QRIS Pusat').closest('li')!;
     expect(row.textContent).toContain('Bolusi Sorong, Bolusi Manokwari');
+  });
+
+  it('connects a QRIS method to Xendit with its secret key, and disconnects it after asking', async () => {
+    await openMethods('Yosua Wonda');
+    fireEvent.click(byTestId('money.desk.methods.row.01920000-0000-7000-8000-00000000a001.open'));
+    await screen.findByTestId('money.desk.methodForm');
+    expect(
+      (await screen.findByTestId('money.desk.methodForm.qris.connected')).textContent,
+    ).toContain('Terhubung, mode uji');
+    fireEvent.click(byTestId('money.desk.methodForm.qris.disconnect'));
+    fireEvent.click(await screen.findByTestId('money.desk.methodForm.qris.confirm.confirm'));
+    const key = await screen.findByTestId('money.desk.methodForm.qris.key');
+    expect(byTestId('money.desk.methodForm.qris.connect')).toHaveProperty('disabled', true);
+    fireEvent.change(key, { target: { value: 'xnd_production_0123456789abcdef' } });
+    fireEvent.click(byTestId('money.desk.methodForm.qris.connect'));
+    expect(
+      (await screen.findByTestId('money.desk.methodForm.qris.connected')).textContent,
+    ).toContain('Terhubung');
+    expect(byTestId('money.desk.methodForm.qris.connected').textContent).not.toContain('mode uji');
+    // Other kinds have nothing to connect.
+    fireEvent.click(
+      within(byTestId('money.desk.methodForm')).getByRole('button', { name: 'Batal' }),
+    );
+    await waitFor(() => expect(screen.queryByTestId('money.desk.methodForm')).toBeNull());
+    fireEvent.click(byTestId('money.desk.methods.row.01920000-0000-7000-8000-00000000a002.open'));
+    await screen.findByTestId('money.desk.methodForm');
+    expect(screen.queryByTestId('money.desk.methodForm.qris')).toBeNull();
   });
 
   it('switches a method off instead of deleting it, and a store owner leaves head-office ones be', async () => {

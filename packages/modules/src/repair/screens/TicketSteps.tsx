@@ -17,20 +17,41 @@ import {
   size,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { REPAIR_PERMISSION, WORK_PHOTOS_MAX, type WorkPhotoStage } from '../constants.js';
+import {
+  REPAIR_APPROVAL_KIND,
+  REPAIR_PERMISSION,
+  WORK_PHOTOS_MAX,
+  type WorkPhotoStage,
+} from '../constants.js';
+import { useDownPaymentAsk } from '../down-payment-ask.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
-import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
+import {
+  cancelDrop,
+  cancelRoom,
+  standardCancelFee,
+  type QuoteLineRow,
+  type TicketDetailRow,
+} from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import {
+  DOWN_PAYMENT_GAP_KEY,
+  PRICE_KIND_KEY,
+  discountLimitHint,
+  downPaymentTitleKey,
+  optionLabel,
+} from '../labels.js';
 import {
   acceptsRupiahText,
+  askedBecauseKey,
+  asksApproval,
   capturedThumbnailRef,
   downPaymentEntry,
   parseRupiah,
@@ -39,6 +60,7 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
+  cancelRefund,
 } from '../flows.js';
 import {
   FlowScreen,
@@ -50,6 +72,7 @@ import {
   usePhotoGridCell,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
+import { ta } from '../../approvals/i18n.js';
 import {
   useCancelFees,
   useIntakeOptionSettings,
@@ -61,7 +84,7 @@ import {
 import { chosenMethod, referenceMissing } from '../../money/payment-entry.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
-interface StepProps {
+export interface StepProps {
   readonly chrome: RepairChrome;
   readonly ticketId: string;
   /** Set once the ticket changed elsewhere and this step can no longer finish. */
@@ -241,11 +264,12 @@ export function WaitForPartsStep({
   );
 }
 
-// ── cancel (owners) ───────────────────────────────────────────────────────────────────────────
+// ── cancel (owners; the counter asks one) ─────────────────────────────────────────────────────
 
 /**
  * Cancel a servisan: the store's fee for its stage is filled in, the owner may change it, and the
- * reason is always required. The fee is what the customer signs for at handover.
+ * reason is always required. The fee is what the customer signs for at handover. Someone who may
+ * not cancel, or not at a fee that far below the store's, asks an owner instead (`onAsked`).
  */
 export function CancelStep({
   chrome,
@@ -253,13 +277,21 @@ export function CancelStep({
   stale,
   workStarted,
   claimOf,
+  downPayment,
+  discounted,
   onDone,
+  onAsked,
   onCancel,
   testID = 'repair.cancel',
 }: StepProps & {
   readonly workStarted: boolean;
+  /** The discounts standing on the servisan, which a smaller fee counts with against a limit. */
+  readonly discounted: number;
+  /** Paid in so far: what is above the fee goes back at pickup. */
+  readonly downPayment: number;
   /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
   readonly claimOf: string | null;
+  readonly onAsked: () => void;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -277,29 +309,42 @@ export function CancelStep({
   const fee = feeText === null ? standard : parseRupiah(feeText);
   const changed = standard !== null && fee !== null && fee !== standard;
   const complete = fee !== null && reason.trim() !== '';
+  const holds = runtime.hasPermission(REPAIR_PERMISSION.cancel);
+  // A limited role (a manager) sees how far below the store's fee they may go before it is asked.
+  const limit = holds ? runtime.limitOf(REPAIR_PERMISSION.cancel) : null;
+  const asking = asksApproval(
+    holds,
+    limit,
+    standard === null || fee === null ? 0 : cancelDrop(standard, fee, discounted),
+  );
+  const room = cancelRoom(limit, standard, discounted);
 
   const submit = (): void => {
     if (fee === null || !complete) return;
     // An unchanged fee is left to the command, which fills in the store's fee as it is then.
+    const input = feeText === null ? { ticketId, reason } : { ticketId, reason, fee };
     void runner
-      .run(() =>
-        runtime.run(
-          'cancelTicket',
-          feeText === null ? { ticketId, reason } : { ticketId, reason, fee },
-        ),
+      .run<unknown>(() =>
+        asking
+          ? runtime.approvals.run('requestApproval', {
+              kind: REPAIR_APPROVAL_KIND.cancel,
+              input,
+              reason,
+            })
+          : runtime.run('cancelTicket', input),
       )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result !== undefined) (asking ? onAsked : onDone)();
       });
   };
 
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn('repair.action.cancel')}
+      title={tn(holds ? 'repair.action.cancel' : 'repair.approval.askCancel')}
       onBack={onCancel}
-      primaryLabel={tn('repair.action.cancel')}
-      primaryVariant="destructive"
+      primaryLabel={asking ? ta('approvals.action.ask') : tn('repair.action.cancel')}
+      primaryVariant={asking ? 'primary' : 'destructive'}
       onPrimary={submit}
       primaryDisabled={!complete}
       primaryHint={tn(
@@ -312,8 +357,15 @@ export function CancelStep({
       testID={testID}
     >
       <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
-        {tn('repair.cancel.consequence')}
+        {cancelRefund(downPayment, fee) > 0
+          ? tn('repair.cancel.refundsDp', { amount: formatMoney(cancelRefund(downPayment, fee)) })
+          : tn('repair.cancel.consequence')}
       </Text>
+      {asking ? (
+        <Text style={[repairStyles.caption, styles.consequence]} testID={`${testID}.asks`}>
+          {tn(askedBecauseKey(holds))}
+        </Text>
+      ) : null}
       <QueryView
         query={fees}
         onBack={onCancel}
@@ -329,7 +381,7 @@ export function CancelStep({
                   <TextButton
                     label={tn('repair.cancel.changeFee')}
                     accessibilityLabel={tn('repair.cancel.changeFeeLabel')}
-                    onPress={() => setFeeText(String(standard ?? 0))}
+                    onPress={() => setFeeText(groupedAmount(String(standard ?? 0)))}
                     testID={`${testID}.changeFee`}
                   />
                 </View>
@@ -358,12 +410,18 @@ export function CancelStep({
             label={tn('repair.cancel.feeInput')}
             value={feeText}
             onChangeText={(text) => {
-              if (acceptsRupiahText(text)) setFeeText(text);
+              if (acceptsRupiahText(text)) setFeeText(groupedAmount(text));
             }}
             keyboardType="number-pad"
+            selectTextOnFocus
             autoFocus
             testID={`${testID}.feeInput`}
           />
+          {room === null ? null : (
+            <Text style={repairStyles.caption} testID={`${testID}.limit`}>
+              {tn('repair.hint.cancelLimit', { amount: formatMoney(room) })}
+            </Text>
+          )}
         </View>
       )}
       <View style={repairStyles.gap}>
@@ -384,6 +442,66 @@ export function CancelStep({
   );
 }
 
+// ── undo a handover (owners) ──────────────────────────────────────────────────────────────────
+
+/** Take back a handover recorded by mistake: the phone is in the store again. A reason is required. */
+export function UndoHandoverStep({
+  chrome,
+  ticketId,
+  stale,
+  onDone,
+  onCancel,
+  onRegisterDiscardGuard,
+  testID = 'repair.undoHandover',
+}: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [reason, setReason] = useState('');
+  const complete = reason.trim() !== '';
+  const discard = useDiscardConfirm({
+    dirty: stale === null && complete,
+    onRegisterDiscardGuard,
+    testID,
+  });
+  const submit = (): void => {
+    if (!complete) return;
+    void runner
+      .run(() => runtime.run('undoHandover', { ticketId, reason }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tn('repair.undoHandover.title')}
+      onBack={() => discard.requestLeave(onCancel)}
+      primaryLabel={tn('repair.action.undoHandover')}
+      primaryVariant="destructive"
+      onPrimary={submit}
+      primaryDisabled={!complete}
+      primaryHint={tn('repair.hint.reason')}
+      overlay={discard.overlay}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      stale={stale}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.explain`}>
+        {tn('repair.undoHandover.explain')}
+      </Text>
+      <TextInput
+        label={tn('repair.undoHandover.reason')}
+        value={reason}
+        onChangeText={setReason}
+        multiline
+        testID={`${testID}.reason`}
+      />
+    </FlowScreen>
+  );
+}
+
 // ── down payment ──────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -398,6 +516,7 @@ export function DownPaymentStep({
   current,
   total,
   onDone,
+  onAsked,
   onCancel,
   testID = 'repair.downPayment',
 }: StepProps & {
@@ -405,6 +524,8 @@ export function DownPaymentStep({
   /** The down payment recorded now; null when none is. */
   readonly current: number | null;
   readonly total: number;
+  /** A fix beyond this person was asked of an owner instead. */
+  readonly onAsked: () => void;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -426,35 +547,49 @@ export function DownPaymentStep({
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const complete = gap === null && loadedAccounts !== null;
+  const fix =
+    correcting && complete && amount !== null
+      ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
+      : null;
+  // Whether it goes to an owner shows as soon as the new amount is typed, before the reason.
+  const typedFix =
+    correcting && amount !== null && amount !== current && !aboveTotal && loadedAccounts !== null
+      ? { ticketId, amount, ...chosenMethod(method.account, method.reference, accounts) }
+      : null;
+  const ask = useDownPaymentAsk(typedFix, current ?? 0);
+  const asking = correcting && ask.asking;
 
   const submit = (): void => {
     if (!complete || amount === null) return;
     void runner
-      .run(() =>
-        correcting
-          ? runtime.run('correctDownPayment', {
+      .run<unknown>(() =>
+        fix === null
+          ? runtime.run('recordDownPayment', {
               ticketId,
               amount,
-              reason,
               ...chosenMethod(method.account, method.reference, accounts),
             })
-          : runtime.run('recordDownPayment', {
-              ticketId,
-              amount,
-              ...chosenMethod(method.account, method.reference, accounts),
-            }),
+          : asking
+            ? runtime.approvals.run('requestApproval', {
+                kind: REPAIR_APPROVAL_KIND.downPayment,
+                input: fix,
+                reason,
+              })
+            : runtime.run('correctDownPayment', fix),
       )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result !== undefined) (asking ? onAsked : onDone)();
       });
   };
 
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(correcting ? 'repair.downPayment.correctTitle' : 'repair.downPayment.recordTitle')}
+      title={tn(
+        downPaymentTitleKey(mode, runtime.hasPermission(REPAIR_PERMISSION.correctDownPayment)),
+      )}
       onBack={onCancel}
-      primaryLabel={tn('repair.downPayment.save')}
+      primaryLabel={asking ? ta('approvals.action.ask') : tn('repair.downPayment.save')}
       onPrimary={submit}
       primaryDisabled={!complete}
       primaryHint={gap === null ? undefined : tn(DOWN_PAYMENT_GAP_KEY[gap])}
@@ -478,6 +613,7 @@ export function DownPaymentStep({
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           autoFocus
           errorMessage={aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
           testID={`${testID}.amount`}
@@ -507,6 +643,21 @@ export function DownPaymentStep({
             testID={`${testID}.reason`}
           />
           <Text style={repairStyles.caption}>{tn('repair.downPayment.removeHint')}</Text>
+          {ask.limit === null ? null : (
+            <Text style={repairStyles.caption} testID={`${testID}.limit`}>
+              {tn('repair.hint.downPaymentLimit', { amount: formatMoney(ask.limit) })}
+            </Text>
+          )}
+          {ask.withEarlier === null ? null : (
+            <Text style={repairStyles.caption} testID={`${testID}.withEarlier`}>
+              {tn('repair.hint.downPaymentWithEarlier', { amount: formatMoney(ask.withEarlier) })}
+            </Text>
+          )}
+          {asking ? (
+            <Text style={repairStyles.caption} testID={`${testID}.asks`}>
+              {tn(ask.because)}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </FlowScreen>
@@ -681,51 +832,77 @@ export function AssignStep({
 
 export { PRICE_KINDS, type PriceKind } from '../flows.js';
 
-/** The kinds this user may add: a discount lowers the price, so only owners see it. */
-export function usePriceKinds(): readonly PriceKind[] {
+/**
+ * The kinds this user may add: a discount lowers the price, so only owners see it, unless the
+ * user may ask one (`askable`).
+ */
+export function usePriceKinds(askable = false): readonly PriceKind[] {
   const runtime = useRepairRuntime();
-  const discount = runtime.hasPermission(REPAIR_PERMISSION.discount);
+  const discount = askable || runtime.hasPermission(REPAIR_PERMISSION.discount);
   return useMemo(() => priceKinds(discount), [discount]);
 }
 
 /**
  * A new price line after intake. The cashier changes the price directly, answering whether the
  * customer agreed as the save itself (as on a proposal, so it cannot be skipped by not noticing a
- * toggle); a technician only proposes it for the cashier to decide.
+ * toggle); a technician only proposes it for the cashier to decide. A discount the cashier may not
+ * give (or not that large) goes to an owner instead (`onAsked`), and asks the customer once it is
+ * approved.
  */
 export function PriceChangeStep({
   chrome,
   ticketId,
   stale,
   mode,
+  discounted,
   onDone,
+  onAsked,
   onCancel,
   testID = `repair.price.${mode}`,
 }: StepProps & {
   readonly mode: 'change' | 'propose';
+  /** What the discounts already on the servisan take off; a limit counts them too. */
+  readonly discounted: number;
+  /** Set where a discount may be asked of an owner (changing the price, not proposing it). */
+  readonly onAsked?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const kinds = usePriceKinds();
+  const kinds = usePriceKinds(onAsked !== undefined);
+  const holdsDiscount = runtime.hasPermission(REPAIR_PERMISSION.discount);
+  // A limited role (a manager) sees how far they may discount before it goes to an owner.
+  const discountLimit = runtime.limitOf(REPAIR_PERMISSION.discount);
   const [kind, setKind] = useState<PriceKind>('part');
   const [description, setDescription] = useState('');
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
   const amount = parseRupiah(amountText);
   const complete = description.trim() !== '' && amount !== null && reason.trim() !== '';
+  const asking =
+    onAsked !== undefined &&
+    kind === 'discount' &&
+    asksApproval(holdsDiscount, discountLimit, discounted + (amount ?? 0));
+  // Asking skips the customer's answer: it is asked once an owner approves.
+  const deciding = mode === 'change' && !asking;
 
   const submit = (customerAgreed: boolean): void => {
     if (!complete) return;
     const line = { ticketId, kind, description, amount: signedAmount(kind, amount), reason };
     void runner
-      .run(() =>
-        mode === 'change'
-          ? runtime.run('changeQuote', { ...line, customerAgreed })
-          : runtime.run('proposeQuoteChange', line),
+      .run<unknown>(() =>
+        asking
+          ? runtime.approvals.run('requestApproval', {
+              kind: REPAIR_APPROVAL_KIND.discount,
+              input: { ...line, customerAgreed: false },
+              reason,
+            })
+          : mode === 'change'
+            ? runtime.run('changeQuote', { ...line, customerAgreed })
+            : runtime.run('proposeQuoteChange', line),
       )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result !== undefined) (asking ? (onAsked ?? onDone) : onDone)();
       });
   };
 
@@ -734,13 +911,15 @@ export function PriceChangeStep({
       chrome={chrome}
       title={tn(mode === 'change' ? 'repair.action.changePrice' : 'repair.action.proposePrice')}
       onBack={onCancel}
-      question={mode === 'change' ? tn('repair.price.alreadyAgreed') : undefined}
-      primaryLabel={tn(
-        mode === 'change' ? 'repair.action.agreedYes' : 'repair.action.proposePrice',
-      )}
+      question={deciding ? tn('repair.price.alreadyAgreed') : undefined}
+      primaryLabel={
+        asking
+          ? ta('approvals.action.ask')
+          : tn(mode === 'change' ? 'repair.action.agreedYes' : 'repair.action.proposePrice')
+      }
       onPrimary={() => submit(true)}
       secondary={
-        mode === 'change'
+        deciding
           ? {
               label: tn('repair.action.applyUnconfirmed'),
               onPress: () => submit(false),
@@ -780,11 +959,17 @@ export function PriceChangeStep({
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           testID={`${testID}.amount`}
         />
         {amount === null ? null : (
           <Text style={repairStyles.caption} testID={`${testID}.amountPreview`}>
             {formatMoney(signedAmount(kind, amount))}
+          </Text>
+        )}
+        {kind !== 'discount' || !holdsDiscount || discountLimit === null ? null : (
+          <Text style={repairStyles.caption} testID={`${testID}.discountLimit`}>
+            {discountLimitHint(discountLimit, discounted)}
           </Text>
         )}
       </View>
@@ -797,7 +982,11 @@ export function PriceChangeStep({
           testID={`${testID}.reason`}
         />
       </View>
-      {mode === 'change' ? (
+      {asking ? (
+        <Text style={[repairStyles.caption, repairStyles.gap]} testID={`${testID}.asks`}>
+          {tn(askedBecauseKey(holdsDiscount))}
+        </Text>
+      ) : mode === 'change' ? (
         // Agreement often comes later, by phone; saying so keeps "Belum" from reading as a dead end.
         <Text style={[repairStyles.caption, repairStyles.gap]} testID={`${testID}.waitsHint`}>
           {tn('repair.price.waitsHint')}
@@ -817,11 +1006,14 @@ export function ProposalStep({
   ticketId,
   stale,
   line,
+  total,
   onDone,
   onCancel,
   testID = 'repair.proposal',
 }: StepProps & {
   readonly line: QuoteLineRow;
+  /** The agreed total now, so the change reads as what the customer will pay. */
+  readonly total: number;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -873,6 +1065,13 @@ export function ProposalStep({
         <Text style={styles.proposalDescription}>{line.description}</Text>
         <Text style={styles.proposalAmount} testID={`${testID}.amount`}>
           {formatMoney(line.amount)}
+        </Text>
+        {/* An extra zero shows here, where the customer hears it: 1.500.000 → 3.500.000. */}
+        <Text style={repairStyles.body} testID={`${testID}.newTotal`}>
+          {tn('repair.price.newTotal', {
+            from: formatMoney(total),
+            to: formatMoney(total + line.amount),
+          })}
         </Text>
         {line.reason === null ? null : (
           <>

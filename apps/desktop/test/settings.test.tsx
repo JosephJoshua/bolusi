@@ -10,6 +10,7 @@ import {
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { initI18n } from '@bolusi/i18n';
 import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
+import { PRESET_ROLE_ABILITIES, permissionsFor } from '@bolusi/modules/roles';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
@@ -46,9 +47,30 @@ const CASHIER_GRANTS = [
 
 const DIRECTORY: StaffDirectory = {
   roles: [
-    { id: 'r-cashier', key: 'cashier', ownerRole: false },
-    { id: 'r-tech', key: 'technician', ownerRole: false },
-    { id: 'r-owner', key: 'store_owner', ownerRole: true },
+    {
+      id: 'r-cashier',
+      key: 'cashier',
+      custom: false,
+      permissionIds: [],
+      ownerRole: false,
+      limits: null,
+    },
+    {
+      id: 'r-tech',
+      key: 'technician',
+      custom: false,
+      permissionIds: [],
+      ownerRole: false,
+      limits: null,
+    },
+    {
+      id: 'r-owner',
+      key: 'store_owner',
+      custom: false,
+      permissionIds: [],
+      ownerRole: true,
+      limits: null,
+    },
   ],
   members: [
     {
@@ -119,6 +141,8 @@ describe('Settings on the PC', () => {
       'account',
       'staff',
       'staffPins',
+      'limits',
+      'roles',
       'fees',
       'uncollected',
       'slip',
@@ -137,6 +161,8 @@ describe('Settings on the PC', () => {
           canUnlock: false,
           canReset: false,
           canManageStaff: false,
+          canSetLimits: false,
+          canRenameDevice: false,
           tenantAdmin: false,
         }),
       }),
@@ -183,19 +209,19 @@ describe('Settings on the PC', () => {
     await openSettings();
     fireEvent.click(byTestId('desktop.settings.changePin'));
     await screen.findByTestId('desktop.changePin');
-    typePin('111111');
-    typePin('222222');
-    typePin('222222');
+    typePin('571938');
+    typePin('593026');
+    typePin('593026');
     await waitFor(() =>
       expect(byTestId('desktop.changePin.message').textContent).toBe('PIN lama salah. Coba lagi.'),
     );
-    typePin('123456');
-    typePin('654321');
-    typePin('654321');
+    typePin('274816');
+    typePin('639174');
+    typePin('639174');
     await screen.findByTestId('desktop.changePin.done');
     expect(callsTo('session.changePin')).toEqual([
-      [TECH.id, '111111', '222222'],
-      [TECH.id, '123456', '654321'],
+      [TECH.id, '571938', '593026'],
+      [TECH.id, '274816', '639174'],
     ]);
   });
 
@@ -205,9 +231,9 @@ describe('Settings on the PC', () => {
     await openSettings();
     fireEvent.click(byTestId('desktop.settings.changePin'));
     await screen.findByTestId('desktop.changePin');
-    typePin('111111');
-    typePin('222222');
-    typePin('333333');
+    typePin('571938');
+    typePin('593026');
+    typePin('361548');
     await waitFor(() =>
       expect(byTestId('desktop.changePin.message').textContent).toContain('tidak sama'),
     );
@@ -289,6 +315,158 @@ describe('Settings on the PC', () => {
     expect((await screen.findByTestId('desktop.resetPin')).textContent).toContain('Maria Kambu');
   });
 
+  it('sets a manager’s limits as the owner signed in, and says when the PC is offline', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    let directory: StaffDirectory = {
+      ...DIRECTORY,
+      roles: [
+        ...DIRECTORY.roles,
+        {
+          id: 'r-manager',
+          key: 'manager',
+          custom: false,
+          permissionIds: [],
+          ownerRole: false,
+          limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+        },
+      ],
+    };
+    core.answers['staff.list'] = () => directory;
+    let online = false;
+    core.answers['staff.setLimits'] = (_userId, roleId, limits) => {
+      if (!online) return Promise.reject(new StaffAdminError('offline'));
+      directory = {
+        ...directory,
+        roles: directory.roles.map((role) =>
+          role.id === roleId ? { ...role, limits: limits as typeof role.limits } : role,
+        ),
+      };
+      return undefined;
+    };
+    renderApp();
+    await openSettings('limits');
+    const refund = await screen.findByTestId('desktop.settings.limits.manager.refund');
+    fireEvent.change(refund, { target: { value: '25.000' } });
+
+    // An emptied amount is not Rp 0: nothing is sent.
+    const credit = byTestId('desktop.settings.limits.manager.credit');
+    fireEvent.change(credit, { target: { value: '' } });
+    fireEvent.click(byTestId('desktop.settings.limits.save'));
+    expect(byTestId('desktop.settings.limits').textContent).toContain('Isi ketiga batas');
+    expect(callsTo('staff.setLimits')).toEqual([]);
+
+    fireEvent.change(credit, { target: { value: '100.000' } });
+    fireEvent.click(byTestId('desktop.settings.limits.save'));
+    await screen.findByText(/belum terhubung internet/);
+
+    online = true;
+    fireEvent.click(byTestId('desktop.settings.limits.save'));
+    await screen.findByTestId('desktop.settings.limits.saved');
+    expect(callsTo('staff.setLimits').at(-1)).toEqual([
+      OWNER.id,
+      'r-manager',
+      { priceDrop: 50_000, refund: 25_000, credit: 100_000 },
+    ]);
+  });
+
+  it('renames this PC as the owner signed in, and keeps the dialog open while offline', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    let online = false;
+    core.answers['device.rename'] = (_userId, name) => {
+      if (!online) return Promise.reject(new StaffAdminError('offline'));
+      core.set({ deviceInfo: { ...core.state.deviceInfo!, deviceName: name as string } });
+      return undefined;
+    };
+    renderApp();
+    await openSettings('computer');
+    fireEvent.click(byTestId('desktop.device.rename'));
+    const field = (await screen.findByTestId('desktop.rename.name')) as HTMLInputElement;
+    expect(field.value).toBe('PC Kasir');
+
+    // A blank name is not sent.
+    fireEvent.change(field, { target: { value: '   ' } });
+    fireEvent.click(byTestId('desktop.rename.save'));
+    expect(byTestId('desktop.rename').textContent).toContain('Isi namanya dulu');
+    expect(callsTo('device.rename')).toEqual([]);
+
+    fireEvent.change(field, { target: { value: ' Kasir depan ' } });
+    fireEvent.click(byTestId('desktop.rename.save'));
+    await screen.findByText(/belum terhubung internet/);
+    expect(byTestId('desktop.device.name').textContent).toBe('PC Kasir');
+
+    online = true;
+    fireEvent.click(byTestId('desktop.rename.save'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.rename')).toBeNull());
+    expect(callsTo('device.rename').at(-1)).toEqual([OWNER.id, 'Kasir depan']);
+    expect(byTestId('desktop.device.name').textContent).toBe('Kasir depan');
+  });
+
+  it('offers no rename to someone who may not register devices', async () => {
+    core = new FakeCore(
+      ready({ session: session({ ...signedIn(TECH, ALL), canRenameDevice: false }) }),
+    );
+    renderApp();
+    await openSettings('computer');
+    expect(byTestId('desktop.device.name').textContent).toBe('PC Kasir');
+    expect(screen.queryByTestId('desktop.device.rename')).toBeNull();
+  });
+
+  it('edits what a role may do as the main owner, and says when the PC is offline', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    const cashierPermissions = permissionsFor(new Set(PRESET_ROLE_ABILITIES.cashier));
+    const directory: StaffDirectory = {
+      ...DIRECTORY,
+      roles: DIRECTORY.roles.map((role) =>
+        role.id === 'r-cashier' ? { ...role, permissionIds: cashierPermissions } : role,
+      ),
+    };
+    core.answers['staff.list'] = () => directory;
+    let online = false;
+    core.answers['staff.updateRole'] = () =>
+      online ? undefined : Promise.reject(new StaffAdminError('offline'));
+    renderApp();
+    await openSettings('roles');
+    // An owner's role is shown as fixed and opens nothing.
+    await screen.findByTestId('desktop.settings.roles.owner.store_owner');
+    fireEvent.click(byTestId('desktop.settings.roles.open.r-cashier'));
+    const discount = await screen.findByTestId('desktop.roles.ability.repairDiscount');
+    fireEvent.click(discount);
+    fireEvent.click(byTestId('desktop.roles.save'));
+    await screen.findByText(/belum terhubung internet/);
+
+    online = true;
+    fireEvent.click(byTestId('desktop.roles.save'));
+    await waitFor(() => expect(callsTo('staff.updateRole')).toHaveLength(2));
+    const [actor, roleId, change] = callsTo('staff.updateRole').at(-1)!;
+    expect([actor, roleId]).toEqual([OWNER.id, 'r-cashier']);
+    expect((change as { permissionIds: string[] }).permissionIds).toEqual(
+      expect.arrayContaining([...cashierPermissions, 'repair.discount', 'repair.quote_change']),
+    );
+    // A first discount makes the role limited (Rp 0 until limits are set), not unlimited.
+    expect((change as { limited?: boolean }).limited).toBe(true);
+  });
+
+  it('adds a role under a name no role has, starting from the chosen one', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    core.answers['staff.list'] = () => DIRECTORY;
+    core.answers['staff.createRole'] = () => ({ roleId: 'r-made' });
+    renderApp();
+    await openSettings('roles');
+    fireEvent.click(await screen.findByTestId('desktop.settings.roles.add'));
+    const name = await screen.findByTestId('desktop.roles.add.name');
+    fireEvent.change(name, { target: { value: 'kasir' } });
+    fireEvent.click(byTestId('desktop.roles.add.save'));
+    await screen.findByText('Nama ini sudah dipakai tugas lain.');
+    expect(callsTo('staff.createRole')).toEqual([]);
+
+    fireEvent.change(name, { target: { value: '  Kasir pagi ' } });
+    fireEvent.click(within(byTestId('desktop.roles.add.from')).getByText('Teknisi'));
+    fireEvent.click(byTestId('desktop.roles.add.save'));
+    await waitFor(() =>
+      expect(callsTo('staff.createRole')).toEqual([[OWNER.id, 'Kasir pagi', 'r-tech']]),
+    );
+  });
+
   it('does not let a store owner open another owner', async () => {
     core = new FakeCore(
       ready({
@@ -300,6 +478,8 @@ describe('Settings on the PC', () => {
     await openSettings('staff');
     await screen.findByTestId(`desktop.settings.staff.row.${OWNER.id}`);
     expect(screen.queryByTestId(`desktop.settings.staff.open.${OWNER.id}`)).toBeNull();
+    // Nor change what a role may do: that is the main owner's alone.
+    expect(screen.queryByTestId('desktop.settings.nav.roles')).toBeNull();
   });
 });
 

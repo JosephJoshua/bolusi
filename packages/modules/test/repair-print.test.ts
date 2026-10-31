@@ -52,9 +52,19 @@ describe('intake slip', () => {
         ctx,
       ),
     );
-    expect(text).toContain('Cetak ulang ke-2');
+    // One earlier print: this is the first reprint, not the second.
+    expect(text).toContain('Cetak ulang');
+    expect(text).not.toContain('Cetak ulang ke-');
     expect(text).toMatch(/DP\s+-Rp 200\.000/);
     expect(text).toMatch(/Sisa bayar\s+Rp 750\.000/);
+  });
+
+  it('numbers the reprints after the first by how many came before', () => {
+    const slip = (intake: number) =>
+      allText(intakeSlip(sampleTicket({ slipPrints: { intake, handover: 0 } }), ctx));
+    expect(slip(0)).not.toContain('Cetak ulang');
+    expect(slip(2)).toContain('Cetak ulang ke-2');
+    expect(slip(3)).toContain('Cetak ulang ke-3');
   });
 
   it('prints the store terms one per line instead of the default ones', () => {
@@ -127,6 +137,19 @@ describe('handover slip', () => {
     expect(text).toMatch(/Sisa bayar\s+Rp 30\.000/);
     // No repair, so no warranty terms.
     expect(text).not.toContain('KETENTUAN');
+  });
+
+  it('takes what an owner lowered off the bill, so a reprint after a refund owes nothing', () => {
+    const text = allText(
+      handoverSlip(
+        { ...repaired, location: 'returned', reduced: 150_000, downPayment: 1_000_000 },
+        { ...ctx, handedOverByName: null, signature: null },
+      ),
+    );
+    expect(text).toMatch(/Total\s+Rp 1\.150\.000/);
+    expect(text).toMatch(/Potongan\s+-Rp 150\.000/);
+    expect(text).toMatch(/Sudah dibayar\s+-Rp 1\.000\.000/);
+    expect(text).toMatch(/Sisa bayar\s+Rp 0/);
   });
 
   it('prints each repair type’s warranty from the day the phone went home', () => {

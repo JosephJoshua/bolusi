@@ -23,6 +23,25 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
+export interface ApprovalRequests {
+  amount: Int8;
+  basis: string;
+  decidedAt: Int8 | null;
+  decidedBy: string | null;
+  id: string;
+  inputJson: string;
+  kind: string;
+  note: string | null;
+  reason: string;
+  requestedAt: Int8;
+  requestedBy: string;
+  status: string;
+  storeId: string;
+  targetId: string;
+  targetType: string;
+  tenantId: string;
+}
+
 export interface AuthPermissionDenials {
   deviceId: string;
   id: string;
@@ -381,6 +400,37 @@ export interface PushTokens {
   userId: string | null;
 }
 
+export interface QrisCharges {
+  accountId: string;
+  amount: Int8;
+  callbackTokenHash: string;
+  checkedAt: Int8 | null;
+  createdAt: Int8;
+  deviceId: string;
+  documentJson: string;
+  environment: string;
+  expiresAt: Int8;
+  id: string;
+  paidAt: Int8 | null;
+  paymentId: string | null;
+  qrString: string;
+  requestedBy: string;
+  secretSealed: string | null;
+  storeId: string;
+  tenantId: string;
+  xenditQrId: string;
+}
+
+export interface QrisConnections {
+  accountId: string;
+  callbackTokenHash: string;
+  connectedAt: Int8;
+  connectedBy: string;
+  environment: string;
+  secretSealed: string;
+  tenantId: string;
+}
+
 export interface RefusedOperations {
   code: string;
   deviceId: string;
@@ -540,6 +590,16 @@ export interface RepairTickets {
   updatedAt: Int8;
 }
 
+export interface RoleLimits {
+  amount: Int8;
+  kind: string;
+  roleId: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface RolePermissions {
   permissionId: string;
   roleId: string;
@@ -550,6 +610,7 @@ export interface Roles {
   createdAt: Int8;
   id: string;
   isSystemDefault: Generated<boolean>;
+  limited: Generated<boolean>;
   name: string;
   scopeType: string;
   tenantId: string;
@@ -629,6 +690,7 @@ export interface UserStores {
 }
 
 export interface DB {
+  approvalRequests: ApprovalRequests;
   authPermissionDenials: AuthPermissionDenials;
   authSessions: AuthSessions;
   conflicts: Conflicts;
@@ -656,6 +718,8 @@ export interface DB {
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;
+  qrisCharges: QrisCharges;
+  qrisConnections: QrisConnections;
   refusedOperations: RefusedOperations;
   repairCustomers: RepairCustomers;
   repairIntakeOptions: RepairIntakeOptions;
@@ -667,6 +731,7 @@ export interface DB {
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;
+  roleLimits: RoleLimits;
   rolePermissions: RolePermissions;
   roles: Roles;
   stores: Stores;

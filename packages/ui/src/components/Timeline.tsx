@@ -4,7 +4,8 @@
  * reads the details it needs. The newest dot is filled; the rest are hollow, so "where it is now"
  * stands out without colour carrying the meaning alone (the newest entry is also first).
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { border, color, radius, space, type } from '../tokens.js';
 

@@ -18,13 +18,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
-import {
-  Platform,
-  StatusBar as RNStatusBar,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Linking, Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
@@ -63,12 +57,17 @@ import type { EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
+import { LimitsScreen } from './src/screens/staff/LimitsScreen.js';
+import { RolesScreen } from './src/screens/staff/RolesScreen.js';
 import { StaffScreen } from './src/screens/staff/StaffScreen.js';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
 import { pinView } from '@bolusi/device/models/pin/model';
+import { RenameDeviceScreen } from './src/screens/settings/RenameDeviceScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
+import { DeviceSetupRoute } from './src/screens/setup/DeviceSetupRoute.js';
+import type { PermissionPort } from './src/push/permission.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
 import { roleLabel } from './src/screens/switcher/UserRow.js';
 import {
@@ -88,6 +87,8 @@ import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
 import type { SignatureSurface } from './src/media/SignatureHost.js';
 import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
+import type { VideoSurface } from './src/media/VideoHost.js';
+import { VideoScreen } from './src/media/VideoScreen.js';
 import type { ScanSurface } from './src/media/ScanHost.js';
 import { ScanScreen } from './src/media/ScanScreen.js';
 import type { DeviceInfo, MutablePushCategory } from '@bolusi/device/models/settings/model';
@@ -162,6 +163,8 @@ export interface AppProps {
   readonly signature?: SignatureSurface | null;
   /** The code scanner while it looks for a barcode or QR code, from `useScanHost`; like `capture`. */
   readonly scan?: ScanSurface | null;
+  /** The video recorder or player while one is open, from `useVideoHost`; like `capture`. */
+  readonly video?: VideoSurface | null;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -252,6 +255,11 @@ export interface AppProps {
    * who may not add staff here, and on a build with no server wire; then the row is absent too.
    */
   readonly staff?: StaffControls | undefined;
+  /**
+   * Rename this phone (Settings › device), for someone who may register devices here. Online only;
+   * REJECTS with a `StaffAdminError`. Absent for everyone else, and then the action is absent too.
+   */
+  readonly onRenameDevice?: ((name: string) => Promise<void>) | undefined;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -273,6 +281,13 @@ export interface AppProps {
    * `true` is "Nyalakan" (the OS prompt follows), `false` is "Nanti saja". Null when not asking.
    */
   readonly onAnswerNotifications?: ((allow: boolean) => void) | null | undefined;
+  /** This phone's first-run setup waits for the signed-in person: it opens on their first unlock. */
+  readonly setupPending?: boolean | undefined;
+  /** The setup was finished or put off, so it does not open by itself again. */
+  readonly onSetupDone?: (() => void) | undefined;
+  /** The permissions the setup asks up front, with their reason; absent where none are bound. */
+  readonly cameraPermission?: PermissionPort | undefined;
+  readonly notificationPermission?: PermissionPort | undefined;
 }
 
 export default function App(props: AppProps): React.JSX.Element {
@@ -304,7 +319,6 @@ export default function App(props: AppProps): React.JSX.Element {
     userId: '',
     tab: 'repair',
   });
-  const { fontScale } = useWindowDimensions();
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
    * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
@@ -389,6 +403,8 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const [shownRoute, setShownRoute] = useState<ShellRoute>(route);
   const [syncReturn, setSyncReturn] = useState<ShellRoute>('home');
+  // The setup ends where it was opened from: Settings when reopened there, else the home surface.
+  const [setupReturn, setSetupReturn] = useState<ShellRoute>('home');
   if (routeOwner !== sessionUserId) {
     const restored = workspace?.route ?? 'home';
     setRouteOwner(sessionUserId);
@@ -546,6 +562,21 @@ export default function App(props: AppProps): React.JSX.Element {
   const clearLockout = useLatestCallback(props.onClearLockout);
   const resetPin = useLatestCallback(props.onResetPin);
 
+  /**
+   * The new-phone setup opens for the owner who registered the phone, on their unlock (after the
+   * route they left is restored above). Leaving it any way, "Mulai", "Nanti saja" or back, ends it.
+   */
+  const setupPending = props.setupPending === true;
+  useEffect(() => {
+    if (setupPending && sessionUserId !== null) setRoute('deviceSetup');
+  }, [setupPending, sessionUserId]);
+  const onSetupDone = useLatestCallback(() => props.onSetupDone?.());
+  const lastRoute = useRef(route);
+  useEffect(() => {
+    if (lastRoute.current === 'deviceSetup' && route !== 'deviceSetup') onSetupDone();
+    lastRoute.current = route;
+  }, [route, onSetupDone]);
+
   const zone = resolveZone({
     device: props.device,
     session: props.session,
@@ -593,6 +624,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const captureSurface = props.capture ?? null;
   const signatureSurface = props.signature ?? null;
   const scanSurface = props.scan ?? null;
+  const videoSurface = props.video ?? null;
   const goBack = useCallback((): boolean => {
     if (accountMenu) {
       setAccountMenu(false);
@@ -612,6 +644,10 @@ export default function App(props: AppProps): React.JSX.Element {
     }
     if (scanSurface !== null) {
       scanSurface.onBack();
+      return true;
+    }
+    if (videoSurface !== null) {
+      videoSurface.onBack();
       return true;
     }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
@@ -662,7 +698,16 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, scanSurface, syncReturn]);
+  }, [
+    accountMenu,
+    zone,
+    enrollment,
+    captureSurface,
+    signatureSurface,
+    scanSurface,
+    videoSurface,
+    syncReturn,
+  ]);
 
   // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
   useEffect(() => {
@@ -914,6 +959,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const capture = zone.kind === 'shell' ? captureSurface : null;
   const signing = zone.kind === 'shell' ? signatureSurface : null;
   const scanning = zone.kind === 'shell' ? scanSurface : null;
+  const filming = zone.kind === 'shell' ? videoSurface : null;
   const modal =
     capture !== null ? (
       <CaptureScreen
@@ -954,6 +1000,22 @@ export default function App(props: AppProps): React.JSX.Element {
         avatar={<View testID="scan-no-avatar" />}
         onBack={scanning.onBack}
       />
+    ) : filming !== null ? (
+      <VideoScreen
+        title={filming.title}
+        hint={filming.hint}
+        state={filming.state}
+        view={filming.view}
+        maxMs={filming.maxMs}
+        syncChip={modalSyncChip}
+        avatar={<View testID="video-no-avatar" />}
+        onStart={filming.onStart}
+        onStop={filming.onStop}
+        onRetake={filming.onRetake}
+        onUse={filming.onUse}
+        onRetry={filming.onRetry}
+        onBack={filming.onBack}
+      />
     ) : null;
 
   return (
@@ -961,12 +1023,6 @@ export default function App(props: AppProps): React.JSX.Element {
       {/* Dark icons: the app is light-only (app.config.ts), even when the phone is in dark mode. */}
       <StatusBar style="dark" />
       <View
-        // A new system font size remounts the screens. Re-measuring in place does not hold on
-        // Android: the next React commit brings back its own text nodes, measured at the old size,
-        // so text drew at the new size inside old boxes (QA runs on PR #45). Fresh nodes measure
-        // at the new size. MainActivity tells JS the new scale (withActivityConfigChanges.ts).
-        // Work in progress survives: drafts live in the workspace above.
-        key={`font-${fontScale}`}
         style={styles.zone}
         // Hidden from touch and screen readers while the overlay covers it, but still mounted.
         pointerEvents={modal === null ? 'auto' : 'none'}
@@ -1174,12 +1230,26 @@ export default function App(props: AppProps): React.JSX.Element {
                   onBack={() => setRoute('home')}
                   onOpenSwitcher={() => setSwitching(true)}
                   onOpenChangePin={() => setRoute('changePin')}
+                  onRenameDevice={
+                    props.onRenameDevice === undefined ? undefined : () => setRoute('renameDevice')
+                  }
+                  onOpenSetup={() => {
+                    setSetupReturn('settings');
+                    setRoute('deviceSetup');
+                  }}
                   // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
                   // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
                   onOpenStaffPins={
                     props.canUnlock || props.canReset ? () => setRoute('staffPins') : undefined
                   }
                   onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
+                  onOpenLimits={
+                    props.staff?.canSetLimits === true ? () => setRoute('limits') : undefined
+                  }
+                  // The role editor is the main owner's alone.
+                  onOpenRoles={
+                    props.staff?.tenantAdmin === true ? () => setRoute('roles') : undefined
+                  }
                   lockedStaffCount={
                     [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
                       (id) => id !== currentUser.id,
@@ -1310,6 +1380,32 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            if (shellZone.route === 'deviceSetup') {
+              return (
+                <DeviceSetupRoute
+                  repair={props.repair}
+                  syncChip={routeSyncChip}
+                  camera={props.cameraPermission}
+                  notifications={props.notificationPermission}
+                  onOpenSystemSettings={() => void Linking.openSettings()}
+                  onOpenSetting={setRoute}
+                  onDone={() => {
+                    setRoute(setupReturn);
+                    setSetupReturn('home');
+                  }}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'renameDevice' && props.onRenameDevice !== undefined) {
+              return (
+                <RenameDeviceScreen
+                  current={props.deviceInfo.deviceName}
+                  onRename={props.onRenameDevice}
+                  onClose={() => setRoute('settings')}
+                />
+              );
+            }
             if (shellZone.route === 'changePin') {
               // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
               // through the session controller and REJECTS with its DomainError; the screen maps it.
@@ -1365,6 +1461,33 @@ export default function App(props: AppProps): React.JSX.Element {
                         }
                       : undefined
                   }
+                  onClose={() => setRoute('settings')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'limits' && props.staff !== undefined && currentUser !== null) {
+              // The store owner's "Batas wewenang": a limited role's amounts here, online.
+              const staff = props.staff;
+              return (
+                <LimitsScreen
+                  actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
+                  load={staff.load}
+                  onSave={staff.onSetLimits}
+                  onClose={() => setRoute('settings')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'roles' && props.staff?.tenantAdmin === true) {
+              // The main owner's "Tugas karyawan": the store roles and their switches, online.
+              const staff = props.staff;
+              return (
+                <RolesScreen
+                  load={staff.load}
+                  onCreate={staff.onCreateRole}
+                  onUpdate={staff.onUpdateRole}
+                  onDelete={staff.onDeleteRole}
                   onClose={() => setRoute('settings')}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1555,6 +1678,7 @@ export default function App(props: AppProps): React.JSX.Element {
       ) : null}
       {props.onAnswerNotifications != null &&
       zone.kind === 'shell' &&
+      zone.route !== 'deviceSetup' &&
       !accountMenu &&
       modal === null ? (
         // On the work screen, after unlock, with the reason before the OS asks (never at boot).
@@ -1628,7 +1752,8 @@ const HIDDEN = { display: 'none' } as const;
 
 /**
  * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
- * hardware back asks the surface first: the repair/notes home, and the owner's repair settings.
+ * hardware back asks the surface first: the repair/notes home, the owner's repair settings, and the
+ * new-phone setup's steps.
  */
 const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
@@ -1637,10 +1762,13 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'uncollectedDays',
   'staff',
   'staffPins',
+  'limits',
+  'roles',
   'printSettings',
   'printPaper',
   'parts',
   'paymentMethods',
+  'deviceSetup',
 ]);
 
 /**

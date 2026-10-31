@@ -169,8 +169,9 @@ async function pushServisan(
         photos: [{ slot: 'front', label: null, ref: photo(1) }],
         repairTypes: [{ item: 'screen', label: null, warrantyDays: 30, needsVideo: false }],
         claimOf: null,
+        ownershipVideo: null,
       }),
-      schemaVersion: 3,
+      schemaVersion: 4,
     },
     onTicket('repair.status_link_made', { code: claim ?? code, nonce: NONCE }),
     {

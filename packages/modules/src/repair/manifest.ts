@@ -30,6 +30,10 @@ import {
   claimTicketInput,
   correctCustomerDetailsHandler,
   correctCustomerDetailsInput,
+  correctTicketDetailsHandler,
+  correctTicketDetailsInput,
+  undoHandoverHandler,
+  undoHandoverInput,
   correctDownPaymentHandler,
   correctDownPaymentInput,
   declineProposalHandler,
@@ -138,6 +142,7 @@ export const repairModuleManifest = {
       isDangerous: true,
       description:
         'Can cancel a repair and set what the customer pays for it. The device stays in the store until it is handed back.',
+      limit: 'priceDrop',
     },
     [REPAIR_PERMISSION.handover]: {
       scope: 'store',
@@ -160,6 +165,7 @@ export const repairModuleManifest = {
       scope: 'store',
       isDangerous: true,
       description: "Can lower a repair's price with a discount, at intake or later.",
+      limit: 'priceDrop',
     },
     [REPAIR_PERMISSION.setCancelFees]: {
       scope: 'store',
@@ -171,6 +177,7 @@ export const repairModuleManifest = {
       // Recording less than the customer paid is how a down payment would go missing.
       isDangerous: true,
       description: 'Can change or remove a down payment already recorded on a repair.',
+      limit: 'priceDrop',
     },
     [REPAIR_PERMISSION.setPrintSettings]: {
       scope: 'store',
@@ -185,7 +192,8 @@ export const repairModuleManifest = {
     },
     [REPAIR_PERMISSION.warrantyException]: {
       scope: 'store',
-      // A free repair outside the warranty is money the store gives away.
+      // A free repair outside the warranty is money the store gives away, and so is handing a
+      // repaired phone back for free (deviceReturnedRule).
       isDangerous: true,
       description: 'Can open a warranty claim after the warranty ended, or charge for a claim.',
     },
@@ -261,6 +269,16 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.handover,
       input: returnDeviceInput,
       handler: returnDeviceHandler,
+    },
+    undoHandover: {
+      permission: REPAIR_PERMISSION.cancel,
+      input: undoHandoverInput,
+      handler: undoHandoverHandler,
+    },
+    correctTicketDetails: {
+      permission: REPAIR_PERMISSION.intake,
+      input: correctTicketDetailsInput,
+      handler: correctTicketDetailsHandler,
     },
     changeIntakeOptions: {
       permission: REPAIR_PERMISSION.manageIntakeOptions,

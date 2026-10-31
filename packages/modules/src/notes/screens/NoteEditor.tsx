@@ -45,10 +45,11 @@ import {
   size,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { tn } from './i18n.js';
 import { useCommand, useNotesRuntime, useQuery } from './runtime.js';

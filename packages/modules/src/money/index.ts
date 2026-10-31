@@ -4,7 +4,13 @@ export * from './constants.js';
 export type * from './schema.js';
 export * from './documents.js';
 export { postingsFor, reversalOf, type Posting } from './postings.js';
-export { MONEY_REFUSALS, documentBalance, documentTotal } from './rules.js';
+export {
+  MONEY_REFUSALS,
+  accountVisibleTo,
+  centralStoreIds,
+  documentBalance,
+  documentTotal,
+} from './rules.js';
 export {
   chargeOp,
   paymentOp,
@@ -25,6 +31,7 @@ export {
 export {
   documentMoneyQuery,
   paidOnDocumentSql,
+  reducedOnDocumentSql,
   paymentAccountsQuery,
   type CashCountRow,
   type CashDrawer,
@@ -33,3 +40,22 @@ export {
   type OpenBalanceRow,
   type PaymentAccountRow,
 } from './queries.js';
+export {
+  QRIS_FAILURES,
+  QrisError,
+  canSimulateQris,
+  qrisFailure,
+  type QrisFailure,
+  type QrisPort,
+} from './qris.js';
+export { forgetShownQrs } from './qris-hooks.js';
+export {
+  refundMethods,
+  targetOf,
+  useReduceCharge,
+  useRefund,
+  type MoneyTarget,
+  type ReduceChargeForm,
+  type RefundForm,
+  type RefundMethod,
+} from './refund.js';
