@@ -10,7 +10,12 @@ import { afterEach, expect, test } from 'vitest';
 
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import {
+  intake,
+  openRepairHarness,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 const open: RepairHarness[] = [];
 afterEach(async () => {
@@ -239,4 +244,108 @@ test('a cancel signed before the intake it cancels keeps its fee and stays cance
   expect(ticket.cancelledBy).toBe(owner.storeOwnerId);
   expect(ticket.cancelFee).toBe(0);
   await expectSameAsServer(ctx, [owner, front]);
+});
+
+/** A ticket opened and repaired on `front`, known to every device given. */
+async function repairedOn(
+  ctx: Awaited<ReturnType<typeof devices>>,
+  front: RepairHarness,
+  others: readonly RepairHarness[],
+): Promise<string> {
+  const { ticketId } = (await front.run('openTicket', intake(front), front.cashierId)) as {
+    ticketId: string;
+  };
+  await front.run('startWork', { ticketId, beforePhotos: [front.photo(30)] }, front.technicianId);
+  await front.run('markRepaired', { ticketId, afterPhotos: [front.photo(31)] }, front.technicianId);
+  for (const to of others) await ctx.sync(front, to);
+  return ticketId;
+}
+
+async function handoverSlots(h: RepairHarness, ticketId: string): Promise<string[]> {
+  const db = h.db as unknown as Kysely<never>;
+  const { rows } = await sql<{ slot: string; mediaId: string }>`
+    SELECT slot, media_id AS "mediaId" FROM repair_ticket_photos
+    WHERE ticket_id = ${ticketId} AND slot IN ('handover', 'signature') ORDER BY slot
+  `.execute(db);
+  return rows.map((row) => `${row.slot}:${row.mediaId}`);
+}
+
+test('a handover taken back on a phone running behind still leaves the phone in the store', async () => {
+  const ctx = await devices(461);
+  const { b: front, a: owner, server, sync } = ctx;
+  const ticketId = await repairedOn(ctx, front, [owner, server]);
+  await front.run('returnDevice', (await paidHandover(front, ticketId)) as never, front.cashierId);
+  await sync(front, owner);
+  await sync(front, server);
+  // The owner's clock is behind the counter's: the undo is signed "before" the handover.
+  await owner.run('undoHandover', { ticketId, reason: 'Salah servisan' }, owner.ownerId);
+  await sync(owner, server);
+
+  const ticket = await ticketOf(server, ticketId);
+  expect(ticket.location).toBe('in_store');
+  expect(ticket.returnedBy).toBeNull();
+  expect(await handoverSlots(server, ticketId)).toEqual([]);
+  await expectSameAsServer(ctx, [owner, front]);
+});
+
+test('handed over again after an undo signed behind it, the phone is out with the new evidence', async () => {
+  const ctx = await devices(471);
+  const { b: front, a: owner, server, sync } = ctx;
+  const ticketId = await repairedOn(ctx, front, [owner, server]);
+  await front.run('returnDevice', (await paidHandover(front, ticketId)) as never, front.cashierId);
+  const firstAt = (await ticketOf(front, ticketId)).returnedAt as number;
+  await sync(front, owner);
+  await sync(front, server);
+  await owner.run('undoHandover', { ticketId, reason: 'Salah servisan' }, owner.ownerId);
+  await sync(owner, front);
+  await sync(owner, server);
+  const again = (await paidHandover(front, ticketId, {}, [40, 41])) as {
+    handoverPhoto: { mediaId: string };
+    signature: { mediaId: string };
+  };
+  await front.run('returnDevice', again as never, front.cashierId);
+  await sync(front, server);
+
+  const ticket = await ticketOf(server, ticketId);
+  expect(ticket.location).toBe('returned');
+  expect(ticket.returnedBy).toBe(front.cashierId);
+  // The warranty counts from the first handover.
+  expect(ticket.returnedAt).toBe(firstAt);
+  expect(await handoverSlots(server, ticketId)).toEqual([
+    `handover:${again.handoverPhoto.mediaId}`,
+    `signature:${again.signature.mediaId}`,
+  ]);
+  await expectSameAsServer(ctx, [owner, front]);
+});
+
+test('a correction signed before the intake it corrects is applied once the intake arrives', async () => {
+  const ctx = await devices(481);
+  const { b: front, a: owner, server, sync } = ctx;
+  const { ticketId } = (await front.run('openTicket', intake(front), front.cashierId)) as {
+    ticketId: string;
+  };
+  await sync(front, owner);
+  await sync(front, server);
+  await owner.run(
+    'correctTicketDetails',
+    { ticketId, complaint: 'Layar bergaris', passcode: 'pin:1234', reason: 'Salah ketik' },
+    owner.ownerId,
+  );
+  await sync(owner, server);
+
+  const ticket = await ticketOf(server, ticketId);
+  expect(ticket.complaint).toBe('Layar bergaris');
+  await expectSameAsServer(ctx, [owner, front]);
+  // The history says what changed, and never keeps the screen lock it set.
+  const db = ctx.other.db as unknown as Kysely<never>;
+  const { rows } = await sql<{ detailJson: string }>`
+    SELECT detail_json AS "detailJson" FROM repair_ticket_events
+    WHERE ticket_id = ${ticketId} AND kind = 'repair.ticket_details_corrected'
+  `.execute(db);
+  const detail = JSON.parse(rows[0]!.detailJson) as Record<string, unknown>;
+  expect(detail['pending']).toBeUndefined();
+  expect(detail['changes']).toEqual(
+    expect.arrayContaining([expect.objectContaining({ field: 'complaint', to: 'Layar bergaris' })]),
+  );
+  expect(rows[0]!.detailJson).not.toContain('1234');
 });

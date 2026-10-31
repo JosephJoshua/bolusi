@@ -170,9 +170,33 @@ test('existing tickets settle to what the server judged', async () => {
     ['repair.ticket_opened', OPENED_AT],
     ['repair.work_started', 6_000],
   ]);
+  // An undo signed on a phone running behind its handover folded first, so the phone read as out.
+  const undone = await seedTicket({ outcome: 'repaired', location: 'returned' }, [
+    ['repair.ticket_opened', OPENED_AT],
+    ['repair.marked_repaired', 6_000, { note: '' }],
+    ['repair.handover_reversed', 6_500, { reason: 'Salah servisan' }],
+    ['repair.device_returned', 7_000, { note: '' }],
+  ]);
+  // Handed over, taken back, handed over again: out, from the first handover.
+  const again = await seedTicket({ outcome: 'repaired', location: 'in_store' }, [
+    ['repair.ticket_opened', OPENED_AT],
+    ['repair.marked_repaired', 6_000, { note: '' }],
+    ['repair.device_returned', 7_000, { note: '' }],
+    ['repair.handover_reversed', 7_500, { reason: 'Salah servisan' }],
+    ['repair.device_returned', 8_000, { note: '' }],
+  ]);
   const before = await ticket(untouched);
 
   await up(testDb.db as never);
+
+  const u = await ticket(undone);
+  expect(u.location).toBe('in_store');
+  expect(u.returnedBy).toBeNull();
+  expect(u.outcome).toBe('repaired');
+  const a = await ticket(again);
+  expect(a.location).toBe('returned');
+  expect(a.returnedBy).toBe(world.userId);
+  expect(Number(a.returnedAt)).toBe(7_000);
 
   const c = await ticket(cancelled);
   expect(c.outcome).toBe('cancelled');
