@@ -49,6 +49,10 @@
       "types": "./dist/inventory/screens/index.d.ts",
       "default": "./dist/inventory/screens/index.js"
     },
+    "./inventory/desktop": {
+      "types": "./dist/inventory/desktop/index.d.ts",
+      "default": "./dist/inventory/desktop/index.js"
+    },
     "./money": {
       "types": "./dist/money/index.d.ts",
       "default": "./dist/money/index.js"

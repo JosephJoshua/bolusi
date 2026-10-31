@@ -13,10 +13,11 @@ import {
   space,
   type,
   type IconName,
+  Text,
 } from '@bolusi/ui';
 import { t } from '@bolusi/i18n';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import { FlowScreen, Section, type ScreenChrome } from '../../screen-kit/screens/views.js';

@@ -7,6 +7,9 @@ import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import idApprovalsCatalog from '@bolusi/modules/approvals/i18n/id.json';
 import enApprovalsCatalog from '@bolusi/modules/approvals/i18n/en.json';
 import { registerApprovalsCatalog } from '@bolusi/modules/approvals';
+import idInventoryCatalog from '@bolusi/modules/inventory/i18n/id.json';
+import enInventoryCatalog from '@bolusi/modules/inventory/i18n/en.json';
+import { registerInventoryCatalog } from '@bolusi/modules/inventory/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { applyTheme, TooltipProvider } from '@bolusi/ui-web';
 import { StrictMode } from 'react';
@@ -20,6 +23,7 @@ initI18n({ locale: 'id' });
 registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
 registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
 registerApprovalsCatalog({ id: idApprovalsCatalog, en: enApprovalsCatalog });
+registerInventoryCatalog({ id: idInventoryCatalog, en: enInventoryCatalog });
 applyTheme();
 
 const root = document.getElementById('root');
