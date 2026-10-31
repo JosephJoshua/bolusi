@@ -1258,8 +1258,10 @@ export const handoverReversedRule: Rule = async (op, ctx) => {
   if (ticket.location !== 'returned') {
     throw invalidTransition(ticket, op.type, 'notReturned', 'the phone has not been handed over');
   }
-  // Counted from the first handover, so taking it back again and again never stretches it.
-  if (ticket.returnedAt === null || op.timestamp - ticket.returnedAt > HANDOVER_UNDO_WINDOW_MS) {
+  // Counted from the first handover, so taking it back again and again never stretches it. The
+  // server holds it to when it received the undo too, so a phone clock set back cannot stretch it.
+  const at = Math.max(op.timestamp, ctx.receivedAt ?? op.timestamp);
+  if (ticket.returnedAt === null || at - ticket.returnedAt > HANDOVER_UNDO_WINDOW_MS) {
     throw invalidTransition(ticket, op.type, 'undoTooLate', 'the handover was too long ago');
   }
   // What went home is at stake: a limited role (a manager) only within its cancel limit.
