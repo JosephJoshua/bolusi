@@ -14,7 +14,6 @@ import {
   space,
   type,
   type IconName,
-  Text,
 } from '@bolusi/ui';
 import { t } from '@bolusi/i18n';
 import { useState } from 'react';
