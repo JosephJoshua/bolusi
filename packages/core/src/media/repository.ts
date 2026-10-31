@@ -153,6 +153,23 @@ export async function selectDrainable<DB>(
   return result.rows.map(toItem);
 }
 
+/**
+ * The server refused `operationId`, so the captures it committed to will never be its evidence: the
+ * server has no op to file them under. They go back to being unattached captures, which the drain
+ * never selects and the pruning pass deletes once the orphan window passes, so they stop retrying
+ * and stop counting as pending. Runs inside the transaction that marks the op refused. What already
+ * reached the server stays as it is.
+ */
+export async function releaseRefusedOpMedia<DB>(
+  db: Kysely<DB>,
+  operationId: string,
+): Promise<void> {
+  await sql`
+    UPDATE media_items SET attached_to_operation_id = NULL
+    WHERE attached_to_operation_id = ${operationId} AND upload_status <> 'uploaded'
+  `.execute(db);
+}
+
 /** One row by id, or null. */
 export async function findMediaItem<DB>(
   db: Kysely<DB>,

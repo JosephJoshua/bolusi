@@ -98,7 +98,8 @@ export async function insertMediaItem<DB>(
  * 06 §4: "`attachedToOperationId` — set once when the referencing op is appended; never changed
  * afterwards." The `WHERE attached_to_operation_id IS NULL` clause is what makes "once" structural
  * rather than a convention — a second attach touches zero rows instead of re-pointing evidence at a
- * different operation.
+ * different operation. The one exception is a refusal: the server never holds a refused op, so its
+ * captures are released (`releaseRefusedOpMedia` in core) rather than uploaded.
  *
  * This is the command runtime's step (04 §5.1 step 5): the app's append seam (`bootstrap/runtime.ts`)
  * calls it for every `mediaRef` in each appended op's payload, inside the append transaction.

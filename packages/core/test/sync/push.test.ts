@@ -21,7 +21,12 @@ import {
 } from '@bolusi/schemas';
 import { opRowOf } from '@bolusi/test-support';
 
-import { insertOpLogRow, runPushPhase } from '../../src/index.js';
+import {
+  insertOpLogRow,
+  pendingMediaCount,
+  runPushPhase,
+  selectDrainable,
+} from '../../src/index.js';
 import {
   makeDevice,
   makeSignedNoteOp,
@@ -360,6 +365,61 @@ describe('a refused op is rolled out of this device`s projection', () => {
     await runPushPhase(deps());
 
     expect(await noteBody(noteId)).toBeUndefined();
+  });
+
+  it('a refused op`s captures leave the upload queue; an accepted op`s stay', async () => {
+    // QA saw pendingMediaCount climb after a refusal: the photos of a change the server refused
+    // stayed queued and retried for an op the server will never hold.
+    let seed = 8400;
+    const capture = async (opId: string, status: string): Promise<string> => {
+      const id = uuidV7(prngFor((seed += 1)), clockAt);
+      await sql`
+        INSERT INTO media_items (
+          id, tenant_id, store_id, captured_by_user_id, device_id, type, mime_type, byte_size,
+          sha256, captured_at, attached_to_operation_id, upload_status
+        ) VALUES (
+          ${id}, ${tenantId}, ${storeId}, ${userId}, ${device.id}, 'image', 'image/jpeg', ${100},
+          ${'a'.repeat(64)}, ${clockAt}, ${opId}, ${status}
+        )
+      `.execute(harness.db);
+      return id;
+    };
+    const kept = await appendLocal(1, uuidV7(prngFor(8401), clockAt), 'notes.note_created', {
+      title: 'Diterima',
+      body: 'ok',
+      mediaRef: null,
+    });
+    const refused = await appendLocal(2, uuidV7(prngFor(8402), clockAt), 'notes.note_created', {
+      title: 'Ditolak',
+      body: 'x',
+      mediaRef: null,
+    });
+    const keptPhoto = await capture(kept.id, 'pending');
+    const pending = await capture(refused.id, 'pending');
+    const failed = await capture(refused.id, 'failed');
+    const uploaded = await capture(refused.id, 'uploaded');
+    expect(await pendingMediaCount(harness.db)).toBe(3);
+
+    harness.transport.scriptPush({
+      results: [
+        { id: kept.id, status: 'accepted', serverSeq: 1 },
+        { id: refused.id, status: 'rejected', code: 'RULE_VIOLATED', reason: 'x' },
+      ],
+      serverTime: clockAt,
+    });
+    await runPushPhase(deps());
+
+    expect(await pendingMediaCount(harness.db)).toBe(1);
+    expect((await selectDrainable(harness.db, clockAt)).map((item) => item.id)).toEqual([
+      keptPhoto,
+    ]);
+    const attached = await sql<{ id: string; opId: string | null }>`
+      SELECT id, attached_to_operation_id AS "opId" FROM media_items
+    `.execute(harness.db);
+    const opOf = new Map(attached.rows.map((row) => [row.id, row.opId]));
+    expect([opOf.get(pending), opOf.get(failed)]).toEqual([null, null]);
+    // What already reached the server keeps its link.
+    expect(opOf.get(uploaded)).toBe(refused.id);
   });
 
   it('CHAIN_GAP is not a refusal: the record keeps the op', async () => {
