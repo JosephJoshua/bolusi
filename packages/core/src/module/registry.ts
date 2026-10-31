@@ -38,6 +38,7 @@ import {
 import { ProjectionRegistry } from '../projection/registry.js';
 import type {
   ModuleProjectionManifest,
+  OperationConcerns,
   ProjectionApplier,
   ProjectionDb,
 } from '../projection/manifest.js';
@@ -259,10 +260,12 @@ export function registerModules<DB>(
 /** The projection-facing slice (04 §4) task 08's engine consumes: id, tables, type → applier. */
 function toProjectionManifest<DB>(module: AnyModuleDefinition<DB>): ModuleProjectionManifest<DB> {
   const appliers: Record<string, ProjectionApplier<DB>> = {};
+  const concerns: Record<string, OperationConcerns> = {};
   for (const [type, declaration] of Object.entries(module.operations)) {
     appliers[type] = declaration.apply;
+    if (declaration.concerns !== undefined) concerns[type] = declaration.concerns;
   }
-  return { id: module.id, tables: module.projections.tables, appliers };
+  return { id: module.id, tables: module.projections.tables, appliers, concerns };
 }
 
 /**

@@ -12,6 +12,8 @@ import type { Kysely } from 'kysely';
 
 import type { SignedOperation } from '@bolusi/schemas';
 
+import type { EntityRef } from './invalidation.js';
+
 /**
  * A Kysely handle restricted to the dialect-neutral subset (04 §2). The engine is generic
  * over the concrete schema `DB` so a module's appliers keep their real column typing
@@ -87,7 +89,12 @@ export interface ModuleProjectionManifest<DB> {
   readonly tables: Readonly<Record<string, ProjectionTableManifest>>;
   /** Op `type` → applier (§4.1). Every type this module folds appears here. */
   readonly appliers: Readonly<Record<string, ProjectionApplier<DB>>>;
+  /** Op `type` → the other records it concerns, for the types that declare it. */
+  readonly concerns?: Readonly<Record<string, OperationConcerns>>;
 }
+
+/** The records besides its own that an op changes the look of (`OperationDeclaration.concerns`). */
+export type OperationConcerns = (op: ProjectionOperation) => readonly EntityRef[];
 
 /** Column names of a table in DECLARATION ORDER (the oracle's column list, §3.4). */
 export function declaredColumns(table: ProjectionTableManifest): readonly string[] {

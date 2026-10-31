@@ -28,6 +28,10 @@
     "./direction": {
       "types": "./dist/direction.d.ts",
       "default": "./dist/direction.js"
+    },
+    "./fresh": {
+      "types": "./dist/fresh.d.ts",
+      "default": "./dist/fresh.js"
     }
   },
   "files": [

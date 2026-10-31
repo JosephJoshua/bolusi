@@ -66,6 +66,9 @@ export { IconButton, type IconButtonProps } from './components/IconButton.js';
 export { Kbd } from './components/Kbd.js';
 export { Card, Fact, FactGrid, Section } from './components/Layout.js';
 export { Menu, type MenuItem } from './components/Menu.js';
+export { FreshGlow } from './components/FreshGlow.js';
+/** Fed by the app with what another device changed; read by `FreshGlow`. */
+export { markFresh } from '@bolusi/ui/fresh';
 export { RollingText } from './components/RollingText.js';
 export {
   CaptureTile,

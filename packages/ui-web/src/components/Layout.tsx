@@ -2,6 +2,8 @@
 import { clsx } from 'clsx';
 import type { ReactNode } from 'react';
 
+import { FreshGlow } from './FreshGlow.js';
+
 export function Section({
   title,
   action,
@@ -77,17 +79,26 @@ export function Fact({
 export function Card({
   children,
   className,
+  freshId,
   testId,
 }: {
   readonly children: ReactNode;
   readonly className?: string | undefined;
+  /** The record the card shows: it glows once when another device changes it (`FreshGlow`). */
+  readonly freshId?: string | undefined;
   readonly testId?: string | undefined;
 }): React.JSX.Element {
   return (
     <div
       data-testid={testId}
-      className={clsx('rounded-md border border-border bg-surface p-4', className)}
+      className={clsx(
+        'rounded-md border border-border bg-surface p-4',
+        // Its own layer, so the glow sits over the card's fill and under its content.
+        freshId !== undefined && 'relative isolate',
+        className,
+      )}
     >
+      {freshId === undefined ? null : <FreshGlow id={freshId} className="rounded-md" />}
       {children}
     </div>
   );
