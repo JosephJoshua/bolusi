@@ -135,6 +135,20 @@ export default tseslint.config(
     },
   },
   {
+    // Permission-scoped sync drops PULLED ops a device may no longer read (another device's
+    // history, held only as a copy) and re-folds their records. The device's own ops, which its
+    // signing chain runs through, are never touched (the query requires arrival_seq IS NOT NULL).
+    // The server's log stays append-only.
+    name: 'bolusi/oplog-read-purge-allowlist',
+    files: ['packages/core/src/sync/read-purge.ts'],
+    rules: {
+      'bolusi/no-op-table-update': [
+        'error',
+        { allowFiles: ['packages/core/src/sync/read-purge.ts'] },
+      ],
+    },
+  },
+  {
     name: 'bolusi/money',
     files: ['packages/schemas/src/**/*.{ts,tsx}', 'packages/modules/src/**/*.{ts,tsx}'],
     rules: {

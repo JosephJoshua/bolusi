@@ -96,9 +96,14 @@ export const OWNER_POWER_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.roleManage,
 ];
 
+/** Whether a role is an owner role: tenant-wide, or holding power over other people's accounts. */
+export function isOwnerRoleOf(scopeType: string, permissionIds: readonly string[]): boolean {
+  if (scopeType === 'tenant') return true;
+  return permissionIds.some((id) => OWNER_POWER_PERMISSIONS.includes(id));
+}
+
 function isOwnerRole(role: Pick<RoleRow, 'scopeType' | 'permissionIds'>): boolean {
-  if (role.scopeType === 'tenant') return true;
-  return permissionIdsOf(role).some((id) => OWNER_POWER_PERMISSIONS.includes(id));
+  return isOwnerRoleOf(role.scopeType, permissionIdsOf(role));
 }
 
 function staffRoleOf(row: RoleRow): StaffRole {

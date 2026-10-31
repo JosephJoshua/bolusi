@@ -40,7 +40,12 @@ export function createApprovalOperations(
   kinds: ApprovalKinds,
 ): Readonly<Record<string, OperationDeclaration<ApprovalsDatabase>>> {
   const rules = createApprovalRules(kinds);
-  const common = { entityType: APPROVAL_ENTITY, permission: APPROVAL_PERMISSION.use } as const;
+  // Everyone may ask for an approval, and the asker and the deciders both follow it.
+  const common = {
+    entityType: APPROVAL_ENTITY,
+    permission: APPROVAL_PERMISSION.use,
+    read: APPROVAL_PERMISSION.use,
+  } as const;
   return {
     [APPROVAL_OP.requested]: {
       ...common,

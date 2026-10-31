@@ -100,6 +100,7 @@ export function validManifest(seed: number): ModuleManifest<FixtureSuiteDatabase
         apply: noopApplier,
         rule: null,
         permission: `${id}.create`,
+        read: `${id}.read`,
         entityType: 'widget',
       },
     },

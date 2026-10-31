@@ -25,6 +25,7 @@ import {
 import { createApp, serveWithRealtime } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { FakeClock } from '@bolusi/test-support';
+import { OWNER_POWER_PERMISSIONS } from '@bolusi/core';
 
 import type { DeviceIdentity } from './device.js';
 import type { FetchLike } from './fault-fetch.js';
@@ -376,6 +377,15 @@ export class HarnessServer {
                                 AND role_id = md5(${identity.tenantId} || ':harness-all')::uuid)`.execute(
       this.db,
     );
+    // A staff role with every permission but the owner powers, granted to no one, as provisioning
+    // seeds the preset staff roles: shared devices are sent what staff roles may read.
+    await sql`INSERT INTO roles (id, tenant_id, name, scope_type, created_at)
+              VALUES (md5(${identity.tenantId} || ':harness-staff')::uuid, ${identity.tenantId}, ${'harness_staff'}, ${'store'}, ${CREATED_AT})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO role_permissions (role_id, permission_id, tenant_id)
+              SELECT md5(${identity.tenantId} || ':harness-staff')::uuid, id, ${identity.tenantId} FROM permissions
+              WHERE id NOT IN (${sql.join(OWNER_POWER_PERMISSIONS)})
+              ON CONFLICT DO NOTHING`.execute(this.db);
     await sql`INSERT INTO devices (id, tenant_id, store_id, kind, signing_key_public, status, revoked_at, enrolled_at, last_seq, last_hash, last_sync_at)
               VALUES (${identity.deviceId}, ${identity.tenantId}, ${identity.storeId}, ${'member'}, ${identity.publicKeyBase64}, ${status},
                       ${status === 'revoked' ? CREATED_AT : null}, ${CREATED_AT}, ${0n}, ${null}, ${null})

@@ -163,6 +163,11 @@ async function build(options: { online?: boolean } = {}): Promise<Built> {
     db,
     deviceId: DEVICE_ID,
     transport,
+    readScope: {
+      registry: { types: () => [], readPermissionFor: () => undefined },
+      refold: () => Promise.resolve(),
+      catchUpWatermarks: () => Promise.resolve(),
+    },
     bundle: { refresh: () => Promise.resolve('unchanged') },
     applyPulledOp: () => Promise.resolve(),
     refoldRefused: () => Promise.resolve(),

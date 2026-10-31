@@ -130,6 +130,7 @@ export function createMoneyOperations(
       apply: accountSavedApplier,
       rule: accountSavedRule,
       permission: MONEY_PERMISSION.manageAccounts,
+      read: MONEY_PERMISSION.read,
       entityType: MONEY_ACCOUNT_ENTITY,
     },
     [MONEY_OP.centralAccountSaved]: {
@@ -139,6 +140,7 @@ export function createMoneyOperations(
       apply: accountSavedApplier,
       rule: centralAccountSavedRule,
       permission: MONEY_PERMISSION.manageCentralAccounts,
+      read: MONEY_PERMISSION.read,
       entityType: MONEY_ACCOUNT_ENTITY,
       scope: 'tenant',
     },
@@ -149,6 +151,7 @@ export function createMoneyOperations(
       reversal: 'Lowered only by an owner with money.charge_reduced.',
       rule: rules.chargeRecordedRule,
       permission: MONEY_PERMISSION.receive,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.chargeReduced]: {
       ...entry,
@@ -158,6 +161,7 @@ export function createMoneyOperations(
         'Not reversible: what the customer owes was lowered. Charging again is a new charge.',
       rule: rules.chargeReducedRule,
       permission: MONEY_PERMISSION.refund,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.paymentReceived]: {
       ...entry,
@@ -167,6 +171,7 @@ export function createMoneyOperations(
         'Cancelled by an owner with money.payment_voided, or given back with money.refund_paid.',
       rule: rules.paymentReceivedRule,
       permission: MONEY_PERMISSION.receive,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.paymentVoided]: {
       schemaVersion: 1,
@@ -175,6 +180,7 @@ export function createMoneyOperations(
       apply: paymentVoidedApplier,
       rule: rules.paymentVoidedRule,
       permission: MONEY_PERMISSION.voidPayment,
+      read: MONEY_PERMISSION.read,
       entityType: MONEY_ENTRY_ENTITY,
     },
     [MONEY_OP.cashMoveVoided]: {
@@ -185,6 +191,7 @@ export function createMoneyOperations(
       rule: rules.cashMoveVoidedRule,
       // Changing what the drawer should hold is settling the book, the owner's call.
       permission: MONEY_PERMISSION.adjustCash,
+      read: MONEY_PERMISSION.read,
       entityType: MONEY_ENTRY_ENTITY,
     },
     [MONEY_OP.refundPaid]: {
@@ -194,6 +201,7 @@ export function createMoneyOperations(
       reversal: NOT_REVERSIBLE,
       rule: rules.refundPaidRule,
       permission: MONEY_PERMISSION.receive,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.cashMoved]: {
       ...entry,
@@ -202,6 +210,7 @@ export function createMoneyOperations(
       reversal: NOT_REVERSIBLE,
       rule: rules.cashMovedRule,
       permission: MONEY_PERMISSION.moveCash,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.cashCounted]: {
       ...entry,
@@ -210,6 +219,7 @@ export function createMoneyOperations(
       reversal: 'Not reversible: the drawer was counted. Count again for a new figure.',
       rule: rules.cashCountedRule,
       permission: MONEY_PERMISSION.countCash,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.cashAdjusted]: {
       ...entry,
@@ -218,6 +228,7 @@ export function createMoneyOperations(
       reversal: 'Reversed by an opposite money.cash_adjusted.',
       rule: rules.cashAdjustedRule,
       permission: MONEY_PERMISSION.adjustCash,
+      read: MONEY_PERMISSION.read,
     },
   };
 }
