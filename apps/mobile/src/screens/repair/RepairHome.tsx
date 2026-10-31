@@ -66,6 +66,11 @@ export interface RepairHomeProps {
    * font change, Android recreating the app), already owner-checked by the shell.
    */
   readonly restoredDraft?: RepairDraft | null;
+  /**
+   * The colleague who started the restored intake, when it was not this person: the intake belongs
+   * to the device, so they may carry on with it, but it waits on the board rather than opening.
+   */
+  readonly intakeStartedBy?: string | null | undefined;
   readonly onDraftChange?: ((draft: RepairDraft | null) => void) | undefined;
 }
 
@@ -77,6 +82,7 @@ export function RepairHome({
   onOpenSyncStatus,
   onRegisterSurfaceNav,
   restoredDraft,
+  intakeStartedBy = null,
   onDraftChange,
 }: RepairHomeProps): React.JSX.Element {
   // Read once at mount: the lock unmounts this surface and the unlock remounts it.
@@ -85,7 +91,9 @@ export function RepairHome({
       ? { kind: 'board' }
       : restoredDraft.kind === 'handover'
         ? { kind: 'handover', ticketId: restoredDraft.ticketId }
-        : { kind: 'intake' },
+        : intakeStartedBy === null
+          ? { kind: 'intake' }
+          : { kind: 'board' },
   );
   const viewport = useViewport();
   const split = viewport.widthClass === 'expanded' && view.kind !== 'intake';
@@ -145,6 +153,13 @@ export function RepairHome({
         runLeave(() => setView({ kind: 'ticket', ticketId }));
       }}
       onNewIntake={() => runLeave(() => setView({ kind: 'intake' }))}
+      waitingDraft={
+        restoredDraft?.kind !== 'intake'
+          ? null
+          : restoredDraft.claimOf === null
+            ? 'intake'
+            : 'claim'
+      }
       onOpenSyncStatus={onOpenSyncStatus}
     />
   );
@@ -215,6 +230,7 @@ export function RepairHome({
             chrome={chrome}
             now={now}
             restoredDraft={view.draft ?? (restoredDraft?.kind === 'intake' ? restoredDraft : null)}
+            startedBy={view.draft === undefined ? intakeStartedBy : null}
             onDraftChange={onDraftChange}
             onRegisterDiscardGuard={registerDiscardGuard}
             onRegisterStepBack={registerStepBack}

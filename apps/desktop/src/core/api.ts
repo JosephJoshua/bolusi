@@ -19,6 +19,8 @@ export interface SessionView {
   readonly locked: boolean;
   readonly lockReason: LockReason | null;
   readonly workspace: UserWorkspace | null;
+  /** Drafts that belong to this PC (an intake anyone here may carry on), null while locked. */
+  readonly deviceDrafts: Readonly<Record<string, unknown>> | null;
   readonly canUnlock: boolean;
   readonly canReset: boolean;
   readonly canManageStaff: boolean;

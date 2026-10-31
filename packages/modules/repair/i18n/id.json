@@ -189,6 +189,7 @@
     "discardTitle": "Buang servisan ini?",
     "keepEditing": "Lanjut isi",
     "progress": "{step} dari {total}",
+    "startedBy": "Dimulai oleh {name}",
     "step": {
       "condition": "Kondisi HP",
       "customer": "Pelanggan",

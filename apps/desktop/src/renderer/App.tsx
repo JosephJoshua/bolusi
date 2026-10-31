@@ -8,11 +8,7 @@ import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { tapTarget, type SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { resolveZone } from '@bolusi/device/navigation/zone';
-import {
-  emptyWorkspace,
-  withDraft,
-  type UserWorkspace,
-} from '@bolusi/device/state/user-workspaces';
+import { withDraft, type UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import { t, translateRoleKey } from '@bolusi/i18n';
 import { REPAIR_MODULE_ID, parseIntakeDraft } from '@bolusi/modules/repair';
 import { RepairRuntimeProvider, type IntakeDraft } from '@bolusi/modules/repair/desktop';
@@ -356,25 +352,38 @@ function LiveCounter({
   );
   const [syncOpen, setSyncOpen] = useState(false);
 
-  // The intake in progress lives in this person's workspace in the core, so it survives a lock, a
-  // switch to a colleague and a restart, and only this person's PIN brings it back.
+  // The intake in progress belongs to this PC (Joseph, 2026-10-31): it survives a lock, a switch
+  // to a colleague and a restart, and whoever signs in next may carry on with it. One kept in this
+  // person's own workspace by an older version still comes back, and moves to the PC on its next
+  // change.
   const workspace = session.workspace?.ownerUserId === userId ? session.workspace : null;
+  const deviceDraft = session.deviceDrafts?.[REPAIR_MODULE_ID];
   const restoredDraft = useMemo<IntakeDraft | null>(
-    () => (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
-    [workspace],
+    () =>
+      parseIntakeDraft(deviceDraft) ??
+      (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
+    [deviceDraft, workspace],
   );
-  // The core's copy arrives a moment after each write; the next write builds on the last one sent.
-  const sent = useRef<UserWorkspace | null>(workspace);
+  // The core's copy arrives a moment after each write; a write repeating the last one is skipped.
+  const sent = useRef<string>(JSON.stringify(deviceDraft ?? null));
+  const legacy = useRef<UserWorkspace | null>(
+    workspace !== null && workspace.drafts[REPAIR_MODULE_ID] !== undefined ? workspace : null,
+  );
   const onDraftChange = useCallback(
     (draft: IntakeDraft | null) => {
-      const base = sent.current ?? emptyWorkspace(userId);
-      const held = base.drafts[REPAIR_MODULE_ID] ?? null;
-      if (JSON.stringify(held) === JSON.stringify(draft)) return;
-      const next = withDraft(base, REPAIR_MODULE_ID, draft);
-      sent.current = next;
-      client.call('session.updateWorkspace', next).catch(() => undefined);
+      const held = legacy.current;
+      if (held !== null) {
+        legacy.current = null;
+        client
+          .call('session.updateWorkspace', withDraft(held, REPAIR_MODULE_ID, null))
+          .catch(() => undefined);
+      }
+      const json = JSON.stringify(draft);
+      if (json === sent.current) return;
+      sent.current = json;
+      client.call('session.updateDeviceDraft', REPAIR_MODULE_ID, draft).catch(() => undefined);
     },
-    [client, userId],
+    [client],
   );
 
   return (
@@ -496,14 +505,10 @@ function demoNameOf(userId: string): string | null {
 /** The seeded demo (the dev server in a browser, and the demo build): four people, no core. */
 function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Element {
   const [person, setPerson] = useState<DemoPerson>(DEMO_PEOPLE[0]!);
-  // Each person's intake waits for them, as the core's workspaces do.
-  const [drafts, setDrafts] = useState<Readonly<Record<string, IntakeDraft | null>>>({});
+  // One intake for the whole PC, as the core keeps it: whoever is here may carry on with it.
+  const [draft, setDraft] = useState<IntakeDraft | null>(null);
   const runtime = useMemo(() => demoRuntimeFor(person, capture), [person, capture]);
   const settings = useMemo((): SettingsAccess => ({ staff: demoStaffFor(person) }), [person]);
-  const onDraftChange = useCallback(
-    (draft: IntakeDraft | null) => setDrafts((all) => ({ ...all, [person.userId]: draft })),
-    [person.userId],
-  );
   return (
     <RepairRuntimeProvider runtime={runtime}>
       <Counter
@@ -525,8 +530,8 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
           label: other.name,
           onSelect: () => setPerson(other),
         }))}
-        restoredDraft={drafts[person.userId] ?? null}
-        onDraftChange={onDraftChange}
+        restoredDraft={draft}
+        onDraftChange={setDraft}
         settings={settings}
       />
     </RepairRuntimeProvider>

@@ -11,6 +11,12 @@ import { sql, type Kysely } from 'kysely';
 
 import { encryptColumnValue } from '../crypto/column-cipher.js';
 
+/**
+ * The key of the work that belongs to the device rather than to one person: an intake anyone
+ * signed in here may carry on with (Joseph, 2026-10-31). Not an id, so no user can hold it.
+ */
+export const DEVICE_WORK_KEY = 'device';
+
 /** Where `SessionManager` keeps each user's work between app runs. */
 export interface WorkStore<TWork> {
   /** The user's saved work, or undefined when there is none or it can no longer be read. */
@@ -63,7 +69,7 @@ export function createWorkStore<DB, TWork>(
 /**
  * Drop saved work of anyone not in `userIds` (the device's active users). A deactivated or removed
  * employee can never unlock again, so their drafts, with whatever customer data they hold, should
- * not stay on the device.
+ * not stay on the device. The device's own work stays while anyone can still sign in here.
  */
 export async function deleteWorkExcept<DB>(
   db: Kysely<DB>,
@@ -73,5 +79,7 @@ export async function deleteWorkExcept<DB>(
     await sql`DELETE FROM user_work`.execute(db);
     return;
   }
-  await sql`DELETE FROM user_work WHERE user_id NOT IN (${sql.join(userIds)})`.execute(db);
+  await sql`
+    DELETE FROM user_work WHERE user_id NOT IN (${sql.join([...userIds, DEVICE_WORK_KEY])})
+  `.execute(db);
 }

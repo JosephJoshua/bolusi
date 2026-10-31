@@ -12,6 +12,7 @@ import {
   type ListFilter,
 } from '@bolusi/modules/inventory/desktop';
 import { KasPage, MONEY_PERMISSION, MoneyRuntimeProvider, tm } from '@bolusi/modules/money/desktop';
+import { keptIntakeDraft, startedByOther } from '@bolusi/modules/repair';
 import {
   IntakePage,
   RepairBoardPage,
@@ -121,7 +122,7 @@ export function Counter({
   readonly onOpenSyncStatus?: (() => void) | undefined;
   /** What Settings may do for this person besides the repair settings; the demo has only staff. */
   readonly settings?: SettingsAccess | undefined;
-  /** This person's unfinished intake, kept across a lock or a switch to someone else. */
+  /** This PC's unfinished intake, kept across a lock, a restart or a switch to someone else. */
   readonly restoredDraft: IntakeDraft | null;
   readonly onDraftChange: (draft: IntakeDraft | null) => void;
   /** This PC's first-run setup waits for this person: it opens first. */
@@ -129,13 +130,21 @@ export function Counter({
   /** The setup was finished or put off; absent where there is none to record (the demo). */
   readonly onSetupDone?: (() => void) | undefined;
 }): React.JSX.Element {
-  // Someone who left an intake half done comes back to it, as on the phone.
+  // Someone who left an intake half done comes back to it, as on the phone. One a colleague left
+  // waits on the board instead, for whoever picks it up.
+  const startedBy = startedByOther(restoredDraft, person.userId);
+  const ownDraft = restoredDraft !== null && startedBy === null;
   const [page, setPage] = useState<Page>(() =>
-    setupPending
-      ? { kind: 'setup' }
-      : restoredDraft === null
-        ? { kind: 'board' }
-        : { kind: 'intake' },
+    setupPending ? { kind: 'setup' } : ownDraft ? { kind: 'intake' } : { kind: 'board' },
+  );
+  // The intake belongs to the PC; it names who started it the first time it is kept.
+  const { userId: personId, name: personName } = person;
+  const keepDraft = useCallback(
+    (draft: IntakeDraft | null) =>
+      onDraftChange(
+        draft === null ? null : keptIntakeDraft(draft, { userId: personId, name: personName }),
+      ),
+    [onDraftChange, personId, personName],
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   // The servisan an intake just opened, so its number is stamped in once; any other pick clears it.
@@ -197,7 +206,7 @@ export function Counter({
   }, [setupPending]);
   const finishSetup = (): void => {
     onSetupDone?.();
-    setPage(restoredDraft === null ? { kind: 'board' } : { kind: 'intake' });
+    setPage(ownDraft ? { kind: 'intake' } : { kind: 'board' });
   };
   // Settings opens from the person menu too, as on the phone. Switching person leaves Settings
   // as well; locking keeps everything as it is.
@@ -328,9 +337,10 @@ export function Counter({
           now={Date.now}
           restoredDraft={page.claim ?? restoredDraft}
           prefilled={page.claim !== undefined}
-          onDraftChange={onDraftChange}
+          startedBy={page.claim === undefined ? startedBy : null}
+          onDraftChange={keepDraft}
           onOpened={(ticketId) => {
-            onDraftChange(null);
+            keepDraft(null);
             setSelectedTicketId(ticketId);
             setJustOpenedTicketId(ticketId);
             setOpenedTicketId(ticketId);

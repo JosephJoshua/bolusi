@@ -78,6 +78,8 @@ export interface RepairBoardProps {
   readonly now: () => number;
   readonly onOpenTicket: (ticketId: string) => void;
   readonly onNewIntake: () => void;
+  /** An unfinished intake or claim waits on this device: the button carries on with it. */
+  readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
   readonly onOpenSyncStatus: () => void;
   /**
    * The ticket open beside the board on a tablet, marked so the eye finds it in the list. Its next
@@ -105,6 +107,7 @@ export function RepairBoard({
   now,
   onOpenTicket,
   onNewIntake,
+  waitingDraft = null,
   onOpenSyncStatus,
   selectedTicketId = null,
   testID = 'repair.board',
@@ -274,7 +277,13 @@ export function RepairBoard({
       bottomAction={
         can.intake ? (
           <Button
-            label={tn('repair.action.newIntake')}
+            label={tn(
+              waitingDraft === 'claim'
+                ? 'repair.action.resumeClaim'
+                : waitingDraft === 'intake'
+                  ? 'repair.action.resumeIntake'
+                  : 'repair.action.newIntake',
+            )}
             // One primary on screen: with a ticket open beside the board, its next step leads.
             variant={selectedTicketId === null ? 'primary' : 'secondary'}
             onPress={onNewIntake}

@@ -1131,9 +1131,33 @@ const zIntakeDraft = z.strictObject({
     })
     .nullable()
     .default(null),
+  /**
+   * Who started it. An unfinished intake belongs to the device, so a colleague may carry on with
+   * it; the servisan is recorded under whoever saves it (Joseph, 2026-10-31).
+   */
+  startedBy: z.strictObject({ userId: z.string(), name: z.string() }).nullable().default(null),
 });
 
 export type IntakeDraft = z.infer<typeof zIntakeDraft>;
+
+/**
+ * The draft as the device keeps it, naming who started it the first time it is kept (once their
+ * name is known: the staff list may still be loading).
+ */
+export function keptIntakeDraft(
+  draft: IntakeDraft,
+  person: { readonly userId: string; readonly name: string },
+): IntakeDraft {
+  return draft.startedBy !== null || person.name === ''
+    ? draft
+    : { ...draft, startedBy: { userId: person.userId, name: person.name } };
+}
+
+/** Who started this intake, when it was someone other than `userId`; null otherwise. */
+export function startedByOther(draft: IntakeDraft | null, userId: string): string | null {
+  const started = draft?.startedBy ?? null;
+  return started === null || started.userId === userId ? null : started.name;
+}
 export type QuoteLineDraft = z.infer<typeof zLineDraft>;
 
 export function parseIntakeDraft(value: unknown): IntakeDraft | null {
@@ -1201,6 +1225,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     downPaymentReference: '',
     ready: '',
     claimOf: null,
+    startedBy: null,
   };
 }
 

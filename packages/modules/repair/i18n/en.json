@@ -189,6 +189,7 @@
     "discardTitle": "Discard this intake?",
     "keepEditing": "Keep editing",
     "progress": "Step {step} of {total}",
+    "startedBy": "Started by {name}",
     "step": {
       "condition": "Condition",
       "customer": "Customer",

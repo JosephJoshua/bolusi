@@ -9,7 +9,7 @@
 //
 // Determinism (T-6): a FakeClock and a hand-driven tick. No real timers, no sleeps — the idle
 // transition is a function call, which is exactly why 14 kept the timer out of SessionManager.
-import type { ClockPort } from '@bolusi/core';
+import { DEVICE_WORK_KEY, type ClockPort } from '@bolusi/core';
 import { beforeEach, describe, expect, test } from 'vitest';
 
 import { emptyWorkspace, withDraft, type UserWorkspace } from '../state/user-workspaces.js';
@@ -90,6 +90,14 @@ class FakeSession implements SessionPort<UserWorkspace> {
 
   work(userId: string) {
     return this.#work.get(userId);
+  }
+
+  async deviceWork() {
+    return this.current === null ? undefined : this.#work.get(DEVICE_WORK_KEY);
+  }
+
+  saveDeviceWork(work: UserWorkspace) {
+    if (this.current !== null) this.#work.set(DEVICE_WORK_KEY, work);
   }
 }
 
@@ -217,6 +225,31 @@ describe('SEC-AUTH-08 — a lock preserves work; an unlock restores exactly the 
     expect(shell.snapshot().workspace?.ownerUserId ?? 'user-b').toBe('user-b');
     expect(JSON.stringify(shell.snapshot())).not.toContain('A stale');
     expect(session.work('user-b')).toBeUndefined();
+  });
+});
+
+describe('a draft that belongs to the device (Joseph, 2026-10-31)', () => {
+  test('anyone who signs in here next carries on with it, and nobody sees it while locked', async () => {
+    await shell.unlock('user-a');
+    shell.updateDeviceDraft('repair', { customer: 'Yakobus' });
+    expect(shell.snapshot().deviceDrafts).toEqual({ repair: { customer: 'Yakobus' } });
+    // Not A's own work: it stays out of A's workspace.
+    expect(JSON.stringify(shell.snapshot().workspace)).not.toContain('Yakobus');
+
+    await shell.lockNow();
+    expect(shell.snapshot().deviceDrafts).toBeNull();
+
+    await shell.unlock('user-b');
+    expect(shell.snapshot().deviceDrafts).toEqual({ repair: { customer: 'Yakobus' } });
+    shell.updateDeviceDraft('repair', null);
+    await shell.lockNow();
+    await shell.unlock('user-a');
+    expect(shell.snapshot().deviceDrafts).toEqual({ repair: null });
+  });
+
+  test('nothing is kept for the device while nobody is signed in', () => {
+    shell.updateDeviceDraft('repair', { customer: 'Yakobus' });
+    expect(session.work(DEVICE_WORK_KEY)).toBeUndefined();
   });
 });
 

@@ -132,6 +132,8 @@ export interface IntakePageProps {
    * typed: it is kept, and leaving asks, only once they change something.
    */
   readonly prefilled?: boolean | undefined;
+  /** The colleague who started this intake, when it was not the person carrying on with it. */
+  readonly startedBy?: string | null | undefined;
   readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
   readonly onOpened: (ticketId: string) => void;
   readonly onCancel: () => void;
@@ -144,6 +146,7 @@ export function IntakePage({
   now,
   restoredDraft,
   prefilled = false,
+  startedBy = null,
   onDraftChange,
   onOpened,
   onCancel,
@@ -346,7 +349,17 @@ export function IntakePage({
             />
           ) : undefined
         }
-      />
+      >
+        {startedBy === null ? null : (
+          <p
+            className="truncate text-body text-text-muted"
+            title={tn('repair.intake.startedBy', { name: startedBy })}
+            data-testid="repair.desk.intake.startedBy"
+          >
+            {tn('repair.intake.startedBy', { name: startedBy })}
+          </p>
+        )}
+      </PageHeader>
       {settings.status === 'loading' ? (
         // The store's lists decide the checks and photo angles: wait for them rather than let the
         // form change under the person typing.

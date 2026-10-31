@@ -5,7 +5,7 @@ import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
 import { initI18n } from '@bolusi/i18n';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
-import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
+import { REPAIR_PERMISSION, emptyIntakeDraft } from '@bolusi/modules/repair';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -324,7 +324,7 @@ describe('the PC over the offline core', () => {
     expect(screen.getByTestId('desktop.shell')).toBeTruthy();
   });
 
-  it("keeps a half-done intake in the person's own workspace and brings it back", async () => {
+  it('keeps a half-done intake on the PC, naming who started it, for whoever signs in next', async () => {
     core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
     renderApp();
     await screen.findByTestId('repair.desk.board.newIntake');
@@ -332,20 +332,60 @@ describe('the PC over the offline core', () => {
     fireEvent.change(await screen.findByTestId('repair.desk.intake.name'), {
       target: { value: 'Yakobus Mandowen' },
     });
-    const writes = core.calls.filter((call) => call.method === 'session.updateWorkspace');
-    const last = writes.at(-1)?.args[0] as {
-      ownerUserId: string;
-      drafts: Record<string, { customerName?: string }>;
-    };
-    expect(last.ownerUserId).toBe('u-owner');
-    expect(JSON.stringify(last.drafts['repair'])).toContain('Yakobus Mandowen');
+    const writes = core.calls.filter((call) => call.method === 'session.updateDeviceDraft');
+    const [moduleId, kept] = writes.at(-1)!.args as [string, Record<string, unknown>];
+    expect(moduleId).toBe('repair');
+    expect(kept['startedBy']).toEqual({ userId: OWNER.id, name: OWNER.name });
+    expect(JSON.stringify(kept)).toContain('Yakobus Mandowen');
+    // Not in the owner's own workspace: it belongs to the PC.
+    expect(core.calls.some((call) => call.method === 'session.updateWorkspace')).toBe(false);
 
-    // A lock, and the same person back: the core hands the workspace back and the intake reopens.
+    // The same person back after a lock: the intake reopens, with no "started by" line.
     core.session({ active: null, locked: true, permissions: [] });
-    core.session({ ...signedIn(OWNER, ALL), locked: false, workspace: last as never });
+    core.session({ ...signedIn(OWNER, ALL), locked: false, deviceDrafts: { repair: kept } });
     expect(((await screen.findByTestId('repair.desk.intake.name')) as HTMLInputElement).value).toBe(
       'Yakobus Mandowen',
     );
+    expect(screen.queryByTestId('repair.desk.intake.startedBy')).toBeNull();
+
+    // A colleague: it waits on the board, and carrying on says whose it was.
+    core.session({ active: null, locked: true, permissions: [] });
+    core.session({ ...signedIn(TECH, ALL), locked: false, deviceDrafts: { repair: kept } });
+    const resume = await screen.findByTestId('repair.desk.board.newIntake');
+    expect(resume.textContent).toContain('Lanjutkan servisan baru');
+    fireEvent.click(resume);
+    expect(((await screen.findByTestId('repair.desk.intake.name')) as HTMLInputElement).value).toBe(
+      'Yakobus Mandowen',
+    );
+    expect(screen.getByTestId('repair.desk.intake.startedBy').textContent).toBe(
+      `Dimulai oleh ${OWNER.name}`,
+    );
+    // Their changes keep the starter's name.
+    fireEvent.change(screen.getByTestId('repair.desk.intake.name'), {
+      target: { value: 'Yakobus M.' },
+    });
+    const after = core.calls.filter((call) => call.method === 'session.updateDeviceDraft');
+    const latest = after.at(-1)!.args[1] as Record<string, unknown>;
+    expect(latest['startedBy']).toEqual({ userId: OWNER.id, name: OWNER.name });
+    expect(JSON.stringify(latest)).toContain('Yakobus M.');
+  });
+
+  it("brings back an intake an older version kept in the person's own workspace, and moves it to the PC", async () => {
+    const draft = { ...emptyIntakeDraft(), customer: { kind: 'new', name: 'Ester', phone: '' } };
+    const workspace = { ownerUserId: OWNER.id, route: 'home', drafts: { repair: draft } };
+    core = new FakeCore(
+      ready({ session: session({ ...signedIn(OWNER, ALL), workspace: workspace as never }) }),
+    );
+    renderApp();
+    expect(((await screen.findByTestId('repair.desk.intake.name')) as HTMLInputElement).value).toBe(
+      'Ester',
+    );
+    await waitFor(() => {
+      const cleared = core.calls.find((call) => call.method === 'session.updateWorkspace');
+      expect((cleared?.args[0] as { drafts: Record<string, unknown> }).drafts['repair']).toBeNull();
+    });
+    const moved = core.calls.find((call) => call.method === 'session.updateDeviceDraft');
+    expect(JSON.stringify(moved?.args[1])).toContain('Ester');
   });
 
   it("never shows one person's draft to another", async () => {
