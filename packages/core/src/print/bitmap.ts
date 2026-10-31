@@ -46,3 +46,24 @@ export function toMonoBitmap(
   }
   return { width: outWidth, height: outHeight, dots };
 }
+
+/**
+ * Dots per QR module in bit-image mode: 4 x 2 dots is 0.85 x 0.71 mm, about square, and large
+ * enough to scan off a carbon copy. Scanners correct the small difference like any tilt.
+ */
+export const QR_MODULE_DOTS = { x: 4, y: 2 } as const;
+
+/** A QR code's modules (true = dark) as dots, each module a block of `QR_MODULE_DOTS`. */
+export function qrBitmap(modules: readonly (readonly boolean[])[]): MonoBitmap {
+  const size = modules.length;
+  const width = size * QR_MODULE_DOTS.x;
+  const height = size * QR_MODULE_DOTS.y;
+  const dots = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    const row = modules[Math.floor(y / QR_MODULE_DOTS.y)] ?? [];
+    for (let x = 0; x < width; x += 1) {
+      if (row[Math.floor(x / QR_MODULE_DOTS.x)] === true) dots[y * width + x] = 1;
+    }
+  }
+  return { width, height, dots };
+}

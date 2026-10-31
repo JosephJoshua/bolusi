@@ -158,3 +158,9 @@ export const ENTRY_KINDS = [
   'cash_adjusted',
 ] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
+
+/** The money decisions an owner may hand out through an approval request (approval-kinds.ts). */
+export const MONEY_APPROVAL_KIND = {
+  /** Cancelling a payment recorded by mistake, asked from Kas. */
+  voidPayment: 'money.voidPayment',
+} as const;

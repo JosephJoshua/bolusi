@@ -46,7 +46,7 @@ function printing(load: ThumbnailLoader = () => Promise.resolve({ kind: 'unavail
   };
   return {
     platform,
-    port: createRepairPrinting({ db: db.db, userId: 'u-1', loadThumbnail: load, platform }),
+    port: createRepairPrinting({ db: db.db, loadThumbnail: load, platform }),
   };
 }
 
@@ -93,8 +93,6 @@ describe('the phone printing binding', () => {
       aside: [],
       closing: [],
       copies: [],
-      plyNote: null,
-      footer: null,
     };
     const slip = { html: '<p>x</p>', document, jobName: 'Nota SV-1', paper: PAPER_PRESETS.a4 };
     expect(await port.output(slip, 'print')).toBe('cancelled');

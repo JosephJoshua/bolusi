@@ -218,10 +218,10 @@ describe('history', () => {
     expect(expense.label).toBe('money.moveKind.expense');
     expect(expense.details).toEqual(['Bensin']);
     // One minus sign everywhere: the one formatMoney writes (round 2 QA, F14).
-    expect(expense.amount).toBe('-Rp 25.000');
+    expect(expense.amount).toBe('\u2212Rp 25.000');
     expect(expense.amount).toBe(formatMoney(-25_000));
     const refund = historyLine(entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }), []);
-    expect(refund.amount).toBe('-Rp 20.000');
+    expect(refund.amount).toBe('\u2212Rp 20.000');
     expect(refund.details).toContain('Batal');
     // A handover refund is saved as a code, and older ones in fixed English: both read localized.
     for (const reason of ['handover_refund', 'Returned at handover']) {
@@ -231,7 +231,7 @@ describe('history', () => {
     }
     const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
     expect(short.label).toBe('money.kas.adjusted');
-    expect(short.amount).toBe('-Rp 5.000');
+    expect(short.amount).toBe('\u2212Rp 5.000');
   });
 
   test('a cancelled payment keeps its customer, servisan and method, and says why', () => {
@@ -255,7 +255,7 @@ describe('history', () => {
   });
 
   test('a payment or a cash move still standing can be cancelled, each by whoever may', () => {
-    const owner = { payments: true, cashMoves: true };
+    const owner = { payments: true, askPayments: false, cashMoves: true };
     expect(voidable(entry({}), owner)).toBe(true);
     const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
     expect(voidable(voided, owner)).toBe(false);
@@ -266,15 +266,24 @@ describe('history', () => {
     const move = entry({ kind: 'cash_moved', subKind: 'float' });
     expect(voidable(move, owner)).toBe(true);
     // A manager may cancel a payment within limits, but settling the drawer is the owner's.
-    expect(voidable(move, { payments: true, cashMoves: false })).toBe(false);
+    expect(voidable(move, { payments: true, askPayments: true, cashMoves: false })).toBe(false);
     expect(voidKind(move).command).toBe('voidCashMove');
   });
 
   test('a void limit of 0 cancels no payment, the same as not holding it', () => {
     const holds = (id: string) => id === MONEY_PERMISSION.voidPayment;
-    expect(voidAbilities(holds, () => 100_000)).toEqual({ payments: true, cashMoves: false });
+    expect(voidAbilities(holds, () => 100_000)).toEqual({
+      payments: true,
+      askPayments: false,
+      cashMoves: false,
+    });
     expect(voidAbilities(holds, () => 0).payments).toBe(false);
     expect(voidAbilities(holds).payments).toBe(true);
+    // Still offered to ask an owner instead, as the void step allows.
+    const zero = voidAbilities(holds, () => 0, true);
+    expect(zero.askPayments).toBe(true);
+    expect(voidable(entry({ documentId: 'doc-1' }), zero)).toBe(true);
+    expect(voidable(entry({ documentId: null }), zero)).toBe(false);
     expect(voidKind(entry({})).command).toBe('voidPayment');
   });
 });

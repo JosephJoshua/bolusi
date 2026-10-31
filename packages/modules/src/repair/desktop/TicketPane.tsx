@@ -2,7 +2,7 @@
 // changes, every photo, the condition at intake and the history. Steps that need input open a
 // dialog; the rest run in place. Live like the phone's ticket: a change synced in from another
 // device redraws it, and an open dialog says when that change means it can no longer finish.
-import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   Banner,
   Button,
@@ -14,6 +14,7 @@ import {
   PatternPad,
   PhotoTile,
   PhotoViewer,
+  RollingText,
   Section,
   StatePanel,
   Timeline,
@@ -35,10 +36,10 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { rejectedCount, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
-import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
 import { TicketVideoSection } from './video.js';
 import {
   MESSAGE_ACTION_KEY,
@@ -79,6 +80,7 @@ import {
   type TicketAction,
   type StaleStep,
   type TicketStep,
+  repairedDoneKey,
 } from '../flows.js';
 import { useClearAskedNotice } from '../asked-notice.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
@@ -90,7 +92,7 @@ import { describeRepairApproval } from '../approval-copy.js';
 import {
   actionKey,
   downPaymentTitleKey,
-  eventNote,
+  historyEntry,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
@@ -137,7 +139,6 @@ const DONE_KEY: Partial<Record<TicketAction | 'before' | 'after', RepairKey>> = 
   resume: 'repair.done.start',
   reopen: 'repair.done.start',
   before: 'repair.done.start',
-  after: 'repair.done.repaired',
   handover: 'repair.desk.done.handover',
 };
 
@@ -160,6 +161,8 @@ interface LoadedTicket {
 
 export interface TicketPaneProps {
   readonly ticketId: string;
+  /** An intake opened it just now: the number lands like a stamp. */
+  readonly justOpened?: boolean | undefined;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
   readonly onClose: () => void;
@@ -169,11 +172,18 @@ export interface TicketPaneProps {
   readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   /** Opens a linked servisan: the one a claim is on, or a claim on this one. */
   readonly onOpenTicket?: ((ticketId: string) => void) | undefined;
+  /** Just opened by an intake: offers its slip at once, as the customer is still at the counter. */
+  readonly printFirst?: boolean | undefined;
+  /** The slip was offered, so coming back to this servisan later does not offer it again. */
+  readonly onPrintOffered?: (() => void) | undefined;
 }
 
 export function TicketPane({
   ticketId,
+  justOpened = false,
   now,
+  printFirst = false,
+  onPrintOffered,
   onClose,
   onOpenSyncStatus,
   onStartClaim,
@@ -229,6 +239,18 @@ export function TicketPane({
           ? repairTypesStale(ticket, can)
           : staleStep(step, ticket, can, runtime.userId, now());
 
+  // The slip the customer takes away is offered as soon as there is one: after the intake, and after
+  // the handover once the servisan reads as picked up (its slip prints what was handed over).
+  const [printNext, setPrintNext] = useState<'opened' | 'returned' | null>(
+    printFirst ? 'opened' : null,
+  );
+  useEffect(() => {
+    if (printNext === null || ticket === undefined || step.kind !== 'none') return;
+    if (printNext === 'returned' && ticket.location !== 'returned') return;
+    setPrintNext(null);
+    if (printNext === 'opened') onPrintOffered?.();
+    if (printing !== undefined) setStep({ kind: 'print' });
+  }, [printNext, ticket, step.kind, printing, onPrintOffered]);
   const closeStep = (): void => setStep({ kind: 'none' });
   const finishStep = (said: RepairKey | undefined): void => {
     closeStep();
@@ -285,14 +307,15 @@ export function TicketPane({
 
   const storeName = useStoreDisplayName();
   const uncollectedLimit = useUncollectedLimit();
-  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const messageKind =
+    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
       ? null
       : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
-    const url = customerMessageUrl(kind, row, storeName);
+    const url = customerMessageUrl(kind, row, storeName, runtime.statusSite);
     if (url === null) return;
     setDone(null);
     window.open(url, '_blank', 'noopener');
@@ -404,7 +427,9 @@ export function TicketPane({
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
-              className="tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted"
+              className={`tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted${
+                justOpened ? ' animate-stamp' : ''
+              }`}
               data-testid="repair.desk.ticket.number"
             >
               {row.ticketNumber}
@@ -606,23 +631,7 @@ export function TicketPane({
         <DeviceSpecs brand={row.deviceBrand} model={row.deviceModel} repairs={can.work} />
 
         <Section title={tn('repair.ticket.history')} testId="repair.desk.ticket.history">
-          <Timeline
-            entries={[...row.events].reverse().map((event) => {
-              const note = eventNote(event.detail);
-              return {
-                key: event.id,
-                // A change saved before the customer agreed reads as waiting, not as changed.
-                title:
-                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
-                    ? tn('repair.price.waitingEvent')
-                    : translateOpType(event.kind),
-                meta: [formatDateTime(event.at), event.actorName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(note === null ? {} : { detail: note }),
-              };
-            })}
-          />
+          <Timeline entries={[...row.events].reverse().map(historyEntry)} />
         </Section>
 
         {[...FINAL_ACTIONS]
@@ -712,7 +721,7 @@ export function TicketPane({
             className={`tabular ${cancelled ? 'text-small text-text-muted line-through' : 'text-title font-bold text-text'}`}
             data-testid="repair.desk.ticket.total"
           >
-            {formatMoney(row.quoteTotal)}
+            <RollingText value={row.quoteTotal}>{formatMoney(row.quoteTotal)}</RollingText>
           </p>
         </div>
         {cancelled ? (
@@ -982,7 +991,9 @@ export function TicketPane({
           <WorkPhotosDialog
             {...common}
             stage={step.kind}
-            onDone={() => finishStep(DONE_KEY[step.kind])}
+            onDone={() =>
+              finishStep(step.kind === 'after' ? repairedDoneKey(row) : DONE_KEY[step.kind])
+            }
           />
         );
       case 'waitForParts':
@@ -1101,7 +1112,10 @@ export function TicketPane({
             {...common}
             ticket={row}
             customerName={row.customerName}
-            onDone={() => finishStep(DONE_KEY.handover)}
+            onDone={() => {
+              finishStep(DONE_KEY.handover);
+              setPrintNext('returned');
+            }}
           />
         );
     }
@@ -1434,13 +1448,17 @@ function DownPaymentLines({
               ) : null}
             </dt>
             <dd className="tabular" data-testid="repair.desk.ticket.paid">
-              {paidText.amount}
+              <RollingText value={paid}>{paidText.amount}</RollingText>
             </dd>
           </div>
         )}
         <div className="flex justify-between gap-4 text-body font-semibold text-text">
           <dt>{tn(balanceLabelKey(balance.kind, returned))}</dt>
-          <dd className="tabular">{formatMoney(balance.amount)}</dd>
+          <dd className="tabular">
+            <RollingText value={balance.kind === 'due' ? balance.amount : -balance.amount}>
+              {formatMoney(balance.amount)}
+            </RollingText>
+          </dd>
         </div>
       </dl>
       {paid === 0 ? record : null}

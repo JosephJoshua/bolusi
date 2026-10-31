@@ -4,7 +4,7 @@
  * own full-screen step (TicketSteps.tsx); the rest run in place. The rejected-op banner shows here,
  * where the change was made (05-operation-log §8).
  */
-import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -14,6 +14,7 @@ import {
   Icon,
   ListRow,
   PatternLock,
+  RollingText,
   Sheet,
   TextButton,
   Timeline,
@@ -28,13 +29,13 @@ import {
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ApprovalSection, ApprovalStep } from '../../approvals/screens/ApprovalViews.js';
 import { ta } from '../../approvals/i18n.js';
 import type { ApprovalRow } from '../../approvals/queries.js';
 import { describeRepairApproval } from '../approval-copy.js';
-import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
 import {
   MESSAGE_ACTION_KEY,
   customerMessageKind,
@@ -42,6 +43,7 @@ import {
   type CustomerMessageKind,
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
+import { whatsAppAppUrl, whatsAppUrl } from '../whatsapp.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   rejectedCount,
@@ -55,7 +57,7 @@ import { tn, type RepairKey } from '../i18n.js';
 import {
   actionKey,
   downPaymentTitleKey,
-  eventNote,
+  historyEntry,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
@@ -91,6 +93,7 @@ import {
   type StaleStep,
   type TicketAction,
   type TicketStep,
+  repairedDoneKey,
 } from '../flows.js';
 import { useClearAskedNotice } from '../asked-notice.js';
 import {
@@ -164,12 +167,19 @@ type Step =
 
 export interface TicketDetailProps {
   readonly ticketId: string;
+  /**
+   * Just opened by an intake or handed over: opens on its slip, as the customer is still at the
+   * counter. Read once, when the screen opens.
+   */
+  readonly printFirst?: boolean | undefined;
   readonly chrome: RepairChrome;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
   readonly onBack: () => void;
   /** Beside the board on a tablet there is nothing to go back to: the board is already in view. */
   readonly hideBack?: boolean | undefined;
+  /** It was opened just now by an intake: its number lands like a stamp once it shows. */
+  readonly justOpened?: boolean | undefined;
   readonly onHandover: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
   /** Starts a warranty claim's intake from this servisan; without it the claim is not offered. */
@@ -192,10 +202,12 @@ interface LoadedTicket {
 
 export function TicketDetail({
   ticketId,
+  printFirst = false,
   chrome,
   now,
   onBack,
   hideBack = false,
+  justOpened = false,
   onHandover,
   onOpenSyncStatus,
   onStartClaim,
@@ -209,7 +221,9 @@ export function TicketDetail({
   // Money back to the customer and a lowered bill are the ledger's steps, over repair's port.
   const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
-  const [step, setStep] = useState<Step>({ kind: 'none' });
+  const [step, setStep] = useState<Step>(() =>
+    printFirst && runtime.printing !== undefined ? { kind: 'print' } : { kind: 'none' },
+  );
   const [reloadNonce, setReloadNonce] = useState(0);
   // What the last action did, already in words: repair's own steps and the parts steps say it.
   const [done, setDone] = useState<string | null>(null);
@@ -326,7 +340,7 @@ export function TicketDetail({
           stage={step.kind}
           onDone={() => {
             closeStep();
-            setDone(tn(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired'));
+            setDone(tn(step.kind === 'before' ? 'repair.done.start' : repairedDoneKey(ticket)));
           }}
         />
       );
@@ -565,14 +579,23 @@ export function TicketDetail({
       ? { next: null, alternative: null, more: [] }
       : arrangeTicketActions(actions, ticket, runtime.userId);
   const primary = layout.next ?? undefined;
-  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const messageKind =
+    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
       ? null
       : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
+  // A phone opens the app itself, so a phone without WhatsApp says so instead of landing in a
+  // browser; the web preview keeps the wa.me link.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
-    const url = customerMessageUrl(kind, row, storeName);
+    const url = customerMessageUrl(
+      kind,
+      row,
+      storeName,
+      runtime.statusSite,
+      Platform.OS === 'web' ? whatsAppUrl : whatsAppAppUrl,
+    );
     if (url === null) return;
     setDone(null);
     setMessageFailed(false);
@@ -622,6 +645,7 @@ export function TicketDetail({
       scrollable
       title={ticket?.ticketNumber ?? tn('repair.ticket.title')}
       titleVariant="detail"
+      stampTitle={justOpened && ticket !== undefined}
       onBack={hideBack ? undefined : onBack}
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
@@ -941,21 +965,7 @@ export function TicketDetail({
 
         <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
           <Timeline
-            entries={[...row.events].reverse().map((event) => {
-              const note = eventNote(event.detail);
-              return {
-                key: event.id,
-                // A change saved before the customer agreed reads as waiting, not as changed.
-                title:
-                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
-                    ? tn('repair.price.waitingEvent')
-                    : translateOpType(event.kind),
-                meta: [formatDateTime(event.at), event.actorName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(note === null ? {} : { detail: note }),
-              };
-            })}
+            entries={[...row.events].reverse().map(historyEntry)}
             testID={`${testID}.timeline`}
           />
         </Section>
@@ -1030,7 +1040,8 @@ export function TicketDetail({
           <Text style={[cancelled ? styles.notCharged : styles.totalLabel, repairStyles.rowText]}>
             {tn('repair.price.total')}
           </Text>
-          <Text
+          <RollingText
+            value={row.quoteTotal}
             style={[
               cancelled ? styles.notCharged : styles.totalValue,
               styles.amount,
@@ -1039,7 +1050,7 @@ export function TicketDetail({
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
-          </Text>
+          </RollingText>
         </View>
         {cancelled ? (
           // The repair price stays as quiet history; the number that leads is what the customer

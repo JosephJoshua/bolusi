@@ -30,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { statusesFor, useTick, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import {
   amountOwed,
+  BOARD_EMPTY_KEY,
   boardViews,
   UNCOLLECTED_REFRESH_MS,
   defaultBoardView,
@@ -87,6 +88,11 @@ export interface RepairBoardPageProps {
   /** The repair open beside the table, owned by the app so a new intake can open its ticket. */
   readonly selectedTicketId: string | null;
   readonly onSelectTicket: (ticketId: string | null) => void;
+  /** The servisan an intake opened just now: its number is stamped in when its pane shows. */
+  readonly justOpenedTicketId?: string | null | undefined;
+  /** The servisan an intake just opened, whose slip the pane offers at once. */
+  readonly openedTicketId?: string | null | undefined;
+  readonly onOpenedShown?: (() => void) | undefined;
   readonly onNewIntake: () => void;
   /** An unsaved intake or warranty claim this person left: "Servisan baru" says it carries on with it. */
   readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
@@ -153,6 +159,9 @@ function fuzzyOptions(options: readonly FilterOption[], text: string): FilterOpt
 export function RepairBoardPage({
   selectedTicketId,
   onSelectTicket,
+  justOpenedTicketId = null,
+  openedTicketId = null,
+  onOpenedShown,
   onNewIntake,
   waitingDraft = null,
   onStartClaim,
@@ -348,8 +357,8 @@ export function RepairBoardPage({
     ) : (
       <StatePanel
         icon={ClipboardList}
-        title={t('core.status.empty')}
-        hint={tn('repair.board.emptyHint')}
+        title={tn(BOARD_EMPTY_KEY[view])}
+        {...(view === 'active' ? { hint: tn('repair.board.emptyHint') } : {})}
       />
     );
 
@@ -486,7 +495,8 @@ export function RepairBoardPage({
                     ? 'repair.action.resumeIntake'
                     : 'repair.action.newIntake',
               )}
-              variant="primary"
+              // One filled button on screen: an open servisan has its own next step.
+              variant={selectedTicketId === null ? 'primary' : 'secondary'}
               icon={Plus}
               shortcut="F2"
               onClick={onNewIntake}
@@ -510,6 +520,13 @@ export function RepairBoardPage({
           label={t('core.action.search')}
           clearLabel={tn('repair.board.clearSearch')}
           shortcut="/"
+          // Straight from typing to the first result: it opens, and the arrows go on from there.
+          onPick={() => {
+            const first = loaded?.rows[0];
+            if (first === undefined || stale) return;
+            onSelectTicket(first.id);
+            tableRef.current?.focus();
+          }}
           className="w-full max-w-[520px]"
           testId="repair.desk.board.search"
         />
@@ -627,11 +644,14 @@ export function RepairBoardPage({
                 // A fresh pane per ticket: nothing said about the last one carries over.
                 key={selectedTicketId}
                 ticketId={selectedTicketId}
+                justOpened={selectedTicketId === justOpenedTicketId}
                 now={clock}
                 onClose={closePane}
                 onOpenSyncStatus={onOpenSyncStatus}
                 onStartClaim={onStartClaim}
                 onOpenTicket={onSelectTicket}
+                printFirst={openedTicketId === selectedTicketId}
+                onPrintOffered={onOpenedShown}
               />
             </div>
           )}

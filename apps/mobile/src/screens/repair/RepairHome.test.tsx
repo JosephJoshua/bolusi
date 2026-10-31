@@ -1784,7 +1784,6 @@ describe('printing a slip', () => {
       .mockResolvedValueOnce('unconfirmed');
     const printing: RepairPrinting = {
       storeName: async () => 'Bolusi Sorong',
-      userName: async () => null,
       readPaper: async () => null,
       writePaper: async () => undefined,
       output,
@@ -1807,6 +1806,66 @@ describe('printing a slip', () => {
     expect(output).toHaveBeenCalledTimes(2);
     expect(screen.query('repair.print.notice')).toBeNull();
     expect(screen.query('repair.print.ask')).not.toBeNull();
+  });
+});
+
+describe('the slip, offered while the customer is still there', () => {
+  const printing: RepairPrinting = {
+    storeName: async () => 'Bolusi Sorong',
+    readPaper: async () => null,
+    writePaper: async () => undefined,
+    output: async () => 'done',
+    imageDataUri: async () => null,
+  };
+
+  test('a handover ends on its slip, and backing out of it leaves the servisan', async () => {
+    h = await openRepairScreenHarness(5303);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(40)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(41)] }, h.technicianId);
+    const screen = await mount(h, h.cashierId, {
+      runtime: { ...repairRuntimeFor(h, h.cashierId), printing },
+    });
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(screen.query('repair.print.primary')).toBeNull();
+    await press(screen, 'repair.ticket.action.handover');
+    await press(screen, 'repair.handover.photo.press');
+    await press(screen, 'repair.handover.signature.press');
+    for (const line of [
+      'check.customerTried',
+      'check.repairWorks',
+      'accessory.charger',
+      'accessory.case',
+    ]) {
+      await press(screen, `repair.handover.check.${line}`);
+    }
+    await press(screen, 'repair.handover.primary');
+    expect(screen.query('repair.print.primary')).not.toBeNull();
+  });
+
+  test('without printing on the device, a handover just returns to the servisan', async () => {
+    h = await openRepairScreenHarness(5304);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(40)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(41)] }, h.technicianId);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.handover');
+    await press(screen, 'repair.handover.photo.press');
+    await press(screen, 'repair.handover.signature.press');
+    for (const line of [
+      'check.customerTried',
+      'check.repairWorks',
+      'accessory.charger',
+      'accessory.case',
+    ]) {
+      await press(screen, `repair.handover.check.${line}`);
+    }
+    await press(screen, 'repair.handover.primary');
+    expect(screen.query('repair.print.primary')).toBeNull();
+    expect(screen.query('repair.ticket.photos.strip.handover')).not.toBeNull();
   });
 });
 
@@ -1856,8 +1915,8 @@ describe('money once the phone went home', () => {
     await press(screen, 'money.refund.primary');
 
     expect(text(screen, 'repair.ticket.done')).toContain('Uang sudah dikembalikan.');
-    expect(text(screen, 'repair.ticket.reduced')).toBe('-Rp 50.000');
-    expect(text(screen, 'repair.ticket.downPayment')).toBe('-Rp 700.000');
+    expect(text(screen, 'repair.ticket.reduced')).toBe('−Rp 50.000');
+    expect(text(screen, 'repair.ticket.downPayment')).toBe('−Rp 700.000');
     expect(text(screen, 'repair.ticket.balance')).toBe('Rp 0');
   });
 });

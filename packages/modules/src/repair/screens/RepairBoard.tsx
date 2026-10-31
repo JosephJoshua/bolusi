@@ -38,6 +38,7 @@ import {
 import { tn, type RepairKey } from '../i18n.js';
 import {
   APPROVALS_VIEW_MAX,
+  BOARD_EMPTY_KEY,
   boardFilter,
   amountOwed,
   boardSort,
@@ -206,14 +207,14 @@ export function RepairBoard({
           return {
             kind: 'empty',
             empty: {
-              title: searching ? tn('repair.board.noMatches') : t('core.status.empty'),
-              ...(searching ? {} : { hint: tn('repair.board.emptyHint') }),
+              title: tn(searching ? 'repair.board.noMatches' : BOARD_EMPTY_KEY[view]),
+              ...(!searching && view === 'active' ? { hint: tn('repair.board.emptyHint') } : {}),
             },
           };
         }
         return { kind: 'ready', items: query.data.rows };
     }
-  }, [query, searching, onOpenSyncStatus]);
+  }, [query, searching, view, onOpenSyncStatus]);
 
   const loaded = query.status === 'ready' ? query.data : null;
   const statuses = loaded?.statuses;

@@ -37,8 +37,10 @@ import type { SurfaceNav } from '../../navigation/surface.js';
 import {
   acceptsLimitText,
   LIMIT_FIELDS,
+  limitHintKey,
   limitRoles,
   limitsText,
+  parseLimit,
   parseLimits,
   sameLimits,
   type LimitRole,
@@ -302,25 +304,29 @@ function LimitsForm({
       <View style={styles.form} testID={`limits-form-${role.key}`}>
         <Text style={styles.intro}>{t('auth.limits.intro')}</Text>
         <View style={styles.fields}>
-          {LIMIT_FIELDS.map(({ kind, label, hint }) => (
-            <View key={kind}>
+          {LIMIT_FIELDS.map((field) => (
+            <View key={field.kind}>
               <TextInput
-                label={t(label)}
+                label={t(field.label)}
                 // Shown as money while typing ("Rp 50.000"), so there is nothing to read back.
-                value={moneyText(text[kind])}
+                value={moneyText(text[field.kind])}
                 onChangeText={(next) => {
                   if (busy || !acceptsLimitText(next)) return;
                   setFailure(null);
                   onClearNotice();
-                  setText((current) => ({ ...current, [kind]: next.replace(/\D/g, '') }));
+                  setText((current) => ({ ...current, [field.kind]: next.replace(/\D/g, '') }));
                 }}
                 keyboardType="number-pad"
                 selectTextOnFocus
-                errorMessage={attempted && text[kind] === '' ? t('auth.limits.missing') : undefined}
+                errorMessage={
+                  attempted && text[field.kind] === '' ? t('auth.limits.missing') : undefined
+                }
                 disabled={busy}
-                testID={`limits-${kind}`}
+                testID={`limits-${field.kind}`}
               />
-              <Text style={styles.hint}>{t(hint)}</Text>
+              <Text style={styles.hint}>
+                {t(limitHintKey(field, parseLimit(text[field.kind])))}
+              </Text>
             </View>
           ))}
         </View>

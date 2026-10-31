@@ -202,6 +202,7 @@ const source = {
         wrong: 'PIN salah.',
         attemptsLeft: 'Sisa {count} kali coba.',
         wait: 'Terlalu sering salah. Coba lagi dalam {duration}.',
+        nextWait: 'Salah sekali lagi, harus tunggu {duration}.',
         lockedOut: 'Minta pemilik toko membuka kuncinya.',
         forgot: 'Minta pemilik toko membuatkan PIN baru. Bisa tanpa internet.',
         setup: {
@@ -478,6 +479,7 @@ const source = {
         refundHint: 'Termasuk membatalkan pembayaran dan DP',
         credit: 'Bayar nanti',
         creditHint: 'Sisa tagihan saat HP dibawa pulang',
+        checkAmount: 'Besar sekali untuk satu servisan. Cek lagi jumlahnya.',
         save: 'Simpan',
         saved: 'Batas {role} tersimpan.',
         missing: 'Isi ketiga batas. Tulis 0 kalau harus pemilik toko.',
@@ -711,10 +713,10 @@ const source = {
         waitingForConnection: 'Menunggu koneksi',
       },
       action: {
-        takePhoto: 'Ambil Foto',
-        retake: 'Foto Ulang',
-        usePhoto: 'Pakai Foto Ini',
-        retryUpload: 'Kirim Ulang',
+        takePhoto: 'Ambil foto',
+        retake: 'Foto ulang',
+        usePhoto: 'Pakai foto ini',
+        retryUpload: 'Kirim ulang',
       },
       permission: {
         camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
@@ -996,6 +998,7 @@ export const resources = {
           wrong: 'Wrong PIN.',
           attemptsLeft: '{count, plural, one {# try left.} other {# tries left.}}',
           wait: 'Too many wrong tries. Try again in {duration}.',
+          nextWait: 'One more wrong try and you wait {duration}.',
           lockedOut: 'Ask the store owner to unlock it.',
           forgot: 'Ask the store owner to make you a new PIN. Works offline.',
           setup: {
@@ -1278,6 +1281,7 @@ export const resources = {
           refundHint: 'Includes voiding payments and down payments',
           credit: 'Pay later',
           creditHint: 'What the customer still owes when they take the phone',
+          checkAmount: 'That is a lot for one repair. Check the amount.',
           save: 'Save',
           saved: '{role} limits saved.',
           missing: 'Fill in all three. Enter 0 to always need a store owner.',
@@ -1522,10 +1526,10 @@ export const resources = {
           waitingForConnection: 'Waiting for connection',
         },
         action: {
-          takePhoto: 'Take Photo',
+          takePhoto: 'Take photo',
           retake: 'Retake',
-          usePhoto: 'Use This Photo',
-          retryUpload: 'Send Again',
+          usePhoto: 'Use this photo',
+          retryUpload: 'Send again',
         },
         permission: {
           camera: 'Allow the app to use the camera to take photos.',

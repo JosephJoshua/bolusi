@@ -138,6 +138,14 @@ export function Counter({
         : { kind: 'intake' },
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // The servisan an intake just opened, so its number is stamped in once; any other pick clears it.
+  const [justOpenedTicketId, setJustOpenedTicketId] = useState<string | null>(null);
+  const selectTicket = useCallback((ticketId: string | null) => {
+    setJustOpenedTicketId(null);
+    setSelectedTicketId(ticketId);
+  }, []);
+  // The servisan an intake just saved: its pane offers the slip once.
+  const [openedTicketId, setOpenedTicketId] = useState<string | null>(null);
   // A claim asked for while another intake waits unsaved: it would take that intake's place.
   const [claimAsked, setClaimAsked] = useState<IntakeDraft | null>(null);
   const startClaim = (claim: IntakeDraft): void => {
@@ -213,6 +221,7 @@ export function Counter({
     <AppShell
       testId="desktop.shell"
       collapsed={collapsed}
+      pageKey={page.kind}
       titleBar={
         <TitleBar
           storeName={storeName}
@@ -323,6 +332,8 @@ export function Counter({
           onOpened={(ticketId) => {
             onDraftChange(null);
             setSelectedTicketId(ticketId);
+            setJustOpenedTicketId(ticketId);
+            setOpenedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
           onCancel={() => setPage({ kind: 'board' })}
@@ -330,7 +341,10 @@ export function Counter({
       ) : (
         <RepairBoardPage
           selectedTicketId={selectedTicketId}
-          onSelectTicket={setSelectedTicketId}
+          onSelectTicket={selectTicket}
+          justOpenedTicketId={justOpenedTicketId}
+          openedTicketId={openedTicketId}
+          onOpenedShown={() => setOpenedTicketId(null)}
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}

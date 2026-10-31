@@ -108,6 +108,7 @@
     "@bolusi/core": "workspace:*",
     "@bolusi/schemas": "workspace:*",
     "@bolusi/i18n": "workspace:*",
+    "uqr": "0.1.3",
     "zod": "catalog:"
   },
   "peerDependencies": {

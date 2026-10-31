@@ -6,10 +6,13 @@ import { formatMoney, t } from '@bolusi/i18n';
 import type { MediaRef } from '@bolusi/schemas';
 import {
   Avatar,
+  Banner,
   Button,
   CaptureTile,
+  ChoiceList,
   ConfirmDialog,
   Dialog,
+  RollingText,
   Segmented,
   TextArea,
   TextField,
@@ -27,7 +30,7 @@ import { chosenMethod, offeredAccount, referenceMissing } from '../../money/paym
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
 import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
-import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, useCapture, type ActionRunner } from '../../screen-kit/index.js';
 import {
   REPAIR_APPROVAL_KIND,
   REPAIR_PERMISSION,
@@ -159,8 +162,9 @@ function StepDialog({
   );
 }
 
+/** "Kembali", never "Batal": beside "Batalkan servisan" a "Batal" reads as the same thing. */
 function CancelButton({ onClick }: { readonly onClick: () => void }): React.JSX.Element {
-  return <Button label={t('core.action.cancel')} onClick={onClick} />;
+  return <Button label={t('core.action.back')} onClick={onClick} />;
 }
 
 /** Leaving a step that holds photos or notes asks first, so a mis-click does not lose them. */
@@ -247,9 +251,10 @@ export function WorkPhotosDialog({
   const leave = useLeaveGuard(stale === null && (photos.length > 0 || note.trim() !== ''), onClose);
   const testId = `repair.desk.work.${stage}`;
 
+  const media = useCapture(runner);
   const take = (index: number): void => {
-    void runner
-      .run(() => runtime.capturePhoto({ title: tn(copy.shot, { n: index + 1 }) }))
+    void media
+      .capture(() => runtime.capturePhoto({ title: tn(copy.shot, { n: index + 1 }) }))
       .then((captured) => {
         if (captured === undefined || captured === null) return;
         setPhotos((current) =>
@@ -291,7 +296,7 @@ export function WorkPhotosDialog({
               label={tn(copy.submit)}
               variant="primary"
               onClick={submit}
-              busy={runner.busy}
+              busy={media.busy}
               disabled={photos.length === 0 || stale !== null}
               data-testid={`${testId}.submit`}
             />
@@ -537,7 +542,7 @@ export function CancelDialog({
   return (
     <>
       <StepDialog
-        title={tn(holds ? 'repair.action.cancel' : 'repair.approval.askCancel')}
+        title={tn('repair.cancel.title')}
         description={
           cancelRefund(downPayment, charged) > 0
             ? tn('repair.cancel.refundsDp', {
@@ -1007,7 +1012,7 @@ export function PriceChangeDialog({
   return (
     <>
       <StepDialog
-        title={tn(mode === 'change' ? 'repair.action.changePrice' : 'repair.action.proposePrice')}
+        title={tn('repair.price.editTitle')}
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
@@ -1071,7 +1076,7 @@ export function PriceChangeDialog({
             />
             <MoneyField
               // The field already shows "Rp", so the label does not repeat it.
-              label={tn('repair.desk.price')}
+              label={tn(kind === 'discount' ? 'repair.price.kind.discount' : 'repair.desk.price')}
               hint={
                 amount === null || kind !== 'discount'
                   ? undefined
@@ -1285,11 +1290,12 @@ export function HandoverDialog({
   const photoState = usePhotoState(photo === null ? null : capturedThumbnailRef(photo));
   const signatureState = usePhotoState(signature === null ? null : capturedThumbnailRef(signature));
 
+  const media = useCapture(runner);
   const capture = (
     take: () => Promise<{ readonly mediaRef: MediaRef } | null>,
     keep: (ref: MediaRef) => void,
   ): void => {
-    void runner.run(take).then((captured) => {
+    void media.capture(take).then((captured) => {
       if (captured !== undefined && captured !== null) keep(captured.mediaRef);
     });
   };
@@ -1319,7 +1325,7 @@ export function HandoverDialog({
   return (
     <>
       <StepDialog
-        title={tn('repair.action.handover')}
+        title={tn('repair.handover.title')}
         // Which phone it is, as the phone app shows it: a customer with two ready names both.
         description={
           <span data-testid="repair.desk.handover.phone">
@@ -1352,7 +1358,7 @@ export function HandoverDialog({
               label={tn('repair.action.handover')}
               variant="primary"
               onClick={submit}
-              busy={runner.busy}
+              busy={media.busy}
               disabled={!complete || stale !== null}
               data-testid="repair.desk.handover.submit"
             />
@@ -1371,7 +1377,7 @@ export function HandoverDialog({
               className="tabular text-title font-bold text-text"
               data-testid="repair.desk.handover.total"
             >
-              {formatMoney(amount)}
+              <RollingText value={amount}>{formatMoney(amount)}</RollingText>
             </p>
           </div>
           {(downPayment ?? 0) === 0 && reduced === 0 ? null : (
@@ -1391,7 +1397,9 @@ export function HandoverDialog({
                 <>
                   {/* The DP and anything paid at this counter already (a QR): all of it is paid. */}
                   <dt className="text-text-muted">{tn('repair.price.paid')}</dt>
-                  <dd className="tabular text-right text-text">{formatMoney(-downPayment)}</dd>
+                  <dd className="tabular text-right text-text">
+                    <RollingText value={downPayment}>{formatMoney(-downPayment)}</RollingText>
+                  </dd>
                 </>
               )}
               {split.length === 0 ? (
@@ -1403,7 +1411,9 @@ export function HandoverDialog({
                     className="tabular text-right font-semibold text-text"
                     data-testid="repair.desk.handover.balance"
                   >
-                    {formatMoney(balance.amount)}
+                    <RollingText value={balance.kind === 'due' ? balance.amount : -balance.amount}>
+                      {formatMoney(balance.amount)}
+                    </RollingText>
                   </dd>
                 </>
               ) : (
@@ -1770,7 +1780,7 @@ export function PrintDialog({
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
   const { paper } = useDevicePaper(printing, DESK_PAPERS);
-  const { state: printers } = useDevicePrinters(printing.printers);
+  const { state: printers, choose } = useDevicePrinters(printing.printers);
   const [problem, catchProblem, clearProblem] = usePrinterProblem();
   const [asking, setAsking] = useState(false);
   const testId = 'repair.desk.print';
@@ -1783,7 +1793,10 @@ export function PrintDialog({
   const unpicked = listed && printers.chosen === null;
   // A printer unplugged since it was picked is said too, but printing stays possible: it may be back.
   const missing = listed && printers.chosen !== null && printer === null;
-  const shownProblem = problem ?? (unpicked ? 'noPrinter' : missing ? 'printerMissing' : null);
+  // Nothing installed at all: there is nothing to pick here, so the dialog says what to do instead.
+  const noneInstalled = listed && printers.printers.length === 0;
+  const shownProblem =
+    problem ?? (unpicked && !noneInstalled ? 'noPrinter' : missing ? 'printerMissing' : null);
 
   const print = (): void => {
     void runner
@@ -1859,6 +1872,22 @@ export function PrintDialog({
             problem={shownProblem}
             onDismiss={problem === null ? undefined : clearProblem}
           />
+          {/* No printer yet, or the one picked is gone: picked right here, and kept for next time
+              as in Settings, so the customer is not kept waiting on a trip there. */}
+          {!(unpicked || missing) || printers.kind !== 'ready' ? null : noneInstalled ? (
+            <Banner tone="danger" message={tn('repair.printer.none')} />
+          ) : (
+            <ChoiceList
+              label={tn('repair.printer.printer')}
+              options={printers.printers.map((p) => ({ value: p.name, label: p.label }))}
+              value={null}
+              onChange={(name) => {
+                clearProblem();
+                void choose(name);
+              }}
+              testId={`${testId}.printers`}
+            />
+          )}
         </div>
       </StepDialog>
       <ConfirmDialog

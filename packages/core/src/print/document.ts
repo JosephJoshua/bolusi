@@ -20,6 +20,19 @@ export interface PrintHeader {
   readonly logo: PrintImage | null;
 }
 
+/**
+ * A link the reader opens by scanning or typing it, such as the customer's status page: a QR code
+ * with what it is for and its address, printed beside the signatures.
+ */
+export interface PrintLink {
+  /** The QR code's modules, row by row, true = dark, without a quiet zone. */
+  readonly modules: readonly (readonly boolean[])[];
+  /** What it opens, e.g. "Cek status servisan". */
+  readonly title: string;
+  /** The address to type when the code will not scan, e.g. `bolusi.id/c/K7M2Q9XA4BRS`. */
+  readonly address: string;
+}
+
 export interface PrintField {
   readonly label: string;
   readonly value: string;
@@ -81,12 +94,11 @@ export interface PrintDocument {
   readonly aside: readonly PrintBlock[];
   /** Full width under everything, kept on one page: the signatures. */
   readonly closing: readonly PrintBlock[];
+  /** Printed beside the signatures (or on its own at the foot); absent or null for none. */
+  readonly link?: PrintLink | null;
   /**
    * One label per copy, e.g. ["Untuk toko", "Untuk pelanggan"]. On carbonless paper the printer
-   * makes every copy in one pass, so `plyNote` is printed instead of separate labelled copies.
+   * makes every copy in one pass, so the labels are left off.
    */
   readonly copies: readonly string[];
-  /** e.g. "Merah muda untuk toko, kuning untuk pelanggan". */
-  readonly plyNote: string | null;
-  readonly footer: string | null;
 }

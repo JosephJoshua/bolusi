@@ -23,7 +23,8 @@
     "repairDiscount": "Discount",
     "repairCancel": "Cancel the repair",
     "repairPayLater": "Pay later",
-    "repairDownPayment": "Change down payment"
+    "repairDownPayment": "Change down payment",
+    "moneyVoidPayment": "Cancel a payment"
   },
   "status": {
     "waiting": "Waiting",

@@ -16,6 +16,7 @@
     "wrong": "PIN salah.",
     "attemptsLeft": "Sisa {count} kali coba.",
     "wait": "Terlalu sering salah. Coba lagi dalam {duration}.",
+    "nextWait": "Salah sekali lagi, harus tunggu {duration}.",
     "lockedOut": "Minta pemilik toko membuka kuncinya.",
     "forgot": "Minta pemilik toko membuatkan PIN baru. Bisa tanpa internet.",
     "setup": {
@@ -286,6 +287,7 @@
     "refundHint": "Termasuk membatalkan pembayaran dan DP",
     "credit": "Bayar nanti",
     "creditHint": "Sisa tagihan saat HP dibawa pulang",
+    "checkAmount": "Besar sekali untuk satu servisan. Cek lagi jumlahnya.",
     "save": "Simpan",
     "saved": "Batas {role} tersimpan.",
     "missing": "Isi ketiga batas. Tulis 0 kalau harus pemilik toko.",
