@@ -10,7 +10,7 @@ import {
   type CashMoveKind,
 } from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
-import { paymentEntry, type PaymentEntry, type PaymentLine } from './payment-entry.js';
+import { paymentEntry, rupiah, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
 
 /** Local midnight of the day `now` falls in: "today" is the store's day, not UTC's. */
@@ -186,9 +186,16 @@ function reasonText(reason: string | null): string | null {
     : reason;
 }
 
+/**
+ * Whether Riwayat lists a record. It is the money that moved and what an owner decided about it; a
+ * bill recorded at handover moved no money, and the servisan's own history already says it.
+ */
+export function inHistory(entry: Pick<MoneyEntryRow, 'kind'>): boolean {
+  return entry.kind !== 'charge_recorded';
+}
+
 /** How each kind of record reads in the day's history. */
 const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
-  charge_recorded: 'money.opType.chargeRecorded',
   charge_reduced: 'money.opType.chargeReduced',
   payment_received: 'money.opType.paymentReceived',
   refund_paid: 'money.opType.refundPaid',
@@ -198,8 +205,9 @@ const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
 export interface HistoryLine {
   readonly label: MoneyKey;
   /**
-   * The customer, the servisan, the method and the reason, as far as the record has them. A
-   * cancelled one keeps whose and which method it was, and says why it was cancelled instead.
+   * The customer, the servisan, the method, the reason and who recorded it, as far as the record
+   * has them. A cancelled one keeps whose and which method it was, and says why it was cancelled
+   * instead.
    */
   readonly details: readonly string[];
   /** Signed for the drawer's moves and refunds, as the amount reads. */
@@ -237,6 +245,7 @@ export function historyLine(
       voided
         ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
         : reasonText(entry.reason),
+      entry.createdByName,
     ].filter((part): part is string => part !== null && part !== ''),
     amount: formatMoney(signed),
     voided,
@@ -347,6 +356,8 @@ export function cashMoveCheck(move: {
   readonly reason: string;
   readonly accounts: readonly PaymentAccountRow[];
   readonly drawer: number | null;
+  /** Counts blind (`seesExpected`): told it is too much, not how much is in the drawer. */
+  readonly blind?: boolean | undefined;
 }): CashMoveCheck {
   const banks = move.accounts.filter((row) => row.kind === 'transfer');
   const depositAccount =
@@ -358,6 +369,9 @@ export function cashMoveCheck(move: {
     movesOut(move.kind) &&
     move.drawer !== null &&
     move.amount > move.drawer;
+  if (aboveDrawer && move.blind === true) {
+    return { banks, depositAccount, missing: 'money.move.aboveDrawerBlind' };
+  }
   if (aboveDrawer) {
     return {
       banks,
@@ -401,3 +415,70 @@ export function debtPayment(
       : null;
   return { entry, taken };
 }
+
+/**
+ * Whether this person sees what should be in the drawer before they count it. Whoever checks the
+ * drawer does: an owner, who settles a difference, or a manager, who cancels payments. Everyone
+ * else counts blind, so a count is what was in the drawer, not the figure on the screen (Joseph,
+ * 2026-10-31).
+ */
+export function seesExpected(
+  hasPermission: (id: string) => boolean,
+  limitOf: (id: string) => number | null = () => null,
+): boolean {
+  return (
+    hasPermission(MONEY_PERMISSION.adjustCash) || voidAbilities(hasPermission, limitOf).payments
+  );
+}
+
+/** A cash count as it is typed: the amount, and for a blind count whether it was checked yet. */
+export interface CashCountForm {
+  readonly counted: string;
+  /** Blind counts only: the count was checked against the drawer, so the difference shows. */
+  readonly checked: boolean;
+  /** Blind counts only: counted again once already, so no second recount is offered. */
+  readonly recounted: boolean;
+}
+
+export const NEW_CASH_COUNT: CashCountForm = { counted: '', checked: false, recounted: false };
+
+export interface CashCountView {
+  readonly amount: number | null;
+  /** What should be in the drawer, when this person may see it now. */
+  readonly expected: number | null;
+  /** Counted less what should be there, once both are known and shown. */
+  readonly difference: number | null;
+  /** A blind count is checked before it is saved; then it is saved. */
+  readonly next: 'check' | 'save';
+  /** The amount stays as checked: changing it means counting again. */
+  readonly locked: boolean;
+  /** A blind count that came out off may be counted once more before it is saved. */
+  readonly mayRecount: boolean;
+}
+
+/**
+ * What a count step shows. Seen up front, the expected figure and the difference show as the
+ * amount is typed. Blind, they show only once the counter checks what they typed; when it is off,
+ * they may count once more (the second count starts empty and blind again), then save.
+ */
+export function cashCountView(
+  form: CashCountForm,
+  drawer: number | null,
+  blind: boolean,
+): CashCountView {
+  const amount = rupiah(form.counted);
+  const shown = !blind || form.checked;
+  const expected = shown ? drawer : null;
+  const difference = amount === null || expected === null ? null : amount - expected;
+  return {
+    amount,
+    expected,
+    difference,
+    next: blind && !form.checked ? 'check' : 'save',
+    locked: blind && form.checked,
+    mayRecount: blind && form.checked && !form.recounted && difference !== null && difference !== 0,
+  };
+}
+
+/** Counting once more: the amount goes, and the drawer's figure hides again until it is checked. */
+export const RECOUNT_CASH: CashCountForm = { counted: '', checked: false, recounted: true };

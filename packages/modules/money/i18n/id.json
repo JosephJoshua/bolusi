@@ -54,6 +54,7 @@
     "remaining": "Kurang {amount}",
     "overpaid": "Lebih {amount}. Kurangi jumlahnya dulu.",
     "problem": {
+      "pick": "Pilih cara bayarnya dulu.",
       "method": "Metode ini sudah tidak tersedia. Pilih metode lain.",
       "tendered": "Uang diterima kurang dari jumlahnya."
     },
@@ -63,6 +64,7 @@
   "kas": {
     "title": "Kas",
     "expected": "Seharusnya di laci",
+    "drawer": "Laci kas",
     "notCounted": "Belum tutup kas hari ini",
     "counted": "Sudah tutup kas pukul {time}",
     "count": "Tutup kas",
@@ -96,6 +98,9 @@
     "counted": "Uang di laci",
     "difference": "Selisih",
     "note": "Catatan (opsional)",
+    "check": "Cek hitungan",
+    "recount": "Hitung ulang",
+    "recountHint": "Ada selisih. Hitung sekali lagi kalau ragu, atau simpan.",
     "save": "Simpan hitungan",
     "hint": "Hitung uang di laci, lalu isi jumlahnya."
   },
@@ -107,10 +112,11 @@
     "hintAmount": "Isi jumlahnya.",
     "hintReason": "Isi keterangannya.",
     "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya.",
-    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu."
+    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu.",
+    "aboveDrawerBlind": "Lebih dari uang di laci. Kurangi jumlahnya dulu."
   },
   "settle": {
-    "title": "Selesaikan selisih",
+    "title": "Selisih kas",
     "countedBy": "Dihitung {name}, {time}",
     "reason": "Alasan",
     "save": "Selesaikan selisih",
@@ -137,7 +143,8 @@
     "today": "Hari ini",
     "previousDay": "Sebelumnya",
     "nextDay": "Berikutnya",
-    "none": "Belum ada catatan di hari ini.",
+    "none": "Belum ada catatan hari ini.",
+    "noneDay": "Tidak ada catatan di hari itu.",
     "voided": "Dibatalkan: {reason}",
     "handoverRefund": "Sisa DP saat HP diambil",
     "more": "Muat lagi",
@@ -150,13 +157,13 @@
     "voidCashLabel": "Batalkan catatan kas {amount} pukul {time}"
   },
   "void": {
-    "title": "Batalkan pembayaran",
+    "title": "Pembatalan pembayaran",
     "save": "Batalkan pembayaran",
     "hint": "Isi alasannya.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
     "reason": "Alasan",
     "limit": "Batas pembatalanmu {amount} per servisan.",
-    "cashTitle": "Batalkan catatan kas",
+    "cashTitle": "Pembatalan catatan kas",
     "cashSave": "Batalkan catatan",
     "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya."
   },

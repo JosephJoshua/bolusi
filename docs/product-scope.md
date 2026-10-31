@@ -202,6 +202,19 @@ silent edits, and each one names who did it and what it was before.
   customer is reused, and PINs that are easy to guess (111111, 123456, common
   ones) are refused on every device. The server only sees PIN verifiers, so it
   cannot check this itself.
+- **No payment method is picked for the counter** (2026-10-31): where the
+  store takes more than cash, a payment, a DP or a debt paid later starts
+  with no method, and it saves only once one is tapped. A store that takes
+  only cash gets cash. A method switched off since it was picked is picked
+  again, never booked to the drawer.
+- **Intake drafts belong to the device** (Joseph, 2026-10-31): anyone signed in
+  on that PC or phone can carry on with an unfinished intake. It shows who
+  started it, and the servisan is recorded under whoever saves it. Drafts never
+  sync.
+- **Blind cash count for staff** (Joseph, 2026-10-31): Kasir and Teknisi type
+  what they counted before they see "Seharusnya di laci" and the difference,
+  and may recount once before saving. Owners and managers see the expected
+  amount up front.
 
 ## Printing repair slips (2026-10-26)
 

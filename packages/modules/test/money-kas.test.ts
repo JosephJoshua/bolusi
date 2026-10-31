@@ -7,7 +7,7 @@ import enCatalog from '../money/i18n/en.json' with { type: 'json' };
 import idCatalog from '../money/i18n/id.json' with { type: 'json' };
 import { registerMoneyCatalog } from '../src/money/i18n.js';
 import { methodStores, methodSummary } from '../src/money/methods.js';
-import { shiftDay } from '../src/money/day-records.js';
+import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
 
 import {
@@ -17,7 +17,12 @@ import {
   moneyIn,
   differenceToSettle,
   drawerMoves,
+  cashCountView,
   historyLine,
+  inHistory,
+  NEW_CASH_COUNT,
+  RECOUNT_CASH,
+  seesExpected,
   settleState,
   splitOpenBalances,
   voidAbilities,
@@ -45,6 +50,7 @@ function entry(overrides: Partial<MoneyEntryRow>): MoneyEntryRow {
     documentId: 'd',
     documentLabel: 'B7B-0001',
     createdBy: 'u',
+    createdByName: null,
     createdAt: 0,
     voidedBy: null,
     voidedAt: null,
@@ -234,6 +240,35 @@ describe('history', () => {
     expect(short.amount).toBe('\u2212Rp 5.000');
   });
 
+  test('each record says who recorded it, last', () => {
+    const line = historyLine(
+      entry({ account: 'account:q', createdByName: 'Dewi' }),
+      [qris],
+      'Yakobus',
+    );
+    expect(line.details).toEqual(['Yakobus', 'B7B-0001', 'QRIS BCA', 'Dewi']);
+  });
+
+  test('the bill recorded at handover is not money that moved, so Riwayat leaves it out', () => {
+    expect(inHistory(entry({ kind: 'charge_recorded' }))).toBe(false);
+    for (const kind of [
+      'charge_reduced',
+      'payment_received',
+      'refund_paid',
+      'cash_moved',
+      'cash_counted',
+      'cash_adjusted',
+    ] as const) {
+      expect(inHistory(entry({ kind }))).toBe(true);
+    }
+  });
+
+  test('an empty day says today may still get some, a past day that it had none', () => {
+    const today = dayStart(Date.now());
+    expect(historyEmptyKey(today, today)).toBe('money.history.none');
+    expect(historyEmptyKey(shiftDay(today, -1), today)).toBe('money.history.noneDay');
+  });
+
   test('a cancelled payment keeps its customer, servisan and method, and says why', () => {
     const line = historyLine(
       entry({ account: 'account:q', amount: 150_000, voidedAt: 5, voidReason: 'Salah metode' }),
@@ -313,5 +348,62 @@ describe('payment methods', () => {
       'QRIS · Bolusi Sorong · Tidak dipakai',
     );
     expect(methodSummary(method({ central: false, kind: 'edc' }), stores)).toBe('EDC');
+  });
+});
+
+describe('the blind count', () => {
+  test('owners and managers see the drawer up front; the counter and technicians count blind', () => {
+    const holding = (ids: string[]) => (id: string) => ids.includes(id);
+    expect(seesExpected(holding(['money.adjust_cash']))).toBe(true);
+    expect(seesExpected(holding(['money.void_payment']))).toBe(true);
+    // A void limit of 0 cancels nothing, so it is not oversight of the drawer.
+    expect(seesExpected(holding(['money.void_payment']), () => 0)).toBe(false);
+    expect(seesExpected(holding(['money.count_cash', 'money.move_cash']))).toBe(false);
+  });
+
+  test('seen up front, the difference shows as it is typed and it saves', () => {
+    const view = cashCountView({ ...NEW_CASH_COUNT, counted: '95000' }, 100_000, false);
+    expect(view).toMatchObject({ expected: 100_000, difference: -5_000, next: 'save' });
+    expect(view.mayRecount).toBe(false);
+  });
+
+  test('blind, nothing shows until it is checked, then a count that is off may be redone once', () => {
+    const typed = { ...NEW_CASH_COUNT, counted: '95000' };
+    expect(cashCountView(typed, 100_000, true)).toMatchObject({
+      expected: null,
+      difference: null,
+      next: 'check',
+      locked: false,
+    });
+    const checked = cashCountView({ ...typed, checked: true }, 100_000, true);
+    expect(checked).toMatchObject({ expected: 100_000, difference: -5_000, next: 'save' });
+    expect(checked).toMatchObject({ locked: true, mayRecount: true });
+    expect(cashCountView(RECOUNT_CASH, 100_000, true)).toMatchObject({
+      expected: null,
+      next: 'check',
+    });
+    expect(
+      cashCountView({ ...RECOUNT_CASH, counted: '95000', checked: true }, 100_000, true).mayRecount,
+    ).toBe(false);
+    // Right the first time: nothing to redo.
+    expect(
+      cashCountView({ ...typed, counted: '100000', checked: true }, 100_000, true).mayRecount,
+    ).toBe(false);
+  });
+
+  test('taking out more than is there says so, without the figure, to someone who counts blind', () => {
+    const move = {
+      kind: 'withdrawal' as const,
+      account: null,
+      amount: 900_000,
+      reason: 'x',
+      accounts: [],
+      drawer: 700_000,
+    };
+    expect(cashMoveCheck(move).missingValues).toEqual({ amount: formatMoney(700_000) });
+    expect(cashMoveCheck({ ...move, blind: true })).toMatchObject({
+      missing: 'money.move.aboveDrawerBlind',
+    });
+    expect(cashMoveCheck({ ...move, blind: true }).missingValues).toBeUndefined();
   });
 });

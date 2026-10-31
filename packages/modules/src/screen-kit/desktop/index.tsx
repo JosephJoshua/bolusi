@@ -158,7 +158,8 @@ export function TaskDialog({
                 {hint}
               </p>
             )}
-            <Button label={t('core.action.cancel')} onClick={requestClose} />
+            {/* "Kembali", never "Batal": beside "Batalkan …" the two read alike. */}
+            <Button label={t('core.action.back')} onClick={requestClose} />
             {secondary === undefined ? null : (
               <Button
                 label={secondary.label}

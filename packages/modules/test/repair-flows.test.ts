@@ -40,6 +40,7 @@ import {
   type RepairAbilities,
   type TicketAction,
 } from '../src/repair/flows.js';
+import { NO_METHOD } from '../src/money/payment-entry.js';
 import type { PaymentAccountRow } from '../src/money/queries.js';
 import { downPaymentChangeLine } from '../src/repair/labels.js';
 import { HANDOVER_UNDO_WINDOW_MS, INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
@@ -851,7 +852,49 @@ describe('intake draft', () => {
     expect(money.entries).toMatchObject([{ account: edc, reference: '004512' }]);
   });
 
-  test('a draft saved before DP methods restores with the drawer', () => {
+  test('a DP waits for its method where the store takes more than cash, and is cash where not', async () => {
+    h = await openRepairHarness(4110);
+    await h.money('saveAccount', { kind: 'transfer', name: 'BCA' }, h.storeOwnerId);
+    const accounts = (await h.moneyQuery('paymentAccounts', {}, h.cashierId))
+      .rows as PaymentAccountRow[];
+    const draft = { ...complete(h), downPayment: '100.000' };
+    expect(draft.downPaymentAccount).toBe(NO_METHOD);
+    expect(stepProblems(draft, 'price', OPTIONS, accounts)).toEqual(['downPaymentMethod']);
+    expect(stepProblems(draft, 'review', OPTIONS, accounts)).toEqual(['downPaymentMethod']);
+    expect(stepProblems({ ...draft, downPayment: '' }, 'price', OPTIONS, accounts)).toEqual([]);
+    expect(stepProblems(draft, 'price', OPTIONS, [])).toEqual([]);
+    expect(toOpenTicketInput(draft, OPTIONS, 0, [])).toMatchObject({ downPaymentAccount: 'cash' });
+    const cash = { ...draft, downPaymentAccount: 'cash' };
+    expect(stepProblems(cash, 'review', OPTIONS, accounts)).toEqual([]);
+  });
+
+  test('a DP step says when its method is still to pick', () => {
+    const base = { mode: 'record' as const, reason: '', current: null, total: 100_000 };
+    expect(downPaymentEntry({ ...base, typed: 50_000, methodMissing: true }).gap).toBe('method');
+    expect(
+      downPaymentEntry({
+        ...base,
+        mode: 'correct',
+        current: 50_000,
+        typed: 60_000,
+        reason: 'Salah',
+        methodMissing: true,
+      }).gap,
+    ).toBe('method');
+    // Removing a DP takes no method.
+    expect(
+      downPaymentEntry({
+        ...base,
+        mode: 'correct',
+        current: 50_000,
+        typed: 0,
+        reason: 'Batal',
+        methodMissing: true,
+      }).gap,
+    ).toBeNull();
+  });
+
+  test('a draft saved before DP methods restores with no method picked', () => {
     const old: Record<string, unknown> = { ...emptyIntakeDraft() };
     delete old['downPaymentAccount'];
     delete old['downPaymentReference'];
