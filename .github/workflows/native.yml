@@ -3,11 +3,16 @@ name: native
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   android-emulator:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -38,7 +43,7 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: harness correctness gates + Maestro native E2E on the emulator (every figure EMULATOR)
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 36
           arch: x86_64
@@ -59,6 +64,8 @@ jobs:
       EXPO_PUBLIC_API_URL: 'http://localhost:3000'
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:

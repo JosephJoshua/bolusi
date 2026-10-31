@@ -20,9 +20,9 @@
  * this harness renders resolve every user-visible label through the catalog, unchanged. */
 import { getLocale, setLocale, type Locale } from '@bolusi/i18n';
 import type { PinAttemptRow } from '@bolusi/core';
-import { border, color, space, type } from '@bolusi/ui';
+import { border, color, space, type, Text } from '@bolusi/ui';
 import { useReducer, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import App from '../../App.js';
 import { CaptureScreen, type CaptureScreenState } from '../media/CaptureScreen.js';
@@ -44,6 +44,7 @@ import { SettingsScreen } from '../screens/settings/SettingsScreen.js';
 import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
 import type { AppProps } from '../../App.js';
+import type { PermissionPort } from '../push/permission.js';
 
 import {
   DEMO_REPAIR_ROLES,
@@ -52,7 +53,14 @@ import {
   demoTicketCount,
   type DemoRepairRole,
 } from '@bolusi/modules/repair/demo';
-import { LimitsDemo, STAFF_ACTOR, STAFF_DEMO, STAFF_MANY, StaffDemo } from './staff-demo.js';
+import {
+  LimitsDemo,
+  RolesDemo,
+  STAFF_ACTOR,
+  STAFF_DEMO,
+  STAFF_MANY,
+  StaffDemo,
+} from './staff-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -183,6 +191,7 @@ function SettingsInteractive(): React.JSX.Element {
       onOpenChangePin={noop}
       onOpenStaff={noop}
       onOpenLimits={noop}
+      onOpenRoles={noop}
       onOpenStaffPins={noop}
       lockedStaffCount={1}
       modules={[
@@ -324,10 +333,13 @@ const PREVIEW_USERS: readonly SwitcherUser[] = DEMO_USERS.map((user) => ({
 function AppMode({
   session,
   repairRole,
+  setup = false,
 }: {
   readonly session: AppProps['session'];
   /** Puts the repair module on the home surface, signed in as this demo role. */
   readonly repairRole?: DemoRepairRole;
+  /** Opens on the new-phone setup, as for the owner who just registered the phone. */
+  readonly setup?: boolean;
 }): React.JSX.Element {
   const [, force] = useReducer((n: number) => n + 1, 0);
   // One runtime per mount, so a create/edit interaction accumulates instead of resetting each render.
@@ -341,6 +353,10 @@ function AppMode({
   );
   // "Switch user" works: any PIN opens the chosen person, who acts on the same demo tickets.
   const [current, setCurrent] = useState(session);
+  const [setupPending, setSetupPending] = useState(setup);
+  const [deviceInfo, setDeviceInfo] = useState(DEMO_DEVICE_INFO);
+  const [camera] = useState(() => previewPermission(false));
+  const [notifications] = useState(() => previewPermission(true));
   const onSubmitPin = (userId: string): Promise<boolean> => {
     const role = demoRoleOf(userId);
     if (role !== undefined) repair?.actAs(role);
@@ -376,10 +392,30 @@ function AppMode({
         force();
       }}
       locale={getLocale()}
-      deviceInfo={DEMO_DEVICE_INFO}
+      deviceInfo={deviceInfo}
+      onRenameDevice={(deviceName) => {
+        setDeviceInfo((current) => ({ ...current, deviceName }));
+        return Promise.resolve();
+      }}
       enrollment={fakeEnrollmentController()}
+      setupPending={setupPending}
+      onSetupDone={() => setSetupPending(false)}
+      cameraPermission={camera}
+      notificationPermission={notifications}
     />
   );
+}
+
+/** A permission the browser preview grants on the first ask; `refused` starts it blocked for good. */
+function previewPermission(refused: boolean): PermissionPort {
+  let granted = false;
+  return {
+    status: () => Promise.resolve({ granted, canAskAgain: !refused }),
+    request: () => {
+      if (!refused) granted = true;
+      return Promise.resolve();
+    },
+  };
 }
 
 // ── The registry ─────────────────────────────────────────────────────────────────────────────────
@@ -737,6 +773,22 @@ export const ENTRIES: readonly HarnessEntry[] = [
     ),
   })),
 
+  // Tugas karyawan (main owner) — the roles, each opening its switches; offline refuses saving.
+  ...(
+    [
+      ['ready', {}],
+      ['offline', { offline: true }],
+    ] as const
+  ).map(([state, props]) => ({
+    screen: 'roles',
+    state,
+    render: () => (
+      <ApproxFrame screen="roles" state={state}>
+        <RolesDemo {...props} />
+      </ApproxFrame>
+    ),
+  })),
+
   // Settings — the live ID↔EN language toggle.
   {
     screen: 'settings',
@@ -1020,6 +1072,18 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => (
       <ApproxFrame screen="app" state="shell">
         <AppMode session={{ userId: 'u-andi' }} />
+      </ApproxFrame>
+    ),
+  },
+
+  // New-phone setup — what the owner who registered the phone sees first: the camera still to allow,
+  // notifications refused for good, then the slip paper and its test page.
+  {
+    screen: 'app',
+    state: 'setup',
+    render: () => (
+      <ApproxFrame screen="app" state="setup">
+        <AppMode session={{ userId: 'u-andi' }} repairRole="owner" setup />
       </ApproxFrame>
     ),
   },

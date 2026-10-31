@@ -91,6 +91,7 @@ const IRREGULAR_PAST_FORMS: ReadonlySet<string> = new Set([
   'began',
   'took',
   'taken',
+  'withdrawn',
   'gave',
   'came',
   'went',

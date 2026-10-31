@@ -2,6 +2,7 @@
 // playing a stored one back. The recorder shows what the clip must say, a live preview, one button
 // to start and stop, and the time taken against the time allowed; it stops by itself at the limit.
 // The take plays back to keep or record again. Copy comes from the caller.
+import { VIDEO_RECORDING } from '@bolusi/schemas';
 import { clsx } from 'clsx';
 import { CameraOff, Circle, RefreshCw, Square, SwitchCamera } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -33,20 +34,8 @@ export interface VideoRecorderLabels {
   readonly time: (elapsed: string, max: string) => string;
 }
 
-// 720p at about 2 Mbit/s, as the phone records: a minute is some 15 MB.
-const IDEAL = { width: 1280, height: 720 };
-const VIDEO_BITS = 2_000_000;
-const AUDIO_BITS = 64_000;
-/**
- * MP4 (H.264 and AAC) first, the phones' own format, which every phone and PC plays back; WebM
- * where the recorder cannot. The server checks the file's header against the type.
- */
-const RECORDER_TYPES = [
-  { type: 'video/mp4;codecs=avc1.42E01F,mp4a.40.2', mime: 'video/mp4' },
-  { type: 'video/mp4', mime: 'video/mp4' },
-  { type: 'video/webm;codecs=vp8,opus', mime: 'video/webm' },
-  { type: 'video/webm', mime: 'video/webm' },
-] as const;
+const IDEAL = { width: VIDEO_RECORDING.width, height: VIDEO_RECORDING.height };
+const RECORDER_TYPES = VIDEO_RECORDING.types;
 export type RecordedVideoMime = (typeof RECORDER_TYPES)[number]['mime'];
 
 /** A kept take: the clip and what it is. */
@@ -129,8 +118,8 @@ export function VideoRecorderDialog({
       RECORDER_TYPES[RECORDER_TYPES.length - 1]!;
     const running = new MediaRecorder(stream, {
       mimeType: format.type,
-      videoBitsPerSecond: VIDEO_BITS,
-      audioBitsPerSecond: AUDIO_BITS,
+      videoBitsPerSecond: VIDEO_RECORDING.videoBitsPerSecond,
+      audioBitsPerSecond: VIDEO_RECORDING.audioBitsPerSecond,
     });
     const chunks: Blob[] = [];
     running.addEventListener('dataavailable', (event) => {

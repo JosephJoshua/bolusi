@@ -6,8 +6,10 @@
  * The tone is carried by the icon as well as the colour (§6.3), and the text wraps, never truncates.
  */
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, StyleSheet, View } from 'react-native';
 
+import { useEntrance, usePop } from '../motion.js';
 import { color, radius, size, space, type } from '../tokens.js';
 import { Icon, type IconName } from './Icon.js';
 
@@ -45,6 +47,7 @@ const styles = StyleSheet.create({
   },
   title: { ...type.title, color: color.text, textAlign: 'center', marginTop: space.xl },
   message: { ...type.body, color: color.textMuted, textAlign: 'center', marginTop: space.sm },
+  words: { alignSelf: 'stretch', alignItems: 'center' },
   extra: { marginTop: space.lg, alignItems: 'center' },
 });
 
@@ -57,20 +60,25 @@ export function OutcomeState({
   testID = 'ui.outcomeState',
 }: OutcomeStateProps): React.JSX.Element {
   const { bg, fg } = TONE[tone];
+  // The disc lands first; the words rise in under it, so the eye reads the outcome, then the words.
+  const disc = usePop();
+  const words = useEntrance();
   return (
     <View testID={testID} style={styles.root}>
-      <View style={[styles.disc, { backgroundColor: bg }]}>
+      <Animated.View style={[styles.disc, { backgroundColor: bg }, disc]}>
         <Icon name={icon} size={size.iconState} color={fg} />
-      </View>
-      <Text testID={`${testID}.title`} accessibilityRole="header" style={styles.title}>
-        {title}
-      </Text>
-      {message === undefined ? null : (
-        <Text testID={`${testID}.message`} style={styles.message}>
-          {message}
+      </Animated.View>
+      <Animated.View style={[styles.words, words]}>
+        <Text testID={`${testID}.title`} accessibilityRole="header" style={styles.title}>
+          {title}
         </Text>
-      )}
-      {children === undefined ? null : <View style={styles.extra}>{children}</View>}
+        {message === undefined ? null : (
+          <Text testID={`${testID}.message`} style={styles.message}>
+            {message}
+          </Text>
+        )}
+        {children === undefined ? null : <View style={styles.extra}>{children}</View>}
+      </Animated.View>
     </View>
   );
 }

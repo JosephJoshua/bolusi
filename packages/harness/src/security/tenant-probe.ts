@@ -20,6 +20,7 @@ import { migrateToLatest, type DB } from '@bolusi/db-server';
 import { createApp } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { bytesToBase64 } from '@bolusi/core';
+import { zHandoffPageLabels } from '@bolusi/schemas';
 import { deriveDeviceKeypair, FakeClock } from '@bolusi/test-support';
 
 import type { ProbeContext } from './route-walker.js';
@@ -35,25 +36,9 @@ const APP_ROLE = 'bolusi_app';
  * validation (`422 VALIDATION_FAILED`) BEFORE the handler's scope check and every media probe
  * would pass for the wrong reason — a probe that never reaches the code it audits.
  */
-/** Any 15 strings: the probes never open the phone page. */
+/** Any strings: the probes never open the phone page. */
 const HANDOFF_LABELS = Object.fromEntries(
-  [
-    'photoHint',
-    'signatureHint',
-    'take',
-    'retake',
-    'clear',
-    'send',
-    'sending',
-    'sent',
-    'waiting',
-    'rotate',
-    'rotateNow',
-    'failed',
-    'withdrawn',
-    'expired',
-    'unreadable',
-  ].map((key) => [key, key]),
+  Object.keys(zHandoffPageLabels.shape).map((key) => [key, key]),
 );
 
 const ID = {
@@ -72,6 +57,10 @@ const ID = {
   mediaAOther: '0a444444-4444-7444-8444-444444444444',
   mediaB: '0b555555-5555-7555-8555-555555555555',
   pushTokenB: '0b666666-6666-7666-8666-666666666666',
+  qrisAccountA2: '0a777777-7777-7777-8777-777777777777',
+  qrisAccountB: '0b777777-7777-7777-8777-777777777777',
+  qrisChargeA2: '0a888888-8888-7888-8888-888888888888',
+  qrisChargeB: '0b888888-8888-7888-8888-888888888888',
   nonexistent: '0f999999-9999-7999-8999-999999999999',
 } as const;
 
@@ -85,6 +74,24 @@ const TENANT_B_LOGIN = 'tenant-b-owner@probe.invalid';
 const TENANT_B_HELD_PUSH_TOKEN = 'ExponentPushToken[sec-tenant-04-held-by-b]';
 
 /** A test password KDF: real shape, no argon2 cost. Only the login probe reaches it. */
+/**
+ * QRIS switched on, so its routes reach their scope checks instead of answering 503. Xendit, the
+ * sealer and the system signer refuse loudly: every probe must be turned away before any of them.
+ */
+const refuse = (): never => {
+  throw new Error('a QRIS probe reached past its scope check');
+};
+const probeQris = {
+  publicUrl: 'https://probe.invalid',
+  sealer: { seal: refuse, open: refuse },
+  xendit: {
+    setQrWebhook: refuse,
+    createDynamicQr: refuse,
+    listQrPayments: refuse,
+    simulateQrPayment: refuse,
+  },
+};
+
 const fastPasswordKdf = {
   createVerifier: (password: string) => Promise.resolve(`fake:${password}`),
   verify: (password: string, verifierJson: string) =>
@@ -155,6 +162,8 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     authDirectory,
     passwordKdf: fastPasswordKdf,
     accessLogSink: (record: unknown) => accessLogs.push(JSON.stringify(record)),
+    qris: probeQris,
+    systemKeyStore: { getSystemSigner: () => undefined },
   } as unknown as NonNullable<Parameters<typeof createApp>[0]>);
 
   // ── seed ──────────────────────────────────────────────────────────────────────────────────────
@@ -232,6 +241,30 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     db,
   );
 
+  // A store's QRIS account and a QR made on it: tenant B's, and tenant A's in the store the prober
+  // is not in.
+  const seedQris = async (
+    tenantId: string,
+    storeId: string,
+    accountId: string,
+    chargeId: string,
+    deviceId: string,
+    userId: string,
+  ): Promise<void> => {
+    await sql`INSERT INTO money_accounts (id, tenant_id, store_id, kind, name, active, store_ids_json, created_at, updated_by, updated_at)
+              VALUES (${accountId}, ${tenantId}, ${storeId}, ${'qris'}, ${'QRIS'}, ${1}, ${null}, ${CREATED_AT}, ${userId}, ${CREATED_AT})`.execute(
+      db,
+    );
+    await sql`INSERT INTO qris_charges (id, tenant_id, store_id, account_id, document_json, amount, xendit_qr_id, qr_string,
+                                        environment, expires_at, requested_by, device_id, created_at, secret_sealed, callback_token_hash)
+              VALUES (${chargeId}, ${tenantId}, ${storeId}, ${accountId}, ${'{}'}, ${15000n}, ${`qr_${chargeId}`}, ${'000201'},
+                      ${'test'}, ${BigInt(CLOCK_BASE + 900_000)}, ${userId}, ${deviceId}, ${CREATED_AT}, ${'sealed'}, ${'0'.repeat(64)})`.execute(
+      db,
+    );
+  };
+  await seedQris(ID.tenantB, ID.storeB, ID.qrisAccountB, ID.qrisChargeB, ID.deviceB, ID.userB);
+  await seedQris(ID.tenantA, ID.storeA2, ID.qrisAccountA2, ID.qrisChargeA2, ID.deviceA2, ID.userA2);
+
   const deviceToken = 'bdt_probe_tenant_a_device_1';
   const controlToken = 'bcs_probe_tenant_a_control';
   tokens.add(deviceToken, {
@@ -287,6 +320,8 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     tenantAStore2MediaId: ID.mediaA2,
     tenantAOtherDeviceMediaId: ID.mediaAOther,
     tenantAStore2HandoffId: handoffA2,
+    tenantAStore2QrisAccountId: ID.qrisAccountA2,
+    tenantAStore2QrisChargeId: ID.qrisChargeA2,
     tenantBTenantId: ID.tenantB,
     tenantBUserId: ID.userB,
     tenantBDeviceId: ID.deviceB,
@@ -295,6 +330,8 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     tenantBLoginIdentifier: TENANT_B_LOGIN,
     tenantBHeldPushToken: TENANT_B_HELD_PUSH_TOKEN,
     tenantBHandoffId: handoffB,
+    tenantBQrisAccountId: ID.qrisAccountB,
+    tenantBQrisChargeId: ID.qrisChargeB,
     nonexistentId: ID.nonexistent,
   };
 

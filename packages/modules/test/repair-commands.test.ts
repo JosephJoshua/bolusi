@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
+import { HANDOVER_UNDO_WINDOW_MS, REPAIR_OP } from '../src/repair/constants.js';
+import { REPAIR_DOCUMENT_KIND } from '../src/repair/money-document.js';
 import { maxTicketCounter } from '../src/repair/queries.js';
 
 import {
@@ -83,7 +85,7 @@ describe('intake', () => {
     const t = await ticket(h, first.ticketId);
     expect(t).toMatchObject({
       customerName: 'Yohanis Wenda',
-      customerPhone: '0812-4455-6677',
+      customerPhone: '081244556677',
       deviceModel: 'Galaxy A14',
       outcome: 'received',
       location: 'in_store',
@@ -208,6 +210,42 @@ describe('intake', () => {
     h = await openRepairHarness(4);
     const opened = await open(h, { customer: { name: 'Mama Yuliana', phone: '  ' } });
     expect((await ticket(h, opened.ticketId)).customerPhone).toBeNull();
+  });
+
+  test('a phone number is stored one way and one that cannot be dialled is refused', async () => {
+    h = await openRepairHarness(4);
+    const opened = await open(h, {
+      customer: { name: 'Mama Yuliana', phone: '+62 812-3456-7890' },
+    });
+    expect((await ticket(h, opened.ticketId)).customerPhone).toBe('081234567890');
+    for (const phone of ['0812345', '08123456789012345', '12345678', '+1 555 0100']) {
+      await expectCode(
+        h.run('openTicket', intake(h, { customer: { name: 'Mama Yuliana', phone } }), h.cashierId),
+        'VALIDATION_FAILED',
+      );
+    }
+  });
+
+  test('an IMEI must be 15 digits with a valid check digit', async () => {
+    h = await openRepairHarness(4);
+    const device = { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam' };
+    for (const imei of ['35678910445566', '356789104455667']) {
+      await expectCode(
+        h.run('openTicket', intake(h, { device: { ...device, imei } }), h.cashierId),
+        'VALIDATION_FAILED',
+      );
+    }
+    const opened = await open(h, { device: { ...device, imei: '35678910-4455660' } });
+    expect((await ticket(h, opened.ticketId)).deviceImei).toBe('356789104455660');
+  });
+
+  test('retyping a returning customer reuses them; another name on the number is someone new', async () => {
+    h = await openRepairHarness(4);
+    const first = await open(h, { customer: { name: 'Yohanis Wenda', phone: '0812-4455-6677' } });
+    const again = await open(h, { customer: { name: ' yohanis  wenda', phone: '081244556677' } });
+    expect(again.customerId).toBe(first.customerId);
+    const other = await open(h, { customer: { name: 'Mama Wenda', phone: '081244556677' } });
+    expect(other.customerId).not.toBe(first.customerId);
   });
 
   test('technicians and unprivileged users cannot take devices in', async () => {
@@ -526,6 +564,38 @@ describe('a price change waits for the customer', () => {
     expect(t.quoteTotal).toBe(750_000);
     expect(t.pendingProposals).toBe(0);
   });
+
+  test('an older phone (v1) cannot count a change the customer has not agreed to', async () => {
+    h = await openRepairHarness(38);
+    const { ticketId } = await open(h);
+    const line = {
+      ticketId,
+      kind: 'part',
+      description: 'Baterai',
+      amount: 200_000,
+      reason: 'Baterai kembung',
+    } as const;
+    await h.run('changeQuote', { ...line, customerAgreed: true }, h.cashierId);
+    const v2 = (await h.ownOps()).filter((op) => op.type === 'repair.quote_changed').at(-1)!;
+    const v1Payload: Record<string, unknown> = { ...v2.payload };
+    delete v1Payload['waitsForCustomer'];
+    // v1 had no waiting: a line counted at once, so only the customer's yes lets it through.
+    const v1 = (customerAgreed: boolean, n: number) => ({
+      ...v2,
+      id: `0191e000-0000-7000-8000-00000000c0d${n}`,
+      schemaVersion: 1,
+      payload: { ...v1Payload, lineId: `0191e000-0000-7000-8000-00000000c0e${n}`, customerAgreed },
+    });
+    await expectCode(h.checkRule(v1(false, 1)), 'VALIDATION_FAILED', 'customerAgreementMismatch');
+    await h.checkRule(v1(true, 2));
+
+    // History an older phone synced before still replays: rules judge new changes, not pulls.
+    await h.deliverPulled(
+      { ...v1(false, 3), deviceId: '0191e000-0000-7000-8000-00000000d0de', seq: 1 },
+      1,
+    );
+    expect((await ticket(h, ticketId)).quoteTotal).toBe(1_150_000);
+  });
 });
 
 describe('price changes', () => {
@@ -745,6 +815,368 @@ describe('cancel and handover', () => {
       h.cashierId,
     );
     expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', location: 'returned' });
+  });
+});
+
+describe('correcting a saved servisan', () => {
+  test('the counter corrects the customer and the phone; the history says before and after', async () => {
+    h = await openRepairHarness(30);
+    const opened = await open(h);
+    await h.run(
+      'correctTicketDetails',
+      {
+        ticketId: opened.ticketId,
+        customer: { name: 'Yohanis Wenda', phone: '0813 1111 2222' },
+        device: { brand: 'Samsung', model: 'Galaxy A15', color: 'Biru', imei: '356789104455660' },
+        passcode: 'pin:1234',
+        reason: 'Salah ketik',
+      },
+      h.cashierId,
+    );
+    const t = await ticket(h, opened.ticketId);
+    expect(t).toMatchObject({
+      customerPhone: '081311112222',
+      deviceModel: 'Galaxy A15',
+      deviceColor: 'Biru',
+      devicePasscode: 'pin:1234',
+    });
+    const event = t.events.find(
+      (e: { kind: string }) => e.kind === 'repair.ticket_details_corrected',
+    );
+    expect(event.detail).toEqual({
+      reason: 'Salah ketik',
+      changes: [
+        { field: 'customerPhone', from: '081244556677', to: '081311112222' },
+        { field: 'model', from: 'Galaxy A14', to: 'Galaxy A15' },
+        { field: 'color', from: 'Hitam', to: 'Biru' },
+        // The screen lock's code is never shown, only that it changed.
+        { field: 'passcode' },
+      ],
+    });
+    const found = await h.query('searchCustomers', { text: '081311112222' }, h.cashierId);
+    expect(found.rows.map((r: { id: string }) => r.id)).toEqual([opened.customerId]);
+  });
+
+  test('a customer with other servisans is never renamed: the servisan moves instead', async () => {
+    h = await openRepairHarness(34);
+    const first = await open(h);
+    const second = await open(h, { customer: { customerId: first.customerId } });
+    // Intake picked the wrong Yohanis: this servisan is Mama Wenda's.
+    const mama = { name: 'Mama Wenda', phone: '0813 1111 2222' };
+    await h.run('correctTicketDetails', { ticketId: second.ticketId, customer: mama }, h.cashierId);
+    const moved = await ticket(h, second.ticketId);
+    expect(moved).toMatchObject({ customerName: 'Mama Wenda', customerPhone: '081311112222' });
+    expect(moved.customerId).not.toBe(first.customerId);
+    expect(await ticket(h, first.ticketId)).toMatchObject({
+      customerId: first.customerId,
+      customerName: 'Yohanis Wenda',
+      customerPhone: '081244556677',
+    });
+    expect(moved.events.at(-1).detail.changes).toEqual([
+      { field: 'customerName', from: 'Yohanis Wenda', to: 'Mama Wenda' },
+      { field: 'customerPhone', from: '081244556677', to: '081311112222' },
+    ]);
+    // Typed back to the first customer's details, it rejoins that record rather than make a third.
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: second.ticketId, customer: { name: 'Yohanis Wenda', phone: '081244556677' } },
+      h.cashierId,
+    );
+    expect((await ticket(h, second.ticketId)).customerId).toBe(first.customerId);
+  });
+
+  test('a customer picked from the list takes the servisan, even one with no number', async () => {
+    h = await openRepairHarness(35);
+    const mine = await open(h);
+    const other = await open(h, { customer: { name: 'Mama Wenda', phone: null } });
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { customerId: other.customerId } },
+      h.cashierId,
+    );
+    const moved = await ticket(h, mine.ticketId);
+    expect(moved).toMatchObject({ customerId: other.customerId, customerName: 'Mama Wenda' });
+    // Neither record was renamed.
+    expect(await ticket(h, other.ticketId)).toMatchObject({ customerName: 'Mama Wenda' });
+    const found = await h.query('searchCustomers', { text: '081244556677' }, h.cashierId);
+    expect(found.rows.map((r: { name: string }) => r.name)).toEqual(['Yohanis Wenda']);
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        { ticketId: mine.ticketId, customer: { customerId: 'nobody' } },
+        h.cashierId,
+      ),
+      'ENTITY_NOT_FOUND',
+    );
+  });
+
+  test('nothing to correct, a bad number, a technician, or a phone gone home are refused', async () => {
+    h = await openRepairHarness(31);
+    const { ticketId } = await open(h);
+    const same = { ticketId, complaint: 'Layar retak, sentuhan tidak responsif' };
+    await expectCode(h.run('correctTicketDetails', same, h.cashierId), 'VALIDATION_FAILED');
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        { ticketId, customer: { name: 'Y', phone: '0812' } },
+        h.cashierId,
+      ),
+      'VALIDATION_FAILED',
+    );
+    const fix = { ticketId, complaint: 'Layar retak' };
+    await expectCode(h.run('correctTicketDetails', fix, h.technicianId), 'PERMISSION_DENIED');
+
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
+    await expectCode(
+      h.run('correctTicketDetails', fix, h.cashierId),
+      'INVALID_TRANSITION',
+      'returned',
+    );
+    const t = await ticket(h, ticketId);
+    await expectCode(
+      h.run(
+        'correctCustomerDetails',
+        { customerId: t.customerId, name: 'Orang Lain', phone: null },
+        h.cashierId,
+      ),
+      'INVALID_TRANSITION',
+      'returned',
+    );
+  });
+
+  test('details typed in another case fix the spelling, or join the customer they name', async () => {
+    h = await openRepairHarness(40);
+    const mine = await open(h, { customer: { name: 'yohanis wenda', phone: '0812-4455-6677' } });
+    // Its only servisan: the record is respelled in place.
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { name: 'Yohanis Wenda', phone: '081244556677' } },
+      h.cashierId,
+    );
+    expect(await ticket(h, mine.ticketId)).toMatchObject({
+      customerId: mine.customerId,
+      customerName: 'Yohanis Wenda',
+    });
+    // Typed loosely, the servisan moves to the customer as their record reads.
+    const mama = await open(h, { customer: { name: 'Mama Wenda', phone: '0813 1111 2222' } });
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { name: 'mama  wenda', phone: '081311112222' } },
+      h.cashierId,
+    );
+    const moved = await ticket(h, mine.ticketId);
+    expect(moved).toMatchObject({ customerId: mama.customerId, customerName: 'Mama Wenda' });
+    expect(moved.events.at(-1).detail.changes).toContainEqual({
+      field: 'customerName',
+      from: 'Yohanis Wenda',
+      to: 'Mama Wenda',
+    });
+  });
+
+  test('a customer with two servisans is never renamed in place', async () => {
+    h = await openRepairHarness(38);
+    const first = await open(h);
+    await open(h, { customer: { customerId: first.customerId } });
+    await expectCode(
+      h.run(
+        'correctCustomerDetails',
+        { customerId: first.customerId, name: 'Orang Lain', phone: null },
+        h.cashierId,
+      ),
+      'INVALID_TRANSITION',
+      'customerShared',
+    );
+  });
+
+  test("a move's history must name the customer it moves to", async () => {
+    h = await openRepairHarness(39);
+    const mine = await open(h);
+    const other = await open(h, { customer: { name: 'Mama Wenda', phone: null } });
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: mine.ticketId, customer: { customerId: other.customerId } },
+      h.cashierId,
+    );
+    const moved = (await h.ownOps())
+      .filter((op) => op.type === REPAIR_OP.ticketDetailsCorrected)
+      .at(-1)!;
+    const payload = moved.payload as Record<string, unknown>;
+    // A crafted change claiming a different "now" than the record it points at is refused.
+    const forged = {
+      ...moved,
+      payload: { ...payload, customer: { name: 'Orang Lain', phone: '081311112222' } },
+    };
+    await expect(h.checkRule(moved)).resolves.toBeUndefined();
+    const refused = await h.checkRule(forged).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(refusalKeyOf(refused)).toBe('repair.refusal.customerMismatch');
+  });
+
+  test("a warranty claim keeps its servisan's phone", async () => {
+    h = await openRepairHarness(32);
+    const { ticketId } = await open(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
+    const original = await ticket(h, ticketId);
+    const claim = await open(
+      h,
+      {
+        customer: { customerId: original.customerId },
+        claimOf: ticketId,
+        quoteLines: [{ kind: 'labour', description: 'Klaim garansi', amount: 0 }],
+      },
+      h.ownerId,
+    );
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        {
+          ticketId: claim.ticketId,
+          device: {
+            brand: 'Samsung',
+            model: 'Galaxy A14',
+            color: 'Hitam',
+            imei: '350000000000006',
+          },
+        },
+        h.cashierId,
+      ),
+      'VALIDATION_FAILED',
+      'claimSamePhone',
+    );
+    // Its colour or complaint can still be put right.
+    await h.run(
+      'correctTicketDetails',
+      { ticketId: claim.ticketId, complaint: 'Layar bergaris' },
+      h.cashierId,
+    );
+    // And the original's handover can no longer be taken back.
+    await expectCode(
+      h.run('undoHandover', { ticketId, reason: 'Salah' }, h.ownerId),
+      'INVALID_TRANSITION',
+      'handoverHasClaim',
+    );
+  });
+});
+
+describe('undoing a handover', () => {
+  test('an owner takes a mistaken handover back; it can then be handed over properly', async () => {
+    h = await openRepairHarness(33);
+    const { ticketId } = await open(h);
+    const reason = { ticketId, reason: 'Salah servisan, HP masih di rak' };
+    await expectCode(h.run('undoHandover', reason, h.ownerId), 'INVALID_TRANSITION', 'notReturned');
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
+
+    await expectCode(h.run('undoHandover', reason, h.cashierId), 'PERMISSION_DENIED');
+    const signatureOf = (row: { photos: { slot: string; mediaId: string }[] }) =>
+      row.photos.find((p) => p.slot === 'signature')?.mediaId;
+    const wrongSignature = signatureOf(await ticket(h, ticketId));
+    await h.run('undoHandover', reason, h.ownerId);
+    let t = await ticket(h, ticketId);
+    expect(t).toMatchObject({ location: 'in_store', returnedBy: null });
+    expect(t.photos.map((p: { slot: string }) => p.slot)).not.toContain('signature');
+    expect(t.events.at(-1)).toMatchObject({
+      kind: 'repair.handover_reversed',
+      detail: { reason: 'Salah servisan, HP masih di rak' },
+    });
+    // Already paid: the real handover takes no second payment, and keeps its own evidence.
+    await h.run(
+      'returnDevice',
+      (await paidHandover(h, ticketId, {}, [9, 10])) as never,
+      h.cashierId,
+    );
+    t = await ticket(h, ticketId);
+    expect(t.location).toBe('returned');
+    const money = await h.moneyQuery(
+      'documentMoney',
+      { kind: REPAIR_DOCUMENT_KIND, id: ticketId },
+      h.ownerId,
+    );
+    expect(money.rows[0]).toMatchObject({ charged: t.quoteTotal, balance: 0 });
+    expect(signatureOf(t)).toEqual(expect.any(String));
+    expect(signatureOf(t)).not.toBe(wrongSignature);
+  });
+
+  test('only within a day of the first handover, and a manager only within the cancel limit', async () => {
+    h = await openRepairHarness(36);
+    const handedOver = async (amount: number) => {
+      const { ticketId } = await open(h!, {
+        quoteLines: [{ kind: 'labour', description: 'Ganti konektor', amount }],
+      });
+      await h!.run('startWork', { ticketId, beforePhotos: [h!.photo(20)] }, h!.technicianId);
+      await h!.run('markRepaired', { ticketId, afterPhotos: [h!.photo(21)] }, h!.technicianId);
+      await h!.run('returnDevice', (await paidHandover(h!, ticketId)) as never, h!.cashierId);
+      return ticketId;
+    };
+    const reason = (ticketId: string) => ({ ticketId, reason: 'Salah servisan' });
+    const dear = await handedOver(750_000);
+    await expectCode(h.run('undoHandover', reason(dear), h.managerId), 'PERMISSION_DENIED');
+    const cheap = await handedOver(40_000);
+    await h.run('undoHandover', reason(cheap), h.managerId);
+
+    const firstHandover = (await ticket(h, cheap)).returnedAt;
+    expect(firstHandover).toEqual(expect.any(Number));
+    h.advance(HANDOVER_UNDO_WINDOW_MS + 1);
+    await expectCode(
+      h.run('undoHandover', reason(dear), h.ownerId),
+      'INVALID_TRANSITION',
+      'undoTooLate',
+    );
+    // Handed over properly later, the warranty still counts from the first handover, and taking
+    // it back again does not restart the window.
+    await h.run('returnDevice', (await paidHandover(h, cheap, {}, [9, 10])) as never, h.cashierId);
+    expect((await ticket(h, cheap)).returnedAt).toBe(firstHandover);
+    await expectCode(
+      h.run('undoHandover', reason(cheap), h.ownerId),
+      'INVALID_TRANSITION',
+      'undoTooLate',
+    );
+  });
+
+  test('a handover taken back is never cancelled, nor moved to another customer or phone', async () => {
+    h = await openRepairHarness(37);
+    const { ticketId } = await open(h);
+    await open(h, { customer: { name: 'Mama Wenda', phone: '0813 1111 2222' } });
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
+    await h.run('undoHandover', { ticketId, reason: 'Salah servisan' }, h.ownerId);
+
+    await expectCode(
+      h.run('cancelTicket', { ticketId, reason: 'Batal' }, h.ownerId),
+      'INVALID_TRANSITION',
+      'handedOverBefore',
+    );
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        { ticketId, customer: { name: 'Mama Wenda', phone: '0813 1111 2222' } },
+        h.cashierId,
+      ),
+      'INVALID_TRANSITION',
+      'handedOverBefore',
+    );
+    await expectCode(
+      h.run(
+        'correctTicketDetails',
+        {
+          ticketId,
+          device: { brand: 'Xiaomi', model: 'Redmi 12', color: 'Hitam', imei: '350000000000006' },
+        },
+        h.cashierId,
+      ),
+      'VALIDATION_FAILED',
+      'handedOverBefore',
+    );
+    // Its colour or complaint can still be put right.
+    await h.run('correctTicketDetails', { ticketId, complaint: 'Layar bergaris' }, h.cashierId);
   });
 });
 

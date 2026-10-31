@@ -14,10 +14,11 @@ import {
   type,
   useViewport,
   type IconName,
+  Text,
 } from '@bolusi/ui';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 import {
@@ -249,40 +250,57 @@ export function Field({
 export { Fact, FactGrid };
 
 /**
- * Under a total: the down payment taken off it, then what the customer still pays, or what the
- * store gives back when the down payment was more. Nothing when no down payment was taken. `action`
- * sits beside the down payment, the one thing it changes.
+ * Under a total: what an owner took off it, the down payment taken off it, then what the customer
+ * still pays, or what the store gives back when they paid more. Nothing when neither was taken.
+ * `total` is what is owed, already less `reduced`. `action` sits beside the down payment, the one
+ * thing it changes.
  */
 export function DownPaymentRows({
   total,
   downPayment,
+  reduced = 0,
   paidLabel = 'repair.price.downPayment',
   action,
   testID,
 }: {
   readonly total: number;
   readonly downPayment: number | null;
+  readonly reduced?: number | undefined;
   /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
   readonly paidLabel?: RepairKey;
   readonly action?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element | null {
-  if (downPayment === null || downPayment === 0) return null;
-  const balance = balanceAfterDownPayment(total, downPayment);
+  const paid = downPayment ?? 0;
+  if (paid === 0 && reduced === 0) return null;
+  const balance = balanceAfterDownPayment(total, paid);
+  // Before pickup an overpaid DP goes back at the handover; after it, it is still owed back.
+  const owedBackLabel: RepairKey =
+    paidLabel === 'repair.price.paid' ? 'repair.price.owedBack' : 'repair.price.refund';
   return (
     <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
-      <View style={[repairStyles.row, styles.paidRow]}>
-        <View style={styles.paidLabel}>
-          <Text style={styles.paidText}>{tn(paidLabel)}</Text>
-          {action}
+      {reduced === 0 ? null : (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={styles.paidText}>{tn('repair.price.reduced')}</Text>
+          <Text style={[styles.paidText, styles.amount]} testID={`${testID}.reduced`}>
+            {formatMoney(-reduced)}
+          </Text>
         </View>
-        <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
-          {formatMoney(-downPayment)}
-        </Text>
-      </View>
+      )}
+      {paid === 0 ? null : (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <View style={styles.paidLabel}>
+            <Text style={styles.paidText}>{tn(paidLabel)}</Text>
+            {action}
+          </View>
+          <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
+            {formatMoney(-paid)}
+          </Text>
+        </View>
+      )}
       <View style={[repairStyles.row, styles.paidRow]}>
         <Text style={styles.balanceLabel}>
-          {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+          {tn(balance.kind === 'due' ? 'repair.price.balance' : owedBackLabel)}
         </Text>
         <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
           {formatMoney(balance.amount)}

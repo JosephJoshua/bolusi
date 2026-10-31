@@ -30,6 +30,10 @@ import {
   claimTicketInput,
   correctCustomerDetailsHandler,
   correctCustomerDetailsInput,
+  correctTicketDetailsHandler,
+  correctTicketDetailsInput,
+  undoHandoverHandler,
+  undoHandoverInput,
   correctDownPaymentHandler,
   correctDownPaymentInput,
   declineProposalHandler,
@@ -188,7 +192,8 @@ export const repairModuleManifest = {
     },
     [REPAIR_PERMISSION.warrantyException]: {
       scope: 'store',
-      // A free repair outside the warranty is money the store gives away.
+      // A free repair outside the warranty is money the store gives away, and so is handing a
+      // repaired phone back for free (deviceReturnedRule).
       isDangerous: true,
       description: 'Can open a warranty claim after the warranty ended, or charge for a claim.',
     },
@@ -264,6 +269,16 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.handover,
       input: returnDeviceInput,
       handler: returnDeviceHandler,
+    },
+    undoHandover: {
+      permission: REPAIR_PERMISSION.cancel,
+      input: undoHandoverInput,
+      handler: undoHandoverHandler,
+    },
+    correctTicketDetails: {
+      permission: REPAIR_PERMISSION.intake,
+      input: correctTicketDetailsInput,
+      handler: correctTicketDetailsHandler,
     },
     changeIntakeOptions: {
       permission: REPAIR_PERMISSION.manageIntakeOptions,

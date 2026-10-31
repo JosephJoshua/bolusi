@@ -168,6 +168,38 @@ describe('printing on the counter PC', () => {
     expect(printers.printRaw).not.toHaveBeenCalled();
   });
 
+  it('prints on a size the store types, as ESC/P on tractor-feed paper', async () => {
+    const printers = fakePrinters({ chosen: 'EPSON LX-310' });
+    setBridge(printers);
+    renderApp();
+    await openSettings();
+    fireEvent.click(await screen.findByTestId('repair.desk.printing.paper.custom'));
+    const width = await screen.findByTestId('repair.desk.printing.size.width');
+    // Out of range: nothing changes, and the range says why.
+    fireEvent.change(width, { target: { value: '30' } });
+    fireEvent.blur(width);
+    await waitFor(() =>
+      expect(byTestId('repair.desk.printing.size.range').className).toContain('text-danger'),
+    );
+    // A good size saves as it is typed, without leaving the field.
+    fireEvent.change(width, { target: { value: '216' } });
+    // It starts from the paper it had: the store's half forms, tractor-feed.
+    expect(byTestId('repair.desk.printing.size.continuous').getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    await waitFor(async () =>
+      expect((await printers.settings()).paper).toMatchObject({
+        preset: 'custom',
+        widthMm: 216,
+        continuous: true,
+      }),
+    );
+    await openPrintFor('Ester Mandowen');
+    expect(byTestId('repair.desk.print.paper').textContent).toContain('216 × 140 mm');
+    fireEvent.click(byTestId('repair.desk.print.submit'));
+    await waitFor(() => expect(printers.printRaw).toHaveBeenCalledTimes(1));
+  });
+
   it('says to pick a printer first instead of printing nowhere', async () => {
     setBridge(fakePrinters());
     renderApp();
@@ -211,6 +243,47 @@ describe('printing on the counter PC', () => {
     expect((await screen.findByTestId('repair.desk.printing.none')).textContent).toContain(
       'Belum ada printer',
     );
+  });
+});
+
+describe('the printer reminder', () => {
+  it('says no printer is chosen until one is, and leads to where it is chosen', async () => {
+    setBridge(fakePrinters());
+    renderApp();
+    const reminder = await screen.findByTestId('desktop.printerReminder');
+    expect(reminder.getAttribute('aria-label')).toBe('Printer belum dipilih');
+    fireEvent.click(reminder);
+    await screen.findByTestId('desktop.settings.computer');
+    // Gone as soon as the choice is saved, still in Settings.
+    fireEvent.click(await screen.findByText('EPSON LX-310'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.printerReminder')).toBeNull());
+  });
+
+  it("opens this computer's settings again after the person moved to another section", async () => {
+    setBridge(fakePrinters());
+    renderApp();
+    fireEvent.click(await screen.findByTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
+    fireEvent.click(byTestId('desktop.settings.nav.account'));
+    await waitFor(() => expect(screen.queryByTestId('desktop.settings.computer')).toBeNull());
+    fireEvent.click(byTestId('desktop.printerReminder'));
+    await screen.findByTestId('desktop.settings.computer');
+  });
+
+  it('says when the chosen printer is gone', async () => {
+    setBridge(fakePrinters({ chosen: 'EPSON LX-300', installed: ['EPSON LX-310'] }));
+    renderApp();
+    expect((await screen.findByTestId('desktop.printerReminder')).getAttribute('aria-label')).toBe(
+      'Printer tidak ditemukan',
+    );
+  });
+
+  it('stays out of the way once a printer is ready', async () => {
+    setBridge(fakePrinters({ chosen: 'EPSON LX-310' }));
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('desktop.printerReminder')).toBeNull();
   });
 });
 

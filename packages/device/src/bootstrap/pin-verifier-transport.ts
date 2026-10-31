@@ -54,13 +54,14 @@ export function createFetchPinVerifierUpload(
         body: JSON.stringify({ verifierRef, verifier }),
       });
       if (!response.ok) {
-        // 403 (acting user not permitted) and 404 (target not in the server's directory) are PERMANENT
-        // for this (actingUser, target) pair — retrying the identical POST can never succeed, so DROP it
+        // 403 (acting user not permitted), 404 (target not in the server's directory) and 422 (the
+        // server refuses the verifier itself, e.g. an `asOf` it will never accept) are PERMANENT for
+        // this POST — retrying the identical request can never succeed, so DROP it
         // (return a terminal result) rather than re-queue it forever. `applied: false` is how the queue
         // reads "the server did not apply it": the drain drops a RETURNED result and only re-queues a
         // THROWN one. Everything else — 429 (users-quota, retryable), 5xx, a 401 stale device token — is
         // transient/recoverable, so throw to keep it queued for the next online contact (task 186b-2).
-        if (response.status === 403 || response.status === 404) {
+        if (response.status === 403 || response.status === 404 || response.status === 422) {
           return { userId, applied: false };
         }
         throw new Error(`pin-verifier upload failed: HTTP ${String(response.status)}`);

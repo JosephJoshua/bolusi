@@ -27,9 +27,10 @@ import {
   space,
   type,
   type SyncChipState,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 

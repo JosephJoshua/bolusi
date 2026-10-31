@@ -13,6 +13,9 @@ import { registerInventoryCatalog } from '@bolusi/modules/inventory/screens';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
+import idApprovalsCatalog from '@bolusi/modules/approvals/i18n/id.json';
+import enApprovalsCatalog from '@bolusi/modules/approvals/i18n/en.json';
+import { registerApprovalsCatalog } from '@bolusi/modules/approvals/screens';
 
 type ModuleCatalogTree = Readonly<Record<string, unknown>>;
 
@@ -45,6 +48,11 @@ export const CLIENT_SCREEN_MODULES: readonly ClientScreenModule[] = [
     moduleId: 'money',
     register: registerMoneyCatalog,
     catalogs: { id: idMoneyCatalog, en: enMoneyCatalog },
+  },
+  {
+    moduleId: 'approvals',
+    register: registerApprovalsCatalog,
+    catalogs: { id: idApprovalsCatalog, en: enApprovalsCatalog },
   },
 ];
 

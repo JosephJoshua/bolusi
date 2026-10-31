@@ -25,6 +25,7 @@ import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
 import type { UpdateSource } from './app-updates/releases.js';
+import type { QrisConfig } from './qris/service.js';
 import { HandoffRelay } from './handoff/relay.js';
 import { createDbVerifyToken } from './auth/verify-token.js';
 import { noblePasswordKdf, type PasswordKdf } from './crypto/index.js';
@@ -170,6 +171,10 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       if (!isFoldableSchemaVersion(currentVersion, schemaVersion)) {
         return { kind: 'known', validate: () => false };
       }
+      // A version the type's rule no longer fully judges is refused in a new push. Only push
+      // ingestion asks: stored history still folds at every version.
+      const minPushVersion = declaration.minPushVersion ?? 1;
+      if (schemaVersion < minPushVersion) return { kind: 'retired', minPushVersion };
 
       // THE PAYLOAD GATE (task 127; 05 §8, 04 §3). The version is foldable, so validate the payload
       // against the schema THAT VERSION declared — `payloadSchemaFor` returns `payload` for the
@@ -252,6 +257,9 @@ export interface ServerDeps {
   readonly accessLogSink: AccessLogSink;
   readonly bodyCaps: (path: string) => BodyCaps;
   readonly clientIp: (c: Context<AppEnv>) => string;
+  /** Mark cookies Secure. From config in production (main.ts); off for tests and the plain-http
+   *  harness, whose browsers would otherwise drop them. */
+  readonly secureCookies: boolean;
   /** Ed25519 verify + SHA-256 over JCS bytes for the push pipeline (05 §3; task 16 sync push). */
   readonly serverCrypto: CryptoPort;
   /** Fresh ids for `device_anomalies` rows the push pipeline writes (05 §3). */
@@ -308,6 +316,9 @@ export interface ServerDeps {
   readonly handoffRelay: HandoffRelay;
   /** Where phones' over-the-air updates come from (app-updates/releases.ts); absent ⇒ none. */
   readonly appUpdates?: UpdateSource;
+  /** Integrated QRIS through Xendit (qris/service.ts). Absent ⇒ its routes answer 503; it also
+   *  needs `systemKeyStore`, since a confirmed payment is a record the server signs. */
+  readonly qris?: QrisConfig;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -420,6 +431,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     accessLogSink: overrides.accessLogSink ?? consoleAccessLogSink,
     bodyCaps: overrides.bodyCaps ?? defaultBodyCaps,
     clientIp: overrides.clientIp ?? defaultClientIp,
+    secureCookies: overrides.secureCookies ?? false,
     serverCrypto,
     newOpLogId,
     opRegistry: overrides.opRegistry ?? serverOpRegistry,
@@ -441,6 +453,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
     ...(overrides.appUpdates === undefined ? {} : { appUpdates: overrides.appUpdates }),
+    ...(overrides.qris === undefined ? {} : { qris: overrides.qris }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };

@@ -8,6 +8,8 @@
  */
 import { formatMoney } from '@bolusi/i18n';
 import {
+  Button,
+  Banner,
   Card,
   PhotoSlot,
   TextButton,
@@ -17,15 +19,17 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
-import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/screens/PaymentLines.js';
+import { QrisStep, useQrStepBack } from '../../money/screens/QrisStep.js';
+import { canSimulateQris } from '../../money/qris.js';
 import { tn } from '../i18n.js';
 import {
   balanceAfterDownPayment,
@@ -48,8 +52,21 @@ import {
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
-import { useHandoverPayment } from '../handover-payment.js';
-import { usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { freeHandoverNeedsOwner } from '../rules.js';
+import {
+  giveBackText,
+  payLaterHintKey,
+  payLaterLines,
+  useHandoverPayment,
+} from '../handover-payment.js';
+import { ta } from '../../approvals/i18n.js';
+import {
+  useHandoverRefunds,
+  usePaymentAccounts,
+  useRepairQuery,
+  useRepairRuntime,
+  useTicketQris,
+} from '../runtime.js';
 
 export interface HandoverProps {
   readonly ticketId: string;
@@ -86,17 +103,23 @@ export function Handover({
   // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
   // than take a signature for a handover that would be refused.
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const ticket = query.status === 'ready' ? query.data : undefined;
   const balance =
     ticket === undefined
       ? { kind: 'due' as const, amount: 0 }
       : balanceAfterDownPayment(amountOwed(ticket), ticket.downPayment ?? 0);
   const due = balance.kind === 'due' ? balance.amount : 0;
-  const payment = useHandoverPayment(due, accounts, canPayLater);
+  const giveBack = giveBackText(
+    useHandoverRefunds(ticketId, balance.kind === 'refund' ? balance.amount : 0, accounts),
+  );
+  const qris = useTicketQris(ticketId, ticket?.ticketNumber ?? null);
+  const payment = useHandoverPayment(ticketId, due, accounts, qris);
   const { settled } = payment;
   const checks = useHandoverChecks(ticket);
+  const ownerNeeded =
+    ticket !== undefined && freeHandoverNeedsOwner(ticket) && !can.warrantyException;
   const ready =
+    !ownerNeeded &&
     photo !== null &&
     signature !== null &&
     settled &&
@@ -113,7 +136,11 @@ export function Handover({
         note.trim() !== '' ||
         payment.touched ||
         checks.touched),
-    onRegisterDiscardGuard,
+    onRegisterDiscardGuard: useQrStepBack(
+      onRegisterDiscardGuard,
+      payment.qris.open !== null,
+      payment.qris.close,
+    ),
     testID,
   });
 
@@ -144,6 +171,22 @@ export function Handover({
       });
   };
 
+  if (payment.qris.open !== null && qris.port !== undefined) {
+    return (
+      <QrisStep
+        chrome={chrome}
+        open={payment.qris.open}
+        port={qris.port}
+        canSimulate={canSimulateQris(runtime.hasPermission)}
+        onPaid={payment.qris.paid}
+        onRenew={payment.qris.renew}
+        onTakeByHand={payment.qris.takeByHand}
+        onClose={payment.qris.close}
+        testID={`${testID}.qris`}
+      />
+    );
+  }
+
   return (
     <FlowScreen
       chrome={chrome}
@@ -154,11 +197,15 @@ export function Handover({
       onPrimary={submit}
       primaryDisabled={!ready}
       primaryHint={tn(
-        !settled
-          ? 'repair.hint.handoverPayment'
-          : checks.loaded && !checks.ready(note)
-            ? 'repair.hint.handoverChecks'
-            : 'repair.hint.handover',
+        ownerNeeded
+          ? 'repair.hint.handoverFree'
+          : payment.qris.pending > 0
+            ? 'repair.hint.handoverQris'
+            : !settled
+              ? payLaterHintKey(payment)
+              : checks.loaded && !checks.ready(note)
+                ? 'repair.hint.handoverChecks'
+                : 'repair.hint.handover',
       )}
       busy={runner.busy}
       errorCode={runner.errorCode}
@@ -201,12 +248,17 @@ export function Handover({
               <DownPaymentRows
                 total={amountOwed(shown)}
                 downPayment={shown.downPayment}
+                // The DP and anything paid at this counter already (a QR): all of it is paid.
+                paidLabel="repair.price.paid"
                 testID={testID}
               />
             </Card>
           )
         }
       </QueryView>
+      {giveBack === null || stale !== null ? null : (
+        <Banner variant="info" message={giveBack} testID={`${testID}.giveBack`} />
+      )}
       {checks.lines.length === 0 || stale !== null ? null : (
         <Section title={tn('repair.handover.checks')} testID={`${testID}.checks`}>
           {/* Wrapped, not a sideways row: every line must be in sight to be gone through. */}
@@ -227,13 +279,17 @@ export function Handover({
         <Section
           title={tn('repair.handover.payment')}
           action={
-            canPayLater ? (
+            payment.access.kind === 'none' ? undefined : (
               <TextButton
                 label={tn(payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
-                onPress={payment.togglePayLater}
+                onPress={() => {
+                  // A refusal of the other way to settle no longer applies.
+                  runner.clearError();
+                  payment.togglePayLater();
+                }}
                 testID={`${testID}.payLater`}
               />
-            ) : undefined
+            )
           }
           testID={`${testID}.payment`}
         >
@@ -246,9 +302,20 @@ export function Handover({
                 multiline
                 testID={`${testID}.unpaidReason`}
               />
-              <Text style={repairStyles.muted} testID={`${testID}.debt`}>
-                {tn('repair.handover.payLaterNote', { amount: formatMoney(due) })}
-              </Text>
+              {payLaterLines(payment, due).map((line) => (
+                <Text key={line.id} style={repairStyles.muted} testID={`${testID}.${line.id}`}>
+                  {line.text}
+                </Text>
+              ))}
+              {payment.access.kind === 'ask' ? (
+                <Button
+                  label={ta('approvals.action.ask')}
+                  variant="secondary"
+                  disabled={payment.unpaidReason.trim() === '' || runner.busy}
+                  onPress={() => void runner.run(payment.askPayLater)}
+                  testID={`${testID}.askPayLater`}
+                />
+              ) : null}
             </View>
           ) : (
             <PaymentLines
@@ -257,6 +324,7 @@ export function Handover({
               accounts={accounts}
               onChange={payment.setLines}
               newKey={payment.newKey}
+              qris={payment.qris}
               testID={`${testID}.pay`}
             />
           )}

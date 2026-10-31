@@ -31,7 +31,7 @@ import { PIN_KDF_BOUNDS } from './constants.js';
 import { clearLockout, resetForNewVerifier } from './lockout.js';
 import { AUTH_ENTITY, AUTH_OP, AUTH_PERMISSION } from './operations.js';
 import {
-  assertPinFormat,
+  assertNewPin,
   attemptLockKey,
   verifyPin,
   withAttemptLock,
@@ -41,7 +41,6 @@ import type { PinVerifierUploadPort, PinVerifierUploadResult } from './ports.js'
 import {
   deleteMeta,
   FIRST_PIN_USER_META_KEY,
-  holdsMainOwnerRole,
   readMeta,
   readPinAttempt,
   readVerifier,
@@ -53,6 +52,7 @@ import {
   writeVerifier,
   type StoredVerifierRow,
 } from './repo.js';
+import { mayManageOwnerPin } from './staff.js';
 import {
   chooseEffectiveVerifier,
   hashNewPin,
@@ -298,7 +298,7 @@ export async function setFirstPin<DB>(
   // Serialized, so two quick taps cannot both pass the checks below and emit two first PINs. Not the
   // attempt lock: `emitVerifierChange` takes that one inside, and it does not nest.
   const run = firstPinChain.then(async () => {
-    assertPinFormat(input.pin);
+    assertNewPin(input.pin);
     // Only a user with NO PIN yet. Without this, anyone at the counter could replace a colleague's PIN
     // through the first-PIN path and sign in as them; an existing PIN changes only via `changePin`
     // (knowing the current one) or an owner's `resetPin`.
@@ -348,7 +348,7 @@ export async function changePin<DB>(
   deps: PinFlowDeps<DB>,
   input: { readonly userId: string; readonly currentPin: string; readonly newPin: string },
 ): Promise<PendingVerifier> {
-  assertPinFormat(input.newPin);
+  assertNewPin(input.newPin);
   const verified = await verifyPin(
     {
       db: deps.db,
@@ -376,8 +376,8 @@ export async function changePin<DB>(
 
 /**
  * Owner PIN reset (api/02-auth §6.6). Applies the §5.4.6 targeting restrictions (target present in
- * the directory) and the §6.6 privileged-target rule (resetting a main_owner-role holder requires
- * the actor to hold main_owner) BEFORE the command runs, then emits `auth.pin_reset`. Clears the
+ * the directory) and the §6.6 privileged-target rule (resetting an owner's PIN requires the main
+ * owner, {@link mayManageOwnerPin}) BEFORE the command runs, then emits `auth.pin_reset`. Clears the
  * target's lockout. Works offline; the POST rides the next online contact.
  *
  * @throws {DomainError} `PERMISSION_DENIED` `restriction_violated` on a targeting/privileged-target
@@ -388,7 +388,7 @@ export async function resetPin<DB>(
   deps: PinFlowDeps<DB>,
   input: { readonly actorUserId: string; readonly targetUserId: string; readonly newPin: string },
 ): Promise<PendingVerifier> {
-  assertPinFormat(input.newPin);
+  assertNewPin(input.newPin);
   if (!(await userInDirectory(deps.db, input.targetUserId))) {
     return deps.runtime.denyRestriction(
       input.actorUserId,
@@ -397,13 +397,12 @@ export async function resetPin<DB>(
       'target is not in this device’s directory (§5.4.6)',
     );
   }
-  const targetIsMainOwner = await holdsMainOwnerRole(deps.db, input.targetUserId);
-  if (targetIsMainOwner && !(await holdsMainOwnerRole(deps.db, input.actorUserId))) {
+  if (!(await mayManageOwnerPin(deps.db, input.actorUserId, input.targetUserId))) {
     return deps.runtime.denyRestriction(
       input.actorUserId,
       resetPinCommand.permission,
       resetPinCommand.name,
-      'resetting a main_owner-role holder requires the actor to hold main_owner (§6.6)',
+      'resetting an owner’s PIN requires the main owner (§6.6, owner powers)',
     );
   }
   return emitVerifierChange(deps, {
@@ -419,8 +418,9 @@ export async function resetPin<DB>(
  * target to be locked (else `INVALID_TRANSITION` — nothing to clear) and present in the directory
  * (§5.4.6). Emits `auth.pin_lockout_cleared` and resets the target's counter. Offline-capable.
  *
- * @throws {DomainError} `PERMISSION_DENIED` `restriction_violated` (target absent); `INVALID_TRANSITION`
- *   (target not locked); `PERMISSION_DENIED` (+ denial op) when the actor lacks `auth.pin_unlock`.
+ * @throws {DomainError} `PERMISSION_DENIED` `restriction_violated` (target absent, or an owner and the
+ *   actor not the main owner); `INVALID_TRANSITION` (target not locked); `PERMISSION_DENIED` (+ denial
+ *   op) when the actor lacks `auth.pin_unlock`.
  */
 export async function clearPinLockoutFlow<DB>(
   deps: PinFlowDeps<DB>,
@@ -432,6 +432,16 @@ export async function clearPinLockoutFlow<DB>(
       clearPinLockoutCommand.permission,
       clearPinLockoutCommand.name,
       'target is not in this device’s directory (§5.4.6)',
+    );
+  }
+  // Checked here, before the counter is touched: the server refuses the op, but a counter reset on
+  // this device would already let the guessing go on offline.
+  if (!(await mayManageOwnerPin(deps.db, input.actorUserId, input.targetUserId))) {
+    return deps.runtime.denyRestriction(
+      input.actorUserId,
+      clearPinLockoutCommand.permission,
+      clearPinLockoutCommand.name,
+      'unlocking an owner’s PIN requires the main owner (§6.6, owner powers)',
     );
   }
   // The read→gate→write on `pin_attempt_state` is the SAME read-modify-write `verifyPin` serializes

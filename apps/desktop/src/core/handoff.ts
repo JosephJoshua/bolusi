@@ -1,12 +1,12 @@
 // The counter PC's side of the phone handoff (apps/server handoff relay): it pairs a store phone
-// through the server, puts each photo or signature step in front of it, and listens for what comes
-// back, which the window then keeps like its own webcam photo or pad signature. It runs in the core
+// through the server, puts each photo, signature or video step in front of it, and listens for
+// what comes back, which the window then keeps like its own webcam photo, pad signature or clip. It runs in the core
 // process because the device token does; the window only sees ids, steps and results.
 import {
   HANDOFF_PAD,
+  type HandoffAsk,
   type HandoffAskResponse,
   type HandoffEventsResponse,
-  type HandoffKind,
   type HandoffPageLabels,
   type HandoffPairResponse,
 } from '@bolusi/schemas';
@@ -28,7 +28,7 @@ export interface HandoffClientConfig {
 export interface HandoffClient {
   pair(labels: HandoffPageLabels): Promise<HandoffOpened>;
   /** The step's number, or null when the pairing is over (the window then pairs again). */
-  ask(id: string, kind: HandoffKind, title: string): Promise<number | null>;
+  ask(id: string, ask: HandoffAsk): Promise<number | null>;
   withdraw(id: string, seq: number): Promise<void>;
   unpair(id: string): Promise<void>;
   /** Stops listening (the core is stopping). */
@@ -74,6 +74,31 @@ export function createHandoffClient(config: HandoffClientConfig): HandoffClient 
     listening = null;
   };
 
+  /**
+   * The clip the phone sent for `seq`, fetched on its own (it is too big for the events); tried
+   * again while the PC is offline, and null once the server no longer holds it.
+   */
+  async function fetchClip(
+    id: string,
+    seq: number,
+    abort: AbortController,
+  ): Promise<Uint8Array | null> {
+    for (let failures = 0; !abort.signal.aborted; failures += 1) {
+      try {
+        const response = await call(
+          `/${encodeURIComponent(id)}/clip/${String(seq)}`,
+          {},
+          abort.signal,
+        );
+        return new Uint8Array(await response.arrayBuffer());
+      } catch (error) {
+        if (abort.signal.aborted || error instanceof Gone) return null;
+        await sleep(RETRY_MS[Math.min(failures, RETRY_MS.length - 1)]!);
+      }
+    }
+    return null;
+  }
+
   async function listen(id: string, abort: AbortController): Promise<void> {
     let after = 0;
     let failures = 0;
@@ -105,6 +130,12 @@ export function createHandoffClient(config: HandoffClientConfig): HandoffClient 
         else if (event.type === 'photo') {
           const bytes = Buffer.from(event.jpeg, 'base64');
           config.emit({ id, type: 'photo', seq: event.seq, bytes: new Uint8Array(bytes) });
+        } else if (event.type === 'video') {
+          const bytes = await fetchClip(id, event.seq, abort);
+          if (abort.signal.aborted) return;
+          if (bytes !== null) {
+            config.emit({ id, type: 'video', seq: event.seq, bytes, mime: event.mime });
+          }
         } else {
           config.emit({
             id,
@@ -142,11 +173,11 @@ export function createHandoffClient(config: HandoffClientConfig): HandoffClient 
       void listen(paired.id, abort);
       return { ok: true, id: paired.id, urls: [`${config.baseUrl}${paired.path}`] };
     },
-    async ask(id, kind, title) {
+    async ask(id, ask) {
       try {
         const response = await call(`/${encodeURIComponent(id)}/ask`, {
           method: 'POST',
-          body: JSON.stringify({ kind, title }),
+          body: JSON.stringify(ask),
         });
         return ((await response.json()) as HandoffAskResponse).seq;
       } catch (error) {

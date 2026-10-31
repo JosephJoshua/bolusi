@@ -53,6 +53,8 @@ export const MONEY_REFUSALS = defineRefusals('money', [
   'countSuperseded',
   'differenceChanged',
   'overLimit',
+  'cashMoveNotFound',
+  'laterCountSettled',
 ] as const);
 const { refuse } = MONEY_REFUSALS;
 
@@ -210,6 +212,36 @@ async function netPaidThrough(
   return Number(row?.net ?? 0);
 }
 
+/**
+ * What went back to a document's customer through its payment accounts beyond what was paid
+ * through each, `outgoing` (the op being judged) taken off its account first.
+ */
+async function overdrawnAccounts(
+  db: Db,
+  storeId: string,
+  document: { kind: string; id: string },
+  outgoing: readonly { readonly account: string; readonly amount: number }[],
+): Promise<number> {
+  const rows = await db
+    .selectFrom('moneyLines')
+    .select(['account', sql<string | number>`COALESCE(SUM(debit - credit), 0)`.as('net')])
+    .where('storeId', '=', storeId)
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .groupBy('account')
+    .execute();
+  const net = new Map<string, number>();
+  for (const row of rows) {
+    if (row.account === CASH_ACCOUNT || paymentAccountIdOf(row.account) !== null) {
+      net.set(row.account, Number(row.net));
+    }
+  }
+  for (const { account, amount } of outgoing) net.set(account, (net.get(account) ?? 0) - amount);
+  let overdrawn = 0;
+  for (const value of net.values()) overdrawn += Math.max(0, -value);
+  return overdrawn;
+}
+
 async function entryExists(db: Db, id: string): Promise<boolean> {
   const row = await db
     .selectFrom('moneyEntries')
@@ -265,6 +297,61 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     return { source, lookup };
   }
 
+  /**
+   * Everything taken off a document that its refund limit counts, `change` (the op being judged)
+   * included: charge reductions, voided payments (`voidedOffDocument`) and refunds beyond what the
+   * counter could give back. Once the document is charged in full, refunds count as far as they
+   * left the customer owing (the refund command lowers the bill by that first, and the two then
+   * count once, as the reduction), plus what went back through an account beyond what the customer
+   * paid through it (`overdrawnAccounts`), so credit from a payment through one account does not
+   * come back free through another. Before that, every refund counts.
+   */
+  async function takenOffDocument(
+    db: Db,
+    op: SignedOperation,
+    document: { readonly kind: string; readonly id: string },
+    change: {
+      readonly reduced?: number;
+      readonly refund?: { readonly account: string; readonly amount: number };
+      readonly voiding?: { readonly id: string; readonly amount: number; readonly account: string };
+    },
+  ): Promise<number> {
+    const store = storeOf(op);
+    const reduced = change.reduced ?? 0;
+    const refunded = change.refund?.amount ?? 0;
+    const voided = change.voiding?.amount ?? 0;
+    const source = sources[document.kind];
+    const expected =
+      source === undefined
+        ? null
+        : await source.charge(db as unknown as Kysely<never>, {
+            tenantId: op.tenantId,
+            storeId: store,
+            documentId: document.id,
+          });
+    const charged = await documentTotal(db, store, document, 'charge_recorded');
+    const refunds = (await documentTotal(db, store, document, 'refund_paid')) + refunded;
+    const balance = (await documentBalance(db, store, document)) - reduced + refunded + voided;
+    const outgoing = [change.refund, change.voiding].filter((move) => move !== undefined);
+    const refundsCounted =
+      expected !== null && charged >= expected.amount
+        ? Math.min(
+            refunds,
+            Math.max(0, balance) + (await overdrawnAccounts(db, store, document, outgoing)),
+          )
+        : refunds;
+    return (
+      (await documentTotal(db, store, document, 'charge_reduced')) +
+      reduced +
+      (await voidedOffDocument(db, store, {
+        ...document,
+        voiding: change.voiding === undefined ? [] : [{ ...change.voiding, at: op.timestamp }],
+        owed: balance,
+      })) +
+      refundsCounted
+    );
+  }
+
   /** Exactly what is left to charge for the document, to the revenue account it names. */
   const chargeRecordedRule: Rule = async (op, { db }) => {
     const { document, amount, account } = payloadOf<{
@@ -307,7 +394,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         details: { field: 'amount', issue: `at most ${charged - reduced}` },
       });
     }
-    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, reduced + amount);
+    const takenOff = await takenOffDocument(db, op, document, { reduced: amount });
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
   const paymentReceivedRule: Rule = async (op, { db }) => {
@@ -339,14 +427,14 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
 
   /**
    * An owner cancels a payment of this store that still counts. A limited role (a manager) may
-   * only while the money voids took off its document stays within its store's refund limit: a void
+   * only while everything taken off its document stays within its store's refund limit: a void
    * takes money off the book like a refund does.
    */
   const paymentVoidedRule: Rule = async (op, ctx) => {
     const { db } = ctx;
     const entry = await db
       .selectFrom('moneyEntries')
-      .select(['id', 'kind', 'voidedBy', 'amount', 'documentKind', 'documentId'])
+      .select(['id', 'kind', 'voidedBy', 'amount', 'account', 'documentKind', 'documentId'])
       .where('id', '=', op.entityId)
       .where('storeId', '=', storeOf(op))
       .executeTakeFirst();
@@ -362,12 +450,52 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     const takenOff =
       entry.documentKind === null || entry.documentId === null
         ? Number(entry.amount)
-        : await voidedOffDocument(db, storeOf(op), {
-            kind: entry.documentKind,
-            id: entry.documentId,
-            voiding: { id: entry.id, amount: Number(entry.amount) },
-          });
+        : await takenOffDocument(
+            db,
+            op,
+            { kind: entry.documentKind, id: entry.documentId },
+            {
+              voiding: { id: entry.id, amount: Number(entry.amount), account: entry.account ?? '' },
+            },
+          );
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
+  };
+
+  /**
+   * An owner cancels a cash move typed wrong. Not once a count after it was settled: that owner
+   * already put the book right for it, and taking the move away would open the difference again.
+   */
+  const cashMoveVoidedRule: Rule = async (op, { db }) => {
+    const entry = await db
+      .selectFrom('moneyEntries')
+      .select(['id', 'kind', 'voidedBy', 'createdAt'])
+      .where('id', '=', op.entityId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirst();
+    if (entry === undefined || entry.kind !== 'cash_moved') {
+      throw refuse('cashMoveNotFound', {
+        code: 'ENTITY_NOT_FOUND',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
+    if (entry.voidedBy !== null) {
+      throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
+    }
+    const settled = await db
+      .selectFrom('moneyEntries as a')
+      .innerJoin('moneyEntries as c', 'c.id', 'a.relatedEntryId')
+      .select('a.id')
+      .where('a.storeId', '=', storeOf(op))
+      .where('a.kind', '=', 'cash_adjusted')
+      .where('c.kind', '=', 'cash_counted')
+      .where('c.createdAt', '>', entry.createdAt)
+      .executeTakeFirst();
+    if (settled !== undefined) {
+      throw refuse('laterCountSettled', {
+        code: 'INVALID_TRANSITION',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
   };
 
   /**
@@ -413,9 +541,9 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     })();
     if (counterRefusal === null) return;
     if (!(await holdsPermission(op.userId, MONEY_PERMISSION.refund))) throw counterRefusal;
-    // A limited role (a manager): every refund on the document, this one with them, within limit.
-    const earlier = await documentTotal(db, store, document, 'refund_paid');
-    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, earlier + amount);
+    // A limited role (a manager): everything taken off the document, this with it, within limit.
+    const takenOff = await takenOffDocument(db, op, document, { refund: { account, amount } });
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
   /** A deposit goes into one of the store's accounts; other moves touch only the drawer. */
@@ -506,6 +634,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     chargeReducedRule,
     paymentReceivedRule,
     paymentVoidedRule,
+    cashMoveVoidedRule,
     refundPaidRule,
     cashMovedRule,
     cashCountedRule,
@@ -557,9 +686,42 @@ async function requireReplaceable(
 }
 
 /**
- * The money voids took off a document, the void being judged included. A payment voided after one
- * was recorded in its place counts only beyond what that one holds, and only while the document is
- * not charged: once billed, every void counts in full.
+ * What voiding `voiding` (and recording `paying` in place of one) at `at` would leave taken off a
+ * document, as the last of those voids is judged against the refund limit (`takenOffDocument`):
+ * its charge reductions and the voids. Refunds are left out, so it holds only for documents
+ * without any (a down payment fix is refused once one is paid).
+ */
+export async function takenOffByVoids(
+  db: Db,
+  storeId: string,
+  document: { readonly kind: string; readonly id: string },
+  change: {
+    readonly voiding: readonly { readonly id: string; readonly amount: number }[];
+    readonly paying?: { readonly replaces: string; readonly amount: number };
+    readonly at: number;
+  },
+): Promise<number> {
+  const voided = change.voiding.reduce((sum, { amount }) => sum + amount, 0);
+  const owed =
+    (await documentBalance(db, storeId, document)) + voided - (change.paying?.amount ?? 0);
+  return (
+    (await documentTotal(db, storeId, document, 'charge_reduced')) +
+    (await voidedOffDocument(db, storeId, {
+      ...document,
+      voiding: change.voiding.map((entry) => ({ ...entry, at: change.at })),
+      ...(change.paying === undefined ? {} : { paying: { ...change.paying, at: change.at } }),
+      owed,
+    }))
+  );
+}
+
+/**
+ * The money voids took off a document, the void being judged (if any) included. Before the document
+ * is charged, a payment voided after one was recorded in its place counts only beyond what that one
+ * holds. Once charged, a void made since counts only beyond the live payments recorded after it (a
+ * payment taken again, say through the right account), and never less than what the voids leave
+ * the customer owing (`owed`, the document's balance after the change), so a payment that settles
+ * the bill does not also excuse a void. Voids from before the charge count in full.
  */
 async function voidedOffDocument(
   db: Db,
@@ -567,30 +729,82 @@ async function voidedOffDocument(
   document: {
     readonly kind: string;
     readonly id: string;
-    readonly voiding: { readonly id: string; readonly amount: number };
+    /** The payments being voided now. */
+    readonly voiding: readonly {
+      readonly id: string;
+      readonly amount: number;
+      readonly at: number;
+    }[];
+    /** A payment about to be recorded in place of one (a down payment fix asked, not yet made). */
+    readonly paying?: { readonly replaces: string; readonly amount: number; readonly at: number };
+    readonly owed: number;
   },
 ): Promise<number> {
-  const payments = await db
+  const recorded = await db
     .selectFrom('moneyEntries')
-    .select(['id', 'amount', 'voidedBy', 'relatedEntryId'])
+    .select(['id', 'amount', 'voidedBy', 'voidedAt', 'createdAt', 'relatedEntryId'])
     .where('storeId', '=', storeId)
     .where('kind', '=', 'payment_received')
     .where('documentKind', '=', document.kind)
     .where('documentId', '=', document.id)
     .execute();
+  const { paying } = document;
+  const payments = [
+    ...recorded,
+    ...(paying === undefined
+      ? []
+      : [
+          {
+            id: '',
+            amount: paying.amount,
+            voidedBy: null,
+            voidedAt: null,
+            createdAt: paying.at,
+            relatedEntryId: paying.replaces,
+          },
+        ]),
+  ];
   const voided = [
     ...payments
       .filter((row) => row.voidedBy !== null)
-      .map((row) => ({ id: row.id, amount: Number(row.amount) })),
-    document.voiding,
+      .map((row) => ({ id: row.id, amount: Number(row.amount), at: Number(row.voidedAt) })),
+    ...document.voiding,
   ];
   const total = voided.reduce((sum, { amount }) => sum + amount, 0);
-  if ((await documentTotal(db, storeId, document, 'charge_recorded')) > 0) return total;
-  const credit = voided.reduce((sum, { id, amount }) => {
-    const replacement = payments.find((row) => row.relatedEntryId === id);
-    return sum + (replacement === undefined ? 0 : Math.min(amount, Number(replacement.amount)));
-  }, 0);
-  return total - credit;
+  const billed = await db
+    .selectFrom('moneyEntries')
+    .select(sql<string | number | null>`MIN(created_at)`.as('at'))
+    .where('storeId', '=', storeId)
+    .where('kind', '=', 'charge_recorded')
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .executeTakeFirst();
+  if (billed?.at === null || billed?.at === undefined) {
+    const credit = voided.reduce((sum, { id, amount }) => {
+      const replacement = payments.find((row) => row.relatedEntryId === id);
+      return sum + (replacement === undefined ? 0 : Math.min(amount, Number(replacement.amount)));
+    }, 0);
+    return total - credit;
+  }
+  const billedAt = Number(billed.at);
+  // Latest first: each void since the charge takes what the live payments after it still hold.
+  const events = [
+    ...voided
+      .filter(({ at }) => at >= billedAt)
+      .map(({ amount, at }) => ({ at, voids: amount, pays: 0 })),
+    ...payments
+      .filter((row) => row.voidedBy === null)
+      .map((row) => ({ at: Number(row.createdAt), voids: 0, pays: Number(row.amount) })),
+  ].sort((a, b) => b.at - a.at || b.voids - a.voids);
+  let after = 0;
+  let credit = 0;
+  for (const { voids, pays } of events) {
+    after += pays;
+    const taken = Math.min(voids, after);
+    after -= taken;
+    credit += taken;
+  }
+  return Math.max(total - credit, Math.min(total, Math.max(0, document.owed)));
 }
 
 /** An account stays with the store that made it (or central), and keeps its kind. */

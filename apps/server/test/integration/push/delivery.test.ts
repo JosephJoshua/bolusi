@@ -101,6 +101,14 @@ async function grantDeviceRead(
     .insertInto('userRoles')
     .values({ tenantId: row.tenantId, userId: row.userId, roleId, storeId: row.storeId })
     .execute();
+  // A store grant counts only where the user is a member.
+  if (row.storeId !== null) {
+    await h.db
+      .insertInto('userStores')
+      .values({ tenantId: row.tenantId, userId: row.userId, storeId: row.storeId })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+  }
 }
 
 // ── sync wake / conflict / anomaly + the latency probe — signed-push composition (makeSyncHarness) ─

@@ -6,11 +6,15 @@ import { zMediaRef, zVideoRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
-import { CASH_ACCOUNT } from '../money/constants.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
 import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
+import type { ApprovalRow } from '../approvals/queries.js';
+import type { MoneyTarget } from '../money/refund.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
-import type { OpenTicketInput } from './commands.js';
+import type { CorrectTicketDetailsInput, OpenTicketInput } from './commands.js';
+import { imeiInvalid, phoneInvalid } from './contact.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairKey } from './i18n.js';
 import {
   CHECKLIST_STATES,
@@ -25,6 +29,7 @@ import {
   type RepairOutcome,
   type SlipKind,
   type WorkPhotoStage,
+  HANDOVER_UNDO_WINDOW_MS,
 } from './constants.js';
 import {
   readyDays,
@@ -32,9 +37,10 @@ import {
   type IntakeOption,
   type IntakeOptionLists,
 } from './intake-options.js';
-import { SCREEN_LOCK_KINDS, encodeScreenLock } from './screen-lock.js';
+import { SCREEN_LOCK_KINDS, decodeScreenLock, encodeScreenLock } from './screen-lock.js';
 import type {
   ListTicketsInput,
+  QuoteLineRow,
   TicketDetailRow,
   TicketPhotoRow,
   TicketSummaryRow,
@@ -43,6 +49,7 @@ import type {
 // ── board ─────────────────────────────────────────────────────────────────────────────────────
 
 export const BOARD_VIEWS = [
+  'approvals',
   'active',
   'mine',
   'unassigned',
@@ -55,10 +62,12 @@ export type BoardView = (typeof BOARD_VIEWS)[number];
 
 /**
  * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
- * nobody collected are for the counter and owners, who call the customer.
+ * nobody collected are for the counter and owners, who call the customer. Servisan with requests
+ * this user can approve lead while there are any (`waitingApprovals`).
  */
-export function boardViews(can: RepairAbilities): readonly BoardView[] {
+export function boardViews(can: RepairAbilities, waitingApprovals = 0): readonly BoardView[] {
   return BOARD_VIEWS.filter((view) => {
+    if (view === 'approvals') return waitingApprovals > 0;
     if (view === 'cancelled') return can.cancel;
     if (view === 'uncollected') return flagsUncollected(can);
     return true;
@@ -104,16 +113,23 @@ export function uncollectedDays(
   return Math.floor((now - ticket.readyAt) / DAY_MS);
 }
 
+/** The most servisan the approvals view lists at once (`listTickets` takes up to 100 ids). */
+export const APPROVALS_VIEW_MAX = 100;
+
 /**
  * The `listTickets` filter behind each board view. `readyBefore` is the not-collected cut-off
- * (`uncollectedBefore`), which only that view reads.
+ * (`uncollectedBefore`), and `approvalIds` the servisan waiting on this user's approval; each is
+ * read by its own view only. The approvals view is offered only while it has some.
  */
 export function boardFilter(
   view: BoardView,
   userId: string,
   readyBefore: number,
+  approvalIds: readonly string[] = [],
 ): ListTicketsInput['filter'] {
   switch (view) {
+    case 'approvals':
+      return { ids: approvalIds.slice(0, APPROVALS_VIEW_MAX) };
     case 'active':
       return { outcomes: [...IN_PROGRESS], location: 'in_store' };
     case 'mine':
@@ -249,6 +265,8 @@ export type TicketAction =
   | 'changePrice'
   | 'proposePrice'
   | 'handover'
+  | 'correctDetails'
+  | 'undoHandover'
   | 'cancel';
 
 /**
@@ -256,9 +274,13 @@ export type TicketAction =
  * button never leads to a refusal the user could have been spared; the command stays the authority.
  */
 export function ticketActions(
-  ticket: Pick<TicketSummaryRow, 'outcome' | 'location' | 'technicianId' | 'pendingProposals'>,
+  ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'returnedAt'
+  >,
   can: RepairAbilities,
   userId: string,
+  now: number = Date.now(),
 ): TicketAction[] {
   const actions: TicketAction[] = [];
   const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
@@ -289,15 +311,36 @@ export function ticketActions(
   else if (open && can.work) actions.push('proposePrice');
   if (open && can.assign && !assignFirst) actions.push('assign');
   if (open && can.work && ticket.outcome === 'repaired') actions.push('reopen');
-  if (open && can.cancel) actions.push('cancel');
+  // What intake wrote down is put right while the phone is here; after pickup the signed slip is
+  // the record. Taking a handover back is an owner's call, like cancelling.
+  if (ticket.location === 'in_store' && can.intake) actions.push('correctDetails');
+  // A handover taken back was charged: it goes home again, never cancelled. Taking one back is for
+  // a day after the first handover only. The counter, who cannot cancel, asks an owner to (an
+  // approval request).
+  if (open && (can.cancel || can.intake) && ticket.returnedAt === null) actions.push('cancel');
+  if (ticket.location === 'returned' && can.cancel && undoableHandover(ticket, now)) {
+    actions.push('undoHandover');
+  }
   return actions;
 }
+
+/** The actions kept apart at the end of a servisan, below everything: final, or taking one back. */
+/** Mirrors the handover-undo rule's window, counted from the first handover. */
+export function undoableHandover(
+  ticket: Pick<TicketDetailRow, 'returnedAt'>,
+  now: number,
+): boolean {
+  return ticket.returnedAt !== null && now - ticket.returnedAt <= HANDOVER_UNDO_WINDOW_MS;
+}
+
+export const FINAL_ACTIONS: ReadonlySet<TicketAction> = new Set(['cancel', 'undoHandover']);
 
 /** Actions that change one fact, offered beside it (the technician, the price), never in a row. */
 export const CONTEXTUAL_ACTIONS: ReadonlySet<TicketAction> = new Set([
   'assign',
   'changePrice',
   'proposePrice',
+  'correctDetails',
 ]);
 
 /**
@@ -336,7 +379,9 @@ export function arrangeTicketActions(
   const mine = ticket.technicianId === null || ticket.technicianId === userId;
   const offered = actions.filter(
     (action) =>
-      action !== 'cancel' && !CONTEXTUAL_ACTIONS.has(action) && (mine || !BENCH_WORK.has(action)),
+      !FINAL_ACTIONS.has(action) &&
+      !CONTEXTUAL_ACTIONS.has(action) &&
+      (mine || !BENCH_WORK.has(action)),
   );
   const forward = FORWARD.filter((action) => offered.includes(action));
   // With nothing to push forward, picking a technician is what an unassigned repair waits on.
@@ -356,7 +401,8 @@ export function arrangeTicketActions(
 /**
  * What this user may do about the down payment, shown beside it. Mirrors the commands: anyone at
  * the counter records one while the servisan is open and none is recorded; only an owner
- * changes one already recorded, since a lower figure is how cash would go missing.
+ * changes one already recorded, since a lower figure is how cash would go missing, and the counter
+ * asks one to.
  */
 export function downPaymentAction(
   ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
@@ -364,9 +410,43 @@ export function downPaymentAction(
 ): 'record' | 'correct' | null {
   // Once the phone is back with its owner the DP is part of the bill it paid, not a figure to edit.
   if (ticket.location === 'returned') return null;
-  if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
+  // The counter asks an owner to fix it (repair approval-kinds.ts).
+  if (ticket.downPayment !== null) return can.correctDownPayment || can.intake ? 'correct' : null;
   const open = ticket.outcome !== 'cancelled';
   return can.intake && open ? 'record' : null;
+}
+
+/** The servisan as the money ledger names it, and whose money goes back. */
+export function ticketMoneyTarget(
+  ticket: Pick<TicketSummaryRow, 'id' | 'ticketNumber' | 'customerName'>,
+): MoneyTarget {
+  return {
+    document: { kind: REPAIR_DOCUMENT_KIND, id: ticket.id, label: ticket.ticketNumber },
+    customer: ticket.customerName,
+  };
+}
+
+/**
+ * What may be done with a servisan's money once the phone went home (refund.ts has the details):
+ * give back an overpayment (the counter) or any of what was paid (an owner), and an owner lowers
+ * what is still owed.
+ */
+export function ticketMoneyActions(
+  ticket: Pick<
+    TicketSummaryRow,
+    'location' | 'outcome' | 'cancelFee' | 'quoteTotal' | 'reduced' | 'downPayment'
+  >,
+  hasPermission: (permission: string) => boolean,
+): { readonly refund: boolean; readonly reduce: boolean } {
+  if (ticket.location !== 'returned') return { refund: false, reduce: false };
+  const owner = hasPermission(MONEY_PERMISSION.refund);
+  const paid = ticket.downPayment ?? 0;
+  const owed = amountOwed(ticket) - paid;
+  // Money going back is the counter's command, so even an owner needs `receive` (manifest.ts).
+  return {
+    refund: hasPermission(MONEY_PERMISSION.receive) && ((owner && paid > 0) || owed < 0),
+    reduce: owner && owed > 0,
+  };
 }
 
 /**
@@ -436,6 +516,99 @@ export function claimIntakeDraft(ticket: TicketDetailRow, lineDescription: strin
   };
 }
 
+// ── correcting what intake wrote down ───────────────────────────────────────────────────────
+
+/** The correction form, filled with the servisan as saved: intake's own fields, edited in place. */
+export function correctionDraft(ticket: TicketDetailRow): IntakeDraft {
+  const lock = ticket.devicePasscode === null ? null : decodeScreenLock(ticket.devicePasscode);
+  return {
+    ...emptyIntakeDraft(),
+    customer: { kind: 'new', name: ticket.customerName, phone: ticket.customerPhone ?? '' },
+    device: {
+      brand: ticket.deviceBrand,
+      model: ticket.deviceModel,
+      color: ticket.deviceColor,
+      imei: ticket.deviceImei ?? '',
+      // A lock saved before lock kinds is plain text: shown as a password, so it stays readable.
+      lockKind: lock === null ? 'none' : lock.kind === 'unknown' ? 'password' : lock.kind,
+      passcode: lock?.value ?? '',
+    },
+    complaint: ticket.complaint,
+    peripherals: ticket.peripherals.map((option) => option.item),
+    claimOf:
+      ticket.claimOfTicketId === null
+        ? null
+        : { ticketId: ticket.claimOfTicketId, ticketNumber: '', warrantyUntil: null },
+  };
+}
+
+/** What still blocks a correction: intake's own checks on the customer, the phone and the complaint. */
+export function correctionProblems(
+  draft: IntakeDraft,
+  options: IntakeOptionLists,
+): IntakeProblem[] {
+  return (['customer', 'device', 'condition'] as const).flatMap((step) =>
+    stepProblems(draft, step, options),
+  );
+}
+
+/**
+ * The store's lists for a correction: an accessory recorded on this servisan that the store no
+ * longer offers stays on offer, with the label it was recorded with, so it can still be unticked.
+ */
+export function correctionOptions(
+  options: IntakeOptionLists,
+  ticket: Pick<TicketDetailRow, 'peripherals'>,
+): IntakeOptionLists {
+  const offered = new Set(options.accessories.map((option) => option.id));
+  const gone = ticket.peripherals
+    .filter((option) => !offered.has(option.item))
+    .map((option) => ({ id: option.item, label: option.label }));
+  return { ...options, accessories: [...options.accessories, ...gone] };
+}
+
+/**
+ * The `correctTicketDetails` input for a correction with no problems, against the lists from
+ * `correctionOptions`. The command sends on only what differs.
+ */
+export function toCorrectionInput(
+  ticket: TicketDetailRow,
+  draft: IntakeDraft,
+  options: IntakeOptionLists,
+  reason: string,
+): CorrectTicketDetailsInput {
+  const { lockKind, passcode: typed } = draft.device;
+  const passcode =
+    lockKind === 'none' || typed === '' ? null : encodeScreenLock({ kind: lockKind, value: typed });
+  // A lock saved as plain text before lock kinds is unchanged when its text is.
+  const sameLock =
+    passcode === ticket.devicePasscode ||
+    (ticket.devicePasscode !== null &&
+      decodeScreenLock(ticket.devicePasscode).kind === 'unknown' &&
+      typed === ticket.devicePasscode);
+  return {
+    ticketId: ticket.id,
+    customer:
+      draft.customer.kind === 'existing'
+        ? { customerId: draft.customer.customerId }
+        : { name: draft.customer.name.trim(), phone: draft.customer.phone.trim() || null },
+    device: {
+      brand: draft.device.brand.trim(),
+      model: draft.device.model.trim(),
+      color: draft.device.color.trim(),
+      imei: draft.device.imei.trim() || null,
+    },
+    ...(sameLock ? {} : { passcode }),
+    complaint: draft.complaint.trim(),
+    // One already recorded keeps its recorded label, so a renamed list entry is not a change.
+    peripherals: chosenAccessories(draft, options.accessories).map(({ id, label }) => ({
+      item: id,
+      label: ticket.peripherals.find((option) => option.item === id)?.label ?? label,
+    })),
+    reason: reason.trim(),
+  };
+}
+
 /**
  * Whether a claim's warranty has ended by now, so only an owner can open it. Judged when shown, not
  * when the intake started: an intake kept overnight may have outlived the warranty.
@@ -457,11 +630,14 @@ export function repairTypesStale(
   return { kind: ticket.outcome === 'cancelled' ? 'cancelled' : 'changed' };
 }
 
-/** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
+/**
+ * What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total, less
+ * what an owner took off it once charged.
+ */
 export function amountOwed(
-  row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal'>,
+  row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal' | 'reduced'>,
 ): number {
-  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+  return (row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal) - row.reduced;
 }
 
 /**
@@ -551,6 +727,11 @@ export function balanceAfterDownPayment(
     : { kind: 'due', amount: total - downPayment };
 }
 
+/** What a cancelled servisan's customer gets back at pickup: the DP above the fee, if any. */
+export function cancelRefund(downPayment: number, fee: number | null): number {
+  return fee === null ? 0 : Math.max(0, downPayment - fee);
+}
+
 // ── an open step after the ticket changed ────────────────────────────────────────────────────
 
 /**
@@ -567,7 +748,9 @@ export type TicketStep =
         | 'assign'
         | 'changePrice'
         | 'proposePrice'
-        | 'handover';
+        | 'handover'
+        | 'correctDetails'
+        | 'undoHandover';
     }
   | { readonly kind: 'proposal'; readonly lineId: string };
 
@@ -589,6 +772,8 @@ const STEP_ACTIONS: Readonly<Record<TicketStep['kind'], readonly TicketAction[]>
   changePrice: ['changePrice'],
   proposePrice: ['proposePrice'],
   handover: ['handover'],
+  correctDetails: ['correctDetails'],
+  undoHandover: ['undoHandover'],
   proposal: ['decidePrice'],
 };
 
@@ -602,18 +787,19 @@ export function staleStep(
   step: TicketStep,
   ticket: Pick<
     TicketDetailRow,
-    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'quoteLines'
+    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'quoteLines' | 'returnedAt'
   >,
   can: RepairAbilities,
   userId: string,
+  now: number = Date.now(),
 ): StaleStep | null {
-  const actions = ticketActions(ticket, can, userId);
+  const actions = ticketActions(ticket, can, userId, now);
   const line =
     step.kind === 'proposal' ? ticket.quoteLines.find((row) => row.id === step.lineId) : undefined;
   const lineOpen = step.kind !== 'proposal' || line?.status === 'proposed';
   if (lineOpen && STEP_ACTIONS[step.kind].some((action) => actions.includes(action))) return null;
 
-  if (ticket.location === 'returned') return { kind: 'returned' };
+  if (ticket.location === 'returned' && step.kind !== 'undoHandover') return { kind: 'returned' };
   if (line !== undefined && (line.status === 'applied' || line.status === 'declined')) {
     return { kind: 'proposalDecided', decision: line.status };
   }
@@ -697,6 +883,69 @@ export type PriceKind = (typeof PRICE_KINDS)[number];
 /** The kinds a user may add: a discount lowers the price, so only those who may discount see it. */
 export function priceKinds(discount: boolean): readonly PriceKind[] {
   return PRICE_KINDS.filter((kind) => kind !== 'discount' || discount);
+}
+
+/**
+ * Whether a discount or a cancel goes to an owner instead: this user may not do it at all, or it
+ * is beyond their limit (`limit` as `ModulePort.limitOf` gives it, null when not limited).
+ */
+export function asksApproval(holds: boolean, limit: number | null, amount: number): boolean {
+  return !holds || (limit !== null && amount > limit);
+}
+
+/**
+ * What the discounts still standing on a servisan take off (all but declined ones): a discount
+ * limit is per servisan, so they count with the next one (repair rules, `discountsStanding`).
+ */
+export function discountsStanding(
+  lines: readonly Pick<QuoteLineRow, 'amount' | 'status'>[],
+): number {
+  return lines.reduce(
+    (sum, line) => (line.amount < 0 && line.status !== 'declined' ? sum - line.amount : sum),
+    0,
+  );
+}
+
+/** Why it is asked: the user may not do it, or it is beyond their limit. */
+export function askedBecauseKey(holds: boolean): RepairKey {
+  return holds ? 'repair.approval.overLimit' : 'repair.approval.needsApproval';
+}
+
+/**
+ * Whether the counter may let the phone go unpaid now ("Bayar nanti"), and if not, where asking
+ * stands. `requests` are the servisan's Bayar nanti requests, newest first.
+ * - `own`: they may, within their limit;
+ * - `permitted`: an owner approved it for at least what is due (`by` names them);
+ * - `waiting`: they asked, and the answer has not come;
+ * - `ask`: they may ask (`rejected` is the last answer when it was no);
+ * - `none`: they can neither do it nor ask.
+ */
+export type PayLaterAccess =
+  | { readonly kind: 'own' }
+  | { readonly kind: 'permitted'; readonly by: string | null }
+  | { readonly kind: 'waiting' }
+  | { readonly kind: 'ask'; readonly because: RepairKey; readonly rejected: ApprovalRow | null }
+  | { readonly kind: 'none' };
+
+export function payLaterAccess(args: {
+  readonly holds: boolean;
+  readonly limit: number | null;
+  readonly canAsk: boolean;
+  readonly due: number;
+  readonly requests: readonly ApprovalRow[];
+}): PayLaterAccess {
+  const { holds, limit, canAsk, due, requests } = args;
+  const permit = requests.find((row) => row.status === 'approved' && row.amount >= due);
+  if (permit !== undefined) return { kind: 'permitted', by: permit.decidedByName };
+  if (!asksApproval(holds, limit, due)) return { kind: 'own' };
+  if (!canAsk) return { kind: 'none' };
+  if (requests.some((row) => row.status === 'waiting')) return { kind: 'waiting' };
+  const last = requests[0];
+  return {
+    kind: 'ask',
+    because: askedBecauseKey(holds),
+    rejected: last?.status === 'rejected' ? last : null,
+  };
 }
 
 /**
@@ -874,7 +1123,9 @@ export type IntakeStep = (typeof INTAKE_STEPS)[number];
 /** What still blocks a step, as the fields to point at. Empty means the step is complete. */
 export type IntakeProblem =
   | 'customerName'
+  | 'customerPhone'
   | 'deviceBrand'
+  | 'deviceImei'
   | 'deviceModel'
   | 'screenLock'
   | 'complaint'
@@ -885,6 +1136,24 @@ export type IntakeProblem =
   | 'negativeTotal'
   | 'downPaymentAboveTotal'
   | 'downPaymentReference';
+
+/** What each problem says, on the phone and on the PC. */
+export const INTAKE_PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
+  customerName: 'repair.problem.customerName',
+  customerPhone: 'repair.problem.customerPhone',
+  deviceBrand: 'repair.problem.deviceBrand',
+  deviceModel: 'repair.problem.deviceModel',
+  deviceImei: 'repair.problem.deviceImei',
+  screenLock: 'repair.problem.screenLock',
+  complaint: 'repair.problem.complaint',
+  photos: 'repair.problem.photos',
+  ownershipVideo: 'repair.problem.ownershipVideo',
+  quoteLines: 'repair.problem.quoteLines',
+  incompleteLine: 'repair.problem.incompleteLine',
+  negativeTotal: 'repair.problem.negativeTotal',
+  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
+  downPaymentReference: 'repair.problem.downPaymentReference',
+};
 
 export function stepProblems(
   draft: IntakeDraft,
@@ -899,10 +1168,14 @@ export function stepProblems(
       if (draft.customer.kind === 'new' && draft.customer.name.trim() === '') {
         problems.push('customerName');
       }
+      if (draft.customer.kind === 'new' && phoneInvalid(draft.customer.phone)) {
+        problems.push('customerPhone');
+      }
       break;
     case 'device':
       if (draft.device.brand.trim() === '') problems.push('deviceBrand');
       if (draft.device.model.trim() === '') problems.push('deviceModel');
+      if (imeiInvalid(draft.device.imei)) problems.push('deviceImei');
       // A chosen lock with nothing entered (a pattern shorter than Android allows is kept as '')
       // would save as no lock; the counter picks "Tidak ada" for that.
       if (draft.device.lockKind !== 'none' && draft.device.passcode === '') {

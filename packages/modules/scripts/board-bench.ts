@@ -111,7 +111,8 @@ async function main(): Promise<void> {
     ];
 
     // The first page of each view: what opening the board or switching a view costs.
-    for (const view of BOARD_VIEWS) {
+    // The approvals view lists given servisan by id, so it has nothing to measure here.
+    for (const view of BOARD_VIEWS.filter((v) => v !== 'approvals')) {
       const { ms: took, result } = await time(() =>
         list({ filter: boardFilter(view, qctx.userId, 0), sort: boardSort(view), limit: 50 }),
       );

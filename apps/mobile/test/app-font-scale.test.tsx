@@ -1,4 +1,5 @@
-// A live system font-size change left Android text laid out at the old size (second QA run).
+// A live system font-size change left Android text laid out at the old size (second QA run), and
+// remounting the whole screen for it dropped an open form (QA on PR #93).
 import { act } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
@@ -21,6 +22,8 @@ vi.mock('expo-location', () => ({
   getForegroundPermissionsAsync: vi.fn(async () => ({ status: 'denied' })),
   watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
 }));
+
+import { FontScaleProvider } from '@bolusi/ui';
 
 import App, { type AppProps } from '../App.js';
 import { render, type RenderResult } from '../../../packages/ui/test/render.js';
@@ -70,23 +73,25 @@ afterEach(() => {
 });
 
 describe('a system font-size change', () => {
-  test('remounts the screens so every text is measured at the new size; a re-render alone does not', () => {
+  test('keeps the screens mounted; only the text is drawn afresh', () => {
+    const app = (): React.JSX.Element => (
+      <FontScaleProvider>
+        <App {...props()} />
+      </FontScaleProvider>
+    );
     act(() => {
-      screen = render(<App {...props()} />);
+      screen = render(app());
     });
+    // The native nodes themselves: the test renderer's wrappers are not kept across updates.
     const zone = (): unknown =>
       screen!.container
         .queryAll((n) => n.props['style'] !== undefined)
-        .find((n) => n.parent?.props['testID'] === 'bolusi-app-shell');
+        .find((n) => n.parent?.props['testID'] === 'bolusi-app-shell')?.unstable_fiber?.stateNode;
     const before = zone();
     expect(before).toBeDefined();
 
-    screen!.rerender(<App {...props()} />);
-    expect(zone()).toBe(before);
-
     __windowMetrics.fontScale = 1.3;
-    screen!.rerender(<App {...props()} />);
-    expect(zone()).toBeDefined();
-    expect(zone()).not.toBe(before);
+    screen!.rerender(app());
+    expect(zone()).toBe(before);
   });
 });

@@ -13,6 +13,7 @@ import {
   newPinPadState,
   newPinPromptKey,
   type NewPinEntry,
+  newPinPadKey,
 } from '@bolusi/device/models/pin/new-pin';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinEntry } from './PinEntry.js';
@@ -51,7 +52,7 @@ export function StaffPinNewPin({
         message={feedback === null ? undefined : t(feedback)}
         state={entry === null ? 'locked' : newPinPadState(entry)}
         onComplete={onComplete}
-        padKey={entry === null ? 'submitting' : `${entry.kind}-${newPinPadState(entry)}`}
+        padKey={entry === null ? 'submitting' : newPinPadKey(entry)}
         backspaceLabel={t('core.action.delete')}
         testID="staff-pin-entry"
       />

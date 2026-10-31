@@ -88,6 +88,12 @@ export type AssertHttpErrorCodeUnion = Expect<
     | 'ENROLL_KEY_REUSED'
     | 'LAST_ADMIN_PROTECTED'
     | 'LOGIN_IDENTIFIER_TAKEN'
+    // Integrated QRIS.
+    | 'QRIS_UNAVAILABLE'
+    | 'QRIS_NOT_CONNECTED'
+    | 'QRIS_KEY_REFUSED'
+    | 'QRIS_AMOUNT_REFUSED'
+    | 'CHANGE_REFUSED'
   >
 >;
 export type AssertSyncStatusUnion = Expect<Equal<SyncStatus, 'local' | 'synced' | 'rejected'>>;

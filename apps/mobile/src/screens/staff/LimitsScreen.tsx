@@ -26,9 +26,10 @@ import {
   space,
   type,
   type ListState,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useLatestCallback } from '../../hooks/useLatestCallback.js';
 import type { SurfaceNav } from '../../navigation/surface.js';
@@ -43,6 +44,7 @@ import {
   type LimitRole,
   type LimitsText,
 } from '@bolusi/device/models/staff/limits';
+import { roleName } from '@bolusi/device/models/staff/roles';
 import { StaffShell } from './StaffPages.js';
 
 export interface LimitsScreenProps {
@@ -188,10 +190,6 @@ export function LimitsScreen({
   );
 }
 
-function roleName(role: LimitRole): string {
-  return t(`role.${role.key}.name` as 'role.manager.name');
-}
-
 /** "Diskon Rp 50.000 · Refund Rp 0 · Bayar nanti Rp 100.000", breaking only between amounts. */
 function limitsSummary(limits: LimitAmounts): string {
   return LIMIT_FIELDS.map(({ kind, label }) =>
@@ -317,6 +315,7 @@ function LimitsForm({
                   setText((current) => ({ ...current, [kind]: next.replace(/\D/g, '') }));
                 }}
                 keyboardType="number-pad"
+                selectTextOnFocus
                 errorMessage={attempted && text[kind] === '' ? t('auth.limits.missing') : undefined}
                 disabled={busy}
                 testID={`limits-${kind}`}

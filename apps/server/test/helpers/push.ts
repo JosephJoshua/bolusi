@@ -197,6 +197,14 @@ export async function makePushHarness(): Promise<PushHarness> {
         .insertInto('userRoles')
         .values({ tenantId: row.tenantId, userId: row.userId, roleId, storeId: row.storeId })
         .execute();
+      // A store grant counts only where the user is a member.
+      if (row.storeId !== null) {
+        await db
+          .insertInto('userStores')
+          .values({ tenantId: row.tenantId, userId: row.userId, storeId: row.storeId })
+          .onConflict((oc) => oc.doNothing())
+          .execute();
+      }
     },
     async seedConflict(row) {
       const id = detUuid(`conflict:${row.seed}`);

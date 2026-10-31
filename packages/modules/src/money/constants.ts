@@ -32,6 +32,8 @@ export const MONEY_OP = {
   refundPaid: 'money.refund_paid',
   /** Cash taken out of or put into the drawer, with a reason. */
   cashMoved: 'money.cash_moved',
+  /** An owner cancels a cash move recorded by mistake (a typo in its amount). */
+  cashMoveVoided: 'money.cash_move_voided',
   /** The drawer counted ("Tutup kas"). */
   cashCounted: 'money.cash_counted',
   /** An owner settles a counted difference, so the drawer's book matches the cash again. */

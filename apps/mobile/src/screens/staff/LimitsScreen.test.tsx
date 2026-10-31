@@ -18,13 +18,29 @@ import { LimitsScreen, type LimitsScreenProps } from './LimitsScreen.js';
 const MANAGER: StaffRole = {
   id: 'r-manager',
   key: 'manager',
+  custom: false,
+  permissionIds: [],
   ownerRole: false,
   limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
 };
 const ROLES: StaffRole[] = [
-  { id: 'r-cashier', key: 'cashier', ownerRole: false, limits: null },
+  {
+    id: 'r-cashier',
+    key: 'cashier',
+    custom: false,
+    permissionIds: [],
+    ownerRole: false,
+    limits: null,
+  },
   MANAGER,
-  { id: 'r-store', key: 'store_owner', ownerRole: true, limits: null },
+  {
+    id: 'r-store',
+    key: 'store_owner',
+    custom: false,
+    permissionIds: [],
+    ownerRole: true,
+    limits: null,
+  },
 ];
 
 function person(id: string, roleIds: string[]): StaffMember {

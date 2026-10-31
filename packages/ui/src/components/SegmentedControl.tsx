@@ -8,7 +8,8 @@
  * state): a 36 dp pill whose hit area is still padded to the 48 dp floor, so it does not outweigh
  * the content it filters.
  */
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, size as sizes, space, touch, type } from '../tokens.js';
 

@@ -9,7 +9,8 @@
     "refundPaid": "Uang dikembalikan",
     "cashMoved": "Kas keluar/masuk",
     "cashCounted": "Tutup kas",
-    "cashAdjusted": "Selisih kas diselesaikan"
+    "cashAdjusted": "Selisih kas diselesaikan",
+    "cashMoveVoided": "Catatan kas dibatalkan"
   },
   "refusal": {
     "alreadyRecorded": "Catatan ini sudah ada.",
@@ -32,7 +33,9 @@
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
     "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
-    "overLimit": "Melebihi batasmu. Minta pemilik toko."
+    "overLimit": "Melebihi batasmu. Minta pemilik toko.",
+    "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
+    "laterCountSettled": "Selisih hitungan kas sesudahnya sudah diselesaikan, jadi catatan ini tidak bisa dibatalkan lagi."
   },
   "method": {
     "cash": "Tunai"
@@ -114,7 +117,8 @@
     "owed": "Belum dibayar",
     "save": "Terima {amount}",
     "saveEmpty": "Terima pembayaran",
-    "hint": "Isi jumlah yang dibayar, paling banyak sisa tagihannya."
+    "hint": "Isi jumlah yang dibayar, paling banyak sisa tagihannya.",
+    "waitQr": "Tunggu pelanggan bayar QR-nya."
   },
   "discard": {
     "title": "Keluar tanpa menyimpan?",
@@ -136,14 +140,19 @@
       "time": "Waktu",
       "record": "Catatan"
     },
-    "voidLabel": "Batalkan pembayaran {amount} pukul {time}"
+    "voidLabel": "Batalkan pembayaran {amount} pukul {time}",
+    "voidCashLabel": "Batalkan catatan kas {amount} pukul {time}"
   },
   "void": {
     "title": "Batalkan pembayaran",
     "save": "Batalkan pembayaran",
     "hint": "Isi alasannya.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
-    "reason": "Alasan"
+    "reason": "Alasan",
+    "limit": "Batas pembatalanmu {amount} per servisan.",
+    "cashTitle": "Batalkan catatan kas",
+    "cashSave": "Batalkan catatan",
+    "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya."
   },
   "kind": {
     "qris": "QRIS",
@@ -176,5 +185,95 @@
     "storeCount": "{count} toko",
     "storeRequired": "Pilih paling sedikit satu toko.",
     "thisStore": "Toko ini"
+  },
+  "qris": {
+    "show": "Tampilkan QR",
+    "minimum": "Minimal QRIS {amount}. Catat manual.",
+    "title": "Bayar pakai QRIS",
+    "creating": "Membuat QR…",
+    "scan": "Minta pelanggan scan QR ini.",
+    "expiresAt": "Berlaku sampai {time}",
+    "reconnecting": "Koneksi terputus. Mencoba lagi…",
+    "qrLabel": "QR pembayaran {amount}",
+    "testMode": "Mode uji: tidak ada uang sungguhan.",
+    "simulate": "Bayar (mode uji)",
+    "paid": "Pembayaran diterima",
+    "paidMessage": "{amount} lewat QRIS.",
+    "done": "Selesai",
+    "expired": "QR sudah tidak berlaku",
+    "expiredMessage": "Buat QR baru kalau pelanggan belum bayar.",
+    "renew": "Buat QR baru",
+    "retry": "Coba lagi",
+    "byHand": "Catat manual",
+    "useQr": "Pakai QR",
+    "close": "Tutup",
+    "received": "QRIS {amount} diterima.",
+    "section": "Xendit",
+    "connectHint": "Hubungkan supaya kasir bisa menampilkan QR dengan jumlah pas. Pembayarannya tercatat sendiri.",
+    "secretKey": "Secret key Xendit",
+    "connect": "Hubungkan",
+    "connected": "Terhubung",
+    "testConnected": "Terhubung, mode uji",
+    "disconnect": "Putuskan",
+    "disconnectTitle": "Putuskan Xendit?",
+    "disconnectMessage": "Kasir kembali mencatat QRIS manual. QR yang sudah tampil tetap tercatat kalau dibayar.",
+    "checking": "Memeriksa Xendit…",
+    "checkFailed": "Status Xendit belum bisa dicek.",
+    "failure": {
+      "offline": "Tidak ada koneksi internet.",
+      "denied": "Kamu tidak punya izin untuk ini.",
+      "notFound": "Datanya belum tersinkron. Coba lagi sebentar.",
+      "notConnected": "Metode ini belum terhubung ke Xendit.",
+      "keyRefused": "Xendit menolak secret key ini. Cek kuncinya dan izin QRIS-nya.",
+      "amountRefused": "Xendit tidak menerima jumlah ini.",
+      "unavailable": "Xendit belum bisa dihubungi. Coba lagi nanti.",
+      "refused": "Pembayaran ini tidak bisa dicatat.",
+      "unexpected": "Ada yang salah. Coba lagi."
+    },
+    "showKey": "Tampilkan kunci",
+    "hideKey": "Sembunyikan kunci",
+    "cancel": "Batal",
+    "unresolved": "QR {amount} tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar.",
+    "unresolvedMany": "{count} QR tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
+  },
+  "refund": {
+    "limit": "Batas pengembalianmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
+    "title": "Kembalikan uang",
+    "action": "Kembalikan",
+    "credit": "Lebih bayar",
+    "paid": "Sudah dibayar",
+    "method": "Kembalikan lewat",
+    "amount": "Jumlah",
+    "reason": "Alasan",
+    "reference": "No. referensi (opsional)",
+    "save": "Kembalikan {amount}",
+    "saveEmpty": "Kembalikan",
+    "tooMuch": "Paling banyak {amount} lewat metode ini.",
+    "lowersBill": "Tagihan juga turun {amount}.",
+    "nothing": "Belum ada pembayaran yang bisa dikembalikan.",
+    "hint": {
+      "method": "Pilih metodenya dulu.",
+      "amount": "Isi jumlahnya dulu.",
+      "reason": "Tulis alasannya dulu."
+    }
+  },
+  "reduce": {
+    "limit": "Batas potonganmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
+    "title": "Kurangi tagihan",
+    "action": "Kurangi tagihan",
+    "owed": "Sisa bayar",
+    "amount": "Potongan",
+    "after": "Sisa jadi",
+    "becomesCredit": "Jadi lebih bayar {amount}. Kembalikan ke pelanggan.",
+    "reason": "Alasan",
+    "save": "Kurangi {amount}",
+    "saveEmpty": "Kurangi",
+    "tooMuch": "Paling banyak {amount}.",
+    "hint": {
+      "amount": "Isi potongannya dulu.",
+      "reason": "Tulis alasannya dulu."
+    }
   }
 }

@@ -354,3 +354,67 @@ describe('the PC over the offline core', () => {
     expect(screen.queryByTestId('repair.desk.intake')).toBeNull();
   });
 });
+
+describe('setting up a newly registered PC', () => {
+  it('opens the setup for the owner who registered it, then the counter once it is done', async () => {
+    core = new FakeCore(
+      ready({ setupFor: OWNER.id, session: session({ ...signedIn(OWNER, ALL) }) }),
+    );
+    renderApp();
+    await screen.findByTestId('desktop.setup.printer');
+    expect(screen.getByTestId('desktop.setup.step').textContent).toBe('Langkah 1 dari 2');
+    fireEvent.click(screen.getByTestId('desktop.setup.next'));
+    await screen.findByTestId('desktop.setup.capture');
+    // No webcam here: photos and signatures come from a store phone.
+    expect((await screen.findByTestId('desktop.setup.phone')).textContent).toContain('HP toko');
+    expect(screen.getByTestId('desktop.setup.signature').textContent).toContain('HP toko');
+    fireEvent.click(screen.getByTestId('desktop.setup.back'));
+    await screen.findByTestId('desktop.setup.printer');
+    fireEvent.click(screen.getByTestId('desktop.setup.next'));
+    fireEvent.click(await screen.findByTestId('desktop.setup.next'));
+    await screen.findByTestId('desktop.setup.done');
+    expect(screen.getByTestId('desktop.setup.done.photos').textContent).toContain('HP toko');
+    expect(core.methods()).not.toContain('device.finishSetup');
+    fireEvent.click(screen.getByTestId('desktop.setup.start'));
+    await screen.findByTestId('repair.desk.board');
+    expect(core.methods()).toContain('device.finishSetup');
+  });
+
+  it('can be put off, and opened again from Settings', async () => {
+    core = new FakeCore(
+      ready({ setupFor: OWNER.id, session: session({ ...signedIn(OWNER, ALL) }) }),
+    );
+    renderApp();
+    fireEvent.click(await screen.findByTestId('desktop.setup.later'));
+    await screen.findByTestId('repair.desk.board');
+    expect(core.methods()).toContain('device.finishSetup');
+    core.set({ setupFor: null });
+    fireEvent.click(screen.getByTestId('nav.settings'));
+    fireEvent.click(await screen.findByTestId('desktop.settings.nav.computer'));
+    fireEvent.click(await screen.findByTestId('desktop.settings.setup'));
+    await screen.findByTestId('desktop.setup.printer');
+  });
+
+  it('lists the store basics still missing, each opening its setting', async () => {
+    core = new FakeCore(
+      ready({ setupFor: OWNER.id, session: session({ ...signedIn(OWNER, ALL) }) }),
+    );
+    renderApp();
+    fireEvent.click(await screen.findByTestId('desktop.setup.next'));
+    fireEvent.click(await screen.findByTestId('desktop.setup.next'));
+    await screen.findByTestId('desktop.setup.done');
+    fireEvent.click(await screen.findByTestId('desktop.setup.basics.logo'));
+    await screen.findByTestId('repair.desk.slip');
+    // Going to fill one in ends the setup, as starting would.
+    expect(core.methods()).toContain('device.finishSetup');
+  });
+
+  it('does not stop anyone else with it', async () => {
+    core = new FakeCore(
+      ready({ setupFor: OWNER.id, session: session({ ...signedIn(TECH, ALL) }) }),
+    );
+    renderApp();
+    await screen.findByTestId('repair.desk.board');
+    expect(screen.queryByTestId('desktop.setup.printer')).toBeNull();
+  });
+});

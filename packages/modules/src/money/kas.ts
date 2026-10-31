@@ -2,7 +2,7 @@
 // method, the drawer's moves, a count's difference and what customers still owe.
 import { formatMoney } from '@bolusi/i18n';
 
-import { CASH_ACCOUNT, type CashMoveKind } from './constants.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION, type CashMoveKind } from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -192,9 +192,54 @@ export function historyLine(
   };
 }
 
-/** Whether an owner may still cancel this record: a payment not cancelled yet. */
-export function voidable(entry: MoneyEntryRow): boolean {
-  return entry.kind === 'payment_received' && entry.voidedAt === null;
+/** What the person may cancel in Riwayat: payments (`voidPayment`), cash moves (`adjustCash`). */
+export interface VoidAbilities {
+  readonly payments: boolean;
+  readonly cashMoves: boolean;
+}
+
+export function voidAbilities(hasPermission: (id: string) => boolean): VoidAbilities {
+  return {
+    payments: hasPermission(MONEY_PERMISSION.voidPayment),
+    cashMoves: hasPermission(MONEY_PERMISSION.adjustCash),
+  };
+}
+
+/**
+ * Whether this person may still cancel this record: a payment, or money put in or taken out of
+ * the drawer by hand, not cancelled yet.
+ */
+export function voidable(entry: MoneyEntryRow, can: VoidAbilities): boolean {
+  if (entry.voidedAt !== null) return false;
+  return entry.kind === 'payment_received'
+    ? can.payments
+    : entry.kind === 'cash_moved' && can.cashMoves;
+}
+
+/** How a record is cancelled, and what the screen calls it. */
+export function voidKind(entry: Pick<MoneyEntryRow, 'kind'>): {
+  readonly command: 'voidPayment' | 'voidCashMove';
+  readonly title: MoneyKey;
+  readonly save: MoneyKey;
+  readonly explain: MoneyKey;
+  /** The void button's full name in a list, with the amount and time. */
+  readonly label: MoneyKey;
+} {
+  return entry.kind === 'cash_moved'
+    ? {
+        command: 'voidCashMove',
+        title: 'money.void.cashTitle',
+        save: 'money.void.cashSave',
+        explain: 'money.void.cashExplain',
+        label: 'money.history.voidCashLabel',
+      }
+    : {
+        command: 'voidPayment',
+        title: 'money.void.title',
+        save: 'money.void.save',
+        explain: 'money.void.explain',
+        label: 'money.history.voidLabel',
+      };
 }
 
 /**
@@ -270,9 +315,12 @@ export function debtPayment(
   owed: number,
   lines: readonly PaymentLine[],
   accounts: readonly PaymentAccountRow[],
+  qrAccounts?: ReadonlySet<string>,
 ): DebtPayment {
-  const entry = paymentEntry(owed, lines, accounts);
+  const entry = paymentEntry(owed, lines, accounts, qrAccounts);
   const taken =
-    entry.paid > 0 && entry.overpaid === 0 ? paymentEntry(entry.paid, lines, accounts) : null;
+    entry.paid > 0 && entry.overpaid === 0
+      ? paymentEntry(entry.paid, lines, accounts, qrAccounts)
+      : null;
   return { entry, taken };
 }

@@ -3,7 +3,8 @@
  * left, a switch on the right, and the whole row toggles it. For a choice between two named things
  * use SegmentedControl; for picking items in a group use ToggleChip.
  */
-import { Pressable, Switch, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, Switch, StyleSheet, View } from 'react-native';
 
 import { color, space, touch, type } from '../tokens.js';
 

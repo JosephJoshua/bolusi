@@ -381,18 +381,26 @@ export function FilterToggle({
   pressed,
   onChange,
   icon: Icon,
+  collapse = false,
   testId,
 }: {
   readonly label: string;
   readonly pressed: boolean;
   readonly onChange: (pressed: boolean) => void;
   readonly icon?: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }> | undefined;
+  /**
+   * In a narrow toolbar (its nearest `@container`), only the icon shows, with the label as its
+   * tooltip, so the label is never cut off. Needs an icon.
+   */
+  readonly collapse?: boolean | undefined;
   readonly testId?: string | undefined;
 }): React.JSX.Element {
-  return (
+  const collapsible = collapse && Icon !== undefined;
+  const button = (
     <button
       type="button"
       aria-pressed={pressed}
+      aria-label={collapsible ? label : undefined}
       onClick={() => onChange(!pressed)}
       data-testid={testId}
       className={clsx(
@@ -403,7 +411,14 @@ export function FilterToggle({
       )}
     >
       {Icon === undefined ? null : <Icon size={14} aria-hidden />}
-      {label}
+      {collapsible ? (
+        <span aria-hidden className="hidden whitespace-nowrap @min-[54rem]:inline">
+          {label}
+        </span>
+      ) : (
+        label
+      )}
     </button>
   );
+  return collapsible ? <Tooltip label={label}>{button}</Tooltip> : button;
 }

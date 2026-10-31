@@ -10,6 +10,7 @@
 import type { TenantDb } from '@bolusi/db-server';
 import type { SignedOperation } from '@bolusi/schemas';
 
+import { mayManageOwnerPin } from '../../auth/permissions.js';
 import type { DeviceRecord, OpRegistry } from '../types.js';
 
 /** The per-type extension list (05 §9.5) — spec-fixed op-type strings. Permissions are not checked
@@ -22,10 +23,9 @@ export const AUTH_PIN_LOCKOUT_CLEARED = 'auth.pin_lockout_cleared';
 export const PLATFORM_CONFLICT_DETECTED = 'platform.conflict_detected';
 export const PLATFORM_CONFLICT_ACKNOWLEDGED = 'platform.conflict_acknowledged';
 
-/** The tenant-administration role a pin_reset target may hold (api/02-auth §6.6). */
-export const MAIN_OWNER_ROLE = 'main_owner';
-
-export type ScopeOutcome = null | { readonly reason: string };
+/** A refusal; `tamper: false` marks one an honest device can meet (a stale directory), which is
+ *  refused without recording a device anomaly. */
+export type ScopeOutcome = null | { readonly reason: string; readonly tamper?: false };
 
 type MediaRefLike = { readonly userId?: unknown; readonly deviceId?: unknown };
 
@@ -53,7 +53,8 @@ function mediaRefsIn(payload: unknown): MediaRefLike[] {
 export interface ScopeLookup {
   storeExists(storeId: string): Promise<boolean>;
   userExists(userId: string): Promise<boolean>;
-  holdsRole(userId: string, roleName: string): Promise<boolean>;
+  /** May the actor reset or unlock the target's PIN as far as owner powers go (auth/permissions). */
+  mayManageOwnerPin(actorUserId: string, targetUserId: string): Promise<boolean>;
 }
 
 /**
@@ -61,12 +62,12 @@ export interface ScopeLookup {
  * always one store and one author, so this turns per-op reads into one per batch. Lives only for one
  * transaction, so a directory change between pushes is always seen.
  */
-export function createScopeLookup(db: TenantDb): ScopeLookup {
+export function createScopeLookup(db: TenantDb, tenantId: string): ScopeLookup {
   const cache = new Map<string, Promise<boolean>>();
   const once = (key: string, load: () => Promise<unknown>) => {
     let value = cache.get(key);
     if (value === undefined) {
-      value = load().then((row) => row !== undefined);
+      value = load().then((row) => row !== undefined && row !== false);
       cache.set(key, value);
     }
     return value;
@@ -80,15 +81,9 @@ export function createScopeLookup(db: TenantDb): ScopeLookup {
       once(`user:${userId}`, () =>
         db.selectFrom('users').select('id').where('id', '=', userId).executeTakeFirst(),
       ),
-    holdsRole: (userId, roleName) =>
-      once(`role:${roleName}:${userId}`, () =>
-        db
-          .selectFrom('userRoles')
-          .innerJoin('roles', 'roles.id', 'userRoles.roleId')
-          .select('roles.id')
-          .where('userRoles.userId', '=', userId)
-          .where('roles.name', '=', roleName)
-          .executeTakeFirst(),
+    mayManageOwnerPin: (actorUserId, targetUserId) =>
+      once(`ownerPin:${actorUserId}:${targetUserId}`, () =>
+        mayManageOwnerPin(db, tenantId, actorUserId, targetUserId),
       ),
   };
 }
@@ -240,12 +235,16 @@ export async function checkScope(
 
     case AUTH_PIN_RESET:
     case AUTH_PIN_LOCKOUT_CLEARED: {
-      // If the TARGET holds main_owner, the actor must too (blocks store_owner → main_owner
-      // impersonation, api/02-auth §6.6; unlocking an owner's PIN is the same takeover's first step).
-      // The permission itself is the authorization step's.
-      const targetIsMainOwner = await lookup.holdsRole(op.entityId, MAIN_OWNER_ROLE);
-      if (targetIsMainOwner && !(await lookup.holdsRole(op.userId, MAIN_OWNER_ROLE))) {
-        return { reason: `${op.type} on a main_owner requires the actor to hold main_owner` };
+      // An owner's PIN is the main owner's to manage (owner powers): blocks a store owner taking
+      // over the main owner or a peer owner, api/02-auth §6.6; unlocking an owner's PIN is the
+      // same takeover's first step. The permission itself is the authorization step's.
+      // Not tamper: the device judged from its bundle, and someone made an owner since it last
+      // synced is an owner here too.
+      if (!(await lookup.mayManageOwnerPin(op.userId, op.entityId))) {
+        return {
+          reason: `${op.type} on an owner requires the actor to be the main owner`,
+          tamper: false,
+        };
       }
       return null;
     }

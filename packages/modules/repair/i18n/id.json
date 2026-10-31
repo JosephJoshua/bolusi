@@ -22,7 +22,9 @@
     "slipPrinted": "Nota dicetak",
     "storePrintSettingsChanged": "Tampilan nota diubah",
     "storeUncollectedDaysChanged": "Batas HP belum diambil diubah",
-    "ticketRepairTypesChanged": "Jenis servisan diubah"
+    "ticketRepairTypesChanged": "Jenis servisan diubah",
+    "handoverReversed": "Penyerahan dibatalkan",
+    "ticketDetailsCorrected": "Data servisan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -50,7 +52,9 @@
     "applyUnconfirmed": "Belum",
     "agreedYes": "Sudah",
     "takeOver": "Ambil alih",
-    "more": "Lainnya"
+    "more": "Lainnya",
+    "correctDetails": "Ubah data",
+    "undoHandover": "Batalkan penyerahan"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -60,9 +64,11 @@
     "emptyHint": "Servisan yang masuk akan muncul di sini.",
     "noMatches": "Servisan tidak ditemukan. Coba kata lain.",
     "priceChangeWaiting": "Harga perlu dikonfirmasi",
+    "approvalWaiting": "Menunggu persetujuan",
     "searchHint": "Cari nama, no. HP, no. servisan",
     "title": "Servisan",
     "view": {
+      "approvals": "Persetujuan ({count})",
       "active": "Aktif",
       "mine": "Tugasku",
       "pickup": "Siap diambil",
@@ -79,6 +85,7 @@
     "waited": "{days} hari belum diambil"
   },
   "cancel": {
+    "refundsDp": "Saat ambil HP, pelanggan dapat kembali {amount} dari DP.",
     "reason": "Kenapa dibatalkan?",
     "consequence": "Pelanggan cukup bayar biaya pembatalan saat ambil HP.",
     "fee": "Biaya pembatalan",
@@ -138,6 +145,8 @@
     "watch": "Jam tangan"
   },
   "handover": {
+    "giveBack": "Kembalikan {refunds} ke pelanggan.",
+    "giveBackVia": "{amount} lewat {method}",
     "note": "Catatan (opsional)",
     "photo": "Foto serah terima",
     "sign": "Minta tanda tangan",
@@ -155,7 +164,12 @@
     "accessoryBack": "{name} dikembalikan",
     "noteNeeded": "Catatan",
     "checked": "Dicek: {items}",
-    "unchecked": "Belum: {items}"
+    "unchecked": "Belum: {items}",
+    "payLaterLimit": "Batas bayar nantimu {amount}.",
+    "payLaterPermitted": "Disetujui {name}.",
+    "payLaterWaiting": "Menunggu persetujuan pemilik toko.",
+    "payLaterRejected": "Ditolak {name}.",
+    "payLaterRejectedNote": "Ditolak {name}: {note}"
   },
   "intake": {
     "discard": "Buang",
@@ -240,7 +254,10 @@
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Dikembalikan"
+    "refund": "Dikembalikan",
+    "newTotal": "Total jadi {from} → {to}",
+    "reduced": "Potongan",
+    "owedBack": "Lebih bayar"
   },
   "problem": {
     "complaint": "Keluhan belum diisi.",
@@ -254,7 +271,9 @@
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentReference": "Isi kode approval dari mesin EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada.",
-    "ownershipVideo": "Video kepemilikan belum direkam."
+    "ownershipVideo": "Video kepemilikan belum direkam.",
+    "customerPhone": "Nomor HP-nya belum benar. Cek lagi angkanya.",
+    "deviceImei": "IMEI-nya belum benar. Cocokkan dengan 15 angka di *#06#."
   },
   "ready": {
     "today": "Hari ini",
@@ -297,7 +316,11 @@
     "printed": "Nota dicetak.",
     "shared": "PDF nota sudah dikirim.",
     "downPayment": "DP tersimpan.",
-    "repairTypes": "Jenis servisan disimpan."
+    "repairTypes": "Jenis servisan disimpan.",
+    "corrected": "Data servisan disimpan.",
+    "handoverUndone": "Penyerahan dibatalkan. HP tercatat ada di toko.",
+    "refund": "Uang sudah dikembalikan.",
+    "reduce": "Tagihan sudah dikurangi."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -313,9 +336,17 @@
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
     "downPaymentSame": "Jumlahnya masih sama.",
+    "handoverFree": "Servisan gratis. Minta pemilik untuk menyerahkannya.",
     "handoverPayment": "Lengkapi pembayarannya dulu.",
     "discountLimit": "Batas diskonmu {amount} per servisan.",
-    "handoverChecks": "Centang semua, atau tulis kenapa belum."
+    "discountLeft": "Sisa batas diskonmu {amount} untuk servisan ini.",
+    "handoverChecks": "Centang semua, atau tulis kenapa belum.",
+    "payLaterWaiting": "Tunggu disetujui, atau bayar sekarang.",
+    "payLaterAsk": "Minta persetujuan, atau bayar sekarang.",
+    "downPaymentLimit": "Kamu bisa mengurangi uang masuk sampai {amount}.",
+    "cancelLimit": "Kamu bisa memotong biaya sampai {amount}.",
+    "downPaymentWithEarlier": "Bersama perubahan DP sebelumnya, totalnya {amount}.",
+    "handoverQris": "Tunggu QRIS masuk. Pastikan internet nyala."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -419,7 +450,7 @@
   "fees": {
     "title": "Biaya pembatalan",
     "summary": "Sebelum dan sesudah mulai dikerjakan",
-    "intro": "Dibayar pelanggan kalau servisannya dibatalkan. Saat membatalkan, pemilik masih bisa mengubahnya.",
+    "intro": "Dibayar pelanggan kalau servisannya dibatalkan. Saat membatalkan, biayanya masih bisa diubah.",
     "beforeWork": "Belum mulai dikerjakan",
     "afterWork": "Sudah mulai dikerjakan",
     "save": "Simpan",
@@ -437,6 +468,7 @@
     "readyBy": "Estimasi selesai {date}",
     "returned": "Diambil {date}",
     "reprint": "Cetak ulang ke-{count}",
+    "reprintFirst": "Cetak ulang",
     "printed": "Dicetak {date}",
     "printedBy": "Dicetak {date} oleh {name}",
     "field": {
@@ -503,8 +535,16 @@
     "problem": {
       "noPrinter": "Pilih printernya dulu di Pengaturan.",
       "printerMissing": "Printernya tidak ditemukan. Cek kabel dan dayanya, atau pilih printer lain di Pengaturan.",
-      "failed": "Belum bisa mencetak. Cek printernya, lalu coba lagi."
-    }
+      "failed": "Belum bisa mencetak. Cek printernya, lalu coba lagi.",
+      "stuck": "Notanya belum bisa disiapkan. Coba lagi."
+    },
+    "paperCustom": "Ukuran lain",
+    "paperSize": "{width} × {height} mm",
+    "paperWidth": "Lebar (mm)",
+    "paperHeight": "Tinggi (mm)",
+    "paperContinuous": "Kertas continuous",
+    "paperContinuousHint": "Berlubang di kedua sisi, untuk printer dot-matrix.",
+    "paperRange": "Lebar {minWidth}–{maxWidth} mm, tinggi {minHeight}–{maxHeight} mm."
   },
   "downPayment": {
     "recordTitle": "Catat DP",
@@ -516,7 +556,8 @@
     "current": "DP tercatat",
     "ofTotal": "Total biaya {amount}",
     "reason": "Alasan perubahan",
-    "removeHint": "Isi 0 kalau DP-nya batal."
+    "removeHint": "Isi 0 kalau DP-nya batal.",
+    "askTitle": "Minta ubah DP"
   },
   "printSettings": {
     "title": "Tampilan nota",
@@ -646,6 +687,7 @@
     "partsNotYours": "Servisan ini dipegang teknisi lain.",
     "notPaid": "Servisan ini belum lunas.",
     "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas.",
+    "freeHandoverOwnerOnly": "Hanya pemilik yang bisa menyerahkan servisan gratis.",
     "downPaymentRefunded": "Sebagian DP ini sudah dikembalikan, jadi tidak bisa diubah.",
     "repairTypesNotYours": "Hanya kasir atau teknisi yang bisa mengubah jenis servisan.",
     "claimNotReturned": "Klaim garansi hanya untuk HP yang sudah selesai diservis dan diambil.",
@@ -657,7 +699,15 @@
     "overLimit": "Melebihi batasmu. Minta pemilik toko.",
     "handoverAccessories": "Ada kelengkapan yang tidak ada di daftar serah terima.",
     "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu.",
-    "ownershipVideoNeeded": "Rekam video kepemilikan dulu."
+    "ownershipVideoNeeded": "Rekam video kepemilikan dulu.",
+    "notReturned": "HP ini belum diserahkan.",
+    "handoverHasClaim": "Sudah ada klaim garansi untuk servisan ini, jadi penyerahannya tidak bisa dibatalkan.",
+    "claimSamePhone": "Klaim garansi harus untuk HP yang sama. Merek, tipe dan IMEI-nya tidak bisa diubah.",
+    "nothingChanged": "Belum ada yang diubah.",
+    "undoTooLate": "Penyerahan ini sudah lebih dari sehari, jadi tidak bisa dibatalkan.",
+    "handedOverBefore": "Servisan ini sudah pernah diserahkan. Pelanggan dan HP-nya tidak bisa diubah, dan servisannya tidak bisa dibatalkan.",
+    "customerShared": "Pelanggan ini punya servisan lain. Coba ubah lagi.",
+    "customerMismatch": "Data pelanggan tidak cocok. Coba lagi."
   },
   "paper": {
     "title": "Kertas nota",
@@ -763,5 +813,46 @@
     "noCamera": "Rekam lewat HP toko: buka servisan ini di HP.",
     "label": "Video",
     "expired": "Video kepemilikan sudah terhapus. Rekam ulang, ya."
+  },
+  "approval": {
+    "discountAfter": "Setelah disetujui, diskon ini masih perlu konfirmasi pelanggan.",
+    "cancelBelow": "{amount} di bawah biaya biasa toko.",
+    "cancelStoreFee": "Biaya pembatalan biasa toko.",
+    "askCancel": "Minta pembatalan",
+    "needsApproval": "Perlu persetujuan pemilik toko.",
+    "overLimit": "Melebihi batasmu, jadi perlu persetujuan.",
+    "payLaterDebt": "Sisa yang dibayar nanti",
+    "payLaterAfter": "Setelah disetujui, kasir bisa menyerahkan HP tanpa pelunasan.",
+    "downPaymentNew": "DP yang benar",
+    "downPaymentTakenOff": "Total pengurangan uang masuk di servisan ini {amount}."
+  },
+  "basics": {
+    "title": "Lengkapi data toko",
+    "slipHeader": "Alamat dan nomor toko",
+    "slipHeaderSummary": "Belum ada di nota",
+    "logo": "Logo toko",
+    "logoSummary": "Belum ada di nota",
+    "terms": "Ketentuan di nota",
+    "termsSummary": "Masih ketentuan bawaan",
+    "paymentMethods": "Metode pembayaran",
+    "paymentMethodsSummary": "Baru tunai"
+  },
+  "correct": {
+    "title": "Ubah data servisan",
+    "about": "Perubahan dicatat di riwayat, lengkap dengan data sebelumnya.",
+    "reason": "Kenapa diubah? (opsional)",
+    "save": "Simpan perubahan",
+    "claimDevice": "Ini klaim garansi, jadi HP-nya tetap sama dengan servisan asal.",
+    "handedOverLocked": "Servisan ini sudah pernah diserahkan, jadi pelanggan dan HP-nya tidak bisa diubah."
+  },
+  "undoHandover": {
+    "title": "Batalkan penyerahan?",
+    "explain": "HP tercatat kembali di toko dan bisa diserahkan lagi. Pembayaran tetap tercatat. Kalau pembayaran masuk ke servisan yang salah, batalkan di Kas.",
+    "reason": "Kenapa dibatalkan?"
+  },
+  "changed": {
+    "line": "{field}: {from} → {to}",
+    "only": "{field} diubah",
+    "empty": "kosong"
   }
 }

@@ -125,6 +125,10 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- When a type's rule judges only newer versions, set `minPushVersion` on the type. The
+  server refuses a new push below it as `SCHEMA_INVALID`; stored ops still fold at every version.
+  Signed ops can't be upgraded, so raise a floor only once the app that signs the newer
+  version has reached every device and old queues have synced.
 - A change that lowers what a customer owes (a price, a down payment, a fee) needs
   an owner-only permission, checked in the type's `permission` or its `rule` with
   `holdsPermission` (repair's `requireDiscountPermission`), so the server refuses it too.
@@ -162,6 +166,17 @@ and lowering a bill, voiding a payment or settling a cash difference are owners'
 A cash count records what was counted; the difference is computed against the
 book at the count's time, so late-synced cash shows up correctly. Stock and
 purchasing post through the same module (reserved accounts in `constants.ts`).
+
+QRIS through Xendit (`apps/server/src/qris`) is online only. An owner connects a
+QRIS account with its Xendit secret key; the server points that Xendit account's
+QR webhook at `/xendit/qr/<tenant>` and keeps the key sealed and the callback
+token hashed. The counter asks the server for a dynamic QR (checked by the same
+rule as a device's own payment); each QR keeps the key and token it was made
+under. A callback or a device's status check makes the server read the payment
+back from Xendit, then record it as a `money.payment_received` signed by the
+tenant's system device, with the charge id as its entry id, so one QR records at
+most one payment. Devices pull it like any other payment. Test-mode payments
+carry a `test:` reference.
 
 ## Limits to carry into repair work
 
@@ -230,9 +245,23 @@ DB; `MEDIA_STORAGE_DIR` needs durable, backed-up production storage.
 `EXPO_ACCESS_TOKEN` is required by the production push transport at boot. Tests
 inject their transport and need no production push credentials.
 
+`PUBLIC_URL` is the origin clients reach the server at. Cookies are marked `Secure`
+unless it is a plain-http origin, so leave it unset or https in production and set it
+to `http://<lan-ip>:3000` only for a local server phones reach over plain HTTP.
+
+`TRUSTED_PROXY_CIDRS` lists the reverse proxies in front of the server (addresses or
+CIDR ranges, comma-separated). Unset, `X-Forwarded-For` is ignored and per-IP login
+limits key by the socket address, which behind a proxy is the proxy's, so all
+clients share one bucket. Set it to the proxy's address in production; a request from
+it is keyed by the rightmost forwarded address that is not a trusted proxy.
+
 `SYSTEM_KEY_DIR` enables server conflict detection. It contains one mode-0600
 `system-device-<tenantId>.key` per tenant: a base64 Ed25519 private key created by
 tenant provisioning. Unset means detection is off. When enabled, missing/invalid
 keys can fail colliding pushes; provision every served tenant before enabling it.
 Signers are cached, so restart after changing keys. See
 `apps/server/src/sync/system-key-store.ts` and the provisioning CLI.
+
+`PAYMENT_SECRETS_KEY` (32 bytes, base64) and `PUBLIC_URL` together turn on QRIS
+through Xendit; it also needs `SYSTEM_KEY_DIR`. Losing the secrets key means
+reconnecting every Xendit account.

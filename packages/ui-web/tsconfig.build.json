@@ -10,6 +10,9 @@
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "references": [
     {
+      "path": "../schemas/tsconfig.build.json"
+    },
+    {
       "path": "../ui/tsconfig.build.json"
     }
   ]

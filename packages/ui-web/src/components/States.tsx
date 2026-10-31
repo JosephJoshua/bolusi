@@ -20,7 +20,7 @@ export function StatePanel({
   readonly title: string;
   readonly hint?: string | undefined;
   readonly action?: ReactNode;
-  readonly tone?: 'neutral' | 'danger';
+  readonly tone?: 'neutral' | 'success' | 'danger';
   readonly testId?: string | undefined;
 }): React.JSX.Element {
   return (
@@ -31,7 +31,13 @@ export function StatePanel({
       <Icon
         size={40}
         aria-hidden
-        className={tone === 'danger' ? 'text-danger' : 'text-text-disabled'}
+        className={
+          tone === 'danger'
+            ? 'text-danger'
+            : tone === 'success'
+              ? 'text-success'
+              : 'text-text-disabled'
+        }
         strokeWidth={1.5}
       />
       <p className="mt-2 text-heading font-semibold text-text">{title}</p>

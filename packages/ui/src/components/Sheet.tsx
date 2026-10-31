@@ -7,8 +7,10 @@
  * Mounted by its owner in the AppShell `overlay` slot, like ConfirmSheet.
  */
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { useSheetEntrance } from '../motion.js';
 import { NAV_BAR_INSET } from '../platform-insets.js';
 import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, size, space, touch, type } from '../tokens.js';
@@ -30,6 +32,7 @@ export interface SheetProps {
 
 const styles = StyleSheet.create({
   root: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'flex-end' },
+  fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   scrim: {
     position: 'absolute',
     left: 0,
@@ -84,16 +87,18 @@ export function Sheet({
 }: SheetProps): React.JSX.Element {
   // Like ConfirmSheet, it never opens under the keyboard.
   useDismissKeyboard();
+  const entrance = useSheetEntrance();
   return (
     <View testID={testID} style={styles.root}>
+      <Animated.View pointerEvents="none" style={[styles.scrim, entrance.scrim]} />
       <Pressable
         testID={`${testID}.scrim`}
         accessibilityRole="button"
         accessibilityLabel={closeLabel}
         onPress={onClose}
-        style={styles.scrim}
+        style={styles.fill}
       />
-      <View testID={`${testID}.sheet`} style={styles.sheet}>
+      <Animated.View testID={`${testID}.sheet`} style={[styles.sheet, entrance.sheet]}>
         <View style={styles.handle} />
         <View style={styles.header}>
           {leading === undefined ? null : <View style={styles.leading}>{leading}</View>}
@@ -118,7 +123,7 @@ export function Sheet({
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
-      </View>
+      </Animated.View>
     </View>
   );
 }

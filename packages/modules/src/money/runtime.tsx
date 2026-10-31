@@ -12,6 +12,7 @@ import {
 } from '../screen-kit/index.js';
 
 import type { MoneyModule } from './manifest.js';
+import type { QrisPort } from './qris.js';
 
 /** A store of the business, by name. */
 export interface MoneyStore {
@@ -23,6 +24,8 @@ export interface MoneyStore {
 export interface MoneyPort extends ModulePort<MoneyModule> {
   /** Every store of the business, as this device last heard; this store alone before then. */
   stores(): Promise<readonly MoneyStore[]>;
+  /** QRIS through Xendit; absent on a device that cannot reach the server (a demo). */
+  readonly qris?: QrisPort;
 }
 
 export interface MoneyRuntime extends MoneyPort, LiveSource {

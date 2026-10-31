@@ -6,6 +6,7 @@
   },
   "refusal": {
     "conflictNotFound": "This conflict wasn’t found.",
-    "notYourPreference": "Only the account’s owner can change its language."
+    "notYourPreference": "Only the account’s owner can change its language.",
+    "idTaken": "This couldn’t be saved. Create it again."
   }
 }

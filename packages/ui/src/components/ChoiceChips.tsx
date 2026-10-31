@@ -5,7 +5,8 @@
  * keeps the field open for the next, so a run of new values is typed without reaching for a button.
  */
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, space, type } from '../tokens.js';
 import { ActionChip } from './ActionChip.js';

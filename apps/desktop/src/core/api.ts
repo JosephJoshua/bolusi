@@ -24,6 +24,8 @@ export interface SessionView {
   readonly canManageStaff: boolean;
   /** May set limited roles' amounts at this store (`auth.limit_manage`). */
   readonly canSetLimits: boolean;
+  /** May rename this PC (`auth.device_enroll` at its store). */
+  readonly canRenameDevice: boolean;
   readonly tenantAdmin: boolean;
   /**
    * Every module's permissions the signed-in person holds (repair's, money's, ...), for showing
@@ -42,6 +44,8 @@ export interface CoreState {
   readonly bootError: string | null;
   readonly device: DeviceStatus;
   readonly deviceInfo: DeviceInfo | null;
+  /** The owner this PC's first-run setup waits for; null once done, or on a PC set up before it. */
+  readonly setupFor: string | null;
   /** Null before the PC is enrolled. */
   readonly session: SessionView | null;
   /** Null until the core has booted. */
@@ -93,4 +97,11 @@ export type HandoffEvent =
       readonly seq: number;
       readonly strokes: readonly (readonly { readonly x: number; readonly y: number }[])[];
       readonly pad: { readonly width: number; readonly height: number };
+    }
+  | {
+      readonly id: string;
+      readonly type: 'video';
+      readonly seq: number;
+      readonly bytes: Uint8Array;
+      readonly mime: VideoMime;
     };

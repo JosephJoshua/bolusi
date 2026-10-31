@@ -9,7 +9,9 @@ import { extname, join } from 'node:path';
 import {
   createUuidV7Generator,
   DomainError,
+  finishDeviceSetup,
   readDeviceId,
+  readDeviceSetupFor,
   readSyncState,
   type ClockPort,
   type CommandIdentity,
@@ -19,7 +21,7 @@ import {
 } from '@bolusi/core';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
-import { readDeviceInfo } from '@bolusi/device/bootstrap/device-info';
+import { readDeviceInfo, renameDevice } from '@bolusi/device/bootstrap/device-info';
 import {
   createEnrollTransport,
   createLoginTransport,
@@ -34,7 +36,12 @@ import {
   repairMediaSeamsFor,
 } from '@bolusi/device/bootstrap/repair';
 import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
-import { createStaffControls, type StaffControls } from '@bolusi/device/bootstrap/staff';
+import {
+  createStaffControls,
+  type RoleChange,
+  type StaffControls,
+} from '@bolusi/device/bootstrap/staff';
+import { createFetchQris } from '@bolusi/device/bootstrap/qris-transport';
 import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
@@ -60,21 +67,23 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import { moneyModule } from '@bolusi/modules';
+import { approvalsModule, moneyModule } from '@bolusi/modules';
+import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
 import {
   MEDIA_EXTENSION,
   VIDEO_MAX_SIZE_BYTES,
   isVideoMime,
-  type HandoffKind,
+  type HandoffAsk,
   type HandoffPageLabels,
   type MediaRef,
+  type QrisChargeBody,
   type VideoMime,
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingSession, actingStaffAdmin } from './acting.js';
+import { actingDeviceAdmin, actingSession, actingStaffAdmin } from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
@@ -198,6 +207,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     deviceToken: loadDeviceToken,
     ...fetchOptions,
   });
+  const qrisFor = createFetchQris({
+    baseUrl: deps.apiBaseUrl,
+    deviceToken: loadDeviceToken,
+    ...fetchOptions,
+  });
 
   let app: Bootstrapped | null = null;
   let enrollment: AppEnrollment | null = null;
@@ -206,6 +220,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   let media: MediaClient | null = null;
   let ticker: IdleTicker | null = null;
   let deviceInfo: DeviceInfo | null = null;
+  /** The owner this PC's first-run setup waits for (core device-setup.ts), or null. */
+  let setupFor: string | null = null;
   let syncReads: SyncStatusReads = NO_SYNC_STATUS_READS;
   let bootError: string | null = null;
   let stopped = false;
@@ -241,6 +257,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     bootError: null,
     device: 'unenrolled',
     deviceInfo: null,
+    setupFor: null,
     session: null,
     sync: null,
   };
@@ -298,6 +315,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       canReset: snapshot.canReset,
       canManageStaff: snapshot.canManageStaff,
       canSetLimits: snapshot.canSetLimits,
+      canRenameDevice: snapshot.canRenameDevice,
       tenantAdmin: snapshot.tenantAdmin,
       permissions,
       colleaguePermissions,
@@ -315,6 +333,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       bootError: null,
       device: shell.device,
       deviceInfo,
+      setupFor,
       session: sessionView(),
       sync: shell.sync,
     };
@@ -367,6 +386,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         // A PC's thumbnails are already `data:` URIs.
         readBase64: (uri) => Promise.resolve(uri.slice(uri.indexOf(',') + 1)),
       },
+      qris: qrisFor,
     });
   }
 
@@ -379,6 +399,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const runtime = activeRepair();
     if (runtime === null || runtime.userId !== userId) throw new DomainError('NOT_AUTHENTICATED');
     return runtime;
+  }
+
+  /** QRIS for the person signed in now; a call for anyone else is refused like a repair call. */
+  function qrisOf(userId: string): QrisPort {
+    const port = repairFor(userId).money.qris;
+    if (port === undefined) throw new QrisError('unavailable');
+    return port;
   }
 
   /** Who a photo or signature from the window is stamped with: the person signed in now. */
@@ -623,6 +650,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         platform: PLATFORM,
         appVersion: deps.appVersion,
       });
+      setupFor = await readDeviceSetupFor(booted.db.db);
       emit();
       const started = generation;
       await startSync(booted, enroll);
@@ -680,6 +708,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     );
     startProjectionRebuild(booting);
     deviceInfo = await readDeviceInfo(booting, { platform: PLATFORM, appVersion: deps.appVersion });
+    setupFor = await readDeviceSetupFor(booting.db.db);
     emit();
     await startEnrolledServices(booting, enroll);
     await rereadSyncStatus();
@@ -730,6 +759,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'enrollment.finish'() {
       requireEnrollment().controller.finish();
     },
+    // The first-run setup is finished or skipped: it does not open by itself again.
+    async 'device.finishSetup'() {
+      if (app === null) return;
+      await finishDeviceSetup(app.db.db);
+      setupFor = null;
+      emit();
+    },
 
     // ── PIN session ─────────────────────────────────────────────────────────────────────────────
     'session.refresh': () => requireSession().refresh(),
@@ -772,6 +808,24 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       staffFor(userId).onSetActive(memberId, active),
     'staff.setLimits': (userId: string, roleId: string, limits: LimitAmounts) =>
       staffFor(userId).onSetLimits(roleId, limits),
+    'staff.createRole': (userId: string, name: string, copyFromRoleId: string) =>
+      staffFor(userId).onCreateRole(name, copyFromRoleId),
+    'staff.updateRole': (userId: string, roleId: string, change: RoleChange) =>
+      staffFor(userId).onUpdateRole(roleId, change),
+    'staff.deleteRole': (userId: string, roleId: string) => staffFor(userId).onDeleteRole(roleId),
+
+    // Online only, like Karyawan: the server takes the new name first, then this PC shows it.
+    async 'device.rename'(userId: string, name: string) {
+      actingDeviceAdmin(session, userId);
+      const booted = app;
+      if (booted === null) throw new Error('the core has not booted');
+      await renameDevice(booted, staffAdmin, { actingUserId: userId, name });
+      deviceInfo = await readDeviceInfo(booted, {
+        platform: PLATFORM,
+        appVersion: deps.appVersion,
+      });
+      emit();
+    },
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
     'sync.requestManual'() {
@@ -790,6 +844,21 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'money.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).money.run)(knownName(moneyModule.commands, name), input),
     'money.stores': (userId: string) => repairFor(userId).money.stores(),
+    // QRIS through Xendit: server calls as the same person, made from here like the staff calls.
+    'money.qris.connections': (userId: string) => qrisOf(userId).connections(),
+    'money.qris.connect': (userId: string, accountId: string, secretKey: string) =>
+      qrisOf(userId).connect(accountId, secretKey),
+    'money.qris.disconnect': (userId: string, accountId: string) =>
+      qrisOf(userId).disconnect(accountId),
+    'money.qris.createCharge': (userId: string, body: QrisChargeBody) =>
+      qrisOf(userId).createCharge(body),
+    'money.qris.charge': (userId: string, id: string) => qrisOf(userId).charge(id),
+    'money.qris.simulate': (userId: string, id: string) => qrisOf(userId).simulate(id),
+    // Approval requests on servisan (a discount or a cancel asked of an owner), for the same person.
+    'approvals.query': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).approvals.query)(knownName(approvalsModule.queries, name), input),
+    'approvals.run': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).approvals.run)(knownName(approvalsModule.commands, name), input),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),
@@ -861,7 +930,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
     // ── Phone handoff: a store phone takes the photo or signature for this PC ───────────────────
     'handoff.pair': (labels: HandoffPageLabels) => handoff.pair(labels),
-    'handoff.ask': (id: string, kind: HandoffKind, title: string) => handoff.ask(id, kind, title),
+    'handoff.ask': (id: string, ask: HandoffAsk) => handoff.ask(id, ask),
     'handoff.withdraw': (id: string, seq: number) => handoff.withdraw(id, seq),
     'handoff.unpair': (id: string) => handoff.unpair(id),
   } satisfies Handlers;
