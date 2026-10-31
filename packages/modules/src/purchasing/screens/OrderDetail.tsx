@@ -22,7 +22,7 @@ import {
 import { useState } from 'react';
 import { Linking, Platform, Share, StyleSheet, View } from 'react-native';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, useJustReplaced } from '../../screen-kit/index.js';
 import {
   ActionErrorBanner,
   QueryView,
@@ -98,8 +98,9 @@ export function OrderDetail({
   // Writes the order and opens WhatsApp on the supplier's number, or the share sheet without one;
   // the buyer checks it and sends. As a servisan's messages: a phone opens the app itself, so one
   // without WhatsApp says so instead of landing in a browser; the web preview keeps wa.me.
+  // What the screen says stays until something new replaces it, so the button does not jump out
+  // from under the tap.
   const send = (row: OrderDetailRow): void => {
-    say(null);
     const url = orderMessageUrl(
       row,
       storeName,
@@ -118,6 +119,8 @@ export function OrderDetail({
         : actions.includes('receive')
           ? 'receive'
           : null;
+  // "Pesan" becomes "Terima barang" in the same spot: a double tap does not open the next step.
+  const primaryHeld = useJustReplaced(primary);
 
   return (
     <AppShell
@@ -156,7 +159,10 @@ export function OrderDetail({
         ) : (
           <Button
             label={tp('purchasing.action.receive')}
-            onPress={() => onReceive(order)}
+            // Ignored, not greyed, for that moment: the button does not flash.
+            onPress={() => {
+              if (!primaryHeld) onReceive(order);
+            }}
             disabled={runner.busy}
             testID={`${testID}.receive`}
           />

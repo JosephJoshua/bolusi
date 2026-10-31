@@ -177,6 +177,8 @@ describe('Belanja on the PC', () => {
     await openBuying();
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('purchasing.desk.form');
+    // Numbers read as the counter writes them, whatever was typed.
+    expect(await screen.findByRole('radio', { name: /0821-9988-1122/ })).toBeTruthy();
     fireEvent.click(byTestId('purchasing.desk.form.addSupplier'));
     await screen.findByTestId('purchasing.desk.supplierForm');
     expect(byTestId('purchasing.desk.supplierForm.submit')).toHaveProperty('disabled', true);
