@@ -211,4 +211,31 @@ describe('a half-entered servisan survives the app being torn down', () => {
       'Dimulai oleh Andi Pratama',
     );
   });
+
+  test('handing the phone over mid-intake asks nothing, and the colleague carries on with it', async () => {
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedTwoUsers(fixture, 300, COUNTER_PERMISSIONS);
+    const app = await start(fixture);
+    screen = app.screen;
+    expect(await unlockAs(app.screen, fixture.userId)).toBe(true);
+    expect(await waitUntil(() => app.screen.query('repair.board.newIntake') !== null)).toBe(true);
+    await press(app.screen, 'repair.board.newIntake');
+    await type(app.screen, 'repair.intake.customer.name', CUSTOMER);
+    await type(app.screen, 'repair.intake.customer.phone', PHONE);
+    // The avatar is on the intake itself, and switching keeps the intake rather than asking.
+    fireOn(app.screen, 'ui.avatarButton');
+    fireOn(app.screen, 'account-menu-switch-user');
+    await settle();
+    expect(app.screen.query('repair.intake.discard')).toBeNull();
+    expect(await waitUntil(() => app.screen.query('switcher-screen') !== null)).toBe(true);
+
+    expect(await unlockAs(app.screen, SECOND_USER_ID)).toBe(true);
+    expect(await waitUntil(() => app.screen.query('repair.board.newIntake') !== null)).toBe(true);
+    await press(app.screen, 'repair.board.newIntake');
+    expect(valueOf(app.screen, 'repair.intake.customer.name')).toBe(CUSTOMER);
+    expect(textsIn(app.screen.get('repair.intake.startedBy'))).toContain(
+      'Dimulai oleh Andi Pratama',
+    );
+  });
 });

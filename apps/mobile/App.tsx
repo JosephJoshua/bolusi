@@ -1709,7 +1709,10 @@ export default function App(props: AppProps): React.JSX.Element {
               primaryText={t('core.account.switchUser')}
               onPress={() => {
                 setAccountMenu(false);
-                leaveHome(() => setSwitching(true));
+                // An intake carries on for whoever signs in next, so handing the phone over asks
+                // nothing; anything else asks before it is dropped.
+                if (surfaceNavRef.current?.keepsWorkOnSwitch === true) setSwitching(true);
+                else leaveHome(() => setSwitching(true));
               }}
               testID="account-menu-switch-user"
             />
