@@ -19,7 +19,7 @@ import { shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
-import { useVoidAsk, voidRequest } from '../void-ask.js';
+import { useVoidAsk, useWaitingVoids, voidRequest } from '../void-ask.js';
 import { ta } from '../../approvals/i18n.js';
 
 import { Row } from './Kas.js';
@@ -61,6 +61,7 @@ export function KasHistory({
   const today = dayStart(now());
   const day = chosen ?? today;
   const records = useDayRecords(day, pages, nonce);
+  const waiting = useWaitingVoids();
 
   const goTo = (next: number): void => {
     setPages(1);
@@ -112,14 +113,19 @@ export function KasHistory({
                   accounts,
                   entry.documentId === null ? null : (customers.get(entry.documentId) ?? null),
                 );
+                const asked = waiting.has(entry.id) && entry.voidedAt === null;
                 return (
                   <Row
                     key={entry.id}
                     label={tm(line.label)}
-                    detail={[formatTime(entry.createdAt), ...line.details].join(' · ')}
+                    detail={[
+                      formatTime(entry.createdAt),
+                      ...line.details,
+                      ...(asked ? [tm('money.void.waiting')] : []),
+                    ].join(' · ')}
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
-                    onPress={voidable(entry, can) ? () => onVoid(entry) : undefined}
+                    onPress={!asked && voidable(entry, can) ? () => onVoid(entry) : undefined}
                     testID={`${testID}.entry.${entry.id}`}
                   />
                 );

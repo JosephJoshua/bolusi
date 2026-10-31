@@ -163,6 +163,7 @@ export const MONEY_KEYS = [
   'money.void.hint',
   'money.void.explain',
   'money.void.limit',
+  'money.void.waiting',
   'money.void.reason',
   'money.void.needsApproval',
   'money.void.overLimit',

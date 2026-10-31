@@ -3,6 +3,8 @@
 // asks. What a cancel counts against the limit is read from the ledger the way its rule counts it
 // (`voidCounted`, with what was already taken off the servisan), so the screen asks exactly when
 // saving would be refused.
+import { useMemo } from 'react';
+
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import { MONEY_APPROVAL_KIND, MONEY_PERMISSION } from './constants.js';
 import type { MoneyKey } from './i18n.js';
@@ -71,4 +73,25 @@ export function voidRequest(entry: MoneyEntryRow, reason: string) {
     },
     reason,
   };
+}
+
+/**
+ * The payments an owner was asked to cancel and has not answered yet, by entry id: the asker's own
+ * and those this person may decide. Riwayat marks them, and the step says so instead of asking again.
+ */
+export function useWaitingVoids(): ReadonlySet<string> {
+  const runtime = useMoneyRuntime();
+  const mayAsk = runtime.approvals.hasPermission(APPROVAL_PERMISSION.use);
+  const waiting = useMoneyQuery(
+    async (rt) =>
+      mayAsk
+        ? (await rt.approvals.query('approvalRequests', {})).rows
+            .filter((row) => row.kind === MONEY_APPROVAL_KIND.voidPayment)
+            .map((row) => (row.input as { readonly entryId?: unknown }).entryId)
+            .filter((id): id is string => typeof id === 'string')
+        : [],
+    `waitingVoids:${mayAsk}`,
+  );
+  const ids = waiting.status === 'ready' ? waiting.data.join(',') : '';
+  return useMemo(() => new Set(ids === '' ? [] : ids.split(',')), [ids]);
 }

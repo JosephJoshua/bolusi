@@ -114,7 +114,7 @@
     "countedBy": "Counted by {name}, {time}",
     "reason": "Reason",
     "save": "Settle difference",
-    "hint": "Enter the reason.",
+    "hint": "Enter the reason first.",
     "closed": "This difference is already settled, or there is a newer count."
   },
   "receive": {
@@ -152,10 +152,11 @@
   "void": {
     "title": "Cancel payment",
     "save": "Cancel payment",
-    "hint": "Enter the reason.",
+    "hint": "Enter the reason first.",
     "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
     "reason": "Reason",
     "limit": "Your cancel limit is {amount} per repair.",
+    "waiting": "Waiting for approval",
     "cashTitle": "Cancel cash record",
     "cashSave": "Cancel record",
     "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts.",

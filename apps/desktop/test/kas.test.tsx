@@ -314,6 +314,9 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.void.submit'));
     await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
     expect(screen.queryByTestId('money.desk.void')).toBeNull();
+    // The payment now says it waits, in place of its cancel button.
+    const table = byTestId('money.desk.history.table');
+    expect(await within(table).findByText('Menunggu persetujuan')).toBeTruthy();
   });
 
   it('lets the counter ask an owner to cancel a payment, and only that', async () => {

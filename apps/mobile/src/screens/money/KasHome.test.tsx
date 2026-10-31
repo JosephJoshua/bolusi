@@ -691,6 +691,10 @@ describe('Riwayat', () => {
     await press(screen, 'money.void.primary');
     const [request] = await waiting(h, h.storeOwnerId);
     expect(request).toMatchObject({ kind: 'money.voidPayment', reason: 'Tercatat dua kali' });
+    // Back in Riwayat the payment says it waits, and is not asked about twice.
+    await settle();
+    expect(text(screen, `money.history.entry.${entryId}`)).toContain('Menunggu persetujuan');
+    await expect(press(screen, `money.history.entry.${entryId}`)).rejects.toThrow(/no onPress/);
     // Nothing is cancelled until an owner says yes.
     const entry = await h.db
       .selectFrom('moneyEntries')
