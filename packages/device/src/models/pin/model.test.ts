@@ -13,11 +13,13 @@ import {
   PIN_LOCKOUT_SCHEDULE,
   type PinAttemptRow,
 } from '@bolusi/core';
+import { formatDuration, t } from '@bolusi/i18n';
 import { describe, expect, test } from 'vitest';
 
 import {
   attemptsLeft,
   PIN_MESSAGE_KEY,
+  pinMessage,
   pinPadState,
   pinView,
   type LastAttempt,
@@ -80,16 +82,46 @@ describe('the view renders 14`s derived state — it never re-derives it', () =>
       expect(pinView(given, NOW, 'wrong')).toEqual({
         kind: 'wrong',
         attemptsLeft: PIN_HARD_LOCK_THRESHOLD - failures,
+        nextWaitMs: delayMsForFailureCount(failures + 1),
       });
     }
   });
 
   test('a wrong PIN shows auth.pin.attemptsLeft, counted from 14`s threshold', () => {
     const view = pinView(row(1), NOW, 'wrong');
-    expect(view).toEqual({ kind: 'wrong', attemptsLeft: PIN_HARD_LOCK_THRESHOLD - 1 });
+    expect(view).toEqual({
+      kind: 'wrong',
+      attemptsLeft: PIN_HARD_LOCK_THRESHOLD - 1,
+      nextWaitMs: delayMsForFailureCount(2),
+    });
     expect(PIN_MESSAGE_KEY[view.kind]).toBe('auth.pin.wrong');
     expect(pinPadState(view)).toBe('error');
     expect(keysAreLive(row(1), NOW, 'wrong')).toBe(true);
+  });
+
+  test('the wrong try just before the first wait says so, instead of a count that hides it', () => {
+    const lastFree = row(PIN_FREE_ATTEMPTS - 1);
+    const view = pinView(lastFree, NOW, 'wrong');
+    expect(view).toMatchObject({
+      kind: 'wrong',
+      nextWaitMs: delayMsForFailureCount(PIN_FREE_ATTEMPTS),
+    });
+    expect(pinMessage(view)).toBe(
+      `${t('auth.pin.wrong')} ${t('auth.pin.nextWait', {
+        duration: formatDuration(delayMsForFailureCount(PIN_FREE_ATTEMPTS)),
+      })}`,
+    );
+    // An earlier wrong try is still free and keeps the count.
+    expect(pinMessage(pinView(row(1), NOW, 'wrong'))).toContain(
+      t('auth.pin.attemptsLeft', { count: PIN_HARD_LOCK_THRESHOLD - 1 }),
+    );
+  });
+
+  test('the wait also says how many tries are left before the hard lock', () => {
+    const view = pinView(row(PIN_FREE_ATTEMPTS, NOW + 1_000), NOW);
+    expect(pinMessage(view)).toContain(
+      t('auth.pin.attemptsLeft', { count: PIN_HARD_LOCK_THRESHOLD - PIN_FREE_ATTEMPTS }),
+    );
   });
 
   test('attemptsLeft tracks the row and never goes negative', () => {
@@ -119,7 +151,11 @@ describe('`delayed` — the countdown, and NO verify call while now < notBefore'
     // Dead regardless of the transient `wrong` flag — `lockedOut`/`delayed` outrank it (precedence).
     expect(keysAreLive(delayedRow, NOW, 'wrong')).toBe(false);
     const view = pinView(delayedRow, NOW);
-    expect(view).toEqual({ kind: 'delayed', remainingMs: firstDelay });
+    expect(view).toEqual({
+      kind: 'delayed',
+      remainingMs: firstDelay,
+      attemptsLeft: PIN_HARD_LOCK_THRESHOLD - PIN_FREE_ATTEMPTS,
+    });
     expect(pinPadState(view)).toBe('locked');
     expect(PIN_MESSAGE_KEY[view.kind]).toBe('auth.pin.wait');
   });

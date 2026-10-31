@@ -16,6 +16,7 @@
     "wrong": "Wrong PIN.",
     "attemptsLeft": "{count, plural, one {# try left.} other {# tries left.}}",
     "wait": "Too many wrong tries. Try again in {duration}.",
+    "nextWait": "One more wrong try and you wait {duration}.",
     "lockedOut": "Ask the store owner to unlock it.",
     "forgot": "Ask the store owner to make you a new PIN. Works offline.",
     "setup": {
@@ -278,6 +279,7 @@
     "refundHint": "Includes voiding payments and down payments",
     "credit": "Pay later",
     "creditHint": "What the customer still owes when they take the phone",
+    "checkAmount": "That is a lot for one repair. Check the amount.",
     "save": "Save",
     "saved": "{role} limits saved.",
     "missing": "Fill in all three. Enter 0 to always need a store owner.",
