@@ -42,6 +42,7 @@ import {
 } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
 import type { StockSourceTargets } from './stock-source.js';
+import { zOptionalPayloadText } from '../shared/optional-text.js';
 
 export const MAX_PART_NAME = 200;
 export const MAX_PART_CODE = 60;
@@ -49,7 +50,6 @@ export const MAX_BARCODE = 120;
 export const MAX_NOTE = 500;
 
 const zName = z.string().trim().min(1).max(MAX_PART_NAME);
-const zOptional = (max: number) => z.string().trim().min(1).max(max).nullable();
 
 /** A phone model a part fits: the catalog's brand and model, or a model typed with no brand.
  * Limits match the catalog's (repair/device-models.ts), so any catalog model can be picked. */
@@ -62,8 +62,8 @@ export const partDetailsPayload = z
     name: zName,
     /** True when the name is the category's format filled in; a format change renames it. */
     nameAuto: z.boolean(),
-    code: zOptional(MAX_PART_CODE),
-    barcode: zOptional(MAX_BARCODE),
+    code: zOptionalPayloadText(MAX_PART_CODE),
+    barcode: zOptionalPayloadText(MAX_BARCODE),
     categoryId: zUuidV7.nullable(),
     values: zFieldValues,
     tags: z.array(z.string().trim().min(1).max(MAX_FIELD_VALUE)).max(MAX_ITEM_TAGS),
@@ -90,7 +90,7 @@ export const stockCountedPayload = z
     /** What the counting device showed, kept so the history can say how far off the record was.
      * Stock itself is the latest count plus what moved after it (queries.ts). */
     expected: z.number().int().min(-MAX_COUNTED_QTY).max(MAX_COUNTED_QTY),
-    note: zOptional(MAX_NOTE),
+    note: zOptionalPayloadText(MAX_NOTE),
   })
   .strict();
 

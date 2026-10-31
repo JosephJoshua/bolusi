@@ -17,7 +17,10 @@
     "notOrdered": "Pesanan ini belum dipesan atau sudah dibatalkan.",
     "alreadyCancelled": "Pesanan ini sudah dibatalkan.",
     "notOnOrder": "Ada barang yang tidak ada di pesanan ini.",
-    "receiptMismatch": "Jumlah barangnya tidak sesuai dengan yang diterima."
+    "receiptMismatch": "Jumlah barangnya tidak sesuai dengan yang diterima.",
+    "nothingToCancel": "Semua barang pesanan ini sudah datang, jadi tidak bisa dibatalkan.",
+    "numberNotThisDevice": "Nomor pesanan ini bukan dari HP ini.",
+    "numberUsed": "Nomor pesanan ini sudah dipakai."
   },
   "stage": {
     "draft": "Draf",

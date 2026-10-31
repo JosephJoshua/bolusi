@@ -27,7 +27,8 @@ export function createPurchasingRuntime(deps: PurchasingRuntimeDeps): Purchasing
     ...bindModulePort(purchasingModule, deps.runtime, deps.identity),
     subscribe: (listener) =>
       deps.invalidation.subscribeTables(
-        [...Object.values(PURCHASING_TABLE), INVENTORY_TABLE.movements],
+        // Orders show part names, which a rename changes; receiving is in the purchasing tables.
+        [...Object.values(PURCHASING_TABLE), INVENTORY_TABLE.items],
         listener,
       ),
     storeName: deps.storeName,

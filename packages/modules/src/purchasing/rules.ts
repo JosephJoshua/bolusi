@@ -7,13 +7,16 @@
 // - Only a placed order is received. A receipt a phone recorded before someone cancelled the order
 //   (by phone time) still counts: the parts are on the shelf, so refusing it would leave the stock
 //   wrong. Receiving more than was ordered is allowed (two phones offline, or the supplier sent
-//   extra); the order then reads "Diterima lebih" for the owner to sort out.
+//   extra); the order then reads "Diterima lebih" for the owner to sort out once nothing is
+//   still to come. An order that came in full cannot be cancelled.
+// - An order number is the drafting device's own (shared/device-number.ts).
 import type { Kysely } from 'kysely';
 
 import { defineRefusals, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import type { InventoryDatabase } from '../inventory/schema.js';
+import { requireDeviceNumber } from '../shared/device-number.js';
 import {
   PURCHASING_ORDER_ENTITY,
   PURCHASING_SUPPLIER_ENTITY,
@@ -35,6 +38,9 @@ export const PURCHASING_REFUSALS = defineRefusals('purchasing', [
   'alreadyCancelled',
   'notOnOrder',
   'receiptMismatch',
+  'nothingToCancel',
+  'numberNotThisDevice',
+  'numberUsed',
 ] as const);
 const { refuse } = PURCHASING_REFUSALS;
 
@@ -90,7 +96,7 @@ async function requireItems(
 export async function requireOrder(db: Db, op: SignedOperation, orderId: string) {
   const order = await db
     .selectFrom('purchasingOrders')
-    .select(['id', 'status', 'orderNumber', 'cancelledAt'])
+    .select(['id', 'status', 'orderNumber', 'orderedAt', 'cancelledAt'])
     .where('id', '=', orderId)
     .where('tenantId', '=', op.tenantId)
     .where('storeId', '=', op.storeId ?? '')
@@ -151,6 +157,27 @@ export const orderDraftedRule: Rule = async (op, { db }) => {
     .executeTakeFirst();
   if (taken !== undefined) throw alreadyRecorded('orderId');
   await requireDetails(db, op);
+  // The number is printed on what goes to the supplier and labels the stock it brings: this
+  // device's to mint offline, never another's, never twice.
+  const { orderNumber } = payloadOf<{ readonly orderNumber: string }>(op);
+  await requireDeviceNumber(db, op, {
+    number: orderNumber,
+    prefix: 'PO-',
+    table: 'purchasing_orders',
+    column: 'order_number',
+    notThisDevice: () =>
+      refuse('numberNotThisDevice', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'orderNumber', issue: 'not minted by this device' },
+        message: `order number ${orderNumber} does not belong to device ${op.deviceId}`,
+      }),
+    used: () =>
+      refuse('numberUsed', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'orderNumber', issue: 'already used' },
+        message: `order number ${orderNumber} is already used by this device`,
+      }),
+  });
 };
 
 export const orderEditedRule: Rule = async (op, { db }) => {
@@ -169,7 +196,35 @@ export const orderCancelledRule: Rule = async (op, { db }) => {
       details: { entityType: PURCHASING_ORDER_ENTITY, entityId: op.entityId },
     });
   }
+  // Once every part came there is nothing to stop waiting for, and an order that came over keeps
+  // saying so until the owner corrects the stock.
+  if (order.status === 'ordered' && (await nothingToCome(db, op, order.id))) {
+    throw refuse('nothingToCancel', {
+      details: { entityType: PURCHASING_ORDER_ENTITY, entityId: op.entityId },
+      message: `order ${order.orderNumber} has arrived in full`,
+    });
+  }
 };
+
+/** Whether every line of the order has arrived in full. */
+async function nothingToCome(db: Db, op: SignedOperation, orderId: string): Promise<boolean> {
+  const lines = await db
+    .selectFrom('purchasingOrderLines')
+    .select(['itemId', 'qty'])
+    .where('tenantId', '=', op.tenantId)
+    .where('orderId', '=', orderId)
+    .execute();
+  const came = await db
+    .selectFrom('purchasingReceiptLines as l')
+    .innerJoin('purchasingReceipts as r', 'r.id', 'l.receiptId')
+    .select(['l.itemId', (eb) => eb.fn.sum<number>('l.qty').as('qty')])
+    .where('r.tenantId', '=', op.tenantId)
+    .where('r.orderId', '=', orderId)
+    .groupBy('l.itemId')
+    .execute();
+  const arrived = new Map(came.map((row) => [row.itemId, Number(row.qty)]));
+  return lines.every((line) => (arrived.get(line.itemId) ?? 0) >= line.qty);
+}
 
 export const orderReceivedRule: Rule = async (op, { db }) => {
   const taken = await db
@@ -183,9 +238,12 @@ export const orderReceivedRule: Rule = async (op, { db }) => {
     readonly lines: readonly { readonly itemId: string }[];
   }>(op);
   const order = await requireOrder(db, op, payload.orderId);
+  // Only an order that was placed, received while it still stood.
   const receivedBeforeCancel =
     order.status === 'cancelled' &&
+    order.orderedAt !== null &&
     order.cancelledAt !== null &&
+    op.timestamp >= Number(order.orderedAt) &&
     op.timestamp < Number(order.cancelledAt);
   if (order.status !== 'ordered' && !receivedBeforeCancel) {
     throw refuse('notOrdered', {

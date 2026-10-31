@@ -40,8 +40,8 @@ import {
   supplierEditedRule,
 } from './rules.js';
 import type { PurchasingDatabase } from './schema.js';
+import { zOptionalPayloadText } from '../shared/optional-text.js';
 
-const zOptional = (max: number) => z.string().trim().min(1).max(max).nullable();
 const zQty = z.number().int().min(1).max(MAX_LINE_QTY);
 
 /** `PO-K7Q-0001`: the drafting device's code and its own counter. */
@@ -50,8 +50,8 @@ export const ORDER_NUMBER_PATTERN = /^PO-[0-9A-Z]{3}-\d{4,9}$/;
 export const supplierDetailsPayload = z
   .object({
     name: z.string().trim().min(1).max(MAX_SUPPLIER_NAME),
-    phone: zOptional(MAX_SUPPLIER_PHONE),
-    note: zOptional(MAX_PURCHASING_NOTE),
+    phone: zOptionalPayloadText(MAX_SUPPLIER_PHONE),
+    note: zOptionalPayloadText(MAX_PURCHASING_NOTE),
   })
   .strict();
 
@@ -79,7 +79,7 @@ const zOrderLines = z
 export const orderDetailsPayload = z
   .object({
     supplierId: zUuidV7,
-    note: zOptional(MAX_PURCHASING_NOTE),
+    note: zOptionalPayloadText(MAX_PURCHASING_NOTE),
     lines: zOrderLines,
   })
   .strict();
@@ -90,12 +90,14 @@ export const orderDraftedPayload = orderDetailsPayload
 
 export const orderPlacedPayload = z.object({}).strict();
 
-export const orderCancelledPayload = z.object({ reason: zOptional(MAX_PURCHASING_NOTE) }).strict();
+export const orderCancelledPayload = z
+  .object({ reason: zOptionalPayloadText(MAX_PURCHASING_NOTE) })
+  .strict();
 
 export const orderReceivedPayload = z
   .object({
     orderId: zUuidV7,
-    note: zOptional(MAX_PURCHASING_NOTE),
+    note: zOptionalPayloadText(MAX_PURCHASING_NOTE),
     lines: z
       .array(z.object({ itemId: zUuidV7, qty: zQty }).strict())
       .min(1)

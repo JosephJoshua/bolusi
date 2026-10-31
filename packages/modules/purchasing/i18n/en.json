@@ -17,7 +17,10 @@
     "notOrdered": "This order is not placed yet, or was cancelled.",
     "alreadyCancelled": "This order was already cancelled.",
     "notOnOrder": "A part is not on this order.",
-    "receiptMismatch": "The quantity does not match what was received."
+    "receiptMismatch": "The quantity does not match what was received.",
+    "nothingToCancel": "Everything on this order has arrived, so it can’t be cancelled.",
+    "numberNotThisDevice": "This order number wasn’t made on this device.",
+    "numberUsed": "This order number is already used."
   },
   "stage": {
     "draft": "Draft",

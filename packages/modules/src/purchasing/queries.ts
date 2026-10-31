@@ -79,8 +79,9 @@ export function orderStage(
 ): OrderStage {
   if (status === 'draft' || status === 'cancelled') return status;
   if (lines.every((line) => line.received === 0)) return 'ordered';
-  if (lines.some((line) => line.received > line.qty)) return 'over';
-  return lines.every((line) => line.received >= line.qty) ? 'received' : 'partial';
+  // Anything still to come keeps it open, even when another line came over.
+  if (lines.some((line) => line.received < line.qty)) return 'partial';
+  return lines.some((line) => line.received > line.qty) ? 'over' : 'received';
 }
 
 /** What is still to come on each line: ordered minus arrived, never below zero. */

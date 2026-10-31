@@ -27,18 +27,10 @@ import {
   type OrderDetailRow,
   type SupplierRow,
 } from './queries.js';
+import { zOptionalText } from '../shared/optional-text.js';
+import { orderActions } from './order-form.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
-
-/** Blank optional text is no text. */
-const zOptionalText = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .nullable()
-    .default(null)
-    .transform((value) => (value === null || value === '' ? null : value));
 
 function invalid(field: string, issue: string): DomainError {
   return new DomainError('VALIDATION_FAILED', { field, issue });
@@ -258,9 +250,12 @@ export async function editOrderHandler(
     order.lines.length === lines.length &&
     order.lines.every((line, i) => line.itemId === lines[i]!.itemId && line.qty === lines[i]!.qty);
   if (unchanged && !input.place) throw invalid('lines', 'nothing changed');
+  // A supplier archived since the draft was written is not ordered from.
+  if (order.supplierId !== input.supplierId || input.place) {
+    await requireActiveSupplier(ctx, input.supplierId);
+  }
   const ops: OpDraft[] = [];
   if (!unchanged) {
-    if (order.supplierId !== input.supplierId) await requireActiveSupplier(ctx, input.supplierId);
     ops.push(
       ctx.op({
         type: PURCHASING_OP.orderEdited,
@@ -286,6 +281,8 @@ export async function cancelOrderHandler(
 ): Promise<CommandHandlerResult<{ orderId: string }>> {
   const order = await loadOrder(ctx, input.orderId);
   if (order.status === 'cancelled') throw invalid('orderId', 'already cancelled');
+  // Everything came: there is nothing left to stop waiting for.
+  if (!orderActions(order.stage).includes('cancel')) throw invalid('orderId', 'nothing to come');
   return {
     ops: [
       ctx.op({

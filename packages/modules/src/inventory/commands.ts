@@ -35,16 +35,7 @@ import {
   type CategoryRow,
   type ItemDetailRow,
 } from './queries.js';
-
-/** Blank optional text is no text. */
-const zOptionalText = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .nullable()
-    .default(null)
-    .transform((value) => (value === null || value === '' ? null : value));
+import { zOptionalText } from '../shared/optional-text.js';
 
 const zPartDetails = z
   .object({

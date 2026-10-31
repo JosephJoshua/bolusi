@@ -11,7 +11,12 @@ import type { SignedOperation } from '@bolusi/schemas';
 import enCatalog from '../purchasing/i18n/en.json' with { type: 'json' };
 import idCatalog from '../purchasing/i18n/id.json' with { type: 'json' };
 import { registerPurchasingCatalog } from '../src/purchasing/i18n.js';
-import { orderMessage, orderMessageUrl, type OrderDetailRow } from '../src/purchasing/index.js';
+import {
+  orderMessage,
+  orderMessageUrl,
+  orderStage,
+  type OrderDetailRow,
+} from '../src/purchasing/index.js';
 import { openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
 beforeAll(() => {
@@ -401,5 +406,127 @@ describe('the order on WhatsApp', () => {
     expect(url.startsWith('https://wa.me/6281234567890?text=')).toBe(true);
     expect(decodeURIComponent(url.split('?text=')[1]!)).toBe(orderMessage(long, null));
     expect(orderMessageUrl({ ...long, supplierPhone: null }, null)).toBeNull();
+  });
+});
+
+describe('review round 1 (2026-10-31)', () => {
+  test('a line that came over does not close an order with another still to come', () => {
+    expect(
+      orderStage('ordered', [
+        { qty: 5, received: 6 },
+        { qty: 5, received: 0 },
+      ]),
+    ).toBe('partial');
+    expect(
+      orderStage('ordered', [
+        { qty: 5, received: 6 },
+        { qty: 5, received: 5 },
+      ]),
+    ).toBe('over');
+  });
+
+  test('an order that came in full cannot be cancelled, on the phone or the server', async () => {
+    const h = await harness(7120);
+    const { lcd, battery, orderId } = await placed(h);
+    await h.purchasing(
+      'receiveOrder',
+      {
+        orderId,
+        lines: [
+          { itemId: lcd, qty: 4 },
+          { itemId: battery, qty: 2 },
+        ],
+      },
+      h.storeOwnerId,
+    );
+    expect((await order(h, orderId)).stage).toBe('over');
+    await expectRefused(
+      h.purchasing('cancelOrder', { orderId, reason: null }, h.storeOwnerId),
+      'VALIDATION_FAILED',
+    );
+    const placedOp = (await h.ownOps()).find((op) => op.type === 'purchasing.order_placed')!;
+    const cancel = {
+      ...placedOp,
+      type: 'purchasing.order_cancelled',
+      payload: { reason: null },
+    } as unknown as SignedOperation;
+    await expectRefused(
+      h.checkRule(cancel),
+      'INVALID_TRANSITION',
+      'purchasing.refusal.nothingToCancel',
+    );
+    expect((await order(h, orderId)).stage).toBe('over');
+  });
+
+  test('an order number is the drafting device’s own, used once', async () => {
+    const h = await harness(7121);
+    await placed(h);
+    const drafted = (await h.ownOps()).find((op) => op.type === 'purchasing.order_drafted')!;
+    const payload = drafted.payload as { orderNumber: string };
+    const code = payload.orderNumber.slice(3, 6);
+    const otherCode = code === 'ZZZ' ? 'YYY' : 'ZZZ';
+    const fresh = (orderNumber: string, n: number) =>
+      ({
+        ...drafted,
+        entityId: `01900000-0000-7000-8000-00000000010${String(n)}`,
+        payload: { ...payload, orderNumber },
+      }) as SignedOperation;
+    await expectRefused(
+      h.checkRule(fresh(`PO-${otherCode}-0009`, 1)),
+      'VALIDATION_FAILED',
+      'purchasing.refusal.numberNotThisDevice',
+    );
+    await expectRefused(
+      h.checkRule(fresh(payload.orderNumber, 2)),
+      'VALIDATION_FAILED',
+      'purchasing.refusal.numberUsed',
+    );
+  });
+
+  test('a draft that was never placed takes no delivery, however the phone dates it', async () => {
+    const h = await harness(7122);
+    const { orderId: placedId, lcd, supplierId } = await placed(h);
+    await h.purchasing(
+      'receiveOrder',
+      { orderId: placedId, lines: [{ itemId: lcd, qty: 1 }] },
+      h.storeOwnerId,
+    );
+    const { orderId: draftId } = (await h.purchasing(
+      'draftOrder',
+      { supplierId, note: null, lines: [{ itemId: lcd, qty: 1 }] },
+      h.storeOwnerId,
+    )) as { orderId: string };
+    await h.purchasing('cancelOrder', { orderId: draftId, reason: null }, h.storeOwnerId);
+    const received = (await h.ownOps()).find((op) => op.type === 'purchasing.order_received')!;
+    const backdated = {
+      ...received,
+      entityId: '01900000-0000-7000-8000-000000000201',
+      timestamp: 1,
+      payload: { ...(received.payload as object), orderId: draftId },
+    } as SignedOperation;
+    await expectRefused(
+      h.checkRule(backdated),
+      'INVALID_TRANSITION',
+      'purchasing.refusal.notOrdered',
+    );
+  });
+
+  test('a draft is not placed with a supplier archived since it was written', async () => {
+    const h = await harness(7123);
+    const supplierId = await addSupplier(h);
+    const lcd = await addItem(h, 'LCD Redmi Note 10 + frame');
+    const draft = { supplierId, note: null, lines: [{ itemId: lcd, qty: 1 }] };
+    const { orderId } = (await h.purchasing('draftOrder', draft, h.storeOwnerId)) as {
+      orderId: string;
+    };
+    await h.purchasing(
+      'editSupplier',
+      { supplierId, name: 'Sumber Jaya', phone: null, note: null, archived: true },
+      h.storeOwnerId,
+    );
+    await expectRefused(
+      h.purchasing('editOrder', { orderId, ...draft, place: true }, h.storeOwnerId),
+      'VALIDATION_FAILED',
+    );
   });
 });

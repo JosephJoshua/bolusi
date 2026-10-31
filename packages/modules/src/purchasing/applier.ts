@@ -162,7 +162,11 @@ interface OrderDetails {
 }
 
 async function writeOrderLines(db: Db, op: ProjectionOperation, lines: OrderDetails['lines']) {
-  await db.deleteFrom('purchasingOrderLines').where('orderId', '=', op.entityId).execute();
+  await db
+    .deleteFrom('purchasingOrderLines')
+    .where('tenantId', '=', op.tenantId)
+    .where('orderId', '=', op.entityId)
+    .execute();
   if (lines.length === 0) return;
   await db
     .insertInto('purchasingOrderLines')

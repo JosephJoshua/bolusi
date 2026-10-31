@@ -214,7 +214,7 @@ function journey(world: ChainWorld): OpSpec[] {
         },
       },
       orderOp('purchasing.order_drafted', order, {
-        orderNumber: 'PO-K7Q-0001',
+        orderNumber: `PO-${formatTicketNumber(world.deviceId, 1)}`,
         supplierId: supplier,
         note: null,
         lines,
@@ -234,11 +234,15 @@ function journey(world: ChainWorld): OpSpec[] {
         payload: {
           itemId: part,
           qty: 2,
-          source: { kind: 'purchase_receipt', id: receipt, label: 'PO-K7Q-0001' },
+          source: {
+            kind: 'purchase_receipt',
+            id: receipt,
+            label: `PO-${formatTicketNumber(world.deviceId, 1)}`,
+          },
         },
       },
       orderOp('purchasing.order_drafted', dropped, {
-        orderNumber: 'PO-K7Q-0002',
+        orderNumber: `PO-${formatTicketNumber(world.deviceId, 2)}`,
         supplierId: supplier,
         note: null,
         lines,
