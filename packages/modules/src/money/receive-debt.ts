@@ -86,7 +86,8 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
     paidByQr,
     input,
     hint:
-      paidByQr || input !== null
+      // Too much is said once, under the payment.
+      paidByQr || input !== null || payment.entry.overpaid > 0
         ? null
         : Object.values(payment.entry.problems).includes('qr')
           ? tm('money.receive.waitQr')

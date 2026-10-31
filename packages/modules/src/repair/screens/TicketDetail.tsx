@@ -1071,9 +1071,10 @@ export function TicketDetail({
         )}
         <DownPaymentRows
           total={amountOwed(row)}
-          downPayment={row.downPayment}
           reduced={row.reduced}
+          downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
+          returned={row.location === 'returned'}
           action={
             paymentAction === 'correct' ? (
               <TextButton

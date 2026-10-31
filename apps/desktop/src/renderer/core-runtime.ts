@@ -4,6 +4,7 @@
 // re-derive what they show. Photos, signatures and the ownership video are taken in the window and
 // handed to the core.
 import { createUuidV7Generator } from '@bolusi/core';
+import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { InventoryRuntime } from '@bolusi/modules/inventory/desktop';
 import { catalogModelSearch } from '@bolusi/modules/repair';
 import type { RepairPrinting, RepairRuntime } from '@bolusi/modules/repair/desktop';
@@ -170,6 +171,7 @@ export function createCoreRepairRuntime(deps: {
         playableVideo(await call<CoreVideoLoad>('media.loadVideo', ref)),
       ),
     printing,
+    diagnostics: consoleDiagnostics,
   };
   return runtime;
 }

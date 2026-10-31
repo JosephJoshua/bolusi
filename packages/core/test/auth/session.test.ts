@@ -2,7 +2,7 @@
 // session state machine against the real command runtime + real op log: the emission order, the
 // envelope attribution, the unbroken device chain, the permission-memo invalidation, switcher
 // usability, and per-user work retention.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { sql } from 'kysely';
 
@@ -171,6 +171,26 @@ describe('SEC-AUTH-08 — idle lock preserves work', () => {
     expect(ended.source).toBe('ui');
   });
 
+  it('a lock whose session_ended append fails still ends the session (fails closed)', async () => {
+    const s = await setup(61, 60);
+    await s.sm.switchTo(s.h.ownerId);
+    const append = vi.spyOn(s.h.runtime, 'emitRuntimeOp').mockRejectedValue(new Error('disk full'));
+
+    const manual = s.sm.manualLock();
+    // Cleared on the call, before the append settles: nothing can act as the user in between.
+    expect(s.sm.current).toBeNull();
+    await expect(manual).rejects.toThrow('disk full');
+    expect(s.sm.current).toBeNull();
+
+    // The idle path too.
+    append.mockRestore();
+    await s.sm.switchTo(s.h.ownerId);
+    vi.spyOn(s.h.runtime, 'emitRuntimeOp').mockRejectedValue(new Error('disk full'));
+    s.h.clock.advance(61_000);
+    await expect(s.sm.checkIdle()).rejects.toThrow('disk full');
+    expect(s.sm.current).toBeNull();
+  });
+
   it('per-user work survives the lock and is restored to the SAME user, never a different one', async () => {
     const s = await setup(7, 60);
     await s.sm.switchTo(s.h.ownerId);
@@ -216,7 +236,13 @@ function parseWork(value: unknown): Work | undefined {
 }
 
 function sqliteStore(h: AuthHarness): WorkStore<Work> {
-  return createWorkStore(h.db, parseWork, () => h.clock.now());
+  // Nothing else writes here at once: the store's writes need no queue to wait in.
+  return createWorkStore(
+    h.db,
+    parseWork,
+    () => h.clock.now(),
+    (fn) => fn(),
+  );
 }
 
 /** A new manager over the same database: what the app builds after Android killed it. */

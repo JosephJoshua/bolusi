@@ -161,8 +161,10 @@ customers registers a document source (`money/documents.ts`) in
 
 The server judges each pushed op alone, not a command's ops as a group, so each
 money rule is safe on its own: a charge equals the document's price, a refund by
-the counter returns at most the overpayment through the account it came in by,
-and lowering a bill, voiding a payment or settling a cash difference are owners'.
+the counter returns at most the overpayment through the account it came in by
+(payments cover the bill in the order they came in, `overpaidByAccount`), nobody
+refunds more than was paid, and lowering a bill, voiding a payment or settling a
+cash difference are owners'. Settling a cash difference always names its count.
 A cash count records what was counted; the difference is computed against the
 book at the count's time, so late-synced cash shows up correctly. Stock and
 purchasing post through the same module (reserved accounts in `constants.ts`).

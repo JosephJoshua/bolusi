@@ -6,6 +6,7 @@ export {
   RealtimeController,
   DEGRADED_WS_RETRY_MS,
   SSE_CONNECT_FAILURES_TO_POLLING,
+  SSE_IDLE_LIMIT_MS,
   WS_CONNECT_FAILURES_TO_SSE,
   type RealtimeControllerState,
   type RealtimeControllerStats,

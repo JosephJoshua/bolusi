@@ -14,7 +14,7 @@ import type { FirstSyncProgress, SyncStatusInput } from '../models/sync-status/m
 
 import type { Bootstrapped } from './bootstrap.js';
 import { NO_SYNC_STATUS_READS, type SyncStatusReads } from './sync-status-reads.js';
-import type { SyncClient } from './sync-client.js';
+import type { ManualSyncStatus, SyncClient } from './sync-client.js';
 
 /**
  * The Sync Status screen's input, built from the device's REAL `SyncState`, the LIVE loop, and the
@@ -44,6 +44,7 @@ export function syncInput(
   now: number,
   reads: SyncStatusReads = NO_SYNC_STATUS_READS,
   firstSync: FirstSyncProgress | null = null,
+  manual: ManualSyncStatus = { busy: false, error: null },
 ): SyncStatusInput {
   return {
     state,
@@ -54,8 +55,8 @@ export function syncInput(
     quarantined: reads.quarantined,
     media: reads.media,
     isOffline,
-    manualSyncBusy: false,
-    manualSyncError: null,
+    manualSyncBusy: manual.busy,
+    manualSyncError: manual.error,
     firstSync,
     now,
   };
@@ -86,5 +87,9 @@ export function resolveShellInputs(
       ? 'active'
       : 'unenrolled';
   const firstSync = sync !== null ? sync.firstSync() : null;
-  return { device, sync: syncInput(syncState, loopState, isOffline, now, reads, firstSync) };
+  const manual = sync !== null ? sync.manualSync() : undefined;
+  return {
+    device,
+    sync: syncInput(syncState, loopState, isOffline, now, reads, firstSync, manual),
+  };
 }

@@ -38,6 +38,7 @@ import {
   warrantyUntil,
   type RecordedRepairType,
 } from './intake-options.js';
+import { sameModelAnySpelling } from './device-models.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 import { cancelDrop, NO_CANCEL_FEES, standardCancelFee } from './queries.js';
 import type {
@@ -105,6 +106,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'warrantyEnded',
   'claimChargeOwnerOnly',
   'claimOtherPhone',
+  'claimOtherImei',
   'partsNotInWork',
   'partsNotYours',
   'notPaid',
@@ -637,12 +639,16 @@ export interface ClaimedServisan {
   readonly claimOfTicketId: string | null;
   readonly customerId: string;
   readonly deviceImei: string | null;
+  readonly deviceBrand: string;
+  readonly deviceModel: string;
 }
 
 /** What a new claim brings: who and which phone, what it picks, and what it costs. */
 export interface ClaimRequest {
   readonly customerId: string;
   readonly imei: string | null;
+  readonly brand: string;
+  readonly model: string;
   readonly repairTypes: readonly unknown[];
   readonly total: number;
   /** When it was signed. */
@@ -671,11 +677,20 @@ export function claimProblem(
   if (claim.repairTypes.length > 0) return { reason: 'claimWithTypes', owner: false };
   // The warranty covers that customer's phone, not another one brought in under its number.
   const imei = (value: string | null): string => (value ?? '').trim();
+  if (claim.customerId !== original.customerId) return { reason: 'claimOtherPhone', owner: false };
   if (
-    claim.customerId !== original.customerId ||
-    (imei(claim.imei) !== '' &&
-      imei(original.deviceImei) !== '' &&
-      imei(claim.imei) !== imei(original.deviceImei))
+    imei(claim.imei) !== '' &&
+    imei(original.deviceImei) !== '' &&
+    imei(claim.imei) !== imei(original.deviceImei)
+  ) {
+    return { reason: 'claimOtherImei', owner: false };
+  }
+  // Nor another model: a phone with no IMEI written down is still the brand and model it was.
+  if (
+    !sameModelAnySpelling(
+      { brand: original.deviceBrand, model: original.deviceModel },
+      { brand: claim.brand, model: claim.model },
+    )
   ) {
     return { reason: 'claimOtherPhone', owner: false };
   }
@@ -708,6 +723,8 @@ async function requireClaimable(
       'claimOfTicketId',
       'customerId',
       'deviceImei',
+      'deviceBrand',
+      'deviceModel',
     ])
     .where('id', '=', claimOf)
     .where('tenantId', '=', op.tenantId)
@@ -778,6 +795,8 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
       {
         customerId: payload.customerId,
         imei: payload.device.imei,
+        brand: payload.device.brand,
+        model: payload.device.model,
         repairTypes: payload.repairTypes,
         total,
       },

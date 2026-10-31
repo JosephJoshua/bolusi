@@ -55,6 +55,7 @@ function fakeClient(over: {
     isOffline: () => over.offline ?? true,
     syncState: () => over.syncState ?? syncState(),
     firstSync: () => over.firstSync ?? null,
+    manualSync: () => ({ busy: false, error: null }),
     subscribe: () => () => undefined,
     surfacings: () => [],
     settle: () => Promise.resolve(),

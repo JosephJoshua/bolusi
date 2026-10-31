@@ -56,16 +56,28 @@ class FakeSession implements SessionPort<UserWorkspace> {
 
   async manualLock() {
     if (this.current === null) return [];
-    this.emitted.push('session_ended(manual_lock)');
+    // Like 14's class: the identity clears on the call, then the append runs (and may fail).
     this.current = null;
+    await this.#append();
+    this.emitted.push('session_ended(manual_lock)');
     return [{}];
   }
 
   async checkIdle() {
     if (this.current === null || this.clock.now() < this.#deadline) return [];
-    this.emitted.push('session_ended(idle_lock)');
     this.current = null;
+    await this.#append();
+    this.emitted.push('session_ended(idle_lock)');
     return [{}];
+  }
+
+  /** Set to make the next `session_ended` append reject, as a full or failing op store would. */
+  failNextAppend = false;
+
+  async #append(): Promise<void> {
+    if (!this.failNextAppend) return;
+    this.failNextAppend = false;
+    throw new Error('append failed');
   }
 
   recordActivity() {
@@ -222,6 +234,30 @@ describe('manual lock behaves identically, with `manual_lock` (api/02-auth §6.4
     expect(session.emitted).not.toContain('session_ended(idle_lock)');
 
     expect(await shell.unlock('user-a')).toEqual(saved);
+  });
+
+  test('a manual lock whose record fails still locks the screen and reports the failure', async () => {
+    await signInWithDraft('user-a', 'tukar layar Oppo');
+    session.failNextAppend = true;
+
+    await expect(shell.lockNow()).rejects.toThrow('append failed');
+    const snapshot = shell.snapshot();
+    expect(snapshot.locked).toBe(true);
+    expect(snapshot.lockReason).toBe('manual_lock');
+    expect(snapshot.userId).toBeNull();
+    expect(snapshot.workspace).toBeNull();
+  });
+
+  test('an idle lock whose record fails still locks the screen and reports the failure', async () => {
+    await signInWithDraft('user-a', 'tukar layar Oppo');
+    clock.advance(IDLE_SECONDS * 1000);
+    session.failNextAppend = true;
+
+    await expect(shell.tick()).rejects.toThrow('append failed');
+    const snapshot = shell.snapshot();
+    expect(snapshot.locked).toBe(true);
+    expect(snapshot.lockReason).toBe('idle_lock');
+    expect(snapshot.workspace).toBeNull();
   });
 
   test('manual lock at the switcher is a no-op — there is no session to end', async () => {

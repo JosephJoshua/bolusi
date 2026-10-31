@@ -69,7 +69,8 @@ vi.mock('electron', () => {
     handle: (channel: string, run: (event: unknown, ...args: unknown[]) => Promise<unknown>) =>
       electron.handlers.set(channel, run),
   };
-  return { app, BrowserWindow, Menu, ipcMain, session, shell: {} };
+  const screen = { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1040 } }) };
+  return { app, BrowserWindow, Menu, ipcMain, screen, session, shell: {} };
 });
 vi.mock('../src/main/core-process.js', () => ({
   quitAfter: (): void => undefined,
@@ -88,6 +89,7 @@ vi.mock('../src/main/window-chrome.js', () => ({
   frameOptions: () => ({}),
   registerWindowChrome: (): void => undefined,
   reportFullscreen: (): void => undefined,
+  windowSize: () => ({}),
 }));
 
 /** Starts main as an installed or a developer's app; resolves with its counter window. */

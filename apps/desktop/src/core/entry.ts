@@ -13,11 +13,14 @@ import { mainPortChannel } from '../main/main-port.js';
 import { connect, serve } from '../main/rpc.js';
 
 import { createCoreHost, type CoreHost } from './host.js';
+import { logUnhandledRejections } from './unhandled.js';
 
 interface ParentMessage {
   readonly data: unknown;
   readonly ports: MessagePortMain[];
 }
+
+logUnhandledRejections(process);
 
 const parent = process.parentPort;
 let host: CoreHost | null = null;

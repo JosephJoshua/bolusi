@@ -129,12 +129,23 @@ export function referenceRequired(kind: PaymentAccountKind | 'cash'): boolean {
 export const CASH_MOVE_KINDS = ['withdrawal', 'expense', 'deposit', 'float'] as const;
 export type CashMoveKind = (typeof CASH_MOVE_KINDS)[number];
 
+/** Whether a move takes cash out of the drawer (everything but change money put in). */
+export function movesOut(kind: CashMoveKind): boolean {
+  return kind !== 'float';
+}
+
 /** The largest rupiah amount one money record may carry. */
 export const MAX_AMOUNT = 1_000_000_000_000;
 export const MAX_REASON = 500;
 export const MAX_REFERENCE = 100;
 export const MAX_DOCUMENT_LABEL = 80;
 export const MAX_ACCOUNT_NAME = 60;
+
+/**
+ * The reason a refund made at handover records: a code, so the history reads it in each reader's
+ * language (`historyLine`) rather than in the words of the device that saved it.
+ */
+export const HANDOVER_REFUND_REASON = 'handover_refund';
 
 /** What an entry is, on its row: the op type without the module prefix. */
 export const ENTRY_KINDS = [

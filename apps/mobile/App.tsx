@@ -102,8 +102,8 @@ import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
   REPAIR_PERMISSION,
-  parseIntakeDraft,
-  type IntakeDraft,
+  parseRepairDraft,
+  type RepairDraft,
 } from '@bolusi/modules/repair';
 import { moneyRuntimeOf, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
 import { MONEY_PERMISSION } from '@bolusi/modules/money';
@@ -481,14 +481,14 @@ export default function App(props: AppProps): React.JSX.Element {
     [publishWorkspace],
   );
 
-  /** The repair intake in progress, retained across a lock exactly like a notes draft. */
-  const restoredIntakeDraft = useMemo<IntakeDraft | null>(
-    () => (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
+  /** The repair intake or handover in progress, retained across a lock exactly like a notes draft. */
+  const restoredRepairDraft = useMemo<RepairDraft | null>(
+    () => (workspace === null ? null : parseRepairDraft(workspace.drafts[REPAIR_MODULE_ID])),
     [workspace],
   );
 
-  const publishIntakeDraft = useCallback(
-    (draft: IntakeDraft | null): void => {
+  const publishRepairDraft = useCallback(
+    (draft: RepairDraft | null): void => {
       publishWorkspace((base) => {
         const current = base.drafts[REPAIR_MODULE_ID] ?? null;
         // Structural, for the same reason as `publishNotesDraft`: an equal re-publish is a no-op.
@@ -1557,8 +1557,8 @@ export default function App(props: AppProps): React.JSX.Element {
                     // The clock itself, not this render's reading: an intake can sit open for hours.
                     now={props.clock ?? systemClock.now}
                     onRegisterSurfaceNav={registerRepairNav}
-                    restoredDraft={restoredIntakeDraft}
-                    onDraftChange={publishIntakeDraft}
+                    restoredDraft={restoredRepairDraft}
+                    onDraftChange={publishRepairDraft}
                     onOpenSyncStatus={openSyncStatus}
                     syncChip={homeSyncChip}
                     avatar={homeAvatar}

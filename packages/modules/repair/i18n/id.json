@@ -43,6 +43,8 @@
     "proposePrice": "Ajukan perubahan harga",
     "reopen": "Kerjakan lagi",
     "resume": "Lanjut kerjakan",
+    "resumeClaim": "Lanjutkan klaim garansi",
+    "resumeIntake": "Lanjutkan servisan baru",
     "start": "Mulai kerjakan",
     "waitForParts": "Tunggu sparepart",
     "reassign": "Ganti teknisi",
@@ -146,8 +148,6 @@
     "watch": "Jam tangan"
   },
   "handover": {
-    "giveBack": "Kembalikan {refunds} ke pelanggan.",
-    "giveBackVia": "{amount} lewat {method}",
     "note": "Catatan (opsional)",
     "photo": "Foto serah terima",
     "sign": "Minta tanda tangan",
@@ -160,7 +160,6 @@
     "payNow": "Bayar sekarang",
     "payLaterReason": "Alasan bayar nanti",
     "payLaterNote": "Sisa {amount} dicatat sebagai utang pelanggan.",
-    "refundReason": "Sisa DP dikembalikan saat serah terima",
     "checks": "Cek bersama pelanggan",
     "accessoryBack": "{name} dikembalikan",
     "noteNeeded": "Catatan",
@@ -255,9 +254,12 @@
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Dikembalikan",
+    "refundDue": "Kembalikan",
+    "refundVia": "Kembalikan lewat {method}",
+    "refundCash": "Kembalikan tunai",
     "newTotal": "Total jadi {from} → {to}",
     "reduced": "Potongan",
+    "givenBack": "Sudah dikembalikan",
     "owedBack": "Lebih bayar"
   },
   "problem": {
@@ -270,7 +272,7 @@
     "incompleteLine": "Biaya ini belum ada keterangannya.",
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
-    "downPaymentReference": "Isi kode approval dari mesin EDC.",
+    "downPaymentReference": "Isi kode approval dari struk EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada.",
     "ownershipVideo": "Video kepemilikan belum direkam.",
     "customerPhone": "Nomor HP-nya belum benar. Cek lagi angkanya.",
@@ -510,7 +512,9 @@
       "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
       "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
     },
-    "refund": "Dikembalikan"
+    "refund": "Perlu dikembalikan",
+    "refundVia": "Dikembalikan lewat {method}",
+    "refundCash": "Dikembalikan tunai"
   },
   "print": {
     "askTitle": "Notanya sudah tercetak?",
@@ -558,6 +562,8 @@
     "ofTotal": "Total biaya {amount}",
     "reason": "Alasan perubahan",
     "removeHint": "Isi 0 kalau DP-nya batal.",
+    "raised": "Tambahannya {added} dicatat lewat {method}. DP {current} tetap seperti tercatat.",
+    "replaced": "DP {current} dibatalkan, lalu {amount} dicatat lewat {method}.",
     "askTitle": "Minta ubah DP"
   },
   "printSettings": {
@@ -697,6 +703,7 @@
     "warrantyEnded": "Garansinya sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
     "claimChargeOwnerOnly": "Klaim garansi gratis. Hanya pemilik yang bisa menagih biaya.",
     "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya.",
+    "claimOtherImei": "IMEI-nya beda dengan HP di servisan aslinya. Klaim garansi hanya untuk HP yang sama.",
     "overLimit": "Melebihi batasmu. Minta pemilik toko.",
     "handoverAccessories": "Ada kelengkapan yang tidak ada di daftar serah terima.",
     "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu.",
@@ -797,7 +804,11 @@
     "claims": "Klaim garansi",
     "open": "Buka",
     "intakeNote": "Dari {number}. Jenis servisan dan garansinya ikut servisan itu.",
-    "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini."
+    "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
+    "replaceTitle": "Mulai klaim garansi?",
+    "replaceMessage": "Isian yang belum disimpan akan dibuang.",
+    "replaceConfirm": "Mulai klaim",
+    "sameDevice": "Klaim hanya untuk HP ini."
   },
   "handoverCheck": {
     "customerTried": "Sudah dicoba pelanggan",

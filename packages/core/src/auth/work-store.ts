@@ -28,6 +28,8 @@ export function createWorkStore<DB, TWork>(
   db: Kysely<DB>,
   parse: (value: unknown) => TWork | undefined,
   now: () => number,
+  /** The connection's transaction queue (db-client `ClientDb.transaction`), as sync state uses. */
+  transaction: <T>(fn: () => Promise<T>) => Promise<T>,
 ): WorkStore<TWork> {
   return {
     async load(userId) {
@@ -42,13 +44,18 @@ export function createWorkStore<DB, TWork>(
         return undefined;
       }
     },
+    // In its own transaction: a bare write on the one client connection runs at once, so with a
+    // command's transaction open it would land inside it and be lost when that command rolls back.
+    // Never called from inside a transaction: the queue does not nest.
     async save(userId, work) {
       const sealed = encryptColumnValue(db, JSON.stringify(work));
-      await sql`
-        INSERT INTO user_work (user_id, work, updated_at)
-        VALUES (${userId}, ${sealed}, ${now()})
-        ON CONFLICT (user_id) DO UPDATE SET work = excluded.work, updated_at = excluded.updated_at
-      `.execute(db);
+      await transaction(async () => {
+        await sql`
+          INSERT INTO user_work (user_id, work, updated_at)
+          VALUES (${userId}, ${sealed}, ${now()})
+          ON CONFLICT (user_id) DO UPDATE SET work = excluded.work, updated_at = excluded.updated_at
+        `.execute(db);
+      });
     },
   };
 }

@@ -38,6 +38,7 @@ afterEach(async () => {
 function deps(fs: FakeFs, freeBytes = 10_000_000_000): ImportDeps<never> {
   return {
     db: db.db as never,
+    transaction: (fn) => db.transaction(() => fn()),
     identity: IDENTITY,
     files: fs.port,
     moveToDocuments: (uri, id, ext) => fs.moveToDocuments(uri, id, ext),

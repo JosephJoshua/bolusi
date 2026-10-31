@@ -77,6 +77,19 @@ export function catalogKeys(brand: string, name: string): string[] {
   return keys;
 }
 
+/**
+ * Whether two brand-and-model spellings may be one phone, written any of the ways `catalogKeys`
+ * allows ("Samsung" "A54" and "Samsung" "Galaxy A54"): a servisan typed before intake stored the
+ * catalog's spelling still matches the same phone named the catalog's way now.
+ */
+export function sameModelAnySpelling(
+  a: { readonly brand: string; readonly model: string },
+  b: { readonly brand: string; readonly model: string },
+): boolean {
+  const keys = new Set(catalogKeys(a.brand, a.model).filter((key) => key !== ''));
+  return catalogKeys(b.brand, b.model).some((key) => keys.has(key));
+}
+
 const CATALOG_PREFIX = 'c:';
 const LEARNED_PREFIX = 'l:';
 

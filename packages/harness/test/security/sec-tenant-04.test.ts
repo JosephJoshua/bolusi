@@ -294,12 +294,15 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
         devices: { id: string; storeId: string | null }[];
       };
       // The sidecar directory is part of the pull page and is the easier thing to leak: it must
-      // carry only THIS tenant's devices, and only ones in the bearer device's store (or none).
+      // carry only THIS tenant's devices. Every store's devices are in it, because tenant-wide ops
+      // (storeId null) signed at another store must verify here too.
       expect(
         body.devices.length,
         'the pull page carried no directory — a vacuous scope check',
       ).toBeGreaterThan(0);
-      expect(body.devices.map((d) => d.id).sort()).toEqual([ctx.tenantADeviceId]);
+      expect(body.devices.map((d) => d.id).sort()).toEqual(
+        [ctx.tenantADeviceId, ctx.tenantAStore2DeviceId].sort(),
+      );
       for (const op of body.ops) {
         expect(op.tenantId).not.toBe(ctx.tenantBTenantId);
         expect(op.storeId === null || op.storeId === ctx.tenantAStore1Id).toBe(true);
