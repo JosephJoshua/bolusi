@@ -210,7 +210,7 @@ describe('runner is idempotent', () => {
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 21 }]);
+    expect(rows.rows).toEqual([{ c: 22 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);
