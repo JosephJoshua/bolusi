@@ -198,6 +198,11 @@ async function build(options: BuildOptions = {}) {
     db,
     deviceId: DEVICE_ID,
     transport,
+    readScope: {
+      registry: { types: () => [], readPermissionFor: () => undefined },
+      refold: () => Promise.resolve(),
+      catchUpWatermarks: () => Promise.resolve(),
+    },
     bundle: {
       refresh: () => {
         bundleCalls += 1;

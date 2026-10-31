@@ -120,6 +120,9 @@ export const authOperationRegistry: OperationRegistry = {
   // Typed by `AuthOpType`, so a type added to AUTH_OP without a permission entry does not compile.
   permissionFor: (type) =>
     AUTH_OP_SCHEMA_VERSIONS.has(type) ? AUTH_OP_PERMISSION[type as AuthOpType] : undefined,
+  // Sign-in, PIN, lockout and device records: every device of the store needs them to let its
+  // people sign in offline, whoever they are.
+  readPermissionFor: (type) => (AUTH_OP_SCHEMA_VERSIONS.has(type) ? null : undefined),
   entityTypeFor: (type) =>
     AUTH_OP_SCHEMA_VERSIONS.has(type) ? AUTH_OP_ENTITY[type as AuthOpType] : undefined,
   types: () => [...AUTH_OP_SCHEMA_VERSIONS.keys()].sort(),

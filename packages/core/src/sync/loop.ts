@@ -39,7 +39,12 @@ import {
   type SyncTransportPort,
   type TimerPort,
 } from './ports.js';
-import { AppUpdateRequiredError, runPullPhase, type PulledBatch } from './pull.js';
+import {
+  AppUpdateRequiredError,
+  runPullPhase,
+  type PulledBatch,
+  type PullReadScope,
+} from './pull.js';
 import { runPushPhase, type PushSettled } from './push.js';
 import {
   pendingMediaCount,
@@ -111,6 +116,8 @@ export interface SyncLoopOptions<DB> {
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   /** Passed to the pull phase: can this build fold the op (see `PullPhaseDeps.knowsOp`)? */
   readonly knowsOp?: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
+  /** Passed to the pull phase: follow the server's read set (see `PullPhaseDeps.readScope`). */
+  readonly readScope?: PullReadScope;
   /** `ProjectionEngine.refoldRefused`: the push phase takes a refused op back out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly pushBatchSize?: number;
@@ -324,6 +331,7 @@ export class SyncLoop<DB> {
         clock: this.options.clock,
         applyPulledOp: this.options.applyPulledOp,
         ...(this.options.knowsOp === undefined ? {} : { knowsOp: this.options.knowsOp }),
+        ...(this.options.readScope === undefined ? {} : { readScope: this.options.readScope }),
         ...(this.options.pullLimit === undefined ? {} : { limit: this.options.pullLimit }),
         ...(this.options.onPullBatch === undefined
           ? {}

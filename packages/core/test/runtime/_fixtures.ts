@@ -92,6 +92,7 @@ export const fixtureOperations: OperationRegistry = {
   scopeFor: (type) => (FIXTURE_OP_SCHEMA_VERSIONS.has(type) ? 'store' : undefined),
   conflictFor: () => undefined,
   permissionFor: (type) => FIXTURE_OP_PERMISSIONS.get(type),
+  readPermissionFor: (type) => (FIXTURE_OP_SCHEMA_VERSIONS.has(type) ? 'notes.read' : undefined),
   entityTypeFor: (type) => (FIXTURE_OP_SCHEMA_VERSIONS.has(type) ? 'note' : undefined),
   types: () => [...FIXTURE_OP_SCHEMA_VERSIONS.keys()].sort(),
   get size() {

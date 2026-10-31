@@ -486,6 +486,7 @@ export interface RolesDirectory {
 }
 
 export interface SyncState {
+  backfill: string | null;
   backoffUntil: number | null;
   devicesDirectoryVersion: Generated<number>;
   id: Generated<number | null>;
@@ -497,6 +498,7 @@ export interface SyncState {
   lastSyncError: string | null;
   pullCursor: Generated<number>;
   pushHalted: Generated<number>;
+  readSet: string | null;
   syncDisabled: Generated<number>;
   syncDisabledReason: string | null;
   tokenRejectedCount: Generated<number>;

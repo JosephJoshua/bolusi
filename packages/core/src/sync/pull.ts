@@ -43,6 +43,7 @@ import {
   zSignedOperation,
   MAX_PULL_LIMIT,
   type DeviceInfo,
+  type PullRequest,
   type PullResponse,
   type SignedOperation,
 } from '@bolusi/schemas';
@@ -53,6 +54,13 @@ import { signedCoreJcsOf } from '../crypto/signed-core.js';
 import { insertOpLogRow } from '../oplog/row.js';
 import type { ClockPort } from '../runtime/ports.js';
 import { readDeviceRegistry, replaceDeviceRegistry, type DeviceRegistryEntry } from './devices.js';
+import { purgePulledOps, type PurgedRecord } from './read-purge.js';
+import {
+  readPermissionsOf,
+  readSetChange,
+  typesReadWith,
+  type ReadScopeRegistry,
+} from './read-scope.js';
 import type { SyncSurfacePort, SyncTransportPort } from './ports.js';
 import {
   deleteQuarantinedOp,
@@ -63,7 +71,7 @@ import {
   signerKeyOf,
   verifyPulledOp,
 } from './quarantine.js';
-import { readSyncState, writeSyncState } from './state.js';
+import { readSyncState, writeSyncState, type PullBackfill } from './state.js';
 
 /** api/01-sync §4: `devicesDirectoryVersion: 0` forces a fresh sidecar (no version is "none"). */
 const FORCE_FRESH_SIDECAR = 0;
@@ -100,6 +108,21 @@ export interface PullPhaseDeps<DB> {
    * stopped. Lets a time-limited background run end cleanly instead of being killed mid-batch.
    */
   readonly shouldContinue?: () => boolean;
+  /**
+   * Permission-scoped sync: what to do when the server's read set for this device changes. Absent,
+   * the device ignores the read set (a test or bench that pulls every op).
+   */
+  readonly readScope?: PullReadScope;
+}
+
+/** The pull's view of permission-scoped sync (read-scope.ts, read-purge.ts). */
+export interface PullReadScope {
+  /** Which permission each op type is read with. */
+  readonly registry: ReadScopeRegistry;
+  /** Re-fold a record after ops were dropped from it (`ProjectionEngine.refoldEntityOf`). */
+  readonly refold: (record: PurgedRecord) => Promise<void>;
+  /** `ProjectionEngine.catchUpPulledWatermarks`. */
+  readonly catchUpWatermarks: () => Promise<void>;
 }
 
 /** What one committed pull batch carried, for progress display. */
@@ -189,13 +212,18 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
   let refetches = 0;
   let serverTime: number | null = null;
 
-  for (;;) {
+  // One page: the normal pull from the cursor, or a catch-up on newly readable ops.
+  const pullPage = async (backfill: PullBackfill | null): Promise<boolean> => {
     const state = await readSyncState(deps.db);
-    let response = await deps.transport.pull({
-      cursor: state.cursor,
+    const request = (devicesDirectoryVersion: number): PullRequest => ({
+      cursor: backfill === null ? state.cursor : backfill.cursor,
       limit,
-      devicesDirectoryVersion: state.devicesDirectoryVersion,
+      devicesDirectoryVersion,
+      ...(backfill === null
+        ? {}
+        : { backfill: { reads: [...backfill.reads], through: backfill.through } }),
     });
+    let response = await deps.transport.pull(request(state.devicesDirectoryVersion));
     let parsed = parsePullResponse(response);
 
     // ONE forced re-pull when a signer is unknown (api/01 §4.2). A device enrolled seconds ago is
@@ -203,11 +231,7 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
     // earns a quarantine. Exactly once: a server that keeps omitting the key must not be able to
     // spin the client (CHAOS-12 asserts the count, which is why it is counted rather than assumed).
     if (await hasUnknownSigner(deps, parsed)) {
-      response = await deps.transport.pull({
-        cursor: state.cursor,
-        limit,
-        devicesDirectoryVersion: FORCE_FRESH_SIDECAR,
-      });
+      response = await deps.transport.pull(request(FORCE_FRESH_SIDECAR));
       parsed = parsePullResponse(response);
       refetches += 1;
     }
@@ -217,18 +241,36 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
     if (unknown !== undefined)
       throw new AppUpdateRequiredError(unknown.type, unknown.schemaVersion);
 
-    const outcome = await applyBatchAtomically(deps, parsed);
+    const outcome = await applyBatchAtomically(deps, parsed, backfill !== null);
     applied += outcome.applied;
     quarantined += outcome.quarantined;
     released += outcome.released;
     serverTime = parsed.envelope.serverTime;
     batches += 1;
     reportBatch(deps, parsed, outcome.applied);
+    return parsed.envelope.hasMore;
+  };
 
-    if (!parsed.envelope.hasMore) break;
-    if (deps.shouldContinue?.() === false) {
-      return { applied, quarantined, released, batches, refetches, serverTime, drained: false };
-    }
+  const stopped = (): PullPhaseResult => ({
+    applied,
+    quarantined,
+    released,
+    batches,
+    refetches,
+    serverTime,
+    drained: false,
+  });
+
+  for (;;) {
+    if (!(await pullPage(null))) break;
+    if (deps.shouldContinue?.() === false) return stopped();
+  }
+  // Then the catch-up, once the normal pull is current: older ops the device newly may read.
+  for (;;) {
+    const { backfill } = await readSyncState(deps.db);
+    if (backfill === null || deps.readScope === undefined) break;
+    await pullPage(backfill);
+    if (deps.shouldContinue?.() === false) return stopped();
   }
 
   return { applied, quarantined, released, batches, refetches, serverTime, drained: true };
@@ -317,6 +359,7 @@ interface BatchOutcome {
 async function applyBatchAtomically<DB>(
   deps: PullPhaseDeps<DB>,
   parsed: { envelope: Omit<PullResponse, 'ops'>; ops: ParsedOp[] },
+  catchUp: boolean,
 ): Promise<BatchOutcome> {
   const surfacings: Array<{ opId: string; reason: 'bad_signature' | 'unknown_pubkey' }> = [];
 
@@ -344,7 +387,11 @@ async function applyBatchAtomically<DB>(
       released = await releaseQuarantined(deps, registry);
     }
 
-    // 3. The ops.
+    // 3. What this device may read: drop what it no longer may, plan a catch-up on what it newly
+    //    may. Before the ops, so a dropped type is gone before this page's ops fold.
+    const restartedCatchUp = await followReadSet(deps, parsed.envelope.readSet);
+
+    // 4. The ops.
     for (const entry of parsed.ops) {
       if (!entry.ok) {
         // An op that does not even parse cannot be verified, and cannot be identified either — it
@@ -397,13 +444,25 @@ async function applyBatchAtomically<DB>(
       applied += 1;
     }
 
-    // 4. The cursor — in the same atom as everything above.
-    await writeSyncState(deps.db, {
-      cursor: parsed.envelope.nextCursor,
+    // 5. The cursor — in the same atom as everything above. A catch-up page moves the catch-up's own
+    //    cursor and ends it when the server has no more; the normal cursor stays where it is.
+    const timing = {
       lastPullAt: deps.clock.now(),
       lastServerTime: parsed.envelope.serverTime,
       lastServerTimeReceivedAt: deps.clock.now(),
-    });
+    };
+    if (!catchUp) {
+      await writeSyncState(deps.db, { cursor: parsed.envelope.nextCursor, ...timing });
+    } else {
+      const { backfill } = await readSyncState(deps.db);
+      const next =
+        restartedCatchUp || backfill === null
+          ? backfill
+          : parsed.envelope.hasMore
+            ? { ...backfill, cursor: parsed.envelope.nextCursor }
+            : null;
+      await writeSyncState(deps.db, { backfill: next, ...timing });
+    }
 
     return { applied, quarantined, released };
   });
@@ -420,6 +479,70 @@ async function applyBatchAtomically<DB>(
   }
 
   return outcome;
+}
+
+/**
+ * Follow the server's read set for this device (permission-scoped sync), inside the batch
+ * transaction. A permission gone from it: the pulled ops read with it are dropped and their records
+ * re-folded. A permission new in it: a catch-up is planned for its older ops, up to where the normal
+ * pull is, since the server skipped them before. Returns whether the catch-up was started over.
+ *
+ * A device that never held a read set (`null`) held everything an older server sent, so it is
+ * treated as holding every read permission: it only drops, never catches up. A brand-new device
+ * (cursor 0) has nothing to drop or catch up on.
+ */
+async function followReadSet<DB>(
+  deps: PullPhaseDeps<DB>,
+  readSet: readonly string[] | undefined,
+): Promise<boolean> {
+  const scope = deps.readScope;
+  if (scope === undefined || readSet === undefined) return false;
+  const state = await readSyncState(deps.db);
+  const now = [...readSet].sort();
+  const fresh = state.cursor === 0 && state.readSet === null;
+  const before = fresh ? now : (state.readSet ?? readPermissionsOf(scope.registry));
+  const { added, removed } = readSetChange(before, now);
+  if (removed.length > 0) {
+    const dropped = typesReadWith(scope.registry, removed);
+    await purgePulledOps(
+      { db: deps.db, refold: scope.refold, catchUpWatermarks: scope.catchUpWatermarks },
+      dropped,
+    );
+    // A quarantined op waits to be applied once its signer is known; one of a dropped type must
+    // not wait, or a later sidecar would bring it back into the log.
+    const droppedTypes = new Set(dropped);
+    for (const row of await readQuarantinedOps(deps.db)) {
+      if (droppedTypes.has(reconstructQuarantinedOp(row).type)) {
+        await deleteQuarantinedOp(deps.db, row.id);
+      }
+    }
+  }
+
+  // A catch-up keeps only what may still be read; a grown set starts it over from the beginning,
+  // through where the normal pull is now (ops already held are skipped by id).
+  const kept = new Set(now);
+  let backfill = state.backfill;
+  if (backfill !== null) {
+    const reads = backfill.reads.filter((read) => kept.has(read));
+    backfill = reads.length === 0 ? null : { ...backfill, reads };
+  }
+  const restarted = added.length > 0 && state.readSet !== null;
+  if (restarted) {
+    backfill = {
+      reads: [...new Set([...(backfill?.reads ?? []), ...added])].sort(),
+      through: Math.max(backfill?.through ?? 0, state.cursor),
+      cursor: 0,
+    };
+  }
+  if (
+    state.readSet === null ||
+    added.length > 0 ||
+    removed.length > 0 ||
+    JSON.stringify(backfill) !== JSON.stringify(state.backfill)
+  ) {
+    await writeSyncState(deps.db, { readSet: now, backfill });
+  }
+  return restarted;
 }
 
 /** Re-verify every quarantined op; apply and un-quarantine the ones that now check out (api/01 §4.2). */
@@ -498,8 +621,15 @@ async function nextArrivalSeq<DB>(db: Kysely<DB>): Promise<number> {
   // at 1, correct) and a MISSING KEY (undefined → 1, WRONG) — laundering a wrong arrival seq of 1
   // out with no error (T-19). They are now distinguished: NULL is the empty log; an absent `maxSeq`
   // THROWS, because a sequence number is the last place a plausible default belongs.
+  // The pulled watermarks count too: ops dropped by permission-scoped sync (read-purge.ts) can take
+  // the newest arrivals out of the log, and reusing their numbers would land new ops below a
+  // watermark that already passed them. Normally no watermark is above the newest arrival.
   const result = await sql<{ maxSeq?: number | null }>`
-    SELECT MAX(arrival_seq) AS "maxSeq" FROM operations
+    SELECT MAX(seq) AS "maxSeq" FROM (
+      SELECT MAX(arrival_seq) AS seq FROM operations
+      UNION ALL
+      SELECT MAX(applied_server_seq) AS seq FROM projection_watermarks
+    )
   `.execute(db);
   const row = result.rows[0];
   if (row === undefined) {
