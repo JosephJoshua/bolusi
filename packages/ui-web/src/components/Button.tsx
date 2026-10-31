@@ -82,7 +82,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {busy ? <Spinner size={16} /> : Icon === undefined ? null : <Icon size={16} aria-hidden />}
       <span>{label}</span>
       {shortcut === undefined ? null : (
-        <Kbd tone={variant === 'primary' || variant === 'danger' ? 'inverse' : 'plain'}>
+        // A disabled filled button turns grey, where a light key would vanish.
+        <Kbd
+          tone={
+            (variant === 'primary' || variant === 'danger') && disabled !== true && !busy
+              ? 'inverse'
+              : 'plain'
+          }
+        >
           {shortcut}
         </Kbd>
       )}
