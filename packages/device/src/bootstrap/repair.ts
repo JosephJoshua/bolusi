@@ -84,6 +84,8 @@ export function createSessionRepairRuntime(deps: {
   readonly scanCode?: (() => Promise<string | null>) | undefined;
   /** QRIS through Xendit for a user (`qris-transport.ts`); absent ⇒ QRIS is only taken by hand. */
   readonly qris?: ((userId: string) => QrisPort) | undefined;
+  /** The server this device syncs with, which serves customers' status pages. */
+  readonly statusSite?: string | null;
 }): RepairRuntime {
   const { app, identity } = deps;
   const printing =
@@ -91,7 +93,6 @@ export function createSessionRepairRuntime(deps: {
       ? undefined
       : createRepairPrinting({
           db: app.db.db,
-          userId: identity.userId,
           loadThumbnail: deps.media.loadThumbnail,
           platform: deps.print,
         });
@@ -119,6 +120,7 @@ export function createSessionRepairRuntime(deps: {
     printing,
     inventory,
     qris: deps.qris?.(identity.userId),
+    statusSite: deps.statusSite ?? null,
   });
   return repair;
 }

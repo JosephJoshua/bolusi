@@ -18,8 +18,8 @@ import {
   deviceByTokenHashQuery,
   loginCredentialQuery,
   mapControlSessionRow,
+  statusLinkQuery,
 } from './auth-lookup-queries.js';
-import { sql } from 'kysely';
 
 import { getDb } from './db.js';
 
@@ -90,9 +90,6 @@ export interface StatusLinkRecord {
  * Cross-tenant, definer-gated. Undefined when no servisan, or more than one, carries the code.
  */
 export async function findStatusLink(code: string): Promise<StatusLinkRecord | undefined> {
-  const { rows } = await sql<StatusLinkRecord>`
-    SELECT tenant_id AS "tenantId", store_id AS "storeId", ticket_id AS "ticketId"
-      FROM public_find_status_link(${code})
-  `.execute(getDb());
+  const { rows } = await statusLinkQuery(code).execute(getDb());
   return rows.length === 1 ? rows[0] : undefined;
 }

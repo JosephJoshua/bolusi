@@ -30,13 +30,25 @@ export type { ContrastPair } from './tokens.js';
 // ---- Motion (native driver, reduce-motion aware) ----------------------------------------------
 export {
   NATIVE_DRIVER,
+  easeEnter,
+  easeExit,
   useEntrance,
   usePop,
   usePressScale,
   useReducedMotion,
+  useReducedMotionAnswer,
   useSheetEntrance,
+  useStamp,
+  useWipe,
 } from './motion.js';
-export type { EntranceFrom, EntranceOptions } from './motion.js';
+export type { EntranceFrom, EntranceOptions, Wipe } from './motion.js';
+export { useChangeDirection } from './direction.js';
+export type { ChangeDirection } from './direction.js';
+export { StepTransition, useStepDirection } from './step-transition.js';
+export type { StepDirection, StepTransitionProps } from './step-transition.js';
+
+// ---- Brand ------------------------------------------------------------------------------------
+export { brandMarkWidth } from './components/BrandMark.js';
 
 // ---- Platform insets (system-window measurements, NOT design tokens — task 205) -----------------
 export { NAV_BAR_INSET } from './platform-insets.js';
@@ -63,6 +75,7 @@ export type {
 } from './components/Banner.js';
 export type { FreshnessCellProps } from './components/FreshnessCell.js';
 export type { ListProps, ListState } from './components/List.js';
+export type { BrandMarkPart, BrandMarkProps } from './components/BrandMark.js';
 export type { ButtonProps, ButtonVariant } from './components/Button.js';
 export type { CardProps } from './components/Card.js';
 export type { ChipProps, ChipTone } from './components/Chip.js';
@@ -73,6 +86,7 @@ export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
 export type { FactProps } from './components/Fact.js';
 export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
+export type { RollingTextProps } from './components/RollingText.js';
 export type { ErrorStateProps } from './components/ErrorState.js';
 export type { IconName, IconProps } from './components/Icon.js';
 export type { ListRowProps } from './components/ListRow.js';

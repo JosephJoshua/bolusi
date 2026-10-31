@@ -12,6 +12,7 @@ import {
   DataTable,
   OverflowText,
   PageHeader,
+  RollingText,
   Section,
   StatePanel,
   Tabs,
@@ -230,7 +231,9 @@ function Today({
                     className="tabular mt-1 text-display font-bold text-text"
                     data-testid={`${testId}.expected`}
                   >
-                    {formatMoney(drawer.expected)}
+                    <RollingText value={drawer.expected}>
+                      {formatMoney(drawer.expected)}
+                    </RollingText>
                   </p>
                   <p className="mt-1 text-body text-text-muted" data-testid={`${testId}.lastCount`}>
                     {counted === null

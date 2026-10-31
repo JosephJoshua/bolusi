@@ -343,8 +343,9 @@ function LiveCounter({
         userId,
         storeName,
         capture,
+        statusSite: state.statusSite,
       }),
-    [client, grants, userId, storeName, capture],
+    [client, grants, userId, storeName, capture, state.statusSite],
   );
 
   const settings = useSettingsAccess(client, state, session, userId);

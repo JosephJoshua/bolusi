@@ -14,6 +14,7 @@ import {
   Icon,
   ListRow,
   PatternLock,
+  RollingText,
   Sheet,
   TextButton,
   Timeline,
@@ -28,7 +29,7 @@ import {
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ApprovalSection, ApprovalStep } from '../../approvals/screens/ApprovalViews.js';
 import { ta } from '../../approvals/i18n.js';
@@ -42,6 +43,7 @@ import {
   type CustomerMessageKind,
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
+import { whatsAppAppUrl, whatsAppUrl } from '../whatsapp.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   rejectedCount,
@@ -176,6 +178,8 @@ export interface TicketDetailProps {
   readonly onBack: () => void;
   /** Beside the board on a tablet there is nothing to go back to: the board is already in view. */
   readonly hideBack?: boolean | undefined;
+  /** It was opened just now by an intake: its number lands like a stamp once it shows. */
+  readonly justOpened?: boolean | undefined;
   readonly onHandover: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
   /** Starts a warranty claim's intake from this servisan; without it the claim is not offered. */
@@ -203,6 +207,7 @@ export function TicketDetail({
   now,
   onBack,
   hideBack = false,
+  justOpened = false,
   onHandover,
   onOpenSyncStatus,
   onStartClaim,
@@ -574,14 +579,23 @@ export function TicketDetail({
       ? { next: null, alternative: null, more: [] }
       : arrangeTicketActions(actions, ticket, runtime.userId);
   const primary = layout.next ?? undefined;
-  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const messageKind =
+    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
       ? null
       : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
+  // A phone opens the app itself, so a phone without WhatsApp says so instead of landing in a
+  // browser; the web preview keeps the wa.me link.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
-    const url = customerMessageUrl(kind, row, storeName);
+    const url = customerMessageUrl(
+      kind,
+      row,
+      storeName,
+      runtime.statusSite,
+      Platform.OS === 'web' ? whatsAppUrl : whatsAppAppUrl,
+    );
     if (url === null) return;
     setDone(null);
     setMessageFailed(false);
@@ -631,6 +645,7 @@ export function TicketDetail({
       scrollable
       title={ticket?.ticketNumber ?? tn('repair.ticket.title')}
       titleVariant="detail"
+      stampTitle={justOpened && ticket !== undefined}
       onBack={hideBack ? undefined : onBack}
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
@@ -1025,7 +1040,8 @@ export function TicketDetail({
           <Text style={[cancelled ? styles.notCharged : styles.totalLabel, repairStyles.rowText]}>
             {tn('repair.price.total')}
           </Text>
-          <Text
+          <RollingText
+            value={row.quoteTotal}
             style={[
               cancelled ? styles.notCharged : styles.totalValue,
               styles.amount,
@@ -1034,7 +1050,7 @@ export function TicketDetail({
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
-          </Text>
+          </RollingText>
         </View>
         {cancelled ? (
           // The repair price stays as quiet history; the number that leads is what the customer

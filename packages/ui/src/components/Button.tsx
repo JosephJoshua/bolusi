@@ -57,7 +57,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    overflow: 'hidden',
   },
   secondaryOutline: {
     borderWidth: border.hairline,
@@ -112,9 +111,8 @@ export function Button({
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
         disabled={inert}
-        // The ripple is the variant's own pressed fill, clipped to the button's corners (`overflow`):
-        // a dark, square ripple read as a grey box behind rounded and pill buttons.
-        android_ripple={{ color: FILL[variant].pressed, borderless: false }}
+        // No Android ripple: Android draws it square past the rounded corners whatever the clipping,
+        // which read as a box behind pill buttons. The pressed fill and the press scale say "pressed".
         hitSlop={compact ? { top: COMPACT_SLOP, bottom: COMPACT_SLOP } : undefined}
         style={({ pressed }) => [
           styles.base,
