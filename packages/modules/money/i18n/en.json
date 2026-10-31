@@ -158,7 +158,10 @@
     "limit": "Your cancel limit is {amount} per repair.",
     "cashTitle": "Cancel cash record",
     "cashSave": "Cancel record",
-    "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts."
+    "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts.",
+    "needsApproval": "Needs the store owner’s approval.",
+    "overLimit": "Over your limit, so it needs approval.",
+    "withEarlier": "With earlier reductions on this servisan, the total is {amount}."
   },
   "kind": {
     "qris": "QRIS",

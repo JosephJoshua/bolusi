@@ -32,6 +32,7 @@ function moneyRuntimeFor(harness: RepairHarness, userId: string): MoneyRuntime {
   const repair = repairRuntimeFor(harness, userId);
   return {
     ...repair.money,
+    approvals: repair.approvals,
     subscribe: repair.subscribe,
     nameOf: () => null,
     customersOf: (documents) => servisanCustomers(repair, documents),

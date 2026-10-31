@@ -87,6 +87,7 @@ export const REPAIR_KEYS = [
   'repair.approval.payLaterAfter',
   'repair.approval.downPaymentNew',
   'repair.approval.downPaymentTakenOff',
+  'repair.approval.voidPayment',
   'repair.approval.askCancel',
   'repair.approval.needsApproval',
   'repair.approval.overLimit',
