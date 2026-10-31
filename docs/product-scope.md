@@ -218,10 +218,11 @@ Agreed with the owner before building printing.
 - **Layout:** on landscape paper the money and terms sit beside the customer and
   phone details. Every field is printed whole at its longest allowed length,
   wrapping rather than cutting. An ordinary slip fits one half form at the
-  printer's default 6 lines per inch, a line down from the perforation; only a
-  longer one tightens to 8 lines per inch (only 1/6" and 1/8" mean the same on
-  9-pin and 24-pin Epsons) before spilling onto a second form. Spare lines go
-  above the signatures. Plain paper gets more spacing. A cancelled servisan's
+  printer's default 6 lines per inch, a line down from the perforation. A
+  longer one stays at 6 lines per inch and is spread evenly over two forms, so
+  no form holds just a few lines (recommended 2026-10-29; 8 lines per inch
+  looked cramped, and 7 is not portable across 9-pin and 24-pin Epsons). Spare
+  lines go above the signatures. Plain paper gets more spacing. A cancelled servisan's
   slip has no warranty terms.
 - **Two documents:** the intake receipt ("Tanda terima servisan") and the
   handover slip ("Nota servisan") for a pickup or a cancel, which is also the

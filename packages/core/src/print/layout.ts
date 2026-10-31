@@ -764,9 +764,10 @@ function layoutCopy(
  * Paper the customer carries home should be one sheet, so layouts are tried roomiest first and the
  * first that needs the fewest forms wins. On landscape paper wide enough, the aside goes beside the
  * body, else everything is stacked; each spaced roomiest first (`SPACINGS`), then tighter;
- * then the same with the signatures under the aside; all at 6 lines per inch, then at 8. A slip
- * that needs more than one form anyway is set at 6, spread evenly over its forms. Spare lines on a
- * one-form slip go above the signatures.
+ * then the same with the signatures under the aside. Always at 6 lines per inch: 8 would squeeze a
+ * slightly long slip onto one form, but cramped (the owner chose normal spacing), so a slip that
+ * needs more than one form is spread evenly over them instead. Spare lines on a one-form slip go
+ * above the signatures.
  */
 export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLayout {
   const doc = asciiDocument(source);
@@ -784,19 +785,16 @@ export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLay
     { sideBySide: false, closingBeside: false },
   ];
   // Signatures squeezed beside the aside get short lines, so tighter spacing is tried first.
-  const variants: Variant[] = ([6, 8] as const).flatMap((linesPerInch) =>
-    [false, true].flatMap((beside) =>
-      SPACINGS.flatMap((spacing) =>
-        arrangements
-          .filter((arrangement) => arrangement.closingBeside === beside)
-          .map((arrangement) => ({ ...arrangement, linesPerInch, spacing })),
-      ),
+  const variants: Variant[] = [false, true].flatMap((beside) =>
+    SPACINGS.flatMap((spacing) =>
+      arrangements
+        .filter((arrangement) => arrangement.closingBeside === beside)
+        .map((arrangement) => ({ ...arrangement, linesPerInch: 6 as const, spacing })),
     ),
   );
   const copies: (string | null)[] =
     paper.carbonless || doc.copies.length === 0 ? [null] : [...doc.copies];
-  // Every copy uses the layout the first one needed, so the job keeps one line spacing.
-  // 1/8" only ever buys one form: a slip that runs on anyway stays at the easier-to-read 1/6".
+  // Every copy uses the layout the first one needed, so the job keeps one look.
   let best: { variant: Variant; pages: GridPage[] } | null = null;
   for (const variant of variants) {
     const pages = layoutCopy(doc, copies[0] ?? null, paper, variant);
@@ -804,7 +802,7 @@ export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLay
       best = { variant, pages };
       break;
     }
-    if (variant.closingBeside || variant.linesPerInch !== 6) continue;
+    if (variant.closingBeside) continue;
     if (best === null || pages.length < best.pages.length) best = { variant, pages };
   }
   const chosen = (best as { variant: Variant }).variant;

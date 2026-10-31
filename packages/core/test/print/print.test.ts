@@ -197,9 +197,8 @@ describe('text-mode layout', () => {
     expect(rows[at + 2]).toMatch(/^Layar retak/);
   });
 
-  it('tightens the line spacing before spilling onto a second form', () => {
+  it('keeps normal spacing and spreads a slightly long slip over two forms', () => {
     const paper = PAPER_PRESETS.continuous_half;
-    expect(layoutGrid(sampleDoc(), paper).geometry.linesPerInch).toBe(6);
     const longer = sampleDoc({
       blocks: [
         ...sampleDoc().blocks,
@@ -211,21 +210,23 @@ describe('text-mode layout', () => {
       ],
     });
     const { geometry, pages } = layoutGrid(longer, paper);
-    expect(pages).toHaveLength(1);
-    expect(geometry.linesPerInch).toBe(8);
-    const rows = (pages[0] ?? []).flatMap((r) => (r.kind === 'text' ? [r.text] : []));
-    // The notes run down the body column, beside the aside where it reaches.
-    expect(rows.some((r) => r.startsWith('Catatan 0 '))).toBe(true);
+    // Never squeezed to 1/8" to stay on one form: the owner chose normal spacing.
+    expect(geometry.linesPerInch).toBe(6);
+    expect(pages).toHaveLength(2);
+    const [first, second] = pages.map((page) => page.length);
+    expect(Math.abs(first! - second!)).toBeLessThanOrEqual(8);
+    const rows = pages.flat().flatMap((r) => (r.kind === 'text' ? [r.text] : []));
+    expect(rows.some((r) => r.startsWith('Catatan 0'))).toBe(true);
     expect(rows.some((r) => r.startsWith('Catatan 21'))).toBe(true);
     const bytes = [...renderEscp(longer, paper)];
-    // ESC 0 (1/8") set before ESC C 44, the form length in those lines.
+    // ESC 2 (1/6") set before ESC C 33, the form length in those lines.
     const at = bytes.indexOf(0x43, 5);
-    expect(bytes.slice(at - 3, at + 2)).toEqual([0x1b, 0x30, 0x1b, 0x43, 44]);
+    expect(bytes.slice(at - 3, at + 2)).toEqual([0x1b, 0x32, 0x1b, 0x43, 33]);
   });
 
   it('spreads a slip that runs past one form evenly, at 1/6"', () => {
     const paper = PAPER_PRESETS.continuous_half;
-    // Too long for one form even at 1/8", but well short of two.
+    // Too long for one form, but well short of two.
     const notes = (count: number) =>
       sampleDoc({
         blocks: [
