@@ -243,7 +243,12 @@ test('enroll appends a signed genesis at seq 1, persists the device identity, an
     enrolledOwner = ownerUserId;
   });
 
-  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  await controller.enroll({
+    login: loginResult(),
+    storeId: STORE_ID,
+    deviceName: 'Kasir 1',
+    personalUserId: null,
+  });
 
   // The device is enrolled: `meta_kv` holds the id (task 88) — the boot signal that gates the loop.
   const deviceId = await readDeviceId(app.db.db);
@@ -293,7 +298,12 @@ test('enroll persists the device/store/tenant NAMES → readDeviceInfo surfaces 
   const { platform } = platformFor();
   const { controller } = createAppEnrollment(app, platform, () => undefined);
 
-  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  await controller.enroll({
+    login: loginResult(),
+    storeId: STORE_ID,
+    deviceName: 'Kasir 1',
+    personalUserId: null,
+  });
 
   const info = await readDeviceInfo(app, { platform: 'android', appVersion: '' });
   const deviceId = await readDeviceId(app.db.db);
@@ -307,7 +317,12 @@ test('enroll persists the device/store/tenant NAMES → readDeviceInfo surfaces 
 test('the enroll POST carries the client-generated identity, not the server-echoed one', async () => {
   const { platform, enrollBodies } = platformFor();
   const { controller } = createAppEnrollment(app, platform, () => undefined);
-  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  await controller.enroll({
+    login: loginResult(),
+    storeId: STORE_ID,
+    deviceName: 'Kasir 1',
+    personalUserId: null,
+  });
 
   const body = enrollBodies[0] as EnrollRequest;
   const deviceId = await readDeviceId(app.db.db);
@@ -322,7 +337,12 @@ test('enrolling a working phone again replaces its registration, so the server r
   const { platform, enrollBodies } = platformFor();
   const { controller } = createAppEnrollment(app, platform, () => undefined);
   expect(await controller.heldPhone()).toBeNull();
-  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  await controller.enroll({
+    login: loginResult(),
+    storeId: STORE_ID,
+    deviceName: 'Kasir 1',
+    personalUserId: null,
+  });
   const first = await readDeviceId(app.db.db);
   expect(enrollBodies[0]).not.toHaveProperty('replacesDeviceId');
 
@@ -331,7 +351,12 @@ test('enrolling a working phone again replaces its registration, so the server r
     storeId: STORE_ID,
     replacesDeviceId: first,
   });
-  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  await controller.enroll({
+    login: loginResult(),
+    storeId: STORE_ID,
+    deviceName: 'Kasir 1',
+    personalUserId: null,
+  });
   expect(enrollBodies[1]?.replacesDeviceId).toBe(first);
   expect(await readDeviceId(app.db.db)).not.toBe(first);
 });
@@ -377,7 +402,12 @@ test('RESUME after crash-before-genesis: a FRESH keystore reloads the seed and c
   });
 
   // The retry must COMPLETE — with the fix reverted this rejects "device signing key not loaded".
-  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+  await controller.enroll({
+    login: loginResult(),
+    storeId: STORE_ID,
+    deviceName: 'Kasir 1',
+    personalUserId: null,
+  });
 
   // The SAME device id from the draft is now enrolled — no fresh keypair, no double-register (§4.3).
   expect(await readDeviceId(app.db.db)).toBe(draftDeviceId);

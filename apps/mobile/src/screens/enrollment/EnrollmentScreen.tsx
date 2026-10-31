@@ -21,11 +21,13 @@ import {
   AppShell,
   Banner,
   Button,
+  ChipRow,
   ConfirmSheet,
   Icon,
   ListRow,
   StepHeader,
   TextInput,
+  ToggleChip,
   border,
   color,
   radius,
@@ -41,9 +43,11 @@ import {
   bindingSummary,
   canSubmitConfirm,
   canSubmitCredentials,
+  chosenPersonalUserId,
   confirmMissing,
   credentialsError,
   failureKey,
+  personalChoices,
   type EnrollmentFailure,
   type EnrollmentState,
 } from '@bolusi/device/models/enrollment/model';
@@ -183,6 +187,7 @@ function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Elem
           ))}
         </View>
       )}
+      <PhoneOwner state={state} onChange={onChange} />
       <View style={styles.section}>
         <TextInput
           label={t('auth.enroll.deviceNameField')}
@@ -195,6 +200,56 @@ function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Elem
         />
       </View>
       <UnsyncedChanges state={state} />
+    </View>
+  );
+}
+
+/**
+ * Whose phone this is (permission-scoped sync). The store's (the default) is shared: everyone at the
+ * store signs in, and it holds staff-level data. Someone's own phone holds what they may see, owner
+ * costs included, and only they sign in. Hidden when the server offers nobody (an older server).
+ */
+function PhoneOwner({
+  state,
+  onChange,
+}: Pick<EnrollmentScreenProps, 'state' | 'onChange'>): React.JSX.Element | null {
+  const people = personalChoices(state);
+  if (people.length === 0) return null;
+  const chosen = chosenPersonalUserId(state);
+  const self = state.login?.user.id;
+  const pick = (personalUserId: string | null) =>
+    state.busy ? () => undefined : () => onChange({ personalUserId });
+  const chosenName = people.find((person) => person.id === chosen)?.name;
+  const hint =
+    chosen === null
+      ? t('auth.enroll.ownerSharedHint')
+      : chosen === self
+        ? t('auth.enroll.ownerSelfHint')
+        : t('auth.enroll.ownerPersonHint', { name: chosenName ?? '' });
+  return (
+    <View style={styles.section} testID="enroll-owner">
+      <Text style={styles.fieldLabel}>{t('auth.enroll.ownerField')}</Text>
+      <ChipRow testID="enroll-owner-chips">
+        <ToggleChip
+          label={t('auth.enroll.ownerShared')}
+          selected={chosen === null}
+          onToggle={pick(null)}
+          testID="enroll-owner-shared"
+        />
+        {people.map((person) => (
+          <ToggleChip
+            key={person.id}
+            label={person.id === self ? t('auth.enroll.ownerSelf') : person.name}
+            selected={chosen === person.id}
+            // Tapping the picked one again goes back to the store's.
+            onToggle={pick(chosen === person.id ? null : person.id)}
+            testID={`enroll-owner-${person.id}`}
+          />
+        ))}
+      </ChipRow>
+      <Text style={styles.fieldHint} testID="enroll-owner-hint">
+        {hint}
+      </Text>
     </View>
   );
 }
@@ -248,8 +303,15 @@ function DoneStep({ state }: EnrollmentScreenProps): React.JSX.Element {
         </>
       )}
       {/* §4.4: enrollment logs nobody in. Next is the switcher, where the enrolling owner makes
-          their own PIN if they have none yet; everyone else gets theirs from an owner (§6.6). */}
-      <Text style={styles.doneNext}>{t('auth.enroll.successNext')}</Text>
+          their own PIN if they have none yet; everyone else gets theirs from an owner (§6.6). A
+          personal phone has only its person to pick, so it just says to sign in. */}
+      <Text style={styles.doneNext}>
+        {t(
+          state.personalUserId === null
+            ? 'auth.enroll.successNext'
+            : 'auth.enroll.successNextPersonal',
+        )}
+      </Text>
     </View>
   );
 }
@@ -358,6 +420,8 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   count: { ...type.bodySm, fontWeight: '600', color: color.text },
+  fieldLabel: { ...type.caption, color: color.textMuted, marginBottom: space.xs },
+  fieldHint: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
   onlyStore: {
     backgroundColor: color.surfaceAlt,
     borderRadius: radius.md,

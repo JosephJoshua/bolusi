@@ -168,6 +168,21 @@ export async function checkScope(
     return { reason: 'op userId is not a member of the tenant directory' };
   }
 
+  // A personal device (migration 0031) is one person's: it is synced only what they may read, and
+  // only they sign in on it. So it may write only as them. Without this, a tampered personal phone
+  // could sign as anyone in the business (its owner, say) and the server would take it, since the
+  // device's key is valid. Two records are about the device itself, not anyone's work: its genesis,
+  // which the owner who set it up signs, and a re-enrolment's audit record. A deactivated person's
+  // phone writes nothing more: their own changes are refused by the authorization step.
+  if (
+    device.personalUserId !== null &&
+    op.userId !== device.personalUserId &&
+    op.type !== GENESIS_TYPE &&
+    op.type !== AUTH_DEVICE_CHANGES_TRANSFERRED
+  ) {
+    return { reason: "a personal device's op must be by the person it is set up for" };
+  }
+
   // §9 media-ref binding (task 140 Leg B; 06 §3.2). A payload's `mediaRef` is self-describing: it
   // carries its OWN `userId`/`deviceId` (06 §3.2 — "capture and attach happen in one command", so
   // in v0 they duplicate the envelope). Bind them to the ENVELOPE's authenticated signer, exactly

@@ -112,7 +112,10 @@ test('login lists only the stores the user may enroll a phone into, so a non-own
   });
 
   const owner = await login(h, 'ocep', PASSWORD);
-  expect(owner.body['stores']).toEqual([{ id: storeId, name: 'S' }]);
+  // The cashier has no PIN, so only the owner is offered as whose own phone it is.
+  expect(owner.body['stores']).toEqual([
+    { id: storeId, name: 'S', people: [{ id: p.ownerUserId, name: expect.any(String) }] },
+  ]);
   const cashier = await login(h, 'kasir', PASSWORD);
   expect(cashier.status).toBe(200);
   expect(cashier.body['stores']).toEqual([]);

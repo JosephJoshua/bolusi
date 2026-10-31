@@ -15,6 +15,7 @@ import {
   afterLogin,
   bindingSummary,
   canSubmitConfirm,
+  chosenPersonalUserId,
   chosenStoreId,
   confirmMissing,
   canSubmitCredentials,
@@ -25,6 +26,7 @@ import {
   initialEnrollmentState,
   needsDiscardConfirm,
   PASSWORD_MIN,
+  personalChoices,
   type EnrollmentFailure,
   type EnrollmentState,
   type LoginResult,
@@ -328,5 +330,51 @@ describe('a revoked device lands here with the danger banner (§8.5)', () => {
 
   test('a revoked device can still enroll — the wizard is the recovery path, not a dead end', () => {
     expect(canSubmitCredentials(typed({ revoked: true }))).toBe(true);
+  });
+});
+
+describe('whose phone this is', () => {
+  const withPeople: LoginResult = {
+    ...LOGIN,
+    stores: [
+      {
+        id: 'store-1',
+        name: 'Toko Abepura',
+        people: [
+          { id: 'user-owner', name: 'Yosef' },
+          { id: 'user-budi', name: 'Budi' },
+        ],
+      },
+      { id: 'store-2', name: 'Toko Sentani', people: [{ id: 'user-owner', name: 'Yosef' }] },
+    ],
+  };
+
+  test('a phone is the store’s unless someone is picked', () => {
+    expect(chosenPersonalUserId(atConfirm({ login: withPeople }))).toBeNull();
+    expect(
+      chosenPersonalUserId(atConfirm({ login: withPeople, personalUserId: 'user-budi' })),
+    ).toBe('user-budi');
+  });
+
+  test('offers the chosen store’s people, and nobody before a store is chosen', () => {
+    expect(personalChoices(atConfirm({ login: withPeople })).map((p) => p.id)).toEqual([
+      'user-owner',
+      'user-budi',
+    ]);
+    expect(personalChoices(atConfirm({ login: withPeople, selectedStoreId: null }))).toEqual([]);
+  });
+
+  test('picking another store that does not offer the person makes it the store’s again', () => {
+    const moved = atConfirm({
+      login: withPeople,
+      personalUserId: 'user-budi',
+      selectedStoreId: 'store-2',
+    });
+    expect(chosenPersonalUserId(moved)).toBeNull();
+  });
+
+  test('an older server offers nobody, so the phone is the store’s', () => {
+    expect(personalChoices(atConfirm())).toEqual([]);
+    expect(chosenPersonalUserId(atConfirm({ personalUserId: 'user-owner' }))).toBeNull();
   });
 });

@@ -145,6 +145,8 @@ export interface DeviceRecord {
   readonly storeId: string | null;
   readonly kind: 'member' | 'system';
   readonly status: 'active' | 'revoked';
+  /** The one person a personal device is set up for (migration 0031); null on a shared device. */
+  readonly personalUserId: string | null;
   readonly publicKey: Uint8Array;
   readonly lastSeq: number;
   readonly lastHash: string | null;
