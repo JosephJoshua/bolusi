@@ -67,6 +67,18 @@ describe('outputSlip', () => {
     expect(sent().html).toContain(detail.ticketNumber);
   });
 
+  it('prints both copies, but sends the customer only theirs', async () => {
+    const { runtime, printing, output } = await setup(PAPER_PRESETS.a4, false);
+    const ticket = (await runtime.query('listTickets', {})).rows[0]!;
+    const detail = (await runtime.query('getTicket', { ticketId: ticket.id })).rows[0]!;
+    await outputSlip(runtime, printing, detail, 'intake', DESK_PAPERS, 'print');
+    await outputSlip(runtime, printing, detail, 'intake', DESK_PAPERS, 'share');
+    const [printed, shared] = output.mock.calls.map(([slip]) => slip);
+    expect(printed!.document.copies).toEqual(['Untuk toko', 'Untuk pelanggan']);
+    expect(shared!.document.copies).toEqual(['Untuk pelanggan']);
+    expect(shared!.html).not.toContain('Untuk toko');
+  });
+
   it('a print that landed but could not be logged still makes the next one a reprint', async () => {
     const { runtime, printing, output } = await setup(PAPER_PRESETS.continuous_half, false);
     const ticket = (await runtime.query('listTickets', {})).rows[0]!;

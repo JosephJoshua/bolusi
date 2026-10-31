@@ -4,7 +4,7 @@
 //
 // Built from what the ticket recorded, in the current language. The phone's unlock code is never
 // printed: the slip leaves the store and the code is stored encrypted for a reason.
-import { formatDate, formatDateTime, formatMoney } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatPhone } from '@bolusi/i18n';
 import type {
   PrintAmountRow,
   PrintBlock,
@@ -12,7 +12,9 @@ import type {
   PrintField,
   PrintHeader,
   PrintImage,
+  PrintLink,
 } from '@bolusi/core';
+import { encode } from 'uqr';
 
 import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 
@@ -35,14 +37,15 @@ import {
   warrantyTerms,
 } from './labels.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketRefund } from './queries.js';
+import { statusAddress, statusQrText } from './status-link.js';
 
 /** What a slip needs besides the ticket. */
 export interface SlipContext {
   readonly header: PrintHeader;
   /** The store's terms for this slip, one per line; null prints the app's default terms. */
   readonly terms: string | null;
-  readonly printedAt: number;
-  readonly printedByName: string | null;
+  /** The customer's status page, printed beside the signatures; null leaves it off. */
+  readonly link: PrintLink | null;
 }
 
 export interface HandoverSlipContext extends SlipContext {
@@ -85,13 +88,6 @@ function common(
   meta: readonly string[],
   parts: Pick<PrintDocument, 'blocks' | 'aside' | 'closing'>,
 ): PrintDocument {
-  const printed =
-    ctx.printedByName === null
-      ? tn('repair.slip.printed', { date: formatDateTime(ctx.printedAt) })
-      : tn('repair.slip.printedBy', {
-          date: formatDateTime(ctx.printedAt),
-          name: ctx.printedByName,
-        });
   return {
     jobName,
     header: ctx.header,
@@ -101,8 +97,7 @@ function common(
     meta: [...meta, ...reprintLabel(ticket.slipPrints[slip])],
     ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
-    plyNote: tn('repair.slip.plyNote'),
-    footer: printed,
+    link: ctx.link,
   };
 }
 
@@ -111,7 +106,7 @@ function customerFields(ticket: TicketDetailRow): PrintField[] {
     { label: tn('repair.slip.field.customer'), value: ticket.customerName },
   ];
   if (ticket.customerPhone !== null && ticket.customerPhone !== '') {
-    fields.push({ label: tn('repair.slip.field.phone'), value: ticket.customerPhone });
+    fields.push({ label: tn('repair.slip.field.phone'), value: formatPhone(ticket.customerPhone) });
   }
   fields.push({ label: tn('repair.slip.field.device'), value: deviceName(ticket) });
   if (ticket.deviceImei !== null && ticket.deviceImei !== '') {
@@ -424,6 +419,21 @@ export function storeHeader(
   };
 }
 
+/**
+ * The customer's status page as a slip prints it: a QR code and the address to type. Null for a
+ * servisan without a link (taken in before links), or a device that does not know its site.
+ */
+export function slipLink(ticket: TicketDetailRow, site: string | null): PrintLink | null {
+  if (ticket.statusCode === null || site === null) return null;
+  // M recovers 15% of the code: room for a smudge on a carbon copy.
+  const { data } = encode(statusQrText(site, ticket.statusCode), { ecc: 'M', border: 0 });
+  return {
+    modules: data,
+    title: tn('repair.slip.link'),
+    address: statusAddress(site, ticket.statusCode),
+  };
+}
+
 /** Everything besides the ticket that goes on a slip, as the platform resolved it. */
 export interface SlipSources {
   readonly settings: PrintSettings;
@@ -432,8 +442,8 @@ export interface SlipSources {
   /** The logo and signature (`logoRef`, `slipSignature`), loaded; null leaves one out. */
   readonly logo: PrintImage | null;
   readonly signature: PrintImage | null;
-  readonly printedAt: number;
-  readonly printedByName: string | null;
+  /** The site that serves the customer's status page (`RepairRuntime.statusSite`). */
+  readonly statusSite: string | null;
 }
 
 /** A slip with this store's header and terms: what every platform prints. */
@@ -446,8 +456,7 @@ export function slipDocument(
   const ctx: SlipContext = {
     header: storeHeader(settings, sources.storeName, sources.logo),
     terms: slip === 'intake' ? settings.intakeTerms : settings.handoverTerms,
-    printedAt: sources.printedAt,
-    printedByName: sources.printedByName,
+    link: slipLink(ticket, sources.statusSite),
   };
   return slip === 'intake'
     ? intakeSlip(ticket, ctx)
@@ -481,7 +490,5 @@ export function testPageDocument(
     aside: [],
     closing: [],
     copies: [],
-    plyNote: null,
-    footer: null,
   };
 }

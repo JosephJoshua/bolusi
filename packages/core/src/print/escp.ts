@@ -3,9 +3,8 @@
 // Only commands from the basic ESC/P set that 9-pin (LX) and 24-pin (LQ) Epsons and their clones all
 // accept: reset, draft quality, pitch, 1/6" or 1/8" line spacing, form length, left margin, bold,
 // 8-dot bit image and form feed. The desktop app sends these bytes as a RAW job to the installed printer.
-import type { MonoBitmap } from './bitmap.js';
 import type { PrintDocument } from './document.js';
-import { layoutGrid, type GridRow } from './layout.js';
+import { layoutGrid, type GridRow, type GridSpan } from './layout.js';
 import type { LinesPerInch, PaperSettings, Pitch } from './paper.js';
 
 const ESC = 0x1b;
@@ -32,16 +31,29 @@ function asciiBytes(text: string, out: number[]): void {
   }
 }
 
-/** 8-dot bands, each a column byte per dot (top dot = bit 7), at ESC * 1 (120 dpi). */
+function spanBytes(spans: readonly GridSpan[], out: number[]): void {
+  for (const span of spans) {
+    if (span.bold) out.push(ESC, 0x45); // ESC E
+    asciiBytes(span.text, out);
+    if (span.bold) out.push(ESC, 0x46); // ESC F
+  }
+}
+
+/**
+ * 8-dot bands, each a column byte per dot (top dot = bit 7), at ESC * 1 (120 dpi), `offset`
+ * characters in, after the `lead` text printed on the same pass.
+ */
 function imageBytes(
-  bitmap: MonoBitmap,
-  offset: number,
+  row: Extract<GridRow, { kind: 'image' }>,
   spacing: readonly number[],
   out: number[],
 ): void {
+  const { bitmap, offset, lead } = row;
+  const leadLength = lead.reduce((sum, span) => sum + span.text.length, 0);
   out.push(ESC, 0x33, 24); // ESC 3 24: 24/216" = 8 dots per band, so bands touch
   for (let top = 0; top < bitmap.height; top += 8) {
-    asciiBytes(' '.repeat(offset), out);
+    if (top === 0) spanBytes(lead, out);
+    asciiBytes(' '.repeat(Math.max(0, offset - (top === 0 ? leadLength : 0))), out);
     out.push(ESC, 0x2a, 1, bitmap.width & 0xff, (bitmap.width >> 8) & 0xff);
     for (let x = 0; x < bitmap.width; x += 1) {
       let byte = 0;
@@ -58,14 +70,10 @@ function imageBytes(
 
 function rowBytes(row: GridRow, spacing: readonly number[], out: number[]): void {
   if (row.kind === 'image') {
-    imageBytes(row.bitmap, row.offset, spacing, out);
+    imageBytes(row, spacing, out);
     return;
   }
-  for (const span of row.spans) {
-    if (span.bold) out.push(ESC, 0x45); // ESC E
-    asciiBytes(span.text, out);
-    if (span.bold) out.push(ESC, 0x46); // ESC F
-  }
+  spanBytes(row.spans, out);
   out.push(CR, LF);
 }
 

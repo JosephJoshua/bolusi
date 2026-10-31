@@ -307,14 +307,15 @@ export function TicketPane({
 
   const storeName = useStoreDisplayName();
   const uncollectedLimit = useUncollectedLimit();
-  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const messageKind =
+    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
       ? null
       : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
-    const url = customerMessageUrl(kind, row, storeName);
+    const url = customerMessageUrl(kind, row, storeName, runtime.statusSite);
     if (url === null) return;
     setDone(null);
     window.open(url, '_blank', 'noopener');

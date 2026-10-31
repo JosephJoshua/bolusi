@@ -261,6 +261,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     setupFor: null,
     session: null,
     sync: null,
+    statusSite: deps.apiBaseUrl,
   };
 
   // Many changes land together (a pull applies ops one by one), so the window gets one state per
@@ -337,6 +338,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       setupFor,
       session: sessionView(),
       sync: shell.sync,
+      statusSite: deps.apiBaseUrl,
     };
   }
 
@@ -402,6 +404,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         readBase64: (uri) => Promise.resolve(uri.slice(uri.indexOf(',') + 1)),
       },
       qris: qrisFor,
+      statusSite: deps.apiBaseUrl,
     });
   }
 
@@ -899,7 +902,6 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       photo: Parameters<RepairRuntime['loadModelPhoto']>[0],
     ) => repairFor(userId).loadModelPhoto(photo),
     'repair.print.storeName': (userId: string) => repairFor(userId).printing!.storeName(),
-    'repair.print.userName': (userId: string) => repairFor(userId).printing!.userName(),
     'repair.print.readPaper': (userId: string) => repairFor(userId).printing!.readPaper(),
     'repair.print.writePaper': (
       userId: string,
