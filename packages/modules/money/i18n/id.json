@@ -61,6 +61,7 @@
     "currency": "Rp"
   },
   "kas": {
+    "turnedDown": "Tidak disetujui pemilik",
     "title": "Kas",
     "expected": "Seharusnya di laci",
     "notCounted": "Belum tutup kas hari ini",
@@ -157,6 +158,8 @@
     "reason": "Alasan",
     "limit": "Batas pembatalanmu {amount} per servisan.",
     "waiting": "Menunggu persetujuan",
+    "rejected": "{name} menolak membatalkan pembayaran {amount}.",
+    "rejectedNote": "{name} menolak membatalkan pembayaran {amount}: {note}",
     "cashTitle": "Batalkan catatan kas",
     "cashSave": "Batalkan catatan",
     "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya.",

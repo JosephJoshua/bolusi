@@ -16,7 +16,7 @@ import {
   type CashMoveKind,
 } from '../constants.js';
 import { tm } from '../i18n.js';
-import { useVoidAsk, voidRequest } from '../void-ask.js';
+import { useEntryCustomer, useVoidAsk, voidRequest } from '../void-ask.js';
 import { ta } from '../../approvals/i18n.js';
 import {
   CASH_MOVE_LABEL,
@@ -670,6 +670,7 @@ export function VoidPaymentDialog({
   // A limited role (a manager) sees its limit up front; beyond it, or without the decision, an
   // owner is asked instead.
   const ask = useVoidAsk(entry);
+  const customer = useEntryCustomer(entry);
   const blocked = ask.asking && !ask.mayAsk;
   const testId = 'money.desk.void';
 
@@ -705,6 +706,7 @@ export function VoidPaymentDialog({
         </span>
         <span className="text-body text-text-muted">
           {[
+            customer,
             accountLabel(entry.account ?? '', accounts),
             entry.documentLabel,
             formatDateTime(entry.createdAt),

@@ -596,7 +596,8 @@ describe('Riwayat', () => {
     await press(screen, 'money.void.primary');
 
     // Back on the day's records: the payment is still there, cancelled, and no longer pressable.
-    expect(text(screen, row)).toContain('Dibatalkan: Salah metode');
+    expect(text(screen, row)).toContain('Pembayaran dibatalkan');
+    expect(text(screen, row)).toContain('Salah metode');
     await press(screen, 'money.history.back');
     expect(text(screen, 'money.kas.expected')).toBe('Rp 0');
   });
@@ -674,6 +675,43 @@ describe('Riwayat', () => {
     expect(text(screen, 'money.void.withEarlier')).toMatch(
       /^Bersama pengurangan sebelumnya di servisan ini, totalnya Rp\s?35\.000\.$/,
     );
+    expect(text(screen, 'money.void.primary')).toBe('Minta persetujuan');
+  });
+
+  test('the counter hears on Kas when an owner turns a cancel down, and may ask again', async () => {
+    h = await openRepairScreenHarness(5417);
+    const entryId = await paid(h);
+    const ticket = await h.db
+      .selectFrom('moneyEntries')
+      .select(['documentId'])
+      .where('id', '=', entryId)
+      .executeTakeFirstOrThrow();
+    const requestId = (
+      (await h.approvals(
+        'requestApproval',
+        {
+          kind: 'money.voidPayment',
+          input: {
+            entryId,
+            reason: 'Tercatat dua kali',
+            document: { kind: 'repair.ticket', id: ticket.documentId! },
+          },
+          reason: 'Tercatat dua kali',
+        },
+        h.cashierId,
+      )) as { requestId: string }
+    ).requestId;
+    await h.approvals('rejectRequest', { requestId, note: 'Uangnya ada' }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId);
+    // Told on the board, with who said no and why.
+    expect(text(screen, `money.kas.turnedDown.${requestId}`)).toContain(USER_NAMES.storeOwner);
+    expect(text(screen, `money.kas.turnedDown.${requestId}`)).toContain('Uangnya ada');
+    await press(screen, `money.kas.turnedDown.${requestId}`);
+    // In Riwayat the payment says so too, and can be asked about again.
+    expect(text(screen, `money.history.entry.${entryId}`)).toContain('Ditolak oleh');
+    await press(screen, `money.history.entry.${entryId}`);
+    // The cancel step names the customer, not only the servisan number.
+    expect(text(screen, 'money.void')).toContain('Yohanis Wenda');
     expect(text(screen, 'money.void.primary')).toBe('Minta persetujuan');
   });
 

@@ -171,7 +171,8 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.void.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.void')).toBeNull());
     // The record stays, with whose and which method it was and why it was cancelled.
-    await waitFor(() => expect(table.textContent).toContain('Dibatalkan: Salah metode'));
+    await waitFor(() => expect(table.textContent).toContain('Pembayaran dibatalkan'));
+    expect(table.textContent).toContain('Salah metode');
     expect(table.textContent).toContain('Yulianus Wenda · K7Q-0004 · Tunai');
     expect(
       within(table).queryByRole('button', { name: /^Batalkan pembayaran Rp\s?200\.000/ }),

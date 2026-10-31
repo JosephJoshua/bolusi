@@ -274,6 +274,11 @@ describe('a cancel asked for by the counter', () => {
       note: 'Telepon dulu',
     });
     expect((await ticket(h, ticketId)).outcome).toBe('received');
+    // The asker reads their own answered requests back; nobody else's come with them.
+    const mine = await h.approvalsQuery('approvalRequests', { mine: true }, h.cashierId);
+    expect(mine.rows).toMatchObject([{ id: requestId, status: 'rejected', mine: true }]);
+    const owners = await h.approvalsQuery('approvalRequests', { mine: true }, h.storeOwnerId);
+    expect(owners.rows).toEqual([]);
   });
 });
 

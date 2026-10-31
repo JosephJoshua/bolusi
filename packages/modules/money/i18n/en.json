@@ -61,6 +61,7 @@
     "currency": "Rp"
   },
   "kas": {
+    "turnedDown": "Turned down by the owner",
     "title": "Cash",
     "expected": "Should be in the drawer",
     "notCounted": "Drawer not counted today",
@@ -157,6 +158,8 @@
     "reason": "Reason",
     "limit": "Your cancel limit is {amount} per repair.",
     "waiting": "Waiting for approval",
+    "rejected": "{name} turned down cancelling the {amount} payment.",
+    "rejectedNote": "{name} turned down cancelling the {amount} payment: {note}",
     "cashTitle": "Cancel cash record",
     "cashSave": "Cancel record",
     "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts.",
