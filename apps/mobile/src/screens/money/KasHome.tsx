@@ -61,6 +61,7 @@ export function KasHome({
   const [historyDay, setHistoryDay] = useState<number | null>(null);
   // Said in Riwayat once an owner has been asked to cancel a payment.
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeEntryId, setNoticeEntryId] = useState<string | null>(null);
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback((guard: DiscardGuard | null): void => {
     guardRef.current = guard;
@@ -183,6 +184,7 @@ export function KasHome({
               setView({ kind: 'void', entry });
             }}
             notice={notice}
+            noticeEntryId={noticeEntryId}
             onClearNotice={() => setNotice(null)}
           />
         );
@@ -195,6 +197,7 @@ export function KasHome({
             onDone={toHistory}
             onAsked={() => {
               setNotice(ta('approvals.done.asked'));
+              setNoticeEntryId(view.entry.id);
               toHistory();
             }}
             onCancel={toHistory}

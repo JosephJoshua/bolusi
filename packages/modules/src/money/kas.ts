@@ -215,7 +215,12 @@ export function historyLine(
 ): HistoryLine {
   // The drawer's own moves read as the board lists them.
   const move = drawerMoves([entry])[0];
-  const label = move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived';
+  const voided = entry.voidedAt !== null;
+  // A cancelled payment says so in its title, so its line gives just the reason.
+  const voidedPayment = voided && entry.kind === 'payment_received';
+  const label = voidedPayment
+    ? 'money.opType.paymentVoided'
+    : (move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived');
   const method =
     entry.account === null ||
     !['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind)
@@ -227,16 +232,17 @@ export function historyLine(
       : entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
         ? -entry.amount
         : entry.amount;
-  const voided = entry.voidedAt !== null;
   return {
     label,
     details: [
       customer,
       entry.documentLabel,
       method,
-      voided
-        ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
-        : reasonText(entry.reason),
+      voidedPayment
+        ? entry.voidReason
+        : voided
+          ? tm('money.history.voided', { reason: entry.voidReason ?? '' })
+          : reasonText(entry.reason),
     ].filter((part): part is string => part !== null && part !== ''),
     amount: formatMoney(signed),
     voided,

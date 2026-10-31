@@ -131,6 +131,8 @@ export const approvalRequestsInput = z
   .object({
     /** One record's requests, newest first; left out, the waiting ones the caller asked or may answer. */
     targetId: zUuid.optional(),
+    /** Only the caller's own requests, in any state, newest first: so an asker hears the answer. */
+    mine: z.literal(true).optional(),
   })
   .strict();
 
@@ -152,14 +154,16 @@ export function createApprovalQueries(kinds: ApprovalKinds) {
         .where('tenantId', '=', qctx.tenantId)
         .where('storeId', '=', storeOf(qctx));
       query =
-        input.targetId === undefined
-          ? query.where('status', '=', 'waiting')
-          : query.where('targetId', '=', input.targetId);
+        input.mine === true
+          ? query.where('requestedBy', '=', qctx.userId)
+          : input.targetId === undefined
+            ? query.where('status', '=', 'waiting')
+            : query.where('targetId', '=', input.targetId);
       const rows = await query.orderBy('requestedAt', 'desc').limit(MAX_ROWS).execute();
       const shown = await rowsOf(qctx, kinds, rows);
       return {
         rows:
-          input.targetId === undefined
+          input.targetId === undefined && input.mine !== true
             ? shown.filter((row) => row.status === 'waiting' && (row.mine || row.canDecide))
             : shown,
         nextCursor: null,

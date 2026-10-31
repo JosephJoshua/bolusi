@@ -9,6 +9,8 @@ import { registerMoneyCatalog } from '../src/money/i18n.js';
 import { methodStores, methodSummary } from '../src/money/methods.js';
 import { shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
+import { turnedDownLines } from '../src/money/void-ask.js';
+import type { ApprovalRow } from '../src/approvals/queries.js';
 
 import {
   cashMoveCheck,
@@ -240,12 +242,9 @@ describe('history', () => {
       [qris],
       'Yulianus Wenda',
     );
-    expect(line.details).toEqual([
-      'Yulianus Wenda',
-      'B7B-0001',
-      'QRIS BCA',
-      'Dibatalkan: Salah metode',
-    ]);
+    expect(line.details).toEqual(['Yulianus Wenda', 'B7B-0001', 'QRIS BCA', 'Salah metode']);
+    // Its title says it was cancelled, so the reason stands alone.
+    expect(line.label).toBe('money.opType.paymentVoided');
   });
 
   test('the day before and after start at local midnight', () => {
@@ -322,5 +321,46 @@ describe('payment methods', () => {
       'QRIS · Bolusi Sorong · Tidak dipakai',
     );
     expect(methodSummary(method({ central: false, kind: 'edc' }), stores)).toBe('EDC');
+  });
+});
+
+describe('cancels an owner turned down', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const rejected = (over: Partial<ApprovalRow>): ApprovalRow =>
+    ({
+      id: 'r1',
+      kind: 'money.voidPayment',
+      input: { entryId: 'e1' },
+      amount: 80_000,
+      status: 'rejected',
+      decidedByName: 'Yohana Pemilik',
+      decidedAt: 1_000,
+      note: null,
+      ...over,
+    }) as ApprovalRow;
+
+  test('says who said no and why, for those answered since the day began', () => {
+    const asks = {
+      waiting: new Set<string>(),
+      rejected: new Map([
+        ['e1', rejected({})],
+        ['e2', rejected({ id: 'r2', note: 'Uangnya ada', amount: 25_000 })],
+        ['e3', rejected({ id: 'r3', decidedAt: 10 })],
+      ]),
+    };
+    expect(turnedDownLines(asks, 500)).toEqual([
+      {
+        id: 'r1',
+        text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(80_000)}.`,
+      },
+      {
+        id: 'r2',
+        text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(25_000)}: Uangnya ada`,
+      },
+    ]);
   });
 });

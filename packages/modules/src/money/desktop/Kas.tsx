@@ -38,6 +38,8 @@ import {
   type NamedBalance,
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
+import { turnedDownLines, useOnVoidDecided, useVoidRequests } from '../void-ask.js';
+import { approvalByLine } from '../../approvals/copy.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { targetOf, type MoneyTarget } from '../refund.js';
 import { useMoneyRuntime } from '../runtime.js';
@@ -79,6 +81,13 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   const close = (): void => setTask(null);
   // Said once an owner has been asked to cancel a payment.
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeEntryId, setNoticeEntryId] = useState<string | null>(null);
+  // Once an owner answers that ask, its notice goes rather than sit above the answer.
+  useOnVoidDecided(notice === null ? null : noticeEntryId, () => setNotice(null));
+  // Cancels this person asked for that an owner turned down today, until closed.
+  const asks = useVoidRequests();
+  const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
+  const turnedDown = turnedDownLines(asks, dayStart(now())).filter((line) => !seen.has(line.id));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="money.desk.kas">
@@ -105,6 +114,20 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           </>
         }
       />
+      {turnedDown.map((line) => (
+        <div
+          key={line.id}
+          className="px-6 pb-3"
+          data-testid={`money.desk.kas.turnedDown.${line.id}`}
+        >
+          <Banner
+            tone="warning"
+            message={line.text}
+            onDismiss={() => setSeen((ids) => new Set([...ids, line.id]))}
+            dismissLabel={t('core.action.close')}
+          />
+        </div>
+      ))}
       {notice === null ? null : (
         <div className="px-6 pb-3">
           <Banner
@@ -162,6 +185,7 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           accounts={task.accounts}
           onDone={close}
           onAsked={() => {
+            setNoticeEntryId(task.entry.id);
             close();
             setNotice(ta('approvals.done.asked'));
           }}
@@ -441,6 +465,8 @@ function History({
   readonly onVoid: (entry: MoneyEntryRow, accounts: readonly PaymentAccountRow[]) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
+  const asks = useVoidRequests();
+  const waiting = asks.waiting;
   const can = voidAbilities(
     (id) => runtime.hasPermission(id),
     (id) => runtime.limitOf(id),
@@ -475,6 +501,11 @@ function History({
       ]),
     );
     const lineOf = (entry: MoneyEntryRow) => lines.get(entry.id) ?? historyLine(entry, []);
+    // An owner said no to this person's ask: said on the record, which can be asked about again.
+    const turnedDownOf = (entry: MoneyEntryRow) =>
+      entry.voidedAt === null && !asks.waiting.has(entry.id)
+        ? asks.rejected.get(entry.id)
+        : undefined;
     const accounts = loaded?.accounts ?? [];
     return [
       {
@@ -499,7 +530,12 @@ function History({
               </span>
               {line.details.length === 0 ? null : (
                 <OverflowText
-                  text={line.details.join(' · ')}
+                  text={[
+                    ...line.details,
+                    ...(turnedDownOf(entry) === undefined
+                      ? []
+                      : [approvalByLine(turnedDownOf(entry)!)]),
+                  ].join(' · ')}
                   className="text-small text-text-muted"
                 />
               )}
@@ -531,9 +567,17 @@ function History({
             {
               id: 'action',
               header: '',
-              meta: { track: '112px', align: 'end' as const },
+              // Wide enough for a cancel button or, once asked, "Menunggu persetujuan" on one line.
+              meta: { track: '176px', align: 'end' as const },
               cell: ({ row: { original: entry } }: { row: { original: MoneyEntryRow } }) =>
-                voidable(entry, can) ? (
+                waiting.has(entry.id) && entry.voidedAt === null ? (
+                  <span
+                    className="whitespace-nowrap text-small text-text-muted"
+                    data-testid={`${testId}.waiting.${entry.id}`}
+                  >
+                    {tm('money.void.waiting')}
+                  </span>
+                ) : voidable(entry, can) ? (
                   <Button
                     label={tm('money.history.void')}
                     aria-label={tm(voidKind(entry).label, {
@@ -553,7 +597,7 @@ function History({
           ]
         : []),
     ];
-  }, [loaded, mayVoid, can, onVoid]);
+  }, [loaded, mayVoid, can, onVoid, waiting, asks]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>
@@ -602,7 +646,7 @@ function History({
           selectedId={selected}
           onSelect={(row) => setSelected(row.id)}
           onActivate={(row) => {
-            if (voidable(row, can)) onVoid(row, loaded?.accounts ?? []);
+            if (!waiting.has(row.id) && voidable(row, can)) onVoid(row, loaded?.accounts ?? []);
           }}
           // Newest first, as the query reads them across pages.
           sortable={false}
