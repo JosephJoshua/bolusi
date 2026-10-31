@@ -170,7 +170,10 @@ test('an owner sees every queue beside an open servisan on a 1366×768 screen', 
   await page.getByText('Lince Wakerkwa').click();
   await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();
   const views = page.getByTestId('repair.desk.board.views');
-  expect(await views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1)).toBe(true);
+  // Measured once the pane and the approvals count have settled, not mid-layout.
+  await expect
+    .poll(() => views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1))
+    .toBe(true);
   for (const view of ['active', 'cancelled']) {
     await expect(page.getByTestId(`repair.desk.board.views.${view}`)).toBeInViewport({ ratio: 1 });
   }
