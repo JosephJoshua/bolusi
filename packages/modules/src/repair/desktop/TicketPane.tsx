@@ -2,7 +2,7 @@
 // changes, every photo, the condition at intake and the history. Steps that need input open a
 // dialog; the rest run in place. Live like the phone's ticket: a change synced in from another
 // device redraws it, and an open dialog says when that change means it can no longer finish.
-import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   Banner,
   Button,
@@ -35,10 +35,10 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { rejectedCount, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
-import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
 import { TicketVideoSection } from './video.js';
 import {
   MESSAGE_ACTION_KEY,
@@ -79,6 +79,7 @@ import {
   type TicketAction,
   type StaleStep,
   type TicketStep,
+  repairedDoneKey,
 } from '../flows.js';
 import { useClearAskedNotice } from '../asked-notice.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
@@ -90,7 +91,7 @@ import { describeRepairApproval } from '../approval-copy.js';
 import {
   actionKey,
   downPaymentTitleKey,
-  eventNote,
+  historyEntry,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
@@ -137,7 +138,6 @@ const DONE_KEY: Partial<Record<TicketAction | 'before' | 'after', RepairKey>> = 
   resume: 'repair.done.start',
   reopen: 'repair.done.start',
   before: 'repair.done.start',
-  after: 'repair.done.repaired',
   handover: 'repair.desk.done.handover',
 };
 
@@ -169,11 +169,17 @@ export interface TicketPaneProps {
   readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   /** Opens a linked servisan: the one a claim is on, or a claim on this one. */
   readonly onOpenTicket?: ((ticketId: string) => void) | undefined;
+  /** Just opened by an intake: offers its slip at once, as the customer is still at the counter. */
+  readonly printFirst?: boolean | undefined;
+  /** The slip was offered, so coming back to this servisan later does not offer it again. */
+  readonly onPrintOffered?: (() => void) | undefined;
 }
 
 export function TicketPane({
   ticketId,
   now,
+  printFirst = false,
+  onPrintOffered,
   onClose,
   onOpenSyncStatus,
   onStartClaim,
@@ -229,6 +235,18 @@ export function TicketPane({
           ? repairTypesStale(ticket, can)
           : staleStep(step, ticket, can, runtime.userId, now());
 
+  // The slip the customer takes away is offered as soon as there is one: after the intake, and after
+  // the handover once the servisan reads as picked up (its slip prints what was handed over).
+  const [printNext, setPrintNext] = useState<'opened' | 'returned' | null>(
+    printFirst ? 'opened' : null,
+  );
+  useEffect(() => {
+    if (printNext === null || ticket === undefined || step.kind !== 'none') return;
+    if (printNext === 'returned' && ticket.location !== 'returned') return;
+    setPrintNext(null);
+    if (printNext === 'opened') onPrintOffered?.();
+    if (printing !== undefined) setStep({ kind: 'print' });
+  }, [printNext, ticket, step.kind, printing, onPrintOffered]);
   const closeStep = (): void => setStep({ kind: 'none' });
   const finishStep = (said: RepairKey | undefined): void => {
     closeStep();
@@ -606,23 +624,7 @@ export function TicketPane({
         <DeviceSpecs brand={row.deviceBrand} model={row.deviceModel} repairs={can.work} />
 
         <Section title={tn('repair.ticket.history')} testId="repair.desk.ticket.history">
-          <Timeline
-            entries={[...row.events].reverse().map((event) => {
-              const note = eventNote(event.detail);
-              return {
-                key: event.id,
-                // A change saved before the customer agreed reads as waiting, not as changed.
-                title:
-                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
-                    ? tn('repair.price.waitingEvent')
-                    : translateOpType(event.kind),
-                meta: [formatDateTime(event.at), event.actorName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(note === null ? {} : { detail: note }),
-              };
-            })}
-          />
+          <Timeline entries={[...row.events].reverse().map(historyEntry)} />
         </Section>
 
         {[...FINAL_ACTIONS]
@@ -982,7 +984,9 @@ export function TicketPane({
           <WorkPhotosDialog
             {...common}
             stage={step.kind}
-            onDone={() => finishStep(DONE_KEY[step.kind])}
+            onDone={() =>
+              finishStep(step.kind === 'after' ? repairedDoneKey(row) : DONE_KEY[step.kind])
+            }
           />
         );
       case 'waitForParts':
@@ -1101,7 +1105,10 @@ export function TicketPane({
             {...common}
             ticket={row}
             customerName={row.customerName}
-            onDone={() => finishStep(DONE_KEY.handover)}
+            onDone={() => {
+              finishStep(DONE_KEY.handover);
+              setPrintNext('returned');
+            }}
           />
         );
     }

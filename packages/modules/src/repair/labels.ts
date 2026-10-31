@@ -1,10 +1,22 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
-import { formatDate, formatMoney, formatPhone } from '@bolusi/i18n';
+import {
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  formatPhone,
+  translateOpType,
+} from '@bolusi/i18n';
 
 import type { DetailChange } from './applier.js';
-import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
+import type { TicketEventRow } from './queries.js';
+import {
+  REPAIR_OP,
+  type ChecklistState,
+  type IntakePhotoSlot,
+  type QuoteLineKind,
+} from './constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import type { DownPaymentGap, IntakeStep, StaleStep, TicketAction, TicketStatus } from './flows.js';
@@ -317,6 +329,19 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
     if (notDone.length > 0)
       lines.push(tn('repair.handover.unchecked', { items: notDone.join(', ') }));
   }
+  // What a price change or a DP was for, and how much: "Ganti baterai · Rp 200.000".
+  const amount = detail['amount'];
+  if (typeof amount === 'number') {
+    const description = detail['description'];
+    lines.push(
+      [
+        typeof description === 'string' && description !== '' ? description : null,
+        formatMoney(amount),
+      ]
+        .filter((part) => part !== null)
+        .join(' · '),
+    );
+  }
   for (const field of ['note', 'reason'] as const) {
     const value = detail[field];
     if (typeof value === 'string' && value.trim() !== '') {
@@ -325,6 +350,32 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
     }
   }
   return lines.length === 0 ? null : lines.join('\n');
+}
+
+/** One line of a servisan's history, the same on the phone and the PC. */
+export function historyEntry(event: TicketEventRow): {
+  readonly key: string;
+  readonly title: string;
+  readonly meta: string;
+  readonly detail?: string;
+} {
+  const note = eventNote(event.detail);
+  // Who was given the work, beside who gave it.
+  const technician =
+    event.kind === REPAIR_OP.technicianAssigned && event.technicianName !== null
+      ? tn('repair.history.technician', { name: event.technicianName })
+      : null;
+  const detail = [technician, note].filter((part) => part !== null).join('\n');
+  return {
+    key: event.id,
+    // A change saved before the customer agreed reads as waiting, not as changed.
+    title:
+      event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
+        ? tn('repair.price.waitingEvent')
+        : translateOpType(event.kind),
+    meta: [formatDateTime(event.at), event.actorName].filter((part) => part !== null).join(' · '),
+    ...(detail === '' ? {} : { detail }),
+  };
 }
 
 /**

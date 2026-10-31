@@ -357,7 +357,7 @@ export function CancelStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(holds ? 'repair.action.cancel' : 'repair.approval.askCancel')}
+      title={tn(holds ? 'repair.cancel.title' : 'repair.approval.askCancel')}
       onBack={leave}
       primaryLabel={asking ? ta('approvals.action.ask') : tn('repair.action.cancel')}
       primaryVariant={asking ? 'primary' : 'destructive'}
@@ -950,7 +950,7 @@ export function PriceChangeStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(mode === 'change' ? 'repair.action.changePrice' : 'repair.action.proposePrice')}
+      title={tn(mode === 'change' ? 'repair.price.editTitle' : 'repair.action.proposePrice')}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
       question={deciding ? tn('repair.price.alreadyAgreed') : undefined}
@@ -995,7 +995,7 @@ export function PriceChangeStep({
       </View>
       <View style={repairStyles.gap}>
         <TextInput
-          label={tn('repair.price.amount')}
+          label={tn(kind === 'discount' ? 'repair.price.discountAmount' : 'repair.price.amount')}
           value={amountText}
           onChangeText={(text) => {
             if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));

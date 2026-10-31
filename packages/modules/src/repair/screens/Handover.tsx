@@ -229,7 +229,7 @@ export function Handover({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn('repair.action.handover')}
+      title={tn('repair.handover.title')}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
       primaryLabel={tn('repair.action.handover')}

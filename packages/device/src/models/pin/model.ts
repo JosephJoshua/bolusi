@@ -28,6 +28,7 @@
 
 import { formatDuration, t } from '@bolusi/i18n';
 import {
+  delayMsForFailureCount,
   derivePinAuthState,
   PIN_HARD_LOCK_THRESHOLD,
   type PinAttemptRow,
@@ -42,10 +43,17 @@ import {
 export type PinView =
   /** Ready for input. The only state in which the keys are live. */
   | { readonly kind: 'entry' }
-  /** The last attempt was wrong and more remain — `auth.pin.wrong` + `auth.pin.attemptsLeft`. */
-  | { readonly kind: 'wrong'; readonly attemptsLeft: number }
-  /** Inside an escalation window (03 §9.1) — `auth.pin.wait` with a live countdown. */
-  | { readonly kind: 'delayed'; readonly remainingMs: number }
+  /**
+   * The last attempt was wrong and more remain — `auth.pin.wrong` + `auth.pin.attemptsLeft`, or
+   * `auth.pin.nextWait` when one more wrong try opens a wait (`nextWaitMs > 0`), so the wait never
+   * comes as a surprise.
+   */
+  | { readonly kind: 'wrong'; readonly attemptsLeft: number; readonly nextWaitMs: number }
+  /**
+   * Inside an escalation window (03 §9.1) — `auth.pin.wait` with a live countdown, then how many
+   * tries are left before the hard lock.
+   */
+  | { readonly kind: 'delayed'; readonly remainingMs: number; readonly attemptsLeft: number }
   /** Hard lock (10 failures) — `auth.pin.lockedOut` + the `auth.pin.forgot` affordance. */
   | { readonly kind: 'lockedOut' };
 
@@ -81,10 +89,20 @@ export function pinView(
     // Never negative, and never trusts the device clock downward: `notBefore` is a stored ms epoch
     // that 14 refuses to recompute (SEC-AUTH-04), so a rolled-back clock only makes the countdown
     // read LONGER — it can never open the window early.
-    return { kind: 'delayed', remainingMs: Math.max(0, row.notBefore - now) };
+    return {
+      kind: 'delayed',
+      remainingMs: Math.max(0, row.notBefore - now),
+      attemptsLeft: attemptsLeft(row),
+    };
   }
 
-  if (lastAttempt === 'wrong') return { kind: 'wrong', attemptsLeft: attemptsLeft(row) };
+  if (lastAttempt === 'wrong') {
+    return {
+      kind: 'wrong',
+      attemptsLeft: attemptsLeft(row),
+      nextWaitMs: delayMsForFailureCount((row?.consecutiveFailures ?? 0) + 1),
+    };
+  }
 
   return { kind: 'entry' };
 }
@@ -144,10 +162,17 @@ export function pinMessage(view: PinView): string | undefined {
     case 'wrong':
       // Two sentences, deliberately: what happened, then what it costs. `attemptsLeft` is what turns
       // "wrong PIN" from a nag into information — it is the only warning a user gets before a lock
-      // that only the owner can undo.
-      return `${t(PIN_MESSAGE_KEY[view.kind])} ${t('auth.pin.attemptsLeft', { count: view.attemptsLeft })}`;
+      // that only the owner can undo. When one more wrong try opens a wait, that is the nearer cost.
+      return `${t(PIN_MESSAGE_KEY[view.kind])} ${
+        view.nextWaitMs > 0
+          ? t('auth.pin.nextWait', { duration: formatDuration(view.nextWaitMs) })
+          : t('auth.pin.attemptsLeft', { count: view.attemptsLeft })
+      }`;
     case 'delayed':
-      return t(PIN_MESSAGE_KEY[view.kind], { duration: formatDuration(view.remainingMs) });
+      return `${t(PIN_MESSAGE_KEY[view.kind], { duration: formatDuration(view.remainingMs) })} ${t(
+        'auth.pin.attemptsLeft',
+        { count: view.attemptsLeft },
+      )}`;
     case 'lockedOut':
       return t(PIN_MESSAGE_KEY[view.kind]);
   }

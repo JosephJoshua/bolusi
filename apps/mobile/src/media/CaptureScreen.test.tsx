@@ -292,6 +292,6 @@ describe('the screen contains no hardcoded copy', () => {
     expect(review.get('capture-use.label').props['children']).toBe(t('media.action.usePhoto'));
     // And the Indonesian catalog really is the one loaded (07-i18n §1.2's default locale) — so a
     // green run here is a statement about the language a technician actually sees.
-    expect(t('media.action.takePhoto')).toBe('Ambil Foto');
+    expect(t('media.action.takePhoto')).toBe('Ambil foto');
   });
 });

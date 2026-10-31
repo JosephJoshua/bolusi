@@ -967,7 +967,7 @@ export default function App(props: AppProps): React.JSX.Element {
     capture !== null ? (
       <CaptureScreen
         // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
-        // catalog's own name for this action ("Ambil Foto") — no new key, no hardcoded string.
+        // catalog's own name for this action ("Ambil foto") — no new key, no hardcoded string.
         title={capture.title ?? t('media.action.takePhoto')}
         state={capture.state}
         preview={capture.preview}
