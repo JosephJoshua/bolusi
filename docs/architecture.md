@@ -71,6 +71,11 @@ behind adapters. Node tests do not establish native performance or correctness.
   can change without rewriting signed facts.
 - Apply operations transactionally and make replay idempotent. Interrupted rebuilds
   and reordered sync must preserve resulting business state.
+- Folding sorts ops by each phone's clock, but the server judged them as they arrived,
+  so an applier must reach what the server judged in either order: a final state
+  (a cancel) is not undone by an earlier-judged op folded after it, and a change
+  folded before the record it changes exists is not lost (repair replays it from
+  the ticket's history entries when the ticket is opened).
 - A projection version bump rebuilds on the device in the background, re-folding one
   entity at a time from the op log. Appliers write only their own entity's rows, so
   screens and commands keep working while it runs.

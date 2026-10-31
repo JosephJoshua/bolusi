@@ -716,7 +716,10 @@
     "undoTooLate": "This handover was more than a day ago, so it can’t be undone.",
     "handedOverBefore": "This servisan was handed over before. Its customer and phone can’t change, and it can’t be cancelled.",
     "customerShared": "This customer has other servisans. Try the change again.",
-    "customerMismatch": "The customer details don’t match. Try again."
+    "customerMismatch": "The customer details don’t match. Try again.",
+    "cancelFeeChanged": "The store’s cancellation fee has changed. Cancel again with the new fee.",
+    "repairTypeTerms": "The owner changed this repair type. Pick the repair types again.",
+    "intakePhotoMissing": "Take photos of the phone from every angle the store asks for first."
   },
   "paper": {
     "title": "Slip paper",
