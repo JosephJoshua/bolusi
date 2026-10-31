@@ -190,6 +190,20 @@ export function voidPaymentHandler(
   };
 }
 
+export const voidCashMoveInput = voidPaymentInput;
+export type VoidCashMoveInput = z.input<typeof voidCashMoveInput>;
+
+/** An owner cancels a cash move typed wrong; the drawer reads as if it was never recorded. */
+export function voidCashMoveHandler(
+  input: z.output<typeof voidCashMoveInput>,
+  ctx: CommandContext,
+): CommandHandlerResult<null> {
+  return {
+    ops: [entryOp(ctx, MONEY_OP.cashMoveVoided, { reason: input.reason }, input.entryId)],
+    result: null,
+  };
+}
+
 export const refundInput = z
   .object({
     document: zDocument,

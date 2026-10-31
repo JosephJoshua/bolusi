@@ -161,36 +161,6 @@ export function createDevicesRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = control.tenantId;
 
-          // §9: 20 enrollments / tenant / day.
-          enforce(
-            deps.identityRateStore.hit(
-              `enroll:${tenantId}`,
-              IDENTITY_LIMITS.enrollPerTenantDay.limit,
-              IDENTITY_LIMITS.enrollPerTenantDay.windowMs,
-              t,
-            ),
-          );
-
-          // A REPLACEMENT enrolment also revokes, so it must also pay the revoke budget (§9:
-          // 20/tenant/hour) — the SAME counter `POST /v1/devices/:id/revoke` charges.
-          //
-          // Found by the QA sweep of this surface. The two limits are independent keys in one store,
-          // so charging only `enroll:` let a caller exhaust the hourly revoke budget on the standalone
-          // endpoint and then keep revoking through here on the untouched daily enrol budget — 40
-          // revocations an hour against a documented cap of 20. The limit exists to bound how fast a
-          // control session can tear down a store's fleet; a second door into the same action has to
-          // charge the same meter or the cap is decorative.
-          if (body.replacesDeviceId !== undefined) {
-            enforce(
-              deps.identityRateStore.hit(
-                `revoke:${tenantId}`,
-                IDENTITY_LIMITS.revokePerTenantHour.limit,
-                IDENTITY_LIMITS.revokePerTenantHour.windowMs,
-                t,
-              ),
-            );
-          }
-
           const rawBody = JSON.stringify(body);
           const requestHash = sha256Hex(rawBody);
 
@@ -224,6 +194,16 @@ export function createDevicesRouter(deps: ServerDeps) {
                   storeId: body.storeId,
                   permissionId: PERM.deviceEnroll,
                 });
+                // §9: 20 enrollments / tenant / day. Charged only once the caller is authorised, so a
+                // session that may not enrol cannot burn the tenant's budget with refused calls.
+                enforce(
+                  deps.identityRateStore.hit(
+                    `enroll:${tenantId}`,
+                    IDENTITY_LIMITS.enrollPerTenantDay.limit,
+                    IDENTITY_LIMITS.enrollPerTenantDay.windowMs,
+                    t,
+                  ),
+                );
 
                 // §4.3 / D27 — this enrolment REPLACES an existing registration (task 168). Revoke
                 // the old row HERE, inside the same transaction that registers the new one, so there
@@ -252,6 +232,23 @@ export function createDevicesRouter(deps: ServerDeps) {
                     storeId: replaced.storeId,
                     permissionId: PERM.deviceRevoke,
                   });
+                  // A REPLACEMENT enrolment also revokes, so it must also pay the revoke budget (§9:
+                  // 20/tenant/hour) — the SAME counter `POST /v1/devices/:id/revoke` charges.
+                  //
+                  // Found by the QA sweep of this surface. The two limits are independent keys in one
+                  // store, so charging only `enroll:` let a caller exhaust the hourly revoke budget on
+                  // the standalone endpoint and then keep revoking through here on the untouched daily
+                  // enrol budget — 40 revocations an hour against a documented cap of 20. The limit
+                  // exists to bound how fast a control session can tear down a store's fleet; a second
+                  // door into the same action has to charge the same meter or the cap is decorative.
+                  enforce(
+                    deps.identityRateStore.hit(
+                      `revoke:${tenantId}`,
+                      IDENTITY_LIMITS.revokePerTenantHour.limit,
+                      IDENTITY_LIMITS.revokePerTenantHour.windowMs,
+                      t,
+                    ),
+                  );
                   const outcome = await revokeDevice(db, {
                     tenantId,
                     deviceId: body.replacesDeviceId,
@@ -460,15 +457,6 @@ export function createDevicesRouter(deps: ServerDeps) {
           if (!LOWERCASE_UUID.test(deviceId)) throw new ApiError('NOT_FOUND');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforce(
-            deps.identityRateStore.hit(
-              `revoke:${tenantId}`,
-              IDENTITY_LIMITS.revokePerTenantHour.limit,
-              IDENTITY_LIMITS.revokePerTenantHour.windowMs,
-              t,
-            ),
-          );
-
           const outcome = await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -483,6 +471,16 @@ export function createDevicesRouter(deps: ServerDeps) {
               storeId: target.storeId,
               permissionId: PERM.deviceRevoke,
             });
+            // §9: 20 revocations / tenant / hour, charged only after authorisation: a stolen device
+            // sending refused revokes must not spend the budget the owner needs to revoke it.
+            enforce(
+              deps.identityRateStore.hit(
+                `revoke:${tenantId}`,
+                IDENTITY_LIMITS.revokePerTenantHour.limit,
+                IDENTITY_LIMITS.revokePerTenantHour.windowMs,
+                t,
+              ),
+            );
             return revokeDevice(db, { tenantId, deviceId, revokedBy: acting.userId, now: t });
           });
 

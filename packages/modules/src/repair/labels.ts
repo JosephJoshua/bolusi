@@ -1,8 +1,9 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
-import { formatDate, formatMoney } from '@bolusi/i18n';
+import { formatDate, formatMoney, formatPhone } from '@bolusi/i18n';
 
+import type { DetailChange } from './applier.js';
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
@@ -253,6 +254,8 @@ const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
   changePrice: 'repair.action.changePrice',
   proposePrice: 'repair.action.proposePrice',
   handover: 'repair.action.handover',
+  correctDetails: 'repair.action.correctDetails',
+  undoHandover: 'repair.action.undoHandover',
   cancel: 'repair.action.cancel',
 };
 
@@ -267,11 +270,39 @@ export function actionKey(action: TicketAction, technicianId: string | null): Re
 }
 
 /**
- * What a history entry says under its title: at a handover, what was and was not checked with the
- * customer; then its note or reason.
+ * What a history entry says under its title: a correction's before and after; at a handover, what
+ * was and was not checked with the customer; then its note or reason.
  */
+const CHANGED_FIELD_KEY: Readonly<Record<string, RepairKey>> = {
+  customerName: 'repair.customer.name',
+  customerPhone: 'repair.customer.phone',
+  brand: 'repair.device.brand',
+  model: 'repair.device.model',
+  color: 'repair.device.color',
+  imei: 'repair.device.imei',
+  passcode: 'repair.device.passcodeLabel',
+  complaint: 'repair.condition.complaint',
+  peripherals: 'repair.condition.peripherals',
+};
+
+/** A corrected fact as the history says it: "Tipe: Galaxy A14 → Galaxy A15", or only that it changed. */
+function changeLine(change: DetailChange): string {
+  const key = CHANGED_FIELD_KEY[change.field];
+  const field = key === undefined ? change.field : tn(key);
+  if (!('to' in change)) return tn('repair.changed.only', { field });
+  const value = (text: string | null | undefined): string =>
+    text === null || text === undefined || text === ''
+      ? tn('repair.changed.empty')
+      : change.field === 'customerPhone'
+        ? formatPhone(text)
+        : text;
+  return tn('repair.changed.line', { field, from: value(change.from), to: value(change.to) });
+}
+
 export function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
   const lines: string[] = [];
+  const changes = detail['changes'];
+  if (Array.isArray(changes)) lines.push(...(changes as readonly DetailChange[]).map(changeLine));
   const checklist = detail['checklist'];
   if (Array.isArray(checklist)) {
     const lineName = (line: HandoverCheck): string =>
@@ -346,4 +377,17 @@ export function paidRow(
   return paid < 0
     ? { label: tn('repair.price.givenBack'), amount: `+${formatMoney(-paid)}` }
     : { label: tn(paidLabel), amount: formatMoney(-paid) };
+}
+
+/** A limited role's discount limit, or what is left of it once the servisan has discounts. */
+export function discountLimitHint(limit: number, discounted: number): string {
+  return discounted === 0
+    ? tn('repair.hint.discountLimit', { amount: formatMoney(limit) })
+    : tn('repair.hint.discountLeft', { amount: formatMoney(Math.max(0, limit - discounted)) });
+}
+
+/** A down payment step's title: recording one, fixing one, or asking an owner to fix it. */
+export function downPaymentTitleKey(mode: 'record' | 'correct', holds: boolean): RepairKey {
+  if (mode === 'record') return 'repair.downPayment.recordTitle';
+  return holds ? 'repair.downPayment.correctTitle' : 'repair.downPayment.askTitle';
 }

@@ -25,6 +25,8 @@ import {
   saveCentralAccountInput,
   voidPaymentHandler,
   voidPaymentInput,
+  voidCashMoveHandler,
+  voidCashMoveInput,
 } from './commands.js';
 import { MONEY_MODULE_ID, MONEY_PERMISSION, MONEY_TABLE } from './constants.js';
 import type { MoneyDocumentSources } from './documents.js';
@@ -161,6 +163,11 @@ function moneyManifest(sources: MoneyDocumentSources) {
         permission: MONEY_PERMISSION.adjustCash,
         input: adjustCashInput,
         handler: adjustCashHandler,
+      },
+      voidCashMove: {
+        permission: MONEY_PERMISSION.adjustCash,
+        input: voidCashMoveInput,
+        handler: voidCashMoveHandler,
       },
     },
 

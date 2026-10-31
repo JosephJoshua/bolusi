@@ -9,7 +9,8 @@
     "refundPaid": "Money given back",
     "cashMoved": "Cash in/out",
     "cashCounted": "Cash counted",
-    "cashAdjusted": "Cash difference settled"
+    "cashAdjusted": "Cash difference settled",
+    "cashMoveVoided": "Cash record cancelled"
   },
   "refusal": {
     "alreadyRecorded": "This record already exists.",
@@ -34,7 +35,9 @@
     "countSuperseded": "There is a newer cash count. Settle the latest difference.",
     "differenceChanged": "The difference has changed. Check it again before settling.",
     "overLimit": "Over your limit. Ask a store owner.",
-    "moveAboveDrawer": "Not enough cash in the drawer."
+    "moveAboveDrawer": "Not enough cash in the drawer.",
+    "cashMoveNotFound": "This cash record isn’t in this store.",
+    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more."
   },
   "method": {
     "cash": "Cash"
@@ -143,15 +146,19 @@
       "time": "Time",
       "record": "Record"
     },
-    "voidLabel": "Cancel the {amount} payment at {time}"
+    "voidLabel": "Cancel the {amount} payment at {time}",
+    "voidCashLabel": "Cancel the cash record of {amount} at {time}"
   },
   "void": {
     "title": "Cancel payment",
     "save": "Cancel payment",
     "hint": "Enter the reason.",
     "explain": "The record stays, marked as cancelled. The customer’s balance goes back up by this amount.",
-    "limit": "Your void limit is {amount} per servisan.",
-    "reason": "Reason"
+    "reason": "Reason",
+    "limit": "Your cancel limit is {amount} per repair.",
+    "cashTitle": "Cancel cash record",
+    "cashSave": "Cancel record",
+    "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts."
   },
   "kind": {
     "qris": "QRIS",

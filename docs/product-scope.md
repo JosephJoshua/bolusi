@@ -164,6 +164,45 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   phone cannot be handed back while a change waits. Technicians keep proposing,
   since they find the extra fault once the phone is open.
 
+## Putting staff mistakes right (2026-10-29)
+
+From PC exploratory QA round 2. Corrections are their own recorded steps, never
+silent edits, and each one names who did it and what it was before.
+
+- **Intake's record while the phone is in the store:** the counter (repair
+  intake) can correct the customer's name and number, the phone (brand, model,
+  colour, IMEI), its lock, the complaint and the accessories, with an optional
+  reason. The history lists each change as before and after; the lock's code is
+  never shown, only that it changed. After pickup the signed slip is the record,
+  so nothing here can be changed.
+- **Customers are never renamed under other servisans:** a correction renames
+  the customer's record only when this servisan is the only one it names and it
+  was never handed over. Otherwise, or when the typed details match another
+  customer, the servisan moves to that customer (found, or made like at intake),
+  and other servisans keep their own. The history must name the customer it
+  moves to.
+- **Warranty claims keep their phone:** a claim's brand, model and IMEI cannot
+  change, and a handover with a claim on it cannot be taken back.
+- **Taking a handover back is an owner's decision** (the cancel permission; a
+  manager only within the cancel limit, against what the servisan charged): for
+  a phone marked as handed over by mistake that is still in the store, within a
+  day of the first handover. A reason is required. The handover photo and
+  signature stop counting and payments stay; a payment booked to the wrong
+  servisan is cancelled in Kas under its own rules. The warranty still counts
+  from the first handover, the servisan can no longer be cancelled (it can only
+  be handed over again), and its customer, brand, model and IMEI stay as on the
+  signed slip. The day is judged by the time the device signs the undo, so an
+  owner's device with its clock set back could undo later; managers stay bound
+  by their limit either way. Accepted: owners already hold the cash decisions.
+- **A mistyped cash move is voided by an owner** (adjust cash) with a reason,
+  until a later count of the drawer was settled. The void dates back to the move,
+  so a count taken after it reads as if the move never happened.
+- **Checks at entry:** phone numbers must be callable (stored one way, 0812…),
+  an IMEI must be 15 digits with a valid check digit, a retyped returning
+  customer is reused, and PINs that are easy to guess (111111, 123456, common
+  ones) are refused on every device. The server only sees PIN verifiers, so it
+  cannot check this itself.
+
 ## Printing repair slips (2026-10-26)
 
 Agreed with the owner before building printing.
@@ -236,7 +275,7 @@ Agreed with the owner after reviewing what the repair release still lacks.
   background like photos. It is taken only at intake (Joseph, 2026-10-28): the servisan
   only plays it back, and a type that needs one added later asks for nothing more. The
   handover's proof is its photo. A warranty claim needs none. A PC without a webcam
-  cannot take one yet (phone handoff for video is next).
+  records it on the paired store phone, like its photos.
 - **No separate QC step:** the technician's after photo stays, and the counter tests
   the phone with the customer at handover from a short checklist: the owner's
   "Cek saat serah terima" list (default: the customer tried the phone, the repaired
@@ -446,6 +485,23 @@ governance notes in "Decision" where they differ.
   their PIN. Role and limit changes are online only and reach phones with the
   next sync; the server judges each synced action by the current roles and
   limits and refuses one over them, which the owner sees.
+- **Approvals as built (first part):** a discount and a cancel. The counter's
+  "Batalkan" and a discount past someone's limit (counting the servisan's other
+  discounts) become "Minta persetujuan". The request shows on the servisan, and
+  approvers get a "Persetujuan (n)" queue on the board. Approving runs the
+  action as the approver, checked by the same rules and their own limit. A
+  waiting request of a kind blocks a second one on the same servisan, and any
+  change to the servisan (even one that leaves the total as it was) closes it.
+  Two approvers answering one request while offline cannot apply it twice: the
+  decision is named after the request, so the second is refused at sync.
+- **Approvals as built (second part):** Bayar nanti and DP fixes. At handover,
+  "Bayar nanti" beyond someone (or past their limit, shown up front) asks with
+  the reason typed; once approved, anyone at the counter may leave that
+  servisan's debt up to the approved amount, and a higher bill needs asking
+  again. The counter's "Ubah DP" asks too; a fix counts against the refund
+  limit by what its voids take off (the decrease through the same method, all
+  of it through another). Refunds beyond an overpayment and voids from Kas are
+  not requestable: no counter screen starts them.
 
 ## Open product choices
 

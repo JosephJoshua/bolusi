@@ -28,9 +28,10 @@ import {
   radius,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ENTRIES, findEntry } from './gallery.js';
 import { DEMO_REPAIR_ROLES, type DemoRepairRole } from '@bolusi/modules/repair/demo';

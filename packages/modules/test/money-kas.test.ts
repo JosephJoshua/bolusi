@@ -8,6 +8,7 @@ import idCatalog from '../money/i18n/id.json' with { type: 'json' };
 import { registerMoneyCatalog } from '../src/money/i18n.js';
 import { methodStores, methodSummary } from '../src/money/methods.js';
 import { shiftDay } from '../src/money/day-records.js';
+import { MONEY_PERMISSION } from '../src/money/constants.js';
 
 import {
   cashMoveCheck,
@@ -19,6 +20,8 @@ import {
   historyLine,
   settleState,
   splitOpenBalances,
+  voidAbilities,
+  voidKind,
   voidable,
 } from '../src/money/kas.js';
 import type {
@@ -251,13 +254,28 @@ describe('history', () => {
     expect(shiftDay(day, 1)).toBe(new Date(2026, 9, 29).getTime());
   });
 
-  test('only a payment still standing can be cancelled', () => {
-    expect(voidable(entry({}))).toBe(true);
+  test('a payment or a cash move still standing can be cancelled, each by whoever may', () => {
+    const owner = { payments: true, cashMoves: true };
+    expect(voidable(entry({}), owner)).toBe(true);
     const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
-    expect(voidable(voided)).toBe(false);
+    expect(voidable(voided, owner)).toBe(false);
     expect(historyLine(voided, []).voided).toBe(true);
-    expect(voidable(entry({ kind: 'refund_paid' }))).toBe(false);
-    expect(voidable(entry({ kind: 'charge_recorded' }))).toBe(false);
+    expect(voidable(entry({ kind: 'refund_paid' }), owner)).toBe(false);
+    expect(voidable(entry({ kind: 'charge_recorded' }), owner)).toBe(false);
+    expect(voidable(entry({ kind: 'cash_counted' }), owner)).toBe(false);
+    const move = entry({ kind: 'cash_moved', subKind: 'float' });
+    expect(voidable(move, owner)).toBe(true);
+    // A manager may cancel a payment within limits, but settling the drawer is the owner's.
+    expect(voidable(move, { payments: true, cashMoves: false })).toBe(false);
+    expect(voidKind(move).command).toBe('voidCashMove');
+  });
+
+  test('a void limit of 0 cancels no payment, the same as not holding it', () => {
+    const holds = (id: string) => id === MONEY_PERMISSION.voidPayment;
+    expect(voidAbilities(holds, () => 100_000)).toEqual({ payments: true, cashMoves: false });
+    expect(voidAbilities(holds, () => 0).payments).toBe(false);
+    expect(voidAbilities(holds).payments).toBe(true);
+    expect(voidKind(entry({})).command).toBe('voidPayment');
   });
 });
 

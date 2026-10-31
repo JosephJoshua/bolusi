@@ -29,6 +29,10 @@ import {
   operationFromSignedCoreJcs,
   readHeldPhone,
   carriedRegistrations,
+  enqueuePendingVerifier,
+  readPendingVerifiers,
+  readVerifier,
+  writeVerifier,
   readSyncState,
   verifyOp,
   PermissionEvaluator,
@@ -883,6 +887,35 @@ describe('re-enrolling a phone that still holds unsynced changes', () => {
       [mediaId]: second.deviceId,
       [uploadedId]: oldDeviceId,
     });
+  });
+
+  it('moves a PIN verifier still waiting for upload to the new device, with its local copy', async () => {
+    // The server takes a verifier only at a position on the posting device's own log, so one queued
+    // under the old registration would be refused for good once the phone posts as the new one.
+    const { f, oldDeviceId } = await enrolledWithBacklog(48);
+    fx = f;
+    const asOf = { timestamp: START + 5_000, deviceId: oldDeviceId, seq: 3 };
+    const verifier = {
+      algorithm: 'argon2id' as const,
+      saltB64: Buffer.alloc(16, 1).toString('base64'),
+      mKiB: 19456,
+      t: 2,
+      p: 1 as const,
+      hashB64: Buffer.alloc(32, 2).toString('base64'),
+      asOf,
+    };
+    await enqueuePendingVerifier(f.db, {
+      userId: f.ownerId,
+      actorUserId: f.ownerId,
+      verifierRef: 'ref-1',
+      verifier,
+    });
+    await writeVerifier(f.db, f.ownerId, verifier);
+
+    const second = await runEnrollment(f.deps, f.params);
+    const moved = { ...asOf, deviceId: second.deviceId };
+    expect((await readPendingVerifiers(f.db)).map((p) => p.verifier.asOf)).toEqual([moved]);
+    expect((await readVerifier(f.db, f.ownerId))?.asOf).toEqual(moved);
   });
 
   it('refuses to bind a phone holding one store’s data to another store, before calling the server', async () => {

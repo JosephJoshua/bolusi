@@ -24,7 +24,8 @@
  * A photo slots into this exact geometry later with zero layout change (§8.2), which is why `size`
  * is a token-backed diameter rather than something callers invent.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, identityColor, radius, size, type } from '../tokens.js';
 

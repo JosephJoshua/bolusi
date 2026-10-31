@@ -5,7 +5,8 @@
  * from a choice without colour alone; `active` fills it when it stands for something switched on
  * (filters in force).
  */
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon, type IconName } from './Icon.js';

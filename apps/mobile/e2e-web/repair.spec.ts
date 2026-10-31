@@ -660,7 +660,7 @@ test('a phone back under warranty opens a free claim linked to its servisan', as
       .or(page.getByTestId('repair.intake.device.claimDevice')),
   ).toContainText('Redmi Note 12');
   await expect(page.getByTestId('repair.intake.device.claimDevice.note')).toBeVisible();
-  await expect(page.getByTestId('repair.intake.device.imei')).toHaveText('356789104455667');
+  await expect(page.getByTestId('repair.intake.device.imei')).toHaveText('356789104455660');
   await expect(page.getByTestId('repair.intake.device.imei.field')).toHaveCount(0);
   await shoot(page, 'claim-device');
   await tap(page, 'repair.intake.primary');

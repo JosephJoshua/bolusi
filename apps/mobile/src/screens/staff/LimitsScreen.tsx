@@ -26,9 +26,10 @@ import {
   space,
   type,
   type ListState,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useLatestCallback } from '../../hooks/useLatestCallback.js';
 import type { SurfaceNav } from '../../navigation/surface.js';
@@ -314,6 +315,7 @@ function LimitsForm({
                   setText((current) => ({ ...current, [kind]: next.replace(/\D/g, '') }));
                 }}
                 keyboardType="number-pad"
+                selectTextOnFocus
                 errorMessage={attempted && text[kind] === '' ? t('auth.limits.missing') : undefined}
                 disabled={busy}
                 testID={`limits-${kind}`}

@@ -67,7 +67,7 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import { moneyModule } from '@bolusi/modules';
+import { approvalsModule, moneyModule } from '@bolusi/modules';
 import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
@@ -75,7 +75,7 @@ import {
   MEDIA_EXTENSION,
   VIDEO_MAX_SIZE_BYTES,
   isVideoMime,
-  type HandoffKind,
+  type HandoffAsk,
   type HandoffPageLabels,
   type MediaRef,
   type QrisChargeBody,
@@ -872,6 +872,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       qrisOf(userId).createCharge(body),
     'money.qris.charge': (userId: string, id: string) => qrisOf(userId).charge(id),
     'money.qris.simulate': (userId: string, id: string) => qrisOf(userId).simulate(id),
+    // Approval requests on servisan (a discount or a cancel asked of an owner), for the same person.
+    'approvals.query': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).approvals.query)(knownName(approvalsModule.queries, name), input),
+    'approvals.run': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).approvals.run)(knownName(approvalsModule.commands, name), input),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),
@@ -943,7 +948,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
     // ── Phone handoff: a store phone takes the photo or signature for this PC ───────────────────
     'handoff.pair': (labels: HandoffPageLabels) => handoff.pair(labels),
-    'handoff.ask': (id: string, kind: HandoffKind, title: string) => handoff.ask(id, kind, title),
+    'handoff.ask': (id: string, ask: HandoffAsk) => handoff.ask(id, ask),
     'handoff.withdraw': (id: string, seq: number) => handoff.withdraw(id, seq),
     'handoff.unpair': (id: string) => handoff.unpair(id),
   } satisfies Handlers;

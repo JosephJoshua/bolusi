@@ -130,6 +130,7 @@ export function AmountField({
       error={error}
       prefix={tm('money.pay.currency')}
       inputMode="numeric"
+      selectOnFocus
       inputClassName="tabular text-right"
       value={digitsText(digits)}
       onChange={(event) => {

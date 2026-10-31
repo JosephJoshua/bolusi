@@ -27,7 +27,8 @@
  *     trusting `maxHeight` not to clip an 8-line body.
  */
 import { useState } from 'react';
-import { Pressable, TextInput as RNTextInput, StyleSheet, Text, View } from 'react-native';
+import { NativeTextInput as RNTextInput, Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 
 import { useRevealOnFocus, type RevealMode } from '../shell/keyboard.js';
@@ -78,6 +79,11 @@ export interface TextInputProps {
    * `textAlignVertical` and heights rather than `numberOfLines`.
    */
   readonly multiline?: boolean | undefined;
+  /**
+   * Selects what the field holds when it gets focus, so typing replaces it. For amounts: a tap
+   * leaves the caret where it lands, and 50000 typed before a "0" would make 500.000.
+   */
+  readonly selectTextOnFocus?: boolean | undefined;
   /** The most characters the field takes: what its command accepts, so typing past it is stopped. */
   readonly maxLength?: number | undefined;
   /**
@@ -129,6 +135,92 @@ const styles = StyleSheet.create({
   errorText: { ...type.bodySm, color: color.danger, marginLeft: space.xs, flex: 1 },
 });
 
+/**
+ * Drops any UTF-16 surrogate left without its pair. Postgres cannot store one and the phone refuses
+ * to sign an op holding one, so the field never hands it to a screen (a keyboard or paste can still
+ * produce one).
+ */
+export function dropUnpairedSurrogates(text: string): string {
+  let out = '';
+  let changed = false;
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : -1;
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += text[i]! + text[i + 1]!;
+        i++;
+        continue;
+      }
+      changed = true;
+      continue;
+    }
+    if (unit >= 0xdc00 && unit <= 0xdfff) {
+      changed = true;
+      continue;
+    }
+    out += text[i]!;
+  }
+  return changed ? out : text;
+}
+
+const ZWJ = 0x200d;
+const MARK = /^\p{M}$/u;
+const isRegionalIndicator = (cp: number): boolean => cp >= 0x1f1e6 && cp <= 0x1f1ff;
+
+/** The code point that ends just before `i` (a surrogate pair counts as one). */
+function codePointBefore(text: string, i: number): number | undefined {
+  if (i <= 0) return undefined;
+  const low = text.charCodeAt(i - 1);
+  if (low >= 0xdc00 && low <= 0xdfff && i >= 2) {
+    const high = text.charCodeAt(i - 2);
+    if (high >= 0xd800 && high <= 0xdbff) return text.codePointAt(i - 2);
+  }
+  return low;
+}
+
+/** Whether cutting `text` at `i` would split one visible character (a grapheme). */
+function splitsCharacter(text: string, i: number): boolean {
+  const unit = text.charCodeAt(i);
+  if (unit >= 0xdc00 && unit <= 0xdfff) return true;
+  const cp = text.codePointAt(i)!;
+  if (
+    cp === ZWJ ||
+    (cp >= 0xfe00 && cp <= 0xfe0f) || // variation selectors (emoji vs text style)
+    (cp >= 0x1f3fb && cp <= 0x1f3ff) || // skin tones
+    (cp >= 0xe0020 && cp <= 0xe007f) || // tag sequences (subdivision flags)
+    MARK.test(String.fromCodePoint(cp))
+  ) {
+    return true;
+  }
+  if (codePointBefore(text, i) === ZWJ) return true;
+  if (isRegionalIndicator(cp)) {
+    // Flags are pairs of regional indicators: an odd run before `i` means `i` is mid-flag.
+    let run = 0;
+    for (let j = i; ;) {
+      const before = codePointBefore(text, j);
+      if (before === undefined || !isRegionalIndicator(before)) break;
+      run++;
+      j -= 2;
+    }
+    return run % 2 === 1;
+  }
+  return false;
+}
+
+/**
+ * Keeps `text` within `max` UTF-16 units without cutting a character in half. RN's native
+ * `maxLength` counts units and cuts wherever the limit falls, leaving a lone flag letter or half an
+ * emoji family, so the limit is enforced here instead: what does not fit whole is left out whole.
+ */
+export function fitWithin(text: string, max: number | undefined): string {
+  const clean = dropUnpairedSurrogates(text);
+  if (max === undefined || clean.length <= max) return clean;
+  let end = max;
+  while (end > 0 && splitsCharacter(clean, end)) end--;
+  return clean.slice(0, end);
+}
+
 export function TextInput({
   label,
   value,
@@ -144,6 +236,7 @@ export function TextInput({
   revealLabels,
   autoFocus = false,
   multiline = false,
+  selectTextOnFocus = false,
   maxLength,
   revealOnFocus = 'into-view',
   onBlur,
@@ -178,7 +271,7 @@ export function TextInput({
           accessibilityLabel={label}
           accessibilityState={{ disabled }}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={(text) => onChangeText(fitWithin(text, maxLength))}
           placeholder={placeholder}
           placeholderTextColor={color.textMuted}
           editable={!notEditable}
@@ -189,7 +282,7 @@ export function TextInput({
           autoCapitalize={autoCapitalize}
           autoFocus={autoFocus}
           multiline={effectiveMultiline}
-          maxLength={maxLength}
+          selectTextOnFocus={selectTextOnFocus}
           onSubmitEditing={onSubmitEditing}
           returnKeyType={onSubmitEditing === undefined ? undefined : 'done'}
           submitBehavior={onSubmitEditing === undefined ? undefined : 'submit'}

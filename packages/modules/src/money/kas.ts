@@ -2,7 +2,13 @@
 // method, the drawer's moves, a count's difference and what customers still owe.
 import { formatMoney } from '@bolusi/i18n';
 
-import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, movesOut, type CashMoveKind } from './constants.js';
+import {
+  CASH_ACCOUNT,
+  HANDOVER_REFUND_REASON,
+  MONEY_PERMISSION,
+  movesOut,
+  type CashMoveKind,
+} from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -237,18 +243,62 @@ export function historyLine(
   };
 }
 
-/** Whether an owner may still cancel this record: a payment not cancelled yet. */
-export function voidable(entry: MoneyEntryRow): boolean {
-  return entry.kind === 'payment_received' && entry.voidedAt === null;
+/**
+ * What the person may cancel in Riwayat: payments (`voidPayment`), cash moves (`adjustCash`).
+ A void limit of 0 (`ModulePort.limitOf(money.void_payment)`) cancels nothing, the same as not
+ * holding it; any other limit is said in the void step, which stops a payment beyond it.
+ */
+export interface VoidAbilities {
+  readonly payments: boolean;
+  readonly cashMoves: boolean;
+}
+
+export function voidAbilities(
+  hasPermission: (id: string) => boolean,
+  limitOf: (id: string) => number | null = () => null,
+): VoidAbilities {
+  return {
+    payments:
+      hasPermission(MONEY_PERMISSION.voidPayment) && limitOf(MONEY_PERMISSION.voidPayment) !== 0,
+    cashMoves: hasPermission(MONEY_PERMISSION.adjustCash),
+  };
 }
 
 /**
- * Whether someone may void this payment, given `ModulePort.limitOf(money.void_payment)`: anyone
- * unlimited, and a limited role (a manager) only a payment within its limit, so one it would be
- * refused is not offered. Earlier voids on the same servisan still count against it at the rule.
+ * Whether this person may still cancel this record: a payment, or money put in or taken out of
+ * the drawer by hand, not cancelled yet.
  */
-export function voidOffered(entry: MoneyEntryRow, limit: number | null): boolean {
-  return voidable(entry) && (limit === null || entry.amount <= limit);
+export function voidable(entry: MoneyEntryRow, can: VoidAbilities): boolean {
+  if (entry.voidedAt !== null) return false;
+  return entry.kind === 'payment_received'
+    ? can.payments
+    : entry.kind === 'cash_moved' && can.cashMoves;
+}
+
+/** How a record is cancelled, and what the screen calls it. */
+export function voidKind(entry: Pick<MoneyEntryRow, 'kind'>): {
+  readonly command: 'voidPayment' | 'voidCashMove';
+  readonly title: MoneyKey;
+  readonly save: MoneyKey;
+  readonly explain: MoneyKey;
+  /** The void button's full name in a list, with the amount and time. */
+  readonly label: MoneyKey;
+} {
+  return entry.kind === 'cash_moved'
+    ? {
+        command: 'voidCashMove',
+        title: 'money.void.cashTitle',
+        save: 'money.void.cashSave',
+        explain: 'money.void.cashExplain',
+        label: 'money.history.voidCashLabel',
+      }
+    : {
+        command: 'voidPayment',
+        title: 'money.void.title',
+        save: 'money.void.save',
+        explain: 'money.void.explain',
+        label: 'money.history.voidLabel',
+      };
 }
 
 /**

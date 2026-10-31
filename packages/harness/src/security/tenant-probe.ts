@@ -20,6 +20,7 @@ import { migrateToLatest, type DB } from '@bolusi/db-server';
 import { createApp } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { bytesToBase64 } from '@bolusi/core';
+import { zHandoffPageLabels } from '@bolusi/schemas';
 import { deriveDeviceKeypair, FakeClock } from '@bolusi/test-support';
 
 import type { ProbeContext } from './route-walker.js';
@@ -35,25 +36,9 @@ const APP_ROLE = 'bolusi_app';
  * validation (`422 VALIDATION_FAILED`) BEFORE the handler's scope check and every media probe
  * would pass for the wrong reason — a probe that never reaches the code it audits.
  */
-/** Any 15 strings: the probes never open the phone page. */
+/** Any strings: the probes never open the phone page. */
 const HANDOFF_LABELS = Object.fromEntries(
-  [
-    'photoHint',
-    'signatureHint',
-    'take',
-    'retake',
-    'clear',
-    'send',
-    'sending',
-    'sent',
-    'waiting',
-    'rotate',
-    'rotateNow',
-    'failed',
-    'withdrawn',
-    'expired',
-    'unreadable',
-  ].map((key) => [key, key]),
+  Object.keys(zHandoffPageLabels.shape).map((key) => [key, key]),
 );
 
 const ID = {

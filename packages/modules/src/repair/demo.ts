@@ -10,6 +10,8 @@
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/schemas';
 
+import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import { demoApprovals } from '../approvals/demo.js';
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, MONEY_PERMISSION } from '../money/constants.js';
@@ -21,7 +23,8 @@ import {
   ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
-import { partsInWork } from './flows.js';
+import { normalizePhone } from './contact.js';
+import { partsInWork, undoableHandover } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -302,6 +305,8 @@ function ticket(spec: {
   returnedBy?: string;
   /** Hours since it was marked repaired; a cancel is ready to collect when it was cancelled. */
   readyHoursAgo?: number;
+  /** When it went home, for a returned one; else 40 hours after intake. */
+  returnedHoursAgo?: number;
   /** Repair type ids from the default list. */
   repairTypes?: readonly string[];
   /** What its handover gives back through each method. */
@@ -317,7 +322,7 @@ function ticket(spec: {
     deviceBrand: spec.brand,
     deviceModel: spec.model,
     deviceColor: spec.color,
-    deviceImei: '356789104455667',
+    deviceImei: '356789104455660',
     complaint: spec.complaint,
     outcome: spec.outcome,
     location: spec.location ?? 'in_store',
@@ -363,7 +368,12 @@ function ticket(spec: {
     createdByName: 'Siti Rahayu',
     returnedBy: spec.returnedBy ?? null,
     returnedByName: spec.returnedBy === undefined ? null : (NAMES.get(spec.returnedBy) ?? null),
-    returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
+    returnedAt:
+      spec.returnedBy === undefined
+        ? null
+        : spec.returnedHoursAgo === undefined
+          ? createdAt + 40 * HOUR
+          : HARNESS_NOW - spec.returnedHoursAgo * HOUR,
     downPayment: spec.downPayment ?? null,
     reduced: 0,
     slipPrints: { intake: 1, handover: 0 },
@@ -575,6 +585,8 @@ function seedTickets(): TicketDetailRow[] {
       readyHoursAgo: 7 * 24,
       location: 'returned',
       returnedBy: 'u-siti',
+      // Picked up this morning: recent enough that an owner can still take the handover back.
+      returnedHoursAgo: 2,
       extraPhotos: [photoRow('before:m12'), photoRow('after:m13')],
     }),
   ].map(withTotals);
@@ -876,10 +888,13 @@ export function demoRepairRuntime(
   ) => {
     // The one rule every step but the handover shares (repair rules.ts): a change that raced a
     // cancel or a handover on another device is refused with its own reason, as on a phone.
+    // Taking a handover back and correcting a cancelled servisan's details check their own.
     const current = find(ticketId);
-    if (kind !== 'repair.device_returned') {
+    if (kind !== 'repair.device_returned' && kind !== 'repair.handover_reversed') {
       if (current.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
-      if (current.outcome === 'cancelled') throw REPAIR_REFUSALS.refuse('cancelled');
+      if (current.outcome === 'cancelled' && kind !== 'repair.ticket_details_corrected') {
+        throw REPAIR_REFUSALS.refuse('cancelled');
+      }
     }
     tickets = tickets.map((t) =>
       t.id === ticketId
@@ -1202,6 +1217,7 @@ export function demoRepairRuntime(
     },
     cancelTicket: (input) => {
       const t = find(String(input['ticketId']));
+      if (t.returnedAt !== null) throw REPAIR_REFUSALS.refuse('handedOverBefore');
       return update(t.id, 'repair.ticket_cancelled', {
         outcome: 'cancelled',
         outcomeNote: String(input['reason']),
@@ -1323,7 +1339,7 @@ export function demoRepairRuntime(
           refunds: [],
           returnedBy: actor.userId,
           returnedByName: actor.name,
-          returnedAt: HARNESS_NOW,
+          returnedAt: t.returnedAt ?? HARNESS_NOW,
           photos: [
             ...t.photos,
             photoRow('handover', input['handoverPhoto'] as MediaRef),
@@ -1331,6 +1347,98 @@ export function demoRepairRuntime(
           ],
         },
         { note, checklist },
+      );
+    },
+    undoHandover: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location !== 'returned') throw REPAIR_REFUSALS.refuse('notReturned');
+      if (!undoableHandover(t, HARNESS_NOW)) throw REPAIR_REFUSALS.refuse('undoTooLate');
+      return update(
+        t.id,
+        'repair.handover_reversed',
+        {
+          location: 'in_store',
+          returnedBy: null,
+          returnedByName: null,
+          photos: t.photos.filter((p) => p.slot !== 'handover' && p.slot !== 'signature'),
+        },
+        { reason: String(input['reason']) },
+      );
+    },
+    // The demo keeps one record per servisan: the customer's name and number change on it.
+    correctTicketDetails: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
+      const handedOver = t.returnedAt !== null;
+      if (handedOver && input['customer'] !== undefined) {
+        throw REPAIR_REFUSALS.refuse('handedOverBefore');
+      }
+      const given = input['customer'] as
+        { name: string; phone: string | null } | { customerId: string } | undefined;
+      // A picked customer is known by their other servisans here.
+      const picked =
+        given !== undefined && 'customerId' in given
+          ? tickets.find((other) => other.customerId === given.customerId)
+          : undefined;
+      const customer =
+        picked !== undefined
+          ? { name: picked.customerName, phone: picked.customerPhone }
+          : given !== undefined && 'name' in given
+            ? given
+            : undefined;
+      const device = input['device'] as
+        { brand: string; model: string; color?: string; imei?: string | null } | undefined;
+      const changes: { field: string; from?: string | null; to?: string | null }[] = [];
+      const note = (field: string, from: string | null, to: string | null): void => {
+        if (from !== to) changes.push({ field, from, to });
+      };
+      const phone = customer?.phone == null ? null : normalizePhone(customer.phone);
+      if (customer !== undefined) {
+        note('customerName', t.customerName, customer.name);
+        note('customerPhone', t.customerPhone, phone);
+      }
+      if (device !== undefined) {
+        note('brand', t.deviceBrand, device.brand);
+        note('model', t.deviceModel, device.model);
+        note('color', t.deviceColor, device.color ?? '');
+        note('imei', t.deviceImei, device.imei ?? null);
+      }
+      const passcode = input['passcode'] as string | null | undefined;
+      if (passcode !== undefined && passcode !== t.devicePasscode)
+        changes.push({ field: 'passcode' });
+      const complaint = input['complaint'] as string | undefined;
+      if (complaint !== undefined) note('complaint', t.complaint, complaint);
+      const peripherals = input['peripherals'] as TicketDetailRow['peripherals'] | undefined;
+      if (
+        peripherals !== undefined &&
+        JSON.stringify(peripherals) !== JSON.stringify(t.peripherals)
+      ) {
+        changes.push({ field: 'peripherals' });
+      }
+      if (changes.length === 0) throw REPAIR_REFUSALS.refuse('nothingChanged');
+      const phoneChanged = changes.some((c) => ['brand', 'model', 'imei'].includes(c.field));
+      if (phoneChanged && (handedOver || t.claimOfTicketId !== null)) {
+        throw REPAIR_REFUSALS.refuse(handedOver ? 'handedOverBefore' : 'claimSamePhone');
+      }
+      return update(
+        t.id,
+        'repair.ticket_details_corrected',
+        {
+          ...(customer === undefined ? {} : { customerName: customer.name, customerPhone: phone }),
+          ...(picked === undefined ? {} : { customerId: picked.customerId }),
+          ...(device === undefined
+            ? {}
+            : {
+                deviceBrand: device.brand,
+                deviceModel: device.model,
+                deviceColor: device.color ?? '',
+                deviceImei: device.imei ?? null,
+              }),
+          ...(passcode === undefined ? {} : { devicePasscode: passcode }),
+          ...(complaint === undefined ? {} : { complaint }),
+          ...(peripherals === undefined ? {} : { peripherals }),
+        },
+        { changes, reason: String(input['reason'] ?? '') },
       );
     },
   };
@@ -1561,7 +1669,70 @@ export function demoRepairRuntime(
         : t,
     );
   }
-  let permitted = new Set<string>(actor.permissions);
+  // Everyone asks for and answers approvals; the decision's own permission says what.
+  let permitted = new Set<string>([...actor.permissions, APPROVAL_PERMISSION.use]);
+  const approvals = demoApprovals({
+    kinds: {
+      'repair.discount': {
+        permission: P.discount,
+        commandPermission: P.quoteChange,
+        amount: (input) => -Number(input['amount']),
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['changeQuote']!(input),
+      },
+      'repair.cancel': {
+        permission: P.cancel,
+        commandPermission: P.cancel,
+        amount: (input) => {
+          const standard = standardCancelFee(find(String(input['ticketId'])), cancelFees);
+          return Math.max(0, standard - Number(input['fee'] ?? standard));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['cancelTicket']!(input),
+      },
+      // A permit: approving changes nothing until the counter hands the phone over.
+      'repair.payLater': {
+        permission: MONEY_PERMISSION.extendCredit,
+        commandPermission: MONEY_PERMISSION.extendCredit,
+        amount: (input) => {
+          const t = find(String(input['ticketId']));
+          return Math.max(0, amountOwed(t) - (t.downPayment ?? 0));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: () => null,
+      },
+      // The demo counts a fix through the same method: what the DP goes down by.
+      'repair.downPayment': {
+        permission: P.correctDownPayment,
+        commandPermission: P.correctDownPayment,
+        limitPermission: MONEY_PERMISSION.voidPayment,
+        amount: (input) =>
+          Math.max(0, (find(String(input['ticketId'])).downPayment ?? 0) - Number(input['amount'])),
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['correctDownPayment']!(input),
+      },
+    },
+    actor: () => ({ userId: actor.userId, name: actor.name, can: (id) => permitted.has(id) }),
+    now: () => HARNESS_NOW,
+    notify,
+    // The counter asked for a discount on the first servisan, waiting for an owner.
+    seed: [
+      {
+        kind: 'repair.discount',
+        input: {
+          ticketId: 't-1',
+          kind: 'discount',
+          description: 'Diskon pelanggan tetap',
+          amount: -25_000,
+          reason: 'Pelanggan tetap, sudah 3 kali servis di sini',
+          customerAgreed: false,
+        },
+        reason: 'Pelanggan tetap, sudah 3 kali servis di sini',
+        by: DEMO_REPAIR_ROLES.counter,
+        at: HARNESS_NOW - 20 * 60_000,
+      },
+    ],
+  });
   const runtime = {
     inventory,
     // The demo keeps no log; the apps wire their diagnostics channel.
@@ -1571,7 +1742,7 @@ export function demoRepairRuntime(
     },
     actAs: (next: DemoRepairRole) => {
       actor = DEMO_REPAIR_ROLES[next];
-      permitted = new Set<string>(actor.permissions);
+      permitted = new Set<string>([...actor.permissions, APPROVAL_PERMISSION.use]);
       notify();
     },
     query: (name: string, input: Input) => queries[name]!(input),
@@ -1632,6 +1803,17 @@ export function demoRepairRuntime(
       limitOf: (id: string) => demoLimitOf(actor, permitted, id),
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
       stores: () => Promise.resolve(DEMO_STORES),
+      get userId() {
+        return actor.userId;
+      },
+    },
+    approvals: {
+      query: approvals.query,
+      run: approvals.run,
+      hasPermission: (id: string) => permitted.has(id),
+      colleagueHasPermission: () => false,
+      limitOf: (id: string) => demoLimitOf(actor, permitted, id),
+      newId: () => `a-new-${String(Math.random()).slice(2, 10)}`,
       get userId() {
         return actor.userId;
       },

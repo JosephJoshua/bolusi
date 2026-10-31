@@ -22,8 +22,9 @@
       "title": "Buat PIN baru",
       "repeat": "Ulangi PIN baru",
       "mismatch": "PIN tidak sama. Buat lagi dari awal.",
+      "weak": "PIN ini terlalu gampang ditebak. Pilih angka lain.",
       "screenTitle": "Buat PIN",
-      "hint": "6 angka. Jangan pakai tanggal lahir.",
+      "hint": "6 angka. Jangan pakai tanggal lahir atau 123456.",
       "failed": "PIN belum bisa dibuat. Coba lagi."
     },
     "change": {
@@ -36,7 +37,7 @@
     "reset": {
       "noUsers": "Belum ada karyawan lain di HP ini.",
       "done": "PIN baru sudah dibuat",
-      "denied": "Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain."
+      "denied": "Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik."
     },
     "unlock": {
       "confirm": "Bisa langsung masuk dengan PIN lamanya.",
@@ -227,15 +228,15 @@
       "back": "Kembali",
       "later": "Nanti saja",
       "laterHint": "Bisa dibuka lagi di Pengaturan > Komputer ini.",
-      "cameraTitle": "Foto dan tanda tangan",
-      "cameraWebcam": "Foto HP pelanggan diambil dengan webcam ini.",
-      "cameraPhone": "Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.",
+      "cameraTitle": "Foto, video dan tanda tangan",
+      "cameraWebcam": "Foto dan video kepemilikan diambil dengan webcam ini.",
+      "cameraPhone": "Komputer ini belum punya webcam, jadi foto dan video diambil lewat HP toko. Saat pertama kali, scan kode QR yang muncul dengan HP.",
       "signatureScreen": "Pelanggan tanda tangan langsung di layar sentuh ini.",
       "signaturePhone": "Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.",
       "doneTitle": "Komputer ini siap",
       "donePrinter": "Printer",
       "donePaper": "Kertas",
-      "donePhotos": "Foto",
+      "donePhotos": "Foto & video",
       "doneSignature": "Tanda tangan",
       "noPrinter": "Belum dipilih",
       "viaWebcam": "Webcam",
@@ -263,7 +264,8 @@
       "micNone": "Mikrofon tidak ditemukan. Video kepemilikan butuh suara pelanggan.",
       "micDenied": "Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.",
       "micFailed": "Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon."
-    }
+    },
+    "idleLocked": "Terkunci karena lama tidak dipakai. Isian servisan baru tetap tersimpan."
   },
   "limits": {
     "title": "Batas wewenang",

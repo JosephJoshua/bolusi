@@ -3,7 +3,8 @@
  * chosen tab is drawn in the primary colour with a bold label, so it never rides on colour alone.
  * Shown only when a person has more than one place to go.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Icon, type IconName } from '../components/Icon.js';
 import { border, color, size, space, type } from '../tokens.js';

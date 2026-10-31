@@ -156,11 +156,16 @@ const source = {
           rotate: 'Putar HP ke posisi mendatar.',
           rotateNow: 'Putar layar',
           withdrawn: 'Dibatalkan di komputer.',
+          videoDenied:
+            'Kamera atau mikrofon belum diizinkan. Izinkan untuk situs ini di browser, lalu coba lagi.',
+          videoUnsupported:
+            'Browser ini belum bisa merekam video. Buka kodenya di Chrome atau Safari.',
         },
         newCode: 'Ganti HP',
         photoOnPhone: 'Ambil fotonya di HP',
         signOnPhone: 'Minta pelanggan tanda tangan di HP',
         waitingSend: 'Menunggu kiriman dari HP…',
+        videoOnPhone: 'Rekam videonya di HP',
       },
       video: {
         denied:
@@ -170,6 +175,12 @@ const source = {
         failed: 'Videonya belum bisa diputar. Coba lagi.',
         noMicrophone:
           'Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi.',
+      },
+      closeWindow: {
+        title: 'Tutup Bolusi?',
+        message: 'Yang sedang diisi belum tersimpan dan akan hilang.',
+        confirm: 'Tutup',
+        keep: 'Lanjut isi',
       },
     },
     auth: {
@@ -196,8 +207,9 @@ const source = {
           title: 'Buat PIN baru',
           repeat: 'Ulangi PIN baru',
           mismatch: 'PIN tidak sama. Buat lagi dari awal.',
+          weak: 'PIN ini terlalu gampang ditebak. Pilih angka lain.',
           screenTitle: 'Buat PIN',
-          hint: '6 angka. Jangan pakai tanggal lahir.',
+          hint: '6 angka. Jangan pakai tanggal lahir atau 123456.',
           failed: 'PIN belum bisa dibuat. Coba lagi.',
         },
         change: {
@@ -210,7 +222,7 @@ const source = {
         reset: {
           noUsers: 'Belum ada karyawan lain di HP ini.',
           done: 'PIN baru sudah dibuat',
-          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain.',
+          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik.',
         },
         unlock: {
           confirm: 'Bisa langsung masuk dengan PIN lamanya.',
@@ -404,16 +416,16 @@ const source = {
           back: 'Kembali',
           later: 'Nanti saja',
           laterHint: 'Bisa dibuka lagi di Pengaturan > Komputer ini.',
-          cameraTitle: 'Foto dan tanda tangan',
-          cameraWebcam: 'Foto HP pelanggan diambil dengan webcam ini.',
+          cameraTitle: 'Foto, video dan tanda tangan',
+          cameraWebcam: 'Foto dan video kepemilikan diambil dengan webcam ini.',
           cameraPhone:
-            'Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.',
+            'Komputer ini belum punya webcam, jadi foto dan video diambil lewat HP toko. Saat pertama kali, scan kode QR yang muncul dengan HP.',
           signatureScreen: 'Pelanggan tanda tangan langsung di layar sentuh ini.',
           signaturePhone: 'Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.',
           doneTitle: 'Komputer ini siap',
           donePrinter: 'Printer',
           donePaper: 'Kertas',
-          donePhotos: 'Foto',
+          donePhotos: 'Foto & video',
           doneSignature: 'Tanda tangan',
           noPrinter: 'Belum dipilih',
           viaWebcam: 'Webcam',
@@ -443,6 +455,7 @@ const source = {
             'Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.',
           micFailed: 'Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon.',
         },
+        idleLocked: 'Terkunci karena lama tidak dipakai. Isian servisan baru tetap tersimpan.',
       },
       limits: {
         title: 'Batas wewenang',
@@ -714,7 +727,7 @@ const source = {
           'Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
         unavailableTitle: 'Video belum ada di HP ini',
         unavailableBody: 'Videonya belum terkirim dari HP yang merekam. Coba lagi nanti.',
-        tooLarge: 'Videonya terlalu besar. Rekam ulang lebih singkat.',
+        tooLarge: 'Videonya terlalu besar. Rekam lebih singkat.',
       },
     },
     platform: {
@@ -726,6 +739,7 @@ const source = {
       refusal: {
         conflictNotFound: 'Data bentrok ini tidak ditemukan.',
         notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
+        idTaken: 'Data ini belum bisa disimpan. Buat ulang, ya.',
       },
     },
     push: {
@@ -918,11 +932,15 @@ export const resources = {
             rotate: 'Turn the phone on its side.',
             rotateNow: 'Turn the screen',
             withdrawn: 'Cancelled on the computer.',
+            videoDenied:
+              'The camera or microphone isn’t allowed. Allow them for this site in the browser, then try again.',
+            videoUnsupported: 'This browser can’t record video. Open the code in Chrome or Safari.',
           },
           newCode: 'Use another phone',
           photoOnPhone: 'Take the photo on the phone',
           signOnPhone: 'Ask the customer to sign on the phone',
           waitingSend: 'Waiting for the phone to send…',
+          videoOnPhone: 'Record the video on the phone',
         },
         video: {
           denied:
@@ -932,6 +950,12 @@ export const resources = {
           failed: 'The video couldn’t play. Try again.',
           noMicrophone:
             'No microphone found. Plug in a microphone or a webcam that has one, then try again.',
+        },
+        closeWindow: {
+          title: 'Close Bolusi?',
+          message: 'What you are filling in is not saved yet and will be lost.',
+          confirm: 'Close',
+          keep: 'Keep editing',
         },
       },
       auth: {
@@ -958,8 +982,9 @@ export const resources = {
             title: 'Create a new PIN',
             repeat: 'Repeat the new PIN',
             mismatch: 'The PINs don’t match. Start again.',
+            weak: 'That PIN is too easy to guess. Choose other digits.',
             screenTitle: 'Create PIN',
-            hint: '6 digits. Avoid your birthday.',
+            hint: '6 digits. Avoid your birthday or 123456.',
             failed: 'The PIN couldn’t be saved. Try again.',
           },
           change: {
@@ -972,7 +997,7 @@ export const resources = {
           reset: {
             noUsers: 'There’s no other staff on this phone yet.',
             done: 'New PIN is set',
-            denied: 'Only a main owner can make a new PIN for another main owner.',
+            denied: 'Only the main owner can make a new PIN for an owner.',
           },
           unlock: {
             confirm: 'They can sign in with their old PIN right away.',
@@ -1172,16 +1197,16 @@ export const resources = {
             back: 'Back',
             later: 'Later',
             laterHint: 'You can open it again in Settings > This computer.',
-            cameraTitle: 'Photos and signatures',
-            cameraWebcam: 'Customer phone photos are taken with this webcam.',
+            cameraTitle: 'Photos, videos and signatures',
+            cameraWebcam: 'Photos and the ownership video are taken with this webcam.',
             cameraPhone:
-              'This computer has no webcam, so photos are taken with a store phone. The first time you take a photo, scan the QR code that appears with the phone.',
+              'This computer has no webcam, so photos and videos are taken with a store phone. The first time, scan the QR code that appears with the phone.',
             signatureScreen: 'Customers sign right on this touch screen.',
             signaturePhone: 'Customers sign on the store phone, through the same QR code.',
             doneTitle: 'This computer is ready',
             donePrinter: 'Printer',
             donePaper: 'Paper',
-            donePhotos: 'Photos',
+            donePhotos: 'Photos & video',
             doneSignature: 'Signatures',
             noPrinter: 'Not chosen',
             viaWebcam: 'Webcam',
@@ -1211,6 +1236,7 @@ export const resources = {
               'The microphone isn’t allowed yet. Allow it in Windows Settings › Privacy › Microphone.',
             micFailed: 'The microphone won’t start. Close other apps that use it.',
           },
+          idleLocked: 'Locked after a while unused. Unsaved intakes are kept.',
         },
         limits: {
           title: 'Limits',
@@ -1510,6 +1536,7 @@ export const resources = {
         refusal: {
           conflictNotFound: 'This conflict wasn’t found.',
           notYourPreference: 'Only the account’s owner can change its language.',
+          idTaken: 'This couldn’t be saved. Create it again.',
         },
       },
       push: {

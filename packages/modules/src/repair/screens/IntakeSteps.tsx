@@ -18,9 +18,10 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { Keyboard, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Keyboard, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 import { modelCaption, useModelPicker } from '../model-picker.js';
@@ -90,8 +91,15 @@ export function CustomerStep({
   draft,
   update,
   nameError,
+  phoneError,
+  currentCustomerId,
   testID,
-}: StepProps & { readonly nameError: string | undefined }): React.JSX.Element {
+}: StepProps & {
+  readonly nameError: string | undefined;
+  readonly phoneError: string | undefined;
+  /** The customer a correction starts from, never offered as a match for itself. */
+  readonly currentCustomerId?: string | undefined;
+}): React.JSX.Element {
   const customer = draft.customer;
   const typed = customer.kind === 'new' ? [customer.name, customer.phone].join(' ').trim() : '';
   // Matched once the counter pauses typing, not on every key; a cleared name clears them at once.
@@ -104,6 +112,9 @@ export function CustomerStep({
         : (await rt.query('searchCustomers', { text: searchText, limit: 5 })).rows,
     `customers:${searchText}`,
   );
+
+  const offered =
+    matches.status === 'ready' ? matches.data.filter((row) => row.id !== currentCustomerId) : [];
 
   if (customer.kind === 'existing') {
     return (
@@ -142,12 +153,13 @@ export function CustomerStep({
           value={customer.phone}
           onChangeText={(phone) => update({ customer: { ...customer, phone: phoneText(phone) } })}
           keyboardType="phone-pad"
+          errorMessage={phoneError}
           testID={`${testID}.phone`}
         />
       </View>
-      {matches.status === 'ready' && matches.data.length > 0 ? (
+      {offered.length > 0 ? (
         <Section title={tn('repair.customer.existing')} testID={`${testID}.matches`}>
-          {matches.data.map((row) => (
+          {offered.map((row) => (
             <ListRow
               key={row.id}
               primaryText={row.name}
@@ -184,11 +196,13 @@ export function DeviceStep({
   options,
   brandError,
   modelError,
+  imeiError,
   lockError,
   testID,
 }: StepProps & {
   readonly brandError: string | undefined;
   readonly modelError: string | undefined;
+  readonly imeiError: string | undefined;
   readonly lockError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
@@ -326,8 +340,9 @@ export function DeviceStep({
           <TextInput
             label={tn('repair.device.imeiField')}
             value={device.imei}
-            onChangeText={(imei) => set({ imei })}
+            onChangeText={(imei) => set({ imei: imei.replace(/[^\d\s-]/g, '') })}
             keyboardType="number-pad"
+            errorMessage={imeiError}
             testID={`${testID}.imei`}
           />
         ) : (
@@ -456,8 +471,6 @@ export function ConditionStep({
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
   const { width, fontScale } = useWindowDimensions();
   const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
-  const togglePeripheral = (item: string): void =>
-    update({ peripherals: toggled(draft.peripherals, item) });
   const toggleRepairType = (item: string): void =>
     update({ repairTypes: toggled(draft.repairTypes, item) });
   return (
@@ -531,21 +544,12 @@ export function ConditionStep({
           ))}
         </Section>
       )}
-      {options.accessories.length === 0 ? null : (
-        <Section title={tn('repair.condition.peripherals')}>
-          <ChipRow testID={`${testID}.peripherals`}>
-            {options.accessories.map((option) => (
-              <ToggleChip
-                key={option.id}
-                label={optionLabel('accessories', option)}
-                selected={draft.peripherals.includes(option.id)}
-                onToggle={() => togglePeripheral(option.id)}
-                testID={`${testID}.peripheral.${option.id}`}
-              />
-            ))}
-          </ChipRow>
-        </Section>
-      )}
+      <AccessoriesSection
+        draft={draft}
+        update={update}
+        accessories={options.accessories}
+        testID={testID}
+      />
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.condition.notes')}
@@ -556,6 +560,34 @@ export function ConditionStep({
         />
       </View>
     </View>
+  );
+}
+
+/** What was left with the phone, ticked from the store's list (intake and its correction). */
+export function AccessoriesSection({
+  draft,
+  update,
+  accessories,
+  testID,
+}: Pick<StepProps, 'update' | 'testID'> & {
+  readonly draft: Pick<IntakeDraft, 'peripherals'>;
+  readonly accessories: readonly IntakeOption[];
+}): React.JSX.Element | null {
+  if (accessories.length === 0) return null;
+  return (
+    <Section title={tn('repair.condition.peripherals')}>
+      <ChipRow testID={`${testID}.peripherals`}>
+        {accessories.map((option) => (
+          <ToggleChip
+            key={option.id}
+            label={optionLabel('accessories', option)}
+            selected={draft.peripherals.includes(option.id)}
+            onToggle={() => update({ peripherals: toggled(draft.peripherals, option.id) })}
+            testID={`${testID}.peripheral.${option.id}`}
+          />
+        ))}
+      </ChipRow>
+    </Section>
   );
 }
 
@@ -691,6 +723,7 @@ export function PriceStep({
                   if (acceptsRupiahText(text)) setLine(index, { amount: parseRupiah(text) ?? 0 });
                 }}
                 keyboardType="number-pad"
+                selectTextOnFocus
                 testID={`${testID}.amount.${index}`}
               />
             </View>
@@ -730,6 +763,7 @@ export function PriceStep({
             if (acceptsRupiahText(text)) update({ downPayment: text.replace(/\D/g, '') });
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           errorMessage={downPaymentError}
           testID={`${testID}.downPaymentInput`}
         />

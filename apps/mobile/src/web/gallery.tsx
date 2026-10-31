@@ -20,9 +20,9 @@
  * this harness renders resolve every user-visible label through the catalog, unchanged. */
 import { getLocale, setLocale, type Locale } from '@bolusi/i18n';
 import type { PinAttemptRow } from '@bolusi/core';
-import { border, color, space, type } from '@bolusi/ui';
+import { border, color, space, type, Text } from '@bolusi/ui';
 import { useReducer, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import App from '../../App.js';
 import { CaptureScreen, type CaptureScreenState } from '../media/CaptureScreen.js';

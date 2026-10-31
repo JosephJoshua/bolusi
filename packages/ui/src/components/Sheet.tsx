@@ -7,7 +7,8 @@
  * Mounted by its owner in the AppShell `overlay` slot, like ConfirmSheet.
  */
 import type { ReactNode } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useSheetEntrance } from '../motion.js';
 import { NAV_BAR_INSET } from '../platform-insets.js';

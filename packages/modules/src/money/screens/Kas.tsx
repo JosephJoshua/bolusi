@@ -16,9 +16,10 @@ import {
   space,
   touch,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 

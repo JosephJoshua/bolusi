@@ -1001,6 +1001,30 @@ export function standardCancelFee(
   return ticket.workStarted ? fees.afterWork : fees.beforeWork;
 }
 
+/**
+ * What a cancel at `fee` counts against a limited role's limit: a fee below the store's is a price
+ * drop on the servisan, counted with the discounts already on it (`discounts`); otherwise nothing.
+ * The same for the rule, an approval request and the step that decides whether to ask.
+ */
+export function cancelDrop(standard: number, fee: number, discounts: number): number {
+  const drop = standard - fee;
+  return drop > 0 ? drop + discounts : drop;
+}
+
+/**
+ * How far below the store's fee a limited role may cut a cancel's fee without asking, or null when
+ * it is not limited or has no room (any cut is then asked, and the step says so).
+ */
+export function cancelRoom(
+  limit: number | null,
+  standard: number | null,
+  discounts: number,
+): number | null {
+  if (limit === null || standard === null || standard === 0) return null;
+  const room = Math.min(limit - discounts, standard);
+  return room > 0 ? room : null;
+}
+
 /** A store that never set its fees charges nothing, as before fees existed. */
 export const NO_CANCEL_FEES: CancelFees = { beforeWork: 0, afterWork: 0 };
 

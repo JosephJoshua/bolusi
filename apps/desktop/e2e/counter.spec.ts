@@ -30,13 +30,21 @@ async function launch(flags: readonly string[] = FLAGS): Promise<void> {
       : { executablePath: INSTALLED, args: [...flags], env },
   );
   page = await app.firstWindow();
+  // Electron shows no dialog for an unload the page holds back (the close guard); Playwright still
+  // reports one, and answering it itself fails. Taking it over leaves the page's question alone.
+  page.on('dialog', (dialog) => void dialog.dismiss().catch(() => undefined));
   await page.getByTestId('repair.desk.board').waitFor();
 }
 
 test.beforeEach(() => launch());
 
 test.afterEach(async () => {
-  await app.close();
+  // Quits outright: a test may end with a dialog open, which the close guard would ask about.
+  // A test that closed the window itself has already quit the app.
+  await app
+    .evaluate(({ app: electronApp }) => setImmediate(() => electronApp.exit(0)))
+    .catch(() => undefined);
+  await app.close().catch(() => undefined);
 });
 
 test('Escape closes the dialog and keeps the servisan open; a second Escape closes it', async () => {
@@ -393,4 +401,28 @@ test('the title bar is ours, but minimise, maximise, close and snapping stay Win
   await expect(bar).toHaveAttribute('data-fullscreen', 'true');
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setFullScreen(false));
   await expect(bar).not.toHaveAttribute('data-fullscreen');
+});
+
+test('closing the window with a dialog open asks first; "Tutup" closes it', async () => {
+  await page.getByText('Maria Kogoya').click();
+  await page.getByTestId('repair.desk.ticket.action.decidePrice').click();
+  await expect(page.getByTestId('repair.desk.proposal')).toBeVisible();
+  const closeWindow = (): Promise<void> =>
+    app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+
+  await closeWindow();
+  await expect(page.getByTestId('desktop.closeGuard')).toContainText('Tutup Bolusi?');
+  await page.getByTestId('desktop.closeGuard.cancel').click();
+  await expect(page.getByTestId('repair.desk.proposal')).toBeVisible();
+
+  await closeWindow();
+  const closed = page.waitForEvent('close');
+  await page.getByTestId('desktop.closeGuard.confirm').click();
+  await closed;
+});
+
+test('closing the window with nothing open closes it at once', async () => {
+  const closed = page.waitForEvent('close');
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await closed;
 });

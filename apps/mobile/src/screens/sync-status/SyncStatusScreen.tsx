@@ -53,9 +53,10 @@ import {
   space,
   type,
   type IconName,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from './chip-a11y.js';
 import {

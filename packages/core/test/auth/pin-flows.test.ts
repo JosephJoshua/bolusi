@@ -12,6 +12,7 @@ import {
   DomainError,
   drainPendingVerifiers,
   readPendingVerifiers,
+  readPinAttempt,
   readVerifier,
   resetPin,
   setFirstPin,
@@ -154,7 +155,7 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
       resetPin(s.flowDeps(), {
         actorUserId: s.h.staffId,
         targetUserId: s.h.storeOwnerId,
-        newPin: '222222',
+        newPin: '593026',
       }),
       'PERMISSION_DENIED',
     );
@@ -171,7 +172,7 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
       resetPin(s.flowDeps(), {
         actorUserId: s.h.ownerId,
         targetUserId: 'b2222222-2222-7222-8222-222222222222',
-        newPin: '222222',
+        newPin: '593026',
       }),
       'PERMISSION_DENIED',
       'restriction_violated',
@@ -197,9 +198,14 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
 
   it('auth.clearPinLockout without auth.pin_unlock → denied (+ evaluator denial op, reason not_granted)', async () => {
     const s = await setup(4);
-    // Lock the store owner directly, then a staff member (no pin_unlock) tries to clear it.
+    // Lock a colleague of the same rank directly (an owner is the main owner's to unlock, which
+    // would deny first), then a staff member (no pin_unlock) tries to clear it.
+    const colleagueId = 'c3333333-3333-7333-8333-333333333333';
+    await sql`
+      INSERT INTO users_directory (id, name, status) VALUES (${colleagueId}, 'Rina', 'active')
+    `.execute(s.h.db);
     await writePinAttempt(s.h.db, {
-      userId: s.h.storeOwnerId,
+      userId: colleagueId,
       deviceId: s.h.deviceId,
       consecutiveFailures: 10,
       windowStartedAt: 1,
@@ -208,7 +214,7 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
     await expectDomain(
       clearPinLockoutFlow(s.flowDeps(), {
         actorUserId: s.h.staffId,
-        targetUserId: s.h.storeOwnerId,
+        targetUserId: colleagueId,
       }),
       'PERMISSION_DENIED',
     );
@@ -259,6 +265,58 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
   });
 });
 
+describe('owner unlock leaves an owner’s lockout to the main owner', () => {
+  async function lock(s: Setup, userId: string): Promise<void> {
+    await writePinAttempt(s.h.db, {
+      userId,
+      deviceId: s.h.deviceId,
+      consecutiveFailures: 10,
+      windowStartedAt: 1,
+      notBefore: null,
+    });
+  }
+
+  it('a store owner cannot clear the main owner’s lockout: refused before the counter moves', async () => {
+    const s = await setup(13);
+    await lock(s, s.h.ownerId);
+    await expectDomain(
+      clearPinLockoutFlow(s.flowDeps(), {
+        actorUserId: s.h.storeOwnerId,
+        targetUserId: s.h.ownerId,
+      }),
+      'PERMISSION_DENIED',
+      'restriction_violated',
+    );
+    expect((await readPinAttempt(s.h.db, s.h.ownerId, s.h.deviceId))?.consecutiveFailures).toBe(10);
+    const all = await s.pinOps();
+    expect(all.filter((o) => o.type === 'auth.pin_lockout_cleared')).toHaveLength(0);
+    expect(all.filter((o) => o.type === 'auth.permission_denied')).toHaveLength(1);
+  });
+
+  it('a store owner cannot clear a peer store owner’s lockout; the main owner can', async () => {
+    const s = await setup(14);
+    await sql`
+      INSERT INTO user_roles_directory (user_id, role_id, store_id)
+      SELECT ${s.h.staffId}, id, ${s.h.storeId} FROM roles_directory WHERE name = 'store_owner'
+    `.execute(s.h.db);
+    await lock(s, s.h.staffId);
+    await expectDomain(
+      clearPinLockoutFlow(s.flowDeps(), {
+        actorUserId: s.h.storeOwnerId,
+        targetUserId: s.h.staffId,
+      }),
+      'PERMISSION_DENIED',
+      'restriction_violated',
+    );
+    expect((await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures).toBe(10);
+    await clearPinLockoutFlow(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+    });
+    expect((await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures).toBe(0);
+  });
+});
+
 describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §6.6)', () => {
   it('store_owner resetting a main_owner-role holder → denied at the command layer, AUDITED (§7)', async () => {
     const s = await setup(5);
@@ -268,7 +326,7 @@ describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §
       resetPin(s.flowDeps(), {
         actorUserId: s.h.storeOwnerId,
         targetUserId: s.h.ownerId,
-        newPin: '222222',
+        newPin: '593026',
       }),
       'PERMISSION_DENIED',
       'restriction_violated',
@@ -299,20 +357,61 @@ describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §
     await resetPin(s.flowDeps(), {
       actorUserId: s.h.ownerId,
       targetUserId: s.h.ownerId,
-      newPin: '222222',
+      newPin: '593026',
     });
     const resets = (await s.pinOps()).filter((o) => o.type === 'auth.pin_reset');
     expect(resets).toHaveLength(1);
     expect(resets[0]!.userId, 'attributed to the acting main owner').toBe(s.h.ownerId);
     expect(resets[0]!.entityId).toBe(s.h.ownerId);
   });
+
+  it('a store owner cannot reset a peer store owner’s PIN; the main owner can', async () => {
+    const s = await setup(7);
+    // Make Budi a second store owner of this store.
+    await sql`
+      INSERT INTO user_roles_directory (user_id, role_id, store_id)
+      SELECT ${s.h.staffId}, id, ${s.h.storeId} FROM roles_directory WHERE name = 'store_owner'
+    `.execute(s.h.db);
+    await expectDomain(
+      resetPin(s.flowDeps(), {
+        actorUserId: s.h.storeOwnerId,
+        targetUserId: s.h.staffId,
+        newPin: '593026',
+      }),
+      'PERMISSION_DENIED',
+      'restriction_violated',
+    );
+    await resetPin(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+      newPin: '593026',
+    });
+    const resets = (await s.pinOps()).filter((o) => o.type === 'auth.pin_reset');
+    expect(resets.map((o) => o.userId)).toEqual([s.h.ownerId]);
+  });
 });
 
 describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh salt', () => {
+  it('a PIN anyone would guess is refused by every flow that makes one, whatever the screen did', async () => {
+    const s = await setup(7);
+    await enrolledBy(s, s.h.staffId);
+    await expect(
+      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '111111' }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { field: 'pin', issue: 'weak' },
+    });
+    expect(await readVerifier(s.h.db, s.h.staffId)).toBeNull();
+    await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' });
+    await expect(
+      changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '274816', newPin: '123456' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
   it('first-PIN: forced setup, current-PIN check skipped, local write at the op asOf, fresh salt', async () => {
     const s = await setup(7); // staff has NO verifier by default → first-PIN territory
     await enrolledBy(s, s.h.staffId);
-    const pending = await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
+    const pending = await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' });
 
     const [op] = (await s.pinOps()).filter((o) => o.type === 'auth.pin_changed');
     expect(op).toBeDefined();
@@ -337,34 +436,34 @@ describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh 
       (
         await verifyPin(
           { db: s.h.db, crypto: s.h.crypto, clock: s.h.clock, deviceId: s.h.deviceId, emitter },
-          { userId: s.h.staffId, pin: '123456' },
+          { userId: s.h.staffId, pin: '274816' },
         )
       ).ok,
     ).toBe(true);
   });
 
   it('first-PIN: refused for a user who already has a PIN, so it cannot overwrite one', async () => {
-    const s = await setup(7, { staff: '111111' });
+    const s = await setup(7, { staff: '482915' });
     await enrolledBy(s, s.h.staffId);
     await expectDomain(
-      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' }),
+      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' }),
       'INVALID_TRANSITION',
     );
     expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_changed')).toHaveLength(0);
   });
 
   it('change: the current PIN is verified before execution; a wrong current PIN is refused', async () => {
-    const s = await setup(8, { staff: '111111' });
+    const s = await setup(8, { staff: '482915' });
     // Wrong current PIN → NOT_AUTHENTICATED, no new verifier, no op.
     await expectDomain(
-      changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '000000', newPin: '222222' }),
+      changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '805139', newPin: '593026' }),
       'NOT_AUTHENTICATED',
     );
     expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_changed')).toHaveLength(0);
 
     // Correct current PIN → change succeeds; new PIN verifies, old does not; salt is fresh.
     const before = await readVerifier(s.h.db, s.h.staffId);
-    await changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '111111', newPin: '222222' });
+    await changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '482915', newPin: '593026' });
     const after = await readVerifier(s.h.db, s.h.staffId);
     expect(after?.saltB64).not.toBe(before?.saltB64); // NEW salt on every change (SEC-AUTH-06)
 
@@ -376,17 +475,17 @@ describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh 
       deviceId: s.h.deviceId,
       emitter,
     };
-    expect((await verifyPin(deps, { userId: s.h.staffId, pin: '222222' })).ok).toBe(true);
-    expect((await verifyPin(deps, { userId: s.h.staffId, pin: '111111' })).ok).toBe(false);
+    expect((await verifyPin(deps, { userId: s.h.staffId, pin: '593026' })).ok).toBe(true);
+    expect((await verifyPin(deps, { userId: s.h.staffId, pin: '482915' })).ok).toBe(false);
   });
 
   it('the op payloads carry ONLY {targetUserId, verifierRef} — no salt/hash bytes anywhere', async () => {
-    const s = await setup(9, { staff: '111111' });
-    await changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '111111', newPin: '222222' });
+    const s = await setup(9, { staff: '482915' });
+    await changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '482915', newPin: '593026' });
     await resetPin(s.flowDeps(), {
       actorUserId: s.h.ownerId,
       targetUserId: s.h.staffId,
-      newPin: '333333',
+      newPin: '361548',
     });
 
     const stored = await readVerifier(s.h.db, s.h.staffId);
@@ -411,7 +510,7 @@ describe('first PIN is only for the owner who enrolled this device', () => {
     await enrolledBy(s, s.h.ownerId);
     expect(await firstPinUserOnThisDevice(s.h.db)).not.toBe(s.h.staffId);
     await expectDomain(
-      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' }),
+      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' }),
       'INVALID_TRANSITION',
     );
     expect(await readVerifier(s.h.db, s.h.staffId)).toBeNull();
@@ -421,15 +520,15 @@ describe('first PIN is only for the owner who enrolled this device', () => {
     const s = await setup(7);
     await enrolledBy(s, s.h.staffId);
     expect(await firstPinUserOnThisDevice(s.h.db)).toBe(s.h.staffId);
-    await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
+    await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' });
     expect(await firstPinUserOnThisDevice(s.h.db)).toBeNull();
   });
 
   it('two quick submits make one PIN: the second is refused, not a second op', async () => {
     const s = await setup(7);
     await enrolledBy(s, s.h.staffId);
-    const first = setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
-    const second = setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '654321' });
+    const first = setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' });
+    const second = setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '639174' });
     await first;
     await expectDomain(second, 'INVALID_TRANSITION', 'pin_already_set');
     expect(await readPendingVerifiers(s.h.db)).toHaveLength(1);
@@ -438,7 +537,7 @@ describe('first PIN is only for the owner who enrolled this device', () => {
   it('a device with no enrolling owner on record allows nobody', async () => {
     const s = await setup(7);
     await expectDomain(
-      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' }),
+      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' }),
       'INVALID_TRANSITION',
     );
   });
@@ -446,11 +545,11 @@ describe('first PIN is only for the owner who enrolled this device', () => {
 
 describe('verifier-POST queue (api/02-auth §5.4)', () => {
   it('queues the upload on disk with the op’s verifierRef, acting as the resetting owner', async () => {
-    const s = await setup(12, { staff: '111111' });
+    const s = await setup(12, { staff: '482915' });
     const pending = await resetPin(s.flowDeps(), {
       actorUserId: s.h.ownerId,
       targetUserId: s.h.staffId,
-      newPin: '222222',
+      newPin: '593026',
     });
     const [op] = (await s.pinOps()).filter((o) => o.type === 'auth.pin_reset');
     expect(JSON.parse(op!.payload)).toMatchObject({ verifierRef: pending.verifierRef });
@@ -469,7 +568,7 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
   it('drains on next contact with the op’s verifierRef; applied:false is terminal (no retry)', async () => {
     const s = await setup(10);
     await enrolledBy(s, s.h.staffId);
-    const pending = await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
+    const pending = await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' });
     expect(await readPendingVerifiers(s.h.db)).toHaveLength(1);
 
     const sent: { userId: string; verifierRef: string }[] = [];
@@ -498,13 +597,13 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
   });
 
   it('a PIN change whose upload cannot be queued does not land at all (one transaction)', async () => {
-    const s = await setup(13, { staff: '111111' });
+    const s = await setup(13, { staff: '482915' });
     const before = await readVerifier(s.h.db, s.h.staffId);
     // Stand-in for the app dying mid-change: the queue write fails after the op row is inserted.
     await sql`DROP TABLE pending_pin_verifiers`.execute(s.h.db);
 
     await expect(
-      changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '111111', newPin: '222222' }),
+      changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '482915', newPin: '593026' }),
     ).rejects.toThrow();
     expect(
       (await s.pinOps()).filter((o) => o.type === 'auth.pin_changed'),
@@ -516,7 +615,7 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
   it('a transport error re-queues; the idempotent replay then converges', async () => {
     const s = await setup(11);
     await enrolledBy(s, s.h.staffId);
-    await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
+    await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '274816' });
 
     let attempts = 0;
     const flaky: PinVerifierUploadPort = {
@@ -531,6 +630,35 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
     const retry = await drainPendingVerifiers(s.h.db, flaky); // idempotent replay converges
     expect(retry[0]).toMatchObject({ sent: true, result: { applied: true } });
     expect(await readPendingVerifiers(s.h.db)).toHaveLength(0);
+  });
+
+  it('one queued upload that fails does not hold back the ones after it', async () => {
+    const s = await setup(14, { staff: '111111' });
+    const failing = await resetPin(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+      newPin: '582914',
+    });
+    const later = await changePin(s.flowDeps(), {
+      userId: s.h.staffId,
+      currentPin: '582914',
+      newPin: '740263',
+    });
+
+    const server: PinVerifierUploadPort = {
+      upload: (userId, verifierRef) =>
+        verifierRef === failing.verifierRef
+          ? Promise.reject(new Error('HTTP 500'))
+          : Promise.resolve({ userId, applied: true }),
+    };
+    const outcomes = await drainPendingVerifiers(s.h.db, server);
+    expect(outcomes.map((o) => [o.verifierRef, o.sent])).toEqual([
+      [failing.verifierRef, false],
+      [later.verifierRef, true],
+    ]);
+    expect((await readPendingVerifiers(s.h.db)).map((p) => p.verifierRef)).toEqual([
+      failing.verifierRef,
+    ]);
   });
 });
 

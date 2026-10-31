@@ -18,7 +18,7 @@
  * layer in tasks 24/25.
  */
 import type { ReactNode } from 'react';
-import { Text } from 'react-native';
+import { Text } from '../text.js';
 
 import * as componentInventory from '../components/index.js';
 import * as shellInventory from '../shell/index.js';

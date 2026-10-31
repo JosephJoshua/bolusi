@@ -113,6 +113,7 @@ export function PaymentLines({
                 label={tm('money.pay.amount')}
                 prefix={tm('money.pay.currency')}
                 inputMode="numeric"
+                selectOnFocus
                 inputClassName="tabular text-right"
                 value={digitsText(line.amount)}
                 onChange={(event) => digits(line.key, 'amount')(event.target.value)}
@@ -127,6 +128,7 @@ export function PaymentLines({
                   label={tm('money.pay.tendered')}
                   prefix={tm('money.pay.currency')}
                   inputMode="numeric"
+                  selectOnFocus
                   inputClassName="tabular text-right"
                   value={digitsText(line.tendered)}
                   onChange={(event) => digits(line.key, 'tendered')(event.target.value)}

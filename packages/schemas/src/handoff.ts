@@ -4,7 +4,9 @@
 // server's validators and the PC's client.
 import { z } from 'zod';
 
-export const HANDOFF_KINDS = ['photo', 'signature'] as const;
+import { VIDEO_MAX_SIZE_BYTES, type VideoMime } from './media.js';
+
+export const HANDOFF_KINDS = ['photo', 'signature', 'video'] as const;
 export const zHandoffKind = z.enum(HANDOFF_KINDS);
 export type HandoffKind = z.infer<typeof zHandoffKind>;
 
@@ -14,6 +16,9 @@ export const HANDOFF_PAD = { width: 800, height: 400 } as const;
 export const HANDOFF_LIMITS = {
   photoBytes: 4 * 1024 * 1024,
   signatureBytes: 1024 * 1024,
+  videoBytes: VIDEO_MAX_SIZE_BYTES,
+  /** The longest clip a step may ask for. */
+  videoMs: 5 * 60 * 1000,
   strokes: 500,
   points: 20_000,
   labelChars: 300,
@@ -39,6 +44,14 @@ export const zHandoffPageLabels = z
     withdrawn: zLabel,
     expired: zLabel,
     unreadable: zLabel,
+    videoStart: zLabel,
+    videoStop: zLabel,
+    videoRetake: zLabel,
+    videoDenied: zLabel,
+    videoFailed: zLabel,
+    retry: zLabel,
+    videoUnsupported: zLabel,
+    videoTooLarge: zLabel,
   })
   .strict();
 export type HandoffPageLabels = z.infer<typeof zHandoffPageLabels>;
@@ -51,8 +64,22 @@ export interface HandoffPairResponse {
   readonly path: string;
 }
 
-/** `POST /v1/handoff/:id/ask`: put one photo or signature in front of the phone. */
-export const zHandoffAskBody = z.object({ kind: zHandoffKind, title: zLabel }).strict();
+/** `POST /v1/handoff/:id/ask`: put one photo, signature or clip in front of the phone. */
+export const zHandoffAskBody = z
+  .object({
+    kind: zHandoffKind,
+    title: zLabel,
+    /** What the clip must show, under the title. */
+    hint: zLabel.optional(),
+    /** A clip's limit; the page stops recording there. */
+    maxMs: z.number().int().positive().max(HANDOFF_LIMITS.videoMs).optional(),
+  })
+  .strict()
+  .refine((ask) => ask.kind !== 'video' || ask.maxMs !== undefined, {
+    message: 'a video step needs maxMs',
+    path: ['maxMs'],
+  });
+export type HandoffAsk = z.infer<typeof zHandoffAskBody>;
 export interface HandoffAskResponse {
   readonly seq: number;
 }
@@ -74,6 +101,14 @@ export type HandoffWireEvent =
       readonly type: 'signature';
       readonly seq: number;
       readonly strokes: readonly (readonly HandoffPoint[])[];
+    }
+  /** A clip is too big to ride in the events; the PC fetches it from `GET /v1/handoff/:id/clip/:seq`. */
+  | {
+      readonly n: number;
+      readonly type: 'video';
+      readonly seq: number;
+      readonly mime: VideoMime;
+      readonly sizeBytes: number;
     };
 
 /** `GET /v1/handoff/:id/events?after=n`: held open until there is something new, or a while. */

@@ -11,7 +11,8 @@
  *
  * Copy arrives as `labels` — even here. `@bolusi/ui` never calls `t()` (08-stack §3.3).
  */
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { border, color, space, type } from '../tokens.js';
 import { stateRegistry, type GalleryLabels } from './registry.js';

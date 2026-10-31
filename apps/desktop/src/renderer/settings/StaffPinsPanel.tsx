@@ -14,6 +14,7 @@ import {
   newPinFeedbackKey,
   newPinPadState,
   newPinPromptKey,
+  newPinPadKey,
 } from '@bolusi/device/models/pin/new-pin';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import {
@@ -367,7 +368,7 @@ export function ResetPinDialog({
             }
             danger={padState === 'error'}
             padState={padState}
-            padKey={entry === null ? 'submitting' : `${entry.kind}-${padState}`}
+            padKey={entry === null ? 'submitting' : newPinPadKey(entry)}
             onComplete={(pin) => dispatch({ kind: 'enteredPin', pin })}
             testId="desktop.resetPin"
           />

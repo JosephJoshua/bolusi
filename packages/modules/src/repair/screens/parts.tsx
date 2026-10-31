@@ -14,10 +14,11 @@ import {
   type,
   useViewport,
   type IconName,
+  Text,
 } from '@bolusi/ui';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 import {

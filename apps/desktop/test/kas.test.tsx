@@ -161,6 +161,8 @@ describe('Kas on the PC', () => {
     fireEvent.click(voidButton!);
     await screen.findByTestId('money.desk.void');
     expect(text('money.desk.void.amount')).toBe('Rp200.000');
+    // An owner has no limit to show.
+    expect(screen.queryByTestId('money.desk.void.limit')).toBeNull();
     fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
     fireEvent.click(byTestId('money.desk.void.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.void')).toBeNull());
@@ -280,6 +282,27 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
     await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+  });
+
+  it('shows a manager their cancel limit before they cancel a payment', async () => {
+    await openKas('Maria Kogoya');
+    fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });
+    fireEvent.click(byTestId('money.desk.kas.tabs.history'));
+    const table = await screen.findByTestId('money.desk.history.table');
+    const [voidButton] = await within(table).findAllByRole('button', {
+      name: /^Batalkan pembayaran/,
+    });
+    fireEvent.click(voidButton!);
+    await screen.findByTestId('money.desk.void');
+    expect(byTestId('money.desk.void.limit').textContent).toBe(
+      'Batas pembatalanmu Rp 30.000 per servisan.',
+    );
+    // Every payment today is beyond it: refused up front, not after submitting.
+    fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
+    expect(byTestId('money.desk.void.submit')).toHaveProperty('disabled', true);
+    expect(byTestId('money.desk.void.hint').textContent).toBe(
+      'Melebihi batasmu. Minta pemilik toko.',
+    );
   });
 
   it('offers cancelling a payment to owners only', async () => {

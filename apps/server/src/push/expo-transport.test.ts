@@ -7,7 +7,7 @@ import type { ServerConfig } from '../config.js';
 import { EXPO_SEND_URL } from './expo-sender.js';
 import { expoFetchTransport, pushPortFromConfig } from './expo-transport.js';
 
-const baseConfig: ServerConfig = { databaseUrl: 'postgres://x', port: 3000 };
+const baseConfig: ServerConfig = { databaseUrl: 'postgres://x', port: 3000, secureCookies: true };
 
 describe('pushPortFromConfig — fail closed on absent EXPO_ACCESS_TOKEN', () => {
   test('throws (loud, at boot) when the token is absent — a silent no-op is the task-134 defect', () => {

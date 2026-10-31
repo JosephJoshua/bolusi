@@ -23,7 +23,6 @@ import {
   ticketBalance,
   ticketMoneyActions,
 } from '../src/repair/flows.js';
-import { payLaterOffer } from '../src/repair/handover-payment.js';
 import { handoverSlip } from '../src/repair/print.js';
 import type { TicketDetailRow } from '../src/repair/queries.js';
 import {
@@ -566,29 +565,6 @@ describe('the DP once the phone went home', () => {
       'INVALID_TRANSITION',
       'repair.refusal.downPaymentRefunded',
     );
-  });
-});
-
-describe('payLaterOffer', () => {
-  test('a limited role is offered a debt only up to its limit, and a limit of 0 is none', () => {
-    const none = { offered: false, limit: null, overLimit: false };
-    expect(payLaterOffer(false, null, 50_000)).toEqual(none);
-    expect(payLaterOffer(true, 0, 10_000)).toEqual(none);
-    expect(payLaterOffer(true, null, 5_000_000)).toEqual({
-      offered: true,
-      limit: null,
-      overLimit: false,
-    });
-    expect(payLaterOffer(true, 100_000, 100_000)).toEqual({
-      offered: true,
-      limit: 100_000,
-      overLimit: false,
-    });
-    expect(payLaterOffer(true, 100_000, 100_001)).toEqual({
-      offered: false,
-      limit: 100_000,
-      overLimit: true,
-    });
   });
 });
 

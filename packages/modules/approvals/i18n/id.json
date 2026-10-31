@@ -1,0 +1,69 @@
+{
+  "opType": {
+    "requestMade": "Minta persetujuan",
+    "requestApproved": "Permintaan disetujui",
+    "requestRejected": "Permintaan ditolak",
+    "requestWithdrawn": "Permintaan ditarik"
+  },
+  "refusal": {
+    "unknownKind": "Permintaan ini tidak dikenal. Perbarui aplikasi.",
+    "notNeeded": "Ini tidak perlu persetujuan.",
+    "cannotAsk": "Kamu tidak bisa meminta ini.",
+    "targetNotFound": "Servisan ini tidak ada di toko ini.",
+    "changed": "Servisan sudah berubah sejak diminta. Minta lagi kalau masih perlu.",
+    "alreadyAsked": "Sudah ada permintaan yang sama dan masih menunggu.",
+    "requestNotFound": "Permintaan ini tidak ada.",
+    "alreadyAnswered": "Permintaan ini sudah dijawab.",
+    "ownRequest": "Permintaanmu sendiri harus diputuskan orang lain.",
+    "cannotDecide": "Kamu tidak bisa memutuskan ini.",
+    "notYours": "Hanya yang meminta yang bisa menariknya.",
+    "overLimit": "Melebihi batasmu. Minta pemilik toko."
+  },
+  "kind": {
+    "repairDiscount": "Diskon",
+    "repairCancel": "Batalkan servisan",
+    "repairPayLater": "Bayar nanti",
+    "repairDownPayment": "Ubah DP"
+  },
+  "status": {
+    "waiting": "Menunggu",
+    "approved": "Disetujui",
+    "rejected": "Ditolak",
+    "withdrawn": "Ditarik",
+    "closed": "Tidak berlaku"
+  },
+  "section": {
+    "title": "Persetujuan"
+  },
+  "row": {
+    "askedBy": "{name}: {reason}",
+    "answeredBy": "{status} oleh {name}",
+    "answeredNote": "{status} oleh {name}: {note}",
+    "withdrawn": "Ditarik oleh yang meminta"
+  },
+  "step": {
+    "title": "Permintaan persetujuan",
+    "askedBy": "Diminta {name} · {time}",
+    "question": "Setujui permintaan ini?",
+    "note": "Catatan (opsional)",
+    "beyondLimit": "Di atas batasmu {amount}. Hanya pemilik toko yang bisa menyetujui."
+  },
+  "action": {
+    "ask": "Minta persetujuan",
+    "approve": "Setujui",
+    "reject": "Tolak",
+    "withdraw": "Tarik permintaan",
+    "decide": "Putuskan",
+    "open": "Lihat"
+  },
+  "withdraw": {
+    "title": "Tarik permintaan ini?",
+    "message": "Pemilik toko tidak perlu memutuskannya lagi."
+  },
+  "done": {
+    "asked": "Permintaan dibuat. Pemilik toko akan memutuskan.",
+    "approved": "Disetujui dan sudah dicatat.",
+    "rejected": "Permintaan ditolak.",
+    "withdrawn": "Permintaan ditarik."
+  }
+}

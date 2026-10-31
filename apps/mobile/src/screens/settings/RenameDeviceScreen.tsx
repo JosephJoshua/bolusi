@@ -11,9 +11,9 @@ import {
   RENAME_PROBLEM_KEY,
 } from '@bolusi/device/models/settings/rename';
 import { t } from '@bolusi/i18n';
-import { AppShell, Banner, Button, TextInput, color, space, type } from '@bolusi/ui';
+import { AppShell, Banner, Button, TextInput, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 export function RenameDeviceScreen({
   current,

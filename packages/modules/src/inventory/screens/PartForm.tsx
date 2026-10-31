@@ -17,9 +17,10 @@ import {
   radius,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';

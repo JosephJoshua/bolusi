@@ -16,9 +16,10 @@ import {
   size,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';

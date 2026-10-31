@@ -4,9 +4,9 @@
  * with its reason; the books reverse it (money/applier.ts).
  */
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
-import { Button, EmptyState, TextButton, TextInput, color, space, type } from '@bolusi/ui';
+import { Button, EmptyState, TextButton, TextInput, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
@@ -15,7 +15,7 @@ import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/scree
 import { MAX_REASON, MONEY_PERMISSION } from '../constants.js';
 import { tm } from '../i18n.js';
 import { shiftDay, useDayRecords } from '../day-records.js';
-import { accountLabel, dayStart, historyLine, voidOffered } from '../kas.js';
+import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
@@ -43,8 +43,10 @@ export function KasHistory({
   testID = 'money.history',
 }: KasHistoryProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const voidLimit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
-  const mayVoid = runtime.hasPermission(MONEY_PERMISSION.voidPayment);
+  const can = voidAbilities(
+    (id) => runtime.hasPermission(id),
+    (id) => runtime.limitOf(id),
+  );
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const today = dayStart(now());
@@ -106,9 +108,7 @@ export function KasHistory({
                     detail={[formatTime(entry.createdAt), ...line.details].join(' · ')}
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
-                    onPress={
-                      mayVoid && voidOffered(entry, voidLimit) ? () => onVoid(entry) : undefined
-                    }
+                    onPress={voidable(entry, can) ? () => onVoid(entry) : undefined}
                     testID={`${testID}.entry.${entry.id}`}
                   />
                 );
@@ -156,12 +156,17 @@ export function VoidPaymentStep({
 }: VoidPaymentStepProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
-  const voidLimit = runtime.limitOf(MONEY_PERMISSION.voidPayment);
   const accounts = useMoneyQuery(
     async (rt) => (await rt.query('paymentAccounts', { includeInactive: true })).rows,
     'accounts',
   );
   const [reason, setReason] = useState('');
+  const kind = voidKind(entry);
+  // A limited role (a manager) sees what it may cancel of a payment before the server refuses it.
+  const limit =
+    kind.command === 'voidPayment' ? runtime.limitOf(MONEY_PERMISSION.voidPayment) : null;
+  // A void counts in full against that limit (with any earlier ones on the same servisan).
+  const beyond = limit !== null && entry.amount > limit;
   const discard = useDiscardConfirm({
     dirty: reason.trim() !== '',
     copy: {
@@ -179,9 +184,9 @@ export function VoidPaymentStep({
   );
 
   const submit = (): void => {
-    if (reason.trim() === '') return;
+    if (reason.trim() === '' || beyond) return;
     void runner
-      .run(() => runtime.run('voidPayment', { entryId: entry.id, reason }))
+      .run(() => runtime.run(kind.command, { entryId: entry.id, reason }))
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -190,14 +195,14 @@ export function VoidPaymentStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tm('money.void.title')}
+      title={tm(kind.title)}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
-      primaryLabel={tm('money.void.save')}
+      primaryLabel={tm(kind.save)}
       primaryVariant="destructive"
       onPrimary={submit}
-      primaryDisabled={reason.trim() === ''}
-      primaryHint={tm('money.void.hint')}
+      primaryDisabled={reason.trim() === '' || beyond}
+      primaryHint={tm(beyond ? 'money.refusal.overLimit' : 'money.void.hint')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -211,10 +216,10 @@ export function VoidPaymentStep({
           .filter((part) => part !== null && part !== '')
           .join(' · ')}
       </Text>
-      <Text style={styles.body}>{tm('money.void.explain')}</Text>
-      {voidLimit === null ? null : (
+      <Text style={styles.body}>{tm(kind.explain)}</Text>
+      {limit === null ? null : (
         <Text style={styles.muted} testID={`${testID}.limit`}>
-          {tm('money.void.limit', { amount: formatMoney(voidLimit) })}
+          {tm('money.void.limit', { amount: formatMoney(limit) })}
         </Text>
       )}
       <View style={styles.gap}>

@@ -183,7 +183,7 @@ describe('whose phone, and when', () => {
       brand: 'Samsung',
       model: 'Galaxy A14',
       color: 'Hitam',
-      imei: '350000000000001',
+      imei: '350000000000006',
     };
     // Another IMEI is named as the reason, so the counter knows what to check.
     await expectRefusal(

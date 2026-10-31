@@ -7,7 +7,8 @@
  * `danger` is for a final action kept out of the way (cancelling a repair): red text says what it
  * is without a solid red block that looks like the next step.
  */
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { color, size, space, touch, type } from '../tokens.js';
 import { Icon, type IconName } from './Icon.js';

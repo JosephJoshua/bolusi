@@ -8,7 +8,8 @@
  * `offline` is NEUTRAL, never red (§4.6): offline is a normal operating mode for this product, not
  * an error. Only `attention` — a rejected op or a revocation — earns the danger token.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon, type IconName } from '../components/Icon.js';

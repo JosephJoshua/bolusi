@@ -18,14 +18,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
-import {
-  Linking,
-  Platform,
-  StatusBar as RNStatusBar,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Linking, Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
@@ -326,7 +319,6 @@ export default function App(props: AppProps): React.JSX.Element {
     userId: '',
     tab: 'repair',
   });
-  const { fontScale } = useWindowDimensions();
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
    * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
@@ -1031,12 +1023,6 @@ export default function App(props: AppProps): React.JSX.Element {
       {/* Dark icons: the app is light-only (app.config.ts), even when the phone is in dark mode. */}
       <StatusBar style="dark" />
       <View
-        // A new system font size remounts the screens. Re-measuring in place does not hold on
-        // Android: the next React commit brings back its own text nodes, measured at the old size,
-        // so text drew at the new size inside old boxes (QA runs on PR #45). Fresh nodes measure
-        // at the new size. MainActivity tells JS the new scale (withActivityConfigChanges.ts).
-        // Work in progress survives: drafts live in the workspace above.
-        key={`font-${fontScale}`}
         style={styles.zone}
         // Hidden from touch and screen readers while the overlay covers it, but still mounted.
         pointerEvents={modal === null ? 'auto' : 'none'}
