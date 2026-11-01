@@ -7,6 +7,8 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 
+import { readEntitySyncStatuses } from './entity-sync-statuses.js';
+
 import {
   markRejectionsHandled,
   readSyncStatusRows,
@@ -145,4 +147,17 @@ test('a refusal marked handled stops asking, and only its maker can mark it', as
     .execute();
   expect(rows.map((row) => row.syncStatus)).toEqual(['rejected', 'rejected']);
   expect(new Set(rows.map((row) => row.rejectionHandledAt))).toEqual(new Set([10, 11]));
+});
+
+test('a servisan shows a refusal only to its maker, until they mark it checked', async () => {
+  const { userId, ids } = await refuseTwo(4404);
+  const statuses = (viewer: string) =>
+    readEntitySyncStatuses(db.db, 'repair_ticket', [NAMED, GONE], viewer);
+
+  expect(await statuses(userId)).toEqual({ [NAMED]: ['rejected'], [GONE]: ['rejected'] });
+  // A colleague signed in here has nothing to redo: the servisan reads as sent.
+  expect(await statuses('someone-else')).toEqual({});
+
+  await markRejectionsHandled(db, userId, [ids[0]!], 10);
+  expect(await statuses(userId)).toEqual({ [GONE]: ['rejected'] });
 });

@@ -83,7 +83,8 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
     // change to any of them must re-render the open screen (04 §7). The op log too, since each
     // screen shows its tickets' sync status.
     subscribe: (listener) => deps.invalidation.subscribeTables(LIVE_TABLES, listener),
-    ticketSyncStatuses: (ids) => readEntitySyncStatuses(deps.db, REPAIR_TICKET_ENTITY, ids),
+    ticketSyncStatuses: (ids) =>
+      readEntitySyncStatuses(deps.db, REPAIR_TICKET_ENTITY, ids, deps.identity.userId),
     technicians: async () =>
       (await listSwitcherUsers(deps.db))
         .filter((user) => port.colleagueHasPermission(user.id, REPAIR_PERMISSION.work))
