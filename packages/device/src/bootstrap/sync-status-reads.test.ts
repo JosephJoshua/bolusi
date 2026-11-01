@@ -3,11 +3,15 @@
 import { insertOpLogRow, markSyncResult } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import { ChainBuilder, makeWorld, noblePort, nodeColumnAead, opRowOf } from '@bolusi/test-support';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import idCatalog from '@bolusi/modules/repair/i18n/id.json' with { type: 'json' };
+import enCatalog from '@bolusi/modules/repair/i18n/en.json' with { type: 'json' };
+import { registerRepairCatalog } from '@bolusi/modules/repair';
+import { afterEach, beforeAll, beforeEach, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 
 import { readTicketSyncStatuses } from '../models/repair/runtime-adapter.js';
+import { REPAIR_REJECTED_SUBJECTS } from './repair.js';
 import { readEntitySyncStatuses } from './entity-sync-statuses.js';
 
 import {
@@ -18,6 +22,10 @@ import {
 
 const keyStore = { getDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)) };
 let db: ClientDb;
+
+beforeAll(() => {
+  registerRepairCatalog({ id: idCatalog, en: enCatalog });
+});
 
 beforeEach(async () => {
   await closeClientDb();
@@ -192,6 +200,10 @@ test('a refused charge shows on its servisan for the person who recorded it', as
     [NAMED]: ['rejected'],
   });
   expect(await readTicketSyncStatuses(db.db, [NAMED], 'someone-else')).toEqual({});
+  // The Status data list names the servisan the refused charge was on.
+  const [row] = (await readSyncStatusRows(db.db, REPAIR_REJECTED_SUBJECTS, maker)).rejected;
+  expect(row?.subject).toBe('Servisan K7Q-0042');
+
   await markRejectionsHandled(db, maker, [charge.id], 10);
   expect(await readTicketSyncStatuses(db.db, [NAMED], maker)).toEqual({});
 });
