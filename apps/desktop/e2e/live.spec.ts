@@ -456,4 +456,5 @@ test('the owner uses Belanja on the store PC, which keeps none of it once they l
   await expect(counter.getByText('Perlu internet untuk membuka ini.')).toBeVisible({
     timeout: 15_000,
   });
+  await expect(counter.getByTestId('purchasing.desk.new')).toBeDisabled();
 });
