@@ -358,6 +358,10 @@ async function recordEvent(db: Db, op: ProjectionOperation, detail: object): Pro
 
 /** What one op writes on its ticket row. */
 type TicketChange = Partial<{
+  /** Written only while nobody holds the servisan (a plain claim), else nothing changes. */
+  unclaimedOnly: true;
+  /** Written only on a cancelled servisan (a fee change waits for its cancel in the fold). */
+  cancelledOnly: true;
   outcome: RepairOutcome | RawBuilder<string>;
   outcomeNote: string | null;
   location: DeviceLocation;
@@ -402,7 +406,14 @@ function downPaymentChange({ detail, actorId, at }: TicketEvent): TicketChange {
  * can replay an op that folded before it was opened (signed on a phone whose clock ran behind).
  */
 const TICKET_CHANGES: Readonly<Record<string, (event: TicketEvent) => TicketChange>> = {
-  [REPAIR_OP.ticketClaimed]: ({ actorId }) => ({ technicianId: actorId }),
+  // A plain claim (v2, from nobody) never takes a servisan someone holds. Whatever took it first in
+  // this fold was judged before the claim (which the server then refuses) or took it from the
+  // claimer afterwards, so either way the claim leaves it be. A take-over, an assignment and a v1
+  // claim take it from whoever holds it.
+  [REPAIR_OP.ticketClaimed]: ({ actorId, detail }) =>
+    detail['from'] === null
+      ? { technicianId: actorId, unclaimedOnly: true }
+      : { technicianId: actorId },
   [REPAIR_OP.technicianAssigned]: ({ detail }) => ({
     technicianId: detail['technicianId'] as string,
   }),
@@ -430,7 +441,10 @@ const TICKET_CHANGES: Readonly<Record<string, (event: TicketEvent) => TicketChan
     cancelledAt: at,
     readyAt: at,
   }),
-  [REPAIR_OP.cancelFeeChanged]: ({ detail }) => ({ cancelFee: detail['fee'] as number }),
+  [REPAIR_OP.cancelFeeChanged]: ({ detail }) => ({
+    cancelFee: detail['fee'] as number,
+    cancelledOnly: true,
+  }),
   // Where the phone is, and who handed it over, follow from every handover and undo together
   // (`settleHandover`). The warranty and the undo window count from the earliest handover.
   [REPAIR_OP.deviceReturned]: ({ at }) => ({
@@ -453,18 +467,18 @@ async function writeTicketChange(
   change: TicketChange,
   updatedAt: number,
 ): Promise<void> {
+  const { unclaimedOnly, cancelledOnly, ...set } = change;
   let update = db
     .updateTable('repairTickets')
-    .set({ ...change, updatedAt })
+    .set({ ...set, updatedAt })
     .where('id', '=', ticketId)
     .where('storeId', '=', storeId);
+  if (unclaimedOnly === true) update = update.where('technicianId', 'is', null);
+  if (cancelledOnly === true) update = update.where('outcome', '=', 'cancelled');
   if (change.outcome === 'in_repair' || change.outcome === 'waiting_for_parts') {
     update = update.where('outcome', '!=', 'cancelled').where('location', '!=', 'returned');
   } else if (change.outcome === 'repaired') {
     update = update.where('outcome', '!=', 'cancelled');
-  } else if (change.outcome === undefined && change.cancelFee !== undefined) {
-    // A fee change is about a cancel; on a servisan not cancelled (yet, in this fold) it waits.
-    update = update.where('outcome', '=', 'cancelled');
   }
   await update.execute();
 }
@@ -812,7 +826,13 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
 };
 
 export const ticketClaimedApplier: ProjectionApplier<RepairDatabase> = (db, op) =>
-  changeTicket(db, op, { technicianId: op.userId });
+  changeTicket(
+    db,
+    op,
+    op.schemaVersion >= 2
+      ? { technicianId: op.userId, from: payloadOf<{ from: string | null }>(op).from }
+      : { technicianId: op.userId },
+  );
 
 export const ticketRepairTypesChangedApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
   const { repairTypes } = payloadOf<{ repairTypes: readonly object[] }>(op);
@@ -893,7 +913,13 @@ async function settleCancelFee(
     .executeTakeFirst();
   if (latest === undefined) return;
   const { fee } = JSON.parse(latest.detailJson) as { fee: number };
-  await writeTicketChange(db, ticketId, storeId, { cancelFee: fee }, updatedAt);
+  await writeTicketChange(
+    db,
+    ticketId,
+    storeId,
+    { cancelFee: fee, cancelledOnly: true },
+    updatedAt,
+  );
 }
 
 /** How a waiting price change was decided, and by whom. */

@@ -8,7 +8,6 @@ import { afterEach, beforeAll, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 import { initI18n } from '@bolusi/i18n';
-import type { SignedOperation } from '@bolusi/schemas';
 import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
 import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
 import { registerRepairCatalog } from '../src/repair/i18n.js';
@@ -20,6 +19,7 @@ import {
   paidHandover,
   type RepairHarness,
 } from './support/repair-harness.js';
+import { judgedStore } from './support/judged-store.js';
 
 beforeAll(() => {
   initI18n({ locale: 'id' });
@@ -42,63 +42,10 @@ async function expectRefused(p: Promise<unknown>, refusal: string): Promise<void
   expect(refusalKeyOf(err)).toBe(refusal);
 }
 
-/** A counter, an owner's phone, a server that refuses what its rules refuse, and a bystander. */
+/** A counter, an owner's phone (ahead of it), the server and a bystander. */
 async function devices(seed: number) {
-  const counter = await openRepairHarness(seed);
-  const shared = {
-    tenantId: counter.tenantId,
-    storeId: counter.storeId,
-    users: [
-      counter.cashierId,
-      counter.technicianId,
-      counter.technician2Id,
-      counter.zeroUserId,
-      counter.ownerId,
-      counter.storeOwnerId,
-    ],
-  };
-  const owner = await openRepairHarness(seed + 1, shared);
-  const server = await openRepairHarness(seed + 2, shared);
-  const other = await openRepairHarness(seed + 3, shared);
-  open.push(counter, owner, server, other);
-  const seen = new Map<RepairHarness, Set<string>>();
-  const arrival = new Map<RepairHarness, number>();
-  const accepted: SignedOperation[] = [];
-  const refused: string[] = [];
-  const deliver = async (to: RepairHarness, op: SignedOperation): Promise<void> => {
-    const n = (arrival.get(to) ?? 0) + 1;
-    arrival.set(to, n);
-    await to.deliverPulled(op, n);
-  };
-  /** Pushes `from`'s new ops to the server, which judges each alone, in arrival order. */
-  const push = async (from: RepairHarness): Promise<void> => {
-    const pushed = seen.get(from) ?? new Set<string>();
-    seen.set(from, pushed);
-    for (const op of await from.ownOps()) {
-      if (pushed.has(op.id)) continue;
-      pushed.add(op.id);
-      try {
-        await server.checkRule(op);
-      } catch (error) {
-        refused.push(`${op.type}:${refusalKeyOf(error) ?? String(error)}`);
-        continue;
-      }
-      accepted.push(op);
-      await deliver(server, op);
-    }
-  };
-  /** Hands `to` every op the server accepted that `to` did not write or get yet. */
-  const pull = async (to: RepairHarness): Promise<void> => {
-    const got = seen.get(to) ?? new Set<string>();
-    seen.set(to, got);
-    const own = new Set((await to.ownOps()).map((op) => op.id));
-    for (const op of accepted) {
-      if (got.has(op.id) || own.has(op.id)) continue;
-      got.add(op.id);
-      await deliver(to, op);
-    }
-  };
-  return { counter, owner, server, other, push, pull, refused };
+  const { first: counter, second: owner, ...rest } = await judgedStore(seed, open);
+  return { counter, owner, ...rest };
 }
 
 async function ticketOf(h: RepairHarness, ticketId: string) {

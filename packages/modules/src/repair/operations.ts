@@ -309,6 +309,11 @@ export const intakeOptionsChangedPayloadV2 = intakeOptionsChangedPayload
   .strict();
 
 const emptyPayload = z.object({}).strict();
+/**
+ * `repair.ticket_claimed` v2 names whom the servisan is taken from (null: nobody held it), so a
+ * claim made offline never takes a servisan someone else took in the meantime.
+ */
+export const ticketClaimedPayload = z.object({ from: zUuid.nullable() }).strict();
 export const technicianAssignedPayload = z.object({ technicianId: zUuid }).strict();
 export const notePayload = z.object({ note: zLongText }).strict();
 /** A fee a customer can owe: integer IDR, never negative. */
@@ -499,8 +504,10 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketClaimed]: {
-    schemaVersion: 1,
-    payload: emptyPayload,
+    // v1 takes the servisan from whoever holds it when it is judged.
+    schemaVersion: 2,
+    payload: ticketClaimedPayload,
+    payloadByVersion: { 1: emptyPayload },
     reversal: 'Reversed by repair.technician_assigned to someone else.',
     apply: ticketClaimedApplier,
     rule: ticketClaimedRule,
@@ -531,8 +538,10 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.workStarted]: {
-    schemaVersion: 1,
+    // v2 is started only by whoever holds the servisan; v1 by anyone once someone does.
+    schemaVersion: 2,
     payload: emptyPayload,
+    payloadByVersion: { 1: emptyPayload },
     reversal: NO_UNDO,
     apply: workStartedApplier,
     rule: workStartedRule,
