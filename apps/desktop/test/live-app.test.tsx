@@ -230,7 +230,7 @@ describe('the PC over the offline core', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cek status sinkron' }));
     const panel = await screen.findByTestId('desktop.sync.dialog');
     expect(panel.textContent).toContain('Ditolak server (2)');
-    expect(panel.textContent).toContain('Sudah dibatalkan juga di komputer ini.');
+    expect(panel.textContent).toContain('Perubahan ini tidak berlaku.');
   });
 
   it('signs a person in with their PIN and offers the owner a new intake', async () => {
