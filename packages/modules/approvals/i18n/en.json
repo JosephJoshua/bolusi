@@ -24,7 +24,9 @@
     "repairCancel": "Cancel the repair",
     "repairPayLater": "Pay later",
     "repairDownPayment": "Change down payment",
-    "moneyVoidPayment": "Cancel a payment"
+    "moneyVoidPayment": "Cancel a payment",
+    "moneyRefund": "Give money back",
+    "moneyReduceCharge": "Lower the bill"
   },
   "status": {
     "waiting": "Waiting",

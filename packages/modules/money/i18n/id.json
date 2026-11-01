@@ -169,9 +169,11 @@
     "cashTitle": "Pembatalan catatan kas",
     "cashSave": "Batalkan catatan",
     "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya.",
-    "needsApproval": "Perlu persetujuan pemilik toko.",
-    "overLimit": "Melebihi batasmu, jadi perlu persetujuan.",
     "withEarlier": "Bersama pengurangan sebelumnya di servisan ini, totalnya {amount}."
+  },
+  "ask": {
+    "needsApproval": "Perlu persetujuan pemilik toko.",
+    "overLimit": "Melebihi batasmu, jadi perlu persetujuan."
   },
   "kind": {
     "qris": "QRIS",

@@ -47,7 +47,7 @@ export function useVoidAsk(entry: MoneyEntryRow): VoidAsk {
     pending: limit !== null && count.status !== 'ready',
     asking: payment && (!holds || (limit !== null && counted > limit)),
     mayAsk: payment && mayAskVoid(runtime, entry),
-    because: holds ? 'money.void.overLimit' : 'money.void.needsApproval',
+    because: holds ? 'money.ask.overLimit' : 'money.ask.needsApproval',
     limit,
     counted,
     withEarlier: limit !== null && counted > entry.amount ? counted : null,
