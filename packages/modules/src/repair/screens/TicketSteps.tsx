@@ -18,6 +18,7 @@ import {
   space,
   type,
   Text,
+  TileGrid,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
@@ -64,15 +65,7 @@ import {
   type StaleStep,
   cancelRefund,
 } from '../flows.js';
-import {
-  FlowScreen,
-  PhotoGrid,
-  PhotoThumb,
-  QueryView,
-  repairStyles,
-  type RepairChrome,
-  usePhotoGridCell,
-} from './parts.js';
+import { FlowScreen, PhotoThumb, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
 import { ta } from '../../approvals/i18n.js';
 import {
@@ -142,7 +135,6 @@ export function WorkPhotosStep({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [photos, setPhotos] = useState<readonly MediaRef[]>([]);
-  const gridCell = usePhotoGridCell();
   const [note, setNote] = useState('');
   const copy = STAGE_COPY[stage];
   const discard = useDiscardConfirm({
@@ -191,24 +183,25 @@ export function WorkPhotosStep({
     >
       <Text style={repairStyles.muted}>{tn(copy.hint)}</Text>
       <View style={repairStyles.gap}>
-        <PhotoGrid>
+        <TileGrid testID={`${testID}.grid`}>
           {photos.map((photo, index) => (
-            <View key={photo.mediaId} style={gridCell}>
-              <PhotoThumb photo={capturedThumbnailRef(photo)} testID={`${testID}.photo.${index}`} />
-            </View>
+            <PhotoThumb
+              key={photo.mediaId}
+              photo={capturedThumbnailRef(photo)}
+              testID={`${testID}.photo.${index}`}
+            />
           ))}
           {photos.length < WORK_PHOTOS_MAX ? (
-            <View style={gridCell}>
-              <PhotoSlot
-                label={tn(copy.shot, { n: photos.length + 1 })}
-                image={null}
-                actionLabel={tn('repair.photo.take')}
-                onPress={takePhoto}
-                testID={`${testID}.take`}
-              />
-            </View>
+            <PhotoSlot
+              key="take"
+              label={tn(copy.shot, { n: photos.length + 1 })}
+              image={null}
+              actionLabel={tn('repair.photo.take')}
+              onPress={takePhoto}
+              testID={`${testID}.take`}
+            />
           ) : null}
-        </PhotoGrid>
+        </TileGrid>
       </View>
       {stage === 'after' ? (
         <View style={repairStyles.gap}>

@@ -19,6 +19,7 @@ import {
   space,
   type,
   Text,
+  TileGrid,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { Keyboard, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -65,11 +66,9 @@ import {
   DownPaymentRows,
   Field,
   ModelPhoto,
-  PhotoGrid,
   PhotoThumb,
   Section,
   repairStyles,
-  usePhotoGridCell,
 } from './parts.js';
 import { useRepairQuery } from '../runtime.js';
 import { usePriceKinds, type PriceKind } from './TicketSteps.js';
@@ -609,37 +608,33 @@ export function PhotosStep({
   readonly onPlayVideo: ((video: VideoMediaRef) => void) | undefined;
   readonly testID: string;
 }): React.JSX.Element {
-  const gridCell = usePhotoGridCell();
   return (
     <View>
       <Text style={repairStyles.muted}>{tn('repair.photo.intakeHint')}</Text>
       <View style={repairStyles.gap}>
-        <PhotoGrid>
+        <TileGrid testID={`${testID}.grid`}>
           {angles.map((angle) => {
             const slot = angle.id;
             const photo = draft.photos[slot];
             return (
-              <View key={slot} style={gridCell}>
-                <PhotoSlot
-                  label={optionLabel('photoAngles', angle)}
-                  actionLabel={tn(
-                    photo === undefined ? 'repair.photo.take' : 'repair.photo.retake',
-                  )}
-                  image={
-                    photo === undefined ? null : (
-                      <PhotoThumb
-                        photo={capturedThumbnailRef(photo)}
-                        testID={`${testID}.thumb.${slot}`}
-                      />
-                    )
-                  }
-                  onPress={() => onTake(angle)}
-                  testID={`${testID}.slot.${slot}`}
-                />
-              </View>
+              <PhotoSlot
+                key={slot}
+                label={optionLabel('photoAngles', angle)}
+                actionLabel={tn(photo === undefined ? 'repair.photo.take' : 'repair.photo.retake')}
+                image={
+                  photo === undefined ? null : (
+                    <PhotoThumb
+                      photo={capturedThumbnailRef(photo)}
+                      testID={`${testID}.thumb.${slot}`}
+                    />
+                  )
+                }
+                onPress={() => onTake(angle)}
+                testID={`${testID}.slot.${slot}`}
+              />
             );
           })}
-        </PhotoGrid>
+        </TileGrid>
       </View>
       {needsVideo ? (
         <View style={styles.videoSection} testID={`${testID}.video`}>

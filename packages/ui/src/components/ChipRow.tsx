@@ -7,6 +7,7 @@
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
+import { bleedMargins, bleedPadding, useBleed } from '../layout.js';
 import { space } from '../tokens.js';
 
 export interface ChipRowProps {
@@ -15,23 +16,22 @@ export interface ChipRowProps {
   readonly testID?: string | undefined;
 }
 
-/** The screen padding the row bleeds through (AppShell content uses `space.lg`). */
-const BLEED = space.lg;
-
+// It bleeds through the screen's gutter (`useBleed`), and only the outer one beside another column.
 const styles = StyleSheet.create({
-  scroller: { flexGrow: 0, marginHorizontal: -BLEED },
-  row: { paddingHorizontal: BLEED, gap: space.sm, alignItems: 'center' },
+  scroller: { flexGrow: 0 },
+  row: { gap: space.sm, alignItems: 'center' },
 });
 
 export function ChipRow({ children, testID = 'ui.chipRow' }: ChipRowProps): React.JSX.Element {
+  const bleed = useBleed();
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       // A tap on a chip lands even while a field above still holds the keyboard.
       keyboardShouldPersistTaps="handled"
-      style={styles.scroller}
-      contentContainerStyle={styles.row}
+      style={[styles.scroller, bleedMargins(bleed)]}
+      contentContainerStyle={[styles.row, bleedPadding(bleed)]}
       testID={testID}
     >
       {children}

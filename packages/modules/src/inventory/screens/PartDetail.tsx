@@ -5,6 +5,7 @@
  */
 import { formatDateTime, t } from '@bolusi/i18n';
 import {
+  Columns,
   AppShell,
   Banner,
   Button,
@@ -46,6 +47,8 @@ export interface PartDetailProps {
   /** What the last step did ("Jumlah stok disimpan."), shown until dismissed. */
   readonly notice: InventoryKey | null;
   readonly onClearNotice: () => void;
+  /** Beside the list on a wide screen: the list is in view, so there is no back arrow. */
+  readonly hideBack?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -57,6 +60,7 @@ export function PartDetail({
   onCount,
   notice,
   onClearNotice,
+  hideBack = false,
   testID = 'inventory.part',
 }: PartDetailProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
@@ -89,9 +93,10 @@ export function PartDetail({
   return (
     <AppShell
       scrollable
+      wide
       title={part?.name ?? ti('inventory.list.title')}
       titleVariant="detail"
-      onBack={onBack}
+      onBack={hideBack ? undefined : onBack}
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
@@ -154,68 +159,80 @@ export function PartDetail({
     const facts = itemFacts(row);
     return (
       <View testID={`${testID}.content`}>
-        <Card testID={`${testID}.summary`}>
-          <Text style={styles.stockLabel}>{ti('inventory.detail.stockHere')}</Text>
-          <Text style={[styles.stock, below ? styles.below : null]} testID={`${testID}.stock`}>
-            {stockText(row.onHand)}
-          </Text>
-          {below || row.archived ? (
-            <View style={styles.chips}>
-              {below ? (
-                <Chip label={ti('inventory.list.belowZero')} icon="warning" tone="warning" />
-              ) : null}
-              {row.archived ? (
-                <Chip label={ti('inventory.list.archived')} icon="pending" tone="neutral" />
-              ) : null}
-            </View>
-          ) : null}
-        </Card>
+        {/* On a tablet the stock history sits beside the part instead of under it. */}
+        <Columns
+          testID={`${testID}.columns`}
+          start={
+            <>
+              <Card testID={`${testID}.summary`}>
+                <Text style={styles.stockLabel}>{ti('inventory.detail.stockHere')}</Text>
+                <Text
+                  style={[styles.stock, below ? styles.below : null]}
+                  testID={`${testID}.stock`}
+                >
+                  {stockText(row.onHand)}
+                </Text>
+                {below || row.archived ? (
+                  <View style={styles.chips}>
+                    {below ? (
+                      <Chip label={ti('inventory.list.belowZero')} icon="warning" tone="warning" />
+                    ) : null}
+                    {row.archived ? (
+                      <Chip label={ti('inventory.list.archived')} icon="pending" tone="neutral" />
+                    ) : null}
+                  </View>
+                ) : null}
+              </Card>
 
-        {facts.length === 0 && !canManage ? null : (
-          <Section
-            title={ti('inventory.detail.title')}
-            action={
-              canManage ? (
-                <TextButton
-                  label={ti('inventory.action.edit')}
-                  onPress={() => onEdit(row)}
-                  disabled={runner.busy}
-                  testID={`${testID}.edit`}
+              {facts.length === 0 && !canManage ? null : (
+                <Section
+                  title={ti('inventory.detail.title')}
+                  action={
+                    canManage ? (
+                      <TextButton
+                        label={ti('inventory.action.edit')}
+                        onPress={() => onEdit(row)}
+                        disabled={runner.busy}
+                        testID={`${testID}.edit`}
+                      />
+                    ) : undefined
+                  }
+                >
+                  <FactGrid>
+                    {facts.map((fact) => (
+                      <Fact
+                        key={fact.key}
+                        label={fact.label}
+                        value={fact.value}
+                        wide={fact.wide}
+                        testID={`${testID}.${fact.key}`}
+                      />
+                    ))}
+                  </FactGrid>
+                </Section>
+              )}
+            </>
+          }
+          end={
+            <Section title={ti('inventory.detail.history')} testID={`${testID}.history`}>
+              {row.movements.length === 0 ? (
+                <Text style={styles.muted}>{ti('inventory.detail.noHistory')}</Text>
+              ) : (
+                <Timeline
+                  entries={row.movements.map((movement) => ({
+                    key: movement.id,
+                    title: `${movementTitle(movement)} · ${signedQty(movement.qty)}`,
+                    meta: [formatDateTime(movement.at), movement.userName]
+                      .filter((part) => part !== null)
+                      .join(' · '),
+                    ...(movement.note === null ? {} : { detail: movement.note }),
+                  }))}
+                  testID={`${testID}.timeline`}
                 />
-              ) : undefined
-            }
-          >
-            <FactGrid>
-              {facts.map((fact) => (
-                <Fact
-                  key={fact.key}
-                  label={fact.label}
-                  value={fact.value}
-                  wide={fact.wide}
-                  testID={`${testID}.${fact.key}`}
-                />
-              ))}
-            </FactGrid>
-          </Section>
-        )}
-
-        <Section title={ti('inventory.detail.history')} testID={`${testID}.history`}>
-          {row.movements.length === 0 ? (
-            <Text style={styles.muted}>{ti('inventory.detail.noHistory')}</Text>
-          ) : (
-            <Timeline
-              entries={row.movements.map((movement) => ({
-                key: movement.id,
-                title: `${movementTitle(movement)} · ${signedQty(movement.qty)}`,
-                meta: [formatDateTime(movement.at), movement.userName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(movement.note === null ? {} : { detail: movement.note }),
-              }))}
-              testID={`${testID}.timeline`}
-            />
-          )}
-        </Section>
+              )}
+            </Section>
+          }
+        />
 
         {canManage ? (
           <View style={styles.archive}>

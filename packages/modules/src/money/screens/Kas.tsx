@@ -9,6 +9,7 @@ import {
   AppShell,
   Banner,
   Button,
+  Columns,
   FreshGlow,
   Icon,
   LoadingState,
@@ -106,172 +107,188 @@ export function KasBoard({
           />
         )
       }
+      wide
       testID={testID}
     >
-      {drawer.status === 'loading' ? (
-        <LoadingState variant="spinner" />
-      ) : drawerData === null ? null : (
-        <View style={styles.drawer} testID={`${testID}.drawer`}>
-          {may.seeExpected ? (
-            <>
-              <Text style={styles.label}>{tm('money.kas.expected')}</Text>
-              <RollingText
-                value={drawerData.expected}
-                style={styles.expected}
-                testID={`${testID}.expected`}
-              >
-                {formatMoney(drawerData.expected)}
-              </RollingText>
-            </>
-          ) : (
-            <Text style={styles.label}>{tm('money.kas.drawer')}</Text>
-          )}
-          <Text style={styles.muted} testID={`${testID}.lastCount`}>
-            {counted === null
-              ? tm('money.kas.notCounted')
-              : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
-          </Text>
-          {may.move || (onHistory !== undefined && mayRead) ? (
-            <View style={styles.drawerAction}>
-              {may.move ? (
-                <Button
-                  label={tm('money.kas.move')}
-                  variant="secondary"
-                  size="compact"
-                  onPress={onMove}
-                  testID={`${testID}.move`}
-                />
-              ) : null}
-              {onHistory !== undefined && mayRead ? (
-                <Button
-                  label={tm('money.history.open')}
-                  variant="secondary"
-                  size="compact"
-                  onPress={onHistory}
-                  testID={`${testID}.history`}
-                />
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-      )}
+      {/* On a tablet what is owed and what moved sit beside the drawer and today's takings. */}
+      <Columns
+        testID={`${testID}.columns`}
+        start={
+          <>
+            {drawer.status === 'loading' ? (
+              <LoadingState variant="spinner" />
+            ) : drawerData === null ? null : (
+              <View style={styles.drawer} testID={`${testID}.drawer`}>
+                {may.seeExpected ? (
+                  <>
+                    <Text style={styles.label}>{tm('money.kas.expected')}</Text>
+                    <RollingText
+                      value={drawerData.expected}
+                      style={styles.expected}
+                      testID={`${testID}.expected`}
+                    >
+                      {formatMoney(drawerData.expected)}
+                    </RollingText>
+                  </>
+                ) : (
+                  <Text style={styles.label}>{tm('money.kas.drawer')}</Text>
+                )}
+                <Text style={styles.muted} testID={`${testID}.lastCount`}>
+                  {counted === null
+                    ? tm('money.kas.notCounted')
+                    : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
+                </Text>
+                {may.move || (onHistory !== undefined && mayRead) ? (
+                  <View style={styles.drawerAction}>
+                    {may.move ? (
+                      <Button
+                        label={tm('money.kas.move')}
+                        variant="secondary"
+                        size="compact"
+                        onPress={onMove}
+                        testID={`${testID}.move`}
+                      />
+                    ) : null}
+                    {onHistory !== undefined && mayRead ? (
+                      <Button
+                        label={tm('money.history.open')}
+                        variant="secondary"
+                        size="compact"
+                        onPress={onHistory}
+                        testID={`${testID}.history`}
+                      />
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            )}
 
-      {turnedDown.length === 0 ? null : (
-        <Section title={tm('money.kas.turnedDown')} testID={`${testID}.turnedDown`}>
-          {turnedDown.map((row) => (
-            <Row
-              key={row.id}
-              label={ta(approvalKindKey(row.kind))}
-              detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
-                .filter(Boolean)
-                .join(' · ')}
-              value={formatMoney(row.amount)}
-              onPress={onHistory}
-              testID={`${testID}.turnedDown.${row.id}`}
-            />
-          ))}
-        </Section>
-      )}
+            {turnedDown.length === 0 ? null : (
+              <Section title={tm('money.kas.turnedDown')} testID={`${testID}.turnedDown`}>
+                {turnedDown.map((row) => (
+                  <Row
+                    key={row.id}
+                    label={ta(approvalKindKey(row.kind))}
+                    detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    value={formatMoney(row.amount)}
+                    onPress={onHistory}
+                    testID={`${testID}.turnedDown.${row.id}`}
+                  />
+                ))}
+              </Section>
+            )}
 
-      {difference === null ? null : (
-        <Section title={tm('money.kas.difference')} testID={`${testID}.differences`}>
-          <Row
-            label={formatDateTime(difference.countedAt)}
-            detail={
-              maySettle
-                ? (runtime.nameOf(difference.countedBy) ?? undefined)
-                : tm('money.kas.waitingOwner')
-            }
-            value={differenceText(difference.difference)}
-            tone={difference.difference < 0 ? 'danger' : 'text'}
-            onPress={maySettle ? () => onSettle(difference) : undefined}
-            testID={`${testID}.difference.${difference.id}`}
-          />
-        </Section>
-      )}
-
-      {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
-      {entriesReady && may.seeExpected ? (
-        <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
-          {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
-            <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
-          ) : (
-            <>
-              {moneyIn.methods.map((method) => (
+            {difference === null ? null : (
+              <Section title={tm('money.kas.difference')} testID={`${testID}.differences`}>
                 <Row
-                  key={method.account}
-                  label={accountLabel(method.account, accountRows)}
-                  value={formatMoney(method.amount)}
-                  testID={`${testID}.in.${method.account}`}
+                  label={formatDateTime(difference.countedAt)}
+                  detail={
+                    maySettle
+                      ? (runtime.nameOf(difference.countedBy) ?? undefined)
+                      : tm('money.kas.waitingOwner')
+                  }
+                  value={differenceText(difference.difference)}
+                  tone={difference.difference < 0 ? 'danger' : 'text'}
+                  onPress={maySettle ? () => onSettle(difference) : undefined}
+                  testID={`${testID}.difference.${difference.id}`}
                 />
-              ))}
-              {moneyIn.refunded === 0 ? null : (
-                <Row
-                  label={tm('money.kas.refunded')}
-                  value={formatMoney(-moneyIn.refunded)}
-                  testID={`${testID}.in.refunded`}
-                />
+              </Section>
+            )}
+
+            {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+            {entriesReady && may.seeExpected ? (
+              <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
+                {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
+                  <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
+                ) : (
+                  <>
+                    {moneyIn.methods.map((method) => (
+                      <Row
+                        key={method.account}
+                        label={accountLabel(method.account, accountRows)}
+                        value={formatMoney(method.amount)}
+                        testID={`${testID}.in.${method.account}`}
+                      />
+                    ))}
+                    {moneyIn.refunded === 0 ? null : (
+                      <Row
+                        label={tm('money.kas.refunded')}
+                        value={formatMoney(-moneyIn.refunded)}
+                        testID={`${testID}.in.refunded`}
+                      />
+                    )}
+                    <Row
+                      label={tm('money.kas.total')}
+                      value={formatMoney(moneyIn.total)}
+                      strong
+                      testID={`${testID}.in.total`}
+                    />
+                  </>
+                )}
+              </Section>
+            ) : null}
+          </>
+        }
+        end={
+          moves.length === 0 && open.owed.length === 0 && open.owedBack.length === 0 ? null : (
+            <>
+              {moves.length === 0 ? null : (
+                <Section title={tm('money.kas.movesToday')} testID={`${testID}.moves`}>
+                  {moves.map(({ entry, label, delta }) => (
+                    <Row
+                      key={entry.id}
+                      label={tm(label)}
+                      detail={[formatTime(entry.createdAt), entry.reason]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
+                      testID={`${testID}.moves.${entry.id}`}
+                    />
+                  ))}
+                </Section>
               )}
-              <Row
-                label={tm('money.kas.total')}
-                value={formatMoney(moneyIn.total)}
-                strong
-                testID={`${testID}.in.total`}
-              />
+
+              {open.owed.length === 0 ? null : (
+                <Section title={tm('money.kas.owed')} testID={`${testID}.owed`}>
+                  {open.owed.map((row) => (
+                    <Row
+                      key={row.documentId}
+                      label={row.customer ?? row.documentLabel}
+                      detail={[
+                        row.customer === null ? null : row.documentLabel,
+                        tm('money.kas.since', { date: formatDate(row.since) }),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      value={formatMoney(row.balance)}
+                      onPress={mayReceive ? () => onReceive(row) : undefined}
+                      testID={`${testID}.owed.${row.documentId}`}
+                    />
+                  ))}
+                </Section>
+              )}
+
+              {open.owedBack.length === 0 ? null : (
+                <Section title={tm('money.kas.owedBack')} testID={`${testID}.owedBack`}>
+                  <Text style={styles.muted}>{tm('money.kas.owedBackHint')}</Text>
+                  {open.owedBack.map((row) => (
+                    <Row
+                      key={row.documentId}
+                      label={row.customer ?? row.documentLabel}
+                      detail={row.customer === null ? undefined : row.documentLabel}
+                      value={formatMoney(-row.balance)}
+                      onPress={mayReceive ? () => onRefund(row) : undefined}
+                      testID={`${testID}.owedBack.${row.documentId}`}
+                    />
+                  ))}
+                </Section>
+              )}
             </>
-          )}
-        </Section>
-      ) : null}
-
-      {moves.length === 0 ? null : (
-        <Section title={tm('money.kas.movesToday')} testID={`${testID}.moves`}>
-          {moves.map(({ entry, label, delta }) => (
-            <Row
-              key={entry.id}
-              label={tm(label)}
-              detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
-              value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
-              testID={`${testID}.moves.${entry.id}`}
-            />
-          ))}
-        </Section>
-      )}
-
-      {open.owed.length === 0 ? null : (
-        <Section title={tm('money.kas.owed')} testID={`${testID}.owed`}>
-          {open.owed.map((row) => (
-            <Row
-              key={row.documentId}
-              label={row.customer ?? row.documentLabel}
-              detail={[
-                row.customer === null ? null : row.documentLabel,
-                tm('money.kas.since', { date: formatDate(row.since) }),
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-              value={formatMoney(row.balance)}
-              onPress={mayReceive ? () => onReceive(row) : undefined}
-              testID={`${testID}.owed.${row.documentId}`}
-            />
-          ))}
-        </Section>
-      )}
-
-      {open.owedBack.length === 0 ? null : (
-        <Section title={tm('money.kas.owedBack')} testID={`${testID}.owedBack`}>
-          <Text style={styles.muted}>{tm('money.kas.owedBackHint')}</Text>
-          {open.owedBack.map((row) => (
-            <Row
-              key={row.documentId}
-              label={row.customer ?? row.documentLabel}
-              detail={row.customer === null ? undefined : row.documentLabel}
-              value={formatMoney(-row.balance)}
-              onPress={mayReceive ? () => onRefund(row) : undefined}
-              testID={`${testID}.owedBack.${row.documentId}`}
-            />
-          ))}
-        </Section>
-      )}
+          )
+        }
+      />
     </AppShell>
   );
 }

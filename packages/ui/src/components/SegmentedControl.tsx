@@ -12,6 +12,7 @@ import { Text } from '../text.js';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, size as sizes, space, touch, type } from '../tokens.js';
+import { bleedMargins, bleedPadding, useBleed } from '../layout.js';
 
 /** Grows a compact pill's touch height to the §1.4 floor without growing what is drawn. */
 const COMPACT_SLOP = (touch.min - sizes.control) / 2;
@@ -52,8 +53,6 @@ const styles = StyleSheet.create({
   compactWrapped: { rowGap: 2 * COMPACT_SLOP },
   // Android delivers no touch outside a ScrollView's bounds, so the slop lives inside the row.
   compactRow: { paddingVertical: COMPACT_SLOP },
-  bleedScroller: { marginHorizontal: -space.lg },
-  bleedRow: { paddingHorizontal: space.lg },
   option: {
     minHeight: touch.min,
     paddingHorizontal: space.lg,
@@ -90,6 +89,7 @@ export function SegmentedControl<V extends string>({
   testID = 'ui.segmented',
 }: SegmentedControlProps<V>): React.JSX.Element {
   const compact = size === 'compact';
+  const gutter = useBleed();
   const items = options.map((option) => {
     const selected = option.value === value;
     return (
@@ -148,11 +148,11 @@ export function SegmentedControl<V extends string>({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={[styles.scroller, bleed ? styles.bleedScroller : null]}
+      style={[styles.scroller, bleed ? bleedMargins(gutter) : null]}
       contentContainerStyle={[
         styles.row,
         compact ? styles.compactRow : null,
-        bleed ? styles.bleedRow : null,
+        bleed ? bleedPadding(gutter) : null,
       ]}
       accessibilityRole="radiogroup"
       testID={testID}

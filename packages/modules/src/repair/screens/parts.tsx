@@ -13,13 +13,12 @@ import {
   size,
   space,
   type,
-  useViewport,
   type IconName,
   Text,
 } from '@bolusi/ui';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 import {
@@ -358,19 +357,6 @@ export function DownPaymentRows({
   );
 }
 
-/** Photos laid out in a wrapping grid. */
-export function PhotoGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
-  return <View style={styles.grid}>{children}</View>;
-}
-
-/**
- * One cell of a `PhotoGrid`: three to a row on a phone, four on a tablet, where three would make
- * each photo the size of a phone screen and push everything under them out of sight.
- */
-export function usePhotoGridCell(): StyleProp<ViewStyle> {
-  return useViewport().widthClass === 'compact' ? styles.gridCell : styles.gridCellWide;
-}
-
 export const repairStyles = StyleSheet.create({
   caption: { ...type.caption, color: color.textMuted, marginTop: space.xs },
   muted: { ...type.bodySm, color: color.textMuted },
@@ -424,7 +410,4 @@ const styles = StyleSheet.create({
   field: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
   fieldLabel: { ...type.bodySm, color: color.textMuted, marginRight: space.md },
   fieldValue: { ...type.bodySm, color: color.text, flexShrink: 1, textAlign: 'right' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  gridCell: { width: '31%' },
-  gridCellWide: { width: '23%' },
 });

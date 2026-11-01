@@ -10,7 +10,9 @@ import { formatMoney } from '@bolusi/i18n';
 import {
   Button,
   Card,
+  Columns,
   PhotoSlot,
+  TileGrid,
   RollingText,
   TextButton,
   TextInput,
@@ -44,7 +46,6 @@ import {
   DownPaymentRows,
   FlowScreen,
   Section,
-  PhotoGrid,
   PhotoThumb,
   QueryView,
   StatusChip,
@@ -120,6 +121,8 @@ export function Handover({
     checks.ready(note);
   const stale =
     ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
+  // The payment section shows: something is left to pay and the handover can still finish.
+  const paying = due > 0 && stale === null;
 
   const dirty =
     stale === null &&
@@ -230,6 +233,7 @@ export function Handover({
   return (
     <FlowScreen
       chrome={chrome}
+      wide
       title={tn('repair.handover.title')}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
@@ -253,179 +257,204 @@ export function Handover({
       stale={stale}
       testID={testID}
     >
-      <QueryView
-        query={query}
-        onBack={onCancel}
-        onRetry={() => setReloadNonce((n) => n + 1)}
-        testID={`${testID}.ticket`}
-      >
-        {(shown) =>
-          shown === undefined ? null : (
-            <Card testID={`${testID}.summary`}>
-              <StatusChip status={ticketStatus(shown)} testID={`${testID}.status`} />
-              <Text style={styles.customer}>{shown.customerName}</Text>
-              <Text style={repairStyles.muted}>
-                {`${shown.deviceBrand} ${shown.deviceModel} · ${shown.ticketNumber}`}
-              </Text>
-              {/* What the customer signs for: the cancellation fee, never the repair price. A
+      {/* On a tablet the payment and the proof sit beside what is handed over. */}
+      <Columns
+        testID={`${testID}.columns`}
+        start={
+          <>
+            <QueryView
+              query={query}
+              onBack={onCancel}
+              onRetry={() => setReloadNonce((n) => n + 1)}
+              testID={`${testID}.ticket`}
+            >
+              {(shown) =>
+                shown === undefined ? null : (
+                  <Card testID={`${testID}.summary`}>
+                    <StatusChip status={ticketStatus(shown)} testID={`${testID}.status`} />
+                    <Text style={styles.customer}>{shown.customerName}</Text>
+                    <Text style={repairStyles.muted}>
+                      {`${shown.deviceBrand} ${shown.deviceModel} · ${shown.ticketNumber}`}
+                    </Text>
+                    {/* What the customer signs for: the cancellation fee, never the repair price. A
                   ticket cancelled before fees existed charged nothing. */}
-              <View style={[repairStyles.row, styles.total]}>
-                <Text style={[styles.totalLabel, repairStyles.rowText]}>
-                  {tn(shown.outcome === 'cancelled' ? 'repair.cancel.fee' : 'repair.price.total')}
-                </Text>
-                <RollingText
-                  value={amountOwed(shown) + shown.reduced}
-                  style={[repairStyles.heading, repairStyles.rowValue]}
-                  testID={`${testID}.total`}
-                >
-                  {/* Before any reduction, which the rows below take off. */}
-                  {formatMoney(amountOwed(shown) + shown.reduced)}
-                </RollingText>
-              </View>
-              {shown.outcome === 'cancelled' ? (
-                <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>
-                  {tn('repair.handover.cancelled')}
-                </Text>
-              ) : null}
-              <DownPaymentRows
-                total={amountOwed(shown)}
-                reduced={shown.reduced}
-                refunds={shown.refunds}
-                downPayment={shown.downPayment}
-                // The DP and anything paid at this counter already (a QR): all of it is paid.
-                paidLabel="repair.price.paid"
-                testID={testID}
-              />
-            </Card>
-          )
+                    <View style={[repairStyles.row, styles.total]}>
+                      <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                        {tn(
+                          shown.outcome === 'cancelled'
+                            ? 'repair.cancel.fee'
+                            : 'repair.price.total',
+                        )}
+                      </Text>
+                      <RollingText
+                        value={amountOwed(shown) + shown.reduced}
+                        style={[repairStyles.heading, repairStyles.rowValue]}
+                        testID={`${testID}.total`}
+                      >
+                        {/* Before any reduction, which the rows below take off. */}
+                        {formatMoney(amountOwed(shown) + shown.reduced)}
+                      </RollingText>
+                    </View>
+                    {shown.outcome === 'cancelled' ? (
+                      <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>
+                        {tn('repair.handover.cancelled')}
+                      </Text>
+                    ) : null}
+                    <DownPaymentRows
+                      total={amountOwed(shown)}
+                      reduced={shown.reduced}
+                      refunds={shown.refunds}
+                      downPayment={shown.downPayment}
+                      // The DP and anything paid at this counter already (a QR): all of it is paid.
+                      paidLabel="repair.price.paid"
+                      testID={testID}
+                    />
+                  </Card>
+                )
+              }
+            </QueryView>
+            {checks.lines.length === 0 || stale !== null ? null : (
+              <Section title={tn('repair.handover.checks')} testID={`${testID}.checks`}>
+                {/* Wrapped, not a sideways row: every line must be in sight to be gone through. */}
+                <View style={styles.checks} testID={`${testID}.checkList`}>
+                  {checks.lines.map((line) => (
+                    <ToggleChip
+                      key={`${line.kind}:${line.item}`}
+                      label={handoverLineLabel(line)}
+                      selected={line.done}
+                      onToggle={() => checks.toggle(line)}
+                      testID={`${testID}.check.${line.kind}.${line.item}`}
+                    />
+                  ))}
+                </View>
+              </Section>
+            )}
+          </>
         }
-      </QueryView>
-      {checks.lines.length === 0 || stale !== null ? null : (
-        <Section title={tn('repair.handover.checks')} testID={`${testID}.checks`}>
-          {/* Wrapped, not a sideways row: every line must be in sight to be gone through. */}
-          <View style={styles.checks} testID={`${testID}.checkList`}>
-            {checks.lines.map((line) => (
-              <ToggleChip
-                key={`${line.kind}:${line.item}`}
-                label={handoverLineLabel(line)}
-                selected={line.done}
-                onToggle={() => checks.toggle(line)}
-                testID={`${testID}.check.${line.kind}.${line.item}`}
-              />
-            ))}
-          </View>
-        </Section>
-      )}
-      {due > 0 && stale === null ? (
-        <Section
-          title={tn('repair.handover.payment')}
-          action={
-            payment.access.kind === 'none' ? undefined : (
-              <TextButton
-                label={tn(payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
-                onPress={() => {
-                  // A refusal of the other way to settle no longer applies.
-                  runner.clearError();
-                  payment.togglePayLater();
-                }}
-                testID={`${testID}.payLater`}
-              />
-            )
-          }
-          testID={`${testID}.payment`}
-        >
-          {payment.unpaid ? (
-            <View style={styles.payLater}>
-              <TextInput
-                label={tn('repair.handover.payLaterReason')}
-                value={payment.unpaidReason}
-                onChangeText={payment.setUnpaidReason}
-                multiline
-                testID={`${testID}.unpaidReason`}
-              />
-              {payLaterLines(payment, due).map((line) => (
-                <Text key={line.id} style={repairStyles.muted} testID={`${testID}.${line.id}`}>
-                  {line.text}
-                </Text>
-              ))}
-              {payment.access.kind === 'ask' ? (
-                <Button
-                  label={ta('approvals.action.ask')}
-                  variant="secondary"
-                  disabled={payment.unpaidReason.trim() === '' || runner.busy}
-                  onPress={() => void runner.run(payment.askPayLater)}
-                  testID={`${testID}.askPayLater`}
-                />
-              ) : null}
-            </View>
-          ) : (
-            <PaymentLines
-              lines={payment.lines}
-              entry={payment.entry}
-              accounts={accounts}
-              onChange={payment.setLines}
-              newKey={payment.newKey}
-              qris={payment.qris}
-              testID={`${testID}.pay`}
-            />
-          )}
-        </Section>
-      ) : null}
-      <View style={repairStyles.gap}>
-        <PhotoGrid>
-          <View style={styles.half}>
-            <PhotoSlot
-              label={tn('repair.handover.photo')}
-              actionLabel={tn(photo === null ? 'repair.photo.take' : 'repair.photo.retake')}
-              image={
-                photo === null ? null : (
-                  <PhotoThumb photo={capturedThumbnailRef(photo)} testID={`${testID}.photoThumb`} />
-                )
-              }
-              onPress={() =>
-                capture(
-                  () => runtime.capturePhoto({ title: tn('repair.handover.photo') }),
-                  setPhoto,
-                )
-              }
-              testID={`${testID}.photo`}
-            />
-          </View>
-          <View style={styles.half}>
-            <PhotoSlot
-              label={tn('repair.handover.signature')}
-              emptyIcon="signature"
-              actionLabel={tn(
-                signature === null ? 'repair.handover.sign' : 'repair.handover.signAgain',
-              )}
-              image={
-                signature === null ? null : (
-                  <PhotoThumb
-                    photo={capturedThumbnailRef(signature)}
-                    testID={`${testID}.signatureThumb`}
+        end={
+          <>
+            {paying ? (
+              <Section
+                title={tn('repair.handover.payment')}
+                action={
+                  payment.access.kind === 'none' ? undefined : (
+                    <TextButton
+                      label={tn(
+                        payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater',
+                      )}
+                      onPress={() => {
+                        // A refusal of the other way to settle no longer applies.
+                        runner.clearError();
+                        payment.togglePayLater();
+                      }}
+                      testID={`${testID}.payLater`}
+                    />
+                  )
+                }
+                testID={`${testID}.payment`}
+              >
+                {payment.unpaid ? (
+                  <View style={styles.payLater}>
+                    <TextInput
+                      label={tn('repair.handover.payLaterReason')}
+                      value={payment.unpaidReason}
+                      onChangeText={payment.setUnpaidReason}
+                      multiline
+                      testID={`${testID}.unpaidReason`}
+                    />
+                    {payLaterLines(payment, due).map((line) => (
+                      <Text
+                        key={line.id}
+                        style={repairStyles.muted}
+                        testID={`${testID}.${line.id}`}
+                      >
+                        {line.text}
+                      </Text>
+                    ))}
+                    {payment.access.kind === 'ask' ? (
+                      <Button
+                        label={ta('approvals.action.ask')}
+                        variant="secondary"
+                        disabled={payment.unpaidReason.trim() === '' || runner.busy}
+                        onPress={() => void runner.run(payment.askPayLater)}
+                        testID={`${testID}.askPayLater`}
+                      />
+                    ) : null}
+                  </View>
+                ) : (
+                  <PaymentLines
+                    lines={payment.lines}
+                    entry={payment.entry}
+                    accounts={accounts}
+                    onChange={payment.setLines}
+                    newKey={payment.newKey}
+                    qris={payment.qris}
+                    testID={`${testID}.pay`}
                   />
-                )
-              }
-              onPress={() =>
-                capture(
-                  () => runtime.captureSignature({ title: tn('repair.handover.signatureTitle') }),
-                  setSignature,
-                )
-              }
-              testID={`${testID}.signature`}
-            />
-          </View>
-        </PhotoGrid>
-      </View>
-      <View style={repairStyles.gap}>
-        <TextInput
-          label={tn(checks.noteNeeded ? 'repair.handover.noteNeeded' : 'repair.handover.note')}
-          value={note}
-          onChangeText={setNote}
-          multiline
-          testID={`${testID}.note`}
-        />
-      </View>
+                )}
+              </Section>
+            ) : null}
+            {/* Its own gap when nothing comes before it in its column: the start of a section. */}
+            <View style={paying ? repairStyles.gap : styles.proof}>
+              <TileGrid min={2} testID={`${testID}.proof`}>
+                <PhotoSlot
+                  label={tn('repair.handover.photo')}
+                  actionLabel={tn(photo === null ? 'repair.photo.take' : 'repair.photo.retake')}
+                  image={
+                    photo === null ? null : (
+                      <PhotoThumb
+                        photo={capturedThumbnailRef(photo)}
+                        testID={`${testID}.photoThumb`}
+                      />
+                    )
+                  }
+                  onPress={() =>
+                    capture(
+                      () => runtime.capturePhoto({ title: tn('repair.handover.photo') }),
+                      setPhoto,
+                    )
+                  }
+                  testID={`${testID}.photo`}
+                />
+                <PhotoSlot
+                  label={tn('repair.handover.signature')}
+                  emptyIcon="signature"
+                  actionLabel={tn(
+                    signature === null ? 'repair.handover.sign' : 'repair.handover.signAgain',
+                  )}
+                  image={
+                    signature === null ? null : (
+                      <PhotoThumb
+                        photo={capturedThumbnailRef(signature)}
+                        testID={`${testID}.signatureThumb`}
+                      />
+                    )
+                  }
+                  onPress={() =>
+                    capture(
+                      () =>
+                        runtime.captureSignature({ title: tn('repair.handover.signatureTitle') }),
+                      setSignature,
+                    )
+                  }
+                  testID={`${testID}.signature`}
+                />
+              </TileGrid>
+            </View>
+            <View style={repairStyles.gap}>
+              <TextInput
+                label={tn(
+                  checks.noteNeeded ? 'repair.handover.noteNeeded' : 'repair.handover.note',
+                )}
+                value={note}
+                onChangeText={setNote}
+                multiline
+                testID={`${testID}.note`}
+              />
+            </View>
+          </>
+        }
+      />
     </FlowScreen>
   );
 }
@@ -441,6 +470,5 @@ const styles = StyleSheet.create({
   totalLabel: { ...type.bodyBold, color: color.text },
   payLater: { gap: space.sm },
   checks: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  // Two captures side by side, each half the row.
-  half: { flexBasis: '47%', flexGrow: 1 },
+  proof: { marginTop: space.xl },
 });

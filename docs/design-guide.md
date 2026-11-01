@@ -106,9 +106,18 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 - `AppShell` keeps content and the bottom action in one centred column of at
   most `size.contentMax`; sheets rise at the same width. Never stretch a form,
   a button or a line of text across a tablet.
-- A list with a detail (the servisan board) shows both side by side when
-  expanded; a task from start to finish (intake) keeps the whole screen.
-  Exactly one filled primary across both panes.
+- A list with a detail (the servisan board, parts, Belanja) shows both side by
+  side when expanded, through `ListDetail`; a task from start to finish
+  (intake, a new order) keeps the whole screen. Exactly one filled primary
+  across both panes.
+- A record's page (servisan, Serah terima, Kas, a part, an order) splits into
+  `Columns` with `AppShell` `wide`: the record and its next step on the start
+  side, photos, history and reference on the end side. They sit side by side
+  once two phone-width columns fit and stack on a phone, so each column is laid
+  out exactly as on a phone.
+- Photo and capture tiles go in a `TileGrid`, which adds tiles to a row rather
+  than letting one grow past `size.tileMax`. Strips and edge-to-edge rows bleed
+  through `useBleed()`, so beside another column they never run into the gap.
 - Check every changed screen at 360 x 640, 800 x 1280, 960 x 600 and
   1280 x 800, and at 1.3x font. A short landscape tablet is the tightest case:
   put things side by side rather than making the person scroll to a key.

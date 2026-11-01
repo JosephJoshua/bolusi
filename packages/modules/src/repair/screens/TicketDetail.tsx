@@ -11,6 +11,7 @@ import {
   Button,
   Card,
   Chip,
+  Columns,
   Icon,
   ListRow,
   PatternLock,
@@ -668,6 +669,7 @@ export function TicketDetail({
   return (
     <AppShell
       scrollable
+      wide
       title={ticket?.ticketNumber ?? tn('repair.ticket.title')}
       titleVariant="detail"
       stampTitle={justOpened && ticket !== undefined}
@@ -783,228 +785,244 @@ export function TicketDetail({
         : null;
     return (
       <View testID={`${testID}.content`}>
-        <Card freshId={row.id} testID={`${testID}.summary`}>
-          <View style={styles.statusRow}>
-            <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
-            {row.claimOf === null ? null : (
-              <Chip
-                label={tn('repair.warrantyClaim.title')}
-                icon="repair"
-                testID={`${testID}.claimChip`}
-              />
-            )}
-            {waited === null ? null : (
-              <Chip
-                label={tn('repair.board.waited', { days: waited })}
-                icon="warning"
-                tone="warning"
-                testID={`${testID}.uncollected`}
-              />
-            )}
-          </View>
-          <View style={styles.customerRow}>
-            <Text style={styles.customer} testID={`${testID}.customer`}>
-              {row.customerName}
-            </Text>
-            {contextual('correctDetails')}
-          </View>
-          {row.customerPhone === null ? null : (
-            // Tap to call: the counter rings the customer when the phone is ready or a price changes.
-            <Pressable
-              accessibilityRole="link"
-              onPress={() => void Linking.openURL(`tel:${row.customerPhone ?? ''}`)}
-              style={styles.phone}
-              testID={`${testID}.phone`}
-            >
-              <Icon name="phone" size={size.iconChip} color={color.primary} />
-              <Text style={styles.link}>{formatPhone(row.customerPhone)}</Text>
-            </Pressable>
-          )}
-          <View style={styles.deviceBox}>
-            <CatalogPhoto
-              brand={row.deviceBrand}
-              model={row.deviceModel}
-              large
-              testID={`${testID}.devicePhoto`}
-            />
-            <View style={styles.deviceText}>
-              <Text style={styles.device} testID={`${testID}.device`}>
-                {device}
-              </Text>
-              <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
-              <Text style={styles.complaint} testID={`${testID}.complaint`}>
-                {row.complaint}
-              </Text>
-            </View>
-          </View>
-        </Card>
-
-        <ApprovalSection
-          rows={approvals}
-          describe={describeRepairApproval}
-          onOpen={(request) => setStep({ kind: 'approval', requestId: request.id })}
-          testID={`${testID}.approvals`}
-        />
-
-        <View style={styles.facts}>
-          <FactGrid>
-            {renderRepairTypes(row)}
-            {renderClaimLinks(row)}
-            <Fact
-              label={tn('repair.ticket.technician')}
-              value={row.technicianName ?? tn('repair.ticket.unassigned')}
-              action={contextual('assign')}
-              testID={`${testID}.technician`}
-            />
-            {row.estimatedReadyAt === null ? null : (
-              <Fact
-                label={tn('repair.ticket.readyBy')}
-                value={formatDateTime(row.estimatedReadyAt)}
-              />
-            )}
-            {row.deviceImei === null ? null : (
-              <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
-            )}
-            {lock === null ? null : (
-              // The technician needs it to test the phone; hidden until asked so it is not read
-              // over a shoulder at the counter.
-              <Fact
-                label={
-                  lock.kind === 'unknown'
-                    ? tn('repair.device.passcodeLabel')
-                    : `${tn('repair.device.passcodeLabel')} · ${tn(LOCK_KIND_KEY[lock.kind])}`
-                }
-                value={
-                  !passcodeShown
-                    ? '••••'
-                    : lock.kind === 'pattern'
-                      ? patternSteps(lock.value)
-                      : lock.value
-                }
-                testID={`${testID}.passcode`}
-                wide
-                action={
-                  <TextButton
-                    label={tn(passcodeShown ? 'repair.passcode.hide' : 'repair.passcode.show')}
-                    onPress={() => setPasscodeShown((shown) => !shown)}
-                    testID={`${testID}.passcode.toggle`}
+        {/* On a tablet the photos and history sit beside the record instead of under it. */}
+        <Columns
+          testID={`${testID}.columns`}
+          start={
+            <>
+              <Card freshId={row.id} testID={`${testID}.summary`}>
+                <View style={styles.statusRow}>
+                  <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+                  {row.claimOf === null ? null : (
+                    <Chip
+                      label={tn('repair.warrantyClaim.title')}
+                      icon="repair"
+                      testID={`${testID}.claimChip`}
+                    />
+                  )}
+                  {waited === null ? null : (
+                    <Chip
+                      label={tn('repair.board.waited', { days: waited })}
+                      icon="warning"
+                      tone="warning"
+                      testID={`${testID}.uncollected`}
+                    />
+                  )}
+                </View>
+                <View style={styles.customerRow}>
+                  <Text style={styles.customer} testID={`${testID}.customer`}>
+                    {row.customerName}
+                  </Text>
+                  {contextual('correctDetails')}
+                </View>
+                {row.customerPhone === null ? null : (
+                  // Tap to call: the counter rings the customer when the phone is ready or a price changes.
+                  <Pressable
+                    accessibilityRole="link"
+                    onPress={() => void Linking.openURL(`tel:${row.customerPhone ?? ''}`)}
+                    style={styles.phone}
+                    testID={`${testID}.phone`}
+                  >
+                    <Icon name="phone" size={size.iconChip} color={color.primary} />
+                    <Text style={styles.link}>{formatPhone(row.customerPhone)}</Text>
+                  </Pressable>
+                )}
+                <View style={styles.deviceBox}>
+                  <CatalogPhoto
+                    brand={row.deviceBrand}
+                    model={row.deviceModel}
+                    large
+                    testID={`${testID}.devicePhoto`}
                   />
-                }
-              >
-                {passcodeShown && lock.kind === 'pattern' ? (
-                  <PatternLock
-                    value={lock.value}
-                    size={168}
-                    accessibilityLabel={tn('repair.lock.patternLabel')}
-                    testID={`${testID}.passcode.pattern`}
-                  />
-                ) : null}
-              </Fact>
-            )}
-          </FactGrid>
-          {row.outcomeNote === null || row.outcomeNote === '' ? null : (
-            <View style={styles.note}>
-              <Text style={styles.complaintLabel}>{tn('repair.ticket.lastNote')}</Text>
-              <Text style={styles.complaint}>{row.outcomeNote}</Text>
-            </View>
-          )}
-        </View>
+                  <View style={styles.deviceText}>
+                    <Text style={styles.device} testID={`${testID}.device`}>
+                      {device}
+                    </Text>
+                    <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
+                    <Text style={styles.complaint} testID={`${testID}.complaint`}>
+                      {row.complaint}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
 
-        {layout.alternative === null &&
-        more.length === 0 &&
-        messageKind === null &&
-        claimAction === null ? null : (
-          <View style={styles.actions}>
-            {claimAction === null ? null : (
-              <Button
-                label={tn('repair.warrantyClaim.action')}
-                variant="secondary"
-                size="compact"
-                onPress={() =>
-                  onStartClaim?.(claimIntakeDraft(row, tn('repair.warrantyClaim.line')))
-                }
-                disabled={runner.busy}
-                testID={`${testID}.action.warrantyClaim`}
+              <ApprovalSection
+                rows={approvals}
+                describe={describeRepairApproval}
+                onOpen={(request) => setStep({ kind: 'approval', requestId: request.id })}
+                testID={`${testID}.approvals`}
               />
-            )}
-            {messageKind === null ? null : (
-              <Button
-                label={tn(MESSAGE_ACTION_KEY[messageKind])}
-                variant="secondary"
-                size="compact"
-                onPress={() => sendMessage(messageKind, row)}
-                disabled={runner.busy}
-                testID={`${testID}.action.message`}
-              />
-            )}
-            {layout.alternative === null ? null : (
-              <Button
-                label={label(layout.alternative)}
-                variant="secondary"
-                size="compact"
-                onPress={() => perform(layout.alternative!, row)}
-                disabled={runner.busy}
-                testID={`${testID}.action.${layout.alternative}`}
-              />
-            )}
-            {/* One rare move needs no sheet; several wait behind "Lainnya". Same level as the
+
+              <View style={styles.facts}>
+                <FactGrid>
+                  {renderRepairTypes(row)}
+                  {renderClaimLinks(row)}
+                  <Fact
+                    label={tn('repair.ticket.technician')}
+                    value={row.technicianName ?? tn('repair.ticket.unassigned')}
+                    action={contextual('assign')}
+                    testID={`${testID}.technician`}
+                  />
+                  {row.estimatedReadyAt === null ? null : (
+                    <Fact
+                      label={tn('repair.ticket.readyBy')}
+                      value={formatDateTime(row.estimatedReadyAt)}
+                    />
+                  )}
+                  {row.deviceImei === null ? null : (
+                    <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
+                  )}
+                  {lock === null ? null : (
+                    // The technician needs it to test the phone; hidden until asked so it is not read
+                    // over a shoulder at the counter.
+                    <Fact
+                      label={
+                        lock.kind === 'unknown'
+                          ? tn('repair.device.passcodeLabel')
+                          : `${tn('repair.device.passcodeLabel')} · ${tn(LOCK_KIND_KEY[lock.kind])}`
+                      }
+                      value={
+                        !passcodeShown
+                          ? '••••'
+                          : lock.kind === 'pattern'
+                            ? patternSteps(lock.value)
+                            : lock.value
+                      }
+                      testID={`${testID}.passcode`}
+                      wide
+                      action={
+                        <TextButton
+                          label={tn(
+                            passcodeShown ? 'repair.passcode.hide' : 'repair.passcode.show',
+                          )}
+                          onPress={() => setPasscodeShown((shown) => !shown)}
+                          testID={`${testID}.passcode.toggle`}
+                        />
+                      }
+                    >
+                      {passcodeShown && lock.kind === 'pattern' ? (
+                        <PatternLock
+                          value={lock.value}
+                          size={168}
+                          accessibilityLabel={tn('repair.lock.patternLabel')}
+                          testID={`${testID}.passcode.pattern`}
+                        />
+                      ) : null}
+                    </Fact>
+                  )}
+                </FactGrid>
+                {row.outcomeNote === null || row.outcomeNote === '' ? null : (
+                  <View style={styles.note}>
+                    <Text style={styles.complaintLabel}>{tn('repair.ticket.lastNote')}</Text>
+                    <Text style={styles.complaint}>{row.outcomeNote}</Text>
+                  </View>
+                )}
+              </View>
+
+              {layout.alternative === null &&
+              more.length === 0 &&
+              messageKind === null &&
+              claimAction === null ? null : (
+                <View style={styles.actions}>
+                  {claimAction === null ? null : (
+                    <Button
+                      label={tn('repair.warrantyClaim.action')}
+                      variant="secondary"
+                      size="compact"
+                      onPress={() =>
+                        onStartClaim?.(claimIntakeDraft(row, tn('repair.warrantyClaim.line')))
+                      }
+                      disabled={runner.busy}
+                      testID={`${testID}.action.warrantyClaim`}
+                    />
+                  )}
+                  {messageKind === null ? null : (
+                    <Button
+                      label={tn(MESSAGE_ACTION_KEY[messageKind])}
+                      variant="secondary"
+                      size="compact"
+                      onPress={() => sendMessage(messageKind, row)}
+                      disabled={runner.busy}
+                      testID={`${testID}.action.message`}
+                    />
+                  )}
+                  {layout.alternative === null ? null : (
+                    <Button
+                      label={label(layout.alternative)}
+                      variant="secondary"
+                      size="compact"
+                      onPress={() => perform(layout.alternative!, row)}
+                      disabled={runner.busy}
+                      testID={`${testID}.action.${layout.alternative}`}
+                    />
+                  )}
+                  {/* One rare move needs no sheet; several wait behind "Lainnya". Same level as the
                 alternative, so the two never read as a choice between a button and a link. */}
-            {more.length === 0 ? null : more.length === 1 ? (
-              <Button
-                label={more[0]!.label}
-                variant="secondary"
-                size="compact"
-                onPress={more[0]!.onPress}
-                disabled={runner.busy}
-                testID={`${testID}.action.${more[0]!.key}`}
-              />
-            ) : (
-              <Button
-                label={tn('repair.action.more')}
-                variant="secondary"
-                size="compact"
-                onPress={() => setMoreOpen(true)}
-                disabled={runner.busy}
-                testID={`${testID}.more.open`}
-              />
-            )}
-          </View>
-        )}
+                  {more.length === 0 ? null : more.length === 1 ? (
+                    <Button
+                      label={more[0]!.label}
+                      variant="secondary"
+                      size="compact"
+                      onPress={more[0]!.onPress}
+                      disabled={runner.busy}
+                      testID={`${testID}.action.${more[0]!.key}`}
+                    />
+                  ) : (
+                    <Button
+                      label={tn('repair.action.more')}
+                      variant="secondary"
+                      size="compact"
+                      onPress={() => setMoreOpen(true)}
+                      disabled={runner.busy}
+                      testID={`${testID}.more.open`}
+                    />
+                  )}
+                </View>
+              )}
 
-        {renderPrice(
-          row,
-          contextual('changePrice') ?? contextual('proposePrice') ?? contextual('changeCancelFee'),
-        )}
-        {runtime.inventory === undefined ||
-        !runtime.inventory.hasPermission(INVENTORY_PERMISSION.read) ? null : (
-          <InventoryRuntimeProvider runtime={runtime.inventory}>
-            <UsedPartsSection
-              use={partUse(row)}
-              editable={canUseParts(row, runtime.userId, runtime.inventory.hasPermission)}
-              takeable={canTakeParts(row, runtime.userId, runtime.inventory.hasPermission)}
-              flagUnreturned={row.outcome === 'cancelled'}
-              onTake={() => setStep({ kind: 'takePart' })}
-              onPutBack={(part) => setStep({ kind: 'putBackPart', part })}
-              testID={`${testID}.parts`}
-            />
-          </InventoryRuntimeProvider>
-        )}
-        {photos.section}
-        <TicketVideoSection ticket={row} runner={runner} testID={`${testID}.video`} />
-        {renderCondition(row)}
-        <DeviceSpecs
-          brand={row.deviceBrand}
-          model={row.deviceModel}
-          repairs={can.work}
-          testID={`${testID}.specs`}
+              {renderPrice(
+                row,
+                contextual('changePrice') ??
+                  contextual('proposePrice') ??
+                  contextual('changeCancelFee'),
+              )}
+              {runtime.inventory === undefined ||
+              !runtime.inventory.hasPermission(INVENTORY_PERMISSION.read) ? null : (
+                <InventoryRuntimeProvider runtime={runtime.inventory}>
+                  <UsedPartsSection
+                    use={partUse(row)}
+                    editable={canUseParts(row, runtime.userId, runtime.inventory.hasPermission)}
+                    takeable={canTakeParts(row, runtime.userId, runtime.inventory.hasPermission)}
+                    flagUnreturned={row.outcome === 'cancelled'}
+                    onTake={() => setStep({ kind: 'takePart' })}
+                    onPutBack={(part) => setStep({ kind: 'putBackPart', part })}
+                    testID={`${testID}.parts`}
+                  />
+                </InventoryRuntimeProvider>
+              )}
+            </>
+          }
+          end={
+            <>
+              {photos.section}
+              <TicketVideoSection ticket={row} runner={runner} testID={`${testID}.video`} />
+              {renderCondition(row)}
+              <DeviceSpecs
+                brand={row.deviceBrand}
+                model={row.deviceModel}
+                repairs={can.work}
+                testID={`${testID}.specs`}
+              />
+
+              <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
+                <Timeline
+                  entries={[...row.events].reverse().map(historyEntry)}
+                  testID={`${testID}.timeline`}
+                />
+              </Section>
+            </>
+          }
         />
-
-        <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
-          <Timeline
-            entries={[...row.events].reverse().map(historyEntry)}
-            testID={`${testID}.timeline`}
-          />
-        </Section>
 
         {[...FINAL_ACTIONS]
           .filter((action) => actions.includes(action))

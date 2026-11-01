@@ -5,6 +5,7 @@
  */
 import { formatDate, formatDateTime, t } from '@bolusi/i18n';
 import {
+  Columns,
   AppShell,
   Banner,
   Button,
@@ -45,6 +46,8 @@ export interface OrderDetailProps {
   /** What the last step did ("Pesanan dipesan."), shown until dismissed. */
   readonly notice: PurchasingKey | null;
   readonly onClearNotice: () => void;
+  /** Beside the list on a wide screen: the list is in view, so there is no back arrow. */
+  readonly hideBack?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -56,6 +59,7 @@ export function OrderDetail({
   onReceive,
   notice,
   onClearNotice,
+  hideBack = false,
   testID = 'purchasing.order',
 }: OrderDetailProps): React.JSX.Element {
   const runtime = usePurchasingRuntime();
@@ -125,9 +129,10 @@ export function OrderDetail({
   return (
     <AppShell
       scrollable
+      wide
       title={order?.supplierName ?? tp('purchasing.list.title')}
       titleVariant="detail"
-      onBack={onBack}
+      onBack={hideBack ? undefined : onBack}
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
@@ -206,88 +211,104 @@ export function OrderDetail({
     const draft = row.stage === 'draft';
     return (
       <View testID={`${testID}.content`}>
-        <Card testID={`${testID}.summary`}>
-          <View style={styles.summaryTop}>
-            <Text style={styles.number}>{row.orderNumber}</Text>
-            <Chip
-              label={tp(`purchasing.stage.${row.stage}`)}
-              icon={stage.icon}
-              tone={stage.tone}
-              testID={`${testID}.stage`}
-            />
-          </View>
-          <Text style={styles.meta}>
-            {row.orderedAt === null
-              ? tp('purchasing.order.created', { date: formatDate(row.createdAt) })
-              : tp('purchasing.order.ordered', { date: formatDate(row.orderedAt) })}
-          </Text>
-          {row.note === null ? null : <Text style={styles.note}>{row.note}</Text>}
-          {row.stage === 'over' ? (
-            <Text style={styles.warning}>{tp('purchasing.order.overHint')}</Text>
-          ) : null}
-          {row.stage === 'cancelled' && row.cancelReason !== null ? (
-            <Text style={styles.meta}>{row.cancelReason}</Text>
-          ) : null}
-          {actions.includes('send') ? (
-            <View style={styles.send}>
-              <Button
-                label={tp('purchasing.action.send')}
-                variant="secondary"
-                onPress={() => send(row)}
-                testID={`${testID}.send`}
-              />
-            </View>
-          ) : null}
-        </Card>
+        {/* On a tablet what came in sits beside the order instead of under it. */}
+        <Columns
+          testID={`${testID}.columns`}
+          start={
+            <>
+              <Card testID={`${testID}.summary`}>
+                <View style={styles.summaryTop}>
+                  <Text style={styles.number}>{row.orderNumber}</Text>
+                  <Chip
+                    label={tp(`purchasing.stage.${row.stage}`)}
+                    icon={stage.icon}
+                    tone={stage.tone}
+                    testID={`${testID}.stage`}
+                  />
+                </View>
+                <Text style={styles.meta}>
+                  {row.orderedAt === null
+                    ? tp('purchasing.order.created', { date: formatDate(row.createdAt) })
+                    : tp('purchasing.order.ordered', { date: formatDate(row.orderedAt) })}
+                </Text>
+                {row.note === null ? null : <Text style={styles.note}>{row.note}</Text>}
+                {row.stage === 'over' ? (
+                  <Text style={styles.warning}>{tp('purchasing.order.overHint')}</Text>
+                ) : null}
+                {row.stage === 'cancelled' && row.cancelReason !== null ? (
+                  <Text style={styles.meta}>{row.cancelReason}</Text>
+                ) : null}
+                {actions.includes('send') ? (
+                  <View style={styles.send}>
+                    <Button
+                      label={tp('purchasing.action.send')}
+                      variant="secondary"
+                      onPress={() => send(row)}
+                      testID={`${testID}.send`}
+                    />
+                  </View>
+                ) : null}
+              </Card>
 
-        <Section
-          title={tp('purchasing.order.lines')}
-          action={
-            actions.includes('edit') ? (
-              <TextButton
-                label={tp('purchasing.action.edit')}
-                onPress={() => onEdit(row)}
-                disabled={runner.busy}
-                testID={`${testID}.edit`}
-              />
-            ) : undefined
-          }
-          testID={`${testID}.lines`}
-        >
-          {row.lines.map((line) => (
-            <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-              <Text style={styles.lineName}>{line.name}</Text>
-              <Text
-                style={[styles.lineQty, line.received > line.qty ? styles.over : null]}
-                testID={`${testID}.line.${line.itemId}.qty`}
+              <Section
+                title={tp('purchasing.order.lines')}
+                action={
+                  actions.includes('edit') ? (
+                    <TextButton
+                      label={tp('purchasing.action.edit')}
+                      onPress={() => onEdit(row)}
+                      disabled={runner.busy}
+                      testID={`${testID}.edit`}
+                    />
+                  ) : undefined
+                }
+                testID={`${testID}.lines`}
               >
-                {showsReceived(row.stage)
-                  ? tp('purchasing.order.receivedOf', { received: line.received, qty: line.qty })
-                  : tp('purchasing.order.qty', { qty: line.qty })}
-              </Text>
-            </View>
-          ))}
-        </Section>
-
-        {row.receipts.length === 0 ? null : (
-          <Section title={tp('purchasing.order.receipts')} testID={`${testID}.receipts`}>
-            <Timeline
-              entries={row.receipts.map((receipt) => ({
-                key: receipt.id,
-                title: receipt.lines
-                  .map((line) =>
-                    tp('purchasing.order.receiptLine', { name: line.name, qty: line.qty }),
-                  )
-                  .join(', '),
-                meta: [formatDateTime(receipt.at), receipt.userName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(receipt.note === null ? {} : { detail: receipt.note }),
-              }))}
-              testID={`${testID}.timeline`}
-            />
-          </Section>
-        )}
+                {row.lines.map((line) => (
+                  <View
+                    key={line.itemId}
+                    style={styles.line}
+                    testID={`${testID}.line.${line.itemId}`}
+                  >
+                    <Text style={styles.lineName}>{line.name}</Text>
+                    <Text
+                      style={[styles.lineQty, line.received > line.qty ? styles.over : null]}
+                      testID={`${testID}.line.${line.itemId}.qty`}
+                    >
+                      {showsReceived(row.stage)
+                        ? tp('purchasing.order.receivedOf', {
+                            received: line.received,
+                            qty: line.qty,
+                          })
+                        : tp('purchasing.order.qty', { qty: line.qty })}
+                    </Text>
+                  </View>
+                ))}
+              </Section>
+            </>
+          }
+          end={
+            row.receipts.length === 0 ? null : (
+              <Section title={tp('purchasing.order.receipts')} testID={`${testID}.receipts`}>
+                <Timeline
+                  entries={row.receipts.map((receipt) => ({
+                    key: receipt.id,
+                    title: receipt.lines
+                      .map((line) =>
+                        tp('purchasing.order.receiptLine', { name: line.name, qty: line.qty }),
+                      )
+                      .join(', '),
+                    meta: [formatDateTime(receipt.at), receipt.userName]
+                      .filter((part) => part !== null)
+                      .join(' · '),
+                    ...(receipt.note === null ? {} : { detail: receipt.note }),
+                  }))}
+                  testID={`${testID}.timeline`}
+                />
+              </Section>
+            )
+          }
+        />
 
         {actions.includes('cancel') ? (
           <View style={styles.cancel}>
