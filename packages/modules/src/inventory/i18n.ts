@@ -122,6 +122,8 @@ export const INVENTORY_KEYS = [
   'inventory.use.picked',
   'inventory.use.fitsDevice',
   'inventory.use.otherParts',
+  'inventory.use.overStock',
+  'inventory.use.searchMore',
   'inventory.done.added',
   'inventory.done.saved',
   'inventory.done.counted',

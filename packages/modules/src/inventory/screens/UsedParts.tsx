@@ -20,9 +20,10 @@ import {
   touch,
   type,
   Text,
+  useRevealOnMount,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useActionRunner, useSettledValue } from '../../screen-kit/index.js';
 import {
@@ -36,7 +37,13 @@ import { stockText } from '../labels.js';
 import { ti } from '../i18n.js';
 import type { ItemRow, UsedPartRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
-import { partForCode, useTakeChoices, type PartUse } from '../take-part.js';
+import {
+  moreHint,
+  overStockHint,
+  partForCode,
+  useTakeChoices,
+  type PartUse,
+} from '../take-part.js';
 
 export type { PartUse };
 
@@ -169,7 +176,8 @@ export function TakePartStep({
       decreaseLabel={ti('inventory.stepper.decrease')}
       increaseLabel={ti('inventory.stepper.increase')}
       caption={
-        showStock ? ti('inventory.list.stockCount', { count: stockText(part.onHand) }) : undefined
+        overStockHint(part, qty) ??
+        (showStock ? ti('inventory.list.stockCount', { count: stockText(part.onHand) }) : undefined)
       }
       testID={`${testID}.qty`}
     />
@@ -207,7 +215,7 @@ export function TakePartStep({
           </Text>
           {selected ? <Icon name="check" size={size.iconInline} color={color.primary} /> : null}
         </Pressable>
-        {selected ? <View style={styles.inlineQty}>{qtyStepper(row, false)}</View> : null}
+        {selected ? <Revealed style={styles.inlineQty}>{qtyStepper(row, false)}</Revealed> : null}
       </View>
     );
   };
@@ -303,11 +311,32 @@ export function TakePartStep({
                 </>
               )}
               <View style={styles.choices}>{rest.map(choice)}</View>
+              {moreHint({ fitting, rest }) === null ? null : (
+                <Text style={[styles.muted, styles.more]} testID={`${testID}.more`}>
+                  {moreHint({ fitting, rest })}
+                </Text>
+              )}
             </View>
           )
         }
       </QueryView>
     </FlowScreen>
+  );
+}
+
+/** Brought into sight as it appears, so it never opens behind the bottom action. */
+function Revealed({
+  style,
+  children,
+}: {
+  readonly style: StyleProp<ViewStyle>;
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  const { anchorRef, onLayout } = useRevealOnMount();
+  return (
+    <View ref={anchorRef} style={style} onLayout={onLayout}>
+      {children}
+    </View>
   );
 }
 
@@ -391,6 +420,7 @@ const styles = StyleSheet.create({
   flagText: { ...type.caption, color: color.warning, flexShrink: 1 },
   picked: { marginBottom: space.xl, gap: space.md },
   inlineQty: { paddingTop: space.sm, paddingBottom: space.md },
+  more: { marginTop: space.md, textAlign: 'center' },
   pickedName: { ...type.heading, color: color.text },
   message: { marginTop: space.xs, marginBottom: space.lg },
   group: { ...type.caption, fontWeight: '600', color: color.textMuted, marginTop: space.md },

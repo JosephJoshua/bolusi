@@ -136,7 +136,9 @@
     "searchHint": "Cari sparepart",
     "picked": "Dipilih",
     "fitsDevice": "Cocok untuk {model}",
-    "otherParts": "Sparepart lain"
+    "otherParts": "Sparepart lain",
+    "overStock": "Lebih {extra} dari stok.",
+    "searchMore": "Cari untuk lihat sparepart lain."
   },
   "done": {
     "added": "Barang ditambahkan.",

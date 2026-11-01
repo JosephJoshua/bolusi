@@ -1076,8 +1076,24 @@ test('taking a part asks how many right under the part picked', async ({ page })
   const row = (await choices.last().boundingBox())!;
   const box = (await stepper.boundingBox())!;
   expect(box.y).toBeGreaterThan(row.y);
+  // Scrolled clear of the bottom action, even for the last row.
+  await expect
+    .poll(async () => {
+      const shown = (await stepper.boundingBox())!;
+      const footer = (await page
+        .getByText('Ambil sparepart', { exact: true })
+        .last()
+        .boundingBox())!;
+      return shown.y + shown.height <= footer.y;
+    })
+    .toBe(true);
   await page.getByLabel('Tambah').first().click();
   await shoot(page, 'take-part-qty');
+  // More than the stock records is allowed, but said.
+  for (let i = 0; i < 6; i += 1) await page.getByLabel('Tambah').first().click();
+  await expect(stepper).toContainText('Lebih 1 dari stok.');
+  for (let i = 0; i < 6; i += 1) await page.getByLabel('Kurangi').first().click();
+  await expect(stepper).not.toContainText('dari stok');
   // A search that leaves the picked part out still names it with its count, above the list.
   await page.getByTestId('inventory.take.search').locator('input').fill('lem');
   await expect(page.getByTestId('inventory.take.picked')).toContainText('Speaker buzzer');
