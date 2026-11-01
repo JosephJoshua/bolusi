@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 
+import { readTicketSyncStatuses } from '../models/repair/runtime-adapter.js';
 import { readEntitySyncStatuses } from './entity-sync-statuses.js';
 
 import {
@@ -160,4 +161,37 @@ test('a servisan shows a refusal only to its maker, until they mark it checked',
 
   await markRejectionsHandled(db, userId, [ids[0]!], 10);
   expect(await statuses(userId)).toEqual({ [GONE]: ['rejected'] });
+});
+
+test('a refused charge shows on its servisan for the person who recorded it', async () => {
+  const builder = new ChainBuilder(makeWorld(4405, noblePort), noblePort);
+  builder.genesis();
+  const charge = builder.append({
+    type: 'money.charge_recorded',
+    entityType: 'money_entry',
+    entityId: '01920000-0000-7000-8000-0000000d0a09',
+    payload: {
+      document: { kind: 'repair.ticket', id: NAMED, label: 'K7Q-0042' },
+      amount: 100_000,
+      account: 'repair',
+    },
+  });
+  await insertOpLogRow(db.db, opRowOf(charge), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
+  await markSyncResult(db.db as unknown as Parameters<typeof markSyncResult>[0], {
+    id: charge.id,
+    currentStatus: 'local',
+    event: { kind: 'rejected', rejectionCode: 'RULE_VIOLATED', rejectionReason: 'x' },
+  });
+  const maker = await makerOf(charge.id);
+
+  expect(await readTicketSyncStatuses(db.db, [NAMED, GONE], maker)).toEqual({
+    [NAMED]: ['rejected'],
+  });
+  expect(await readTicketSyncStatuses(db.db, [NAMED], 'someone-else')).toEqual({});
+  await markRejectionsHandled(db, maker, [charge.id], 10);
+  expect(await readTicketSyncStatuses(db.db, [NAMED], maker)).toEqual({});
 });
