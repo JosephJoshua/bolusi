@@ -176,6 +176,7 @@ export const MONEY_KEYS = [
   'money.void.reason',
   'money.ask.needsApproval',
   'money.ask.overLimit',
+  'money.ask.fromServisan',
   'money.void.withEarlier',
   'money.kind.qris',
   'money.kind.edc',

@@ -173,7 +173,8 @@
   },
   "ask": {
     "needsApproval": "Perlu persetujuan pemilik toko.",
-    "overLimit": "Melebihi batasmu, jadi perlu persetujuan."
+    "overLimit": "Melebihi batasmu, jadi perlu persetujuan.",
+    "fromServisan": "Minta persetujuan pemilik dari halaman servisan."
   },
   "kind": {
     "qris": "QRIS",

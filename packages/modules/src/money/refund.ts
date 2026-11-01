@@ -85,8 +85,8 @@ export interface MoneyAsk {
 }
 
 /** A limited role (a manager) beyond its limit asks an owner, where the step lets it ask. */
-function mayAskBeyond(runtime: MoneyRuntime, limit: number | null, askable: boolean): boolean {
-  return askable && limit !== null && runtime.approvals.hasPermission(APPROVAL_PERMISSION.use);
+function mayAskBeyond(runtime: MoneyRuntime, limit: number | null): boolean {
+  return limit !== null && runtime.approvals.hasPermission(APPROVAL_PERMISSION.use);
 }
 
 export type RefundProblem = 'method' | 'amount' | 'tooMuch' | 'reason';
@@ -118,6 +118,8 @@ export interface RefundForm {
   readonly overLimit: boolean;
   /** The amount is above `limit`, so saving asks an owner for it instead (`ask`). */
   readonly asking: boolean;
+  /** Beyond the limit here, an owner can be asked from the servisan instead (Kas). */
+  readonly askElsewhere: boolean;
   readonly reason: string;
   readonly setReason: (reason: string) => void;
   /** Not for cash: the transfer's or reversal's number, if there is one. */
@@ -138,7 +140,8 @@ export function useRefund(target: MoneyTarget, askable = false): RefundForm {
   const runtime = useMoneyRuntime();
   const owner = runtime.hasPermission(MONEY_PERMISSION.refund);
   const limit = owner ? runtime.limitOf(MONEY_PERMISSION.refund) : null;
-  const mayAsk = mayAskBeyond(runtime, limit, askable);
+  const canAsk = mayAskBeyond(runtime, limit);
+  const mayAsk = askable && canAsk;
   const { money, accounts } = useDocumentMoney(target.document);
   const methods = useMemo(
     () => (money === null || accounts === null ? [] : refundMethods(money, accounts, owner)),
@@ -204,6 +207,7 @@ export function useRefund(target: MoneyTarget, askable = false): RefundForm {
     limit,
     overLimit: problem === 'tooMuch' && most < methodMax,
     asking,
+    askElsewhere: canAsk && !askable && problem === 'tooMuch' && most < methodMax,
     reason,
     setReason,
     reference,
@@ -241,6 +245,8 @@ export interface ReduceChargeForm {
   readonly overLimit: boolean;
   /** The amount is above `limit`, so saving asks an owner for it instead (`ask`). */
   readonly asking: boolean;
+  /** Beyond the limit here, an owner can be asked from the servisan instead (Kas). */
+  readonly askElsewhere: boolean;
   readonly digits: string;
   readonly setDigits: (digits: string) => void;
   readonly reason: string;
@@ -262,7 +268,8 @@ export interface ReduceChargeForm {
 export function useReduceCharge(target: MoneyTarget, askable = false): ReduceChargeForm {
   const runtime = useMoneyRuntime();
   const limit = runtime.limitOf(MONEY_PERMISSION.refund);
-  const mayAsk = mayAskBeyond(runtime, limit, askable);
+  const canAsk = mayAskBeyond(runtime, limit);
+  const mayAsk = askable && canAsk;
   const { money } = useDocumentMoney(target.document);
   const [typed, setDigits] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -296,12 +303,14 @@ export function useReduceCharge(target: MoneyTarget, askable = false): ReduceCha
     limit,
     overLimit: problem === 'tooMuch' && most < chargedMax,
     asking,
+    askElsewhere: canAsk && !askable && problem === 'tooMuch' && most < chargedMax,
     digits,
     setDigits,
     reason,
     setReason,
     // Never past what the bill can come down, so a typed overshoot does not read as money owed back.
-    after: owed - Math.min(amount ?? 0, most),
+    // What the typed amount would leave; the debt as it is while the amount itself is refused.
+    after: problem === 'tooMuch' ? owed : owed - (amount ?? 0),
     problem,
     dirty: typed !== null || reason.trim() !== '',
     input: asking ? null : input,
@@ -371,14 +380,20 @@ export function reduceAmountError(
  * What still stands before saving, said under the button; nothing for an amount above the most,
  * which its field already says.
  */
-export function refundHint(form: Pick<RefundForm, 'ready' | 'problem' | 'methods'>): string | null {
+export function refundHint(
+  form: Pick<RefundForm, 'ready' | 'problem' | 'methods' | 'askElsewhere'>,
+): string | null {
   // With nothing to give back, the step says so instead.
   if (!form.ready || form.methods.length === 0) return null;
+  if (form.askElsewhere) return tm('money.ask.fromServisan');
   if (form.problem === null || form.problem === 'tooMuch') return null;
   return tm(`money.refund.hint.${form.problem}`);
 }
 
-export function reduceHint(form: Pick<ReduceChargeForm, 'ready' | 'problem'>): string | null {
+export function reduceHint(
+  form: Pick<ReduceChargeForm, 'ready' | 'problem' | 'askElsewhere'>,
+): string | null {
+  if (form.ready && form.askElsewhere) return tm('money.ask.fromServisan');
   if (!form.ready || form.problem === null || form.problem === 'tooMuch') return null;
   return tm(`money.reduce.hint.${form.problem}`);
 }

@@ -173,7 +173,8 @@
   },
   "ask": {
     "needsApproval": "Needs the store owner’s approval.",
-    "overLimit": "Over your limit, so it needs approval."
+    "overLimit": "Over your limit, so it needs approval.",
+    "fromServisan": "Ask the owner from the servisan page."
   },
   "kind": {
     "qris": "QRIS",
