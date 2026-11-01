@@ -922,7 +922,10 @@
     "payLaterAfter": "Setelah disetujui, kasir bisa menyerahkan HP tanpa pelunasan.",
     "downPaymentNew": "DP yang benar",
     "downPaymentTakenOff": "Total pengurangan uang masuk di servisan ini {amount}.",
-    "voidPayment": "Pembayaran yang dibatalkan"
+    "voidPayment": "Pembayaran yang dibatalkan",
+    "refund": "Uang yang dikembalikan",
+    "refundThrough": "Dikembalikan lewat {method}.",
+    "reduceCharge": "Potongan tagihan"
   },
   "basics": {
     "title": "Lengkapi data toko",

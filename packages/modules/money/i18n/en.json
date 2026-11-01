@@ -170,9 +170,12 @@
     "cashTitle": "Cash record cancellation",
     "cashSave": "Cancel record",
     "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts.",
+    "withEarlier": "With earlier reductions on this servisan, the total is {amount}."
+  },
+  "ask": {
     "needsApproval": "Needs the store owner’s approval.",
     "overLimit": "Over your limit, so it needs approval.",
-    "withEarlier": "With earlier reductions on this servisan, the total is {amount}."
+    "fromServisan": "Ask the owner from the servisan page."
   },
   "kind": {
     "qris": "QRIS",

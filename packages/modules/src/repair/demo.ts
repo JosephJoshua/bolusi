@@ -1754,6 +1754,31 @@ export function demoRepairRuntime(
           return result;
         },
       },
+      // Money given back or taken off the bill beyond a manager's limit, asked on the servisan.
+      'money.refund': {
+        permission: MONEY_PERMISSION.refund,
+        commandPermission: MONEY_PERMISSION.receive,
+        amount: (input) => Number(input['amount'] ?? 0),
+        targetId: (input) => String((input['document'] as { id: string }).id),
+        apply: async (input) => {
+          const refund = { ...input };
+          delete refund['methodLabel'];
+          const result = await ledger.run('refund', refund);
+          syncTicketMoney(String((input['document'] as { id: string }).id));
+          return result;
+        },
+      },
+      'money.reduceCharge': {
+        permission: MONEY_PERMISSION.refund,
+        commandPermission: MONEY_PERMISSION.refund,
+        amount: (input) => Number(input['amount'] ?? 0),
+        targetId: (input) => String((input['document'] as { id: string }).id),
+        apply: async (input) => {
+          const result = await ledger.run('reduceCharge', input);
+          syncTicketMoney(String((input['document'] as { id: string }).id));
+          return result;
+        },
+      },
     },
     actor: () => ({ userId: actor.userId, name: actor.name, can: (id) => permitted.has(id) }),
     now: () => HARNESS_NOW,

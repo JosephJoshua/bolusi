@@ -611,6 +611,11 @@ describe('money back and lowered bills', () => {
     await settle();
     expect(text(screen, 'money.reduce')).toContain('Melebihi batasmu. Paling banyak Rp 30.000.');
     expect(screen.all('money.reduce.primary')[0]!.props['disabled']).toBe(true);
+    // Android QA (#121): where to ask instead, and the debt as it is, not as the cap would leave it.
+    expect(text(screen, 'money.reduce.primaryHint')).toBe(
+      'Minta persetujuan pemilik dari halaman servisan.',
+    );
+    expect(text(screen, 'money.reduce.after')).toContain('Rp 750.000');
     type(screen, 'money.reduce.amount', '30000');
     await settle();
     await press(screen, 'money.reduce.primary');

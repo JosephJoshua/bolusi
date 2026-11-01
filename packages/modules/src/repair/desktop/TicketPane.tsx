@@ -1088,6 +1088,7 @@ export function TicketPane({
           onClose: closeStep,
           onDone: () =>
             finishStep(step.kind === 'refund' ? 'repair.done.refund' : 'repair.done.reduce'),
+          onAsked: asked,
         };
         return (
           <MoneyRuntimeProvider runtime={money}>

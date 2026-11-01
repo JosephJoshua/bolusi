@@ -24,7 +24,9 @@
     "repairCancel": "Batalkan servisan",
     "repairPayLater": "Bayar nanti",
     "repairDownPayment": "Ubah DP",
-    "moneyVoidPayment": "Batalkan pembayaran"
+    "moneyVoidPayment": "Batalkan pembayaran",
+    "moneyRefund": "Kembalikan uang",
+    "moneyReduceCharge": "Kurangi tagihan"
   },
   "status": {
     "waiting": "Menunggu",
