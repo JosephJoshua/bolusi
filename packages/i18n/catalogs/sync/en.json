@@ -37,7 +37,8 @@
     "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Technical details",
     "noReason": "The server sent no details.",
-    "more": "Show {count} more"
+    "more": "Show {count} more",
+    "handled": "Mark as checked"
   },
   "quarantine": {
     "title": "Changes on hold",

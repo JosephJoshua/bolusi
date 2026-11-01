@@ -24,8 +24,10 @@ export interface UsedPartsSectionProps {
   readonly use: PartUse;
   /** The phone being repaired: parts that fit it are offered first, before anything is typed. */
   readonly device?: { readonly brand: string; readonly model: string } | undefined;
-  /** The user may take and put back parts on this use now. */
+  /** The user may put back parts taken for this use now. */
   readonly editable: boolean;
+  /** The user may take a new part for this use now (not once a servisan is cancelled). */
+  readonly takeable: boolean;
   /** The use is closed without its work (a cancelled servisan): parts still out are flagged. */
   readonly flagUnreturned: boolean;
   /** A take or put-back landed, in words for the pane's banner. */
@@ -42,6 +44,7 @@ export function UsedPartsSection({
   use,
   device,
   editable,
+  takeable,
   flagUnreturned,
   onDone,
   testId = 'inventory.desk.used',
@@ -54,7 +57,7 @@ export function UsedPartsSection({
   );
   // A put-back to zero leaves the part's history, not a row reading "0 diambil".
   const parts = query.status === 'ready' ? (query.data?.parts ?? []).filter((p) => p.out > 0) : [];
-  if (query.status === 'ready' && parts.length === 0 && !editable) return null;
+  if (query.status === 'ready' && parts.length === 0 && !takeable) return null;
   const finish = (message: string): void => {
     setTask({ kind: 'none' });
     onDone(message);
@@ -63,7 +66,7 @@ export function UsedPartsSection({
     <Section
       title={ti('inventory.use.title')}
       action={
-        editable ? (
+        takeable ? (
           <Button
             label={ti('inventory.use.take')}
             aria-label={ti('inventory.use.takeTitle')}

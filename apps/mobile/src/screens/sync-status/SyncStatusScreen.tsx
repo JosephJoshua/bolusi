@@ -89,6 +89,8 @@ export interface SyncStatusScreenProps {
   readonly onOpenRejected: (row: RejectedOpRow) => void;
   /** Re-sends every failed photo: the drain is one loop over all of them (06 §5.2 (e)). */
   readonly onRetryMedia: () => void;
+  /** The person has dealt with the refused changes listed; they stop asking for attention. */
+  readonly onMarkRejectedHandled?: ((opIds: readonly string[]) => void) | undefined;
   readonly onOpenSwitcher: () => void;
   /** Open device setup to register this phone again (offered only when the server forgot it). */
   readonly onReenroll: () => void;
@@ -115,6 +117,7 @@ export function SyncStatusScreen({
   onSyncNow,
   onOpenRejected,
   onRetryMedia,
+  onMarkRejectedHandled,
   onOpenSwitcher,
   onReenroll,
   onCheckForUpdate,
@@ -445,6 +448,16 @@ export function SyncStatusScreen({
               />
             </View>
           ) : null}
+          {onMarkRejectedHandled === undefined ? null : (
+            <View style={styles.handled}>
+              <Button
+                label={t('sync.rejected.handled')}
+                variant="secondary"
+                onPress={() => onMarkRejectedHandled(input.rejected.map((row) => row.opId))}
+                testID="sync-rejected-handled"
+              />
+            </View>
+          )}
         </View>
       ) : null}
     </AppShell>
@@ -507,6 +520,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.bodyBold, color: color.text },
   sectionText: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
   sectionAction: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: space.xs },
+  handled: { alignItems: 'flex-start', marginTop: space.md },
   rows: {
     marginTop: space.md,
     marginHorizontal: -space.lg,

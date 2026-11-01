@@ -42,8 +42,10 @@ export type { PartUse };
 
 export interface UsedPartsSectionProps {
   readonly use: PartUse;
-  /** The user may take and put back parts on this use now. */
+  /** The user may put back parts taken for this use now. */
   readonly editable: boolean;
+  /** The user may take a new part for this use now (not once a servisan is cancelled). */
+  readonly takeable: boolean;
   /** The use is closed without its work (a cancelled servisan): parts still out are flagged. */
   readonly flagUnreturned: boolean;
   readonly onTake: () => void;
@@ -54,6 +56,7 @@ export interface UsedPartsSectionProps {
 export function UsedPartsSection({
   use,
   editable,
+  takeable,
   flagUnreturned,
   onTake,
   onPutBack,
@@ -66,12 +69,12 @@ export function UsedPartsSection({
   );
   // A put-back to zero leaves the part's history, not a row reading "0 dipakai".
   const parts = query.status === 'ready' ? (query.data?.parts ?? []).filter((p) => p.out > 0) : [];
-  if (query.status === 'ready' && parts.length === 0 && !editable) return null;
+  if (query.status === 'ready' && parts.length === 0 && !takeable) return null;
   return (
     <Section
       title={ti('inventory.use.title')}
       action={
-        editable ? (
+        takeable ? (
           <TextButton
             label={ti('inventory.use.take')}
             accessibilityLabel={ti('inventory.use.takeTitle')}
