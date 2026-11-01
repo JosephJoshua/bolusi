@@ -82,6 +82,7 @@ export const REPAIR_KEYS = [
   'repair.cancel.fee',
   'repair.approval.discountAfter',
   'repair.approval.cancelBelow',
+  'repair.approval.cancelBillDown',
   'repair.approval.cancelStoreFee',
   'repair.approval.payLaterDebt',
   'repair.approval.payLaterAfter',

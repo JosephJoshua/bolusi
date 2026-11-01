@@ -921,6 +921,7 @@
   "approval": {
     "discountAfter": "Setelah disetujui, diskon ini masih perlu konfirmasi pelanggan.",
     "cancelBelow": "{amount} di bawah biaya biasa toko.",
+    "cancelBillDown": "Tagihan turun {amount}.",
     "cancelStoreFee": "Biaya pembatalan biasa toko.",
     "askCancel": "Minta pembatalan",
     "needsApproval": "Perlu persetujuan pemilik toko.",

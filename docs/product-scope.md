@@ -548,8 +548,10 @@ governance notes in "Decision" where they differ.
 - **Ubah biaya on a cancelled servisan (2026-11-01):** a manager past their
   limit asks too, on the phone and the PC. Before pickup it asks for the new fee
   (cancel limit, counted from the store's fee with the discounts); once the
-  phone went home and was charged, for a lower bill like "Kurangi tagihan"
-  (refund limit). The owner's yes records exactly what the manager would have.
+  phone went home and was charged, the bill comes down like "Kurangi tagihan"
+  (refund limit). Either way the owner reads the fee the manager typed, with
+  how far the bill drops as a note, and their yes records exactly what the
+  manager would have.
 
 ## Customers follow their repair online (2026-10-28)
 
