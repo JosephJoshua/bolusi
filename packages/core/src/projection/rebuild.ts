@@ -138,11 +138,7 @@ export async function refoldEntities<DB>(
   const histories = await readEntitiesOps(db, entityType, entityIds, options);
   let applied = 0;
   for (const entityId of entityIds) {
-    for (const ref of tables) {
-      await sql`
-        DELETE FROM ${sql.table(ref.table)} WHERE ${sql.ref(ref.entityIdColumn)} = ${entityId}
-      `.execute(db);
-    }
+    await clearEntityRows(db, tables, entityId, options.tableSchema);
     for (const op of histories.get(entityId) ?? []) {
       // An op on this entity of a type the module does not fold (another module's) is skipped.
       const applier = module.appliers[op.type];
@@ -152,6 +148,24 @@ export async function refoldEntities<DB>(
     }
   }
   return applied;
+}
+
+/**
+ * Delete one entity's rows from its tables. `schema` names the database the rows live in (SQLite
+ * `main` or `temp`), so a device's fold never reaches a person store's tables of the same name.
+ */
+export async function clearEntityRows<DB>(
+  db: Kysely<DB>,
+  tables: readonly { readonly table: string; readonly entityIdColumn: string }[],
+  entityId: string,
+  schema?: string,
+): Promise<void> {
+  for (const ref of tables) {
+    const table = schema === undefined ? ref.table : `${schema}.${ref.table}`;
+    await sql`
+      DELETE FROM ${sql.table(table)} WHERE ${sql.ref(ref.entityIdColumn)} = ${entityId}
+    `.execute(db);
+  }
 }
 
 /** The result of a `runRebuild` call. `complete: false` ⇒ it was interrupted and can resume. */
@@ -207,7 +221,10 @@ export async function runRebuild<DB>(
   }
   const batchSize = options.batchSize ?? DEFAULT_REBUILD_BATCH_SIZE;
   const stopAfterBatches = options.stopAfterBatches ?? Number.POSITIVE_INFINITY;
-  const opTypes = ctx.registry.moduleOpTypes(module);
+  const folds = ctx.fold.folds;
+  const opTypes = ctx.registry
+    .moduleOpTypes(module)
+    .filter((type) => folds === undefined || folds(type));
   const tables = new Set(ctx.registry.moduleTableNames(module));
   const version = moduleVersionSignature(module);
 
@@ -237,7 +254,13 @@ export async function runRebuild<DB>(
     const transaction = ctx.db.transaction().execute(async (trx) => {
       const store = ctx.makeStore(trx);
       if (!sameCursor(await store.readCursor(moduleId), expected)) return null;
-      const entities = await readEntityPage(trx, opTypes, expected.after, batchSize);
+      const entities = await readEntityPage(
+        trx,
+        opTypes,
+        expected.after,
+        batchSize,
+        ctx.fold.opTable,
+      );
       let applied = 0;
       // The page is in (entityType, entityId) order, so each type's entities are one run.
       for (let start = 0; start < entities.length;) {

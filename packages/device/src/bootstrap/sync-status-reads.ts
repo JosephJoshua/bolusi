@@ -17,8 +17,12 @@
  * Kysely + generated types only. No native import, so the composed test lane runs it against the
  * same better-sqlite3 client DB the app runs against op-sqlite.
  */
-import { pendingMediaCount, pendingOperationCount } from '@bolusi/core';
-import type { ClientDatabase } from '@bolusi/db-client';
+import {
+  markRejectionsHandled as markHandled,
+  pendingMediaCount,
+  pendingOperationCount,
+} from '@bolusi/core';
+import type { ClientDatabase, ClientDb } from '@bolusi/db-client';
 import type { Kysely } from 'kysely';
 
 import type {
@@ -95,7 +99,12 @@ export const NO_SYNC_STATUS_READS: SyncStatusReads = {
  */
 export async function readSyncStatusRows(
   db: Kysely<ClientDatabase>,
-  subjects: RejectedSubjectReaders = {},
+  subjects: RejectedSubjectReaders,
+  /**
+   * Whose refused changes to list: only the person who made a change can redo it, so a colleague
+   * signed in on the same device is not asked about it. Null (nobody signed in) lists none.
+   */
+  userId: string | null,
 ): Promise<SyncStatusReads> {
   const [operationCount, mediaCount, mediaRows, rejectedRows, quarantinedRows] = await Promise.all([
     // ── THE COUNTERS ARE CORE'S, NOT THIS FILE'S (CLAUDE.md §2.8) ────────────────────────────────
@@ -128,21 +137,26 @@ export async function readSyncStatusRows(
       .orderBy('capturedAt', 'asc')
       .limit(MEDIA_LIST_LIMIT)
       .execute(),
-    db
-      .selectFrom('operations')
-      .select([
-        'id',
-        'type',
-        'entityType',
-        'entityId',
-        'timestampMs',
-        'rejectionCode',
-        'rejectionReason',
-      ])
-      .where('syncStatus', '=', 'rejected')
-      .orderBy('timestampMs', 'desc')
-      .limit(REJECTED_LIST_LIMIT)
-      .execute(),
+    userId === null
+      ? Promise.resolve([])
+      : db
+          .selectFrom('operations')
+          .select([
+            'id',
+            'type',
+            'entityType',
+            'entityId',
+            'timestampMs',
+            'rejectionCode',
+            'rejectionReason',
+          ])
+          .where('syncStatus', '=', 'rejected')
+          .where('userId', '=', userId)
+          // Marked handled by its maker (`markRejectionsHandled`): it no longer asks for attention.
+          .where('rejectionHandledAt', 'is', null)
+          .orderBy('timestampMs', 'desc')
+          .limit(REJECTED_LIST_LIMIT)
+          .execute(),
     // ── THE QUARANTINE LIST (api/01-sync §4.2; §8.4 quarantine section) ──────────────────────────
     // A held-out pull batch: an op whose signer is unknown or whose signature is bad, inserted into
     // `quarantined_ops` by the pull phase (`packages/core/src/sync/pull.ts` → `insertQuarantinedOp`)
@@ -219,6 +233,28 @@ export async function readSyncStatusRows(
     media,
     quarantined,
   };
+}
+
+/**
+ * The person says they have dealt with these refused changes of theirs, so they stop asking for
+ * attention. Only their own, and only ones still refused: the ids are the rows they were shown, so a
+ * refusal that arrived after they looked stays until they have seen it.
+ */
+export async function markRejectionsHandled(
+  db: Pick<ClientDb, 'db' | 'transaction'>,
+  userId: string,
+  opIds: readonly string[],
+  now: number,
+): Promise<void> {
+  // In its own transaction: a bare write on the one connection would land inside an open command.
+  await db.transaction(() =>
+    // The client schema is a superset of the columns core writes, as for `markSyncResult`.
+    markHandled(db.db as unknown as Parameters<typeof markHandled>[0], {
+      userId,
+      opIds,
+      at: now,
+    }),
+  );
 }
 
 /** Each refused op's subject, keyed `entityType:entityId`, one read per entity type. */

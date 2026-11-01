@@ -56,6 +56,9 @@ export const CLIENT_PRAGMAS: readonly string[] = [
   'PRAGMA foreign_keys = ON',
   'PRAGMA busy_timeout = 5000',
   'PRAGMA synchronous = NORMAL',
+  // Temp tables hold a signed-in person's extra reads (core sync/person-store.ts): memory only, never a
+  // temp file, so nothing of it reaches the device's storage.
+  'PRAGMA temp_store = MEMORY',
 ];
 
 /**

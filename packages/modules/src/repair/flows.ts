@@ -271,6 +271,15 @@ export function canUseParts(
   return ticket.technicianId === userId || hasPermission(REPAIR_PERMISSION.assign);
 }
 
+/** Whether this user may take a new part for the ticket now: never once it is cancelled. */
+export function canTakeParts(
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'location' | 'technicianId'>,
+  userId: string,
+  hasPermission: (id: string) => boolean,
+): boolean {
+  return ticket.outcome !== 'cancelled' && canUseParts(ticket, userId, hasPermission);
+}
+
 /** The servisan as stock records it: parts taken for it carry its number. */
 export function partUse(ticket: Pick<TicketSummaryRow, 'id' | 'ticketNumber'>): PartUse {
   return { kind: 'repair_ticket', id: ticket.id, label: ticket.ticketNumber };

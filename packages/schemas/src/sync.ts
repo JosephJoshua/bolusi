@@ -70,8 +70,32 @@ export const zPullRequest = z.strictObject({
       through: z.number().int().min(0),
     })
     .optional(),
+  /**
+   * A person pull (least-privilege sync): what the person signed in may read beyond what this
+   * device holds, for their session only. Sent with the `X-Person-Session` token the server issued
+   * after checking their PIN; the response's `readSet` is that extra, never the device's own.
+   */
+  person: z.literal(true).optional(),
 });
 export type PullRequest = z.infer<typeof zPullRequest>;
+
+/** Header carrying a person session token (`bps_…`) on a person pull. */
+export const PERSON_SESSION_HEADER = 'X-Person-Session';
+
+/** `POST /v1/sync/person-session`: the person's PIN, checked by the server itself. */
+export const zPersonSessionRequest = z.strictObject({
+  userId: z.string().uuid(),
+  pin: z.string().regex(/^[0-9]{6}$/),
+});
+export type PersonSessionRequest = z.infer<typeof zPersonSessionRequest>;
+
+export const zPersonSessionResponse = z.object({
+  token: z.string().min(1),
+  expiresAt: z.number().int(),
+  /** What the person may read here beyond the device; empty means nothing to fetch. */
+  readSet: z.array(z.string().min(1).max(MAX_READ_PERMISSION_LENGTH)).max(MAX_READ_SET),
+});
+export type PersonSessionResponse = z.infer<typeof zPersonSessionResponse>;
 
 export const DEVICE_KINDS = ['member', 'system'] as const;
 export const zDeviceKind = z.enum(DEVICE_KINDS);

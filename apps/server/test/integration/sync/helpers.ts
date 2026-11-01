@@ -26,7 +26,12 @@ import { createVerifyToken, InMemoryTokenStore } from '../../../src/middleware/a
 import { ImmediateDeliveryDispatcher } from '../../../src/push/dispatcher.js';
 import { FakePushPort, type PushPort } from '../../../src/push/port.js';
 import { InProcessPokeHub, type PokeScope } from '../../../src/realtime/poke-hub.js';
-import { grantAllPermissions, seedStaffRole, testRegistry } from '../oplog/helpers.js';
+import {
+  grantAllPermissions,
+  seedStaffMember,
+  seedStaffRole,
+  testRegistry,
+} from '../oplog/helpers.js';
 
 const APP_ROLE = 'bolusi_app';
 
@@ -51,6 +56,7 @@ export interface PullBody {
   readonly limit?: number;
   readonly devicesDirectoryVersion: number;
   readonly backfill?: { readonly reads: readonly string[]; readonly through: number };
+  readonly person?: true;
 }
 
 /** A seeded device ready to push/pull: its directory identity + chain builder + bearer header. */
@@ -230,6 +236,7 @@ export async function makeSyncHarness(
       .execute();
     await grantAllPermissions(db, world.tenantId, world.userId);
     await seedStaffRole(db, world.tenantId);
+    await seedStaffMember(db, world.tenantId, world.storeId);
     const auth = enroll({ ...world, status });
     return { world, auth, builder: new ChainBuilder(world, serverCryptoPort) };
   }
@@ -283,6 +290,10 @@ export async function makeSyncHarness(
         .execute();
     }
     await grantAllPermissions(db, tenantId, world.userId);
+    if (kind !== 'system' && storeId !== null) {
+      await seedStaffRole(db, tenantId);
+      await seedStaffMember(db, tenantId, storeId);
+    }
     const auth = enroll({
       deviceId: world.deviceId,
       tenantId,

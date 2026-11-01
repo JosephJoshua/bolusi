@@ -19,6 +19,7 @@ import {
   text,
   type,
   USER_NAMES,
+  waitUntil,
   type RepairHarness,
   type RenderResult,
 } from '../../../test/repair-support.js';
@@ -599,24 +600,49 @@ describe('money back and lowered bills', () => {
   });
 
   // Android QA (#90): a manager over their limit only learned it when the save was refused.
-  test('a manager sees their limit and cannot take more off a bill than it allows', async () => {
+  test('a manager sees their limit, and asks an owner to take more off a bill', async () => {
     h = await openRepairScreenHarness(5413);
     const ticketId = await handedOver(h, []);
     const screen = await mount(h, h.managerId);
     await press(screen, `money.kas.owed.${ticketId}`);
     await press(screen, 'money.receive.reduce');
     expect(text(screen, 'money.reduce.limit')).toContain('Rp 30.000');
+    // Beyond what was charged it is refused, and "Sisa jadi" keeps the debt as it is.
+    type(screen, 'money.reduce.amount', '800000');
+    await settle();
+    expect(text(screen, 'money.reduce')).toContain('Paling banyak Rp 750.000.');
+    expect(text(screen, 'money.reduce.after')).toContain('Rp 750.000');
+    // Beyond the limit an owner is asked, from Kas as from the servisan (Android QA, #121).
     type(screen, 'money.reduce.amount', '40000');
     type(screen, 'money.reduce.reason', 'Pelanggan lama');
     await settle();
-    expect(text(screen, 'money.reduce')).toContain('Melebihi batasmu. Paling banyak Rp 30.000.');
-    expect(screen.all('money.reduce.primary')[0]!.props['disabled']).toBe(true);
-    // Android QA (#121): where to ask instead, and the debt as it is, not as the cap would leave it.
-    expect(text(screen, 'money.reduce.primaryHint')).toBe(
-      'Minta persetujuan pemilik dari halaman servisan.',
+    expect(text(screen, 'money.reduce.limit')).toBe('Melebihi batasmu, jadi perlu persetujuan.');
+    expect(text(screen, 'money.reduce.primary')).toContain('Minta persetujuan');
+    await press(screen, 'money.reduce.primary');
+    expect(text(screen, 'money.kas.notice')).toContain('Permintaan dibuat.');
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 750.000');
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.storeOwnerId)
+    ).rows;
+    expect(request).toMatchObject({ kind: 'money.reduceCharge', amount: 40_000 });
+    await h.approvals(
+      'rejectRequest',
+      { requestId: request!.id, note: 'Harga sudah pas' },
+      h.storeOwnerId,
     );
-    expect(text(screen, 'money.reduce.after')).toContain('Rp 750.000');
+    // The answer shows on the board as a cancel's does.
+    expect(
+      await waitUntil(() => screen.query(`money.kas.turnedDown.${request!.id}`) !== null),
+    ).toBe(true);
+    expect(text(screen, `money.kas.turnedDown.${request!.id}`)).toContain('Kurangi tagihan');
+    expect(text(screen, `money.kas.turnedDown.${request!.id}`)).toContain('Harga sudah pas');
+    // Said with whose servisan it was, so two answers are told apart.
+    expect(text(screen, `money.kas.turnedDown.${request!.id}`)).toContain('Yohanis Wenda');
+
+    await press(screen, `money.kas.owed.${ticketId}`);
+    await press(screen, 'money.receive.reduce');
     type(screen, 'money.reduce.amount', '30000');
+    type(screen, 'money.reduce.reason', 'Pelanggan lama');
     await settle();
     await press(screen, 'money.reduce.primary');
     expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 720.000');

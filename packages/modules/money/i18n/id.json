@@ -174,8 +174,7 @@
   },
   "ask": {
     "needsApproval": "Perlu persetujuan pemilik toko.",
-    "overLimit": "Melebihi batasmu, jadi perlu persetujuan.",
-    "fromServisan": "Minta persetujuan pemilik dari halaman servisan."
+    "overLimit": "Melebihi batasmu, jadi perlu persetujuan."
   },
   "kind": {
     "qris": "QRIS",
@@ -279,7 +278,9 @@
       "method": "Pilih metodenya dulu.",
       "amount": "Isi jumlahnya dulu.",
       "reason": "Tulis alasannya dulu."
-    }
+    },
+    "rejected": "{name} menolak mengembalikan {amount}.",
+    "rejectedNote": "{name} menolak mengembalikan {amount}: {note}"
   },
   "reduce": {
     "limit": "Batas potonganmu {amount}.",
@@ -297,6 +298,8 @@
     "hint": {
       "amount": "Isi potongannya dulu.",
       "reason": "Tulis alasannya dulu."
-    }
+    },
+    "rejected": "{name} menolak memotong tagihan {amount}.",
+    "rejectedNote": "{name} menolak memotong tagihan {amount}: {note}"
   }
 }

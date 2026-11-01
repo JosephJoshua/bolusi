@@ -43,6 +43,7 @@ export const HTTP_ERROR_CODES = [
   'QRIS_KEY_REFUSED',
   'QRIS_AMOUNT_REFUSED',
   'CHANGE_REFUSED',
+  'PERSON_SESSION_INVALID',
 ] as const;
 
 export const zHttpErrorCode = z.enum(HTTP_ERROR_CODES);

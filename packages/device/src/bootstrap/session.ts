@@ -327,6 +327,36 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   // is real in memory and invisible on screen.
   shell.subscribe(emit);
 
+  // The signed-in person's reads beyond the device (person-access.ts) last exactly as long as their
+  // session here: a lock, a switch or a sign-out ends them. If the server ends them first (expired,
+  // or the person left the store), the session locks, and their PIN opens it all again.
+  const person = deps.app.person;
+  shell.subscribe(() => {
+    const active = shell.snapshot().locked ? null : (manager.current?.userId ?? null);
+    if (person.userId() !== null && person.userId() !== active) void person.end();
+  });
+  person.subscribe(() => {
+    if (person.status() === 'ended' && person.userId() === manager.current?.userId) {
+      void person.end().then(() => shell.lockNow());
+    }
+  });
+  const beginPerson = async (userId: string, pin: string): Promise<void> => {
+    await person.begin({
+      userId,
+      pin,
+      extra: person
+        .heldReads()
+        .filter((read) => commands.enforcementPoint.hasPermission({ ...device, userId }, read)),
+    });
+    // A lock or switch while the last person's store was closing found nobody to end.
+    if (
+      person.userId() === userId &&
+      (shell.snapshot().locked || manager.current?.userId !== userId)
+    ) {
+      await person.end();
+    }
+  };
+
   const loadRow = async (userId: string): Promise<void> => {
     rows.set(userId, await readPinAttempt(db, userId, device.deviceId));
   };
@@ -497,6 +527,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
             throw new Error('unlock did not open a session (SessionManager.current stayed null)');
           }
           outcome = { kind: 'opened', session };
+          await beginPerson(userId, pin);
         } else {
           outcome = { kind: 'wrong', state: result.state, lockedOut: result.lockedOut };
         }

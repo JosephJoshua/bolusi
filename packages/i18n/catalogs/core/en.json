@@ -54,6 +54,9 @@
   "unauthorized": {
     "askOwner": "Ask your store owner for access."
   },
+  "notOnDevice": {
+    "hint": "This isn’t kept on this device. It shows up once you’re online."
+  },
   "opType": {
     "unknown": "Change"
   },
@@ -70,6 +73,7 @@
     "LAST_ADMIN_PROTECTED": "Not allowed. There must always be at least one active main owner.",
     "ROLE_IN_USE": "This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.",
     "CLOCK_AHEAD": "This device’s clock is ahead. Turn on automatic date and time in settings, then try again.",
+    "NOT_ON_DEVICE": "Needs internet to open this.",
     "IDEMPOTENCY_CONFLICT": "This request clashed with an earlier one. Try again.",
     "RATE_LIMITED": "Too many requests. Wait a moment, then try again.",
     "UNEXPECTED": "Something went wrong. Try again.",

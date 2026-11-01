@@ -7,6 +7,7 @@
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
 import {
   AppShell,
+  Banner,
   Button,
   FreshGlow,
   Icon,
@@ -30,8 +31,8 @@ import { accountLabel, dayStart, differenceText, type NamedBalance } from '../ka
 import { useKasDay } from '../kas-day.js';
 import type { CashCountRow } from '../queries.js';
 import { useMoneyRuntime } from '../runtime.js';
-import { useVoidRequests } from '../void-ask.js';
-import { ta } from '../../approvals/i18n.js';
+import { useAskedAbout, useVoidRequests } from '../void-ask.js';
+import { approvalKindKey, ta } from '../../approvals/i18n.js';
 
 export interface KasBoardProps {
   readonly chrome: ScreenChrome;
@@ -44,6 +45,9 @@ export interface KasBoardProps {
   readonly onRefund: (balance: NamedBalance) => void;
   /** The day's records; absent for someone who cannot read the store's money. */
   readonly onHistory?: (() => void) | undefined;
+  /** Said at the top once something was asked of an owner from here; pressing it clears it. */
+  readonly notice?: string | null | undefined;
+  readonly onClearNotice?: (() => void) | undefined;
   /** A tablet beside another pane shows no header of its own; absent on a phone. */
   readonly testID?: string | undefined;
 }
@@ -57,6 +61,8 @@ export function KasBoard({
   onReceive,
   onRefund,
   onHistory,
+  notice,
+  onClearNotice,
   testID = 'money.kas',
 }: KasBoardProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
@@ -73,11 +79,11 @@ export function KasBoard({
     may,
   } = useKasDay(now);
   const { count: mayCount, settle: maySettle, receive: mayReceive, read: mayRead } = may;
-  // Cancels this person asked for that an owner turned down today: told here, not only in Riwayat.
+  // What this person asked an owner for from Kas and was turned down today: told here, not only
+  // in Riwayat.
   const since = dayStart(now());
-  const turnedDown = [...useVoidRequests().rejected.values()].filter(
-    (row) => (row.decidedAt ?? 0) >= since,
-  );
+  const turnedDown = useVoidRequests().turnedDown.filter((row) => (row.decidedAt ?? 0) >= since);
+  const about = useAskedAbout(turnedDown);
 
   return (
     <AppShell
@@ -89,6 +95,16 @@ export function KasBoard({
         mayCount ? (
           <Button label={tm('money.kas.count')} onPress={onCount} testID={`${testID}.count`} />
         ) : undefined
+      }
+      banner={
+        notice === null || notice === undefined ? undefined : (
+          <Banner
+            variant="info"
+            message={notice}
+            onPress={onClearNotice}
+            testID={`${testID}.notice`}
+          />
+        )
       }
       testID={testID}
     >
@@ -145,8 +161,10 @@ export function KasBoard({
           {turnedDown.map((row) => (
             <Row
               key={row.id}
-              label={ta('approvals.kind.moneyVoidPayment')}
-              detail={[row.decidedByName, row.note].filter(Boolean).join(': ')}
+              label={ta(approvalKindKey(row.kind))}
+              detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
+                .filter(Boolean)
+                .join(' · ')}
               value={formatMoney(row.amount)}
               onPress={onHistory}
               testID={`${testID}.turnedDown.${row.id}`}

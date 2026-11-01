@@ -29,6 +29,7 @@ export {
   type ProjectionApply,
 } from './append.js';
 export {
+  markRejectionsHandled,
   markSyncResult,
   resolveSyncTransition,
   type BookkeepingPatch,

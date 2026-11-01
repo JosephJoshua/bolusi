@@ -17,6 +17,7 @@ export { ProjectionRegistry, ProjectionRegistryError, type EntityTableRef } from
 
 export {
   cursorOf,
+  DEVICE_OP_TABLE,
   hasNewerEntityOp,
   highestContiguousSeq,
   readEntitiesOps,
@@ -48,7 +49,12 @@ export {
   type HashFn,
 } from './oracle.js';
 
-export { createSqlWatermarkStore, type WatermarkState, type WatermarkStore } from './watermarks.js';
+export {
+  createMemoryWatermarkStore,
+  createSqlWatermarkStore,
+  type WatermarkState,
+  type WatermarkStore,
+} from './watermarks.js';
 
 export {
   createSqlRebuildStore,
@@ -76,7 +82,9 @@ export {
 export { ProjectionStats, type ProjectionStatsSnapshot } from './stats.js';
 
 export {
+  createPersonProjectionEngine,
   createProjectionEngine,
+  PERSON_OP_TABLE,
   ProjectionEngine,
   type ApplyMode,
   type ApplyOutcome,

@@ -83,6 +83,20 @@ export interface VoidRequests {
   readonly waiting: ReadonlySet<string>;
   /** This person's latest ask per payment, when an owner said no. */
   readonly rejected: ReadonlyMap<string, ApprovalRow>;
+  /**
+   * Every money ask of this person's an owner said no to, latest per payment or servisan: cancels
+   * with refunds and lower bills asked from Kas. The board tells them about these.
+   */
+  readonly turnedDown: readonly ApprovalRow[];
+}
+
+/** The money decisions asked from Kas. */
+const KAS_KINDS: ReadonlySet<string> = new Set(Object.values(MONEY_APPROVAL_KIND));
+
+/** What an ask is about: its payment for a cancel, else its kind on its servisan. */
+function askedAbout(row: ApprovalRow): string | null {
+  if (row.kind === MONEY_APPROVAL_KIND.voidPayment) return entryOf(row);
+  return `${row.kind}:${row.targetId}`;
 }
 
 function entryOf(row: ApprovalRow): string | null {
@@ -103,46 +117,92 @@ export function useVoidRequests(): VoidRequests {
       rt.approvals.query('approvalRequests', {}),
       rt.approvals.query('approvalRequests', { mine: true }),
     ]);
-    const voids = (rows: readonly ApprovalRow[]) =>
-      rows.filter((row) => row.kind === MONEY_APPROVAL_KIND.voidPayment);
-    return { waiting: voids(waiting.rows), mine: voids(mine.rows) };
+    return {
+      waiting: waiting.rows.filter((row) => row.kind === MONEY_APPROVAL_KIND.voidPayment),
+      mine: mine.rows.filter((row) => KAS_KINDS.has(row.kind)),
+    };
   }, `voidRequests:${mayAsk}`);
   const data = read.status === 'ready' ? read.data : null;
   return useMemo(() => {
     const waiting = new Set<string>();
     const rejected = new Map<string, ApprovalRow>();
+    const turnedDown: ApprovalRow[] = [];
     for (const row of data?.waiting ?? []) {
       const id = entryOf(row);
       if (id !== null) waiting.add(id);
     }
-    // Newest first: only a payment's latest ask counts.
+    // Newest first: only the latest ask about a payment (or a servisan's refund) counts.
     const seen = new Set<string>();
     for (const row of data?.mine ?? []) {
-      const id = entryOf(row);
-      if (id === null || seen.has(id)) continue;
-      seen.add(id);
-      if (row.status === 'rejected') rejected.set(id, row);
+      const about = askedAbout(row);
+      if (about === null || seen.has(about)) continue;
+      seen.add(about);
+      if (row.status !== 'rejected') continue;
+      turnedDown.push(row);
+      if (row.kind === MONEY_APPROVAL_KIND.voidPayment) rejected.set(about, row);
     }
-    return { waiting, rejected };
+    return { waiting, rejected, turnedDown };
   }, [data]);
 }
 
-/** What the asker is told on the board: each cancel an owner turned down since `since`. */
+/** The servisan (or other document) an ask was about, as its input names it. */
+function documentOf(row: ApprovalRow): { kind: string; id: string; label: string | null } | null {
+  const document = (row.input as { readonly document?: unknown }).document as
+    { readonly kind?: unknown; readonly id?: unknown; readonly label?: unknown } | undefined;
+  if (typeof document?.kind !== 'string' || typeof document.id !== 'string') return null;
+  return {
+    kind: document.kind,
+    id: document.id,
+    label: typeof document.label === 'string' ? document.label : null,
+  };
+}
+
+/**
+ * Whose servisan each turned-down ask was about, and its number when the ask carries it, said with
+ * the answer so two of them are told apart.
+ */
+export function useAskedAbout(rows: readonly ApprovalRow[]): (row: ApprovalRow) => string | null {
+  const documents = rows.map(documentOf).filter((d) => d !== null);
+  const read = useMoneyQuery(
+    async (rt) => (documents.length === 0 ? new Map() : await rt.customersOf(documents)),
+    `askedAbout:${documents.map((d) => d.id).join(',')}`,
+  );
+  const names: ReadonlyMap<string, string> = read.status === 'ready' ? read.data : new Map();
+  return (row) => {
+    const document = documentOf(row);
+    if (document === null) return null;
+    const parts = [names.get(document.id), document.label].filter(
+      (part): part is string => part !== undefined && part !== null && part !== '',
+    );
+    return parts.length === 0 ? null : parts.join(' · ');
+  };
+}
+
+/** How a turned-down ask reads, by what was asked. */
+const REJECTED_COPY: Readonly<Record<string, readonly [MoneyKey, MoneyKey]>> = {
+  [MONEY_APPROVAL_KIND.voidPayment]: ['money.void.rejected', 'money.void.rejectedNote'],
+  [MONEY_APPROVAL_KIND.refund]: ['money.refund.rejected', 'money.refund.rejectedNote'],
+  [MONEY_APPROVAL_KIND.reduceCharge]: ['money.reduce.rejected', 'money.reduce.rejectedNote'],
+};
+
+/** What the asker is told on the board: each money ask an owner turned down since `since`. */
 export function turnedDownLines(
   asks: VoidRequests,
   since: number,
+  about: (row: ApprovalRow) => string | null = () => null,
 ): readonly { id: string; text: string }[] {
-  return [...asks.rejected.values()]
+  return asks.turnedDown
     .filter((row) => (row.decidedAt ?? 0) >= since)
     .map((row) => {
       const values = { name: row.decidedByName ?? '–', amount: formatMoney(row.amount) };
-      return {
-        id: row.id,
-        text:
-          row.note === null || row.note === ''
-            ? tm('money.void.rejected', values)
-            : tm('money.void.rejectedNote', { ...values, note: row.note }),
-      };
+      const [plain, noted] =
+        REJECTED_COPY[row.kind] ?? REJECTED_COPY[MONEY_APPROVAL_KIND.voidPayment]!;
+      const said =
+        row.note === null || row.note === ''
+          ? tm(plain, values)
+          : tm(noted, { ...values, note: row.note });
+      const what = about(row);
+      return { id: row.id, text: what === null ? said : `${what}: ${said}` };
     });
 }
 

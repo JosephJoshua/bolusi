@@ -77,7 +77,7 @@ export function harnessRuntime(
     runtime: h.runtime,
     invalidation: h.invalidation,
     identity: h.identity(userId),
-    noteSyncStatuses: (ids) => readEntitySyncStatuses(h.db, NOTE_ENTITY, ids),
+    noteSyncStatuses: (ids) => readEntitySyncStatuses(h.db, NOTE_ENTITY, ids, userId),
     capturePhoto: overrides.capturePhoto ?? (() => Promise.resolve(null)),
     loadThumbnail: overrides.loadThumbnail ?? (() => Promise.resolve({ kind: 'unavailable' })),
   });

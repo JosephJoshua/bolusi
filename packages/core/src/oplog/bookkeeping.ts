@@ -1,8 +1,9 @@
 // Operation.syncStatus bookkeeping transition layer (03-state-machines §3;
 // 05-operation-log §2.3). This is the SINGLE place the operation-log bookkeeping columns
 // are mutated (08 §5.2 allowlist target for `bolusi/no-op-table-update`) — everything else
-// in the op log is append-only (05 §1). Only the sync engine (task 15) drives it, on a
-// server push result (api/01-sync §3); nothing else may touch bookkeeping.
+// in the op log is append-only (05 §1). The sync engine (task 15) drives the status, on a
+// server push result (api/01-sync §3); the person whose change was refused may mark the refusal
+// handled (`markRejectionsHandled`). Nothing else may touch bookkeeping.
 //
 // Boundary note (08 §3.3): @bolusi/core may not import @bolusi/db-client, so the mutator
 // takes an injected Kysely handle typed against a minimal structural view of the
@@ -146,4 +147,36 @@ export async function markSyncResult(
   }
 
   return result;
+}
+
+/** The structural view `markRejectionsHandled` writes: who made the op, and when they dealt with it. */
+export interface OpRejectionHandledRow {
+  id: string;
+  userId: string;
+  syncStatus: string;
+  rejectionHandledAt: number | null;
+}
+export interface OpRejectionHandledDatabase {
+  operations: OpRejectionHandledRow;
+}
+
+/**
+ * The person whose changes the server refused says they have dealt with them, so the refusals stop
+ * asking for attention. Local bookkeeping only: the refusal and its reason stay on record. Only the
+ * maker's own, still-refused, not-yet-handled ops are touched; the ids are the rows they were shown,
+ * so a refusal that arrived after they looked stays until they have seen it.
+ */
+export async function markRejectionsHandled(
+  db: Kysely<OpRejectionHandledDatabase>,
+  input: { readonly userId: string; readonly opIds: readonly string[]; readonly at: number },
+): Promise<void> {
+  if (input.opIds.length === 0) return;
+  await db
+    .updateTable('operations')
+    .set({ rejectionHandledAt: input.at })
+    .where('id', 'in', [...input.opIds])
+    .where('userId', '=', input.userId)
+    .where('syncStatus', '=', 'rejected')
+    .where('rejectionHandledAt', 'is', null)
+    .execute();
 }

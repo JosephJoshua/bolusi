@@ -56,6 +56,7 @@ import {
   balanceAfterDownPayment,
   balanceLabelKey,
   canSetRepairTypes,
+  canTakeParts,
   canUseParts,
   claimIntakeDraft,
   CONTEXTUAL_ACTIONS,
@@ -964,6 +965,7 @@ export function TicketPane({
           use={partUse(row)}
           device={{ brand: row.deviceBrand, model: row.deviceModel }}
           editable={canUseParts(row, runtime.userId, inventory.hasPermission)}
+          takeable={canTakeParts(row, runtime.userId, inventory.hasPermission)}
           flagUnreturned={row.outcome === 'cancelled'}
           onDone={setDone}
           testId="repair.desk.ticket.parts"

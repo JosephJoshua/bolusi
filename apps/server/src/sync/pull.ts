@@ -14,13 +14,18 @@ import {
 } from '@bolusi/core';
 import type { DeviceInfo, PullRequest, PullResponse, SignedOperation } from '@bolusi/schemas';
 
-import { deviceReadSet } from './read-set.js';
+import { deviceReadSet, personExtraReadSet } from './read-set.js';
 
 /** The token-authenticated device pulling (api/00 §3; store null = system/tenant-scoped device). */
 export interface PullIdentity {
   readonly deviceId: string;
   readonly tenantId: string;
   readonly storeId: string | null;
+  /**
+   * A person pull: the person a valid person session names on this device (the route checked it).
+   * Served only what they may read beyond the device, for their session; never the device's own.
+   */
+  readonly personUserId?: string;
 }
 
 export interface PullDeps {
@@ -128,17 +133,23 @@ export async function runPull(
       .select(['personalUserId'])
       .where('id', '=', identity.deviceId)
       .executeTakeFirst();
-    const readSet = await deviceReadSet(
-      db,
-      identity.tenantId,
-      { storeId: identity.storeId, personalUserId: device?.personalUserId ?? null },
-      deps.readScope,
-    );
+    const readDevice = {
+      storeId: identity.storeId,
+      personalUserId: device?.personalUserId ?? null,
+    };
+    const person = identity.personUserId;
+    const readSet =
+      person === undefined
+        ? await deviceReadSet(db, identity.tenantId, readDevice, deps.readScope)
+        : await personExtraReadSet(db, identity.tenantId, readDevice, person, deps.readScope);
     const allowed = new Set(readSet);
     const hidden = typesReadWith(
       deps.readScope,
       readPermissionsOf(deps.readScope).filter((read) => !allowed.has(read)),
     );
+    // A person pull is the same stream cut to the person's extra reads: only types read with one of
+    // them, so nothing the device already holds (or every device reads) comes twice.
+    const only = person === undefined ? undefined : typesReadWith(deps.readScope, readSet);
     // A catch-up pull asks for older ops of newly readable types only, up to where its normal pull
     // already is. What it asks for is still limited to what the device may read now.
     const backfill =
@@ -155,7 +166,7 @@ export async function runPull(
     // storeId IS NULL)`, ORDER BY serverSeq. Fetch one MORE than the page: the extra row answers "is
     // there a next page?" without a second COUNT, and pins nextCursor to the last SERVED op.
     const rows =
-      backfill !== undefined && backfill.types.length === 0
+      (backfill !== undefined && backfill.types.length === 0) || only?.length === 0
         ? []
         : await db
             .selectFrom('operations')
@@ -166,6 +177,7 @@ export async function runPull(
             .where('serverSeq', '>', String(request.cursor))
             .where((eb) => eb.or([eb('storeId', '=', identity.storeId), eb('storeId', 'is', null)]))
             .$if(hidden.length > 0, (qb) => qb.where('type', 'not in', hidden))
+            .$if(only !== undefined, (qb) => qb.where('type', 'in', only ?? []))
             .$if(backfill !== undefined, (qb) =>
               qb
                 .where('type', 'in', backfill?.types ?? [])
@@ -193,8 +205,9 @@ export async function runPull(
 
     // Devices sidecar (api/01-sync §4.1): only when the client's echoed version is stale. Equal ⇒
     // omit both fields (nothing changed since the client's last snapshot).
+    // A person pull leaves it to the device's own pull: the device keeps one list of signers.
     const currentVersion = await directoryVersion(db);
-    if (request.devicesDirectoryVersion !== currentVersion) {
+    if (person === undefined && request.devicesDirectoryVersion !== currentVersion) {
       response.devices = await deviceSnapshot(db);
       response.devicesDirectoryVersion = currentVersion;
     }
