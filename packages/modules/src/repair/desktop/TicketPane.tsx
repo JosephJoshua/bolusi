@@ -1033,6 +1033,8 @@ export function TicketPane({
         return (
           <ChangeCancelFeeDialog
             {...common}
+            ticket={row}
+            onAsked={asked}
             current={(row.cancelFee ?? 0) - row.reduced}
             paid={row.downPayment ?? 0}
             onDone={() => finishStep('repair.done.cancelFeeChanged')}

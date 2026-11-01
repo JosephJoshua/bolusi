@@ -29,6 +29,7 @@ import {
   WORK_PHOTOS_MAX,
   type WorkPhotoStage,
 } from '../constants.js';
+import { useCancelFeeAsk, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentAsk } from '../down-payment-ask.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import {
@@ -535,15 +536,20 @@ export function ChangeCancelFeeStep({
   chrome,
   ticketId,
   stale,
+  ticket,
   current,
   paid,
   onDone,
+  onAsked,
   onCancel,
   onRegisterDiscardGuard,
   testID = 'repair.cancelFee',
 }: StepProps & {
+  readonly ticket: CancelFeeTicket;
   readonly current: number;
   readonly paid: number;
+  /** A manager beyond their limit asked an owner instead. */
+  readonly onAsked: () => void;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -553,6 +559,7 @@ export function ChangeCancelFeeStep({
   const fee = parseRupiah(feeText);
   const changed = fee !== null && fee !== current;
   const complete = changed && reason.trim() !== '';
+  const ask = useCancelFeeAsk(ticket, current, changed ? fee : null);
   const discard = useDiscardConfirm({
     dirty: stale === null && (changed || reason.trim() !== ''),
     onRegisterDiscardGuard,
@@ -560,10 +567,15 @@ export function ChangeCancelFeeStep({
   });
   const submit = (): void => {
     if (fee === null || !complete) return;
+    const asking = ask.asking;
     void runner
-      .run(() => runtime.run('changeCancelFee', { ticketId, fee, reason }))
+      .run<unknown>(() =>
+        asking
+          ? runtime.approvals.run('requestApproval', ask.request(reason.trim()))
+          : runtime.run('changeCancelFee', { ticketId, fee, reason }),
+      )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result !== undefined) (asking ? onAsked : onDone)();
       });
   };
   return (
@@ -571,7 +583,7 @@ export function ChangeCancelFeeStep({
       chrome={chrome}
       title={tn('repair.cancelFee.title')}
       onBack={() => discard.requestLeave(onCancel)}
-      primaryLabel={tn('repair.cancelFee.save')}
+      primaryLabel={ask.asking ? ta('approvals.action.ask') : tn('repair.cancelFee.save')}
       onPrimary={submit}
       primaryDisabled={!complete}
       primaryHint={tn(
@@ -593,6 +605,11 @@ export function ChangeCancelFeeStep({
           ? tn('repair.cancelFee.paid', { amount: formatMoney(paid) })
           : tn('repair.cancelFee.unpaid')}
       </Text>
+      {ask.asking ? (
+        <Text style={[repairStyles.caption, styles.consequence]} testID={`${testID}.asks`}>
+          {tn(askedBecauseKey(true))}
+        </Text>
+      ) : null}
       <TextInput
         label={tn('repair.cancelFee.input')}
         value={feeText}

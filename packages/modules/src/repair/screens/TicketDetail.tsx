@@ -360,11 +360,14 @@ export function TicketDetail({
         />
       );
     case 'changeCancelFee':
+      if (ticket === undefined) break;
       return (
         <ChangeCancelFeeStep
           {...stepProps}
-          current={(ticket?.cancelFee ?? 0) - (ticket?.reduced ?? 0)}
-          paid={ticket?.downPayment ?? 0}
+          ticket={ticket}
+          onAsked={asked}
+          current={(ticket.cancelFee ?? 0) - ticket.reduced}
+          paid={ticket.downPayment ?? 0}
           onDone={() => {
             closeStep();
             setDone(tn('repair.done.cancelFeeChanged'));

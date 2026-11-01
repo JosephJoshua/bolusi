@@ -780,6 +780,42 @@ describe('a down payment fix (owners; the counter asks)', () => {
 });
 
 describe('putting a mistake right', () => {
+  test('a manager past the limit on Ubah biaya asks an owner instead, and the owner’s yes sets it', async () => {
+    h = await openRepairScreenHarness(5534);
+    await h.run('setCancelFees', { beforeWork: 100_000, afterWork: 150_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Batal' }, h.storeOwnerId);
+
+    const manager = await mount(h, h.managerId);
+    await press(manager, 'repair.board.views.pickup');
+    await press(manager, `repair.board.row.${ticketId}`);
+    await press(manager, 'repair.ticket.action.changeCancelFee');
+    // Rp 50.000 off the store's Rp 100.000 is within the manager's Rp 50.000.
+    type(manager, 'repair.cancelFee.feeInput', '50.000');
+    await settle();
+    expect(manager.query('repair.cancelFee.asks')).toBeNull();
+    expect(text(manager, 'repair.cancelFee.primary')).toBe(tn('repair.cancelFee.save'));
+    type(manager, 'repair.cancelFee.feeInput', '40.000');
+    await settle();
+    expect(text(manager, 'repair.cancelFee.asks')).toBe(tn('repair.approval.overLimit'));
+    expect(text(manager, 'repair.cancelFee.primary')).toBe('Minta persetujuan');
+    type(manager, 'repair.cancelFee.reason', 'Pelanggan lama');
+    await settle();
+    await press(manager, 'repair.cancelFee.primary');
+    expect(text(manager, 'repair.ticket.done')).toBe(
+      'Permintaan dibuat. Pemilik toko akan memutuskan.',
+    );
+    expect((await ticketRow(h, ticketId)).cancelFee).toBe(100_000);
+    manager.unmount();
+
+    const [asked] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.storeOwnerId)
+    ).rows;
+    expect(asked).toMatchObject({ kind: 'repair.cancelFee', amount: 60_000, canDecide: true });
+    await h.approvals('approveRequest', { requestId: asked!.id }, h.storeOwnerId);
+    expect((await ticketRow(h, ticketId)).cancelFee).toBe(40_000);
+  });
+
   test('the counter corrects the number and the IMEI after saving; the history keeps both', async () => {
     h = await openRepairScreenHarness(5510);
     const ticketId = await openTicket(h);
