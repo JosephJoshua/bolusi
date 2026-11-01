@@ -94,7 +94,11 @@ import type { VideoSurface } from './src/media/VideoHost.js';
 import { VideoScreen } from './src/media/VideoScreen.js';
 import type { ScanSurface } from './src/media/ScanHost.js';
 import { ScanScreen } from './src/media/ScanScreen.js';
-import type { DeviceInfo, MutablePushCategory } from '@bolusi/device/models/settings/model';
+import {
+  MUTABLE_PUSH_CATEGORIES,
+  type DeviceInfo,
+  type MutablePushCategory,
+} from '@bolusi/device/models/settings/model';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
@@ -240,6 +244,8 @@ export interface AppProps {
    * so it re-derives on a user switch. Core still enforces the permission, so this is a UX gate.
    */
   readonly canUnlock: boolean;
+  /** May the signed-in person decide conflicts (`platform.conflict_acknowledge`)? Absent: no. */
+  readonly canDecideConflicts?: boolean | undefined;
   /**
    * The device directory as owner-unlock targets (task 186b), each with a caller-derived `lockedOut`
    * flag. Loaded on demand when the Unlock screen opens (the effect below), so the owner sees the
@@ -1287,6 +1293,10 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenNotificationSettings={(category: MutablePushCategory) =>
                     openNotificationSettings(channelId(category))
                   }
+                  // Data that needs an owner's decision is for whoever can decide it.
+                  notificationCategories={MUTABLE_PUSH_CATEGORIES.filter(
+                    (category) => category !== 'conflict' || props.canDecideConflicts === true,
+                  )}
                   device={props.deviceInfo}
                   currentUser={currentUser}
                   onBack={() => setRoute('home')}

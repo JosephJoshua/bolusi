@@ -45,6 +45,7 @@
  */
 import {
   AUTH_PERMISSION,
+  PLATFORM_PERMISSION,
   changePin as changePinFlow,
   firstPinUserOnThisDevice,
   listSignInUsers,
@@ -145,6 +146,11 @@ export interface AppSessionSnapshot {
    * others: the server decides every change.
    */
   readonly canSetLimits: boolean;
+  /**
+   * Does the ACTIVE user hold `platform.conflict_acknowledge` here? Gates the Settings row for the
+   * notifications about data that needs an owner's decision: nobody else can act on one.
+   */
+  readonly canDecideConflicts: boolean;
   /**
    * Does the ACTIVE user hold `auth.device_enroll` here? Gates renaming this device in Settings, a UX
    * gate like the others: the server decides.
@@ -392,6 +398,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
         canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
         canSetLimits: actingUserHolds(AUTH_PERMISSION.limitManage),
+        canDecideConflicts: actingUserHolds(PLATFORM_PERMISSION.conflictAcknowledge),
         canRenameDevice: actingUserHolds(AUTH_PERMISSION.deviceEnroll),
         tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };

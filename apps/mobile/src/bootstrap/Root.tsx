@@ -1302,6 +1302,7 @@ export function Root({
         // REJECTS with its DomainError for the screen's mapper. `session === null` is unreachable (Unlock
         // is a session-gated shell route); the null arms are defensive, not live paths.
         canUnlock={sessionSnapshot?.canUnlock ?? false}
+        canDecideConflicts={sessionSnapshot?.canDecideConflicts ?? false}
         listPinTargets={() => session?.listPinTargets() ?? Promise.resolve([])}
         onClearLockout={(targetUserId) =>
           session === null

@@ -78,6 +78,15 @@ async function tickHandoverChecks(page: Page): Promise<void> {
   for (const line of await lines.all()) await line.click();
 }
 
+/** A new or handed-over ticket opens on the customer's slip first; skip printing it. */
+async function skipSlip(page: Page): Promise<void> {
+  await expect(page.getByTestId('repair.print')).toBeVisible();
+  await tap(page, 'repair.print.back');
+}
+
+/** Pay the handover's line in cash: no method is picked until the counter picks one. */
+const payCash = (page: Page) => tap(page, 'repair.handover.pay.line0.method.cash');
+
 test('a misspelled name finds the ticket', async ({ page }) => {
   await open(page, 'counter');
   await fill(page, 'repair.board.search', 'yohanes wenda');
@@ -127,6 +136,7 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await expect(page.getByTestId('repair.intake.review.devicePhoto.image')).toBeVisible();
   await shoot(page, 'intake-review');
   await tap(page, 'repair.intake.primary');
+  await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Ester Mandowen');
   await expect(page.getByTestId('repair.ticket.devicePhoto.image')).toBeVisible();
   // Unassigned, picking a technician is the counter's next step.
@@ -265,6 +275,7 @@ test('handover takes the rest of the bill, then the photo and the signature', as
   // Rp 115.000 less the Rp 100.000 DP: the rest, in cash unless the counter picks another method.
   await expect(page.getByTestId('repair.handover.balance')).toHaveText('Rp 15.000');
   await expect(page.getByTestId('repair.handover.pay.line0.amount.field')).toHaveValue('15.000');
+  await payCash(page);
   await fill(page, 'repair.handover.pay.line0.tendered', '20000');
   await expect(page.getByTestId('repair.handover.pay.line0.change')).toHaveText('Rp 5.000');
   await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
@@ -273,6 +284,7 @@ test('handover takes the rest of the bill, then the photo and the signature', as
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await tap(page, 'repair.handover.primary');
+  await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.photos.strip.signature')).toBeVisible();
   await shoot(page, 'handover-done');
 });
@@ -284,6 +296,7 @@ test('the counter goes through the checks with the customer; anything not ticked
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-4');
   await tap(page, 'repair.ticket.action.handover');
+  await payCash(page);
   await fill(page, 'repair.handover.pay.line0.tendered', '15000');
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
@@ -303,6 +316,7 @@ test('the counter goes through the checks with the customer; anything not ticked
   await fill(page, 'repair.handover.note', 'Charger diambil besok');
   await expect(page.getByTestId('repair.handover.primary')).toBeEnabled();
   await tap(page, 'repair.handover.primary');
+  await skipSlip(page);
   const history = page.getByTestId('repair.ticket.timeline');
   await expect(history).toContainText('Belum: Charger');
   await history.scrollIntoViewIfNeeded();
@@ -317,6 +331,7 @@ test('a split payment needs every part, and an EDC payment its approval code', a
   await tickHandoverChecks(page);
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
+  await payCash(page);
   await fill(page, 'repair.handover.pay.line0.amount', '5000');
   await expect(page.getByTestId('repair.handover.pay.remaining')).toHaveText('Kurang Rp 10.000');
   await tap(page, 'repair.handover.pay.add');
@@ -329,12 +344,18 @@ test('a split payment needs every part, and an EDC payment its approval code', a
   await shoot(page, 'handover-split-ready');
 });
 
-test('only an owner lets a phone go unpaid, with a reason', async ({ page }) => {
+test('the counter asks an owner to let a phone go unpaid; an owner does it with a reason', async ({
+  page,
+}) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-4');
   await tap(page, 'repair.ticket.action.handover');
-  await expect(page.getByTestId('repair.handover.payLater')).toHaveCount(0);
+  await tap(page, 'repair.handover.payLater');
+  await expect(page.getByTestId('repair.handover.askPayLater')).toBeDisabled();
+  await fill(page, 'repair.handover.unpaidReason', 'Langganan, bayar hari Jumat');
+  await expect(page.getByTestId('repair.handover.askPayLater')).toBeEnabled();
+  await expect(page.getByTestId('repair.handover.primary')).toBeDisabled();
 
   await open(page, 'owner');
   await tap(page, 'repair.board.views.pickup');
@@ -521,6 +542,7 @@ test('intake offers the owner’s lists and the ticket keeps their names', async
   await fill(page, 'repair.intake.price.amount.0', '450000');
   await tap(page, 'repair.intake.primary');
   await tap(page, 'repair.intake.primary');
+  await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Ester Mandowen');
   await expect(page.getByTestId('repair.ticket.photos.strip.front')).toBeVisible();
   await shoot(page, 'options-ticket');
@@ -574,6 +596,7 @@ test('intake picks the repair types and the ticket shows each warranty', async (
     'Ganti layar, Ganti baterai',
   );
   await tap(page, 'repair.intake.primary');
+  await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText(
     'Ganti layar · garansi 30 hari',
   );
@@ -618,6 +641,7 @@ test('unlocking takes the ownership video after the intake photos', async ({ pag
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.video')).toContainText('Sudah direkam');
   await tap(page, 'repair.intake.primary');
+  await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.video.recordedAt')).toBeVisible();
   await page.getByTestId('repair.ticket.video').scrollIntoViewIfNeeded();
   await shoot(page, 'video-ticket');
@@ -629,10 +653,12 @@ test('once the phone goes home, the warranty shows its last day', async ({ page 
   await tap(page, 'repair.board.row.t-4');
   await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText('· garansi 30 hari');
   await tap(page, 'repair.ticket.action.handover');
+  await payCash(page);
   await tickHandoverChecks(page);
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await tap(page, 'repair.handover.primary');
+  await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText(
     /· garansi s\/d \d{2}\/\d{2}\/\d{4}/,
   );
@@ -678,6 +704,7 @@ test('a phone back under warranty opens a free claim linked to its servisan', as
   await expect(page.getByTestId('repair.intake.review.total')).toHaveText('Rp 0');
   await expect(page.getByTestId('repair.intake.claim')).toBeVisible();
   await tap(page, 'repair.intake.primary');
+  await skipSlip(page);
 
   const link = page.getByTestId('repair.ticket.claimLink');
   await expect(link).toContainText('K7Q-0005');
@@ -866,10 +893,14 @@ test('a down payment at intake shows what is left to pay, and opens with the tic
   await page.getByTestId('repair.intake.review.balance').scrollIntoViewIfNeeded();
   await shoot(page, 'dp-intake-review');
   await tap(page, 'repair.intake.primary');
+  await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('−Rp 200.000');
   await expect(page.getByTestId('repair.ticket.balance')).toHaveText('Rp 450.000');
-  // Recorded once; the counter cannot change it afterwards.
-  await expect(page.getByTestId('repair.ticket.downPayment.correct')).toHaveCount(0);
+  // Recorded once; changing it afterwards is an owner's call, so the counter asks for it.
+  await expect(page.getByTestId('repair.ticket.downPayment.correct')).toHaveAttribute(
+    'aria-label',
+    'Minta ubah DP',
+  );
   await page.getByTestId('repair.ticket.balance').scrollIntoViewIfNeeded();
   await shoot(page, 'dp-ticket');
 });
@@ -1019,7 +1050,7 @@ test('the counter sees a phone nobody collected and messages the customer on Wha
   const url = await openedWhatsApp(page);
   expect(`${url.host}${url.pathname}`).toBe('wa.me/6281344556677');
   expect(url.searchParams.get('text')).toContain(
-    'Halo Kak Markus Yikwa, HP Oppo A57 sudah selesai diservis dan bisa diambil',
+    'Halo Kak Markus, HP Oppo A57 sudah selesai diservis dan bisa diambil',
   );
   expect(url.searchParams.get('text')).toContain('No. servisan: K7Q-0006');
 });

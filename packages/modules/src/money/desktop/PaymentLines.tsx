@@ -173,7 +173,12 @@ export function PaymentLines({
               {lines.length > 1 ? (
                 <Button
                   label={tm('money.pay.remove')}
-                  aria-label={tm('money.pay.removeLabel', { method: labelOf(account) })}
+                  // Named by its method once there is one; never a method not picked yet.
+                  aria-label={
+                    unpicked
+                      ? tm('money.pay.removeUnpicked')
+                      : tm('money.pay.removeLabel', { method: labelOf(account) })
+                  }
                   variant="dangerText"
                   size="sm"
                   onClick={() => onChange(lines.filter((other) => other.key !== line.key))}

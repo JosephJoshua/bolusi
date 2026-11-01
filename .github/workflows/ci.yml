@@ -103,6 +103,31 @@ jobs:
           path: apps/desktop/release/Bolusi-Setup-*.exe
           retention-days: 7
 
+  # The phone screens in a browser over the demo runtime: each flow tapped through end to end.
+  mobile-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @bolusi/mobile exec playwright install --with-deps --only-shell chromium
+      - run: pnpm --filter @bolusi/mobile test:visual
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-web-results
+          path: |
+            apps/mobile/e2e-web/test-results
+            apps/mobile/e2e-web/artifacts
+          retention-days: 7
+
   secrets:
     runs-on: ubuntu-latest
     # gitleaks comments on the PR when it finds a secret.
