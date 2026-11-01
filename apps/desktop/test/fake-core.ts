@@ -148,6 +148,7 @@ export function ready(over: Partial<CoreState> = {}): CoreState {
     session: session(),
     sync: null,
     statusSite: 'https://bolusi.example',
+    locale: 'id',
     ...over,
   };
 }

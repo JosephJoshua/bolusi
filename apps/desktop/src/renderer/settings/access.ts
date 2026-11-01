@@ -4,6 +4,7 @@
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { DeviceInfo } from '@bolusi/device/models/settings/model';
+import type { Locale } from '@bolusi/i18n';
 
 export interface StaffPinAccess {
   readonly canUnlock: boolean;
@@ -25,4 +26,6 @@ export interface SettingsAccess {
   readonly device?: DeviceInfo | null | undefined;
   /** Rename this PC, for someone who may register devices here; REJECTS with a `StaffAdminError`. */
   readonly renameDevice?: ((name: string) => Promise<void>) | undefined;
+  /** Switch this PC's language, for anyone signed in; the window follows once it is saved. */
+  readonly chooseLocale?: ((locale: Locale) => Promise<void>) | undefined;
 }

@@ -3,7 +3,8 @@
 // still decide every change), so a cashier sees their account and this computer, an owner the
 // store's people, repair and payment settings too. A page with unsaved changes asks before it is
 // left.
-import { t } from '@bolusi/i18n';
+import { localeNameKey, localeOptions } from '@bolusi/device/models/settings/model';
+import { getLocale, t, type Locale } from '@bolusi/i18n';
 import {
   PaymentMethodsSettings,
   managesPaymentMethods,
@@ -28,9 +29,11 @@ import {
 import {
   Button,
   Card,
+  ChoiceList,
   Fact,
   FactGrid,
   PageHeader,
+  Section,
   SectionNav,
   SettingsPanel,
   Tooltip,
@@ -91,6 +94,8 @@ export function SettingsPage({
   const money = useMoneyRuntime();
   const methods = useMemo(() => managesPaymentMethods(money), [money]);
   const { staff, staffPins } = access;
+  // Every label below follows a switch of this PC's language.
+  const locale = getLocale();
   const groups = useMemo((): readonly SectionNavGroup<SettingsPageKey>[] => {
     return [
       {
@@ -164,7 +169,7 @@ export function SettingsPage({
         items: [{ value: 'computer', label: t('auth.pc.settings.thisPc') }],
       },
     ];
-  }, [staff, staffPins, repair, methods]);
+  }, [staff, staffPins, repair, methods, locale]);
 
   const [page, setPage] = useState<SettingsPageKey>(initialPage);
   const [pending, setPending] = useState<(() => void) | null>(null);
@@ -207,7 +212,10 @@ export function SettingsPage({
           className="min-w-0 flex-1 overflow-y-auto px-6 pt-6"
           data-testid="desktop.settings.page"
         >
-          <div key={current} className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
+          <div
+            key={`${current}.${locale}`}
+            className="mx-auto flex min-h-full w-full max-w-4xl flex-col"
+          >
             <Page
               page={current}
               person={person}
@@ -281,6 +289,7 @@ function Page({
         <ComputerPanel
           device={access.device ?? null}
           onRename={access.renameDevice}
+          onChooseLocale={access.chooseLocale}
           onOpenSetup={onOpenSetup}
         />
       );
@@ -294,14 +303,16 @@ function Page({
   }
 }
 
-/** This PC: the printer and paper its slips use, and what it is registered as. */
+/** This PC: the printer and paper its slips use, its language, and what it is registered as. */
 function ComputerPanel({
   device,
   onRename,
+  onChooseLocale,
   onOpenSetup,
 }: {
   readonly device: SettingsAccess['device'];
   readonly onRename: SettingsAccess['renameDevice'];
+  readonly onChooseLocale: SettingsAccess['chooseLocale'];
   readonly onOpenSetup: (() => void) | undefined;
 }): React.JSX.Element {
   const version = useAppVersion();
@@ -325,6 +336,7 @@ function ComputerPanel({
       <PrintSettings />
       <MediaSettings />
       <StartWithWindows />
+      {onChooseLocale === undefined ? null : <LanguageSettings onChoose={onChooseLocale} />}
       <Card testId="desktop.settings.device">
         <FactGrid>
           {device === null || device === undefined ? null : (
@@ -371,5 +383,44 @@ function ComputerPanel({
         />
       ) : null}
     </SettingsPanel>
+  );
+}
+
+/**
+ * The language this PC shows, as on the phone: each language in its own name, the same in every
+ * language, with the chosen one marked, so someone who picked one they cannot read finds their way
+ * back. It is the PC's, so it says it is for everyone here.
+ */
+function LanguageSettings({
+  onChoose,
+}: {
+  readonly onChoose: (locale: Locale) => Promise<void>;
+}): React.JSX.Element {
+  const current = getLocale();
+  // Marked at once; the words follow when the PC has saved it, and the mark goes back if it could not.
+  const [picked, setPicked] = useState<Locale | null>(null);
+  return (
+    <Card testId="desktop.settings.language">
+      <Section title={t('core.settings.language')}>
+        <p className="-mt-2 text-small text-text-muted">{t('auth.pc.language.caption')}</p>
+        <ChoiceList
+          options={localeOptions.map((locale) => ({
+            value: locale,
+            label: t(localeNameKey(locale) as 'core.language.id'),
+          }))}
+          value={picked ?? current}
+          onChange={(next) => {
+            if (next === current) return;
+            setPicked(next);
+            onChoose(next).then(
+              () => setPicked(null),
+              () => setPicked(null),
+            );
+          }}
+          label={t('core.settings.language')}
+          testId="desktop.settings.language.choice"
+        />
+      </Section>
+    </Card>
   );
 }
