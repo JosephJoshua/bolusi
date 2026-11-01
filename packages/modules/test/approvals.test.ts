@@ -541,3 +541,143 @@ describe('cancelling a payment, asked from Kas', () => {
     );
   });
 });
+
+describe('a refund or a lower bill beyond a manager’s limit', () => {
+  /** A Rp 750.000 servisan handed back paid in full in cash. */
+  async function pickedUp(harness: RepairHarness) {
+    const ticketId = await repaired(harness);
+    await harness.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: harness.photo(7),
+        signature: harness.photo(8),
+        checklist: accessoriesBack(),
+        payments: [{ account: 'cash', amount: 750_000 }],
+      },
+      harness.cashierId,
+    );
+    return { kind: 'repair.ticket', id: ticketId, label: 'T-1' };
+  }
+
+  const refundInput = (document: { kind: string; id: string; label: string }, amount: number) => ({
+    document,
+    account: 'cash',
+    amount,
+    reason: 'Garansi tidak jalan',
+    reference: null,
+  });
+  const refundAsk = (document: { kind: string; id: string; label: string }, amount: number) => ({
+    ...refundInput(document, amount),
+    methodLabel: 'Tunai',
+  });
+
+  async function money(harness: RepairHarness, id: string) {
+    return (
+      await harness.moneyQuery('documentMoney', { kind: 'repair.ticket', id }, harness.ownerId)
+    ).rows[0] as { balance: number; reduced: number; paid: number };
+  }
+
+  test('the manager asks, and the owner’s yes gives it back as the owner’s', async () => {
+    h = await openRepairHarness(9551);
+    const document = await pickedUp(h);
+    // Control: Rp 40.000 is past the manager's Rp 30.000.
+    await expect(
+      h.money('refund', refundInput(document, 40_000), h.managerId),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+    const requestId = await ask(h, 'money.refund', refundAsk(document, 40_000), h.managerId);
+    expect(await request(h, requestId, h.storeOwnerId)).toMatchObject({
+      targetId: document.id,
+      amount: 40_000,
+      counted: 40_000,
+      canDecide: true,
+    });
+    // The counter never decides it, nor asks for one.
+    await refused(
+      h.approvals('approveRequest', { requestId }, h.managerId),
+      'approvals.refusal.ownRequest',
+    );
+    await refused(
+      h.approvals(
+        'requestApproval',
+        { kind: 'money.refund', input: refundAsk(document, 40_000), reason: 'x' },
+        h.cashierId,
+      ),
+      'approvals.refusal.cannotAsk',
+      'PERMISSION_DENIED',
+    );
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+    const refund = await h.db
+      .selectFrom('moneyEntries')
+      .select(['amount', 'createdBy', 'account'])
+      .where('documentId', '=', document.id)
+      .where('kind', '=', 'refund_paid')
+      .executeTakeFirstOrThrow();
+    expect(refund).toMatchObject({ amount: 40_000, createdBy: h.storeOwnerId, account: 'cash' });
+    // The bill came down with it, so the customer owes nothing.
+    expect(await money(h, document.id)).toMatchObject({ balance: 0, reduced: 40_000 });
+  });
+
+  test('a lower bill asked by the manager lands as the owner’s', async () => {
+    h = await openRepairHarness(9552);
+    const ticketId = await repaired(h);
+    await h.run('returnDevice', unpaidHandover(h, ticketId, 0), h.ownerId);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'T-1' };
+    const reduce = { document, amount: 60_000, reason: 'Pelanggan lama' };
+    await expect(h.money('reduceCharge', reduce, h.managerId)).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+    });
+    const requestId = await ask(h, 'money.reduceCharge', reduce, h.managerId);
+    expect(await request(h, requestId, h.storeOwnerId)).toMatchObject({
+      amount: 60_000,
+      counted: 60_000,
+    });
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+    expect(await money(h, ticketId)).toMatchObject({ balance: 690_000, reduced: 60_000 });
+  });
+
+  test('names a method only by the name the store gave it', async () => {
+    h = await openRepairHarness(9554);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BCA Toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const ticketId = await repaired(h);
+    await h.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: h.photo(7),
+        signature: h.photo(8),
+        checklist: accessoriesBack(),
+        payments: [{ account: `account:${accountId}`, amount: 750_000, reference: 'TRF-1' }],
+      },
+      h.cashierId,
+    );
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'T-1' };
+    const through = (methodLabel: string) => ({
+      ...refundAsk(document, 40_000),
+      account: `account:${accountId}`,
+      methodLabel,
+    });
+    // A request that names the money going back some other way is never sent.
+    await expect(ask(h, 'money.refund', through('Tunai'), h.managerId)).rejects.toMatchObject({
+      code: 'ENTITY_NOT_FOUND',
+    });
+    const requestId = await ask(h, 'money.refund', through('BCA Toko'), h.managerId);
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+  });
+
+  test('closes once money moves on the servisan, and an owner gives it back another way', async () => {
+    h = await openRepairHarness(9553);
+    const document = await pickedUp(h);
+    const requestId = await ask(h, 'money.refund', refundAsk(document, 40_000), h.managerId);
+    await h.money('refund', refundInput(document, 10_000), h.storeOwnerId);
+    expect((await request(h, requestId, h.storeOwnerId)).status).toBe('closed');
+    await refused(
+      h.approvals('approveRequest', { requestId }, h.storeOwnerId),
+      'approvals.refusal.changed',
+    );
+  });
+});

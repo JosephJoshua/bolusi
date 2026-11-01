@@ -170,9 +170,11 @@
     "cashTitle": "Cash record cancellation",
     "cashSave": "Cancel record",
     "cashExplain": "The record stays, marked cancelled. The drawer is counted as if it was never recorded, including later counts.",
-    "needsApproval": "Needs the store owner’s approval.",
-    "overLimit": "Over your limit, so it needs approval.",
     "withEarlier": "With earlier reductions on this servisan, the total is {amount}."
+  },
+  "ask": {
+    "needsApproval": "Needs the store owner’s approval.",
+    "overLimit": "Over your limit, so it needs approval."
   },
   "kind": {
     "qris": "QRIS",
@@ -276,7 +278,9 @@
       "method": "Pick a method first.",
       "amount": "Enter the amount first.",
       "reason": "Write the reason first."
-    }
+    },
+    "rejected": "{name} turned down giving back {amount}.",
+    "rejectedNote": "{name} turned down giving back {amount}: {note}"
   },
   "reduce": {
     "limit": "Your limit for lowering a bill is {amount}.",
@@ -294,6 +298,8 @@
     "hint": {
       "amount": "Enter how much to take off first.",
       "reason": "Write the reason first."
-    }
+    },
+    "rejected": "{name} turned down taking {amount} off the bill.",
+    "rejectedNote": "{name} turned down taking {amount} off the bill: {note}"
   }
 }

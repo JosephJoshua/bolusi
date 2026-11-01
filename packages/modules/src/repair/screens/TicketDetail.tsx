@@ -318,7 +318,8 @@ export function TicketDetail({
         : step.kind === 'repairTypes'
           ? repairTypesStale(ticket, can)
           : staleStep(step, ticket, can, runtime.userId, now());
-  // A step that asked an owner instead (a discount, a cancel or a DP fix beyond this person) says so.
+  // A step that asked an owner instead (a discount, a cancel, a DP fix, a refund or a lower bill
+  // beyond this person) says so.
   const asked = (): void => {
     closeStep();
     setDone(ta('approvals.done.asked'));
@@ -511,6 +512,7 @@ export function TicketDetail({
           closeStep();
           setDone(tn(step.kind === 'refund' ? 'repair.done.refund' : 'repair.done.reduce'));
         },
+        onAsked: asked,
       };
       return (
         <MoneyRuntimeProvider runtime={money}>

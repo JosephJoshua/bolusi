@@ -5,18 +5,20 @@
 // in by (rules.ts refundPaidRule). An owner gives back what was paid, any part of it, also after the
 // phone went home: beyond the overpayment the bill is lowered by the difference first
 // (commands.ts refundHandler), so the customer does not end up owing it. Either way it goes back
-// through a method the customer paid with, as much as went in through it.
+// through a method the customer paid with, as much as went in through it. A manager beyond their
+// limit asks an owner instead (approval-kinds.ts) for the same refund or cut.
 import { formatMoney } from '@bolusi/i18n';
 import { useMemo, useState } from 'react';
 
-import { CASH_ACCOUNT, MONEY_PERMISSION } from './constants.js';
+import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import { CASH_ACCOUNT, MONEY_APPROVAL_KIND, MONEY_PERMISSION } from './constants.js';
 import type { RefundInput, ReduceChargeInput } from './commands.js';
 import type { MoneyDocument } from './documents.js';
 import { accountLabel, moneyInByMethod, type NamedBalance } from './kas.js';
 import { tm } from './i18n.js';
 import { rupiah } from './payment-entry.js';
 import type { DocumentMoney, PaymentAccountRow } from './queries.js';
-import { useMoneyQuery, useMoneyRuntime } from './runtime.js';
+import { useMoneyQuery, useMoneyRuntime, type MoneyRuntime } from './runtime.js';
 
 /** What money goes back for, and whose it is. */
 export interface MoneyTarget {
@@ -75,6 +77,18 @@ function useDocumentMoney(document: MoneyDocument) {
   };
 }
 
+/** An approval request a form sends instead of saving, when the amount is beyond the limit. */
+export interface MoneyAsk {
+  readonly kind: string;
+  readonly input: Record<string, unknown>;
+  readonly reason: string;
+}
+
+/** A limited role (a manager) beyond its limit asks an owner, where the step lets it ask. */
+function mayAskBeyond(runtime: MoneyRuntime, limit: number | null): boolean {
+  return limit !== null && runtime.approvals.hasPermission(APPROVAL_PERMISSION.use);
+}
+
 export type RefundProblem = 'method' | 'amount' | 'tooMuch' | 'reason';
 
 export interface RefundForm {
@@ -93,12 +107,17 @@ export interface RefundForm {
   /** The amount as typed, digits only. */
   readonly digits: string;
   readonly setDigits: (digits: string) => void;
-  /** The most the picked method can give back, within a limited role's limit. */
+  /**
+   * The most the picked method can give back, within a limited role's limit unless beyond it is
+   * asked for.
+   */
   readonly max: number;
   /** A limited role's (a manager's) refund limit per document; null when not limited. */
   readonly limit: number | null;
-  /** The amount is above `max` because of `limit`, not the method. */
+  /** The amount is above `max` because of `limit`, not the method, and nobody can be asked. */
   readonly overLimit: boolean;
+  /** The amount is above `limit`, so saving asks an owner for it instead (`ask`). */
+  readonly asking: boolean;
   readonly reason: string;
   readonly setReason: (reason: string) => void;
   /** Not for cash: the transfer's or reversal's number, if there is one. */
@@ -108,13 +127,18 @@ export interface RefundForm {
   readonly lowersBill: number;
   readonly problem: RefundProblem | null;
   readonly dirty: boolean;
+  /** What saving records, unless `asking`. */
   readonly input: RefundInput | null;
+  /** What saving asks for when `asking`. */
+  readonly ask: MoneyAsk | null;
 }
 
-export function useRefund(target: MoneyTarget): RefundForm {
+/** `askable`: the step can send an approval request, and says where its answer shows. */
+export function useRefund(target: MoneyTarget, askable = false): RefundForm {
   const runtime = useMoneyRuntime();
   const owner = runtime.hasPermission(MONEY_PERMISSION.refund);
   const limit = owner ? runtime.limitOf(MONEY_PERMISSION.refund) : null;
+  const mayAsk = askable && mayAskBeyond(runtime, limit);
   const { money, accounts } = useDocumentMoney(target.document);
   const methods = useMemo(
     () => (money === null || accounts === null ? [] : refundMethods(money, accounts, owner)),
@@ -136,12 +160,14 @@ export function useRefund(target: MoneyTarget): RefundForm {
   // Until typed, the overpayment (all of it that this method can give back).
   const digits = typed ?? (credit > 0 ? String(Math.min(credit, max)) : '');
   const amount = rupiah(digits);
+  // Beyond the limit is asked for, when it can be; never beyond what the method can give back.
+  const most = mayAsk ? methodMax : max;
   const problem: RefundProblem | null =
     method === null
       ? 'method'
       : amount === null || amount <= 0
         ? 'amount'
-        : amount > max
+        : amount > most
           ? 'tooMuch'
           : reason.trim() === ''
             ? 'reason'
@@ -149,6 +175,17 @@ export function useRefund(target: MoneyTarget): RefundForm {
   /** '' while no method is picked. */
   const account = method?.account ?? '';
   const trimmed = reference.trim();
+  const asking = amount !== null && amount > max && problem !== 'tooMuch' && mayAsk;
+  const input: RefundInput | null =
+    problem !== null || method === null || amount === null
+      ? null
+      : {
+          document: target.document,
+          account,
+          amount,
+          reason: reason.trim(),
+          reference: account === CASH_ACCOUNT || trimmed === '' ? null : trimmed,
+        };
   return {
     ready: money !== null && accounts !== null,
     owner,
@@ -163,26 +200,27 @@ export function useRefund(target: MoneyTarget): RefundForm {
     },
     digits,
     setDigits,
-    max,
+    max: most,
     limit,
-    overLimit: problem === 'tooMuch' && max < methodMax,
+    overLimit: problem === 'tooMuch' && most < methodMax,
+    asking,
     reason,
     setReason,
     reference,
     setReference,
-    lowersBill: amount === null ? 0 : Math.max(0, Math.min(amount, max) - credit),
+    // What the typed amount would do; nothing while the amount itself is refused.
+    lowersBill: amount === null || problem === 'tooMuch' ? 0 : Math.max(0, amount - credit),
     problem,
     dirty: typed !== null || picked !== null || reason.trim() !== '' || trimmed !== '',
-    input:
-      problem !== null || method === null || amount === null
-        ? null
-        : {
-            document: target.document,
-            account,
-            amount,
-            reason: reason.trim(),
-            reference: account === CASH_ACCOUNT || trimmed === '' ? null : trimmed,
-          },
+    input: asking ? null : input,
+    ask:
+      asking && input !== null && method !== null
+        ? {
+            kind: MONEY_APPROVAL_KIND.refund,
+            input: { ...input, methodLabel: method.label },
+            reason: input.reason,
+          }
+        : null,
   };
 }
 
@@ -194,13 +232,15 @@ export interface ReduceChargeForm {
   readonly owed: number;
   /**
    * The most the bill can come down: what was charged, less what was taken off before, and for a
-   * limited role no further than its limit.
+   * limited role no further than its limit unless beyond it is asked for.
    */
   readonly max: number;
   /** A limited role's limit on what is taken off a document; null when not limited. */
   readonly limit: number | null;
-  /** The amount is above `max` because of `limit`. */
+  /** The amount is above `max` because of `limit`, and nobody can be asked. */
   readonly overLimit: boolean;
+  /** The amount is above `limit`, so saving asks an owner for it instead (`ask`). */
+  readonly asking: boolean;
   readonly digits: string;
   readonly setDigits: (digits: string) => void;
   readonly reason: string;
@@ -209,12 +249,20 @@ export interface ReduceChargeForm {
   readonly after: number;
   readonly problem: ReduceProblem | null;
   readonly dirty: boolean;
+  /** What saving records, unless `asking`. */
   readonly input: ReduceChargeInput | null;
+  /** What saving asks for when `asking`. */
+  readonly ask: MoneyAsk | null;
 }
 
-/** An owner lowers a bill already charged; the whole debt is filled in. */
-export function useReduceCharge(target: MoneyTarget): ReduceChargeForm {
-  const limit = useMoneyRuntime().limitOf(MONEY_PERMISSION.refund);
+/**
+ * An owner lowers a bill already charged; the whole debt is filled in. `askable`: the step can send
+ * an approval request (on a servisan).
+ */
+export function useReduceCharge(target: MoneyTarget, askable = false): ReduceChargeForm {
+  const runtime = useMoneyRuntime();
+  const limit = runtime.limitOf(MONEY_PERMISSION.refund);
+  const mayAsk = askable && mayAskBeyond(runtime, limit);
   const { money } = useDocumentMoney(target.document);
   const [typed, setDigits] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -227,32 +275,41 @@ export function useReduceCharge(target: MoneyTarget): ReduceChargeForm {
       : Math.max(0, Math.min(chargedMax, limit - money.reduced));
   const digits = typed ?? (owed > 0 ? String(Math.min(owed, max)) : '');
   const amount = rupiah(digits);
+  const most = mayAsk ? chargedMax : max;
   const problem: ReduceProblem | null =
     amount === null || amount <= 0
       ? 'amount'
-      : amount > max
+      : amount > most
         ? 'tooMuch'
         : reason.trim() === ''
           ? 'reason'
           : null;
+  const asking = amount !== null && amount > max && problem !== 'tooMuch' && mayAsk;
+  const input: ReduceChargeInput | null =
+    problem !== null || amount === null
+      ? null
+      : { document: target.document, amount, reason: reason.trim() };
   return {
     ready: money !== null,
     owed,
-    max,
+    max: most,
     limit,
-    overLimit: problem === 'tooMuch' && max < chargedMax,
+    overLimit: problem === 'tooMuch' && most < chargedMax,
+    asking,
     digits,
     setDigits,
     reason,
     setReason,
     // Never past what the bill can come down, so a typed overshoot does not read as money owed back.
-    after: owed - Math.min(amount ?? 0, max),
+    // What the typed amount would leave; the debt as it is while the amount itself is refused.
+    after: problem === 'tooMuch' ? owed : owed - (amount ?? 0),
     problem,
     dirty: typed !== null || reason.trim() !== '',
-    input:
-      problem !== null || amount === null
-        ? null
-        : { document: target.document, amount, reason: reason.trim() },
+    input: asking ? null : input,
+    ask:
+      asking && input !== null
+        ? { kind: MONEY_APPROVAL_KIND.reduceCharge, input: { ...input }, reason: input.reason }
+        : null,
   };
 }
 
@@ -276,15 +333,21 @@ export function withinRefundLimit(money: DocumentMoney, methodMax: number, limit
  * Under the amount: a limited role's limit, before the save would refuse it. Not while the amount's
  * own error already says how far it may go.
  */
-export function refundLimitText(form: Pick<RefundForm, 'limit' | 'overLimit'>): string | null {
+export function refundLimitText(
+  form: Pick<RefundForm, 'limit' | 'overLimit' | 'asking' | 'credit' | 'digits'>,
+): string | null {
   if (form.limit === null || form.overLimit) return null;
+  if (form.asking) return tm('money.ask.overLimit');
+  // Giving back an overpayment is the counter's, which no limit holds: said only beyond it.
+  if (form.credit > 0 && (rupiah(form.digits) ?? 0) <= form.credit) return null;
   return tm('money.refund.limit', { amount: formatMoney(form.limit) });
 }
 
 export function reduceLimitText(
-  form: Pick<ReduceChargeForm, 'limit' | 'overLimit'>,
+  form: Pick<ReduceChargeForm, 'limit' | 'overLimit' | 'asking'>,
 ): string | null {
   if (form.limit === null || form.overLimit) return null;
+  if (form.asking) return tm('money.ask.overLimit');
   return tm('money.reduce.limit', { amount: formatMoney(form.limit) });
 }
 

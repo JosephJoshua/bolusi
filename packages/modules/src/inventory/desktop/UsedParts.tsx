@@ -16,7 +16,13 @@ import { ti } from '../i18n.js';
 import { stockText } from '../labels.js';
 import type { ItemRow, UsedPartRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
-import { partForCode, useTakeChoices, type PartUse } from '../take-part.js';
+import {
+  moreHint,
+  overStockHint,
+  partForCode,
+  useTakeChoices,
+  type PartUse,
+} from '../take-part.js';
 import { discardCopy } from './dialogs.js';
 import { QtyField } from './fields.js';
 
@@ -292,6 +298,14 @@ function TakePartDialog({
                   </>
                 )}
                 <ul>{rest.map(choice)}</ul>
+                {moreHint({ fitting, rest }) === null ? null : (
+                  <p
+                    className="px-3 py-3 text-center text-small text-text-muted"
+                    data-testid={`${testId}.more`}
+                  >
+                    {moreHint({ fitting, rest })}
+                  </p>
+                )}
               </>
             )
           }
@@ -310,7 +324,10 @@ function TakePartDialog({
             onChange={setQty}
             min={1}
             max={MAX_MOVEMENT_QTY}
-            hint={ti('inventory.list.stockCount', { count: stockText(picked.onHand) })}
+            hint={
+              overStockHint(picked, qty) ??
+              ti('inventory.list.stockCount', { count: stockText(picked.onHand) })
+            }
             testId={`${testId}.qty`}
           />
         </div>
