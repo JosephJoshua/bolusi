@@ -1,6 +1,6 @@
 // The `money` queries. Every read is constrained to the caller's store; central accounts are read
 // only when this store uses them. Postgres hands `bigint` columns back as strings, hence `Number`.
-import { sql, type RawBuilder } from 'kysely';
+import { sql, type Kysely, type RawBuilder } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -400,10 +400,12 @@ export const moneyEntriesQuery = {
   handler: moneyEntriesHandler,
 } as const;
 
-// ── openBalances (charged documents not square: a customer still owes, or is owed) ─────────────
+// ── openBalances (settled documents not square: a customer still owes, or is owed) ─────────────
 //
 // Owed back happens when more was recorded than was due, as when two offline counters both took
-// the rest of one bill. The cash is real, so the ledger keeps it and the owner sees it here.
+// the rest of one bill. The cash is real, so the ledger keeps it and the owner sees it here. A
+// document whose charge was refused (an owner cancelled it on another device while the phone was
+// handed over and paid offline) has no charge, yet once delivered what it holds is owed all the same.
 
 export interface OpenBalanceRow {
   readonly documentKind: string;
@@ -411,58 +413,70 @@ export interface OpenBalanceRow {
   readonly documentLabel: string;
   /** Above zero the customer owes it ("Belum lunas"); below, the store owes it back. */
   readonly balance: number;
-  /** When the charge was recorded (the phone went home unpaid). */
+  /** When the charge was recorded (the phone went home unpaid), or the first money on it. */
   readonly since: number;
 }
 
 export const openBalancesInput = z.object({}).strict();
 
-async function openBalancesHandler(
-  _input: z.output<typeof openBalancesInput>,
-  qctx: Qctx,
-): Promise<QueryPage<OpenBalanceRow>> {
-  const store = storeOf(qctx);
-  // Only charged documents: a DP on an unfinished repair is money paid ahead, not a debt.
-  const rows = await qctx.db
-    .selectFrom('moneyLines as l')
-    .innerJoin('moneyEntries as e', 'e.id', 'l.entryId')
-    .select([
-      'l.documentKind',
-      'l.documentId',
-      sql<string>`MAX(e.document_label)`.as('documentLabel'),
-      sql<string | number>`SUM(l.debit - l.credit)`.as('balance'),
-      sql<string | number>`MIN(CASE WHEN e.kind = 'charge_recorded' THEN e.created_at END)`.as(
-        'since',
-      ),
-    ])
-    .where('l.storeId', '=', store)
-    .where('l.account', '=', SYSTEM_ACCOUNT.receivable)
-    .groupBy(['l.documentKind', 'l.documentId'])
-    .having(sql<boolean>`SUM(l.debit - l.credit) <> 0`)
-    .having(
-      sql<boolean>`MIN(CASE WHEN e.kind = 'charge_recorded' THEN e.created_at END) IS NOT NULL`,
-    )
-    .execute();
+export function createOpenBalancesQuery(sources: MoneyDocumentSources) {
   return {
-    rows: rows
-      .map((row) => ({
-        documentKind: row.documentKind ?? '',
-        documentId: row.documentId ?? '',
-        documentLabel: row.documentLabel,
-        balance: Number(row.balance),
-        since: Number(row.since),
-      }))
-      .sort((a, b) => a.since - b.since || a.documentId.localeCompare(b.documentId)),
-    nextCursor: null,
-  };
+    name: 'openBalances',
+    permission: MONEY_PERMISSION.read,
+    input: openBalancesInput,
+    handler: async (
+      _input: z.output<typeof openBalancesInput>,
+      qctx: Qctx,
+    ): Promise<QueryPage<OpenBalanceRow>> => {
+      const store = storeOf(qctx);
+      const groups = await qctx.db
+        .selectFrom('moneyLines as l')
+        .innerJoin('moneyEntries as e', 'e.id', 'l.entryId')
+        .select([
+          'l.documentKind',
+          'l.documentId',
+          sql<string>`MAX(e.document_label)`.as('documentLabel'),
+          sql<string | number>`SUM(l.debit - l.credit)`.as('balance'),
+          sql<
+            string | number | null
+          >`MIN(CASE WHEN e.kind = 'charge_recorded' THEN e.created_at END)`.as('chargedAt'),
+          sql<string | number>`MIN(e.created_at)`.as('firstAt'),
+        ])
+        .where('l.storeId', '=', store)
+        .where('l.account', '=', SYSTEM_ACCOUNT.receivable)
+        .where('l.documentId', 'is not', null)
+        .groupBy(['l.documentKind', 'l.documentId'])
+        .execute();
+      const rows: OpenBalanceRow[] = [];
+      for (const group of groups) {
+        const documentKind = group.documentKind ?? '';
+        const documentId = group.documentId ?? '';
+        let balance = Number(group.balance);
+        if (group.chargedAt === null) {
+          // Uncharged: a DP on an unfinished repair is money paid ahead, not a debt. Only a
+          // delivered document counts, against the charge it should have had.
+          const source = sources[documentKind];
+          const lookup = { tenantId: qctx.tenantId, storeId: store, documentId };
+          const db = qctx.db as unknown as Kysely<never>;
+          if (source === undefined || !(await source.delivered(db, lookup))) continue;
+          balance += (await source.charge(db, lookup))?.amount ?? 0;
+        }
+        if (balance === 0) continue;
+        rows.push({
+          documentKind,
+          documentId,
+          documentLabel: group.documentLabel,
+          balance,
+          since: Number(group.chargedAt ?? group.firstAt),
+        });
+      }
+      return {
+        rows: rows.sort((a, b) => a.since - b.since || a.documentId.localeCompare(b.documentId)),
+        nextCursor: null,
+      };
+    },
+  } as const;
 }
-
-export const openBalancesQuery = {
-  name: 'openBalances',
-  permission: MONEY_PERMISSION.read,
-  input: openBalancesInput,
-  handler: openBalancesHandler,
-} as const;
 
 // ── voidCount (what cancelling a payment counts against a limit) ─────────────────────────────
 

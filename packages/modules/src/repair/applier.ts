@@ -430,6 +430,7 @@ const TICKET_CHANGES: Readonly<Record<string, (event: TicketEvent) => TicketChan
     cancelledAt: at,
     readyAt: at,
   }),
+  [REPAIR_OP.cancelFeeChanged]: ({ detail }) => ({ cancelFee: detail['fee'] as number }),
   // Where the phone is, and who handed it over, follow from every handover and undo together
   // (`settleHandover`). The warranty and the undo window count from the earliest handover.
   [REPAIR_OP.deviceReturned]: ({ at }) => ({
@@ -461,6 +462,9 @@ async function writeTicketChange(
     update = update.where('outcome', '!=', 'cancelled').where('location', '!=', 'returned');
   } else if (change.outcome === 'repaired') {
     update = update.where('outcome', '!=', 'cancelled');
+  } else if (change.outcome === undefined && change.cancelFee !== undefined) {
+    // A fee change is about a cancel; on a servisan not cancelled (yet, in this fold) it waits.
+    update = update.where('outcome', '=', 'cancelled');
   }
   await update.execute();
 }
@@ -846,18 +850,51 @@ export const markedRepairedApplier: ProjectionApplier<RepairDatabase> = (db, op)
 };
 
 /** v1 cancels predate fees (nothing was charged), so they record no fee. */
-export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
+export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { reason, fee, standardFee } = payloadOf<{
     reason: string;
     fee?: number;
     standardFee?: number;
   }>(op);
-  return changeTicket(
+  await changeTicket(
     db,
     op,
     fee === undefined ? { reason } : { reason, fee, standardFee: standardFee ?? null },
   );
+  // An owner's later fee change signed on a phone whose clock ran behind folded first, and waited.
+  await settleCancelFee(db, op.entityId, storeIdOf(op), op.timestamp);
 };
+
+/**
+ * An owner changed what a cancelled servisan costs (a customer who paid on a phone that had not
+ * heard of the cancel, or one let off). The latest change stands, in whatever order they fold.
+ */
+export const cancelFeeChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { fee, reason } = payloadOf<{ fee: number; reason: string }>(op);
+  await recordEvent(db, op, { fee, reason });
+  await settleCancelFee(db, op.entityId, storeIdOf(op), op.timestamp);
+};
+
+/** The fee of the latest fee change on a cancelled servisan, when there is one. */
+async function settleCancelFee(
+  db: Db,
+  ticketId: string,
+  storeId: string,
+  updatedAt: number,
+): Promise<void> {
+  const latest = await db
+    .selectFrom('repairTicketEvents')
+    .select('detailJson')
+    .where('ticketId', '=', ticketId)
+    .where('storeId', '=', storeId)
+    .where('kind', '=', REPAIR_OP.cancelFeeChanged)
+    .orderBy('at', 'desc')
+    .orderBy('id', 'desc')
+    .executeTakeFirst();
+  if (latest === undefined) return;
+  const { fee } = JSON.parse(latest.detailJson) as { fee: number };
+  await writeTicketChange(db, ticketId, storeId, { cancelFee: fee }, updatedAt);
+}
 
 /** How a waiting price change was decided, and by whom. */
 interface LineDecision {

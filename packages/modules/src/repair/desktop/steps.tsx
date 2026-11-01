@@ -713,6 +713,99 @@ export function UndoHandoverDialog({
   );
 }
 
+// ── change a cancelled servisan's fee (owners) ──────────────────────────────────────────────
+
+/**
+ * Set a cancelled servisan's fee afterwards, e.g. when a phone was handed over and paid on another
+ * device after the cancel: the bill follows the new fee, charging or giving back the difference.
+ */
+export function ChangeCancelFeeDialog({
+  ticketId,
+  stale,
+  current,
+  paid,
+  onDone,
+  onClose,
+}: StepDialogProps & {
+  /** The fee standing now. */
+  readonly current: number;
+  /** Paid in so far, which the new fee is settled against. */
+  readonly paid: number;
+}): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [fee, setFee] = useState<number | null>(current);
+  const [reason, setReason] = useState('');
+  const changed = fee !== null && fee !== current;
+  const complete = changed && reason.trim() !== '';
+  const submit = (): void => {
+    if (fee === null || !complete) return;
+    void runner
+      .run(() => runtime.run('changeCancelFee', { ticketId, fee, reason }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  const leave = useLeaveGuard(stale === null && (changed || reason.trim() !== ''), onClose);
+  return (
+    <>
+      <StepDialog
+        title={tn('repair.cancelFee.title')}
+        description={
+          paid > 0
+            ? tn('repair.cancelFee.paid', { amount: formatMoney(paid) })
+            : tn('repair.cancelFee.unpaid')
+        }
+        runner={runner}
+        stale={stale}
+        onRequestClose={leave.requestClose}
+        size="sm"
+        testId="repair.desk.cancelFee"
+        footer={
+          <>
+            {complete ? null : (
+              <p className="mr-auto text-small text-text-muted">
+                {tn(
+                  fee === null
+                    ? 'repair.hint.cancelFee'
+                    : changed
+                      ? 'repair.hint.reason'
+                      : 'repair.cancelFee.same',
+                )}
+              </p>
+            )}
+            <CancelButton onClick={leave.requestClose} />
+            <Button
+              label={tn('repair.cancelFee.save')}
+              variant="primary"
+              onClick={submit}
+              busy={runner.busy}
+              disabled={!complete || stale !== null}
+              data-testid="repair.desk.cancelFee.submit"
+            />
+          </>
+        }
+      >
+        <MoneyField
+          label={tn('repair.cancelFee.input')}
+          value={fee}
+          onChange={setFee}
+          autoFocus
+          data-testid="repair.desk.cancelFee.feeInput"
+        />
+        <TextArea
+          className="mt-4"
+          label={tn('repair.cancelFee.reason')}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          data-testid="repair.desk.cancelFee.reason"
+        />
+      </StepDialog>
+      {leave.confirm}
+    </>
+  );
+}
+
 // ── correct what intake wrote down ──────────────────────────────────────────────────────────
 
 /**

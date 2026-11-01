@@ -25,7 +25,8 @@
     "storeUncollectedDaysChanged": "Batas HP belum diambil diubah",
     "ticketRepairTypesChanged": "Jenis servisan diubah",
     "handoverReversed": "Penyerahan dibatalkan",
-    "ticketDetailsCorrected": "Data servisan diubah"
+    "ticketDetailsCorrected": "Data servisan diubah",
+    "cancelFeeChanged": "Biaya pembatalan servisan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -57,7 +58,8 @@
     "takeOver": "Ambil alih",
     "more": "Lainnya",
     "correctDetails": "Ubah data",
-    "undoHandover": "Batalkan penyerahan"
+    "undoHandover": "Batalkan penyerahan",
+    "changeCancelFee": "Ubah biaya pembatalan"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -340,7 +342,8 @@
     "handoverUndone": "Penyerahan dibatalkan. HP tercatat ada di toko.",
     "refund": "Uang sudah dikembalikan.",
     "reduce": "Tagihan sudah dikurangi.",
-    "repairedPriceWaiting": "Selesai dikerjakan. Harga barunya masih perlu dikonfirmasi pelanggan."
+    "repairedPriceWaiting": "Selesai dikerjakan. Harga barunya masih perlu dikonfirmasi pelanggan.",
+    "cancelFeeChanged": "Biaya pembatalan diubah."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -735,7 +738,8 @@
     "customerMismatch": "Data pelanggan tidak cocok. Coba lagi.",
     "cancelFeeChanged": "Biaya pembatalan toko sudah berubah. Batalkan lagi dengan biaya yang baru.",
     "repairTypeTerms": "Jenis servisan ini sudah diubah pemilik. Pilih lagi jenis servisannya.",
-    "intakePhotoMissing": "Foto HP dari semua sisi yang diminta toko dulu."
+    "intakePhotoMissing": "Foto HP dari semua sisi yang diminta toko dulu.",
+    "notCancelled": "Servisan ini tidak dibatalkan."
   },
   "paper": {
     "title": "Kertas nota",
@@ -957,6 +961,17 @@
     "empty": "kosong"
   },
   "history": {
-    "technician": "Teknisi: {name}"
+    "technician": "Teknisi: {name}",
+    "fee": "Biaya pembatalan: {amount}"
+  },
+  "cancelFee": {
+    "title": "Biaya pembatalan",
+    "paid": "Pelanggan sudah bayar {amount}. Tagihannya ikut biaya baru.",
+    "unpaid": "Tagihannya ikut biaya baru.",
+    "input": "Biaya baru",
+    "reason": "Kenapa diubah?",
+    "save": "Simpan biaya",
+    "same": "Ubah biayanya dulu.",
+    "short": "Ubah biaya"
   }
 }

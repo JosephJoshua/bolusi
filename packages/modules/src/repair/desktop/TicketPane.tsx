@@ -129,6 +129,7 @@ import {
   ProposalDialog,
   RepairTypesDialog,
   UndoHandoverDialog,
+  ChangeCancelFeeDialog,
   WaitForPartsDialog,
   WorkPhotosDialog,
 } from './steps.js';
@@ -297,6 +298,7 @@ export function TicketPane({
       case 'waitForParts':
       case 'cancel':
       case 'undoHandover':
+      case 'changeCancelFee':
       case 'correctDetails':
       case 'assign':
       case 'changePrice':
@@ -344,7 +346,9 @@ export function TicketPane({
                     ? 'repair.action.assignShort'
                     : 'repair.action.reassignShort',
                 )
-              : label(action)
+              : action === 'changeCancelFee'
+                ? tn('repair.cancelFee.short')
+                : label(action)
           }
           aria-label={label(action)}
           variant="text"
@@ -611,8 +615,13 @@ export function TicketPane({
               value={formatDateTime(row.estimatedReadyAt)}
             />
           )}
-          {row.outcome === 'cancelled' && row.cancelFee !== null ? (
-            <Fact label={tn('repair.cancel.fee')} value={formatMoney(row.cancelFee)} />
+          {row.outcome === 'cancelled' ? (
+            <Fact
+              label={tn('repair.cancel.fee')}
+              value={formatMoney(row.cancelFee ?? 0)}
+              action={contextual('changeCancelFee', row)}
+              testId="repair.desk.ticket.cancelFeeFact"
+            />
           ) : null}
           {row.deviceImei === null ? null : (
             <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
@@ -1016,6 +1025,15 @@ export function TicketPane({
       case 'undoHandover':
         return (
           <UndoHandoverDialog {...common} onDone={() => finishStep('repair.done.handoverUndone')} />
+        );
+      case 'changeCancelFee':
+        return (
+          <ChangeCancelFeeDialog
+            {...common}
+            current={row.cancelFee ?? 0}
+            paid={row.downPayment ?? 0}
+            onDone={() => finishStep('repair.done.cancelFeeChanged')}
+          />
         );
       case 'correctDetails':
         return (

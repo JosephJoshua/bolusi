@@ -68,6 +68,7 @@ import { CASH_ACCOUNT, HANDOVER_REFUND_REASON } from '../money/constants.js';
 import {
   chargeOp,
   paymentOp,
+  reduceChargeOp,
   refundOp,
   voidOp,
   zPaymentInput,
@@ -584,6 +585,46 @@ export async function cancelTicketHandler(
     ],
     result: { ticketId: ticket.id },
   };
+}
+
+export const changeCancelFeeInput = z
+  .object({ ticketId: z.string().min(1), fee: zFeeInput, reason: zRequiredText(500) })
+  .strict();
+export type ChangeCancelFeeInput = z.input<typeof changeCancelFeeInput>;
+
+/**
+ * An owner changes what a cancelled servisan costs (when: `cancelFeeChangedRule`). One already
+ * charged (it went home) is charged the difference, or has it taken off, in the same step, so what
+ * the customer owes follows the new fee: paid on a phone that had not heard of the cancel, they
+ * owe nothing more once the fee is what they paid.
+ */
+export async function changeCancelFeeHandler(
+  input: z.output<typeof changeCancelFeeInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  const ops: OpDraft[] = [
+    ticketOp(ctx, ticket.id, REPAIR_OP.cancelFeeChanged, {
+      fee: input.fee,
+      reason: input.reason,
+    }),
+  ];
+  const money = await ticketMoney(ctx, ticket.id);
+  const net = money.charged - money.reduced;
+  if (ticket.location === 'returned' || net > 0) {
+    const document = ticketDocument(ticket.id, ticket.ticketNumber);
+    const account = ticketCharge({
+      ...ticket,
+      outcome: 'cancelled',
+      cancelFee: input.fee,
+    })!.account;
+    if (input.fee > money.charged) {
+      ops.push(chargeOp(ctx, document, input.fee - money.charged, account));
+    } else if (input.fee < net) {
+      ops.push(reduceChargeOp(ctx, document, net - input.fee, input.reason));
+    }
+  }
+  return { ops, result: { ticketId: ticket.id } };
 }
 
 export const setCancelFeesInput = z

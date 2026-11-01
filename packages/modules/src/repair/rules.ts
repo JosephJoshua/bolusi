@@ -53,6 +53,7 @@ import {
   type CancelFees,
 } from './queries.js';
 import type {
+  cancelFeeChangedPayload,
   deviceReturnedPayload,
   downPaymentCorrectedPayload,
   downPaymentReceivedPayload,
@@ -130,6 +131,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'ownershipVideoNeeded',
   'freeHandoverOwnerOnly',
   'notReturned',
+  'notCancelled',
   'handoverHasClaim',
   'claimSamePhone',
   'nothingChanged',
@@ -1227,6 +1229,27 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
   await requirePaid(op, ctx);
   // Before v3 there was no checklist to judge.
   if (op.schemaVersion >= 3) await requireHandoverChecks(db, op);
+};
+
+/**
+ * What a cancelled servisan costs, changed afterwards (owner decision), before or after pickup. A
+ * fee below the store's counts against a limited role's (a manager's) cancel limit, as at cancel.
+ */
+export const cancelFeeChangedRule: Rule = async (op, ctx) => {
+  const ticket = await loadTicket(ctx.db, op);
+  if (ticket.outcome !== 'cancelled') {
+    throw invalidTransition(ticket, op.type, 'notCancelled', 'the servisan is not cancelled');
+  }
+  const { fee } = payloadOf<Payload<typeof cancelFeeChangedPayload>>(op);
+  if (fee === (ticket.cancelFee ?? 0)) {
+    throw refuse('nothingChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'fee', issue: 'the fee is already this' },
+    });
+  }
+  const standard = await standardFeeOf(ctx.db, op, ticket);
+  const counted = cancelDrop(standard, fee, await discountsStanding(ctx.db, op));
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, counted);
 };
 
 /**

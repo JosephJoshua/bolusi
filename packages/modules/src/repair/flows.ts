@@ -290,6 +290,7 @@ export type TicketAction =
   | 'handover'
   | 'correctDetails'
   | 'undoHandover'
+  | 'changeCancelFee'
   | 'cancel';
 
 /**
@@ -344,6 +345,9 @@ export function ticketActions(
   if (ticket.location === 'returned' && can.cancel && undoableHandover(ticket, now)) {
     actions.push('undoHandover');
   }
+  // What a cancel costs stays the canceller's to put right, before pickup or after: a customer who
+  // paid on a phone that had not heard of the cancel is charged, or let off, here.
+  if (ticket.outcome === 'cancelled' && can.cancel) actions.push('changeCancelFee');
   return actions;
 }
 
@@ -364,6 +368,7 @@ export const CONTEXTUAL_ACTIONS: ReadonlySet<TicketAction> = new Set([
   'changePrice',
   'proposePrice',
   'correctDetails',
+  'changeCancelFee',
 ]);
 
 /**
@@ -819,7 +824,8 @@ export type TicketStep =
         | 'proposePrice'
         | 'handover'
         | 'correctDetails'
-        | 'undoHandover';
+        | 'undoHandover'
+        | 'changeCancelFee';
     }
   | { readonly kind: 'proposal'; readonly lineId: string };
 
@@ -843,6 +849,7 @@ const STEP_ACTIONS: Readonly<Record<TicketStep['kind'], readonly TicketAction[]>
   handover: ['handover'],
   correctDetails: ['correctDetails'],
   undoHandover: ['undoHandover'],
+  changeCancelFee: ['changeCancelFee'],
   proposal: ['decidePrice'],
 };
 
@@ -868,7 +875,13 @@ export function staleStep(
   const lineOpen = step.kind !== 'proposal' || line?.status === 'proposed';
   if (lineOpen && STEP_ACTIONS[step.kind].some((action) => actions.includes(action))) return null;
 
-  if (ticket.location === 'returned' && step.kind !== 'undoHandover') return { kind: 'returned' };
+  if (
+    ticket.location === 'returned' &&
+    step.kind !== 'undoHandover' &&
+    step.kind !== 'changeCancelFee'
+  ) {
+    return { kind: 'returned' };
+  }
   if (line !== undefined && (line.status === 'applied' || line.status === 'declined')) {
     return { kind: 'proposalDecided', decision: line.status };
   }
