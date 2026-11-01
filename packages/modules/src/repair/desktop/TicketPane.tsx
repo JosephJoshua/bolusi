@@ -618,8 +618,9 @@ export function TicketPane({
           )}
           {row.outcome === 'cancelled' ? (
             <Fact
-              label={tn('repair.cancel.fee')}
-              value={formatMoney(row.cancelFee ?? 0)}
+              // Once cut, the bill is what the customer pays, as the board's total says.
+              label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancel.fee')}
+              value={formatMoney((row.cancelFee ?? 0) - row.reduced)}
               action={contextual('changeCancelFee', row)}
               testId="repair.desk.ticket.cancelFeeFact"
             />
