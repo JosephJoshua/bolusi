@@ -261,6 +261,9 @@
       "label": "Buka saat Windows menyala",
       "caption": "Bolusi langsung terbuka begitu komputer dinyalakan."
     },
+    "language": {
+      "caption": "Berlaku untuk semua orang di komputer ini."
+    },
     "media": {
       "title": "Kamera dan mikrofon",
       "caption": "Dipakai untuk foto dan video kepemilikan di komputer ini.",

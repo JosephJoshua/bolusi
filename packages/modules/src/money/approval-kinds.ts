@@ -94,7 +94,7 @@ async function moneyMoved(db: Db, scope: ApprovalScope, document: Document): Pro
 }
 
 /** Any money moving on the document changes what a refund or a lower bill would count. */
-async function documentBasis(db: Db, scope: ApprovalScope, document: Document) {
+export async function documentBasis(db: Db, scope: ApprovalScope, document: Document) {
   if (!(await hasMoney(db, scope, document))) return null;
   return `${document.id}|${await moneyMoved(db, scope, document)}`;
 }
