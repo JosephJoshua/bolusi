@@ -15,6 +15,7 @@ import { registerRepairCatalog } from '../src/repair/i18n.js';
 import { repairAbilities, ticketActions } from '../src/repair/flows.js';
 
 import {
+  MANAGER_LIMITS,
   intake,
   openRepairHarness,
   paidHandover,
@@ -343,4 +344,43 @@ test('a fee change signed on a clock behind the cancel still folds to the new fe
   }
   await pull(other);
   expect(await dump(other)).toStrictEqual(await dump(server));
+});
+
+test('a lower fee on a charged servisan is judged by what it takes off the bill, as money judges it', async () => {
+  // The store charges nothing to cancel, so a fee the owner set is all above the store's fee: what
+  // a lower fee drops counts only as the bill it cuts. The server judges the fee op alone (a forged
+  // client could send it without its cut), so the fee op must hold the cut to the same limit.
+  const h = await openRepairHarness(895);
+  open.push(h);
+  const { ticketId } = (await h.run('openTicket', intake(h), h.cashierId)) as { ticketId: string };
+  await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 70_000 }, h.storeOwnerId);
+  await h.run(
+    'returnDevice',
+    (await paidHandover(h, ticketId, {
+      payments: [{ account: 'cash', amount: 50_000 }],
+      unpaidReason: 'Sisa minggu depan',
+    })) as never,
+    h.ownerId,
+  );
+  const cancel = (await h.ownOps()).find((op) => op.type === 'repair.ticket_cancelled')!;
+  const feeChange = (fee: number) => ({
+    ...cancel,
+    id: `${cancel.id.slice(0, -4)}ffff`,
+    type: 'repair.cancel_fee_changed',
+    schemaVersion: 1,
+    payload: { fee, reason: 'Gratis' },
+    userId: h.managerId,
+    timestamp: h.now(),
+  });
+  const judged: [string, number][] = [];
+  const managerLimits = (_user: string, permission: string, amount: number) => {
+    judged.push([permission, amount]);
+    return Promise.resolve(
+      amount <= (permission === 'money.refund' ? MANAGER_LIMITS.refund : MANAGER_LIMITS.priceDrop),
+    );
+  };
+  await expectRefused(h.checkRule(feeChange(0), managerLimits), 'repair.refusal.overLimit');
+  expect(judged).toContainEqual(['money.refund', 70_000]);
+  // Within the refund limit it stands, and so does the cut the command pairs with it.
+  await h.checkRule(feeChange(50_000), managerLimits);
 });
