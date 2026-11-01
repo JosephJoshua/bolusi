@@ -48,6 +48,11 @@ export const REPAIR_OP = {
   deviceReturned: 'repair.device_returned',
   /** An owner takes back a handover recorded by mistake: the phone is still in the store. */
   handoverReversed: 'repair.handover_reversed',
+  /**
+   * An owner changes what a cancelled servisan costs, before or after pickup: to charge a customer
+   * who paid on a phone that had not heard of the cancel, or to let them off.
+   */
+  cancelFeeChanged: 'repair.cancel_fee_changed',
   /** The counter corrects what intake wrote down about the phone or the customer. */
   ticketDetailsCorrected: 'repair.ticket_details_corrected',
   intakeOptionsChanged: 'repair.intake_options_changed',

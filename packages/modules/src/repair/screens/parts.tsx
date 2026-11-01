@@ -299,6 +299,15 @@ export function DownPaymentRows({
           </Text>
         </View>
       )}
+      {reduced === 0 ? null : (
+        // What the bill is after the cut, so a fee that was cut never reads as what is billed.
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={[styles.billedText, repairStyles.rowText]}>{tn('repair.price.billed')}</Text>
+          <Text style={[styles.billedText, styles.amount]} testID={`${testID}.billed`}>
+            {formatMoney(total)}
+          </Text>
+        </View>
+      )}
       {paid === 0 ? null : (
         <View style={[repairStyles.row, styles.paidRow]}>
           <View style={styles.paidLabel}>
@@ -384,6 +393,7 @@ const styles = StyleSheet.create({
   paidRow: { marginTop: space.sm, minHeight: space['2xl'] },
   paidLabel: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: space.md },
   paidText: { ...type.bodySm, color: color.text },
+  billedText: { ...type.bodySm, fontWeight: '600', color: color.text },
   balanceLabel: { ...type.bodyBold, color: color.text },
   balanceValue: { ...type.heading, color: color.text },
   amount: { fontVariant: ['tabular-nums'] },

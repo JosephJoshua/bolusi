@@ -130,6 +130,7 @@ import {
   ProposalDialog,
   RepairTypesDialog,
   UndoHandoverDialog,
+  ChangeCancelFeeDialog,
   WaitForPartsDialog,
   WorkPhotosDialog,
 } from './steps.js';
@@ -298,6 +299,7 @@ export function TicketPane({
       case 'waitForParts':
       case 'cancel':
       case 'undoHandover':
+      case 'changeCancelFee':
       case 'correctDetails':
       case 'assign':
       case 'changePrice':
@@ -345,7 +347,9 @@ export function TicketPane({
                     ? 'repair.action.assignShort'
                     : 'repair.action.reassignShort',
                 )
-              : label(action)
+              : action === 'changeCancelFee'
+                ? tn('repair.cancelFee.short')
+                : label(action)
           }
           aria-label={label(action)}
           variant="text"
@@ -612,8 +616,14 @@ export function TicketPane({
               value={formatDateTime(row.estimatedReadyAt)}
             />
           )}
-          {row.outcome === 'cancelled' && row.cancelFee !== null ? (
-            <Fact label={tn('repair.cancel.fee')} value={formatMoney(row.cancelFee)} />
+          {row.outcome === 'cancelled' ? (
+            <Fact
+              // Once cut, the bill is what the customer pays, as the board's total says.
+              label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancel.fee')}
+              value={formatMoney((row.cancelFee ?? 0) - row.reduced)}
+              action={contextual('changeCancelFee', row)}
+              testId="repair.desk.ticket.cancelFeeFact"
+            />
           ) : null}
           {row.deviceImei === null ? null : (
             <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
@@ -1018,6 +1028,15 @@ export function TicketPane({
       case 'undoHandover':
         return (
           <UndoHandoverDialog {...common} onDone={() => finishStep('repair.done.handoverUndone')} />
+        );
+      case 'changeCancelFee':
+        return (
+          <ChangeCancelFeeDialog
+            {...common}
+            current={(row.cancelFee ?? 0) - row.reduced}
+            paid={row.downPayment ?? 0}
+            onDone={() => finishStep('repair.done.cancelFeeChanged')}
+          />
         );
       case 'correctDetails':
         return (
@@ -1431,6 +1450,15 @@ function DownPaymentLines({
             <dt>{tn('repair.price.reduced')}</dt>
             <dd className="tabular" data-testid="repair.desk.ticket.reduced">
               {formatMoney(-reduced)}
+            </dd>
+          </div>
+        )}
+        {reduced === 0 ? null : (
+          // What the bill is after the cut, so a fee that was cut never reads as what is billed.
+          <div className="flex items-center justify-between gap-4 text-body font-semibold text-text">
+            <dt>{tn('repair.price.billed')}</dt>
+            <dd className="tabular" data-testid="repair.desk.ticket.billed">
+              {formatMoney(total)}
             </dd>
           </div>
         )}

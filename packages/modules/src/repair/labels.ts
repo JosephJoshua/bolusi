@@ -269,6 +269,7 @@ const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
   handover: 'repair.action.handover',
   correctDetails: 'repair.action.correctDetails',
   undoHandover: 'repair.action.undoHandover',
+  changeCancelFee: 'repair.action.changeCancelFee',
   cancel: 'repair.action.cancel',
 };
 
@@ -330,6 +331,9 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
     if (notDone.length > 0)
       lines.push(tn('repair.handover.unchecked', { items: notDone.join(', ') }));
   }
+  // What a cancel costs the customer, as set at the cancel or changed afterwards.
+  const fee = detail['fee'];
+  if (typeof fee === 'number') lines.push(tn('repair.history.fee', { amount: formatMoney(fee) }));
   // What a price change or a DP was for, and how much: "Ganti baterai · Rp 200.000".
   const amount = detail['amount'];
   if (typeof amount === 'number') {

@@ -20,7 +20,7 @@ function ticketQuery(
 ) {
   return (db as unknown as Kysely<RepairDatabase>)
     .selectFrom('repairTickets')
-    .select(['outcome', 'quoteTotal', 'cancelFee'])
+    .select(['outcome', 'quoteTotal', 'cancelFee', 'location'])
     .where('id', '=', lookup.documentId)
     .where('tenantId', '=', lookup.tenantId)
     .where('storeId', '=', lookup.storeId)
@@ -37,6 +37,10 @@ export const repairMoneyDocument: MoneyDocumentSource = {
   async charge(db, lookup) {
     const ticket = await ticketQuery(db, lookup);
     return ticket === undefined ? null : ticketCharge(ticket);
+  },
+
+  async delivered(db, lookup) {
+    return (await ticketQuery(db, lookup))?.location === 'returned';
   },
 };
 

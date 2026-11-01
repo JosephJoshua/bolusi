@@ -134,6 +134,7 @@ import {
   AssignStep,
   CancelStep,
   UndoHandoverStep,
+  ChangeCancelFeeStep,
   DownPaymentStep,
   WaitForPartsStep,
   PriceChangeStep,
@@ -358,6 +359,18 @@ export function TicketDetail({
           }}
         />
       );
+    case 'changeCancelFee':
+      return (
+        <ChangeCancelFeeStep
+          {...stepProps}
+          current={(ticket?.cancelFee ?? 0) - (ticket?.reduced ?? 0)}
+          paid={ticket?.downPayment ?? 0}
+          onDone={() => {
+            closeStep();
+            setDone(tn('repair.done.cancelFeeChanged'));
+          }}
+        />
+      );
     case 'correctDetails':
       return (
         <CorrectDetailsStep
@@ -565,6 +578,7 @@ export function TicketDetail({
       case 'waitForParts':
       case 'cancel':
       case 'undoHandover':
+      case 'changeCancelFee':
       case 'assign':
       case 'changePrice':
       case 'proposePrice':
@@ -745,7 +759,13 @@ export function TicketDetail({
     const contextual = (action: TicketAction): ReactNode =>
       CONTEXTUAL_ACTIONS.has(action) && actions.includes(action) && layout.next !== action ? (
         <TextButton
-          label={action === 'assign' ? tn(shortAssignKey) : label(action)}
+          label={
+            action === 'assign'
+              ? tn(shortAssignKey)
+              : action === 'changeCancelFee'
+                ? tn('repair.cancelFee.short')
+                : label(action)
+          }
           accessibilityLabel={label(action)}
           onPress={() => perform(action, row)}
           disabled={runner.busy}
@@ -948,7 +968,10 @@ export function TicketDetail({
           </View>
         )}
 
-        {renderPrice(row, contextual('changePrice') ?? contextual('proposePrice'))}
+        {renderPrice(
+          row,
+          contextual('changePrice') ?? contextual('proposePrice') ?? contextual('changeCancelFee'),
+        )}
         {runtime.inventory === undefined ||
         !runtime.inventory.hasPermission(INVENTORY_PERMISSION.read) ? null : (
           <InventoryRuntimeProvider runtime={runtime.inventory}>

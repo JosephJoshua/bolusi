@@ -36,7 +36,7 @@ import {
   createVoidCountQuery,
   documentMoneyQuery,
   moneyEntriesQuery,
-  openBalancesQuery,
+  createOpenBalancesQuery,
   paymentAccountsQuery,
 } from './queries.js';
 import { MONEY_REFUSALS } from './rules.js';
@@ -177,7 +177,7 @@ function moneyManifest(sources: MoneyDocumentSources) {
       documentMoney: documentMoneyQuery,
       cashDrawer: cashDrawerQuery,
       moneyEntries: moneyEntriesQuery,
-      openBalances: openBalancesQuery,
+      openBalances: createOpenBalancesQuery(sources),
       voidCount: createVoidCountQuery(sources),
     },
   } as const satisfies ModuleManifest<MoneyDatabase>;
