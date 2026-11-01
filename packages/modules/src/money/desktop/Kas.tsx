@@ -79,7 +79,13 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   // The day Riwayat shows; null for today, so a page left open overnight moves on with the clock.
   const [historyDay, setHistoryDay] = useState<number | null>(null);
   const close = (): void => setTask(null);
-  // Said once an owner has been asked to cancel a payment.
+  /** A refund or lower bill asked of an owner; its answer shows here if it is no. */
+  const asked = (): void => {
+    setNoticeEntryId(null);
+    close();
+    setNotice(ta('approvals.done.asked'));
+  };
+  // Said once an owner has been asked for something: a cancel, a refund or a lower bill.
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeEntryId, setNoticeEntryId] = useState<string | null>(null);
   // Once an owner answers that ask, its notice goes rather than sit above the answer.
@@ -174,10 +180,10 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
         <SettleCountDialog count={task.count} onDone={close} onClose={close} />
       ) : null}
       {task?.kind === 'receive' ? (
-        <ReceiveDebtDialog balance={task.balance} onDone={close} onClose={close} />
+        <ReceiveDebtDialog balance={task.balance} onDone={close} onAsked={asked} onClose={close} />
       ) : null}
       {task?.kind === 'refund' ? (
-        <RefundDialog target={task.target} onDone={close} onClose={close} />
+        <RefundDialog target={task.target} onDone={close} onAsked={asked} onClose={close} />
       ) : null}
       {task?.kind === 'void' ? (
         <VoidPaymentDialog

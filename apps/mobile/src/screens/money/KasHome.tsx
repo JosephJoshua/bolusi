@@ -62,11 +62,21 @@ export function KasHome({
   // Said in Riwayat once an owner has been asked to cancel a payment.
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeEntryId, setNoticeEntryId] = useState<string | null>(null);
+  // A refund or lower bill asked of an owner from the board, said there until the board is left;
+  // a turned-down answer shows on the board too.
+  const [boardNotice, setBoardNotice] = useState<string | null>(null);
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback((guard: DiscardGuard | null): void => {
     guardRef.current = guard;
   }, []);
   const toBoard = (): void => setView({ kind: 'board' });
+  const askedFromBoard = (): void => {
+    setBoardNotice(ta('approvals.done.asked'));
+    toBoard();
+  };
+  useEffect(() => {
+    if (view.kind !== 'board') setBoardNotice(null);
+  }, [view.kind]);
   // A step with something typed asks before it is dropped, on back and on leaving home alike.
   const leave = useCallback((proceed: () => void): void => {
     const guard = guardRef.current;
@@ -108,6 +118,8 @@ export function KasHome({
               setHistoryDay(null);
               toHistory();
             }}
+            notice={boardNotice}
+            onClearNotice={() => setBoardNotice(null)}
           />
         );
       case 'count':
@@ -158,6 +170,7 @@ export function KasHome({
             target={view.target}
             onRegisterDiscardGuard={registerGuard}
             onDone={toBoard}
+            onAsked={askedFromBoard}
             onCancel={toBoard}
           />
         );
@@ -168,6 +181,7 @@ export function KasHome({
             target={view.target}
             onRegisterDiscardGuard={registerGuard}
             onDone={toBoard}
+            onAsked={askedFromBoard}
             onCancel={toBoard}
           />
         );

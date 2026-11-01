@@ -436,13 +436,17 @@ describe('cancels an owner turned down', () => {
     }) as ApprovalRow;
 
   test('says who said no and why, for those answered since the day began', () => {
+    const rows = [
+      rejected({}),
+      rejected({ id: 'r2', note: 'Uangnya ada', amount: 25_000 }),
+      rejected({ id: 'r3', decidedAt: 10 }),
+      rejected({ id: 'r4', kind: 'money.refund', amount: 40_000 }),
+      rejected({ id: 'r5', kind: 'money.reduceCharge', amount: 50_000, note: 'Harga pas' }),
+    ];
     const asks = {
       waiting: new Set<string>(),
-      rejected: new Map([
-        ['e1', rejected({})],
-        ['e2', rejected({ id: 'r2', note: 'Uangnya ada', amount: 25_000 })],
-        ['e3', rejected({ id: 'r3', decidedAt: 10 })],
-      ]),
+      rejected: new Map(rows.slice(0, 3).map((row, i) => [`e${i + 1}`, row])),
+      turnedDown: rows,
     };
     expect(turnedDownLines(asks, 500)).toEqual([
       {
@@ -452,6 +456,11 @@ describe('cancels an owner turned down', () => {
       {
         id: 'r2',
         text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(25_000)}: Uangnya ada`,
+      },
+      { id: 'r4', text: `Yohana Pemilik menolak mengembalikan ${formatMoney(40_000)}.` },
+      {
+        id: 'r5',
+        text: `Yohana Pemilik menolak memotong tagihan ${formatMoney(50_000)}: Harga pas`,
       },
     ]);
   });
