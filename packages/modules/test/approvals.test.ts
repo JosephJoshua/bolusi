@@ -2,11 +2,14 @@
 // roles"): someone asks for a decision they may not make, an owner (or someone whose limit covers
 // it) approves, and the decision is recorded as the approver's in the same step. Every refusal has
 // its control: the same step by someone allowed, or before the servisan moved on.
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
+import { formatMoney, initI18n } from '@bolusi/i18n';
 
+import { describeRepairApproval } from '../src/repair/approval-copy.js';
 import { cancelFeeRequest } from '../src/repair/cancel-fee-ask.js';
+import { tn } from '../src/repair/i18n.js';
 import {
   accessoriesBack,
   intake,
@@ -16,6 +19,9 @@ import {
 } from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
+beforeAll(() => {
+  initI18n({ locale: 'id' });
+});
 afterEach(async () => {
   await h?.close();
   h = null;
@@ -357,7 +363,7 @@ describe('a cancelled servisan’s fee lowered beyond a manager’s limit (Ubah 
     expect((await ticket(h, ticketId)).cancelFee).toBe(90_000);
   });
 
-  test('once charged, it is asked as a lower bill and lands as the asked fee', async () => {
+  test('once charged, the owner reads the fee asked and their yes cuts the bill to it', async () => {
     h = await openRepairHarness(9563);
     const ticketId = await openTicket(h);
     await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 70_000 }, h.storeOwnerId);
@@ -382,8 +388,17 @@ describe('a cancelled servisan’s fee lowered beyond a manager’s limit (Ubah 
       { cancel: 50_000, refund: 30_000 },
       0,
     );
-    expect(asked?.kind).toBe('money.reduceCharge');
+    expect(asked?.kind).toBe('repair.cancelFeeCharged');
     const requestId = await ask(h, asked!.kind, { ...asked!.input, reason: 'Kenal' }, h.managerId);
+    // The fee typed is what is asked; the cut is what the refund limit counts.
+    const waiting = await request(h, requestId, h.storeOwnerId);
+    expect(waiting).toMatchObject({ status: 'waiting', amount: 50_000, canDecide: true });
+    expect(waiting.input).toMatchObject({ fee: 20_000 });
+    expect(describeRepairApproval(waiting)).toMatchObject({
+      title: tn('repair.cancel.fee'),
+      amount: formatMoney(20_000),
+      notes: [tn('repair.approval.cancelBillDown', { amount: formatMoney(50_000) })],
+    });
     await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
     const after = await ticket(h, ticketId);
     expect((after.cancelFee ?? 0) - after.reduced).toBe(20_000);

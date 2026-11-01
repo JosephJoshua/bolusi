@@ -25,6 +25,7 @@
     "repairPayLater": "Pay later",
     "repairDownPayment": "Change down payment",
     "repairCancelFee": "Change cancellation fee",
+    "repairCancelFeeCharged": "Change cancellation fee",
     "moneyVoidPayment": "Cancel a payment",
     "moneyRefund": "Give money back",
     "moneyReduceCharge": "Lower the bill"

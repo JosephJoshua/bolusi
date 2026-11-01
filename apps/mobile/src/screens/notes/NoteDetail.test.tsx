@@ -162,6 +162,7 @@ describe('NoteDetail — rejected-op danger banner (the falsified deliverable)',
     expect(screen.query('notes.detail.rejectedBanner')).not.toBeNull();
     // In the page, scrolling with it, never the fixed slot over the text.
     expect(screen.query('notes.detail.bannerSlot')).toBeNull();
+    expect(screen.query('notes.detail.pageBanner')).not.toBeNull();
   });
 
   test('the banner counts every refused change, not just one', async () => {

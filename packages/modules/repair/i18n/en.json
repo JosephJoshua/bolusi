@@ -920,6 +920,7 @@
   "approval": {
     "discountAfter": "Once approved, the customer still has to confirm this discount.",
     "cancelBelow": "{amount} below the store’s usual fee.",
+    "cancelBillDown": "The bill comes down by {amount}.",
     "cancelStoreFee": "The store’s usual cancellation fee.",
     "askCancel": "Ask to cancel",
     "needsApproval": "Needs the store owner’s approval.",

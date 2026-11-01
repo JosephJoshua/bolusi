@@ -1,7 +1,7 @@
 // How a servisan's approval requests read (approvals' `ApprovalDescription`): the price line a
 // discount adds, the fee a cancel charges, what is left to pay later, the right down payment, a
 // payment asked to be cancelled from Kas, or money given back or taken off the bill beyond a
-// manager's limit, in the counter's words.
+// manager's limit, in the counter's words. A cancelled servisan's fee reads as the fee typed.
 import { formatMoney } from '@bolusi/i18n';
 
 import type { ApprovalDescription } from '../approvals/copy.js';
@@ -65,6 +65,16 @@ export function describeRepairApproval(row: ApprovalRow): ApprovalDescription {
     };
   }
   const fee = input['fee'];
+  if (row.kind === REPAIR_APPROVAL_KIND.cancelFeeCharged) {
+    return {
+      title: tn('repair.cancel.fee'),
+      amount: typeof fee === 'number' ? formatMoney(fee) : null,
+      notes: [
+        tn('repair.approval.cancelBillDown', { amount: formatMoney(row.amount) }),
+        ...takenOffWith(row),
+      ],
+    };
+  }
   return {
     title: tn('repair.cancel.fee'),
     amount: typeof fee === 'number' ? formatMoney(fee) : null,

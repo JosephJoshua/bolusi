@@ -1,5 +1,6 @@
 // The servisan decisions an owner may hand out through an approval request (approvals/kinds.ts):
-// a price drop, a cancel (with its fee), a cancelled servisan's lower fee and a down payment fix.
+// a price drop, a cancel (with its fee), a cancelled servisan's lower fee (before and after it is
+// charged) and a down payment fix.
 // Approving runs the same command the owner would, as the owner, so its rules (a manager's limit
 // included) judge it as if they had done it at the counter. "Bayar nanti" is a permit instead:
 // approved, the counter lets the phone go unpaid at handover (`requirePaid`). A request depends on
@@ -8,8 +9,9 @@ import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
 import { approvalKind, type ApprovalKinds, type ApprovalScope } from '../approvals/kinds.js';
+import { documentBasis } from '../money/approval-kinds.js';
 import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
-import { takenOffByVoids } from '../money/rules.js';
+import { takenOffByVoids, takenOffDocument } from '../money/rules.js';
 import type { MoneyDatabase } from '../money/schema.js';
 import {
   cancelTicketHandler,
@@ -23,10 +25,11 @@ import {
   replacedPayment,
 } from './commands.js';
 import { REPAIR_APPROVAL_KIND, REPAIR_PERMISSION, REPAIR_TICKET_ENTITY } from './constants.js';
-import { REPAIR_DOCUMENT_KIND } from './money-document.js';
+import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 import { cancelDrop } from './queries.js';
 import {
   cancelFeeApprovalBasis,
+  cancelledFeeBilled,
   cancelledFeeStandard,
   cancelStandardFee,
   handoverDebt,
@@ -96,6 +99,20 @@ async function downPaymentTakenOff(
   );
 }
 
+/** The servisan's own money document, for counting what a cut takes off it. */
+const moneySources = { [REPAIR_DOCUMENT_KIND]: repairMoneyDocument };
+
+/** How far a charged cancelled servisan's bill comes down to `fee`; null before it is charged. */
+async function chargedFeeCut(
+  db: Kysely<never>,
+  scope: ApprovalScope,
+  input: z.output<typeof changeCancelFeeInput>,
+): Promise<number | null> {
+  const at = ticketRef(db, scope, input.ticketId);
+  const billed = await cancelledFeeBilled(at.db, at.ref);
+  return billed === null ? null : Math.max(0, billed - input.fee);
+}
+
 const payLaterInput = z.object({ ticketId: z.string().min(1) }).strict();
 
 export const repairApprovalKinds: ApprovalKinds = {
@@ -145,8 +162,7 @@ export const repairApprovalKinds: ApprovalKinds = {
   /**
    * A cancelled servisan's fee lowered afterwards, before anything is charged (Ubah biaya), by a
    * manager beyond their cancel limit: counted from the store's fee with the discounts, as the
-   * fee change's rule counts it. Once charged, a lower bill is a cut off the charge, asked as
-   * money's own (money.reduceCharge), so this one closes then.
+   * fee change's rule counts it. Once charged it closes: the next kind asks it then.
    */
   [REPAIR_APPROVAL_KIND.cancelFee]: approvalKind({
     id: REPAIR_APPROVAL_KIND.cancelFee,
@@ -171,6 +187,41 @@ export const repairApprovalKinds: ApprovalKinds = {
     basis: (db, scope, input) => {
       const at = ticketRef(db, scope, input.ticketId);
       return cancelFeeApprovalBasis(at.db, at.ref);
+    },
+  }),
+  /**
+   * The same Ubah biaya once the servisan is charged: the bill comes down to the fee as a cut off
+   * the charge, so a manager's refund limit counts it with everything already taken off, as
+   * Kurangi tagihan is counted. The owner reads the fee they were asked for, not the cut.
+   */
+  [REPAIR_APPROVAL_KIND.cancelFeeCharged]: approvalKind({
+    id: REPAIR_APPROVAL_KIND.cancelFeeCharged,
+    input: changeCancelFeeInput,
+    handler: changeCancelFeeHandler,
+    commandPermission: REPAIR_PERMISSION.cancel,
+    permission: REPAIR_PERMISSION.cancel,
+    limitPermission: MONEY_PERMISSION.refund,
+    askPermission: REPAIR_PERMISSION.cancel,
+    fits: () => true,
+    target: ticketTarget,
+    amount: (db, scope, input) => chargedFeeCut(db, scope, input),
+    counted: async (db, scope, input) =>
+      takenOffDocument(
+        db as unknown as Kysely<MoneyDatabase>,
+        moneySources,
+        { ...scope, at: Number.MAX_SAFE_INTEGER },
+        { kind: REPAIR_DOCUMENT_KIND, id: input.ticketId },
+        { reduced: (await chargedFeeCut(db, scope, input)) ?? 0 },
+      ),
+    // The fee, and any money moving on the servisan, which changes what the cut counts.
+    basis: async (db, scope, input) => {
+      const at = ticketRef(db, scope, input.ticketId);
+      const fee = await cancelFeeApprovalBasis(at.db, at.ref);
+      const money = await documentBasis(db as unknown as Kysely<MoneyDatabase>, scope, {
+        kind: REPAIR_DOCUMENT_KIND,
+        id: input.ticketId,
+      });
+      return fee === null || money === null ? null : `${fee}|${money}`;
     },
   }),
   /**

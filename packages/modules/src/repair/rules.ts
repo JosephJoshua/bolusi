@@ -1152,6 +1152,20 @@ export async function cancelledFeeStandard(db: Db, ref: TicketRef): Promise<numb
   return charged > 0 ? null : standardFeeOf(db, ref, ticket);
 }
 
+/**
+ * What a cancelled servisan bills now, once it is charged (the charge less what was taken off it):
+ * what Ubah biaya lowers then. Null while nothing is charged or when it is not cancelled.
+ */
+export async function cancelledFeeBilled(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined || ticket.outcome !== 'cancelled') return null;
+  const money = db as unknown as Kysely<never>;
+  const document = { kind: REPAIR_DOCUMENT_KIND, id: ref.entityId };
+  const charged = await documentTotal(money, storeOf(ref), document, 'charge_recorded');
+  if (charged === 0) return null;
+  return charged - (await documentTotal(money, storeOf(ref), document, 'charge_reduced'));
+}
+
 /** What a fee change is asked against: the servisan, and the fee it has now. */
 export async function cancelFeeApprovalBasis(db: Db, ref: TicketRef): Promise<string | null> {
   const basis = await ticketApprovalBasis(db, ref);
