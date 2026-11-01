@@ -211,7 +211,7 @@ describe('handover slip', () => {
       ),
     );
     expect(text).toMatch(/Total\s+Rp 1\.150\.000/);
-    expect(text).toMatch(/Potongan\s+-Rp 150\.000/);
+    expect(text).toMatch(/Tagihan dikurangi\s+-Rp 150\.000/);
     expect(text).toMatch(/Sudah dibayar\s+-Rp 1\.000\.000/);
     expect(text).toMatch(/Sisa bayar\s+Rp 0/);
   });

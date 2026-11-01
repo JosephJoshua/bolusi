@@ -343,6 +343,7 @@ export const REPAIR_KEYS = [
   'repair.price.refundVia',
   'repair.price.refundCash',
   'repair.price.reduced',
+  'repair.price.billed',
   'repair.price.owedBack',
   'repair.problem.complaint',
   'repair.problem.customerName',

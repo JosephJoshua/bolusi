@@ -1450,6 +1450,15 @@ function DownPaymentLines({
             </dd>
           </div>
         )}
+        {reduced === 0 ? null : (
+          // What the bill is after the cut, so a fee that was cut never reads as what is billed.
+          <div className="flex items-center justify-between gap-4 text-body font-semibold text-text">
+            <dt>{tn('repair.price.billed')}</dt>
+            <dd className="tabular" data-testid="repair.desk.ticket.billed">
+              {formatMoney(total)}
+            </dd>
+          </div>
+        )}
         {paid === 0 ? null : (
           <div className="flex items-center justify-between gap-4 text-body text-text-muted">
             <dt className="flex items-center gap-2">

@@ -274,7 +274,8 @@
     "refundVia": "Give back by {method}",
     "refundCash": "Give back in cash",
     "newTotal": "Total becomes {from} → {to}",
-    "reduced": "Taken off",
+    "reduced": "Bill reduced",
+    "billed": "Bill",
     "givenBack": "Given back",
     "owedBack": "Overpaid",
     "editTitle": "New price"

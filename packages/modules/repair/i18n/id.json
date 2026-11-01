@@ -274,7 +274,8 @@
     "refundVia": "Kembalikan lewat {method}",
     "refundCash": "Kembalikan tunai",
     "newTotal": "Total jadi {from} → {to}",
-    "reduced": "Potongan",
+    "reduced": "Tagihan dikurangi",
+    "billed": "Tagihan",
     "givenBack": "Sudah dikembalikan",
     "owedBack": "Lebih bayar",
     "editTitle": "Harga baru"
