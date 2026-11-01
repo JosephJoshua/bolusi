@@ -5,7 +5,7 @@
  *
  * PickPartStep — find a part on the business's list (by name, code or scan) to add to the order.
  */
-import { t } from '@bolusi/i18n';
+import { formatPhone, t } from '@bolusi/i18n';
 import {
   ListRow,
   QuantityStepper,
@@ -147,7 +147,7 @@ export function OrderForm({
                   <ListRow
                     key={row.id}
                     primaryText={row.name}
-                    secondaryText={row.phone ?? undefined}
+                    secondaryText={row.phone === null ? undefined : formatPhone(row.phone)}
                     selected={draft.supplierId === row.id}
                     onPress={() => onChange({ ...draft, supplierId: row.id })}
                     testID={`${testID}.supplier.${row.id}`}

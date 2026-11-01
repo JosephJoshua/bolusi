@@ -69,3 +69,19 @@ test('a technician is not offered Belanja', async ({ page }) => {
   await expect(page.getByTestId('shell-open-settings')).toBeVisible();
   await expect(page.getByTestId('shell-open-purchasing')).toHaveCount(0);
 });
+
+test('a second tap on Pesan does not open Terima barang where Pesan was', async ({ page }) => {
+  await openBuying(page, 'owner');
+  await tap(page, 'shell-open-purchasing');
+  await rowWith(page, 'Draf').click();
+  await tap(page, 'purchasing.order.place');
+  const receive = page.getByTestId('purchasing.order.receive').first();
+  await expect(receive).toBeVisible();
+  // The double tap's second press lands where Pesan was, now Terima barang: nothing opens.
+  await receive.click();
+  await expect(page.getByTestId('purchasing.receive')).toHaveCount(0);
+  // A deliberate press a moment later opens it.
+  await page.waitForTimeout(700);
+  await receive.click();
+  await expect(page.getByTestId('purchasing.receive').first()).toBeVisible();
+});

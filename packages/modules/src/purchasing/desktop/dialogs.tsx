@@ -1,6 +1,6 @@
 // Buying's tasks on the counter PC, each a dialog over the orders: write or finish an order, receive
 // what came, and keep the suppliers. The rules and the form's state are the phone's (`order-form`).
-import { t } from '@bolusi/i18n';
+import { formatPhone, t } from '@bolusi/i18n';
 import {
   Button,
   ChoiceList,
@@ -137,7 +137,8 @@ export function OrderDialog({ order, onClose, onDone }: OrderDialogProps): React
                 <ChoiceList
                   options={rows.map((row) => ({
                     value: row.id,
-                    label: row.phone === null ? row.name : `${row.name} · ${row.phone}`,
+                    label:
+                      row.phone === null ? row.name : `${row.name} · ${formatPhone(row.phone)}`,
                   }))}
                   value={draft.supplierId}
                   onChange={(supplierId) => setDraft({ ...draft, supplierId })}
@@ -552,7 +553,9 @@ export function SuppliersDialog({ onClose }: { readonly onClose: () => void }): 
                           </span>
                           {row.phone === null && row.note === null ? null : (
                             <span className="block text-small text-text-muted">
-                              {[row.phone, row.note].filter((part) => part !== null).join(' · ')}
+                              {[row.phone === null ? null : formatPhone(row.phone), row.note]
+                                .filter((part) => part !== null)
+                                .join(' · ')}
                             </span>
                           )}
                         </span>

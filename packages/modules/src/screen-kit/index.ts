@@ -27,7 +27,7 @@ export type {
   VideoPlayback,
 } from './media.js';
 export { useLiveQuery, type LiveSource, type QueryState } from './live.js';
-export { TYPING_PAUSE_MS, useSettledValue } from './settled.js';
+export { FRESH_ACTION_MS, TYPING_PAUSE_MS, useJustReplaced, useSettledValue } from './settled.js';
 export { useTick } from './tick.js';
 export { rejectedCount, statusesFor, type EntitySyncStatuses } from './sync-statuses.js';
 export {

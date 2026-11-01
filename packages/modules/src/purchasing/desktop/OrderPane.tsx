@@ -78,8 +78,8 @@ export function OrderPane({
   };
   // Opens WhatsApp on the supplier's number with the order written; without a number the message is
   // copied, to paste into whatever chat the supplier uses.
+  // What the pane says stays until something new replaces it, so the button does not jump.
   const send = (row: OrderDetailRow): void => {
-    say(null);
     const url = orderMessageUrl(row, storeName);
     if (url !== null) {
       window.open(url, '_blank', 'noopener');
