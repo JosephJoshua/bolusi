@@ -394,6 +394,33 @@ test('a cancelled servisan gives back the DP less its fee, with nothing to pay',
   await shoot(page, 'handover-cancelled-refund');
 });
 
+test('an owner changes a cancelled servisan’s fee beside it', async ({ page }) => {
+  await open(page, 'owner');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-5');
+  const change = page.getByTestId('repair.ticket.action.changeCancelFee');
+  await expect(change).toHaveText('Ubah biaya');
+  await change.scrollIntoViewIfNeeded();
+  await shoot(page, 'cancel-fee-beside');
+  await tap(page, 'repair.ticket.action.changeCancelFee');
+  await expect(page.getByTestId('repair.cancelFee.primary')).toBeDisabled();
+  await fill(page, 'repair.cancelFee.feeInput', '10000');
+  await fill(page, 'repair.cancelFee.reason', 'Pelanggan lama');
+  await shoot(page, 'cancel-fee-step');
+  await tap(page, 'repair.cancelFee.primary');
+  await expect(page.getByTestId('repair.ticket.done')).toContainText('Biaya pembatalan diubah.');
+  // The DP less the new fee goes back at pickup.
+  await expect(page.getByText('Rp 90.000').first()).toBeVisible();
+  await shoot(page, 'cancel-fee-done');
+});
+
+test('the counter gets no fee change on a cancelled servisan', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-5');
+  await expect(page.getByTestId('repair.ticket.action.changeCancelFee')).toHaveCount(0);
+});
+
 test('a ticket photo opens full screen, zooms on double tap, and "see all" groups every photo', async ({
   page,
 }) => {

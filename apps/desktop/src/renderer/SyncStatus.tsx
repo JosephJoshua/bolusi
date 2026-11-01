@@ -78,6 +78,7 @@ export function SyncStatusButton({
   onOpenChange: setOpen,
   onSyncNow,
   onReenrol,
+  onMarkRejectedHandled,
 }: {
   readonly input: SyncStatusInput;
   /** The panel; the app holds it, since a refused change on a servisan opens it too. */
@@ -86,6 +87,8 @@ export function SyncStatusButton({
   readonly onSyncNow: () => void;
   /** Opens registration again, for when the server no longer knows this PC. */
   readonly onReenrol: () => void;
+  /** The person has dealt with the refused changes listed; they stop asking for attention. */
+  readonly onMarkRejectedHandled: (opIds: readonly string[]) => void;
 }): React.JSX.Element {
   const input = useAgedInput(snapshot);
   const state = syncTitleState(input);
@@ -116,6 +119,7 @@ export function SyncStatusButton({
         input={input}
         onClose={() => setOpen(false)}
         onSyncNow={onSyncNow}
+        onMarkRejectedHandled={onMarkRejectedHandled}
         onReenrol={() => {
           setOpen(false);
           onReenrol();
@@ -131,12 +135,14 @@ function SyncStatusDialog({
   onClose,
   onSyncNow,
   onReenrol,
+  onMarkRejectedHandled,
 }: {
   readonly open: boolean;
   readonly input: SyncStatusInput;
   readonly onClose: () => void;
   readonly onSyncNow: () => void;
   readonly onReenrol: () => void;
+  readonly onMarkRejectedHandled: (opIds: readonly string[]) => void;
 }): React.JSX.Element {
   const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
   const manual = manualSync(input);
@@ -253,6 +259,13 @@ function SyncStatusDialog({
                 onClick={() => setRejectedShown((shown) => shown + REJECTED_SHOWN)}
               />
             ) : null}
+            <Button
+              label={t('sync.rejected.handled')}
+              variant="secondary"
+              className="self-start"
+              onClick={() => onMarkRejectedHandled(input.rejected.map((row) => row.opId))}
+              data-testid="desktop.sync.rejected.handled"
+            />
           </section>
         )}
       </div>

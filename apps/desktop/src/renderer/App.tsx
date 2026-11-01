@@ -408,6 +408,9 @@ function LiveCounter({
               open={syncOpen}
               onOpenChange={setSyncOpen}
               onSyncNow={() => void client.call('sync.requestManual').catch(() => undefined)}
+              onMarkRejectedHandled={(opIds) =>
+                void client.call('sync.markRejectedHandled', opIds).catch(() => undefined)
+              }
               onReenrol={onReenrol}
             />
           )

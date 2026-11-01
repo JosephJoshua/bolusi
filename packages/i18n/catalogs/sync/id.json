@@ -37,7 +37,8 @@
     "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Detail teknis",
     "noReason": "Server tidak mengirim keterangan.",
-    "more": "Tampilkan {count} lainnya"
+    "more": "Tampilkan {count} lainnya",
+    "handled": "Tandai sudah dicek"
   },
   "quarantine": {
     "title": "Perubahan ditahan",

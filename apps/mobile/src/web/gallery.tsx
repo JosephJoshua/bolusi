@@ -591,6 +591,7 @@ function syncScreen(
         onSyncNow={noop}
         onOpenRejected={noop}
         onRetryMedia={noop}
+        onMarkRejectedHandled={noop}
         onOpenSwitcher={noop}
         onReenroll={noop}
         expandedRejectedOpId={expandedRejectedOpId}

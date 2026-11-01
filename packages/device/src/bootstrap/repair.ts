@@ -7,8 +7,9 @@
  */
 import type { CommandIdentity } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
-import type { QrisPort } from '@bolusi/modules/money';
+import { MONEY_ENTRY_ENTITY, type QrisPort } from '@bolusi/modules/money';
 import {
+  REPAIR_DOCUMENT_KIND,
   REPAIR_PERMISSION,
   REPAIR_TICKET_ENTITY,
   catalogModelSearch,
@@ -165,4 +166,35 @@ export const REPAIR_REJECTED_SUBJECTS: RejectedSubjectReaders = {
     }
     return subjects;
   },
+  // A refused charge or payment on a servisan: the entry is gone, but its op names the servisan.
+  [MONEY_ENTRY_ENTITY]: async (db: Kysely<ClientDatabase>, ids: readonly string[]) => {
+    const rows = await db
+      .selectFrom('operations')
+      .select(['entityId', 'signedCoreJcs'])
+      .where('entityType', '=', MONEY_ENTRY_ENTITY)
+      .where('entityId', 'in', ids)
+      .execute();
+    const subjects = new Map<string, string>();
+    for (const row of rows) {
+      const number = repairDocumentNumber(row.signedCoreJcs);
+      if (number !== null) {
+        subjects.set(row.entityId, tn('repair.ticket.numbered', { number }));
+      }
+    }
+    return subjects;
+  },
 };
+
+/** The servisan number a money entry's signed op names, if it is for a servisan. */
+function repairDocumentNumber(signedCoreJcs: string): string | null {
+  try {
+    const { payload } = JSON.parse(signedCoreJcs) as { readonly payload?: unknown };
+    const document = (payload as { readonly document?: unknown } | null)?.document as
+      { readonly kind?: unknown; readonly label?: unknown } | null | undefined;
+    return document?.kind === REPAIR_DOCUMENT_KIND && typeof document.label === 'string'
+      ? document.label
+      : null;
+  } catch {
+    return null;
+  }
+}

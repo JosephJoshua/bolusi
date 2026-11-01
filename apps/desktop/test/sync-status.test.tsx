@@ -4,7 +4,7 @@ import type { SyncState } from '@bolusi/core';
 import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
 import { initI18n } from '@bolusi/i18n';
 import { TooltipProvider } from '@bolusi/ui-web';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 
 import { SyncStatusButton } from '../src/renderer/SyncStatus.js';
@@ -66,6 +66,7 @@ test('"Terakhir terhubung" ages while no new snapshot arrives', () => {
         onOpenChange={() => undefined}
         onSyncNow={() => undefined}
         onReenrol={() => undefined}
+        onMarkRejectedHandled={() => undefined}
       />
     </TooltipProvider>,
   );
@@ -91,10 +92,37 @@ test('a "Kirim sekarang" that did not get through says so in the panel', () => {
         onOpenChange={() => undefined}
         onSyncNow={() => undefined}
         onReenrol={() => undefined}
+        onMarkRejectedHandled={() => undefined}
       />
     </TooltipProvider>,
   );
   expect(screen.getByTestId('desktop.sync.manualError').textContent).toBe(
     'Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini.',
   );
+});
+
+test('the refused changes listed can be marked checked, all of them at once', () => {
+  const marked: (readonly string[])[] = [];
+  const row = (opId: string) => ({
+    opId,
+    type: 'repair.ticket_cancelled',
+    at: NOW,
+    rejectionCode: 'RULE_VIOLATED',
+    rejectionReason: null,
+    subject: null,
+  });
+  render(
+    <TooltipProvider>
+      <SyncStatusButton
+        input={{ ...input(), rejected: [row('op-1'), row('op-2')] }}
+        open
+        onOpenChange={() => undefined}
+        onSyncNow={() => undefined}
+        onReenrol={() => undefined}
+        onMarkRejectedHandled={(opIds) => marked.push(opIds)}
+      />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByTestId('desktop.sync.rejected.handled'));
+  expect(marked).toEqual([['op-1', 'op-2']]);
 });

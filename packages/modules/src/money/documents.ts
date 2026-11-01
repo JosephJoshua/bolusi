@@ -47,6 +47,11 @@ export interface MoneyDocumentSource {
    * charged yet (a repair still being worked on).
    */
   charge(db: Kysely<never>, lookup: DocumentLookup): Promise<DocumentCharge | null>;
+  /**
+   * Whether the customer has what the document is for (the phone went home). Money still on a
+   * delivered document is then a debt or owed back, even when its charge was never recorded.
+   */
+  delivered(db: Kysely<never>, lookup: DocumentLookup): Promise<boolean>;
 }
 
 /** The registered sources, by document kind. */

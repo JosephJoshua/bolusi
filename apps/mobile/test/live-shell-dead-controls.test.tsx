@@ -396,6 +396,11 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
     fireOn(screen, `sync-rejected-${opId}`);
     await settle();
     expect(screen.query(`sync-rejected-detail-${opId}`)).toBeNull();
+
+    // Once dealt with, the person marks it checked and it stops asking for attention.
+    fireOn(screen, 'sync-rejected-handled');
+    const gone = await waitUntil(() => screen.query('sync-rejected-section') === null);
+    expect(gone, 'the refusal still asks for attention after it was marked checked').toBe(true);
   });
 });
 

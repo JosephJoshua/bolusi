@@ -524,6 +524,99 @@ export function UndoHandoverStep({
   );
 }
 
+// ── a cancelled servisan's fee (owners) ───────────────────────────────────────────────────────
+
+/**
+ * Change what a cancelled servisan costs, before or after pickup, with the reason on record. What
+ * the customer owes follows the new fee; `paid` is what they paid so far, so the owner sees what a
+ * fee charges or leaves to give back.
+ */
+export function ChangeCancelFeeStep({
+  chrome,
+  ticketId,
+  stale,
+  current,
+  paid,
+  onDone,
+  onCancel,
+  onRegisterDiscardGuard,
+  testID = 'repair.cancelFee',
+}: StepProps & {
+  readonly current: number;
+  readonly paid: number;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [feeText, setFeeText] = useState(groupedAmount(String(current)));
+  const [reason, setReason] = useState('');
+  const fee = parseRupiah(feeText);
+  const changed = fee !== null && fee !== current;
+  const complete = changed && reason.trim() !== '';
+  const discard = useDiscardConfirm({
+    dirty: stale === null && (changed || reason.trim() !== ''),
+    onRegisterDiscardGuard,
+    testID,
+  });
+  const submit = (): void => {
+    if (fee === null || !complete) return;
+    void runner
+      .run(() => runtime.run('changeCancelFee', { ticketId, fee, reason }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tn('repair.cancelFee.title')}
+      onBack={() => discard.requestLeave(onCancel)}
+      primaryLabel={tn('repair.cancelFee.save')}
+      onPrimary={submit}
+      primaryDisabled={!complete}
+      primaryHint={tn(
+        fee === null
+          ? 'repair.hint.cancelFee'
+          : changed
+            ? 'repair.hint.reason'
+            : 'repair.cancelFee.same',
+      )}
+      overlay={discard.overlay}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      stale={stale}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.explain`}>
+        {paid > 0
+          ? tn('repair.cancelFee.paid', { amount: formatMoney(paid) })
+          : tn('repair.cancelFee.unpaid')}
+      </Text>
+      <TextInput
+        label={tn('repair.cancelFee.input')}
+        value={feeText}
+        onChangeText={(text) => {
+          if (acceptsRupiahText(text)) setFeeText(groupedAmount(text));
+        }}
+        keyboardType="number-pad"
+        selectTextOnFocus
+        autoFocus
+        testID={`${testID}.feeInput`}
+      />
+      <View style={repairStyles.gap}>
+        <TextInput
+          label={tn('repair.cancelFee.reason')}
+          value={reason}
+          onChangeText={setReason}
+          multiline
+          testID={`${testID}.reason`}
+        />
+      </View>
+    </FlowScreen>
+  );
+}
+
 // ── down payment ──────────────────────────────────────────────────────────────────────────────
 
 /**

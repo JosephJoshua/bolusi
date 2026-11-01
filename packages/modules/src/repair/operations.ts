@@ -16,6 +16,7 @@ import {
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
+  cancelFeeChangedApplier,
   handoverReversedApplier,
   ticketDetailsCorrectedApplier,
   downPaymentChangedApplier,
@@ -67,6 +68,7 @@ import {
   customerDetailsCorrectedRule,
   customerRegisteredRule,
   deviceReturnedRule,
+  cancelFeeChangedRule,
   handoverReversedRule,
   ticketDetailsCorrectedRule,
   downPaymentCorrectedRule,
@@ -385,6 +387,11 @@ export const deviceReturnedPayload = deviceReturnedPayloadV2
   .strict();
 
 /** Why an owner took a handover back, said in their words. */
+/** What a cancelled servisan costs from now on, and why the owner changed it. */
+export const cancelFeeChangedPayload = z
+  .object({ fee: zFee, reason: z.string().trim().min(1).max(500) })
+  .strict();
+
 export const handoverReversedPayload = z
   .object({ reason: z.string().trim().min(1).max(500) })
   .strict();
@@ -642,6 +649,18 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
+  },
+  [REPAIR_OP.cancelFeeChanged]: {
+    schemaVersion: 1,
+    payload: cancelFeeChangedPayload,
+    reversal: 'Reversed by another repair.cancel_fee_changed with the earlier fee.',
+    apply: cancelFeeChangedApplier,
+    rule: cancelFeeChangedRule,
+    // Setting what a cancel costs is the canceller's call: the same switch in the role editor.
+    permission: REPAIR_PERMISSION.cancel,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.ticketDetailsCorrected]: {
     schemaVersion: 1,
