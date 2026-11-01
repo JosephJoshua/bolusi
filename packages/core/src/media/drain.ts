@@ -346,6 +346,8 @@ export class MediaDrainLoop<DB> {
       // 3. Sequential, ascending — one chunk at a time (06 §5.1: no parallel uploads).
       for (const index of missing) {
         if (this.halted) return { kind: 'failed', code: 'HALTED', message: null };
+        // A refusal can land mid-upload: no further bytes of a released item go out.
+        if (!(await stillQueued(this.options.db, item.id))) return { kind: 'released' };
         const bytes = await this.readChunkStrict(item, chunkSize, totalChunks, index);
         await transport.putChunk(item.id, index, bytes);
         // Self-loop (03 §4): advances a progress display, nothing persisted.
