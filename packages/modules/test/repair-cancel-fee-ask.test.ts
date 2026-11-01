@@ -8,8 +8,6 @@ import { cancelFeeRequest, type CancelFeeTicket } from '../src/repair/cancel-fee
 
 const ticket = (discount = 0): CancelFeeTicket => ({
   id: 't-1',
-  ticketNumber: 'T-1',
-  customerName: 'Budi',
   workStarted: false,
   claimOfTicketId: null,
   quoteTotal: 0,
@@ -56,17 +54,17 @@ describe('before anything is charged: the fee, against the cancel limit', () => 
 });
 
 describe('once charged: a cut off the bill, against the refund limit', () => {
-  test('the cut is asked as a lower bill, counting the cuts already made', () => {
+  test('the fee as typed is asked, counting the cut with the cuts already made', () => {
     const charged = { charged: 70_000, reduced: 0 };
     expect(cancelFeeRequest(ticket(), charged, 70_000, 40_000, limits, 0)).toBeNull();
     expect(cancelFeeRequest(ticket(), charged, 70_000, 39_999, limits, 0)).toEqual({
-      kind: 'money.reduceCharge',
-      input: { document: { kind: 'repair.ticket', id: 't-1', label: 'T-1' }, amount: 30_001 },
+      kind: 'repair.cancelFeeCharged',
+      input: { ticketId: 't-1', fee: 39_999 },
     });
     // 20.000 cut before: another 20.000 is 40.000 in all.
     const cut = { charged: 70_000, reduced: 20_000 };
     expect(cancelFeeRequest(ticket(), cut, 50_000, 30_000, limits, 0)?.kind).toBe(
-      'money.reduceCharge',
+      'repair.cancelFeeCharged',
     );
   });
 });

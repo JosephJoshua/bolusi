@@ -1367,12 +1367,16 @@ describe('changes synced from another device', () => {
     h.engine.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE]));
     await settle();
     expect(screen.query('repair.ticket.rejectedBanner')).not.toBeNull();
-    // At the top of the page, scrolling with it, not in the fixed slot over the rows (font 2.0).
+    // The same strip at the top of the page, scrolling with it, not in the fixed slot over the rows
+    // (font 2.0).
     expect(screen.query('repair.ticket.bannerSlot')).toBeNull();
     const inPage = screen
-      .get('repair.ticket.contentInner')
-      .queryAll((node) => node.props['testID'] === 'repair.ticket.rejectedBanner');
+      .query('repair.ticket.content')!
+      .queryAll((node) => node.props['testID'] === 'repair.ticket.pageBanner');
     expect(inPage.length).toBeGreaterThan(0);
+    expect(
+      inPage[0]!.queryAll((node) => node.props['testID'] === 'repair.ticket.rejectedBanner').length,
+    ).toBeGreaterThan(0);
   });
 
   test("the user's own change closes the step without a stale notice", async () => {

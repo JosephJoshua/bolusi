@@ -7,7 +7,7 @@ import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
 import type { DeviceStatus } from '@bolusi/device/navigation/zone';
 import type { LockReason } from '@bolusi/device/session/shell-session';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import type { MediaRef, VideoMime, VideoRef } from '@bolusi/schemas';
+import type { Locale, MediaRef, VideoMime, VideoRef } from '@bolusi/schemas';
 
 /** The PIN session as the window renders it. */
 export interface SessionView {
@@ -54,6 +54,8 @@ export interface CoreState {
   readonly sync: SyncStatusInput | null;
   /** The server this PC syncs with, which serves customers' status pages. */
   readonly statusSite: string;
+  /** The language this PC shows, from its settings; the window follows it. */
+  readonly locale: Locale;
 }
 
 /** The `repairChanged` payload: the record another device just changed, or null. */

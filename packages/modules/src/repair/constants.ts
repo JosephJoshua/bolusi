@@ -234,4 +234,6 @@ export const REPAIR_APPROVAL_KIND = {
   downPayment: 'repair.downPayment',
   /** A cancelled servisan's fee lowered before anything is charged (Ubah biaya). */
   cancelFee: 'repair.cancelFee',
+  /** The same once it is charged: the bill comes down to the fee, counted as a refund is. */
+  cancelFeeCharged: 'repair.cancelFeeCharged',
 } as const;
