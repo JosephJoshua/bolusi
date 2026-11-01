@@ -137,7 +137,8 @@ fails a build, a boot or a test rather than waiting for review:
 - Every op type also declares `read`: the permission a person needs to see its ops.
   Sync follows least privilege, the same rule for every person and role. A device is
   sent only the ops its read set covers (`sync/read-scope.ts`): a shared store device
-  gets what its store's active non-owner staff may read, and a phone set up as one
+  gets what its store's active non-owner staff may read (its owners' reads while it has
+  no staff yet), and a phone set up as one
   person's own (`devices.personal_user_id`, chosen at setup) gets what that person may
   read, and only they sign in on it. The server takes a personal phone's ops only as
   that person (its genesis and re-enrolment record aside), so a deactivated person's
@@ -154,9 +155,9 @@ fails a build, a boot or a test rather than waiting for review:
   switch, idle lock and close. Their own changes of types the device does not hold
   stay in its log as chain links and lose their text once sent (`sync/device-reads.ts`).
   The extra is worked out when the PIN goes to the server: after a new device's first
-  pull, and after any PIN change made on the device has been sent. If the device later
-  stops holding something the person reads (the staff changed), the screen locks and
-  their PIN opens it again. A query whose data is still coming down waits for that pull;
+  pull, and after any PIN change made on the device has been sent. Until they leave, the
+  PIN stays in memory on a device that holds all they read, so if it comes to hold less
+  (the store's first staff person is added) their extra opens without asking again. A query whose data is still coming down waits for that pull;
   one whose data is not here throws `NOT_ON_DEVICE` ("Perlu internet"), never an empty list. Limits, accepted for now: the extra is pulled
   again at every sign-in (nothing stays between sessions); a person granted more while
   signed in sees it from their next sign-in; and the server's PIN check guards against

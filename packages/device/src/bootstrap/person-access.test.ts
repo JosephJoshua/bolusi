@@ -353,17 +353,28 @@ describe('what the device holds itself can change under a signed-in person', () 
     expect(h.access.status()).toBe('none');
   });
 
-  test('a device that stops holding what the person reads asks for their PIN again', async () => {
+  test('a device that comes to hold less opens the extra without asking for the PIN again', async () => {
     const h = harness([REPAIR, COSTS]);
     await h.access.begin(owner);
     await h.access.sync();
+    expect(h.opens).toEqual([]);
     expect(h.access.status()).toBe('none');
 
-    // The last cashier who could see costs left the store.
+    // The owner just added the store's first staff person, who may not see costs.
+    h.deviceReads.set([REPAIR]);
+    await h.access.sync();
+    expect(h.opens).toEqual([{ userId: 'owner-1', pin: '246810' }]);
+    expect(h.access.status()).toBe('open');
+    expect(h.access.readHere(COSTS)).toBe(true);
+  });
+
+  test('signing out forgets a PIN that never had to leave the device', async () => {
+    const h = harness([REPAIR, COSTS]);
+    await h.access.begin(owner);
+    await h.access.sync();
+    await h.access.end();
     h.deviceReads.set([REPAIR]);
     await h.access.sync();
     expect(h.opens).toEqual([]);
-    expect(h.access.status()).toBe('ended');
-    expect(h.access.readHere(COSTS)).toBe(false);
   });
 });

@@ -3,7 +3,9 @@
 //   - A shared store device gets what the store's active staff may read (least privilege, owner
 //     decision 2026-11-01): people, not roles, so a role nobody there holds adds nothing, and owner
 //     roles never count. Anyone who may read more, an owner or anyone else, reads the rest online
-//     for their session (a person session pull), never onto the device's disk.
+//     for their session (a person session pull), never onto the device's disk. A store with no
+//     active staff yet counts its owners instead (owner decision 2026-11-01): they are the only
+//     people there, so a one-person shop works offline; the first staff person narrows it.
 //   - A personal device (one person's own phone) gets what that person may read at its store, and
 //     nothing once they are deactivated.
 import {
@@ -29,7 +31,9 @@ export async function deviceReadSet(
   device: ReadSetDevice,
   registry: ReadScopeRegistry,
 ): Promise<readonly string[]> {
-  if (device.personalUserId === null) return sharedDeviceReadSet(db, device.storeId, registry);
+  if (device.personalUserId === null) {
+    return sharedDeviceReadSet(db, tenantId, device.storeId, registry);
+  }
   return personalDeviceReadSet(db, tenantId, device.personalUserId, device.storeId, registry);
 }
 
@@ -67,10 +71,12 @@ async function personalDeviceReadSet(
 /**
  * The read set of a shared store device: what the store's active staff may read there. People, not
  * roles: a role nobody at the store holds puts nothing on its devices, and owner roles never count
- * (their extras are read online, the same way as anyone else's reads beyond the device's).
+ * (their extras are read online, the same way as anyone else's reads beyond the device's). With no
+ * active staff at the store yet, what its owners may read there.
  */
 export async function sharedDeviceReadSet(
   db: TenantDb,
+  tenantId: string,
   storeId: string | null,
   registry: ReadScopeRegistry,
 ): Promise<readonly string[]> {
@@ -84,31 +90,82 @@ export async function sharedDeviceReadSet(
         .onRef('userStores.storeId', '=', 'userRoles.storeId'),
     )
     .innerJoin('roles', 'roles.id', 'userRoles.roleId')
-    .select(['roles.id as roleId', 'roles.scopeType as scopeType'])
+    .select(['userRoles.userId as userId', 'roles.id as roleId', 'roles.scopeType as scopeType'])
     .where('userRoles.storeId', '=', storeId)
     .where('users.status', '=', 'active')
     .where('users.isSystem', '=', false)
     .execute();
-  const roleIds = [...new Set(grants.map((g) => g.roleId))];
-  const permissions =
-    roleIds.length === 0
+  const byRole = await permissionsByRole(
+    db,
+    grants.map((grant) => grant.roleId),
+  );
+  const held = new Set<string>();
+  const staff = new Set<string>();
+  for (const grant of grants) {
+    const rolePermissions = byRole.get(grant.roleId) ?? [];
+    if (isOwnerRoleOf(grant.scopeType, rolePermissions)) continue;
+    staff.add(grant.userId);
+    for (const permission of rolePermissions) held.add(permission);
+  }
+  if (staff.size > 0) return readSetOf(registry, held);
+  return storeOwnersReadSet(db, tenantId, storeId, registry);
+}
+
+/** What the store's active owners may read there: tenant-wide owners, and owners of this store. */
+async function storeOwnersReadSet(
+  db: TenantDb,
+  tenantId: string,
+  storeId: string,
+  registry: ReadScopeRegistry,
+): Promise<readonly string[]> {
+  const grants = await db
+    .selectFrom('userRoles')
+    .innerJoin('users', 'users.id', 'userRoles.userId')
+    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
+    .select(['userRoles.userId as userId', 'roles.id as roleId', 'roles.scopeType as scopeType'])
+    .where((where) =>
+      where.or([where('userRoles.storeId', '=', storeId), where('userRoles.storeId', 'is', null)]),
+    )
+    .where('users.status', '=', 'active')
+    .where('users.isSystem', '=', false)
+    .execute();
+  const byRole = await permissionsByRole(
+    db,
+    grants.map((grant) => grant.roleId),
+  );
+  const owners = new Set(
+    grants
+      .filter((grant) => isOwnerRoleOf(grant.scopeType, byRole.get(grant.roleId) ?? []))
+      .map((grant) => grant.userId),
+  );
+  const reads = new Set<string>();
+  for (const owner of owners) {
+    for (const read of await personalDeviceReadSet(db, tenantId, owner, storeId, registry)) {
+      reads.add(read);
+    }
+  }
+  return [...reads].sort();
+}
+
+/** Each role's permission ids. */
+async function permissionsByRole(
+  db: TenantDb,
+  roleIds: readonly string[],
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  const unique = [...new Set(roleIds)];
+  const rows =
+    unique.length === 0
       ? []
       : await db
           .selectFrom('rolePermissions')
           .select(['roleId', 'permissionId'])
-          .where('roleId', 'in', roleIds)
+          .where('roleId', 'in', unique)
           .execute();
   const byRole = new Map<string, string[]>();
-  for (const row of permissions) {
+  for (const row of rows) {
     const list = byRole.get(row.roleId) ?? [];
     list.push(row.permissionId);
     byRole.set(row.roleId, list);
   }
-  const held = new Set<string>();
-  for (const grant of grants) {
-    const rolePermissions = byRole.get(grant.roleId) ?? [];
-    if (isOwnerRoleOf(grant.scopeType, rolePermissions)) continue;
-    for (const permission of rolePermissions) held.add(permission);
-  }
-  return readSetOf(registry, held);
+  return byRole;
 }

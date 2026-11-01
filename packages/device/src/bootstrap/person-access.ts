@@ -102,7 +102,7 @@ export interface PersonAccess {
 interface Person {
   readonly userId: string;
   readonly mayRead: (permissionId: string) => boolean;
-  /** Kept only until the server has checked it. */
+  /** Kept in memory until the server has checked it, or until they leave if it never needs to. */
   pin: string | null;
   token: string | null;
   store: PersonStoreLike | null;
@@ -233,14 +233,13 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
     if (target.token === null) {
       const extra = deps.deviceReads.heldReads().filter(target.mayRead);
       if (extra.length === 0) {
-        // Nothing beyond the device: the PIN never leaves it.
-        target.pin = null;
+        // Nothing beyond the device: the PIN does not leave it. It stays in memory while they are
+        // signed in, so if the device comes to hold less (the store's first staff person was just
+        // added) their extra opens without asking for it again.
         setStatus(target, 'none');
         return;
       }
       if (target.pin === null) {
-        // Signed in when nothing was beyond the device, and now something is (the store's staff
-        // changed, or the device's first pull came after): their PIN again opens it.
         setStatus(target, 'ended');
         return;
       }
