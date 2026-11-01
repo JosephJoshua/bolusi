@@ -221,4 +221,14 @@ describe('parts on the PC', () => {
     await screen.findByTestId('repair.desk.ticket.customer');
     expect(screen.queryByTestId('repair.desk.ticket.parts.take')).toBeNull();
   });
+
+  it('offers no Ambil sparepart on a cancelled servisan, even to an owner', async () => {
+    await renderApp(OWNER);
+    fireEvent.change(byTestId('repair.desk.board.search'), { target: { value: 'Lince' } });
+    fireEvent.click(await screen.findByText('Lince Wakerkwa'));
+    await screen.findByTestId('repair.desk.ticket.customer');
+    // Its parts list is gone too: nothing out on it, and nothing more to take.
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.ticket.parts')).toBeNull());
+    expect(screen.queryByTestId('repair.desk.ticket.parts.take')).toBeNull();
+  });
 });

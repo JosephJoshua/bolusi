@@ -83,6 +83,7 @@ import { createStaffControls } from '@bolusi/device/bootstrap/staff';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import {
   NO_SYNC_STATUS_READS,
+  markRejectionsHandled,
   readSyncStatusRows,
   type SyncStatusReads,
 } from '@bolusi/device/bootstrap/sync-status-reads';
@@ -1112,11 +1113,13 @@ export function Root({
    * `bump()` (the loop/session tick) covers the rest — a push that flips `local` → `synced`/`rejected`
    * runs inside the loop, whose subscribers already re-render this component.
    */
+  // Only the person signed in is asked about their own refused changes; while locked, nobody.
+  const rejectedFor = unlocked ? sessionUserId : null;
   useEffect(() => {
     if (app === null) return;
     let cancelled = false;
     const reread = (): void => {
-      void readSyncStatusRows(app.db.db, REPAIR_REJECTED_SUBJECTS)
+      void readSyncStatusRows(app.db.db, REPAIR_REJECTED_SUBJECTS, rejectedFor)
         .then((rows) => {
           if (!cancelled) setSyncReads(rows);
         })
@@ -1136,7 +1139,7 @@ export function Root({
     };
     // `syncTick` is the loop/session bump: a pushed batch changes `syncStatus` without writing a
     // projection table, so the invalidation bus alone would leave the counters one push behind.
-  }, [app, syncTick]);
+  }, [app, syncTick, rejectedFor]);
 
   // What a colleague just changed on another device glows once wherever it shows (ui `FreshGlow`).
   useEffect(() => {
@@ -1237,6 +1240,16 @@ export function Root({
         // Optional chaining, not a fallback: a device with no media pipeline (never enrolled) has
         // nothing to drain, and there is no media queue on its Sync Status screen to press.
         onRetryMedia={() => media?.requestManual()}
+        onMarkRejectedHandled={(opIds) => {
+          if (app === null || rejectedFor === null) return;
+          void markRejectionsHandled(app.db, rejectedFor, opIds, Date.now())
+            .then(bump)
+            .catch((error: unknown) => {
+              consoleDiagnostics.warn('marking refused changes handled failed', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
+        }}
         onCheckForUpdate={checkForUpdate}
         // §5's Error retry on the switcher — the read that failed, run again. `void`, because the
         // controller reports through its subscription (which re-renders this component), never

@@ -116,7 +116,13 @@ export default tseslint.config(
         'error',
         {
           allowFiles: ['packages/core/src/oplog/bookkeeping.ts'],
-          allowColumns: ['syncStatus', 'syncedAt', 'rejectionCode', 'rejectionReason'],
+          allowColumns: [
+            'syncStatus',
+            'syncedAt',
+            'rejectionCode',
+            'rejectionReason',
+            'rejectionHandledAt',
+          ],
         },
       ],
     },

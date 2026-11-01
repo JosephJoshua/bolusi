@@ -48,6 +48,7 @@ import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
 import {
   NO_SYNC_STATUS_READS,
+  markRejectionsHandled,
   readSyncStatusRows,
   type SyncStatusReads,
 } from '@bolusi/device/bootstrap/sync-status-reads';
@@ -349,6 +350,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     };
   }
 
+  /** Who is signed in now, or null while nobody is or the screen is locked. */
+  function signedInUserId(): string | null {
+    const snapshot = session?.snapshot();
+    if (snapshot === undefined || snapshot.locked) return null;
+    return snapshot.session?.userId ?? null;
+  }
+
   /** The repair runtime for the user signed in now, or null with nobody signed in. */
   function activeRepair(): RepairRuntime | null {
     const active = session?.snapshot().session ?? null;
@@ -500,7 +508,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       do {
         readAgain = false;
         try {
-          syncReads = await readSyncStatusRows(booted.db.db, REPAIR_REJECTED_SUBJECTS);
+          syncReads = await readSyncStatusRows(
+            booted.db.db,
+            REPAIR_REJECTED_SUBJECTS,
+            signedInUserId(),
+          );
           emit();
         } catch (error) {
           warn('sync status read failed', error);
@@ -550,8 +562,9 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     session = controller;
     serviceCleanups.push(
       controller.subscribe(() => {
-        // A switch or a lock changes who the repair runtime is for.
+        // A switch or a lock changes who the repair runtime is for, and whose refusals are listed.
         void bindRepair();
+        void rereadSyncStatus();
         emit();
       }),
     );
@@ -879,6 +892,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'sync.requestManual'() {
       sync?.requestManual();
       media?.requestManual();
+    },
+    // The person signed in has dealt with these refused changes of theirs.
+    async 'sync.markRejectedHandled'(opIds: readonly string[]) {
+      const userId = signedInUserId();
+      if (app === null || userId === null) return;
+      await markRejectionsHandled(app.db, userId, opIds, clock.now());
+      await rereadSyncStatus();
     },
 
     // ── Repair (every call names the user its screen was built for) ─────────────────────────────

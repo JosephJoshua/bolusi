@@ -8,9 +8,11 @@
 //   what the servisan took.
 // - Once the servisan is repaired, cancelled or handed back, only an owner (inventory.correct_use)
 //   can take or put back parts on it, to correct it. Before work starts nobody draws parts for it.
+// - A cancelled servisan takes no more parts, even an owner's: its work stopped. Parts still out on
+//   it can go back.
 import type { Kysely } from 'kysely';
 
-import { INVENTORY_PERMISSION } from '../inventory/constants.js';
+import { INVENTORY_OP, INVENTORY_PERMISSION } from '../inventory/constants.js';
 import type { PartUseTarget } from '../inventory/part-use.js';
 import { REPAIR_PERMISSION, REPAIR_TICKET_ENTITY } from './constants.js';
 import { partsInWork } from './flows.js';
@@ -41,6 +43,7 @@ export const repairPartUse: PartUseTarget = {
         message: `ticket ${ticket.ticketNumber} is ${ticket.outcome}/${ticket.location}`,
       });
     if (ticket.outcome === 'received') throw notInWork();
+    if (ticket.outcome === 'cancelled' && op.type === INVENTORY_OP.itemTaken) throw notInWork();
     if (await holdsPermission(op.userId, INVENTORY_PERMISSION.correctUse)) return label;
     if (!partsInWork(ticket)) throw notInWork();
     if (

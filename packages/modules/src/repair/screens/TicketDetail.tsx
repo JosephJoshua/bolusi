@@ -70,6 +70,7 @@ import {
   CONTEXTUAL_ACTIONS,
   FINAL_ACTIONS,
   canSetRepairTypes,
+  canTakeParts,
   canUseParts,
   partUse,
   claimIntakeDraft,
@@ -948,6 +949,7 @@ export function TicketDetail({
             <UsedPartsSection
               use={partUse(row)}
               editable={canUseParts(row, runtime.userId, runtime.inventory.hasPermission)}
+              takeable={canTakeParts(row, runtime.userId, runtime.inventory.hasPermission)}
               flagUnreturned={row.outcome === 'cancelled'}
               onTake={() => setStep({ kind: 'takePart' })}
               onPutBack={(part) => setStep({ kind: 'putBackPart', part })}

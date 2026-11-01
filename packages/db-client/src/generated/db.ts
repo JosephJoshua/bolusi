@@ -256,6 +256,7 @@ export interface Operations {
   id: string | null;
   previousHash: string;
   rejectionCode: string | null;
+  rejectionHandledAt: number | null;
   rejectionReason: string | null;
   schemaVersion: number;
   seq: number;

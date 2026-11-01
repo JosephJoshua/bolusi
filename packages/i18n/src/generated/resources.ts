@@ -663,6 +663,7 @@ const source = {
         technicalDetails: 'Detail teknis',
         noReason: 'Server tidak mengirim keterangan.',
         more: 'Tampilkan {count} lainnya',
+        handled: 'Tandai sudah dicek',
       },
       quarantine: {
         title: 'Perubahan ditahan',
@@ -1471,6 +1472,7 @@ export const resources = {
           technicalDetails: 'Technical details',
           noReason: 'The server sent no details.',
           more: 'Show {count} more',
+          handled: 'Mark as checked',
         },
         quarantine: {
           title: 'Changes on hold',
