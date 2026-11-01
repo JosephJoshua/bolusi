@@ -337,7 +337,15 @@ export async function openRepairHarness(
     syncScheduler: { schedule: () => undefined },
     // The device's live search cache, fed by this engine's applies (local and pulled).
     search: new SearchIndexCache(engine.invalidation),
-    ...(options.readHere === undefined ? {} : { readHere: options.readHere }),
+    ...(options.readHere === undefined
+      ? {}
+      : {
+          dataHere: {
+            readHere: options.readHere,
+            whenHere: (permissionId: string) =>
+              Promise.resolve(options.readHere?.(permissionId) ?? true),
+          },
+        }),
   });
 
   await runtime.commands.emitRuntimeOp({

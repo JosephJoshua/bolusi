@@ -43,7 +43,7 @@ import {
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
 import { paidOnDocumentSql, reducedOnDocumentSql } from '../money/queries.js';
-import { CASH_ACCOUNT, paymentAccountIdOf } from '../money/constants.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION, paymentAccountIdOf } from '../money/constants.js';
 import { refundSplit } from '../money/rules.js';
 import { amountOwed } from './flows.js';
 import type { MoneyDatabase } from '../money/schema.js';
@@ -207,6 +207,9 @@ export interface TicketDetailRow extends TicketSummaryRow {
 // ── shared pieces ──────────────────────────────────────────────────────────────────────────────
 
 function summaryQuery(qctx: Qctx) {
+  // Money records are read with money.read: whoever may not read them (a technician) sees no DP and
+  // no reductions, and a device whose people may not read them need not hold them.
+  const money = qctx.hasPermission(MONEY_PERMISSION.read);
   return qctx.db
     .selectFrom('repairTickets as t')
     .innerJoin('repairCustomers as c', 'c.id', 't.customerId')
@@ -233,8 +236,12 @@ function summaryQuery(qctx: Qctx) {
       't.cancelStandardFee',
       't.cancelledBy',
       't.cancelledAt',
-      paidOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('downPayment'),
-      reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('reduced'),
+      money
+        ? paidOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('downPayment')
+        : sql<number | string | null>`NULL`.as('downPayment'),
+      money
+        ? reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('reduced')
+        : sql<number | string | null>`NULL`.as('reduced'),
       't.readyAt',
       eb
         .selectFrom('repairQuoteLines as l')
@@ -421,7 +428,8 @@ const SORT_COLUMN = {
   number: sql.ref('t.ticketNumber'),
   // What the customer owes: a cancelled servisan's fee, never its repair price, less what an owner
   // took off it.
-  total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end - coalesce(${reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId')}, 0)`,
+  // Without money.read (a technician), the price before reductions: they see no reductions.
+  total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end`,
   readyBy: sql.ref('t.estimatedReadyAt'),
   createdAt: sql.ref('t.createdAt'),
   cancelledAt: sql.ref('t.cancelledAt'),
@@ -439,7 +447,10 @@ export async function listTicketsHandler(
 
   if (!(CURSOR_SORTS as readonly string[]).includes(input.sort) || input.offset !== undefined) {
     const [key, direction] = input.sort.split('.') as [string, 'asc' | 'desc'];
-    const column = SORT_COLUMN[key as keyof typeof SORT_COLUMN];
+    const column =
+      key === 'total' && qctx.hasPermission(MONEY_PERMISSION.read)
+        ? sql`${SORT_COLUMN.total} - coalesce(${reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId')}, 0)`
+        : SORT_COLUMN[key as keyof typeof SORT_COLUMN];
     const rows = await query
       .orderBy(sql`${column} ${sql.raw(direction)}`)
       .orderBy('t.createdAt', 'desc')
@@ -785,7 +796,11 @@ export async function getTicketHandler(
     ...events.map((event) => event.actorId),
     ...events.flatMap((event) => assignedTo(event) ?? []),
   ]);
-  const refunds = await ticketRefunds(qctx, toSummary(summary, names));
+  // Money records are read with money.read: a technician's servisan shows none, and a store device
+  // whose people may not read them may not hold them.
+  const refunds = qctx.hasPermission(MONEY_PERMISSION.read)
+    ? await ticketRefunds(qctx, toSummary(summary, names))
+    : [];
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -944,8 +959,6 @@ export function maxTicketCounter(
 export const nextTicketCounterQuery = {
   name: 'nextTicketCounter',
   permission: REPAIR_PERMISSION.intake,
-  // Numbered from the store's servisan: without them here a new number could repeat one.
-  reads: [REPAIR_PERMISSION.read],
   input: nextTicketCounterInput,
   handler: nextTicketCounterHandler,
 } as const;

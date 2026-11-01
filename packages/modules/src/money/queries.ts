@@ -1,6 +1,6 @@
 // The `money` queries. Every read is constrained to the caller's store; central accounts are read
 // only when this store uses them. Postgres hands `bigint` columns back as strings, hence `Number`.
-import { sql, type RawBuilder } from 'kysely';
+import { expressionBuilder, sql } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -95,7 +95,6 @@ async function paymentAccountsHandler(
 export const paymentAccountsQuery = {
   name: 'paymentAccounts',
   permission: MONEY_PERMISSION.receive,
-  reads: [MONEY_PERMISSION.read],
   input: paymentAccountsInput,
   handler: paymentAccountsHandler,
 } as const;
@@ -107,35 +106,38 @@ export const paymentAccountsQuery = {
  * for a module's own list (a servisan's DP on the board). `documentId` is the outer query's
  * column holding the document's id, and `storeId` the column holding its store.
  */
-export function paidOnDocumentSql(
-  documentKind: string,
-  documentId: string,
-  storeId: string,
-): RawBuilder<number | string | null> {
-  return sql<number | string | null>`(
-    SELECT SUM(CASE WHEN me.kind = 'refund_paid' THEN -me.amount ELSE me.amount END)
-    FROM money_entries me
-    WHERE me.document_kind = ${documentKind}
-      AND me.document_id = ${sql.ref(documentId)}
-      AND me.store_id = ${sql.ref(storeId)}
-      AND (me.kind = 'refund_paid' OR (me.kind = 'payment_received' AND me.voided_at IS NULL))
-  )`;
+export function paidOnDocumentSql(documentKind: string, documentId: string, storeId: string) {
+  return documentEntries(documentKind, documentId, storeId)
+    .where((eb) =>
+      eb.or([
+        eb('me.kind', '=', 'refund_paid'),
+        eb.and([eb('me.kind', '=', 'payment_received'), eb('me.voidedAt', 'is', null)]),
+      ]),
+    )
+    .select(
+      sql<
+        number | string | null
+      >`SUM(CASE WHEN me.kind = 'refund_paid' THEN -me.amount ELSE me.amount END)`.as('total'),
+    );
 }
 
 /** What was taken off each listed document's charges (an owner lowering a bill), as above. */
-export function reducedOnDocumentSql(
-  documentKind: string,
-  documentId: string,
-  storeId: string,
-): RawBuilder<number | string | null> {
-  return sql<number | string | null>`(
-    SELECT SUM(me.amount)
-    FROM money_entries me
-    WHERE me.document_kind = ${documentKind}
-      AND me.document_id = ${sql.ref(documentId)}
-      AND me.store_id = ${sql.ref(storeId)}
-      AND me.kind = 'charge_reduced'
-  )`;
+export function reducedOnDocumentSql(documentKind: string, documentId: string, storeId: string) {
+  return documentEntries(documentKind, documentId, storeId)
+    .where('me.kind', '=', 'charge_reduced')
+    .select(sql<number | string | null>`SUM(me.amount)`.as('total'));
+}
+
+/**
+ * The money entries of the outer query's document: built, not written as raw SQL, so the query
+ * runtime sees the table it reads (core query/reads-here.ts).
+ */
+function documentEntries(documentKind: string, documentId: string, storeId: string) {
+  return expressionBuilder<MoneyDatabase, never>()
+    .selectFrom('moneyEntries as me')
+    .where('me.documentKind', '=', documentKind)
+    .where('me.documentId', '=', sql.ref<string>(documentId))
+    .where('me.storeId', '=', sql.ref<string>(storeId));
 }
 
 // ── documentMoney (one document's charges, payments and refunds) ───────────────────────────────
@@ -239,7 +241,6 @@ async function documentMoneyHandler(
 export const documentMoneyQuery = {
   name: 'documentMoney',
   permission: MONEY_PERMISSION.receive,
-  reads: [MONEY_PERMISSION.read],
   input: documentMoneyInput,
   handler: documentMoneyHandler,
 } as const;
@@ -341,7 +342,6 @@ async function cashDrawerHandler(
 export const cashDrawerQuery = {
   name: 'cashDrawer',
   permission: MONEY_PERMISSION.countCash,
-  reads: [MONEY_PERMISSION.read],
   input: cashDrawerInput,
   handler: cashDrawerHandler,
 } as const;

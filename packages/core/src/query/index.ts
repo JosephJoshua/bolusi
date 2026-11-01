@@ -5,7 +5,13 @@
 // A denial here is an explicit `DomainError('PERMISSION_DENIED')` and NEVER an empty result
 // (FR-1036, security-guide §2.2) — an empty page leaks "the store exists and is quiet" and is
 // indistinguishable from a legitimate empty page.
-export { QueryRuntime, type ExecutableQuery, type QueryRuntimeOptions } from './execute.js';
+export {
+  QueryRuntime,
+  type DataHerePort,
+  type ExecutableQuery,
+  type QueryRuntimeOptions,
+} from './execute.js';
+export { RawTableReadError, ReadNotHereError, ReadsHerePlugin } from './reads-here.js';
 
 export {
   readOnlyDb,

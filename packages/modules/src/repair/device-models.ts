@@ -289,8 +289,6 @@ export async function searchDeviceModelsHandler(
 export const searchDeviceModelsQuery = {
   name: 'searchDeviceModels',
   permission: REPAIR_PERMISSION.intake,
-  // The phone catalog comes with the device, not through ops.
-  reads: [],
   input: searchDeviceModelsInput,
   handler: searchDeviceModelsHandler,
 } as const;

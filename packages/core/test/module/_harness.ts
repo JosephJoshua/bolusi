@@ -24,6 +24,7 @@ import {
 
 import {
   createModuleRuntime,
+  type DataHerePort,
   createProjectionEngine,
   createUuidV7Generator,
   decodeCursor,
@@ -147,7 +148,7 @@ class SqliteOpStore implements OpAppendStore {
 /** Build a fully-seeded L2 harness. Two calls with the same seed reproduce bit-for-bit (T-6). */
 export async function openModuleHarness(
   seed: number,
-  options: { readonly readHere?: (permissionId: string) => boolean | Promise<boolean> } = {},
+  options: { readonly dataHere?: DataHerePort } = {},
 ): Promise<ModuleHarness> {
   const startMs = 1_726_000_000_000;
   let nowMs = startMs;
@@ -243,7 +244,7 @@ export async function openModuleHarness(
       await engine.applyAppendedOp(op);
     },
     syncScheduler: { schedule: () => undefined },
-    ...(options.readHere === undefined ? {} : { readHere: options.readHere }),
+    ...(options.dataHere === undefined ? {} : { dataHere: options.dataHere }),
   });
 
   // ENROLL THE DEVICE FIRST (05 §9.5): the first op on a device must be `auth.device_enrolled`, so

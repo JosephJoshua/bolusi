@@ -152,8 +152,6 @@ export async function listConflictsHandler(
 export const listConflictsQuery = {
   name: 'listConflicts',
   permission: PLATFORM_PERMISSION.conflictView,
-  // Kept by each device over what it folds itself.
-  reads: [],
   input: listConflictsInput,
   handler: listConflictsHandler,
 } as const;

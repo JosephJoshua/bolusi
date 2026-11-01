@@ -215,13 +215,6 @@ export interface CommandDeclaration<TInput, TResult> {
 /** A query, as DECLARED in a manifest (04 §6). `name` is derived from the key. */
 export interface QueryDeclaration<TInput, TRow, DB> {
   readonly permission: string;
-  /**
-   * The reads (op types' `read`) of the synced data the handler reads, when `permission` is not
-   * itself one (a Kas count is allowed by `money.count_cash` and reads `money.read` data); `[]`
-   * when it reads only what every device holds. The query says "Perlu internet" unless each is
-   * here (least-privilege sync); registry assembly refuses a query that leaves this unclear.
-   */
-  readonly reads?: readonly string[];
   readonly input: InputParser<TInput>;
   readonly handler: (
     input: TInput,
@@ -246,7 +239,6 @@ export interface AnyCommandDeclaration {
 /** @see AnyCommandDeclaration */
 export interface AnyQueryDeclaration {
   readonly permission: string;
-  readonly reads?: readonly string[];
   readonly input: InputParser<unknown>;
   readonly handler: (...args: never[]) => unknown;
 }

@@ -186,8 +186,12 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         applyProjection,
         syncScheduler,
         search,
-        // A read the person may make but whose data is not here says so (`NOT_ON_DEVICE`).
-        readHere: (permissionId) => app.person.whenHere(permissionId),
+        // A query touching data that is not here says so (`NOT_ON_DEVICE`), after waiting for a
+        // pull of the person's store that is under way.
+        dataHere: {
+          readHere: (permissionId) => app.person.readHere(permissionId),
+          whenHere: (permissionId) => app.person.whenHere(permissionId),
+        },
         // Task 40's liveness bound, ACTIVATED here (task 102). The mechanism (`#recordBounded` in
         // core's enforcement point) is OFF unless a `RuntimeTimerPort` is wired: a denied command's
         // best-effort `auth.permission_denied` append is otherwise awaited UNBOUNDED, so a stuck

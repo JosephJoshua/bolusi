@@ -11,7 +11,7 @@
 // that IS the property 02 §9 requires.
 import { describe, expect, test } from 'vitest';
 
-import { DomainError, type CommandContext } from '../../src/index.js';
+import { DomainError, type CommandContext, type DataHerePort } from '../../src/index.js';
 import {
   FIXTURE_SECRET_PERMISSION,
   type CreateItemInput,
@@ -526,14 +526,20 @@ describe('qctx.db is READ-ONLY (04 §6)', () => {
 });
 
 describe('a read whose data is not on this device (least-privilege sync)', () => {
+  const holds = (here: (permissionId: string) => boolean): DataHerePort => ({
+    readHere: here,
+    whenHere: (permissionId) => Promise.resolve(here(permissionId)),
+  });
+
   test('says NOT_ON_DEVICE, never an empty list, and reads normally once the data is here', async () => {
     let here = false;
     const harness = await openModuleHarness(4242, {
-      readHere: (permissionId) => permissionId !== 'fixture.read' || here,
+      dataHere: holds((permissionId) => permissionId !== 'fixture.read' || here),
     });
     try {
       await expect(listItems(harness, harness.adminId)).rejects.toMatchObject({
         code: 'NOT_ON_DEVICE',
+        details: { permission: 'fixture.read' },
       });
       here = true;
       await expect(listItems(harness, harness.adminId)).resolves.toMatchObject({ rows: [] });
@@ -542,24 +548,27 @@ describe('a read whose data is not on this device (least-privilege sync)', () =>
     }
   });
 
-  test('waits for an answer the device is still working out', async () => {
+  test('runs once more when a pull under way brings the data', async () => {
+    let here = false;
     const harness = await openModuleHarness(4244, {
-      readHere: (permissionId) =>
-        new Promise<boolean>((resolve) =>
-          setTimeout(() => resolve(permissionId !== 'fixture.read'), 5),
-        ),
+      dataHere: {
+        readHere: (permissionId) => permissionId !== 'fixture.read' || here,
+        whenHere: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          here = true;
+          return true;
+        },
+      },
     });
     try {
-      await expect(listItems(harness, harness.adminId)).rejects.toMatchObject({
-        code: 'NOT_ON_DEVICE',
-      });
+      await expect(listItems(harness, harness.adminId)).resolves.toMatchObject({ rows: [] });
     } finally {
       await harness.close();
     }
   });
 
   test('a person who may not read it is still refused first', async () => {
-    const harness = await openModuleHarness(4243, { readHere: () => false });
+    const harness = await openModuleHarness(4243, { dataHere: holds(() => false) });
     try {
       await expect(listItems(harness, harness.zeroGrantId)).rejects.toMatchObject({
         code: 'PERMISSION_DENIED',
