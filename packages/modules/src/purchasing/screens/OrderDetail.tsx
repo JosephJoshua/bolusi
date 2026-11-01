@@ -129,7 +129,8 @@ export function OrderDetail({
   return (
     <AppShell
       scrollable
-      wide
+      // Wide only with receipts to put beside the order; otherwise one readable column.
+      wide={(order?.receipts.length ?? 0) > 0}
       title={order?.supplierName ?? tp('purchasing.list.title')}
       titleVariant="detail"
       onBack={hideBack ? undefined : onBack}

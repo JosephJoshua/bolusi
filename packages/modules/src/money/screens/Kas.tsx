@@ -85,6 +85,9 @@ export function KasBoard({
   const since = dayStart(now());
   const turnedDown = useVoidRequests().turnedDown.filter((row) => (row.decidedAt ?? 0) >= since);
   const about = useAskedAbout(turnedDown);
+  // What moved and what is owed sit beside the drawer; on a quiet day there is none, and the
+  // drawer keeps one readable column instead of a wide half-empty page.
+  const hasSide = moves.length > 0 || open.owed.length > 0 || open.owedBack.length > 0;
 
   return (
     <AppShell
@@ -107,7 +110,7 @@ export function KasBoard({
           />
         )
       }
-      wide
+      wide={hasSide}
       testID={testID}
     >
       {/* On a tablet what is owed and what moved sit beside the drawer and today's takings. */}
@@ -232,7 +235,7 @@ export function KasBoard({
           </>
         }
         end={
-          moves.length === 0 && open.owed.length === 0 && open.owedBack.length === 0 ? null : (
+          !hasSide ? null : (
             <>
               {moves.length === 0 ? null : (
                 <Section title={tm('money.kas.movesToday')} testID={`${testID}.moves`}>

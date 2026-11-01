@@ -92,25 +92,19 @@ export function Columns({
       testID={two ? `${testID}.two` : testID}
     >
       <View style={two ? { flex: 1, minWidth: 0 } : undefined} testID={`${testID}.start`}>
-        {two ? (
-          <BleedContext.Provider value={{ left: outer.left, right: 0 }}>
-            {start}
-          </BleedContext.Provider>
-        ) : (
-          start
-        )}
+        {/* Always the provider, only its value changes: switching between one column and two
+            redraws the content in place instead of remounting it and dropping its state. */}
+        <BleedContext.Provider value={two ? { left: outer.left, right: 0 } : outer}>
+          {start}
+        </BleedContext.Provider>
       </View>
       <View
         style={two ? { flex: 1, minWidth: 0, marginTop: -space.xl } : undefined}
         testID={`${testID}.end`}
       >
-        {two ? (
-          <BleedContext.Provider value={{ left: 0, right: outer.right }}>
-            {end}
-          </BleedContext.Provider>
-        ) : (
-          end
-        )}
+        <BleedContext.Provider value={two ? { left: 0, right: outer.right } : outer}>
+          {end}
+        </BleedContext.Provider>
       </View>
     </View>
   );
@@ -225,8 +219,17 @@ export function ListDetail({
       ) : null}
       {shown(detail) ? (
         // The record sizes itself to its pane, not the window: beside the list on a small tablet it
-        // has a phone's width, and lays its photos out like one.
-        <ViewportProvider style={{ flex: 1 }} testID={split ? `${testID}.detail` : undefined}>
+        // has a phone's width, and lays its photos out like one. Until the pane is measured it is
+        // taken to be the room the list leaves, so the first frame is not laid out for the window.
+        <ViewportProvider
+          style={{ flex: 1 }}
+          estimate={
+            split
+              ? { width: viewport.width - listPaneWidth(viewport.width), height: viewport.height }
+              : undefined
+          }
+          testID={split ? `${testID}.detail` : undefined}
+        >
           {detail}
         </ViewportProvider>
       ) : null}

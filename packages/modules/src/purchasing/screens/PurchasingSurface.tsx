@@ -114,14 +114,13 @@ export function PurchasingSurface({
     setView({ kind: 'form' });
   };
 
-  // On a wide screen the list stays beside the open order and its receiving. Writing an order picks
-  // parts and suppliers on screens of its own, so it keeps the whole screen.
-  const beside = view.kind === 'list' || view.kind === 'order' || view.kind === 'receive';
+  // On a wide screen the list stays beside the open order. Writing or receiving an order is a task
+  // of its own and keeps the whole screen, so a tap on the list never throws away a half-done one.
+  const beside = view.kind === 'list' || view.kind === 'order';
   const split = useListDetailSplit() && beside;
   // The list's header carries the sync chip and the avatar; the pane beside it keeps neither.
   const paneChrome: ScreenChrome = split ? { syncChip: null, avatar: null } : chrome;
-  const openId =
-    view.kind === 'order' ? view.orderId : view.kind === 'receive' ? view.order.id : null;
+  const openId = view.kind === 'order' ? view.orderId : null;
 
   const list = (
     <OrderList
@@ -130,7 +129,7 @@ export function PurchasingSurface({
       onFilter={setFilter}
       onBack={onClose}
       onOpenOrder={(orderId) => {
-        if (view.kind !== 'order' || orderId !== openId) openOrder(orderId);
+        if (orderId !== openId) openOrder(orderId);
       }}
       onNewOrder={() => write(EMPTY_ORDER)}
       onOpenSuppliers={() => {
@@ -154,14 +153,6 @@ export function PurchasingSurface({
         notice={notice}
         onClearNotice={() => setNotice(null)}
       />
-    ) : view.kind === 'receive' ? (
-      <ReceiveStep
-        key={`receive:${view.order.id}`}
-        chrome={paneChrome}
-        order={view.order}
-        onDone={() => openOrder(view.order.id, 'purchasing.done.received')}
-        onCancel={() => setView({ kind: 'order', orderId: view.order.id })}
-      />
     ) : split ? (
       <EmptyState title={tp('purchasing.list.pickOrder')} testID="purchasing.noOrderOpen" />
     ) : null;
@@ -182,8 +173,16 @@ export function PurchasingSurface({
     switch (view.kind) {
       case 'list':
       case 'order':
-      case 'receive':
         return null;
+      case 'receive':
+        return (
+          <ReceiveStep
+            chrome={chrome}
+            order={view.order}
+            onDone={() => openOrder(view.order.id, 'purchasing.done.received')}
+            onCancel={() => setView({ kind: 'order', orderId: view.order.id })}
+          />
+        );
       case 'form':
         return (
           <OrderForm

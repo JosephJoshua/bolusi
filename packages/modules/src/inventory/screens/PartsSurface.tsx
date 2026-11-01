@@ -90,19 +90,14 @@ export function PartsSurface({
     setView({ kind: 'part', itemId });
   };
 
-  // On a wide screen the list stays beside the open part and its steps (edit, count). Adding a part
-  // and the filters and categories are tasks of their own and keep the whole screen.
-  const beside =
-    view.kind === 'list' || view.kind === 'part' || view.kind === 'edit' || view.kind === 'count';
+  // On a wide screen the list stays beside the open part. Changing a part (adding, editing, counting)
+  // and the filters and categories are tasks of their own and keep the whole screen, so a tap on
+  // the list never throws away a half-done one.
+  const beside = view.kind === 'list' || view.kind === 'part';
   const split = useListDetailSplit() && beside;
   // The list's header carries the sync chip and the avatar; the pane beside it keeps neither.
   const paneChrome: ScreenChrome = split ? { syncChip: null, avatar: null } : chrome;
-  const openId =
-    view.kind === 'part'
-      ? view.itemId
-      : view.kind === 'edit' || view.kind === 'count'
-        ? view.part.id
-        : null;
+  const openId = view.kind === 'part' ? view.itemId : null;
 
   const list = (
     <PartList
@@ -116,11 +111,7 @@ export function PartsSurface({
       }}
       onBack={onClose}
       onOpenPart={(itemId) => {
-        if (view.kind === 'part' && itemId === openId) return;
-        // A half-done edit or count beside the list asks before another part replaces it.
-        const guard = guardRef.current;
-        if (guard === null) openPart(itemId);
-        else guard(() => openPart(itemId));
+        if (itemId !== openId) openPart(itemId);
       }}
       onAddPart={() => setView({ kind: 'add' })}
       selectedId={split ? openId : null}
@@ -139,24 +130,6 @@ export function PartsSurface({
         onCount={(part) => setView({ kind: 'count', part })}
         notice={notice}
         onClearNotice={() => setNotice(null)}
-      />
-    ) : view.kind === 'edit' ? (
-      <PartForm
-        key={`edit:${view.part.id}`}
-        chrome={paneChrome}
-        part={view.part}
-        onDone={(itemId) => openPart(itemId, 'inventory.done.saved')}
-        onCancel={() => openPart(view.part.id)}
-        onRegisterDiscardGuard={registerGuard}
-      />
-    ) : view.kind === 'count' ? (
-      <CountStep
-        key={`count:${view.part.id}`}
-        chrome={paneChrome}
-        part={view.part}
-        onDone={() => openPart(view.part.id, 'inventory.done.counted')}
-        onCancel={() => openPart(view.part.id)}
-        onRegisterDiscardGuard={registerGuard}
       />
     ) : split ? (
       <EmptyState title={ti('inventory.list.pickPart')} testID="inventory.noPartOpen" />
@@ -178,9 +151,27 @@ export function PartsSurface({
     switch (view.kind) {
       case 'list':
       case 'part':
-      case 'edit':
-      case 'count':
         return null;
+      case 'edit':
+        return (
+          <PartForm
+            chrome={chrome}
+            part={view.part}
+            onDone={(itemId) => openPart(itemId, 'inventory.done.saved')}
+            onCancel={() => openPart(view.part.id)}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+      case 'count':
+        return (
+          <CountStep
+            chrome={chrome}
+            part={view.part}
+            onDone={() => openPart(view.part.id, 'inventory.done.counted')}
+            onCancel={() => openPart(view.part.id)}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
       case 'add':
         return (
           <PartForm

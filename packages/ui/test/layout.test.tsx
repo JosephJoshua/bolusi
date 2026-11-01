@@ -1,5 +1,6 @@
 // The tablet layout primitives size themselves to their own box, so a screen reads right on a phone,
 // beside a list in a tablet's pane, and full screen on a big tablet.
+import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { afterEach, describe, expect, test } from 'vitest';
 
@@ -54,6 +55,22 @@ describe('Columns', () => {
     expect(screen.query('ui.columns.two')).toBeNull();
     layOut(screen, 'ui.columns', twoColumnsMin);
     expect(screen.query('ui.columns.two')).not.toBeNull();
+  });
+
+  test('switching between one column and two keeps what is inside, not remounting it', () => {
+    Object.assign(__windowMetrics, { width: 1280, height: 800 });
+    let mounts = 0;
+    function Counted(): React.JSX.Element {
+      useState(() => (mounts += 1));
+      return <Text testID="counted">c</Text>;
+    }
+    const screen = render(<Columns start={<Counted />} end={<Counted />} />);
+    expect(mounts).toBe(2);
+    layOut(screen, 'ui.columns.two', 360);
+    expect(screen.query('ui.columns.two')).toBeNull();
+    layOut(screen, 'ui.columns', 900);
+    expect(screen.query('ui.columns.two')).not.toBeNull();
+    expect(mounts).toBe(2);
   });
 
   test('with nothing for the end today, the start keeps the whole width', () => {
@@ -112,6 +129,22 @@ describe('ListDetail', () => {
     expect(listPaneWidth(840)).toBe(340);
     expect(listPaneWidth(960)).toBe(384);
     expect(listPaneWidth(1280)).toBe(420);
+  });
+
+  test('beside the list, a record is laid out for its pane from the first frame', () => {
+    // A small tablet sideways: the pane is 576 wide, too narrow for two columns, though the
+    // window alone would take them.
+    Object.assign(__windowMetrics, { width: 960, height: 600 });
+    const screen = render(
+      <ListDetail
+        split
+        list={<Text>l</Text>}
+        detail={<Columns start={<Text>s</Text>} end={<Text>e</Text>} />}
+        testID="x.split"
+      />,
+    );
+    expect(screen.query('ui.columns')).not.toBeNull();
+    expect(screen.query('ui.columns.two')).toBeNull();
   });
 
   test('split shows both; otherwise only the one in front', () => {
