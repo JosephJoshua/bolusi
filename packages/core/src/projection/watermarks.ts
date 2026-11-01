@@ -147,3 +147,26 @@ export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
     },
   };
 }
+
+/**
+ * Watermarks held in memory: a person store's (least-privilege sync), which lives only as long as
+ * the person's session and is never resumed, so there is nothing to persist.
+ */
+export function createMemoryWatermarkStore(): WatermarkStore {
+  const rows = new Map<string, WatermarkState>();
+  const read = (moduleId: string): WatermarkState =>
+    rows.get(moduleId) ?? { appliedServerSeq: 0, appliedLocalSeq: 0 };
+  return {
+    read: (moduleId) => Promise.resolve(read(moduleId)),
+    advanceServerSeq(moduleId, value) {
+      const row = read(moduleId);
+      rows.set(moduleId, { ...row, appliedServerSeq: Math.max(row.appliedServerSeq, value) });
+      return Promise.resolve();
+    },
+    advanceLocalSeq(moduleId, value) {
+      const row = read(moduleId);
+      rows.set(moduleId, { ...row, appliedLocalSeq: Math.max(row.appliedLocalSeq, value) });
+      return Promise.resolve();
+    },
+  };
+}

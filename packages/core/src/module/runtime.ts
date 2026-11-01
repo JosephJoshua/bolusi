@@ -30,6 +30,8 @@ export type ModuleRuntimeOptions = Omit<
 > & {
   /** Live search indexes for every query (search/live-index.ts). Devices pass one. */
   readonly search?: SearchIndexCache;
+  /** Whether a read's data is on this device (`QueryRuntimeOptions.readHere`). Devices pass one. */
+  readonly readHere?: (permissionId: string) => boolean;
 };
 
 /** A wired build: the registries plus the two runtimes, sharing one enforcement point. */
@@ -81,7 +83,7 @@ export function createModuleRuntime<DB>(
     },
   };
 
-  const { search, ...commandOptions } = options;
+  const { search, readHere, ...commandOptions } = options;
   const commands = new CommandRuntime({
     ...commandOptions,
     operations: registry.operations,
@@ -120,6 +122,7 @@ export function createModuleRuntime<DB>(
     db,
     enforcement: commands.enforcementPoint,
     ...(search !== undefined ? { search } : {}),
+    ...(readHere !== undefined ? { readHere } : {}),
   });
 
   return { registry, commands, queries: queryRuntime };

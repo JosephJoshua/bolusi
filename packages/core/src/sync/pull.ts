@@ -52,6 +52,7 @@ import { sql, type Kysely } from 'kysely';
 import type { CryptoPort } from '../crypto/port.js';
 import { signedCoreJcsOf } from '../crypto/signed-core.js';
 import { insertOpLogRow } from '../oplog/row.js';
+import { clearHeldText, isClearedOp, restoreClearedOp, type DeviceReads } from './device-reads.js';
 import type { ClockPort } from '../runtime/ports.js';
 import { readDeviceRegistry, replaceDeviceRegistry, type DeviceRegistryEntry } from './devices.js';
 import { purgePulledOps, type PurgedRecord } from './read-purge.js';
@@ -123,6 +124,17 @@ export interface PullReadScope {
   readonly refold: (record: PurgedRecord) => Promise<void>;
   /** `ProjectionEngine.catchUpPulledWatermarks`. */
   readonly catchUpWatermarks: () => Promise<void>;
+  /**
+   * What the device folds, kept in step with the read set: set before a dropped type's records are
+   * re-folded (so they clear) and before the page's ops fold, and read back if the batch fails.
+   */
+  readonly deviceReads?: DeviceReads;
+  /**
+   * The device is about to hold `added` again, inside the batch transaction: a signed-in person's
+   * store holding any of them must close first (without a transaction of its own), or the device's
+   * folds would land in its in-memory tables of the same names and be lost with them.
+   */
+  readonly beforeGrow?: (added: readonly string[]) => Promise<void>;
 }
 
 /** What one committed pull batch carried, for progress display. */
@@ -241,7 +253,13 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
     if (unknown !== undefined)
       throw new AppUpdateRequiredError(unknown.type, unknown.schemaVersion);
 
-    const outcome = await applyBatchAtomically(deps, parsed, backfill !== null);
+    const outcome = await applyBatchAtomically(deps, parsed, backfill !== null).catch(
+      async (error: unknown) => {
+        // The read set the batch followed rolled back with it.
+        deps.readScope?.deviceReads?.set((await readSyncState(deps.db)).readSet);
+        throw error;
+      },
+    );
     applied += outcome.applied;
     quarantined += outcome.quarantined;
     released += outcome.released;
@@ -281,7 +299,7 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
  * names a type and version: the server validated it on push, so its shape is newer than this
  * build's (an added envelope field, say). Dropping it would skip it for good.
  */
-function firstUnknownOp(
+export function firstUnknownOp(
   ops: readonly ParsedOp[],
   knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean,
 ): Pick<SignedOperation, 'type' | 'schemaVersion'> | undefined {
@@ -411,10 +429,19 @@ async function applyBatchAtomically<DB>(
       const op = entry.op;
 
       // Dedup by id (05 §5): applying an op we already hold is a no-op. The engine's delivery
-      // contract makes this the INSERT layer's job — it never sees a duplicate.
-      if (await hasOp(deps.db, op.id)) continue;
+      // contract makes this the INSERT layer's job — it never sees a duplicate. One exception: an
+      // own change held only as a chain link (its text cleared, device-reads.ts) that the device
+      // may read again gets its text back from the server and folds.
+      const held = await hasOp(deps.db, op.id);
+      if (held && !(await isClearedOp(deps.db, op.id))) continue;
 
       const verification = verifyPulledOp(op, registry, deps.crypto);
+      if (held) {
+        if (!verification.ok || !(await restoreClearedOp(deps.db, op, deps.crypto))) continue;
+        await deps.applyPulledOp(op);
+        applied += 1;
+        continue;
+      }
       if (!verification.ok) {
         await insertQuarantinedOp(deps.db, {
           id: op.id,
@@ -502,12 +529,18 @@ async function followReadSet<DB>(
   const fresh = state.cursor === 0 && state.readSet === null;
   const before = fresh ? now : (state.readSet ?? readPermissionsOf(scope.registry));
   const { added, removed } = readSetChange(before, now);
+  if (added.length > 0) await scope.beforeGrow?.(added);
+  scope.deviceReads?.set(now);
   if (removed.length > 0) {
     const dropped = typesReadWith(scope.registry, removed);
     await purgePulledOps(
       { db: deps.db, refold: scope.refold, catchUpWatermarks: scope.catchUpWatermarks },
       dropped,
     );
+    // The device's own changes of those types stay as chain links: their text goes once sent,
+    // and the records they built come off the disk.
+    await clearHeldText(deps.db, dropped);
+    for (const record of await ownRecordsOf(deps.db, dropped)) await scope.refold(record);
     // A quarantined op waits to be applied once its signer is known; one of a dropped type must
     // not wait, or a later sidecar would bring it back into the log.
     const droppedTypes = new Set(dropped);
@@ -515,6 +548,14 @@ async function followReadSet<DB>(
       if (droppedTypes.has(reconstructQuarantinedOp(row).type)) {
         await deleteQuarantinedOp(deps.db, row.id);
       }
+    }
+  }
+
+  // The device's own changes of a newly readable type fold on disk now. Pulled ops come with the
+  // catch-up, and cleared own ones get their text back from it; these never left, or are not sent.
+  if (added.length > 0 && state.readSet !== null) {
+    for (const record of await ownRecordsOf(deps.db, typesReadWith(scope.registry, added))) {
+      await scope.refold(record);
     }
   }
 
@@ -545,6 +586,16 @@ async function followReadSet<DB>(
   return restarted;
 }
 
+/** The records this device's own changes of `types` built. */
+async function ownRecordsOf<DB>(db: Kysely<DB>, types: readonly string[]): Promise<PurgedRecord[]> {
+  if (types.length === 0) return [];
+  const result = await sql<PurgedRecord>`
+    SELECT DISTINCT type AS "type", entity_type AS "entityType", entity_id AS "entityId"
+    FROM operations WHERE arrival_seq IS NULL AND type IN (${sql.join(types)})
+  `.execute(db);
+  return result.rows;
+}
+
 /** Re-verify every quarantined op; apply and un-quarantine the ones that now check out (api/01 §4.2). */
 async function releaseQuarantined<DB>(
   deps: PullPhaseDeps<DB>,
@@ -570,6 +621,7 @@ async function releaseQuarantined<DB>(
   return released;
 }
 
+/** Put a cleared own change's text back, when the server's copy is the very op the log links. */
 async function hasOp<DB>(db: Kysely<DB>, id: string): Promise<boolean> {
   const result = await sql<{ one: number }>`
     SELECT 1 AS one FROM operations WHERE id = ${id} LIMIT 1

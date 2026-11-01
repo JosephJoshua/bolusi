@@ -33,7 +33,8 @@ function readIdleLock(configuration: unknown): number {
   return IDLE_LOCK_DEFAULT;
 }
 
-function toVerifier(row: {
+/** A stored `user_pin_verifiers` row as the verifier devices and the server check a PIN with. */
+export function toVerifier(row: {
   salt: string;
   params: unknown;
   hash: string;

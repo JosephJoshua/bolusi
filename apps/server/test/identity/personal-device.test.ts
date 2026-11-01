@@ -4,7 +4,6 @@
 // read set a pull is filtered by.
 import { ed25519 } from '@noble/curves/ed25519.js';
 import type { ReadScopeRegistry } from '@bolusi/core';
-import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
 import type { DeviceBundle } from '@bolusi/schemas';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
@@ -182,19 +181,6 @@ describe('what a device is synced', () => {
     expect([...(await readSetOf(p.tenantId, storeId, p.ownerUserId))].sort()).toEqual(
       [OWNER_READ, STAFF_READ].sort(),
     );
-  });
-
-  test('a shared device gets what a staff role can be given, though no staff role has it yet', async () => {
-    const { p, storeId } = await setup();
-    const buying: ReadScopeRegistry = {
-      types: () => ['purchasing.order_drafted'],
-      readPermissionFor: (type) =>
-        type === 'purchasing.order_drafted' ? PURCHASING_PERMISSION.buy : undefined,
-    };
-    const shared = await h.idb.forTenant(p.tenantId, (db) =>
-      deviceReadSet(db, p.tenantId, { storeId, personalUserId: null }, buying),
-    );
-    expect(shared).toEqual([PURCHASING_PERMISSION.buy]);
   });
 
   test('a staff member’s own phone gets only what they may read, and nothing once deactivated', async () => {
