@@ -171,9 +171,13 @@ export interface PersonTransportPort {
   open(request: PersonSessionRequest): Promise<PersonSessionResponse>;
   pull(token: string, request: PullRequest): Promise<PullResponse>;
   end(token: string): Promise<void>;
+  /** Send this device's PIN changes still waiting for the server (they precede a PIN check). */
+  sendPendingPins(): Promise<void>;
 }
 
-export function createFetchPersonTransport(config: SyncTransportConfig): PersonTransportPort {
+export function createFetchPersonTransport(
+  config: SyncTransportConfig,
+): Omit<PersonTransportPort, 'sendPendingPins'> {
   const send = deviceRequester(config);
   return {
     open: (request) => send<PersonSessionResponse>('POST', '/v1/sync/person-session', request),

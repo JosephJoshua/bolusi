@@ -32,6 +32,11 @@ export class DeviceReads {
     this.reads = readSet === null ? null : new Set(readSet);
   }
 
+  /** Whether the server has sent this device a read set yet (a new device has not pulled). */
+  known(): boolean {
+    return this.reads !== null;
+  }
+
   /** Whether the device folds `type`. Types every device reads, and unknown ones, always do. */
   readonly folds = (type: string): boolean => {
     if (this.reads === null) return true;

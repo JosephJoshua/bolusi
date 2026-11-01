@@ -48,6 +48,8 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
     `desk.orders:${filter}:${String(pages)}:${String(reloadNonce)}`,
   );
   const loaded = query.status === 'ready' ? query.data : null;
+  // Offline with the orders not on this PC: nothing to add to or pick from.
+  const notHere = query.status === 'error' && query.code === 'NOT_ON_DEVICE';
   const stale = loaded !== null && loaded.filter !== filter;
 
   const closePane = (): void => {
@@ -65,14 +67,14 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
       if (overlayOpen()) return;
       if (event.key === 'F2') {
         event.preventDefault();
-        setTask('new');
+        if (!notHere) setTask('new');
       } else if (event.key === 'Escape' && selectedId !== null && !typingInField(event.target)) {
         closePane();
       }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [selectedId]);
+  }, [selectedId, notHere]);
 
   const columns = useMemo(orderColumns, []);
   const empty =
@@ -108,6 +110,7 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
               label={tp('purchasing.supplier.listTitle')}
               icon={Store}
               onClick={() => setTask('suppliers')}
+              disabled={notHere}
               data-testid={`${testId}.openSuppliers`}
             />
             <Button
@@ -116,6 +119,7 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
               icon={Plus}
               shortcut="F2"
               onClick={() => setTask('new')}
+              disabled={notHere}
               data-testid={`${testId}.new`}
             />
           </>

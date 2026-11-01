@@ -237,6 +237,14 @@ export async function readPendingVerifiers<DB>(db: Kysely<DB>): Promise<PendingV
   }));
 }
 
+/** Whether a PIN change for `userId` made here has not reached the server yet. */
+export async function hasPendingVerifier<DB>(db: Kysely<DB>, userId: string): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM pending_pin_verifiers WHERE user_id = ${userId} LIMIT 1
+  `.execute(db);
+  return rows.rows.length > 0;
+}
+
 /** POST every pending verifier. Terminal on any HTTP answer; a thrown transport error keeps the row. */
 export async function drainPendingVerifiers<DB>(
   db: Kysely<DB>,
