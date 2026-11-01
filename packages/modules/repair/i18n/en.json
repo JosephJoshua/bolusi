@@ -25,7 +25,8 @@
     "storeUncollectedDaysChanged": "Not-collected limit changed",
     "ticketRepairTypesChanged": "Repair type changed",
     "handoverReversed": "Handover undone",
-    "ticketDetailsCorrected": "Details corrected"
+    "ticketDetailsCorrected": "Details corrected",
+    "cancelFeeChanged": "Repair cancellation fee changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -57,7 +58,8 @@
     "takeOver": "Take over",
     "more": "More",
     "correctDetails": "Edit details",
-    "undoHandover": "Undo handover"
+    "undoHandover": "Undo handover",
+    "changeCancelFee": "Change cancellation fee"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -272,7 +274,8 @@
     "refundVia": "Give back by {method}",
     "refundCash": "Give back in cash",
     "newTotal": "Total becomes {from} → {to}",
-    "reduced": "Taken off",
+    "reduced": "Bill reduced",
+    "billed": "Bill",
     "givenBack": "Given back",
     "owedBack": "Overpaid",
     "editTitle": "New price"
@@ -340,7 +343,8 @@
     "handoverUndone": "Handover undone. The phone is back in the store.",
     "refund": "Money given back.",
     "reduce": "Bill lowered.",
-    "repairedPriceWaiting": "Repair done. The customer still needs to confirm the new price."
+    "repairedPriceWaiting": "Repair done. The customer still needs to confirm the new price.",
+    "cancelFeeChanged": "Cancellation fee changed."
   },
   "passcode": {
     "show": "Show",
@@ -735,7 +739,9 @@
     "customerMismatch": "The customer details don’t match. Try again.",
     "cancelFeeChanged": "The store’s cancellation fee has changed. Cancel again with the new fee.",
     "repairTypeTerms": "The owner changed this repair type. Pick the repair types again.",
-    "intakePhotoMissing": "Take photos of the phone from every angle the store asks for first."
+    "intakePhotoMissing": "Take photos of the phone from every angle the store asks for first.",
+    "feeBelowCharged": "The bill was already recorded on another device. Change the fee again.",
+    "notCancelled": "This repair isn’t cancelled."
   },
   "paper": {
     "title": "Slip paper",
@@ -957,6 +963,17 @@
     "empty": "empty"
   },
   "history": {
-    "technician": "Technician: {name}"
+    "technician": "Technician: {name}",
+    "fee": "Cancellation fee: {amount}"
+  },
+  "cancelFee": {
+    "title": "Cancellation fee",
+    "paid": "The customer paid {amount}. The bill follows the new fee.",
+    "unpaid": "The bill follows the new fee.",
+    "input": "New fee",
+    "reason": "Why the change?",
+    "save": "Save fee",
+    "same": "Change the fee first.",
+    "short": "Change fee"
   }
 }

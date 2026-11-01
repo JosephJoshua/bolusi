@@ -905,9 +905,12 @@ export function demoRepairRuntime(
   ) => {
     // The one rule every step but the handover shares (repair rules.ts): a change that raced a
     // cancel or a handover on another device is refused with its own reason, as on a phone.
-    // Taking a handover back and correcting a cancelled servisan's details check their own.
+    // Taking a handover back, correcting a cancelled servisan's details and changing its fee check
+    // their own.
     const current = find(ticketId);
-    if (kind !== 'repair.device_returned' && kind !== 'repair.handover_reversed') {
+    // Changing a cancelled servisan's fee is about the cancel itself, before or after pickup.
+    const lifecycle = kind === 'repair.device_returned' || kind === 'repair.handover_reversed';
+    if (!lifecycle && kind !== 'repair.cancel_fee_changed') {
       if (current.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
       if (current.outcome === 'cancelled' && kind !== 'repair.ticket_details_corrected') {
         throw REPAIR_REFUSALS.refuse('cancelled');
@@ -1248,6 +1251,17 @@ export function demoRepairRuntime(
         cancelledAt: HARNESS_NOW,
         readyAt: HARNESS_NOW,
       });
+    },
+    changeCancelFee: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.outcome !== 'cancelled') throw REPAIR_REFUSALS.refuse('notCancelled');
+      const fee = Number(input['fee']);
+      return update(
+        t.id,
+        'repair.cancel_fee_changed',
+        { cancelFee: fee },
+        { fee, reason: String(input['reason']) },
+      );
     },
     setUncollectedDays: (input) => {
       uncollectedLimit = Number(input['days']);

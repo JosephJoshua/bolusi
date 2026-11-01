@@ -68,6 +68,16 @@ export function chargeOp(
   return entryOp(ctx, MONEY_OP.chargeRecorded, { document, amount, account });
 }
 
+/** An owner takes `amount` off what a customer was charged for a document, saying why. */
+export function reduceChargeOp(
+  ctx: CommandContext,
+  document: MoneyDocument,
+  amount: number,
+  reason: string,
+): OpDraft {
+  return entryOp(ctx, MONEY_OP.chargeReduced, { document, amount, reason });
+}
+
 export function paymentOp(ctx: CommandContext, document: MoneyDocument, payment: PaymentDraft) {
   return entryOp(ctx, MONEY_OP.paymentReceived, {
     document,
@@ -238,13 +248,7 @@ export async function refundHandler(
   }
   const ops: OpDraft[] = [];
   if (input.amount > credit && ctx.colleagueHasPermission(ctx.userId, MONEY_PERMISSION.refund)) {
-    ops.push(
-      entryOp(ctx, MONEY_OP.chargeReduced, {
-        document: input.document,
-        amount: input.amount - credit,
-        reason: input.reason,
-      }),
-    );
+    ops.push(reduceChargeOp(ctx, input.document, input.amount - credit, input.reason));
   }
   ops.push(
     refundOp(ctx, input.document, {

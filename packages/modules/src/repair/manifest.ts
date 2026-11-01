@@ -20,6 +20,8 @@ import {
   assignTechnicianInput,
   cancelTicketHandler,
   cancelTicketInput,
+  changeCancelFeeHandler,
+  changeCancelFeeInput,
   changeIntakeOptionsHandler,
   changeIntakeOptionsInput,
   hideIntakeOptionsHandler,
@@ -244,6 +246,11 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.cancel,
       input: cancelTicketInput,
       handler: cancelTicketHandler,
+    },
+    changeCancelFee: {
+      permission: REPAIR_PERMISSION.cancel,
+      input: changeCancelFeeInput,
+      handler: changeCancelFeeHandler,
     },
     proposeQuoteChange: {
       permission: REPAIR_PERMISSION.work,

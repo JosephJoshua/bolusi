@@ -16,7 +16,7 @@
     "alreadyRecorded": "This record already exists.",
     "documentNotFound": "This bill isn’t in this store.",
     "notChargeable": "Can’t bill yet. The repair isn’t finished.",
-    "chargeMismatch": "The bill doesn’t match the agreed price.",
+    "chargeMismatch": "This was changed on another device, so the bill wasn’t recorded.",
     "aboveCharged": "The reduction is more than the bill.",
     "accountNotUsable": "This payment method isn’t available in this store.",
     "referenceRequired": "Enter the approval code from the EDC slip.",

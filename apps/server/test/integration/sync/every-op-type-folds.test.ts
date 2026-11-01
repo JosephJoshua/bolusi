@@ -642,6 +642,12 @@ function journey(world: ChainWorld): OpSpec[] {
       schemaVersion: 2,
       payload: { reason: 'Pelanggan batal', fee: 0, standardFee: 0 },
     },
+    {
+      type: 'repair.cancel_fee_changed',
+      entityType: 'repair_ticket',
+      entityId: cancelledTicket,
+      payload: { fee: 20_000, reason: 'Sudah dicek' },
+    },
 
     // auth (the genesis `auth.device_enrolled` is pushed first, by the test)
     {

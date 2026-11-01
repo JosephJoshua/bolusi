@@ -189,6 +189,8 @@ async function perform(
       return harness.run('correctTicketDetails', { ticketId, complaint: 'Layar bergaris' }, userId);
     case 'undoHandover':
       return harness.run('undoHandover', { ticketId, reason: 'Salah servisan' }, userId);
+    case 'changeCancelFee':
+      return harness.run('changeCancelFee', { ticketId, fee: 7_000, reason: 'Biaya cek' }, userId);
   }
 }
 

@@ -16,7 +16,7 @@
     "alreadyRecorded": "Catatan ini sudah ada.",
     "documentNotFound": "Tagihan ini tidak ada di toko ini.",
     "notChargeable": "Belum bisa ditagih. Servisan belum selesai.",
-    "chargeMismatch": "Jumlah tagihan tidak sama dengan harga yang disepakati.",
+    "chargeMismatch": "Servisan ini sudah diubah di perangkat lain, jadi tagihannya tidak dicatat.",
     "aboveCharged": "Potongan lebih besar dari tagihan.",
     "accountNotUsable": "Metode pembayaran ini tidak tersedia di toko ini.",
     "referenceRequired": "Isi kode approval dari struk EDC.",
