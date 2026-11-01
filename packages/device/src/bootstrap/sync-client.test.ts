@@ -266,6 +266,16 @@ function historyPages(): PullResponse[] {
   ];
 }
 
+/** A booted app's least-privilege parts, for fakes that hold everything and sign in nobody. */
+const NO_PERSON = {
+  deviceReads: { heldTypes: () => [] },
+  person: {
+    bindTransport: () => undefined,
+    sync: () => Promise.resolve(),
+    refuse: () => Promise.resolve(),
+  },
+};
+
 describe('the sync client constructs, starts, and drives a REAL cycle (task 89 acceptance)', () => {
   test('an enrolled boot syncs: lastSuccessfulSyncAt becomes a REAL timestamp, banner de-escalates (T-19)', async () => {
     // Before: the seeded row's `last_successful_sync_at` is NULL, which 03 §8 maps to `stale`.
@@ -476,6 +486,7 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
       db,
       engine: { applyPulledOp: () => Promise.resolve(), refoldRefused: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
+      ...NO_PERSON,
     } as unknown as Bootstrapped;
     return createSyncClientForApp(app, {
       baseUrl: 'https://example.invalid',
@@ -532,6 +543,7 @@ describe('a push that settles ops tells the open screens', () => {
       engine: { applyPulledOp: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
       invalidation,
+      ...NO_PERSON,
     } as unknown as Bootstrapped;
     const reply = (body: unknown) =>
       new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
@@ -572,6 +584,7 @@ describe('work waiting for the next online contact', () => {
       engine: { applyPulledOp: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
       invalidation: new InvalidationBus(),
+      ...NO_PERSON,
     } as unknown as Bootstrapped;
     const reply = (body: unknown) =>
       new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
@@ -604,6 +617,52 @@ describe('work waiting for the next online contact', () => {
     await client.settle();
 
     expect(calls).toEqual(['checked']);
+    client.stop();
+  });
+});
+
+describe("a signed-in person's store follows the device's sync", () => {
+  test('after each cycle settles, the person store is pulled too', async () => {
+    let personSyncs = 0;
+    const app = {
+      db,
+      engine: { applyPulledOp: () => Promise.resolve() },
+      syncState: await readSyncState(db.db),
+      invalidation: new InvalidationBus(),
+      ...NO_PERSON,
+      person: {
+        ...NO_PERSON.person,
+        sync: () => {
+          personSyncs += 1;
+          return Promise.resolve();
+        },
+      },
+    } as unknown as Bootstrapped;
+    const client = createSyncClientForApp(app, {
+      baseUrl: 'https://example.invalid',
+      deviceId: DEVICE_ID,
+      loadDeviceToken: () => Promise.resolve('bdt_test'),
+      crypto: noblePort,
+      clock: clockT,
+      appState: activeAppState,
+      netInfo: fakeNetInfo(true).port,
+      timer: new RecordingTimer(),
+      fetchImpl: (input) =>
+        Promise.resolve(
+          String(input).endsWith('/v1/sync/pull')
+            ? new Response(
+                JSON.stringify({ ops: [], nextCursor: 0, hasMore: false, serverTime: T }),
+                {
+                  headers: { 'content-type': 'application/json' },
+                },
+              )
+            : new Response(null, { status: 304 }),
+        ),
+    });
+    expect(personSyncs).toBe(0);
+    await client.start();
+    client.requestManual();
+    await vi.waitFor(() => expect(personSyncs).toBeGreaterThan(0));
     client.stop();
   });
 });

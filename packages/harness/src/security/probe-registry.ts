@@ -640,6 +640,33 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticatedRequest: unauthLeg('POST', () => '/v1/sync/pull'),
   },
 
+  // Least-privilege sync: a person proves their PIN to the server on a device of their own tenant.
+  // A person of another tenant, or of a store this device does not serve, answers exactly like a
+  // wrong PIN (apps/server/test/integration/sync/person-session.test.ts).
+  'POST /v1/sync/person-session': {
+    crossTenant: {
+      kind: 'dedicated',
+      assertion:
+        'person-session: a person who does not work at the device’s store, in any tenant, answers AUTH_INVALID_CREDENTIALS like a wrong PIN',
+    },
+    unassignedStore: {
+      kind: 'dedicated',
+      assertion: 'same leg — store membership is checked first',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', () => '/v1/sync/person-session'),
+  },
+  'DELETE /v1/sync/person-session': {
+    crossTenant: {
+      kind: 'dedicated',
+      assertion:
+        'person-session: ending a session matches the token AND the bearer device, so another tenant’s token ends nothing',
+    },
+    unassignedStore: { kind: 'dedicated', assertion: 'same leg — bound to the bearer device' },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('DELETE', () => '/v1/sync/person-session'),
+  },
+
   // ── media (the §2.2 documented exception 1) ───────────────────────────────────────────────────
   //
   // HISTORY (all resolved — kept so the shape is legible, not a live to-do):

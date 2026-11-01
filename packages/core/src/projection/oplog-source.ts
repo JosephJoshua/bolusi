@@ -21,6 +21,9 @@ import type { SignedOperation } from '@bolusi/schemas';
 import { operationFromSignedCoreJcs } from '../crypto/signed-core.js';
 import { int8ToBigInt, int8ToNumber, type Int8Value } from './int8.js';
 
+/** The op log every engine reads by default: the device's own, or the server's. */
+export const DEVICE_OP_TABLE = 'operations';
+
 /** A canonical-order position (05 §4) — the rebuild checkpoint triple (04 §4.3). */
 export interface CanonicalCursor {
   readonly timestamp: number;
@@ -69,9 +72,10 @@ function reconstructOperation(row: RawOpRow): SignedOperation {
 export async function hasNewerEntityOp<DB>(
   db: Kysely<DB>,
   op: Pick<SignedOperation, 'entityType' | 'entityId' | 'timestamp' | 'deviceId' | 'seq'>,
+  opTable: string = DEVICE_OP_TABLE,
 ): Promise<boolean> {
   const result = await sql<{ one: number }>`
-    SELECT 1 AS one FROM operations
+    SELECT 1 AS one FROM ${sql.table(opTable)}
     WHERE entity_type = ${op.entityType} AND entity_id = ${op.entityId}
       AND (timestamp_ms, device_id, seq) > (${op.timestamp}, ${op.deviceId}, ${op.seq})
     LIMIT 1
@@ -86,6 +90,15 @@ export async function hasNewerEntityOp<DB>(
  */
 export interface FoldReadOptions {
   readonly skipRefused?: boolean;
+  /** The log to read: the device's own, or a person's held in memory for their session. */
+  readonly opTable?: string;
+  /**
+   * Which op types this projection folds. A device keeps the ops of types it may not read only as
+   * links in its chain (least-privilege sync): they fold in a signed-in person's store, never here.
+   */
+  readonly folds?: (type: string) => boolean;
+  /** The SQLite database the projection rows live in (`main`, `temp`); unqualified when absent. */
+  readonly tableSchema?: string;
 }
 
 /** Every op for `(entityType, entityId)` in canonical order — the re-fold input (§4.2). */
@@ -114,6 +127,7 @@ export async function readEntityPage<DB>(
   opTypes: readonly string[],
   after: EntityCursor | null,
   limit: number,
+  opTable: string = DEVICE_OP_TABLE,
 ): Promise<EntityCursor[]> {
   if (opTypes.length === 0) return [];
   const typeList = sql.join(opTypes.map((t) => sql`${t}`));
@@ -122,7 +136,7 @@ export async function readEntityPage<DB>(
       ? sql``
       : sql`AND (entity_type, entity_id) > (${after.entityType}, ${after.entityId})`;
   const result = await sql<EntityCursor>`
-    SELECT DISTINCT entity_type AS "entityType", entity_id AS "entityId" FROM operations
+    SELECT DISTINCT entity_type AS "entityType", entity_id AS "entityId" FROM ${sql.table(opTable)}
     WHERE type IN (${typeList}) ${afterClause}
     ORDER BY entity_type, entity_id
     LIMIT ${limit}
@@ -143,13 +157,18 @@ export async function readEntitiesOps<DB>(
   const byEntity = new Map<string, SignedOperation[]>();
   if (entityIds.length === 0) return byEntity;
   const refused = options.skipRefused === true ? sql`AND sync_status <> 'rejected'` : sql``;
-  const result = await sql<RawOpRow>`
-    SELECT ${OP_COLUMNS} FROM operations
+  const result = await sql<RawOpRow & { type: string }>`
+    SELECT ${OP_COLUMNS}, type FROM ${sql.table(options.opTable ?? DEVICE_OP_TABLE)}
     WHERE entity_type = ${entityType} AND entity_id IN (${sql.join(entityIds.map((id) => sql`${id}`))})
       ${refused}
     ORDER BY entity_id, timestamp_ms, device_id, seq
   `.execute(db);
   for (const row of result.rows) {
+    // Checked before the signed text is read: a type this projection does not fold may be held
+    // only as a chain link, its text cleared (least-privilege sync).
+    if (options.folds !== undefined && !options.folds(row.type)) continue;
+    // A chain link whose text was cleared (sync/device-reads.ts) has nothing left to fold.
+    if (row.signedCoreJcs === '') continue;
     const op = reconstructOperation(row);
     const ops = byEntity.get(op.entityId);
     if (ops === undefined) byEntity.set(op.entityId, [op]);
@@ -186,6 +205,7 @@ export async function highestContiguousSeq<DB>(
   db: Kysely<DB>,
   from: number,
   column: OpSeqColumn,
+  opTable: string = DEVICE_OP_TABLE,
 ): Promise<number> {
   // Bounded, ordered scan of everything above the current watermark. Contiguity breaks at
   // the first gap; the loop stops there. `> from` uses the sequence column's own ordering.
@@ -208,7 +228,7 @@ export async function highestContiguousSeq<DB>(
   // a hardened line is not a verified line). The alias binds the key by construction.
   const seq = sql.ref(column);
   const result = await sql<{ seqValue: Int8Value }>`
-    SELECT ${seq} AS "seqValue" FROM operations
+    SELECT ${seq} AS "seqValue" FROM ${sql.table(opTable)}
     WHERE ${seq} > ${from}
     ORDER BY ${seq}
   `.execute(db);
@@ -235,4 +255,23 @@ export async function highestContiguousSeq<DB>(
   // the 2^53 claim has to hold. It throws rather than round (int8.ts) — a rounded watermark is a
   // wrong watermark returned with no error, which is task 46 again one magnitude up.
   return int8ToNumber(watermark, label);
+}
+
+/**
+ * This device's own changes of `types` that still hold their text, in chain order: the ones a
+ * person store folds when it opens, so a person's own changes not yet back from the server (or not
+ * yet sent) show at once (least-privilege sync). Refused ones never happened and are left out.
+ */
+export async function readOwnOps<DB>(
+  db: Kysely<DB>,
+  types: readonly string[],
+): Promise<SignedOperation[]> {
+  if (types.length === 0) return [];
+  const result = await sql<RawOpRow>`
+    SELECT ${OP_COLUMNS} FROM ${sql.table(DEVICE_OP_TABLE)}
+    WHERE arrival_seq IS NULL AND signed_core_jcs <> '' AND sync_status <> 'rejected'
+      AND type IN (${sql.join(types.map((t) => sql`${t}`))})
+    ORDER BY timestamp_ms, device_id, seq
+  `.execute(db);
+  return result.rows.map(reconstructOperation);
 }

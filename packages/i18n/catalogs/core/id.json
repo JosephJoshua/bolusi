@@ -54,6 +54,9 @@
   "unauthorized": {
     "askOwner": "Minta pemilik toko untuk memberi akses."
   },
+  "notOnDevice": {
+    "hint": "Data ini tidak disimpan di perangkat ini. Akan muncul begitu tersambung."
+  },
   "opType": {
     "unknown": "Perubahan"
   },
@@ -70,6 +73,7 @@
     "LAST_ADMIN_PROTECTED": "Tidak bisa. Harus selalu ada minimal satu pemilik utama yang aktif.",
     "ROLE_IN_USE": "Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.",
     "CLOCK_AHEAD": "Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.",
+    "NOT_ON_DEVICE": "Perlu internet untuk membuka ini.",
     "IDEMPOTENCY_CONFLICT": "Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.",
     "RATE_LIMITED": "Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.",
     "UNEXPECTED": "Terjadi kesalahan. Coba lagi.",

@@ -117,6 +117,7 @@ describe('open path', () => {
       'PRAGMA foreign_keys = ON',
       'PRAGMA busy_timeout = 5000',
       'PRAGMA synchronous = NORMAL',
+      'PRAGMA temp_store = MEMORY',
     ]);
     expect(CLIENT_PRAGMAS).toEqual(h.log.executed.slice(0, CLIENT_PRAGMAS.length));
   });

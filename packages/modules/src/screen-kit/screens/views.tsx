@@ -59,6 +59,16 @@ export function QueryView<TData>({
       if (query.code === 'ENTITY_NOT_FOUND') {
         return <EmptyState title={t('core.errors.ENTITY_NOT_FOUND')} testID={`${testID}.empty`} />;
       }
+      // Not kept on this device and not pulled for this person yet: it fills in once online.
+      if (query.code === 'NOT_ON_DEVICE') {
+        return (
+          <EmptyState
+            title={t('core.errors.NOT_ON_DEVICE')}
+            hint={t('core.notOnDevice.hint')}
+            testID={`${testID}.notOnDevice`}
+          />
+        );
+      }
       return (
         <ErrorState
           title={translateErrorCode(query.code)}

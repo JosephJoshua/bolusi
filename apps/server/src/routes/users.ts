@@ -5,6 +5,7 @@ import { buildPinVerifierRow, type TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
+import { endPersonSessionsOf } from '../auth/person-sessions.js';
 import {
   countActiveTenantAdmins,
   hasPermission,
@@ -587,6 +588,13 @@ export function createUsersRouter(deps: ServerDeps) {
             }
 
             await writeVerifier(db, tenantId, targetUserId, body.verifier);
+            // A new PIN ends the person sessions the old one opened, except the one of the person
+            // changing their own PIN here, who just proved it.
+            await endPersonSessionsOf(db, {
+              userId: targetUserId,
+              now: t,
+              ...(acting.userId === targetUserId ? { keepDeviceId: device.deviceId } : {}),
+            });
             await appendAudit(db, tenantId, {
               actorUserId: acting.userId,
               action: 'pin_verifier.replaced',

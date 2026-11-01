@@ -43,6 +43,7 @@
 // migrations below run against a REAL SQLite engine in CI rather than a fake handle.
 import {
   createProjectionEngine,
+  DeviceReads,
   InvalidationBus,
   readDeviceId,
   readSyncState,
@@ -64,6 +65,8 @@ import {
 
 import { assertDatabaseKeyBinding } from './db-identity.js';
 import { CLIENT_MODULES } from './modules.js';
+import { createPersonAccess, type PersonAccess } from './person-access.js';
+import { knowsOp } from './known-op.js';
 
 /** The database-key store a boot needs: read the key, and mint it once on a first boot. */
 export interface BootDbKeyStore extends DbKeyStore {
@@ -110,6 +113,13 @@ export interface Bootstrapped {
    * place. Exposing it is the difference between a live query and a query that runs once.
    */
   readonly invalidation: InvalidationBus;
+  /**
+   * What this device holds (least-privilege sync): the read set the server last sent, followed by
+   * every pull. The engine folds only these types; the rest stay chain links (core device-reads).
+   */
+  readonly deviceReads: DeviceReads;
+  /** The signed-in person's reads beyond the device, pulled into memory (person-access.ts). */
+  readonly person: PersonAccess;
   /** Versions applied by THIS boot — empty on every boot after the first (the runner is idempotent). */
   readonly migrationsApplied: readonly number[];
   /**
@@ -185,8 +195,21 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     //    subscribe module screens to it — see `Bootstrapped.invalidation`.
     // Given the connection's transaction boundaries so listeners only see committed rows.
     const invalidation = new InvalidationBus(db);
+    // Read before the engine: it folds only what the device holds (least-privilege sync).
+    const syncState = await readSyncState(db.db as never);
+    const deviceReads = new DeviceReads(registry.operations, syncState.readSet);
     const engine = createProjectionEngine<never>(db.db as never, registry.projections, {
       invalidation,
+      folds: deviceReads.folds,
+    });
+    const person = createPersonAccess({
+      db,
+      registry,
+      invalidation,
+      deviceReads,
+      crypto: deps.crypto,
+      clock: deps.clock,
+      knowsOp: (op) => knowsOp(registry.operations, op),
     });
 
     // Is this device enrolled? `readDeviceId` returns the id `meta_kv` holds (task 88) or null. The
@@ -204,17 +227,18 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     //    reaches the wipe. `deviceId` is passed for the defence-in-depth "enrolled but unbound" case.
     await assertDatabaseKeyBinding(db.db as never, db.columnCipherMarker, deviceId);
 
-    // 7. The device's sync state, read from the seeded singleton. `readSyncState` THROWS when the
-    //    row is missing rather than returning defaults — a missing row is a broken migration, and
-    //    substituting `cursor: 0` would silently re-pull the world and look like a sync bug rather
-    //    than the schema failure it is. That throw is why this call is also a migration assertion.
-    const syncState = await readSyncState(db.db as never);
+    // 7. The device's sync state (read above, before the engine), from the seeded singleton.
+    //    `readSyncState` THROWS when the row is missing rather than returning defaults — a missing
+    //    row is a broken migration, and substituting `cursor: 0` would silently re-pull the world
+    //    and look like a sync bug rather than the schema failure it is.
 
     return {
       db,
       registry,
       engine,
       invalidation,
+      deviceReads,
+      person,
       migrationsApplied: applied,
       syncState,
       deviceId,

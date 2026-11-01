@@ -135,16 +135,34 @@ fails a build, a boot or a test rather than waiting for review:
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
 - Every op type also declares `read`: the permission a person needs to see its ops.
-  A device is sent only the ops its read set covers (`sync/read-scope.ts`); a shared
-  store device gets what the business's staff roles may read or be given in the role
-  editor (owners sign in there too, so Belanja reaches the counter PC), so owner-only
-  data, such as part costs, never lands on it. A phone set up as one person's own (`devices.personal_user_id`, chosen at
-  setup) gets what that person may read, and only they sign in on it. The server
-  takes its ops only as that person (its genesis and re-enrolment record aside), so a
-  deactivated person's phone writes nothing more. When the set shrinks, the device drops those pulled ops and re-folds;
-  when it grows, it catches up on the older ones. `null` is for records every device
-  needs (sign-in, PIN, device). A record with fields for different readers is split
-  into separate op types, one per reader (part costs live apart from stock moves).
+  Sync follows least privilege, the same rule for every person and role. A device is
+  sent only the ops its read set covers (`sync/read-scope.ts`): a shared store device
+  gets what its store's active non-owner staff may read, and a phone set up as one
+  person's own (`devices.personal_user_id`, chosen at setup) gets what that person may
+  read, and only they sign in on it. The server takes a personal phone's ops only as
+  that person (its genesis and re-enrolment record aside), so a deactivated person's
+  phone writes nothing more. When the set shrinks, the device drops those pulled ops
+  and re-folds; when it grows, it catches up on the older ones. `null` is for records
+  every device needs (sign-in, PIN, device).
+- Someone who may read more than the device holds (an owner on the counter PC) gets
+  the rest only while signed in: the server checks their PIN (`POST
+/v1/sync/person-session`, a `bps_` token bound to device and person), and their
+  extra (their reads minus the device's) is pulled with `person: true` into an
+  in-memory store (core `sync/person-store.ts`, device `person-access.ts`). It is the
+  same pull, verification and appliers, folding into SQLite temp tables that shadow
+  the device's own, so module queries read it unchanged; it is dropped on sign-out,
+  switch, idle lock and close. Their own changes of types the device does not hold
+  stay in its log as chain links and lose their text once sent (`sync/device-reads.ts`).
+  A query whose data is not here (or not all pulled yet) throws `NOT_ON_DEVICE`
+  ("Perlu internet"), never an empty list. Limits, accepted for now: the extra is pulled
+  again at every sign-in (nothing stays between sessions); a person granted more while
+  signed in sees it from their next sign-in; and the server's PIN check guards against
+  a modified app, not a rooted device, which holds every person's argon2 PIN verifier
+  for offline sign-in, so a 6-digit PIN can be cracked off it. A new PIN ends the
+  person's other sessions. The check uses a query's own `permission`, so a query must
+  not join a table read with another permission. Each projection table must be read with one permission, so a record with
+  fields for different readers is split into separate op types and tables, one per
+  reader (part costs live apart from stock moves; `projectionTableReads` throws otherwise).
 - When a type's rule judges only newer versions, set `minPushVersion` on the type. The
   server refuses a new push below it as `SCHEMA_INVALID`; stored ops still fold at every version.
   Signed ops can't be upgraded, so raise a floor only once the app that signs the newer

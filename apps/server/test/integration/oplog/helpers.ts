@@ -418,6 +418,36 @@ export async function seedStaffRole(db: Kysely<DB>, tenantId: string): Promise<v
 }
 
 /**
+ * A staff person working at `storeId` who holds the staff role there (seedStaffRole first). A shared
+ * store device is synced what its store's active staff may read, so a store whose devices should
+ * receive staff-level data needs someone working there, as a real one does. Idempotent per store.
+ */
+export async function seedStaffMember(
+  db: Kysely<DB>,
+  tenantId: string,
+  storeId: string,
+): Promise<string> {
+  const userId = `${storeId.slice(0, 24)}57aff0000000`;
+  const roleId = `${tenantId.slice(0, 24)}5aff00000000`;
+  await db
+    .insertInto('users')
+    .values({ id: userId, tenantId, name: 'staff', createdAt: 1_726_000_000_000n })
+    .onConflict((oc) => oc.column('id').doNothing())
+    .execute();
+  await db
+    .insertInto('userStores')
+    .values({ userId, storeId, tenantId })
+    .onConflict((oc) => oc.doNothing())
+    .execute();
+  await db
+    .insertInto('userRoles')
+    .values({ tenantId, userId, roleId, storeId })
+    .onConflict((oc) => oc.doNothing())
+    .execute();
+  return userId;
+}
+
+/**
  * Seed ONLY the devices row for a world whose tenant/store/user already exist — a second device
  * inside an existing tenant, which is what a cross-device splice (SEC-OPLOG-04) needs.
  */
