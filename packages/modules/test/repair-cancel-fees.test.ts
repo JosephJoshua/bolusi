@@ -253,6 +253,73 @@ describe('what a cancel charges', () => {
   });
 });
 
+describe('never more than the repair', () => {
+  // Joseph, 2026-11-01: no customer pays more to cancel than to repair.
+  test('the store’s fee stops at the agreed repair price; with no price yet it stands', async () => {
+    const h = await harness(5134);
+    await h.run('setCancelFees', { beforeWork: 80_000, afterWork: 160_000 }, h.storeOwnerId);
+    const cheap = (
+      (await h.run(
+        'openTicket',
+        intake(h, {
+          quoteLines: [{ kind: 'labour', description: 'Ganti tombol', amount: 100_000 }],
+        }),
+        h.cashierId,
+      )) as { ticketId: string }
+    ).ticketId;
+    await h.run('startWork', { ticketId: cheap, beforePhotos: [h.photo(1)] }, h.technicianId);
+    const unpriced = (
+      (await h.run(
+        'openTicket',
+        intake(h, {
+          quoteLines: [{ kind: 'labour', description: 'Cek dulu', amount: 0 }],
+        }),
+        h.cashierId,
+      )) as {
+        ticketId: string;
+      }
+    ).ticketId;
+    const dear = await openTicket(h);
+
+    for (const ticketId of [cheap, unpriced, dear])
+      await h.run('cancelTicket', { ticketId, reason: 'Batal' }, h.storeOwnerId);
+
+    expect(await ticket(h, cheap)).toMatchObject({
+      cancelFee: 100_000,
+      cancelStandardFee: 100_000,
+    });
+    expect(await ticket(h, unpriced)).toMatchObject({
+      cancelFee: 80_000,
+      cancelStandardFee: 80_000,
+    });
+    expect(await ticket(h, dear)).toMatchObject({ cancelFee: 80_000, cancelStandardFee: 80_000 });
+  });
+
+  test('the server takes a capped cancel, and one from a phone that does not cap yet', async () => {
+    const a = await harness(5135);
+    const server = await peer(a, 5136);
+    await a.run('setCancelFees', { beforeWork: 80_000, afterWork: 0 }, a.storeOwnerId);
+    const { ticketId } = (await a.run(
+      'openTicket',
+      intake(a, { quoteLines: [{ kind: 'labour', description: 'Ganti tombol', amount: 50_000 }] }),
+      a.cashierId,
+    )) as { ticketId: string };
+    await a.run('cancelTicket', { ticketId, reason: 'Batal' }, a.storeOwnerId);
+    const ops = await a.ownOps();
+    const cancel = ops.at(-1)!;
+    expect(cancel.payload).toMatchObject({ fee: 50_000, standardFee: 50_000 });
+    let arrival = 0;
+    for (const op of ops.slice(0, -1)) await server.deliverPulled(op, (arrival += 1));
+
+    await server.checkRule(cancel);
+    const uncapped = {
+      ...cancel,
+      payload: { ...cancel.payload, fee: 80_000, standardFee: 80_000 },
+    } as typeof cancel;
+    await server.checkRule(uncapped);
+  });
+});
+
 describe('the owners’ list of cancels', () => {
   test('lists only cancelled tickets, latest cancel first, with fee and who', async () => {
     const h = await harness(5107);

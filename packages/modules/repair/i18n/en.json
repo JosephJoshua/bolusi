@@ -105,6 +105,8 @@
     "refundsDp": "At pickup, the customer gets {amount} of the DP back.",
     "reason": "Why is it cancelled?",
     "consequence": "The customer only pays the cancellation fee when collecting the phone.",
+    "consequenceFree": "The phone goes back at no charge.",
+    "noFee": "No fee",
     "fee": "Cancellation fee",
     "beforeWork": "Work hasn’t started",
     "afterWork": "Work has started",

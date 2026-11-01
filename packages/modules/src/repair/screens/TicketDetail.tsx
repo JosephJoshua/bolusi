@@ -55,6 +55,7 @@ import {
 
 import { tn, type RepairKey } from '../i18n.js';
 import {
+  cancelFeeText,
   actionKey,
   downPaymentTitleKey,
   historyEntry,
@@ -390,6 +391,7 @@ export function TicketDetail({
         <CancelStep
           {...stepProps}
           workStarted={ticket?.workStarted ?? false}
+          price={ticket?.quoteTotal ?? 0}
           claimOf={ticket?.claimOfTicketId ?? null}
           onAsked={asked}
           downPayment={ticket?.downPayment ?? 0}
@@ -1100,7 +1102,7 @@ export function TicketDetail({
                 style={[styles.totalValue, styles.amount, repairStyles.rowValue]}
                 testID={`${testID}.cancelFee`}
               >
-                {formatMoney(row.cancelFee ?? 0)}
+                {cancelFeeText(row.cancelFee ?? 0)}
               </Text>
             </View>
             <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>

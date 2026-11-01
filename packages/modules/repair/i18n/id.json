@@ -105,6 +105,8 @@
     "refundsDp": "Saat ambil HP, pelanggan dapat kembali {amount} dari DP.",
     "reason": "Kenapa dibatalkan?",
     "consequence": "Pelanggan cukup bayar biaya pembatalan saat ambil HP.",
+    "consequenceFree": "HP dikembalikan tanpa biaya.",
+    "noFee": "Tanpa biaya",
     "fee": "Biaya pembatalan",
     "beforeWork": "Belum mulai dikerjakan",
     "afterWork": "Sudah mulai dikerjakan",

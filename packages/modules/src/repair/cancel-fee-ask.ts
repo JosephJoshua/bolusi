@@ -15,7 +15,13 @@ import { useCancelFees, useRepairQuery, useRepairRuntime } from './runtime.js';
 
 export type CancelFeeTicket = Pick<
   TicketDetailRow,
-  'id' | 'ticketNumber' | 'customerName' | 'workStarted' | 'claimOfTicketId' | 'quoteLines'
+  | 'id'
+  | 'ticketNumber'
+  | 'customerName'
+  | 'workStarted'
+  | 'claimOfTicketId'
+  | 'quoteLines'
+  | 'quoteTotal'
 >;
 
 /** Where a fee change stands against a limit, from what the servisan's money says now. */

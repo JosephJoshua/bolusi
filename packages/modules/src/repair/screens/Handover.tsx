@@ -21,6 +21,7 @@ import {
   type,
   Text,
 } from '@bolusi/ui';
+import { cancelFeeText } from '../labels.js';
 import type { MediaRef } from '@bolusi/schemas';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -279,7 +280,9 @@ export function Handover({
                   testID={`${testID}.total`}
                 >
                   {/* Before any reduction, which the rows below take off. */}
-                  {formatMoney(amountOwed(shown) + shown.reduced)}
+                  {shown.outcome === 'cancelled'
+                    ? cancelFeeText(amountOwed(shown) + shown.reduced)
+                    : formatMoney(amountOwed(shown) + shown.reduced)}
                 </RollingText>
               </View>
               {shown.outcome === 'cancelled' ? (

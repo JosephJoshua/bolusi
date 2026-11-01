@@ -12,6 +12,7 @@ const ticket = (discount = 0): CancelFeeTicket => ({
   customerName: 'Budi',
   workStarted: false,
   claimOfTicketId: null,
+  quoteTotal: 0,
   quoteLines:
     discount === 0
       ? []

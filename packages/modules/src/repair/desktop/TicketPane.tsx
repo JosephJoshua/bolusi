@@ -92,6 +92,7 @@ import { ta } from '../../approvals/i18n.js';
 import type { ApprovalRow } from '../../approvals/queries.js';
 import { describeRepairApproval } from '../approval-copy.js';
 import {
+  cancelFeeText,
   actionKey,
   downPaymentTitleKey,
   historyEntry,
@@ -620,7 +621,7 @@ export function TicketPane({
             <Fact
               // Once cut, the bill is what the customer pays, as the board's total says.
               label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancel.fee')}
-              value={formatMoney((row.cancelFee ?? 0) - row.reduced)}
+              value={cancelFeeText((row.cancelFee ?? 0) - row.reduced)}
               action={contextual('changeCancelFee', row)}
               testId="repair.desk.ticket.cancelFeeFact"
             />
@@ -748,7 +749,7 @@ export function TicketPane({
                 className="tabular text-title font-bold text-text"
                 data-testid="repair.desk.ticket.cancelFee"
               >
-                {formatMoney(row.cancelFee ?? 0)}
+                {cancelFeeText(row.cancelFee ?? 0)}
               </p>
             </div>
             <p className="text-small text-text-muted">{tn('repair.price.notCharged')}</p>
@@ -1018,6 +1019,7 @@ export function TicketPane({
           <CancelDialog
             {...common}
             workStarted={row.workStarted}
+            price={row.quoteTotal}
             claimOf={row.claimOfTicketId}
             downPayment={row.downPayment ?? 0}
             discounted={discountsStanding(row.quoteLines)}

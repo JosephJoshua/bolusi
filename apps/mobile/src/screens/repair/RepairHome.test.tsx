@@ -1062,9 +1062,9 @@ describe('cancelling (owners; the counter asks)', () => {
     expect(screen.query(`repair.board.row.${kept}.feeChanged`)).toBeNull();
     expect(screen.query(`repair.board.row.${changed}.feeChanged`)).not.toBeNull();
 
-    // The ticket leads with what is owed, not the repair total it no longer charges.
+    // The ticket leads with what is owed, not the repair total it no longer charges: nothing here.
     await press(screen, `repair.board.row.${changed}`);
-    expect(text(screen, 'repair.ticket.cancelFee')).toBe('Rp 0');
+    expect(text(screen, 'repair.ticket.cancelFee')).toBe('Tanpa biaya');
     expect(
       StyleSheet.flatten(screen.get('repair.ticket.total').props['style']).textDecorationLine,
     ).toBe('line-through');
