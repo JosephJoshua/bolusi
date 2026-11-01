@@ -63,8 +63,12 @@ test('upright, the handover keeps the photo and signature thumbnail-sized beside
   await tap(page, 'repair.board.row.t-4');
   await tap(page, 'repair.ticket.action.handover');
   await expect(page.getByTestId('repair.handover.columns.two')).toBeVisible();
-  expect(await width(page, 'repair.handover.photo')).toBeLessThanOrEqual(tokens.size.tileMax);
-  expect(await width(page, 'repair.handover.signature')).toBeLessThanOrEqual(tokens.size.tileMax);
+  expect(await width(page, 'repair.handover.photo')).toBeLessThanOrEqual(
+    tokens.size.tileTarget * 1.3,
+  );
+  expect(await width(page, 'repair.handover.signature')).toBeLessThanOrEqual(
+    tokens.size.tileTarget * 1.3,
+  );
   await shoot(page, 'handover-upright');
 });
 

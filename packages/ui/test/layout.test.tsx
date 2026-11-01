@@ -99,14 +99,19 @@ describe('Columns', () => {
 });
 
 describe('TileGrid', () => {
-  test('three photos to a phone row, more as the row grows, never past the tile size', () => {
+  test('three photos to a phone row, more as the row grows, each near the tile size', () => {
     expect(tileColumns(328, 3)).toBe(3);
     expect(tileColumns(328, 2)).toBe(2);
+    // A big phone (411 dp) keeps its two handover captures half the row each, as main had.
+    expect(tileColumns(379, 2)).toBe(2);
+    expect(tileColumns(379, 3)).toBe(3);
     expect(tileColumns(688, 3)).toBe(4);
     expect(tileColumns(1008, 2)).toBe(6);
-    for (const width of [328, 500, 688, 1008]) {
+    for (const width of [340, 379, 500, 688, 1008]) {
       const n = tileColumns(width, 2);
-      expect((width - space.sm * (n - 1)) / n).toBeLessThanOrEqual(size.tileMax);
+      const tile = (width - space.sm * (n - 1)) / n;
+      expect(tile).toBeGreaterThanOrEqual(size.tileTarget * 0.75);
+      expect(tile).toBeLessThanOrEqual(size.tileTarget * 1.3);
     }
   });
 

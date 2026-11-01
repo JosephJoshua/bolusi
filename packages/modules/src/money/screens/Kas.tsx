@@ -85,9 +85,12 @@ export function KasBoard({
   const since = dayStart(now());
   const turnedDown = useVoidRequests().turnedDown.filter((row) => (row.decidedAt ?? 0) >= since);
   const about = useAskedAbout(turnedDown);
-  // What moved and what is owed sit beside the drawer; on a quiet day there is none, and the
-  // drawer keeps one readable column instead of a wide half-empty page.
-  const hasSide = moves.length > 0 || open.owed.length > 0 || open.owedBack.length > 0;
+  // Today's takings, what moved and what is owed sit beside the drawer. A blind count shows none
+  // of the takings, and on a quiet day nothing else may be there: the drawer then keeps one
+  // readable column instead of a wide half-empty page.
+  const showsTakings = entriesReady && may.seeExpected;
+  const hasSide =
+    showsTakings || moves.length > 0 || open.owed.length > 0 || open.owedBack.length > 0;
 
   return (
     <AppShell
@@ -199,44 +202,43 @@ export function KasBoard({
                 />
               </Section>
             )}
-
-            {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
-            {entriesReady && may.seeExpected ? (
-              <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
-                {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
-                  <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
-                ) : (
-                  <>
-                    {moneyIn.methods.map((method) => (
-                      <Row
-                        key={method.account}
-                        label={accountLabel(method.account, accountRows)}
-                        value={formatMoney(method.amount)}
-                        testID={`${testID}.in.${method.account}`}
-                      />
-                    ))}
-                    {moneyIn.refunded === 0 ? null : (
-                      <Row
-                        label={tm('money.kas.refunded')}
-                        value={formatMoney(-moneyIn.refunded)}
-                        testID={`${testID}.in.refunded`}
-                      />
-                    )}
-                    <Row
-                      label={tm('money.kas.total')}
-                      value={formatMoney(moneyIn.total)}
-                      strong
-                      testID={`${testID}.in.total`}
-                    />
-                  </>
-                )}
-              </Section>
-            ) : null}
           </>
         }
         end={
           !hasSide ? null : (
             <>
+              {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+              {showsTakings ? (
+                <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
+                  {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
+                    <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
+                  ) : (
+                    <>
+                      {moneyIn.methods.map((method) => (
+                        <Row
+                          key={method.account}
+                          label={accountLabel(method.account, accountRows)}
+                          value={formatMoney(method.amount)}
+                          testID={`${testID}.in.${method.account}`}
+                        />
+                      ))}
+                      {moneyIn.refunded === 0 ? null : (
+                        <Row
+                          label={tm('money.kas.refunded')}
+                          value={formatMoney(-moneyIn.refunded)}
+                          testID={`${testID}.in.refunded`}
+                        />
+                      )}
+                      <Row
+                        label={tm('money.kas.total')}
+                        value={formatMoney(moneyIn.total)}
+                        strong
+                        testID={`${testID}.in.total`}
+                      />
+                    </>
+                  )}
+                </Section>
+              ) : null}
               {moves.length === 0 ? null : (
                 <Section title={tm('money.kas.movesToday')} testID={`${testID}.moves`}>
                   {moves.map(({ entry, label, delta }) => (

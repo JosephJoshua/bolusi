@@ -112,9 +112,13 @@ export function Columns({
 
 const TILE_GAP = space.sm;
 
-/** How many tiles share a row of this width: at least `min`, and as many as keep each thumbnail-sized. */
+/**
+ * How many tiles share a row of this width: at least `min`, else as many as keep each nearest the
+ * target size. Nearest, not "never past it": a big phone's two handover captures stay half the row
+ * each, as on any phone, instead of a third tile's gap opening beside them.
+ */
 export function tileColumns(width: number, min: number): number {
-  return Math.max(min, Math.ceil((width + TILE_GAP) / (size.tileMax + TILE_GAP)));
+  return Math.max(min, Math.round((width + TILE_GAP) / (size.tileTarget + TILE_GAP)));
 }
 
 export function TileGrid({

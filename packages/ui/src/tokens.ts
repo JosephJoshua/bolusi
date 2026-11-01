@@ -221,8 +221,11 @@ export const size = Object.freeze({
   wideMax: 1040,
   /** The narrowest column `Columns` lays out: a 360 dp phone's content, so nothing inside rewraps. */
   columnMin: 328,
-  /** The largest a photo or capture tile in a `TileGrid` grows before another tile joins the row. */
-  tileMax: 180,
+  /**
+   * The size a photo or capture tile in a `TileGrid` keeps near: a wider row takes another tile
+   * rather than growing them, so a tile stays within about a quarter of this either way.
+   */
+  tileTarget: 160,
   /** A person's identity at the top of a PIN screen or their own page: a face, not a bullet. */
   avatarHero: 64,
   /** §3.11 FreshnessCell geometry — the battery-cell signature. */

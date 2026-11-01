@@ -116,7 +116,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   once two phone-width columns fit and stack on a phone, so each column is laid
   out exactly as on a phone.
 - Photo and capture tiles go in a `TileGrid`, which adds tiles to a row rather
-  than letting one grow past `size.tileMax`. Strips and edge-to-edge rows bleed
+  than letting each grow far past `size.tileTarget`. Strips and edge-to-edge rows bleed
   through `useBleed()`, so beside another column they never run into the gap.
 - Check every changed screen at 360 x 640, 800 x 1280, 960 x 600 and
   1280 x 800, and at 1.3x font. A short landscape tablet is the tightest case:
