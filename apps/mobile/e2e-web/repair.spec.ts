@@ -267,6 +267,23 @@ test('the counter decides a proposal and the agreed total grows', async ({ page 
   await shoot(page, 'proposal-applied');
 });
 
+// Regression (QA round D): the board unmounts while a servisan is open on a phone, and coming back
+// put an owner working through Persetujuan back on Aktif.
+test('the picked queue is still picked after opening a servisan and coming back', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  // A new one in Aktif, never in Siap diambil.
+  await expect(page.getByTestId('repair.board.row.t-1')).toBeVisible();
+  await tap(page, 'repair.board.views.pickup');
+  await expect(page.getByTestId('repair.board.row.t-1')).toHaveCount(0);
+  await tap(page, 'repair.board.row.t-4');
+  await expect(page.getByTestId('repair.ticket')).toBeVisible();
+  await page.getByLabel('Kembali').first().click();
+  await expect(page.getByTestId('repair.board.row.t-4')).toBeVisible();
+  await expect(page.getByTestId('repair.board.row.t-1')).toHaveCount(0);
+});
+
 test('handover takes the rest of the bill, then the photo and the signature', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');

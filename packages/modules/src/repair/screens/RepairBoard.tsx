@@ -87,6 +87,13 @@ export interface RepairBoardProps {
    * step is then the screen's primary action, so "Servisan baru" steps back to an outlined button.
    */
   readonly selectedTicketId?: string | null | undefined;
+  /**
+   * The picked view, kept by the screen that holds the board, so opening a servisan and coming
+   * back lands on the same queue (an owner working through Persetujuan). Without it the board
+   * keeps its own and opens on its default.
+   */
+  readonly view?: BoardView | null | undefined;
+  readonly onViewChange?: ((view: BoardView) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -111,11 +118,26 @@ export function RepairBoard({
   waitingDraft = null,
   onOpenSyncStatus,
   selectedTicketId = null,
+  view: heldView,
+  onViewChange,
   testID = 'repair.board',
 }: RepairBoardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  const [view, setView] = useState<BoardView>(() => defaultBoardView(can));
+  // A kept view this user may not see (a colleague took the phone over) is not offered.
+  const kept =
+    heldView !== null && heldView !== undefined && boardViews(can, 1).includes(heldView)
+      ? heldView
+      : null;
+  const [ownView, setOwnView] = useState<BoardView>(() => kept ?? defaultBoardView(can));
+  const view = kept ?? ownView;
+  const setView = useCallback(
+    (next: BoardView) => {
+      setOwnView(next);
+      onViewChange?.(next);
+    },
+    [onViewChange],
+  );
   const [text, setText] = useState('');
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -228,7 +250,7 @@ export function RepairBoard({
   const viewGone = loaded !== null && view === 'approvals' && waitingApprovals === 0;
   useEffect(() => {
     if (viewGone) setView(defaultBoardView(can));
-  }, [viewGone, can]);
+  }, [viewGone, can, setView]);
   const showCancel = !searching && view === 'cancelled';
   // The counter and owners call the customer about a phone left too long; technicians need not.
   const flagUncollected = flagsUncollected(can);
