@@ -419,6 +419,14 @@ describe('what customers owe', () => {
     expect(screen.all('money.receive.primary')[0]!.props['disabled']).toBe(true);
     await press(screen, 'money.receive.pay.line0.method.cash');
     expect(screen.query('money.receive.pay.line0.pick')).toBeNull();
+    // A second line names no method before one is picked (QA round B); then take it away again.
+    await press(screen, 'money.receive.pay.add');
+    const removes = screen.all('money.receive.pay.line0.remove');
+    expect(removes[0]!.props['accessibilityLabel']).toBe('Hapus pembayaran Tunai');
+    const second = screen.all('money.receive.pay.line1.remove')[0]!;
+    expect(second.props['accessibilityLabel']).toBe('Hapus pembayaran ini');
+    await press(screen, 'money.receive.pay.line1.remove');
+    expect(screen.query('money.receive.pay.line1.remove')).toBeNull();
     // Handed over exactly: no "Kembalian Rp 0" (round 2 QA, F14); more shows the change.
     type(screen, 'money.receive.pay.line0.tendered', '500000');
     await settle();

@@ -204,7 +204,11 @@ pnpm exec vitest run --project core test/sync/staleness.test.ts
 
 For schema changes, migrate a disposable DB and run `pnpm db:codegen:check`.
 Client type generation is `pnpm --filter @bolusi/db-client db:codegen`; inspect its diff.
-Automatic CI runs checks once plus a secret scan. Native Android/iOS builds are
+The phone screens also run in a browser over the demo runtime:
+`pnpm --filter @bolusi/mobile test:visual` exports the web bundle and taps through each flow
+(`apps/mobile/e2e-web/`). Run it after changing phone screens or the flows they show.
+
+Automatic CI runs checks once, the phone screens in a browser, plus a secret scan. Native Android/iOS builds are
 manually dispatched in GitHub Actions; use them for native changes and mobile
 verification. They do not establish physical-device performance.
 The native harness includes the canonicalization vectors on the app's Hermes
