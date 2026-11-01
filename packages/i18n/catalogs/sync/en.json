@@ -32,7 +32,7 @@
   "rejected": {
     "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
     "title": "Refused by the server ({count})",
-    "explain": "Also undone on this phone. Redo them if they’re still needed.",
+    "explain": "These changes didn’t count. Each one says why.",
     "opMeta": "{opType} · {time}",
     "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Technical details",
@@ -64,7 +64,7 @@
     "savedHere": "{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}",
     "offline": "Changes are saved on this computer and sent when it is online.",
     "mediaFailed": "{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}",
-    "rejectedExplain": "Also undone on this computer. Redo them if they’re still needed.",
+    "rejectedExplain": "These changes didn’t count. Each one says why.",
     "rejectedBanner": "{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}"
   },
   "updateNeeded": {

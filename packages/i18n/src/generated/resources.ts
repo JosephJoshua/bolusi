@@ -657,7 +657,7 @@ const source = {
       rejected: {
         banner: '{count} perubahan ditolak server. Ketuk untuk melihat.',
         title: 'Ditolak server ({count})',
-        explain: 'Sudah dibatalkan juga di HP ini. Ulangi kalau masih perlu.',
+        explain: 'Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.',
         opMeta: '{opType} · {time}',
         opMetaSubject: '{opType} · {subject} · {time}',
         technicalDetails: 'Detail teknis',
@@ -686,7 +686,7 @@ const source = {
         savedHere: '{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.',
         offline: 'Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.',
         mediaFailed: '{count} foto belum bisa dikirim. Fotonya aman di komputer ini.',
-        rejectedExplain: 'Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.',
+        rejectedExplain: 'Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.',
         rejectedBanner: '{count} perubahan ditolak server.',
       },
       updateNeeded: {
@@ -1466,7 +1466,7 @@ export const resources = {
           banner:
             '{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}',
           title: 'Refused by the server ({count})',
-          explain: 'Also undone on this phone. Redo them if they’re still needed.',
+          explain: 'These changes didn’t count. Each one says why.',
           opMeta: '{opType} · {time}',
           opMetaSubject: '{opType} · {subject} · {time}',
           technicalDetails: 'Technical details',
@@ -1499,7 +1499,7 @@ export const resources = {
           offline: 'Changes are saved on this computer and sent when it is online.',
           mediaFailed:
             '{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}',
-          rejectedExplain: 'Also undone on this computer. Redo them if they’re still needed.',
+          rejectedExplain: 'These changes didn’t count. Each one says why.',
           rejectedBanner:
             '{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}',
         },
