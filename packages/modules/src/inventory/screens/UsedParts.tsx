@@ -157,40 +157,64 @@ export function TakePartStep({
   const searchText = typed === '' ? '' : settled;
   const query = useTakeChoices(searchText, device, reloadNonce);
 
+  // How many is asked right under the picked row, where the finger is: a stepper at the top of a
+  // long list is out of sight, and the part would be taken as one. The row already says its stock.
+  const qtyStepper = (part: ItemRow, showStock: boolean): React.JSX.Element => (
+    <QuantityStepper
+      label={ti('inventory.use.qty')}
+      value={qty}
+      onChange={setQty}
+      min={1}
+      max={MAX_MOVEMENT_QTY}
+      decreaseLabel={ti('inventory.stepper.decrease')}
+      increaseLabel={ti('inventory.stepper.increase')}
+      caption={
+        showStock ? ti('inventory.list.stockCount', { count: stockText(part.onHand) }) : undefined
+      }
+      testID={`${testID}.qty`}
+    />
+  );
+
   const choice = (row: ItemRow): React.JSX.Element => {
     const selected = picked?.id === row.id;
     return (
-      <Pressable
-        key={row.id}
-        accessibilityRole="radio"
-        accessibilityState={{ selected }}
-        accessibilityLabel={`${row.name}, ${ti('inventory.list.stockCount', { count: stockText(row.onHand) })}`}
-        onPress={() => {
-          setPicked(row);
-          setQty(1);
-        }}
-        style={({ pressed }) => [
-          styles.choice,
-          selected ? styles.choiceSelected : null,
-          pressed ? styles.choicePressed : null,
-        ]}
-        testID={`${testID}.choice.${row.id}`}
-      >
-        <View style={styles.usedText}>
-          <Text style={styles.name}>{row.name}</Text>
-          {row.fits === null ? null : (
-            <Text style={styles.muted} numberOfLines={1}>
-              {row.fits}
-            </Text>
-          )}
-        </View>
-        <Text style={[styles.stock, row.onHand < 0 ? styles.stockOut : null]}>
-          {ti('inventory.list.stockCount', { count: stockText(row.onHand) })}
-        </Text>
-        {selected ? <Icon name="check" size={size.iconInline} color={color.primary} /> : null}
-      </Pressable>
+      <View key={row.id}>
+        <Pressable
+          accessibilityRole="radio"
+          accessibilityState={{ selected }}
+          accessibilityLabel={`${row.name}, ${ti('inventory.list.stockCount', { count: stockText(row.onHand) })}`}
+          onPress={() => {
+            setPicked(row);
+            setQty(1);
+          }}
+          style={({ pressed }) => [
+            styles.choice,
+            selected ? styles.choiceSelected : null,
+            pressed ? styles.choicePressed : null,
+          ]}
+          testID={`${testID}.choice.${row.id}`}
+        >
+          <View style={styles.usedText}>
+            <Text style={styles.name}>{row.name}</Text>
+            {row.fits === null ? null : (
+              <Text style={styles.muted} numberOfLines={1}>
+                {row.fits}
+              </Text>
+            )}
+          </View>
+          <Text style={[styles.stock, row.onHand < 0 ? styles.stockOut : null]}>
+            {ti('inventory.list.stockCount', { count: stockText(row.onHand) })}
+          </Text>
+          {selected ? <Icon name="check" size={size.iconInline} color={color.primary} /> : null}
+        </Pressable>
+        {selected ? <View style={styles.inlineQty}>{qtyStepper(row, false)}</View> : null}
+      </View>
     );
   };
+  // While a search loads, no list shows either: the stepper waits for it rather than jumping.
+  const listed =
+    query.status !== 'ready' ||
+    [...query.data.fitting, ...query.data.rest].some((row) => row.id === picked?.id);
 
   /** A scanned code picks its part when it names exactly one; otherwise it is searched for. */
   const scan = async (): Promise<void> => {
@@ -227,20 +251,11 @@ export function TakePartStep({
       onClearError={runner.clearError}
       testID={testID}
     >
-      {picked === null ? null : (
+      {/* A new search can leave the picked part out of the list: it is named here then. */}
+      {picked === null || listed ? null : (
         <View style={styles.picked} testID={`${testID}.picked`}>
           <Text style={styles.pickedName}>{picked.name}</Text>
-          <QuantityStepper
-            label={ti('inventory.use.qty')}
-            value={qty}
-            onChange={setQty}
-            min={1}
-            max={MAX_MOVEMENT_QTY}
-            decreaseLabel={ti('inventory.stepper.decrease')}
-            increaseLabel={ti('inventory.stepper.increase')}
-            caption={ti('inventory.list.stockCount', { count: stockText(picked.onHand) })}
-            testID={`${testID}.qty`}
-          />
+          {qtyStepper(picked, true)}
         </View>
       )}
       <SearchField
@@ -375,6 +390,7 @@ const styles = StyleSheet.create({
   flag: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xs },
   flagText: { ...type.caption, color: color.warning, flexShrink: 1 },
   picked: { marginBottom: space.xl, gap: space.md },
+  inlineQty: { paddingTop: space.sm, paddingBottom: space.md },
   pickedName: { ...type.heading, color: color.text },
   message: { marginTop: space.xs, marginBottom: space.lg },
   group: { ...type.caption, fontWeight: '600', color: color.textMuted, marginTop: space.md },

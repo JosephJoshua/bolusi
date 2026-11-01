@@ -1062,3 +1062,28 @@ test('the store owner sets when a phone counts as not collected', async ({ page 
   await tap(page, 'repair.board.views.uncollected');
   await expect(page.getByTestId('repair.board.row.t-7')).toHaveCount(0);
 });
+
+test('taking a part asks how many right under the part picked', async ({ page }) => {
+  await open(page, 'owner');
+  await tap(page, 'repair.board.row.t-2');
+  await tap(page, 'repair.ticket.parts.take');
+  const choices = page.locator('[data-testid^="inventory.take.choice."]');
+  await choices.last().click();
+  // The stepper sits right under the picked row, not at the top of a long list.
+  const stepper = page.getByTestId('inventory.take.qty').first();
+  await expect(stepper).toBeInViewport();
+  await expect(page.getByTestId('inventory.take.picked')).toHaveCount(0);
+  const row = (await choices.last().boundingBox())!;
+  const box = (await stepper.boundingBox())!;
+  expect(box.y).toBeGreaterThan(row.y);
+  await page.getByLabel('Tambah').first().click();
+  await shoot(page, 'take-part-qty');
+  // A search that leaves the picked part out still names it with its count, above the list.
+  await page.getByTestId('inventory.take.search').locator('input').fill('lem');
+  await expect(page.getByTestId('inventory.take.picked')).toContainText('Speaker buzzer');
+  await expect(page.getByTestId('inventory.take.qty').locator('input')).toHaveValue('2');
+  await page.getByTestId('inventory.take.search').locator('input').fill('');
+  await expect(page.getByTestId('inventory.take.picked')).toHaveCount(0);
+  await page.getByText('Ambil sparepart', { exact: true }).last().click();
+  await expect(page.getByTestId('repair.ticket.parts')).toContainText('2 diambil');
+});
