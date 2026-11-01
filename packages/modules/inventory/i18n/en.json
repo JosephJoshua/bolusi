@@ -136,7 +136,9 @@
     "searchHint": "Search parts",
     "picked": "Selected",
     "fitsDevice": "Fits {model}",
-    "otherParts": "Other parts"
+    "otherParts": "Other parts",
+    "overStock": "{extra} more than in stock.",
+    "searchMore": "Search to see more parts."
   },
   "done": {
     "added": "Item added.",

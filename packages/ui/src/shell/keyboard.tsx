@@ -52,6 +52,8 @@ interface Focused {
 interface RevealPort {
   /** A field was focused: scroll it into sight now, and again when the visible area changes. */
   focused(field: Focused): void;
+  /** Something just appeared (a stepper under a picked row): scroll it into sight once. */
+  show(anchor: View): void;
 }
 
 const RevealContext = createContext<RevealPort | null>(null);
@@ -101,7 +103,7 @@ export function useRevealingScroll(): {
   const viewport = useRef({ height: 0, offset: 0 });
   const last = useRef<Focused | null>(null);
 
-  const reveal = useCallback(({ anchor, mode }: Focused) => {
+  const reveal = useCallback(({ anchor, mode }: Pick<Focused, 'anchor' | 'mode'>) => {
     const content = contentRef.current;
     if (content === null || viewport.current.height === 0) return;
     anchor.measureLayout(
@@ -122,6 +124,9 @@ export function useRevealingScroll(): {
       focused(field) {
         last.current = field;
         reveal(field);
+      },
+      show(anchor) {
+        reveal({ anchor, mode: 'into-view' });
       },
     }),
     [reveal],
@@ -187,4 +192,24 @@ export function useRevealOnFocus(mode: RevealMode = 'into-view'): {
     else reveal();
   }, [port, mode]);
   return { ref, anchorRef, onFocus };
+}
+
+/**
+ * For something that appears under the user's finger, such as the quantity under a picked row: a
+ * ref for its box and an `onLayout` that scrolls it into sight the first time it is laid out, so
+ * it never opens behind the bottom action. Outside a scrollable shell it does nothing.
+ */
+export function useRevealOnMount(): {
+  readonly anchorRef: RefObject<View | null>;
+  readonly onLayout: () => void;
+} {
+  const port = useContext(RevealContext);
+  const anchorRef = useRef<View | null>(null);
+  const shown = useRef(false);
+  const onLayout = useCallback(() => {
+    if (port === null || shown.current || anchorRef.current === null) return;
+    shown.current = true;
+    port.show(anchorRef.current);
+  }, [port]);
+  return { anchorRef, onLayout };
 }
