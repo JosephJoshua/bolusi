@@ -441,13 +441,21 @@ const ticketNoteInput = z
 export const claimTicketInput = ticketIdInput;
 export type TicketIdInput = z.input<typeof ticketIdInput>;
 
+/** Take the servisan from whoever holds it as this device knows it (nobody, or them by name). */
+function claimOp(
+  ctx: CommandContext,
+  ticket: { id: string; technicianId: string | null },
+): OpDraft {
+  return ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, { from: ticket.technicianId });
+}
+
 export async function claimTicketHandler(
   input: z.output<typeof ticketIdInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {})],
+    ops: [claimOp(ctx, ticket)],
     result: { ticketId: ticket.id },
   };
 }
@@ -492,8 +500,8 @@ function workPhotosOp(
 }
 
 /**
- * Start (or resume, or reopen) work. Starting an unassigned ticket claims it in the same command,
- * so a technician picking a device off the shelf needs one tap. The first start needs at least one
+ * Start (or resume, or reopen) work. Starting a servisan nobody holds, or someone else does, takes it
+ * in the same command, so a technician picking a device off the shelf needs one tap. The first start needs at least one
  * `before` photo; a resume keeps the ones already taken and may add more.
  */
 export async function startWorkHandler(
@@ -502,7 +510,8 @@ export async function startWorkHandler(
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   const ops: OpDraft[] = [];
-  if (ticket.technicianId === null) ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {}));
+  // Starting takes the servisan too: off the shelf, or over from whoever holds it.
+  if (ticket.technicianId !== ctx.userId) ops.push(claimOp(ctx, ticket));
   ops.push(...workPhotosOp(ctx, ticket.id, 'before', input.beforePhotos));
   ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.workStarted, {}));
   return { ops, result: { ticketId: ticket.id } };

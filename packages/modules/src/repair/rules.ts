@@ -55,6 +55,7 @@ import {
 import type {
   cancelFeeChangedPayload,
   deviceReturnedPayload,
+  ticketClaimedPayload,
   downPaymentCorrectedPayload,
   downPaymentReceivedPayload,
   intakeOptionsChangedPayload,
@@ -133,6 +134,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'notReturned',
   'notCancelled',
   'feeBelowCharged',
+  'takenElsewhere',
   'handoverHasClaim',
   'claimSamePhone',
   'nothingChanged',
@@ -981,11 +983,22 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
   });
 };
 
+/**
+ * Take a servisan. v2 takes it only from whom it names (nobody, or the technician the person saw):
+ * when someone else took it in the meantime, on another device, the claim is refused and that
+ * person keeps it. v1 takes it from whoever holds it.
+ */
 export const ticketClaimedRule: Rule = async (op, { db }) => {
   const ticket = await loadTicket(db, op);
   requireOpen(ticket, op.type);
   if (ticket.technicianId === op.userId) {
     throw invalidTransition(ticket, op.type, 'alreadyYours', 'already yours');
+  }
+  if (op.schemaVersion >= 2) {
+    const { from } = payloadOf<Payload<typeof ticketClaimedPayload>>(op);
+    if (ticket.technicianId !== from) {
+      throw invalidTransition(ticket, op.type, 'takenElsewhere', 'someone else took it meanwhile');
+    }
   }
 };
 
@@ -1022,6 +1035,10 @@ export const workStartedRule: Rule = async (op, { db }) => {
   requireOutcome(ticket, op.type, STARTABLE);
   if (ticket.technicianId === null) {
     throw invalidTransition(ticket, op.type, 'noTechnician', 'nobody has taken the ticket');
+  }
+  // v2: the work is whoever holds it; someone else takes it over first (startWork does).
+  if (op.schemaVersion >= 2 && ticket.technicianId !== op.userId) {
+    throw invalidTransition(ticket, op.type, 'takenElsewhere', 'someone else holds it');
   }
   if (!(await hasWorkPhoto(db, op, 'before'))) {
     throw missingPhotos('before', `ticket ${ticket.ticketNumber} has no before photo yet`);

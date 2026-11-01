@@ -32,7 +32,7 @@
   "rejected": {
     "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
     "title": "Ditolak server ({count})",
-    "explain": "Sudah dibatalkan juga di HP ini. Ulangi kalau masih perlu.",
+    "explain": "Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.",
     "opMeta": "{opType} · {time}",
     "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Detail teknis",
@@ -64,7 +64,7 @@
     "savedHere": "{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.",
     "offline": "Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.",
     "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini.",
-    "rejectedExplain": "Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.",
+    "rejectedExplain": "Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.",
     "rejectedBanner": "{count} perubahan ditolak server."
   },
   "updateNeeded": {

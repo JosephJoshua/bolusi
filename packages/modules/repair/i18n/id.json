@@ -730,6 +730,7 @@
     "statusLinkMismatch": "Link status servisan ini tidak sah.",
     "ownershipVideoNeeded": "Rekam video kepemilikan dulu.",
     "notReturned": "HP ini belum diserahkan.",
+    "takenElsewhere": "Servisan ini sudah diambil orang lain di perangkat lain. Kalau kamu yang mengerjakan, teknisinya perlu diganti ke kamu dulu, lalu mulai kerjakan lagi.",
     "handoverHasClaim": "Sudah ada klaim garansi untuk servisan ini, jadi penyerahannya tidak bisa dibatalkan.",
     "claimSamePhone": "Klaim garansi harus untuk HP yang sama. Merek, tipe dan IMEI-nya tidak bisa diubah.",
     "nothingChanged": "Belum ada yang diubah.",

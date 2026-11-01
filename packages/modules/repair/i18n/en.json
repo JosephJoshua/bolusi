@@ -730,6 +730,7 @@
     "statusLinkMismatch": "This repair’s status link isn’t valid.",
     "ownershipVideoNeeded": "Record the ownership video first.",
     "notReturned": "This phone hasn’t been handed over.",
+    "takenElsewhere": "Someone else took this repair on another device. If you’re working on it, the technician needs to be changed to you first, then start work again.",
     "handoverHasClaim": "A warranty claim names this servisan, so its handover can’t be undone.",
     "claimSamePhone": "A warranty claim is for the same phone. Its brand, model and IMEI can’t change.",
     "nothingChanged": "Nothing has changed yet.",

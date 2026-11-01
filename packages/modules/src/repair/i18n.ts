@@ -778,6 +778,7 @@ export const REPAIR_KEYS = [
   'repair.video.label',
   'repair.video.expired',
   'repair.refusal.notReturned',
+  'repair.refusal.takenElsewhere',
   'repair.refusal.handoverHasClaim',
   'repair.refusal.claimSamePhone',
   'repair.refusal.nothingChanged',
