@@ -200,9 +200,12 @@ export function PaymentLines({
               <View style={styles.lineAction}>
                 <TextButton
                   label={tm('money.pay.remove')}
-                  accessibilityLabel={tm('money.pay.removeLabel', {
-                    method: labelOf(account),
-                  })}
+                  // Named by its method once there is one; never a method not picked yet.
+                  accessibilityLabel={
+                    unpicked
+                      ? tm('money.pay.removeUnpicked')
+                      : tm('money.pay.removeLabel', { method: labelOf(account) })
+                  }
                   tone="danger"
                   onPress={() => onChange(lines.filter((other) => other.key !== line.key))}
                   testID={`${id}.remove`}

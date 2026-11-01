@@ -50,6 +50,7 @@
     "reference": "Reference no. (optional)",
     "addMethod": "Add another method",
     "remove": "Remove this method",
+    "removeUnpicked": "Remove this payment",
     "removeLabel": "Remove the {method} payment",
     "remaining": "{amount} still to pay",
     "overpaid": "{amount} too much. Lower the amount first.",

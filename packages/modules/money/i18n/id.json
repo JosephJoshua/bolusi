@@ -50,6 +50,7 @@
     "reference": "No. referensi (opsional)",
     "addMethod": "Tambah metode lain",
     "remove": "Hapus metode ini",
+    "removeUnpicked": "Hapus pembayaran ini",
     "removeLabel": "Hapus pembayaran {method}",
     "remaining": "Kurang {amount}",
     "overpaid": "Lebih {amount}. Kurangi jumlahnya dulu.",

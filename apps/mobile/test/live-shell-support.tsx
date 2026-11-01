@@ -376,6 +376,7 @@ export async function seedOwnerAndLockedTarget(
           ...NOTES_PERMISSIONS,
           'auth.pin_unlock',
           'auth.user_reset_pin',
+          'platform.conflict_acknowledge',
         ]),
         storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS),
       ],

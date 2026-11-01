@@ -2,6 +2,7 @@
 // phone being repaired come first, before anything is typed, and only spareparts are offered.
 import type { QueryState } from '../screen-kit/index.js';
 
+import { ti } from './i18n.js';
 import type { PartUse } from './part-use.js';
 import type { ItemRow } from './queries.js';
 import { useInventoryQuery, type InventoryRuntime } from './runtime.js';
@@ -10,6 +11,20 @@ export type { PartUse };
 
 /** How many parts the take step lists before the user narrows it with search. */
 export const PICK_LIMIT = 30;
+
+/** Said under the list when it shows as many as it lists: the rest are a search away. */
+export function moreHint(choices: TakeChoices): string | null {
+  return choices.rest.length >= PICK_LIMIT ? ti('inventory.use.searchMore') : null;
+}
+
+/**
+ * Said under the quantity when it is more than the stock records. Taking it is still allowed (the
+ * count can be wrong, and the owner sees stock below zero flagged), but a typo is caught here.
+ */
+export function overStockHint(part: Pick<ItemRow, 'onHand'>, qty: number): string | null {
+  const extra = qty - Math.max(part.onHand, 0);
+  return extra > 0 ? ti('inventory.use.overStock', { extra }) : null;
+}
 
 export interface TakeChoices {
   /** Parts that fit the phone, when nothing is typed. */

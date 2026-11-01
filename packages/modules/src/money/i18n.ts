@@ -54,6 +54,7 @@ export const MONEY_KEYS = [
   'money.pay.remaining',
   'money.pay.remove',
   'money.pay.removeLabel',
+  'money.pay.removeUnpicked',
   'money.pay.tendered',
   'money.opType.accountSaved',
   'money.opType.cashAdjusted',

@@ -295,6 +295,25 @@ describe('Kas on the PC', () => {
     await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
   });
 
+  // QA round B: a line with no method yet was named after Tunai to a screen reader.
+  it('names a payment line to remove by its method, and an unpicked one by none', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '100000' },
+    });
+    pick('money.desk.receive.pay.line0');
+    fireEvent.click(byTestId('money.desk.receive.pay.add'));
+    expect(byTestId('money.desk.receive.pay.line0.remove').getAttribute('aria-label')).toBe(
+      'Hapus pembayaran Tunai',
+    );
+    const second = screen
+      .getAllByTestId(/^money\.desk\.receive\.pay\.line\d+\.remove$/)
+      .find((button) => button !== byTestId('money.desk.receive.pay.line0.remove'))!;
+    expect(second.getAttribute('aria-label')).toBe('Hapus pembayaran ini');
+  });
+
   it('takes part of a debt by QRIS and the rest in cash, taking a sum below what QRIS takes by hand', async () => {
     await openKas('Andi Pratama');
     fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));

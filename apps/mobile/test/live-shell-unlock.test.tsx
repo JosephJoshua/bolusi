@@ -123,6 +123,8 @@ describe('Owner Unlock reaches the screen and clears a real lockout (task 186b)'
     await openSettings(screen);
     // The owner holds `auth.pin_unlock`, so the staff PIN row is offered (the gate, end-to-end).
     expect(screen.query('settings-staff-pins')).not.toBeNull();
+    // ...and, deciding conflicts, the notifications about data that needs that decision.
+    expect(screen.query('settings-notifications-conflict')).not.toBeNull();
 
     fireOn(screen, 'settings-staff-pins');
     await settle();
@@ -170,6 +172,9 @@ describe('Owner Unlock reaches the screen and clears a real lockout (task 186b)'
     // specifically the owner row that is gated out, not the whole section missing.
     expect(screen.query('settings-change-pin')).not.toBeNull();
     expect(screen.query('settings-staff-pins')).toBeNull();
+    // Nor the notifications about data only an owner can decide; the device ones stay.
+    expect(screen.query('settings-notifications-conflict')).toBeNull();
+    expect(screen.query('settings-notifications-device')).not.toBeNull();
   });
 });
 
