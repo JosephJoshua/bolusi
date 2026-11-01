@@ -97,6 +97,8 @@ describe('the drawer', () => {
     // Neither Kas nor the count shows the counter what should be in the drawer.
     expect(screen.query('money.kas.expected')).toBeNull();
     expect(text(screen, 'money.kas.lastCount')).toBe('Belum tutup kas hari ini');
+    // QA round E: until it is counted, a drawer with no figure says the count is theirs to make.
+    expect(text(screen, 'money.kas.blindHint')).toBe('Hitung uang di laci saat tutup kas.');
 
     await press(screen, 'money.kas.count');
     expect(screen.query('money.count.expected')).toBeNull();
@@ -120,6 +122,8 @@ describe('the drawer', () => {
     await press(screen, 'money.count.primary');
 
     expect(text(screen, 'money.kas.lastCount')).toMatch(/^Sudah tutup kas pukul/);
+    // Counted: the status says it, so the hint goes.
+    expect(screen.query('money.kas.blindHint')).toBeNull();
     // The counter sees the difference waiting, and cannot settle it.
     expect(text(screen, 'money.kas.differences')).toContain('Menunggu pemilik');
     expect(text(screen, 'money.kas.differences')).toContain('Kurang Rp 5.000');
@@ -130,6 +134,7 @@ describe('the drawer', () => {
     await float(h, 100_000);
     const screen = await mount(h, h.storeOwnerId);
     expect(text(screen, 'money.kas.expected')).toBe('Rp 100.000');
+    expect(screen.query('money.kas.blindHint')).toBeNull();
     await press(screen, 'money.kas.count');
     expect(text(screen, 'money.count.expected')).toBe('Rp 100.000');
     type(screen, 'money.count.counted', '95000');

@@ -31,7 +31,11 @@ import { statusesFor, useTick, type EntitySyncStatuses } from '../../screen-kit/
 import {
   amountOwed,
   BOARD_EMPTY_KEY,
+  boardFilter,
+  boardViewLabel,
   boardViews,
+  countsPickup,
+  pointsToPickup,
   UNCOLLECTED_REFRESH_MS,
   defaultBoardView,
   flagsUncollected,
@@ -45,7 +49,7 @@ import {
   type TicketStatus,
 } from '../flows.js';
 import type { TicketSummaryRow } from '../queries.js';
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import { statusLabel } from '../labels.js';
 import { readApprovals, useRepairQuery, useRepairRuntime } from '../runtime.js';
 import {
@@ -72,17 +76,6 @@ import { TicketPane } from './TicketPane.js';
 
 /** Search is ranked, so its best matches are the ones worth filtering and paging. */
 const SEARCH_LIMIT = 100;
-
-const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
-  approvals: 'repair.board.view.approvals',
-  active: 'repair.board.view.active',
-  mine: 'repair.board.view.mine',
-  unassigned: 'repair.board.view.unassigned',
-  pickup: 'repair.board.view.pickup',
-  uncollected: 'repair.board.view.uncollected',
-  returned: 'repair.board.view.returned',
-  cancelled: 'repair.board.view.cancelled',
-};
 
 export interface RepairBoardPageProps {
   /** The repair open beside the table, owned by the app so a new intake can open its ticket. */
@@ -145,6 +138,8 @@ interface LoadedBoard {
   /** Servisan waiting on this user's approval, and those with any waiting request they see. */
   readonly approvalIds: readonly string[];
   readonly approvalWaiting: ReadonlySet<string>;
+  /** Phones waiting for pickup, for the tab and an empty active queue; null when not counted. */
+  readonly pickup: number | null;
 }
 
 /** The filter options matching typed text, best first, with the app's typo-tolerant search. */
@@ -249,8 +244,15 @@ export function RepairBoardPage({
         total = count.rows[0]?.count ?? 0;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
+      // The tabs are hidden while searching, so the count waits until the search is cleared.
+      const pickup =
+        !searching && countsPickup(can)
+          ? ((await rt.query('countTickets', { filter: boardFilter('pickup', rt.userId, 0) }))
+              .rows[0]?.count ?? 0)
+          : null;
       return {
         scope,
+        pickup,
         rows,
         total,
         statuses,
@@ -358,7 +360,20 @@ export function RepairBoardPage({
       <StatePanel
         icon={ClipboardList}
         title={tn(BOARD_EMPTY_KEY[view])}
-        {...(view === 'active' ? { hint: tn('repair.board.emptyHint') } : {})}
+        {...(pointsToPickup(view, searching, loaded?.pickup ?? null)
+          ? {
+              // Nothing being worked on, but customers are due: the way to them, not a dead end.
+              action: (
+                <Button
+                  label={tn('repair.board.pickupWaiting', { count: loaded?.pickup ?? 0 })}
+                  onClick={() => update({ view: 'pickup', facets: facetsFor('pickup', facets) })}
+                  data-testid="repair.desk.board.toPickup"
+                />
+              ),
+            }
+          : view === 'active'
+            ? { hint: tn('repair.board.emptyHint') }
+            : {})}
       />
     );
 
@@ -558,10 +573,13 @@ export function RepairBoardPage({
                 </p>
               ) : (
                 <Tabs
-                  items={boardViews(can, waitingApprovals).map((value) => ({
-                    value,
-                    label: tn(VIEW_KEY[value], { count: waitingApprovals }),
-                  }))}
+                  items={boardViews(can, waitingApprovals).map((value) => {
+                    const label = boardViewLabel(value, {
+                      approvals: waitingApprovals,
+                      pickup: loaded?.pickup ?? null,
+                    });
+                    return { value, label: tn(label.key, { count: label.count }) };
+                  })}
                   value={view}
                   onChange={(next) =>
                     update({

@@ -602,8 +602,11 @@ export function ChangeCancelFeeStep({
     >
       <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.explain`}>
         {paid > 0
-          ? tn('repair.cancelFee.paid', { amount: formatMoney(paid) })
-          : tn('repair.cancelFee.unpaid')}
+          ? tn('repair.cancelFee.paid', {
+              bill: formatMoney(current),
+              amount: formatMoney(paid),
+            })
+          : tn('repair.cancelFee.unpaid', { bill: formatMoney(current) })}
       </Text>
       {ask.asking ? (
         <Text style={[repairStyles.caption, styles.consequence]} testID={`${testID}.asks`}>

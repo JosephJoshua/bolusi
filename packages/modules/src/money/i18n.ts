@@ -104,6 +104,7 @@ export const MONEY_KEYS = [
   'money.kas.title',
   'money.kas.expected',
   'money.kas.drawer',
+  'money.kas.blindHint',
   'money.kas.notCounted',
   'money.kas.counted',
   'money.kas.count',

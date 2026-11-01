@@ -765,8 +765,11 @@ export function ChangeCancelFeeDialog({
         title={tn('repair.cancelFee.title')}
         description={
           paid > 0
-            ? tn('repair.cancelFee.paid', { amount: formatMoney(paid) })
-            : tn('repair.cancelFee.unpaid')
+            ? tn('repair.cancelFee.paid', {
+                bill: formatMoney(current),
+                amount: formatMoney(paid),
+              })
+            : tn('repair.cancelFee.unpaid', { bill: formatMoney(current) })
         }
         runner={runner}
         stale={stale}

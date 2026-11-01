@@ -78,6 +78,56 @@ export const BOARD_EMPTY_KEY = {
   cancelled: 'repair.board.empty.cancelled',
 } as const satisfies Record<BoardView, RepairKey>;
 
+const BOARD_VIEW_KEY = {
+  approvals: 'repair.board.view.approvals',
+  active: 'repair.board.view.active',
+  mine: 'repair.board.view.mine',
+  unassigned: 'repair.board.view.unassigned',
+  pickup: 'repair.board.view.pickup',
+  uncollected: 'repair.board.view.uncollected',
+  returned: 'repair.board.view.returned',
+  cancelled: 'repair.board.view.cancelled',
+} as const satisfies Record<BoardView, RepairKey>;
+
+/** How many servisan wait in the views that carry a count on their tab. */
+export interface BoardCounts {
+  /** Servisan waiting on this user's approval. */
+  readonly approvals: number;
+  /** Phones done or cancelled and still in the store; null when this user is not told. */
+  readonly pickup: number | null;
+}
+
+/**
+ * A view's tab label and its count. Phones waiting for pickup carry their count, so the counter
+ * sees customers are due even from a queue that leaves finished phones out (QA round E).
+ */
+export function boardViewLabel(
+  view: BoardView,
+  counts: BoardCounts,
+): { readonly key: RepairKey; readonly count: number } {
+  if (view === 'approvals') return { key: BOARD_VIEW_KEY.approvals, count: counts.approvals };
+  if (view === 'pickup' && counts.pickup !== null && counts.pickup > 0)
+    return { key: 'repair.board.view.pickupCount', count: counts.pickup };
+  return { key: BOARD_VIEW_KEY[view], count: 0 };
+}
+
+/** Whoever hands phones back is told how many wait for pickup; technicians need not be. */
+export function countsPickup(can: Pick<RepairAbilities, 'handover'>): boolean {
+  return can.handover;
+}
+
+/**
+ * Whether an empty board points to the phones waiting for pickup: the active queue leaves finished
+ * phones out, so "no active servisan" alone reads as nothing to do while customers are due.
+ */
+export function pointsToPickup(
+  view: BoardView,
+  searching: boolean,
+  pickup: number | null,
+): boolean {
+  return view === 'active' && !searching && pickup !== null && pickup > 0;
+}
+
 /**
  * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
  * nobody collected are for the counter and owners, who call the customer. Servisan with requests

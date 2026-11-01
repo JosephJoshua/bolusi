@@ -67,6 +67,7 @@
     "title": "Kas",
     "expected": "Seharusnya di laci",
     "drawer": "Laci kas",
+    "blindHint": "Hitung uang di laci saat tutup kas.",
     "notCounted": "Belum tutup kas hari ini",
     "counted": "Sudah tutup kas pukul {time}",
     "count": "Tutup kas",

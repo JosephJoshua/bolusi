@@ -436,6 +436,33 @@ describe('price changes and handover', () => {
     expect(text(screen, 'repair.handover.total')).not.toContain('750.000');
   });
 
+  // QA round E: with only finished phones in the store, Aktif read as nothing to do while
+  // customers were due to collect.
+  test('an empty active queue points to the phones waiting for pickup, which the tab counts', async () => {
+    h = await openRepairScreenHarness(5309);
+    // Nothing in the store: the plain empty board.
+    const before = await mount(h, h.cashierId);
+    expect(before.query('ui.emptyState.cta')).toBeNull();
+    expect(text(before, 'ui.emptyState.hint')).toBe(tn('repair.board.emptyHint'));
+    expect(text(before, 'repair.board.views.pickup')).toBe('Siap diambil');
+    before.unmount();
+
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId);
+    expect(text(screen, 'ui.emptyState.title')).toBe('Belum ada servisan aktif.');
+    expect(screen.query('ui.emptyState.hint')).toBeNull();
+    expect(text(screen, 'ui.emptyState.cta')).toBe('1 HP siap diambil');
+    expect(text(screen, 'repair.board.views.pickup')).toBe('Siap diambil (1)');
+    await press(screen, 'ui.emptyState.cta');
+    expect(screen.query(`repair.board.row.${ticketId}`)).not.toBeNull();
+    screen.unmount();
+
+    // Technicians do not hand phones back, so their board is not told.
+    const tech = await mount(h, h.technicianId);
+    expect(text(tech, 'repair.board.views.pickup')).toBe('Siap diambil');
+  });
+
   // Android QA: a cancelled servisan's DP went back through the account it came in by without the
   // counter being told; now the cancel form and the handover both say what goes back, and how.
   test('a DP above the cancel fee is said to go back, and the handover says through what', async () => {

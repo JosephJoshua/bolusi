@@ -77,6 +77,7 @@
       "active": "Aktif",
       "mine": "Tugasku",
       "pickup": "Siap diambil",
+      "pickupCount": "Siap diambil ({count})",
       "returned": "Sudah diambil",
       "unassigned": "Belum ada teknisi",
       "cancelled": "Dibatalkan",
@@ -88,6 +89,7 @@
     "feeChanged": "Biaya diubah",
     "pickTicket": "Pilih servisan untuk melihat detailnya.",
     "waited": "{days} hari belum diambil",
+    "pickupWaiting": "{count} HP siap diambil",
     "empty": {
       "approvals": "Tidak ada yang menunggu persetujuan.",
       "active": "Belum ada servisan aktif.",
@@ -969,12 +971,12 @@
   },
   "cancelFee": {
     "title": "Biaya pembatalan",
-    "paid": "Pelanggan sudah bayar {amount}. Tagihannya ikut biaya baru.",
-    "unpaid": "Tagihannya ikut biaya baru.",
-    "input": "Biaya baru",
+    "paid": "Tagihan sekarang {bill}, sudah dibayar {amount}.",
+    "unpaid": "Tagihan sekarang {bill}.",
+    "input": "Tagihan baru",
     "reason": "Kenapa diubah?",
-    "save": "Simpan biaya",
-    "same": "Ubah biayanya dulu.",
+    "save": "Simpan tagihan",
+    "same": "Ubah tagihannya dulu.",
     "short": "Ubah biaya"
   }
 }

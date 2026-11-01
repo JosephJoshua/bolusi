@@ -77,6 +77,7 @@
       "active": "In progress",
       "mine": "Mine",
       "pickup": "Ready for pickup",
+      "pickupCount": "Ready for pickup ({count})",
       "returned": "Returned",
       "unassigned": "Unassigned",
       "cancelled": "Cancelled",
@@ -88,6 +89,7 @@
     "feeChanged": "Fee changed",
     "pickTicket": "Pick a repair to see its details.",
     "waited": "Not collected for {days} days",
+    "pickupWaiting": "{count} ready for pickup",
     "empty": {
       "approvals": "Nothing is waiting for approval.",
       "active": "No active repairs yet.",
@@ -969,12 +971,12 @@
   },
   "cancelFee": {
     "title": "Cancellation fee",
-    "paid": "The customer paid {amount}. The bill follows the new fee.",
-    "unpaid": "The bill follows the new fee.",
-    "input": "New fee",
+    "paid": "Billed {bill} now, {amount} paid.",
+    "unpaid": "Billed {bill} now.",
+    "input": "New bill",
     "reason": "Why the change?",
-    "save": "Save fee",
-    "same": "Change the fee first.",
+    "save": "Save bill",
+    "same": "Change the bill first.",
     "short": "Change fee"
   }
 }

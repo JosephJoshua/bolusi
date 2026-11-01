@@ -36,19 +36,22 @@ import {
   type EntitySyncStatuses,
 } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import {
   APPROVALS_VIEW_MAX,
   BOARD_EMPTY_KEY,
   boardFilter,
   amountOwed,
   boardSort,
+  boardViewLabel,
   boardViews,
+  countsPickup,
   defaultBoardView,
   repairAbilities,
   ticketStatus,
   UNCOLLECTED_REFRESH_MS,
   flagsUncollected,
+  pointsToPickup,
   uncollectedBefore,
   uncollectedDays,
   type BoardView,
@@ -60,17 +63,6 @@ import { readApprovals, useRepairQuery, useRepairRuntime } from '../runtime.js';
 const PAGE = 50;
 /** Search is ranked, so its best matches come first and one page is enough. */
 const SEARCH_LIMIT = 100;
-
-const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
-  approvals: 'repair.board.view.approvals',
-  active: 'repair.board.view.active',
-  mine: 'repair.board.view.mine',
-  unassigned: 'repair.board.view.unassigned',
-  pickup: 'repair.board.view.pickup',
-  uncollected: 'repair.board.view.uncollected',
-  returned: 'repair.board.view.returned',
-  cancelled: 'repair.board.view.cancelled',
-};
 
 export interface RepairBoardProps {
   readonly syncChip: ReactNode;
@@ -100,6 +92,8 @@ interface LoadedBoard {
   /** Servisan waiting on this user's approval, and those with any waiting request they see. */
   readonly approvalIds: readonly string[];
   readonly approvalWaiting: ReadonlySet<string>;
+  /** Phones waiting for pickup, for the tab and an empty active queue; null when not counted. */
+  readonly pickup: number | null;
 }
 
 export function RepairBoard({
@@ -175,7 +169,25 @@ export function RepairBoard({
         hasMore = cursor !== null;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
-      return { rows, statuses, hasMore, uncollectedLimit, readAt, approvalIds, approvalWaiting };
+      // The tabs are hidden while searching, so the count waits until the search is cleared.
+      const pickup =
+        !searching && countsPickup(can)
+          ? ((
+              await rt.query('countTickets', {
+                filter: boardFilter('pickup', rt.userId, 0),
+              })
+            ).rows[0]?.count ?? 0)
+          : null;
+      return {
+        rows,
+        statuses,
+        hasMore,
+        uncollectedLimit,
+        readAt,
+        approvalIds,
+        approvalWaiting,
+        pickup,
+      };
     },
     `board:${searching ? `q:${searchText}` : view}:${String(pages)}:${String(reloadNonce)}:${String(hour)}`,
   );
@@ -206,17 +218,29 @@ export function RepairBoard({
             onRetry: () => setReloadNonce((current) => current + 1),
           },
         };
-      case 'ready':
-        if (query.data.rows.length === 0) {
-          return {
-            kind: 'empty',
-            empty: {
-              title: tn(searching ? 'repair.board.noMatches' : BOARD_EMPTY_KEY[view]),
-              ...(!searching && view === 'active' ? { hint: tn('repair.board.emptyHint') } : {}),
-            },
-          };
-        }
-        return { kind: 'ready', items: query.data.rows };
+      case 'ready': {
+        if (query.data.rows.length > 0) return { kind: 'ready', items: query.data.rows };
+        const { pickup } = query.data;
+        return {
+          kind: 'empty',
+          empty: {
+            title: tn(searching ? 'repair.board.noMatches' : BOARD_EMPTY_KEY[view]),
+            // Nothing being worked on, but customers are due: the way to them, not a dead end.
+            ...(pointsToPickup(view, searching, pickup)
+              ? {
+                  createLabel: tn('repair.board.pickupWaiting', { count: pickup ?? 0 }),
+                  onCreate: () => {
+                    setView('pickup');
+                    setPages(1);
+                  },
+                  ctaVariant: 'secondary' as const,
+                }
+              : !searching && view === 'active'
+                ? { hint: tn('repair.board.emptyHint') }
+                : {}),
+          },
+        };
+      }
     }
   }, [query, searching, view, onOpenSyncStatus]);
 
@@ -307,10 +331,13 @@ export function RepairBoard({
       {searching ? null : (
         <View style={styles.views}>
           <SegmentedControl
-            options={boardViews(can, waitingApprovals).map((value) => ({
-              value,
-              label: tn(VIEW_KEY[value], { count: waitingApprovals }),
-            }))}
+            options={boardViews(can, waitingApprovals).map((value) => {
+              const label = boardViewLabel(value, {
+                approvals: waitingApprovals,
+                pickup: loaded?.pickup ?? null,
+              });
+              return { value, label: tn(label.key, { count: label.count }) };
+            })}
             value={view}
             // One compact row that scrolls sideways and runs to the screen edges: the cut-off pill
             // at the edge shows there are more queues, and the list keeps the screen.

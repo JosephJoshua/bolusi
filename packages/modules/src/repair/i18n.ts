@@ -71,6 +71,8 @@ export const REPAIR_KEYS = [
   'repair.board.view.cancelled',
   'repair.board.view.mine',
   'repair.board.view.pickup',
+  'repair.board.view.pickupCount',
+  'repair.board.pickupWaiting',
   'repair.board.view.returned',
   'repair.board.view.unassigned',
   'repair.cancel.afterWork',
