@@ -153,8 +153,11 @@ fails a build, a boot or a test rather than waiting for review:
   the device's own, so module queries read it unchanged; it is dropped on sign-out,
   switch, idle lock and close. Their own changes of types the device does not hold
   stay in its log as chain links and lose their text once sent (`sync/device-reads.ts`).
-  A query whose data is not here (or not all pulled yet) throws `NOT_ON_DEVICE`
-  ("Perlu internet"), never an empty list. Limits, accepted for now: the extra is pulled
+  The extra is worked out when the PIN goes to the server: after a new device's first
+  pull, and after any PIN change made on the device has been sent. If the device later
+  stops holding something the person reads (the staff changed), the screen locks and
+  their PIN opens it again. A query whose data is still coming down waits for that pull;
+  one whose data is not here throws `NOT_ON_DEVICE` ("Perlu internet"), never an empty list. Limits, accepted for now: the extra is pulled
   again at every sign-in (nothing stays between sessions); a person granted more while
   signed in sees it from their next sign-in; and the server's PIN check guards against
   a modified app, not a rooted device, which holds every person's argon2 PIN verifier

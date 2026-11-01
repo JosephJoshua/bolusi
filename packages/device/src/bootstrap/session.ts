@@ -344,9 +344,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     await person.begin({
       userId,
       pin,
-      extra: person
-        .heldReads()
-        .filter((read) => commands.enforcementPoint.hasPermission({ ...device, userId }, read)),
+      mayRead: (read) => commands.enforcementPoint.hasPermission({ ...device, userId }, read),
     });
     // A lock or switch while the last person's store was closing found nobody to end.
     if (

@@ -542,6 +542,22 @@ describe('a read whose data is not on this device (least-privilege sync)', () =>
     }
   });
 
+  test('waits for an answer the device is still working out', async () => {
+    const harness = await openModuleHarness(4244, {
+      readHere: (permissionId) =>
+        new Promise<boolean>((resolve) =>
+          setTimeout(() => resolve(permissionId !== 'fixture.read'), 5),
+        ),
+    });
+    try {
+      await expect(listItems(harness, harness.adminId)).rejects.toMatchObject({
+        code: 'NOT_ON_DEVICE',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
   test('a person who may not read it is still refused first', async () => {
     const harness = await openModuleHarness(4243, { readHere: () => false });
     try {

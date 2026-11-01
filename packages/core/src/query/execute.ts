@@ -65,7 +65,7 @@ export interface QueryRuntimeOptions<DB> {
    * Whether the data `permission` reads is on this device (least-privilege sync): the device's own
    * read set, or the signed-in person's store. Absent everything is here, as on the server.
    */
-  readonly readHere?: (permissionId: string) => boolean;
+  readonly readHere?: (permissionId: string) => boolean | Promise<boolean>;
 }
 
 /**
@@ -81,7 +81,7 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
   readonly #db: Kysely<DB>;
   readonly #enforcement: PermissionEnforcementPoint;
   readonly #search: SearchIndexCache | undefined;
-  readonly #readHere: ((permissionId: string) => boolean) | undefined;
+  readonly #readHere: ((permissionId: string) => boolean | Promise<boolean>) | undefined;
 
   constructor(options: QueryRuntimeOptions<DB>) {
     this.#db = options.db;
@@ -146,7 +146,7 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
     // Step 2b — may read it, but it is not here: the device holds only what its people may read,
     // and this person's extra has not come down (offline at sign-in). Never an empty result, which
     // would read as "nothing there".
-    if (this.#readHere?.(executable.permission) === false) {
+    if ((await this.#readHere?.(executable.permission)) === false) {
       throw new DomainError(
         'NOT_ON_DEVICE',
         { query: target, permission: executable.permission },

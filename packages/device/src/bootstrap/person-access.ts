@@ -12,6 +12,7 @@
 import {
   AppUpdateRequiredError,
   dropPersonStoreTables,
+  hasPendingVerifier,
   PersonStore,
   SyncTransportError,
   type ClockPort,
@@ -42,6 +43,8 @@ export interface PersonAccessDeps {
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
+  /** Whether a PIN change for the person made here has not reached the server yet. */
+  readonly pinPending?: (userId: string) => Promise<boolean>;
   /** Opens the store; core's `PersonStore.open` unless a test passes another. */
   readonly openStore?: (reads: readonly string[]) => Promise<PersonStoreLike>;
 }
@@ -58,13 +61,14 @@ export interface PersonAccess {
   /** The reads some op type is read with that the device does not hold. */
   heldReads(): readonly string[];
   /**
-   * A person signed in with `pin`. `extra` is what they may read of `heldReads()`, from the
-   * device's grants; empty ends any earlier person and does nothing else.
+   * A person signed in with `pin`; `mayRead` says which reads their grants on this device hold.
+   * Their extra is what they may read of `heldReads()`, worked out once the device knows its own
+   * read set (a new device has not pulled yet). Empty, nothing goes to the server.
    */
   begin(person: {
     readonly userId: string;
     readonly pin: string;
-    readonly extra: readonly string[];
+    readonly mayRead: (permissionId: string) => boolean;
   }): Promise<void>;
   /** The person left: drop their store and end their session (best effort). */
   end(): Promise<void>;
@@ -75,6 +79,11 @@ export interface PersonAccess {
    * pulled to the end (before that a list would look complete while it is not).
    */
   readHere(permissionId: string): boolean;
+  /**
+   * `readHere`, after waiting for a pull of the person's store that is under way: a screen opened
+   * just after sign-in waits for it rather than saying "Perlu internet" while online.
+   */
+  whenHere(permissionId: string): Promise<boolean>;
   /**
    * The device is about to hold `added` itself (inside its pull's transaction): a store holding any
    * of them closes first, so the device's folds reach its own tables, and opens again after.
@@ -92,6 +101,7 @@ export interface PersonAccess {
 
 interface Person {
   readonly userId: string;
+  readonly mayRead: (permissionId: string) => boolean;
   /** Kept only until the server has checked it. */
   pin: string | null;
   token: string | null;
@@ -119,6 +129,9 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
     target.status = status;
     if (person === target) notify();
   };
+
+  const pinPending =
+    deps.pinPending ?? ((userId: string) => hasPendingVerifier(deps.db.db, userId));
 
   const storeDeps = {
     db: deps.db.db as never,
@@ -161,6 +174,12 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
   const once = async (target: Person, port: PersonTransportPort): Promise<void> => {
     if (target.token === null) {
       if (target.pin === null) return;
+      // A PIN just changed here must reach the server before the server can check it.
+      if (await pinPending(target.userId)) {
+        await port.sendPendingPins();
+        if (await pinPending(target.userId)) return;
+      }
+      if (person !== target || target.pin === null) return;
       const opened = await port.open({ userId: target.userId, pin: target.pin });
       target.pin = null;
       if (person !== target) {
@@ -206,9 +225,26 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       target === null ||
       port === null ||
       target.status === 'refused' ||
-      target.status === 'ended'
+      target.status === 'ended' ||
+      // A new device: what it holds itself comes with its first pull, which syncs this again.
+      !deps.deviceReads.known()
     )
       return;
+    if (target.token === null) {
+      const extra = deps.deviceReads.heldReads().filter(target.mayRead);
+      if (extra.length === 0) {
+        // Nothing beyond the device: the PIN never leaves it.
+        target.pin = null;
+        setStatus(target, 'none');
+        return;
+      }
+      if (target.pin === null) {
+        // Signed in when nothing was beyond the device, and now something is (the store's staff
+        // changed, or the device's first pull came after): their PIN again opens it.
+        setStatus(target, 'ended');
+        return;
+      }
+    }
     try {
       await once(target, port);
     } catch (error) {
@@ -240,12 +276,13 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
 
     heldReads: () => deps.deviceReads.heldReads(),
 
-    async begin({ userId, pin, extra }) {
+    async begin({ userId, pin, mayRead }) {
       const mine = (generation += 1);
       await access.end();
-      if (mine !== generation || extra.length === 0) return;
+      if (mine !== generation) return;
       person = {
         userId,
+        mayRead,
         pin,
         token: null,
         store: null,
@@ -270,14 +307,17 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
         again = true;
         return running;
       }
+      // Cleared in the same turn the loop ends: a sync asked for after that starts a new run.
       running = (async () => {
-        do {
-          again = false;
-          await run();
-        } while (again);
-      })().finally(() => {
-        running = null;
-      });
+        try {
+          do {
+            again = false;
+            await run();
+          } while (again);
+        } finally {
+          running = null;
+        }
+      })();
       return running;
     },
 
@@ -285,6 +325,18 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       if (deps.deviceReads.holdsRead(permissionId)) return true;
       const store = person?.complete === true ? person.store : null;
       return store?.reads.includes(permissionId) ?? false;
+    },
+
+    async whenHere(permissionId) {
+      // A sync pulls to the end or fails (offline), so at most two rounds: the one running when
+      // asked, and the one it started again for a request that came in meanwhile. Never from
+      // inside a transaction, which the pull would wait behind.
+      for (let round = 0; round < 2 && !access.readHere(permissionId); round += 1) {
+        const pending = running;
+        if (pending === null || person === null || deps.db.inTransaction) break;
+        await pending;
+      }
+      return access.readHere(permissionId);
     },
 
     async beforeDeviceGrows(added) {

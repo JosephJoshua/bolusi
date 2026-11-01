@@ -31,7 +31,7 @@ export type ModuleRuntimeOptions = Omit<
   /** Live search indexes for every query (search/live-index.ts). Devices pass one. */
   readonly search?: SearchIndexCache;
   /** Whether a read's data is on this device (`QueryRuntimeOptions.readHere`). Devices pass one. */
-  readonly readHere?: (permissionId: string) => boolean;
+  readonly readHere?: (permissionId: string) => boolean | Promise<boolean>;
 };
 
 /** A wired build: the registries plus the two runtimes, sharing one enforcement point. */

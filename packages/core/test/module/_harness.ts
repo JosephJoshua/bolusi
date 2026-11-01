@@ -147,7 +147,7 @@ class SqliteOpStore implements OpAppendStore {
 /** Build a fully-seeded L2 harness. Two calls with the same seed reproduce bit-for-bit (T-6). */
 export async function openModuleHarness(
   seed: number,
-  options: { readonly readHere?: (permissionId: string) => boolean } = {},
+  options: { readonly readHere?: (permissionId: string) => boolean | Promise<boolean> } = {},
 ): Promise<ModuleHarness> {
   const startMs = 1_726_000_000_000;
   let nowMs = startMs;

@@ -25,6 +25,7 @@
 // banner clears from the real column (T-19), never a `?? Date.now()`.
 import {
   clearHeldText,
+  drainPendingVerifiers,
   OP_SYNC_STATUS_TABLE,
   readSyncState,
   SyncLoop,
@@ -49,6 +50,7 @@ import type { FirstSyncProgress } from '../models/sync-status/model.js';
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
 import { createPhoneCatalogRefresher } from './phone-catalog.js';
+import { createFetchPinVerifierUpload } from './pin-verifier-transport.js';
 import {
   createRealtimeController,
   type RealtimeHandle,
@@ -538,13 +540,19 @@ export function createSyncClientForApp(
     ...(config.onBundleChecked === undefined ? {} : { onBundleChecked: config.onBundleChecked }),
   });
   // A signed-in person's reads beyond the device go over the same server and device token.
-  app.person.bindTransport(
-    createFetchPersonTransport({
-      baseUrl: config.baseUrl,
-      deviceToken: config.loadDeviceToken,
-      ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
-    }),
-  );
+  const deviceLeg = {
+    baseUrl: config.baseUrl,
+    deviceToken: config.loadDeviceToken,
+    ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
+  };
+  const uploadPin = createFetchPinVerifierUpload(deviceLeg);
+  app.person.bindTransport({
+    ...createFetchPersonTransport(deviceLeg),
+    // The same queue the bundle check sends: a send twice is one change on the server.
+    sendPendingPins: async () => {
+      await drainPendingVerifiers(app.db.db, uploadPin);
+    },
+  });
   const phoneCatalog = createPhoneCatalogRefresher({
     baseUrl: config.baseUrl,
     deviceToken: config.loadDeviceToken,
