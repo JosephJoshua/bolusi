@@ -610,9 +610,21 @@ export function TicketDetail({
       ? tn('repair.approval.askCancel')
       : tn(actionKey(action, ticket?.technicianId ?? null));
 
-  // One banner at a time, in the fixed slot so it shows wherever the user has scrolled: a refusal of
-  // what they just did (WhatsApp not opening included; dismissing it shows what it covered), then a
-  // rejected op from sync, then what their last action did.
+  // One banner at a time: a refusal of what they just did (WhatsApp not opening included;
+  // dismissing it shows what it covered), then a rejected op from sync, then what their last action
+  // did. The answers to an action sit in the fixed slot so they show wherever the user has
+  // scrolled; the rejected op is lasting news about this servisan, so it sits at the top of the
+  // page and scrolls with it, never holding a strip of the screen over the rows (font 2.0).
+  const rejectedBanner =
+    runner.errorCode === null && !messageFailed && rejected > 0 ? (
+      <Banner
+        variant="danger"
+        message={t('sync.rejected.banner', { count: rejected })}
+        onPress={onOpenSyncStatus}
+        inline
+        testID={`${testID}.rejectedBanner`}
+      />
+    ) : null;
   const banner =
     runner.errorCode !== null ? (
       <ActionErrorBanner
@@ -627,14 +639,7 @@ export function TicketDetail({
         onPress={() => setMessageFailed(false)}
         testID={`${testID}.messageFailed`}
       />
-    ) : rejected > 0 ? (
-      <Banner
-        variant="danger"
-        message={t('sync.rejected.banner', { count: rejected })}
-        onPress={onOpenSyncStatus}
-        testID={`${testID}.rejectedBanner`}
-      />
-    ) : done !== null ? (
+    ) : rejected === 0 && done !== null ? (
       <Banner
         variant="info"
         message={done}
@@ -691,6 +696,7 @@ export function TicketDetail({
       }
       testID={testID}
     >
+      {rejectedBanner}
       <QueryView
         query={query}
         onBack={onBack}
