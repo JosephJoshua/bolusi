@@ -631,15 +631,14 @@ export function TicketDetail({
   // One banner at a time: a refusal of what they just did (WhatsApp not opening included;
   // dismissing it shows what it covered), then a rejected op from sync, then what their last action
   // did. The answers to an action sit in the fixed slot so they show wherever the user has
-  // scrolled; the rejected op is lasting news about this servisan, so it sits at the top of the
-  // page and scrolls with it, never holding a strip of the screen over the rows (font 2.0).
+  // scrolled; the rejected op is lasting news about this servisan, so the same strip sits at the top
+  // of the page and scrolls away with it, never holding the screen over the rows (font 2.0).
   const rejectedBanner =
     runner.errorCode === null && !messageFailed && rejected > 0 ? (
       <Banner
         variant="danger"
         message={t('sync.rejected.banner', { count: rejected })}
         onPress={onOpenSyncStatus}
-        inline
         testID={`${testID}.rejectedBanner`}
       />
     ) : null;
@@ -678,6 +677,7 @@ export function TicketDetail({
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       banner={banner}
+      pageBanner={rejectedBanner ?? undefined}
       overlay={
         moreOpen && ticket !== undefined ? (
           <Sheet
@@ -715,7 +715,6 @@ export function TicketDetail({
       }
       testID={testID}
     >
-      {rejectedBanner}
       <QueryView
         query={query}
         onBack={onBack}

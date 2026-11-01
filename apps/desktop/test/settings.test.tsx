@@ -26,12 +26,14 @@ let core: FakeCore;
 
 vi.mock('../src/renderer/use-core.js', async () => {
   const { useSyncExternalStore } = await import('react');
+  const { followLocale } = await import('../src/renderer/core-client.js');
   return {
     useCore: (): CoreView => {
       const state = useSyncExternalStore(
         (listener) => core.subscribe(listener),
         () => core.state,
       );
+      followLocale(state);
       return { mode: 'live', client: core.client, state };
     },
   };
@@ -399,6 +401,54 @@ describe('Settings on the PC', () => {
     await waitFor(() => expect(screen.queryByTestId('desktop.rename')).toBeNull());
     expect(callsTo('device.rename').at(-1)).toEqual([OWNER.id, 'Kasir depan']);
     expect(byTestId('desktop.device.name').textContent).toBe('Kasir depan');
+  });
+
+  it("switches this PC's language for anyone signed in and stays on the page", async () => {
+    core = new FakeCore(
+      ready({ session: session({ ...signedIn(TECH, ALL), canRenameDevice: false }) }),
+    );
+    core.answers['device.setLocale'] = (_userId, locale) => {
+      core.set({ locale: locale as 'en' });
+      return undefined;
+    };
+    renderApp();
+    await openSettings('computer');
+    const choice = byTestId('desktop.settings.language.choice');
+    // Each language in its own name, the PC's one marked.
+    const options = within(choice).getAllByRole('radio');
+    expect(options.map((option) => option.textContent)).toEqual(['Bahasa Indonesia', 'English']);
+    expect(options[0]!.getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(within(choice).getByText('English'));
+    await waitFor(() =>
+      expect(byTestId('desktop.settings').textContent).toContain('Applies to everyone'),
+    );
+    expect(callsTo('device.setLocale')).toEqual([[TECH.id, 'en']]);
+    // Still on "This computer", with the side menu in English too.
+    expect(byTestId('desktop.settings.computer')).toBeTruthy();
+    expect(byTestId('desktop.settings.nav').textContent).toContain('This computer');
+    expect(
+      within(byTestId('desktop.settings.language.choice'))
+        .getAllByRole('radio')[1]!
+        .getAttribute('aria-checked'),
+    ).toBe('true');
+  });
+
+  it('keeps the language marked as it was when the PC refused the switch', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    core.answers['device.setLocale'] = () => Promise.reject(new DomainError('NOT_AUTHENTICATED'));
+    renderApp();
+    await openSettings('computer');
+    fireEvent.click(within(byTestId('desktop.settings.language.choice')).getByText('English'));
+    await waitFor(() => expect(callsTo('device.setLocale')).toHaveLength(1));
+    await waitFor(() =>
+      expect(
+        within(byTestId('desktop.settings.language.choice'))
+          .getAllByRole('radio')[0]!
+          .getAttribute('aria-checked'),
+      ).toBe('true'),
+    );
+    expect(byTestId('desktop.settings').textContent).toContain('Bahasa');
   });
 
   it('offers no rename to someone who may not register devices', async () => {

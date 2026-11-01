@@ -9,7 +9,7 @@ import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { tapTarget, type SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { resolveZone } from '@bolusi/device/navigation/zone';
 import { withDraft, type UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import { t, translateRoleKey } from '@bolusi/i18n';
+import { getLocale, setLocale, t, translateRoleKey } from '@bolusi/i18n';
 import { REPAIR_MODULE_ID, parseIntakeDraft } from '@bolusi/modules/repair';
 import { RepairRuntimeProvider, type IntakeDraft } from '@bolusi/modules/repair/desktop';
 import { Spinner, StatePanel } from '@bolusi/ui-web';
@@ -486,6 +486,7 @@ function useSettingsAccess(
       staff,
       device,
       renameDevice: canRenameDevice ? (name) => call<void>('device.rename', name) : undefined,
+      chooseLocale: (locale) => call<void>('device.setLocale', locale),
     };
   }, [
     client,
@@ -511,7 +512,19 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
   // One intake for the whole PC, as the core keeps it: whoever is here may carry on with it.
   const [draft, setDraft] = useState<IntakeDraft | null>(null);
   const runtime = useMemo(() => demoRuntimeFor(person, capture), [person, capture]);
-  const settings = useMemo((): SettingsAccess => ({ staff: demoStaffFor(person) }), [person]);
+  // The demo has no core to keep the language: it switches the window, until the next load.
+  const [, setDemoLocale] = useState(getLocale);
+  const settings = useMemo(
+    (): SettingsAccess => ({
+      staff: demoStaffFor(person),
+      chooseLocale: (next) => {
+        setLocale(next);
+        setDemoLocale(next);
+        return Promise.resolve();
+      },
+    }),
+    [person],
+  );
   return (
     <RepairRuntimeProvider runtime={runtime}>
       <Counter

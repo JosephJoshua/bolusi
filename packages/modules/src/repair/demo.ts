@@ -25,7 +25,7 @@ import {
   type RepairOutcome,
 } from './constants.js';
 import { normalizePhone } from './contact.js';
-import { partsInWork, undoableHandover } from './flows.js';
+import { partsInWork, ticketMoneyTarget, undoableHandover } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
 import { PURCHASING_PERMISSION } from '../purchasing/constants.js';
 import { demoPurchasingRuntime } from '../purchasing/demo.js';
@@ -1739,6 +1739,33 @@ export function demoRepairRuntime(
         },
         targetId: (input) => String(input['ticketId']),
         apply: (input) => commands['changeCancelFee']!(input),
+      },
+      // The same once charged: the bill comes down to the fee, as the ledger takes it off.
+      'repair.cancelFeeCharged': {
+        permission: P.cancel,
+        commandPermission: P.cancel,
+        limitPermission: MONEY_PERMISSION.refund,
+        amount: (input) => {
+          const money = ledger.documentMoney(String(input['ticketId']));
+          return money === null
+            ? 0
+            : Math.max(0, money.charged - money.reduced - Number(input['fee']));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: async (input) => {
+          const t = find(String(input['ticketId']));
+          const money = ledger.documentMoney(t.id);
+          const result = await ledger.run('reduceCharge', {
+            document: ticketMoneyTarget(t).document,
+            amount: Math.max(
+              0,
+              (money?.charged ?? 0) - (money?.reduced ?? 0) - Number(input['fee']),
+            ),
+            reason: input['reason'],
+          });
+          syncTicketMoney(t.id);
+          return result;
+        },
       },
       // A permit: approving changes nothing until the counter hands the phone over.
       'repair.payLater': {

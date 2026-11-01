@@ -54,6 +54,13 @@ export interface AppShellProps {
   readonly avatar: ReactNode;
   /** §3.6 banner slot — at most one, already selected via `selectBanner`. */
   readonly banner?: ReactNode;
+  /**
+   * The same strip, at the top of the page instead: it scrolls away with the content. For lasting
+   * news about the record on screen (its refused changes), so a fixed strip never holds a small
+   * screen at a large font. Answers to what the user just did stay in `banner`, seen wherever they
+   * scrolled. A screen that does not scroll shows it under the banner slot.
+   */
+  readonly pageBanner?: ReactNode;
   readonly children: ReactNode;
   /** Bottom action bar: the screen's one primary Button, in the thumb zone (§0, §8.1). */
   readonly bottomAction?: ReactNode;
@@ -204,6 +211,7 @@ export function AppShell({
   syncChip,
   avatar,
   banner,
+  pageBanner,
   children,
   bottomAction,
   scrollable = false,
@@ -278,6 +286,10 @@ export function AppShell({
         </View>
 
         {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
+        {/* A page that does not scroll has nothing to scroll it away with: it sits under the slot. */}
+        {scrollable || pageBanner === undefined ? null : (
+          <View testID={`${testID}.pageBanner`}>{pageBanner}</View>
+        )}
 
         {/*
         The content slot. Plain View by default; a ScrollView only when the screen opts in (task 206
@@ -301,6 +313,9 @@ export function AppShell({
             onScroll={reveal.onScroll}
             scrollEventThrottle={16}
           >
+            {pageBanner === undefined ? null : (
+              <View testID={`${testID}.pageBanner`}>{pageBanner}</View>
+            )}
             {/* What a focused field is measured against when it is scrolled into sight. */}
             <View
               ref={reveal.contentRef}

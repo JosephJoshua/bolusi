@@ -167,7 +167,9 @@ setting).
 Every screen ships loading (skeleton for lists, not spinners), empty, error and
 offline or stale states, plus the success feedback after an action ("Servisan
 mulai dikerjakan."). A refused action shows a banner in the fixed slot, never
-only at the top of a scrolled page. Sync state is a quiet chip, not an alarm.
+only at the top of a scrolled page. Refused changes on the record you are looking
+at show the same strip at the top of the page (`AppShell` `pageBanner`), so it
+scrolls away instead of covering rows at a large font. Sync state is a quiet chip, not an alarm.
 
 ## 8. Indonesian copy
 

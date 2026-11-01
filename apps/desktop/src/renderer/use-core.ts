@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { CORE_EVENTS, type CoreState } from '../core/api.js';
 import type { Client } from '../main/rpc.js';
 
-import { connectToCore, hasCoreBridge, latestCoreState } from './core-client.js';
+import { connectToCore, followLocale, hasCoreBridge, latestCoreState } from './core-client.js';
 
 export type CoreView =
   | { readonly mode: 'connecting' }
@@ -28,10 +28,13 @@ export function useCore(): CoreView {
         return;
       }
       const { client } = connection;
-      setView({ mode: 'live', client, state: latestCoreState() });
-      const off = client.on(CORE_EVENTS.state, (state) =>
-        setView({ mode: 'live', client, state: state as CoreState }),
-      );
+      const first = latestCoreState();
+      followLocale(first);
+      setView({ mode: 'live', client, state: first });
+      const off = client.on(CORE_EVENTS.state, (state) => {
+        followLocale(state as CoreState);
+        setView({ mode: 'live', client, state: state as CoreState });
+      });
       // The connection lives as long as the page; only this listener goes.
       stop = off;
     });

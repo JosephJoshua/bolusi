@@ -9,6 +9,7 @@ import {
   type DomainErrorDetails,
   type StaffAdminFailure,
 } from '@bolusi/core';
+import { getLocale, setLocale } from '@bolusi/i18n';
 import { QRIS_FAILURES, QrisError, type QrisFailure } from '@bolusi/modules/money';
 
 import { CORE_EVENTS, type CoreState, type RepairChange } from '../core/api.js';
@@ -83,6 +84,14 @@ let latest: CoreState | null = null;
 /** The last state the core sent, for a view that starts listening after it arrived. */
 export function latestCoreState(): CoreState | null {
   return latest;
+}
+
+/**
+ * The window speaks the PC's language, which the core holds. It switches before the state that
+ * carries it renders, so every word on that render is already in the new language.
+ */
+export function followLocale(state: CoreState | null): void {
+  if (state !== null && state.locale !== getLocale()) setLocale(state.locale);
 }
 
 /**

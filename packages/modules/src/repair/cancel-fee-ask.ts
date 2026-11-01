@@ -3,19 +3,20 @@
 // the change's own rules count it (commands.ts changeCancelFeeHandler): before anything is charged
 // the fee itself comes down, counted from the store's fee with the discounts against the cancel
 // limit; once charged the bill is cut, counted against the refund limit as Kurangi tagihan is.
-// Beyond it the same change is asked for: the fee as a repair request, the cut as money's own, so
-// the owner's yes records exactly what the manager would have.
+// Beyond it the same change is asked for, with the fee as typed (one kind before a charge, one
+// after, for the two limits), so the owner reads that fee and their yes records exactly what the
+// manager would have.
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
-import { MONEY_APPROVAL_KIND, MONEY_PERMISSION } from '../money/constants.js';
+import { MONEY_PERMISSION } from '../money/constants.js';
 import { REPAIR_APPROVAL_KIND, REPAIR_PERMISSION } from './constants.js';
-import { discountsStanding, ticketMoneyTarget } from './flows.js';
+import { discountsStanding } from './flows.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { cancelDrop, standardCancelFee, type TicketDetailRow } from './queries.js';
 import { useCancelFees, useRepairQuery, useRepairRuntime } from './runtime.js';
 
 export type CancelFeeTicket = Pick<
   TicketDetailRow,
-  'id' | 'ticketNumber' | 'customerName' | 'workStarted' | 'claimOfTicketId' | 'quoteLines'
+  'id' | 'workStarted' | 'claimOfTicketId' | 'quoteLines'
 >;
 
 /** Where a fee change stands against a limit, from what the servisan's money says now. */
@@ -54,10 +55,7 @@ export function cancelFeeRequest(
   }
   const cut = current - fee;
   return limits.refund !== null && money.reduced + cut > limits.refund
-    ? {
-        kind: MONEY_APPROVAL_KIND.reduceCharge,
-        input: { document: ticketMoneyTarget(ticket).document, amount: cut },
-      }
+    ? { kind: REPAIR_APPROVAL_KIND.cancelFeeCharged, input: { ticketId: ticket.id, fee } }
     : null;
 }
 
