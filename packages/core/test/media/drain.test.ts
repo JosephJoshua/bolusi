@@ -302,6 +302,48 @@ describe('a refused op`s captures, released while a pass runs, never reach the s
     await loop.settle();
     expect(completes).toBe(0);
   });
+
+  it('sends no chunk of an item released while its upload was starting', async () => {
+    // QA: the refusal landed between init and the first chunk, and chunk 0 still went out.
+    await givenCapture(h, 's-1', jpegBytes(3 * WIRE_CHUNK_SIZE), { attachedToOperationId: 'gone' });
+    const status = h.server.status.bind(h.server);
+    h.server.status = async (mediaId) => {
+      const response = await status(mediaId);
+      await releaseRefusedOpMedia(h.db, 'gone');
+      return response;
+    };
+    const chunks: number[] = [];
+    const putChunk = h.server.putChunk.bind(h.server);
+    h.server.putChunk = async (mediaId, index, bytes) => {
+      chunks.push(index);
+      return putChunk(mediaId, index, bytes);
+    };
+    const loop = loopFor(h);
+
+    loop.requestDrain('periodic');
+    await loop.settle();
+
+    expect(chunks).toEqual([]);
+    expect(h.surface.events).toEqual([]);
+  });
+
+  it('stops sending chunks once a refusal releases the item mid-upload', async () => {
+    await givenCapture(h, 'c-1', jpegBytes(3 * WIRE_CHUNK_SIZE), { attachedToOperationId: 'gone' });
+    const chunks: number[] = [];
+    const putChunk = h.server.putChunk.bind(h.server);
+    h.server.putChunk = async (mediaId, index, bytes) => {
+      chunks.push(index);
+      const response = await putChunk(mediaId, index, bytes);
+      await releaseRefusedOpMedia(h.db, 'gone');
+      return response;
+    };
+    const loop = loopFor(h);
+
+    loop.requestDrain('periodic');
+    await loop.settle();
+
+    expect(chunks).toEqual([0]);
+  });
 });
 
 describe('crash recovery (03 §4: app restart finds no live upload task)', () => {
