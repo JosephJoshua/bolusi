@@ -162,8 +162,10 @@ fails a build, a boot or a test rather than waiting for review:
   signed in sees it from their next sign-in; and the server's PIN check guards against
   a modified app, not a rooted device, which holds every person's argon2 PIN verifier
   for offline sign-in, so a 6-digit PIN can be cracked off it. A new PIN ends the
-  person's other sessions. The check uses a query's own `permission`, so a query must
-  not join a table read with another permission. Each projection table must be read with one permission, so a record with
+  person's other sessions. The check uses a query's `reads` (its `permission` when
+  absent), so a query allowed by an action (counting cash, taking a phone in) names the
+  reads of the data it reads (`packages/modules/test/query-reads.test.ts`), and a query
+  must not join a table read with a permission it does not name. Each projection table must be read with one permission, so a record with
   fields for different readers is split into separate op types and tables, one per
   reader (part costs live apart from stock moves; `projectionTableReads` throws otherwise).
 - When a type's rule judges only newer versions, set `minPushVersion` on the type. The

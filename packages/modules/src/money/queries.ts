@@ -95,6 +95,7 @@ async function paymentAccountsHandler(
 export const paymentAccountsQuery = {
   name: 'paymentAccounts',
   permission: MONEY_PERMISSION.receive,
+  reads: [MONEY_PERMISSION.read],
   input: paymentAccountsInput,
   handler: paymentAccountsHandler,
 } as const;
@@ -238,6 +239,7 @@ async function documentMoneyHandler(
 export const documentMoneyQuery = {
   name: 'documentMoney',
   permission: MONEY_PERMISSION.receive,
+  reads: [MONEY_PERMISSION.read],
   input: documentMoneyInput,
   handler: documentMoneyHandler,
 } as const;
@@ -339,6 +341,7 @@ async function cashDrawerHandler(
 export const cashDrawerQuery = {
   name: 'cashDrawer',
   permission: MONEY_PERMISSION.countCash,
+  reads: [MONEY_PERMISSION.read],
   input: cashDrawerInput,
   handler: cashDrawerHandler,
 } as const;

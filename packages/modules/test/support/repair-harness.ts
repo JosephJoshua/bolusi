@@ -174,6 +174,7 @@ export interface RepairHarness {
 export async function openRepairHarness(
   seed: number,
   shared?: { tenantId: string; storeId: string; users: readonly string[] },
+  options: { readonly readHere?: (permissionId: string) => boolean } = {},
 ): Promise<RepairHarness> {
   const driver = openMemoryDriver();
   await runClientMigrations(driver, { now: () => 1 });
@@ -336,6 +337,7 @@ export async function openRepairHarness(
     syncScheduler: { schedule: () => undefined },
     // The device's live search cache, fed by this engine's applies (local and pulled).
     search: new SearchIndexCache(engine.invalidation),
+    ...(options.readHere === undefined ? {} : { readHere: options.readHere }),
   });
 
   await runtime.commands.emitRuntimeOp({

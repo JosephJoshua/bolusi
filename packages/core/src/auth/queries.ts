@@ -139,6 +139,8 @@ export async function listPermissionDenialsHandler(
  */
 export const listPermissionDenialsQuery = {
   permission: AUTH_PERMISSION.auditView,
+  // Refusal records every device keeps (their op types are read by everyone).
+  reads: [],
   input: listPermissionDenialsInput,
   handler: listPermissionDenialsHandler,
 } as const;

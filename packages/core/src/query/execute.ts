@@ -47,6 +47,8 @@ import { readOnlyDb, type QueryContext } from './qctx.js';
 export interface ExecutableQuery<TInput, TOutput, DB> extends QueryHandle<TInput, TOutput> {
   /** The manifest key (04 §6: `queries: { listNotes: {...} }`). `defineModule` fills it in. */
   readonly name: string;
+  /** See `QueryDeclaration.reads`: absent, the query reads data read with its `permission`. */
+  readonly reads?: readonly string[];
   readonly handler: (input: TInput, qctx: QueryContext<DB>) => TOutput | Promise<TOutput>;
 }
 
@@ -146,12 +148,15 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
     // Step 2b — may read it, but it is not here: the device holds only what its people may read,
     // and this person's extra has not come down (offline at sign-in). Never an empty result, which
     // would read as "nothing there".
-    if ((await this.#readHere?.(executable.permission)) === false) {
-      throw new DomainError(
-        'NOT_ON_DEVICE',
-        { query: target, permission: executable.permission },
-        `${target} reads ${executable.permission}, which this device does not hold right now`,
-      );
+    // Each read of the data it reads, so an allowed-but-empty table never answers "Rp 0".
+    for (const read of executable.reads ?? [executable.permission]) {
+      if ((await this.#readHere?.(read)) === false) {
+        throw new DomainError(
+          'NOT_ON_DEVICE',
+          { query: target, permission: read },
+          `${target} reads ${read}, which this device does not hold right now`,
+        );
+      }
     }
 
     // Step 3 — the handler, with the §6 qctx and nothing else.

@@ -944,6 +944,8 @@ export function maxTicketCounter(
 export const nextTicketCounterQuery = {
   name: 'nextTicketCounter',
   permission: REPAIR_PERMISSION.intake,
+  // Numbered from the store's servisan: without them here a new number could repeat one.
+  reads: [REPAIR_PERMISSION.read],
   input: nextTicketCounterInput,
   handler: nextTicketCounterHandler,
 } as const;
