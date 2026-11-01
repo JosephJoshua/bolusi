@@ -369,8 +369,13 @@ export function SettleCountDialog({
 export function ReceiveDebtDialog({
   balance,
   onDone,
+  onAsked,
   onClose,
-}: TaskProps & { readonly balance: NamedBalance }): React.JSX.Element {
+}: TaskProps & {
+  readonly balance: NamedBalance;
+  /** Lowering the bill beyond a manager's limit asked an owner instead. */
+  readonly onAsked?: (() => void) | undefined;
+}): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const receipt = useDebtReceipt(balance);
@@ -446,6 +451,7 @@ export function ReceiveDebtDialog({
           target={targetOf(balance)}
           // The bill it was paying changed: the board shows what is owed now.
           onDone={onDone}
+          onAsked={onAsked}
           onClose={() => setReducing(false)}
         />
       ) : null}
