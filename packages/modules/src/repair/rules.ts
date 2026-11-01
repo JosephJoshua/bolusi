@@ -1135,6 +1135,30 @@ export async function cancelStandardFee(db: Db, ref: TicketRef): Promise<number 
   return standardFeeOf(db, ref, ticket);
 }
 
+/**
+ * The store's fee a change to a cancelled servisan's fee counts from (`cancelFeeChangedRule`), or
+ * null when there is no fee to change: not cancelled, or already charged, when a lower bill is a
+ * cut off the charge instead (money's own, with its own limit).
+ */
+export async function cancelledFeeStandard(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined || ticket.outcome !== 'cancelled') return null;
+  const charged = await documentTotal(
+    db as unknown as Kysely<never>,
+    storeOf(ref),
+    { kind: REPAIR_DOCUMENT_KIND, id: ref.entityId },
+    'charge_recorded',
+  );
+  return charged > 0 ? null : standardFeeOf(db, ref, ticket);
+}
+
+/** What a fee change is asked against: the servisan, and the fee it has now. */
+export async function cancelFeeApprovalBasis(db: Db, ref: TicketRef): Promise<string | null> {
+  const basis = await ticketApprovalBasis(db, ref);
+  const ticket = await findTicket(db, ref);
+  return basis === null || ticket === undefined ? null : `${basis}|${ticket.cancelFee ?? ''}`;
+}
+
 /** A technician's suggestion; one the cashier could never apply would only block handover. */
 export const quoteChangeProposedRule: Rule = async (op, ctx) => {
   const { db } = ctx;

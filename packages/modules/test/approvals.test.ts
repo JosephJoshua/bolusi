@@ -6,10 +6,12 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
+import { cancelFeeRequest } from '../src/repair/cancel-fee-ask.js';
 import {
   accessoriesBack,
   intake,
   openRepairHarness,
+  paidHandover,
   type RepairHarness,
 } from './support/repair-harness.js';
 
@@ -279,6 +281,117 @@ describe('a cancel asked for by the counter', () => {
     expect(mine.rows).toMatchObject([{ id: requestId, status: 'rejected', mine: true }]);
     const owners = await h.approvalsQuery('approvalRequests', { mine: true }, h.storeOwnerId);
     expect(owners.rows).toEqual([]);
+  });
+});
+
+describe('a cancelled servisan’s fee lowered beyond a manager’s limit (Ubah biaya)', () => {
+  /** Cancelled at the store's Rp 100.000 before work, still in the store. */
+  async function cancelled(harness: RepairHarness) {
+    await harness.run(
+      'setCancelFees',
+      { beforeWork: 100_000, afterWork: 150_000 },
+      harness.storeOwnerId,
+    );
+    const ticketId = await openTicket(harness);
+    await harness.run('cancelTicket', { ticketId, reason: 'Batal' }, harness.storeOwnerId);
+    return ticketId;
+  }
+
+  test('before pickup the manager asks, and the owner’s yes sets the fee as the owner’s', async () => {
+    h = await openRepairHarness(9561);
+    const ticketId = await cancelled(h);
+    const input = { ticketId, fee: 40_000, reason: 'Pelanggan lama' };
+    // Control: Rp 60.000 below the store's fee is past the manager's Rp 50.000.
+    await refused(h.run('changeCancelFee', input, h.managerId), 'repair.refusal.overLimit');
+    const requestId = await ask(h, 'repair.cancelFee', input, h.managerId);
+    expect(await request(h, requestId, h.storeOwnerId)).toMatchObject({
+      status: 'waiting',
+      amount: 60_000,
+      counted: 60_000,
+      canDecide: true,
+    });
+    // Never by the asker; the counter neither changes the fee nor asks for it.
+    await refused(
+      h.approvals('approveRequest', { requestId }, h.managerId),
+      'approvals.refusal.ownRequest',
+    );
+    await refused(
+      h.approvals('requestApproval', { kind: 'repair.cancelFee', input, reason: 'x' }, h.cashierId),
+      'approvals.refusal.cannotAsk',
+      'PERMISSION_DENIED',
+    );
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+    expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', cancelFee: 40_000 });
+    const changed = (await h.ownOps()).filter((op) => op.type === 'repair.cancel_fee_changed');
+    expect(changed.map((op) => op.userId)).toEqual([h.storeOwnerId]);
+  });
+
+  test('closes once the fee changes another way or the phone is charged at pickup', async () => {
+    h = await openRepairHarness(9562);
+    const ticketId = await cancelled(h);
+    const first = await ask(
+      h,
+      'repair.cancelFee',
+      { ticketId, fee: 40_000, reason: 'Kenal' },
+      h.managerId,
+    );
+    await h.run('changeCancelFee', { ticketId, fee: 90_000, reason: 'Diskon' }, h.storeOwnerId);
+    expect((await request(h, first, h.storeOwnerId)).status).toBe('closed');
+    await refused(
+      h.approvals('approveRequest', { requestId: first }, h.storeOwnerId),
+      'approvals.refusal.changed',
+    );
+
+    const second = await ask(
+      h,
+      'repair.cancelFee',
+      { ticketId, fee: 30_000, reason: 'Kenal' },
+      h.managerId,
+    );
+    await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
+    expect((await request(h, second, h.storeOwnerId)).status).toBe('closed');
+    await refused(
+      h.approvals('approveRequest', { requestId: second }, h.storeOwnerId),
+      'approvals.refusal.changed',
+    );
+    expect((await ticket(h, ticketId)).cancelFee).toBe(90_000);
+  });
+
+  test('once charged, it is asked as a lower bill and lands as the asked fee', async () => {
+    h = await openRepairHarness(9563);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 70_000 }, h.storeOwnerId);
+    await h.run(
+      'returnDevice',
+      (await paidHandover(h, ticketId, {
+        payments: [{ account: 'cash', amount: 50_000 }],
+        unpaidReason: 'Sisa minggu depan',
+      })) as never,
+      h.ownerId,
+    );
+    const row = await ticket(h, ticketId);
+    // Rp 70.000 to Rp 20.000 cuts Rp 50.000 off the bill: past the manager's Rp 30.000.
+    await expect(
+      h.run('changeCancelFee', { ticketId, fee: 20_000, reason: 'Kenal' }, h.managerId),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+    const asked = cancelFeeRequest(
+      row,
+      { charged: 70_000, reduced: 0 },
+      70_000,
+      20_000,
+      { cancel: 50_000, refund: 30_000 },
+      0,
+    );
+    expect(asked?.kind).toBe('money.reduceCharge');
+    const requestId = await ask(h, asked!.kind, { ...asked!.input, reason: 'Kenal' }, h.managerId);
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+    const after = await ticket(h, ticketId);
+    expect((after.cancelFee ?? 0) - after.reduced).toBe(20_000);
+    // Paid 50.000 against a bill of 20.000: 30.000 is owed back.
+    const money = (
+      await h.moneyQuery('documentMoney', { kind: 'repair.ticket', id: ticketId }, h.ownerId)
+    ).rows[0] as { balance: number };
+    expect(money.balance).toBe(-30_000);
   });
 });
 

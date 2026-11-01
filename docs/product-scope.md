@@ -545,6 +545,11 @@ governance notes in "Decision" where they differ.
   limit by what its voids take off (the decrease through the same method, all
   of it through another). Refunds beyond an overpayment and voids from Kas are
   not requestable: no counter screen starts them.
+- **Ubah biaya on a cancelled servisan (2026-11-01):** a manager past their
+  limit asks too, on the phone and the PC. Before pickup it asks for the new fee
+  (cancel limit, counted from the store's fee with the discounts); once the
+  phone went home and was charged, for a lower bill like "Kurangi tagihan"
+  (refund limit). The owner's yes records exactly what the manager would have.
 
 ## Customers follow their repair online (2026-10-28)
 

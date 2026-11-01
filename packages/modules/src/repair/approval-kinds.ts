@@ -1,9 +1,9 @@
 // The servisan decisions an owner may hand out through an approval request (approvals/kinds.ts):
-// a price drop, a cancel (with its fee) and a down payment fix. Approving runs the same command the
-// owner would, as the owner, so its rules (a manager's limit included) judge it as if they had done
-// it at the counter. "Bayar nanti" is a permit instead: approved, the counter lets the phone go
-// unpaid at handover (`requirePaid`). A request depends on the servisan's state and price: once
-// either moves, it closes.
+// a price drop, a cancel (with its fee), a cancelled servisan's lower fee and a down payment fix.
+// Approving runs the same command the owner would, as the owner, so its rules (a manager's limit
+// included) judge it as if they had done it at the counter. "Bayar nanti" is a permit instead:
+// approved, the counter lets the phone go unpaid at handover (`requirePaid`). A request depends on
+// the servisan's state and price: once either moves, it closes.
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
@@ -14,6 +14,8 @@ import type { MoneyDatabase } from '../money/schema.js';
 import {
   cancelTicketHandler,
   cancelTicketInput,
+  changeCancelFeeHandler,
+  changeCancelFeeInput,
   changeQuoteHandler,
   changeQuoteInput,
   correctDownPaymentHandler,
@@ -23,7 +25,14 @@ import {
 import { REPAIR_APPROVAL_KIND, REPAIR_PERMISSION, REPAIR_TICKET_ENTITY } from './constants.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { cancelDrop } from './queries.js';
-import { cancelStandardFee, handoverDebt, ticketApprovalBasis, ticketDiscounts } from './rules.js';
+import {
+  cancelFeeApprovalBasis,
+  cancelledFeeStandard,
+  cancelStandardFee,
+  handoverDebt,
+  ticketApprovalBasis,
+  ticketDiscounts,
+} from './rules.js';
 import type { RepairDatabase } from './schema.js';
 
 function ticketRef(db: Kysely<never>, scope: ApprovalScope, ticketId: string) {
@@ -132,6 +141,37 @@ export const repairApprovalKinds: ApprovalKinds = {
       return cancelDrop(standard, input.fee ?? standard, await ticketDiscounts(at.db, at.ref));
     },
     basis: (db, scope, input) => basisOf(db, scope, input.ticketId),
+  }),
+  /**
+   * A cancelled servisan's fee lowered afterwards, before anything is charged (Ubah biaya), by a
+   * manager beyond their cancel limit: counted from the store's fee with the discounts, as the
+   * fee change's rule counts it. Once charged, a lower bill is a cut off the charge, asked as
+   * money's own (money.reduceCharge), so this one closes then.
+   */
+  [REPAIR_APPROVAL_KIND.cancelFee]: approvalKind({
+    id: REPAIR_APPROVAL_KIND.cancelFee,
+    input: changeCancelFeeInput,
+    handler: changeCancelFeeHandler,
+    commandPermission: REPAIR_PERMISSION.cancel,
+    permission: REPAIR_PERMISSION.cancel,
+    // Only someone who changes the fee asks: a manager beyond their limit.
+    askPermission: REPAIR_PERMISSION.cancel,
+    fits: () => true,
+    target: ticketTarget,
+    amount: async (db, scope, input) => {
+      const at = ticketRef(db, scope, input.ticketId);
+      const standard = await cancelledFeeStandard(at.db, at.ref);
+      return standard === null ? null : Math.max(0, standard - input.fee);
+    },
+    counted: async (db, scope, input) => {
+      const at = ticketRef(db, scope, input.ticketId);
+      const standard = (await cancelledFeeStandard(at.db, at.ref)) ?? 0;
+      return cancelDrop(standard, input.fee, await ticketDiscounts(at.db, at.ref));
+    },
+    basis: (db, scope, input) => {
+      const at = ticketRef(db, scope, input.ticketId);
+      return cancelFeeApprovalBasis(at.db, at.ref);
+    },
   }),
   /**
    * Letting the phone go unpaid at handover, up to what is left to pay now: a permit the counter

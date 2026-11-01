@@ -1729,6 +1729,17 @@ export function demoRepairRuntime(
         targetId: (input) => String(input['ticketId']),
         apply: (input) => commands['cancelTicket']!(input),
       },
+      // A cancelled servisan's fee lowered before pickup, beyond a manager's limit.
+      'repair.cancelFee': {
+        permission: P.cancel,
+        commandPermission: P.cancel,
+        amount: (input) => {
+          const standard = standardCancelFee(find(String(input['ticketId'])), cancelFees);
+          return Math.max(0, standard - Number(input['fee']));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['changeCancelFee']!(input),
+      },
       // A permit: approving changes nothing until the counter hands the phone over.
       'repair.payLater': {
         permission: MONEY_PERMISSION.extendCredit,

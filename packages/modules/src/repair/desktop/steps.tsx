@@ -43,6 +43,7 @@ import {
   type SlipKind,
   type WorkPhotoStage,
 } from '../constants.js';
+import { useCancelFeeAsk, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentAsk } from '../down-payment-ask.js';
 import {
   amountOwed,
@@ -722,15 +723,20 @@ export function UndoHandoverDialog({
 export function ChangeCancelFeeDialog({
   ticketId,
   stale,
+  ticket,
   current,
   paid,
   onDone,
+  onAsked,
   onClose,
 }: StepDialogProps & {
+  readonly ticket: CancelFeeTicket;
   /** The fee standing now. */
   readonly current: number;
   /** Paid in so far, which the new fee is settled against. */
   readonly paid: number;
+  /** A manager beyond their limit asked an owner instead. */
+  readonly onAsked: () => void;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
@@ -738,12 +744,18 @@ export function ChangeCancelFeeDialog({
   const [reason, setReason] = useState('');
   const changed = fee !== null && fee !== current;
   const complete = changed && reason.trim() !== '';
+  const ask = useCancelFeeAsk(ticket, current, changed ? fee : null);
   const submit = (): void => {
     if (fee === null || !complete) return;
+    const asking = ask.asking;
     void runner
-      .run(() => runtime.run('changeCancelFee', { ticketId, fee, reason }))
+      .run<unknown>(() =>
+        asking
+          ? runtime.approvals.run('requestApproval', ask.request(reason.trim()))
+          : runtime.run('changeCancelFee', { ticketId, fee, reason }),
+      )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result !== undefined) (asking ? onAsked : onDone)();
       });
   };
   const leave = useLeaveGuard(stale === null && (changed || reason.trim() !== ''), onClose);
@@ -776,7 +788,7 @@ export function ChangeCancelFeeDialog({
             )}
             <CancelButton onClick={leave.requestClose} />
             <Button
-              label={tn('repair.cancelFee.save')}
+              label={ask.asking ? ta('approvals.action.ask') : tn('repair.cancelFee.save')}
               variant="primary"
               onClick={submit}
               busy={runner.busy}
@@ -800,6 +812,11 @@ export function ChangeCancelFeeDialog({
           onChange={(event) => setReason(event.target.value)}
           data-testid="repair.desk.cancelFee.reason"
         />
+        {ask.asking ? (
+          <p className="mt-4 text-small text-text-muted" data-testid="repair.desk.cancelFee.asks">
+            {tn(askedBecauseKey(true))}
+          </p>
+        ) : null}
       </StepDialog>
       {leave.confirm}
     </>

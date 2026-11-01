@@ -129,6 +129,12 @@ export interface BannerProps {
    */
   readonly collapsed?: boolean | undefined;
   readonly onToggleCollapse?: (() => void) | undefined;
+  /**
+   * Inside the page content instead of the shell's banner slot: it scrolls with the page and takes
+   * its own room, so a lasting notice about the record (its refused changes) never holds a fixed
+   * strip of a small screen at a large font. Rounded, apart from what follows.
+   */
+  readonly inline?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -141,6 +147,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     minHeight: touch.min,
   },
+  inline: { borderRadius: radius.md, marginBottom: space.lg },
   message: {
     ...type.bodySm,
     flex: 1,
@@ -190,6 +197,7 @@ export function Banner({
   onDismiss,
   collapsed = false,
   onToggleCollapse,
+  inline = false,
   testID = 'ui.banner',
 }: BannerProps): React.JSX.Element {
   const { bg, fg, icon } = VARIANT[variant];
@@ -239,7 +247,11 @@ export function Banner({
   );
 
   return (
-    <View testID={testID} accessibilityRole="alert" style={[styles.base, { backgroundColor: bg }]}>
+    <View
+      testID={testID}
+      accessibilityRole="alert"
+      style={[styles.base, inline ? styles.inline : null, { backgroundColor: bg }]}
+    >
       {onPress === undefined ? (
         summary
       ) : (

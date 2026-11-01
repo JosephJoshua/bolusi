@@ -232,4 +232,6 @@ export const REPAIR_APPROVAL_KIND = {
   /** A permit: the phone may leave unpaid, up to the amount approved (Bayar nanti). */
   payLater: 'repair.payLater',
   downPayment: 'repair.downPayment',
+  /** A cancelled servisan's fee lowered before anything is charged (Ubah biaya). */
+  cancelFee: 'repair.cancelFee',
 } as const;

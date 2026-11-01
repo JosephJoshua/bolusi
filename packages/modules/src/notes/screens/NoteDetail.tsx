@@ -109,16 +109,6 @@ export function NoteDetail({
       backLabel={t('core.action.back')}
       syncChip={syncChip}
       avatar={avatar}
-      banner={
-        rejected > 0 ? (
-          <Banner
-            variant="danger"
-            message={t('sync.rejected.banner', { count: rejected })}
-            onPress={onOpenSyncStatus}
-            testID={`${testID}.rejectedBanner`}
-          />
-        ) : undefined
-      }
       testID={testID}
       // OVERLAY slot, not children: inside a scrollable content slot the sheet's absolute box spans
       // the scrollable height and its bottom-docked buttons fall below the viewport on a long note
@@ -137,6 +127,17 @@ export function NoteDetail({
         ) : null
       }
     >
+      {/* At the top of the page, scrolling with it: lasting news about this note never holds a
+          strip of a small screen over the text (repair TicketDetail does the same). */}
+      {rejected > 0 ? (
+        <Banner
+          variant="danger"
+          message={t('sync.rejected.banner', { count: rejected })}
+          onPress={onOpenSyncStatus}
+          inline
+          testID={`${testID}.rejectedBanner`}
+        />
+      ) : null}
       {renderBody()}
     </AppShell>
   );
