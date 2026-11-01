@@ -10,6 +10,7 @@ import { methodStores, methodSummary } from '../src/money/methods.js';
 import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
 import { turnedDownLines } from '../src/money/void-ask.js';
+import { refundLimitText } from '../src/money/refund.js';
 import type { ApprovalRow } from '../src/approvals/queries.js';
 
 import {
@@ -463,5 +464,23 @@ describe('cancels an owner turned down', () => {
         text: `Yohana Pemilik menolak memotong tagihan ${formatMoney(50_000)}: Harga pas`,
       },
     ]);
+  });
+});
+
+describe('a manager’s refund limit, as the step says it', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const form = { limit: 30_000, overLimit: false, asking: false, credit: 100_000 };
+  test('is not said while only the overpayment goes back, which no limit holds', () => {
+    expect(refundLimitText({ ...form, digits: '100000' })).toBeNull();
+    expect(refundLimitText({ ...form, digits: '120000' })).toBe(
+      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+    );
+    expect(refundLimitText({ ...form, credit: 0, digits: '' })).toBe(
+      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+    );
   });
 });

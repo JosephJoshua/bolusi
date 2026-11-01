@@ -145,6 +145,39 @@ export function useVoidRequests(): VoidRequests {
   }, [data]);
 }
 
+/** The servisan (or other document) an ask was about, as its input names it. */
+function documentOf(row: ApprovalRow): { kind: string; id: string; label: string | null } | null {
+  const document = (row.input as { readonly document?: unknown }).document as
+    { readonly kind?: unknown; readonly id?: unknown; readonly label?: unknown } | undefined;
+  if (typeof document?.kind !== 'string' || typeof document.id !== 'string') return null;
+  return {
+    kind: document.kind,
+    id: document.id,
+    label: typeof document.label === 'string' ? document.label : null,
+  };
+}
+
+/**
+ * Whose servisan each turned-down ask was about, and its number when the ask carries it, said with
+ * the answer so two of them are told apart.
+ */
+export function useAskedAbout(rows: readonly ApprovalRow[]): (row: ApprovalRow) => string | null {
+  const documents = rows.map(documentOf).filter((d) => d !== null);
+  const read = useMoneyQuery(
+    async (rt) => (documents.length === 0 ? new Map() : await rt.customersOf(documents)),
+    `askedAbout:${documents.map((d) => d.id).join(',')}`,
+  );
+  const names: ReadonlyMap<string, string> = read.status === 'ready' ? read.data : new Map();
+  return (row) => {
+    const document = documentOf(row);
+    if (document === null) return null;
+    const parts = [names.get(document.id), document.label].filter(
+      (part): part is string => part !== undefined && part !== null && part !== '',
+    );
+    return parts.length === 0 ? null : parts.join(' · ');
+  };
+}
+
 /** How a turned-down ask reads, by what was asked. */
 const REJECTED_COPY: Readonly<Record<string, readonly [MoneyKey, MoneyKey]>> = {
   [MONEY_APPROVAL_KIND.voidPayment]: ['money.void.rejected', 'money.void.rejectedNote'],
@@ -156,6 +189,7 @@ const REJECTED_COPY: Readonly<Record<string, readonly [MoneyKey, MoneyKey]>> = {
 export function turnedDownLines(
   asks: VoidRequests,
   since: number,
+  about: (row: ApprovalRow) => string | null = () => null,
 ): readonly { id: string; text: string }[] {
   return asks.turnedDown
     .filter((row) => (row.decidedAt ?? 0) >= since)
@@ -163,13 +197,12 @@ export function turnedDownLines(
       const values = { name: row.decidedByName ?? '–', amount: formatMoney(row.amount) };
       const [plain, noted] =
         REJECTED_COPY[row.kind] ?? REJECTED_COPY[MONEY_APPROVAL_KIND.voidPayment]!;
-      return {
-        id: row.id,
-        text:
-          row.note === null || row.note === ''
-            ? tm(plain, values)
-            : tm(noted, { ...values, note: row.note }),
-      };
+      const said =
+        row.note === null || row.note === ''
+          ? tm(plain, values)
+          : tm(noted, { ...values, note: row.note });
+      const what = about(row);
+      return { id: row.id, text: what === null ? said : `${what}: ${said}` };
     });
 }
 

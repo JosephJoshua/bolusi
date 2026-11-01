@@ -31,7 +31,7 @@ import { accountLabel, dayStart, differenceText, type NamedBalance } from '../ka
 import { useKasDay } from '../kas-day.js';
 import type { CashCountRow } from '../queries.js';
 import { useMoneyRuntime } from '../runtime.js';
-import { useVoidRequests } from '../void-ask.js';
+import { useAskedAbout, useVoidRequests } from '../void-ask.js';
 import { approvalKindKey, ta } from '../../approvals/i18n.js';
 
 export interface KasBoardProps {
@@ -83,6 +83,7 @@ export function KasBoard({
   // in Riwayat.
   const since = dayStart(now());
   const turnedDown = useVoidRequests().turnedDown.filter((row) => (row.decidedAt ?? 0) >= since);
+  const about = useAskedAbout(turnedDown);
 
   return (
     <AppShell
@@ -161,7 +162,9 @@ export function KasBoard({
             <Row
               key={row.id}
               label={ta(approvalKindKey(row.kind))}
-              detail={[row.decidedByName, row.note].filter(Boolean).join(': ')}
+              detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
+                .filter(Boolean)
+                .join(' · ')}
               value={formatMoney(row.amount)}
               onPress={onHistory}
               testID={`${testID}.turnedDown.${row.id}`}

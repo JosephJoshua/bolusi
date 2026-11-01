@@ -38,7 +38,7 @@ import {
   type NamedBalance,
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
-import { turnedDownLines, useOnVoidDecided, useVoidRequests } from '../void-ask.js';
+import { turnedDownLines, useAskedAbout, useOnVoidDecided, useVoidRequests } from '../void-ask.js';
 import { approvalByLine } from '../../approvals/copy.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { targetOf, type MoneyTarget } from '../refund.js';
@@ -93,7 +93,10 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   // Cancels this person asked for that an owner turned down today, until closed.
   const asks = useVoidRequests();
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
-  const turnedDown = turnedDownLines(asks, dayStart(now())).filter((line) => !seen.has(line.id));
+  const about = useAskedAbout(asks.turnedDown);
+  const turnedDown = turnedDownLines(asks, dayStart(now()), about).filter(
+    (line) => !seen.has(line.id),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="money.desk.kas">

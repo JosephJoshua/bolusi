@@ -334,10 +334,12 @@ export function withinRefundLimit(money: DocumentMoney, methodMax: number, limit
  * own error already says how far it may go.
  */
 export function refundLimitText(
-  form: Pick<RefundForm, 'limit' | 'overLimit' | 'asking'>,
+  form: Pick<RefundForm, 'limit' | 'overLimit' | 'asking' | 'credit' | 'digits'>,
 ): string | null {
   if (form.limit === null || form.overLimit) return null;
   if (form.asking) return tm('money.ask.overLimit');
+  // Giving back an overpayment is the counter's, which no limit holds: said only beyond it.
+  if (form.credit > 0 && (rupiah(form.digits) ?? 0) <= form.credit) return null;
   return tm('money.refund.limit', { amount: formatMoney(form.limit) });
 }
 

@@ -636,6 +636,8 @@ describe('money back and lowered bills', () => {
     ).toBe(true);
     expect(text(screen, `money.kas.turnedDown.${request!.id}`)).toContain('Kurangi tagihan');
     expect(text(screen, `money.kas.turnedDown.${request!.id}`)).toContain('Harga sudah pas');
+    // Said with whose servisan it was, so two answers are told apart.
+    expect(text(screen, `money.kas.turnedDown.${request!.id}`)).toContain('Yohanis Wenda');
 
     await press(screen, `money.kas.owed.${ticketId}`);
     await press(screen, 'money.receive.reduce');
