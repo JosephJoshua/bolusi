@@ -3,10 +3,15 @@
 import { insertOpLogRow, markSyncResult } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import { ChainBuilder, makeWorld, noblePort, nodeColumnAead, opRowOf } from '@bolusi/test-support';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import idCatalog from '@bolusi/modules/repair/i18n/id.json' with { type: 'json' };
+import enCatalog from '@bolusi/modules/repair/i18n/en.json' with { type: 'json' };
+import { registerRepairCatalog } from '@bolusi/modules/repair';
+import { afterEach, beforeAll, beforeEach, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 
+import { readTicketSyncStatuses } from '../models/repair/runtime-adapter.js';
+import { REPAIR_REJECTED_SUBJECTS } from './repair.js';
 import { readEntitySyncStatuses } from './entity-sync-statuses.js';
 
 import {
@@ -17,6 +22,10 @@ import {
 
 const keyStore = { getDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)) };
 let db: ClientDb;
+
+beforeAll(() => {
+  registerRepairCatalog({ id: idCatalog, en: enCatalog });
+});
 
 beforeEach(async () => {
   await closeClientDb();
@@ -160,4 +169,41 @@ test('a servisan shows a refusal only to its maker, until they mark it checked',
 
   await markRejectionsHandled(db, userId, [ids[0]!], 10);
   expect(await statuses(userId)).toEqual({ [GONE]: ['rejected'] });
+});
+
+test('a refused charge shows on its servisan for the person who recorded it', async () => {
+  const builder = new ChainBuilder(makeWorld(4405, noblePort), noblePort);
+  builder.genesis();
+  const charge = builder.append({
+    type: 'money.charge_recorded',
+    entityType: 'money_entry',
+    entityId: '01920000-0000-7000-8000-0000000d0a09',
+    payload: {
+      document: { kind: 'repair.ticket', id: NAMED, label: 'K7Q-0042' },
+      amount: 100_000,
+      account: 'repair',
+    },
+  });
+  await insertOpLogRow(db.db, opRowOf(charge), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
+  await markSyncResult(db.db as unknown as Parameters<typeof markSyncResult>[0], {
+    id: charge.id,
+    currentStatus: 'local',
+    event: { kind: 'rejected', rejectionCode: 'RULE_VIOLATED', rejectionReason: 'x' },
+  });
+  const maker = await makerOf(charge.id);
+
+  expect(await readTicketSyncStatuses(db.db, [NAMED, GONE], maker)).toEqual({
+    [NAMED]: ['rejected'],
+  });
+  expect(await readTicketSyncStatuses(db.db, [NAMED], 'someone-else')).toEqual({});
+  // The Status data list names the servisan the refused charge was on.
+  const [row] = (await readSyncStatusRows(db.db, REPAIR_REJECTED_SUBJECTS, maker)).rejected;
+  expect(row?.subject).toBe('Servisan K7Q-0042');
+
+  await markRejectionsHandled(db, maker, [charge.id], 10);
+  expect(await readTicketSyncStatuses(db.db, [NAMED], maker)).toEqual({});
 });

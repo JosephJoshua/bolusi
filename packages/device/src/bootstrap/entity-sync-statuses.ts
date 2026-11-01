@@ -36,3 +36,37 @@ export async function readEntitySyncStatuses(
   }
   return out;
 }
+
+/**
+ * Refusals of `viewerId`'s own changes to another entity type that belong to one of these entities,
+ * counted per entity: a charge or payment on a servisan is a money entry whose payload names the
+ * servisan. Only the unhandled refusals of the viewer, as above, so the read stays small.
+ */
+export async function readLinkedRefusals(
+  db: Kysely<ClientDatabase>,
+  entityType: string,
+  viewerId: string,
+  linkOf: (payload: unknown) => string | null,
+): Promise<ReadonlyMap<string, number>> {
+  const rows = await db
+    .selectFrom('operations')
+    .select('signedCoreJcs')
+    .where('entityType', '=', entityType)
+    .where('syncStatus', '=', 'rejected')
+    .where('userId', '=', viewerId)
+    .where('rejectionHandledAt', 'is', null)
+    .execute();
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    // The signed core carries the payload (05 §2.1); the plugin has already opened the sealed cell.
+    let payload: unknown;
+    try {
+      payload = (JSON.parse(row.signedCoreJcs) as { readonly payload?: unknown }).payload;
+    } catch {
+      continue;
+    }
+    const link = linkOf(payload);
+    if (link !== null) counts.set(link, (counts.get(link) ?? 0) + 1);
+  }
+  return counts;
+}
