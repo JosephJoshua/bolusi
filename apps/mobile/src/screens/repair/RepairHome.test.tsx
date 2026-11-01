@@ -1923,4 +1923,57 @@ describe('money once the phone went home', () => {
     expect(text(screen, 'repair.ticket.downPayment')).toBe('−Rp 700.000');
     expect(text(screen, 'repair.ticket.balance')).toBe('Rp 0');
   });
+  // Android QA round B: beyond the limit the manager was only told "Melebihi batasmu".
+  test('a manager asks an owner to give back beyond their limit, and the owner’s yes does it', async () => {
+    h = await openRepairScreenHarness(5702);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
+    await h.run(
+      'returnDevice',
+      {
+        ticketId,
+        handoverPhoto: h.photo(7),
+        signature: h.photo(8),
+        payments: [{ account: 'cash', amount: 750_000 }],
+        checklist: accessoriesBack(),
+      },
+      h.cashierId,
+    );
+    const manager = await mount(h, h.managerId);
+    await press(manager, 'repair.board.views.returned');
+    await press(manager, `repair.board.row.${ticketId}`);
+    await press(manager, 'repair.ticket.refund');
+    type(manager, 'money.refund.amount', '20000');
+    await settle();
+    expect(text(manager, 'money.refund.limit')).toBe('Batas pengembalianmu Rp 30.000.');
+    expect(text(manager, 'money.refund.primary')).toContain('Kembalikan Rp 20.000');
+    // Rp 40.000 is past the Rp 30.000 limit: the step asks, and says what the typed amount does.
+    type(manager, 'money.refund.amount', '40000');
+    await settle();
+    expect(text(manager, 'money.refund.limit')).toBe('Melebihi batasmu, jadi perlu persetujuan.');
+    expect(text(manager, 'money.refund.lowersBill')).toBe('Tagihan juga turun Rp 40.000.');
+    expect(text(manager, 'money.refund.primary')).toContain('Minta persetujuan');
+    type(manager, 'money.refund.reason', 'Garansi kaca');
+    await settle();
+    await press(manager, 'money.refund.primary');
+    expect(text(manager, 'repair.ticket.done')).toContain('Permintaan dibuat.');
+    // Nothing went back yet.
+    expect(text(manager, 'repair.ticket.balance')).toBe('Rp 0');
+    manager.unmount();
+
+    const [request] = (
+      await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.storeOwnerId)
+    ).rows;
+    expect(request).toMatchObject({ kind: 'money.refund', amount: 40_000, reason: 'Garansi kaca' });
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, 'repair.board.views.approvals');
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, `repair.ticket.approvals.${request!.id}`);
+    expect(text(owner, 'repair.ticket.approval')).toContain('Dikembalikan lewat Tunai.');
+    await press(owner, 'repair.ticket.approval.primary');
+    await settle();
+    expect(text(owner, 'repair.ticket.reduced')).toBe('−Rp 40.000');
+    expect(text(owner, 'repair.ticket.downPayment')).toBe('−Rp 710.000');
+  });
 });

@@ -1068,4 +1068,24 @@ describe('money after pickup on the servisan', () => {
     expect(byTestId('repair.desk.ticket.balance').textContent).toContain('Sisa bayar');
     expect(text('repair.desk.ticket.balance')).toContain('SisabayarRp0');
   });
+  // Android QA round B: beyond the limit the manager was only told "Melebihi batasmu".
+  it('lets a manager ask an owner to give back beyond their limit', async () => {
+    renderApp();
+    await screen.findByTestId('repair.desk.board');
+    await switchTo('Maria Kogoya');
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    await screen.findByTestId('money.desk.refund');
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '40000' } });
+    expect(text('money.desk.refund.limit')).toBe('Melebihibatasmu,jadiperlupersetujuan.');
+    expect(byTestId('money.desk.refund.lowersBill').textContent).toContain('40.000');
+    fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Garansi kaca' } });
+    expect(byTestId('money.desk.refund.submit').textContent).toBe('Minta persetujuan');
+    fireEvent.click(byTestId('money.desk.refund.submit'));
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
+    // Nothing came off yet: the owner decides first.
+    expect(screen.queryByTestId('repair.desk.ticket.reduced')).toBeNull();
+    expect(byTestId('repair.desk.ticket.approvals').textContent).toContain('Kembalikan uang');
+  });
 });

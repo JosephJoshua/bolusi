@@ -10,6 +10,7 @@ import { methodStores, methodSummary } from '../src/money/methods.js';
 import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
 import { turnedDownLines } from '../src/money/void-ask.js';
+import { refundLimitText } from '../src/money/refund.js';
 import type { ApprovalRow } from '../src/approvals/queries.js';
 
 import {
@@ -436,13 +437,17 @@ describe('cancels an owner turned down', () => {
     }) as ApprovalRow;
 
   test('says who said no and why, for those answered since the day began', () => {
+    const rows = [
+      rejected({}),
+      rejected({ id: 'r2', note: 'Uangnya ada', amount: 25_000 }),
+      rejected({ id: 'r3', decidedAt: 10 }),
+      rejected({ id: 'r4', kind: 'money.refund', amount: 40_000 }),
+      rejected({ id: 'r5', kind: 'money.reduceCharge', amount: 50_000, note: 'Harga pas' }),
+    ];
     const asks = {
       waiting: new Set<string>(),
-      rejected: new Map([
-        ['e1', rejected({})],
-        ['e2', rejected({ id: 'r2', note: 'Uangnya ada', amount: 25_000 })],
-        ['e3', rejected({ id: 'r3', decidedAt: 10 })],
-      ]),
+      rejected: new Map(rows.slice(0, 3).map((row, i) => [`e${i + 1}`, row])),
+      turnedDown: rows,
     };
     expect(turnedDownLines(asks, 500)).toEqual([
       {
@@ -453,6 +458,29 @@ describe('cancels an owner turned down', () => {
         id: 'r2',
         text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(25_000)}: Uangnya ada`,
       },
+      { id: 'r4', text: `Yohana Pemilik menolak mengembalikan ${formatMoney(40_000)}.` },
+      {
+        id: 'r5',
+        text: `Yohana Pemilik menolak memotong tagihan ${formatMoney(50_000)}: Harga pas`,
+      },
     ]);
+  });
+});
+
+describe('a manager’s refund limit, as the step says it', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const form = { limit: 30_000, overLimit: false, asking: false, credit: 100_000 };
+  test('is not said while only the overpayment goes back, which no limit holds', () => {
+    expect(refundLimitText({ ...form, digits: '100000' })).toBeNull();
+    expect(refundLimitText({ ...form, digits: '120000' })).toBe(
+      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+    );
+    expect(refundLimitText({ ...form, credit: 0, digits: '' })).toBe(
+      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+    );
   });
 });

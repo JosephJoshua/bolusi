@@ -369,8 +369,13 @@ export function SettleCountDialog({
 export function ReceiveDebtDialog({
   balance,
   onDone,
+  onAsked,
   onClose,
-}: TaskProps & { readonly balance: NamedBalance }): React.JSX.Element {
+}: TaskProps & {
+  readonly balance: NamedBalance;
+  /** Lowering the bill beyond a manager's limit asked an owner instead. */
+  readonly onAsked?: (() => void) | undefined;
+}): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const receipt = useDebtReceipt(balance);
@@ -446,6 +451,7 @@ export function ReceiveDebtDialog({
           target={targetOf(balance)}
           // The bill it was paying changed: the board shows what is owed now.
           onDone={onDone}
+          onAsked={onAsked}
           onClose={() => setReducing(false)}
         />
       ) : null}
@@ -478,23 +484,32 @@ function targetText(target: MoneyTarget): string {
 export function RefundDialog({
   target,
   onDone,
+  onAsked,
   onClose,
-}: TaskProps & { readonly target: MoneyTarget }): React.JSX.Element {
+}: TaskProps & {
+  readonly target: MoneyTarget;
+  /** Beyond a manager's limit an owner is asked instead, and this runs once asked. */
+  readonly onAsked?: (() => void) | undefined;
+}): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
-  const form = useRefund(target);
+  const form = useRefund(target, onAsked !== undefined);
   const amount = rupiah(form.digits);
   const testId = 'money.desk.refund';
   const nothing = form.ready && form.methods.length === 0;
 
   const submit = (): void => {
-    const { input } = form;
-    if (input === null) return;
-    void runner
-      .run(() => runtime.run('refund', input))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
+    const { input, ask } = form;
+    const save =
+      ask !== null
+        ? () => runtime.approvals.run('requestApproval', ask)
+        : input !== null
+          ? () => runtime.run('refund', input)
+          : null;
+    if (save === null) return;
+    void runner.run<unknown>(save).then((result) => {
+      if (result !== undefined) (ask !== null ? (onAsked ?? onDone) : onDone)();
+    });
   };
 
   return (
@@ -505,12 +520,14 @@ export function RefundDialog({
       dirty={form.dirty}
       onClose={onClose}
       submitLabel={
-        amount !== null && amount > 0
-          ? tm('money.refund.save', { amount: formatMoney(amount) })
-          : tm('money.refund.saveEmpty')
+        form.asking
+          ? ta('approvals.action.ask')
+          : amount !== null && amount > 0
+            ? tm('money.refund.save', { amount: formatMoney(amount) })
+            : tm('money.refund.saveEmpty')
       }
       onSubmit={submit}
-      submitDisabled={form.input === null}
+      submitDisabled={form.input === null && form.ask === null}
       hint={refundHint(form)}
       size="md"
       testId={testId}
@@ -606,22 +623,31 @@ export function RefundDialog({
 export function ReduceChargeDialog({
   target,
   onDone,
+  onAsked,
   onClose,
-}: TaskProps & { readonly target: MoneyTarget }): React.JSX.Element {
+}: TaskProps & {
+  readonly target: MoneyTarget;
+  /** Beyond a manager's limit an owner is asked instead, and this runs once asked. */
+  readonly onAsked?: (() => void) | undefined;
+}): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
-  const form = useReduceCharge(target);
+  const form = useReduceCharge(target, onAsked !== undefined);
   const amount = rupiah(form.digits);
   const testId = 'money.desk.reduce';
 
   const submit = (): void => {
-    const { input } = form;
-    if (input === null) return;
-    void runner
-      .run(() => runtime.run('reduceCharge', input))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
+    const { input, ask } = form;
+    const save =
+      ask !== null
+        ? () => runtime.approvals.run('requestApproval', ask)
+        : input !== null
+          ? () => runtime.run('reduceCharge', input)
+          : null;
+    if (save === null) return;
+    void runner.run<unknown>(save).then((result) => {
+      if (result !== undefined) (ask !== null ? (onAsked ?? onDone) : onDone)();
+    });
   };
 
   return (
@@ -632,12 +658,14 @@ export function ReduceChargeDialog({
       dirty={form.dirty}
       onClose={onClose}
       submitLabel={
-        amount !== null && amount > 0
-          ? tm('money.reduce.save', { amount: formatMoney(amount) })
-          : tm('money.reduce.saveEmpty')
+        form.asking
+          ? ta('approvals.action.ask')
+          : amount !== null && amount > 0
+            ? tm('money.reduce.save', { amount: formatMoney(amount) })
+            : tm('money.reduce.saveEmpty')
       }
       onSubmit={submit}
-      submitDisabled={form.input === null}
+      submitDisabled={form.input === null && form.ask === null}
       hint={reduceHint(form)}
       testId={testId}
     >

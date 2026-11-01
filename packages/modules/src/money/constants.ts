@@ -163,4 +163,8 @@ export type EntryKind = (typeof ENTRY_KINDS)[number];
 export const MONEY_APPROVAL_KIND = {
   /** Cancelling a payment recorded by mistake, asked from Kas. */
   voidPayment: 'money.voidPayment',
+  /** Giving money back beyond a manager's limit, asked from the servisan. */
+  refund: 'money.refund',
+  /** Lowering a bill beyond a manager's limit, asked from the servisan. */
+  reduceCharge: 'money.reduceCharge',
 } as const;
