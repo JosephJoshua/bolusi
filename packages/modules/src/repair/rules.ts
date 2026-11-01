@@ -29,7 +29,7 @@ import {
   type WorkPhotoStage,
 } from './constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
-import { documentBalance, documentTotal, takenOffDocument } from '../money/rules.js';
+import { documentBalance, documentTotal } from '../money/rules.js';
 import {
   handoverProblem,
   intakeListProblems,
@@ -132,6 +132,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'freeHandoverOwnerOnly',
   'notReturned',
   'notCancelled',
+  'feeBelowCharged',
   'handoverHasClaim',
   'claimSamePhone',
   'nothingChanged',
@@ -1250,31 +1251,17 @@ export const cancelFeeChangedRule: Rule = async (op, ctx) => {
   const standard = await standardFeeOf(ctx.db, op, ticket);
   const counted = cancelDrop(standard, fee, await discountsStanding(ctx.db, op));
   await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, counted);
-  // A charged servisan's bill comes down with its fee (changeCancelFee takes the difference off).
-  // Money judges that cut against what was taken off the bill; the fee is judged the same way here,
-  // so the server never keeps a lower fee while refusing the lower bill it needs.
-  const ledger = ctx.db as unknown as Kysely<never>;
-  const document = { kind: REPAIR_DOCUMENT_KIND, id: op.entityId };
-  const store = storeOf(op);
-  const net =
-    (await documentTotal(ledger, store, document, 'charge_recorded')) -
-    (await documentTotal(ledger, store, document, 'charge_reduced'));
-  if (fee >= net) return;
-  if (!(await ctx.holdsPermission(op.userId, MONEY_PERMISSION.refund))) {
-    throw refuse('overLimit', {
-      code: 'PERMISSION_DENIED',
-      details: { permissionId: MONEY_PERMISSION.refund },
-      message: `user ${op.userId} cannot lower a charged bill`,
-    });
-  }
-  const takenOff = await takenOffDocument(
-    ledger,
-    { [REPAIR_DOCUMENT_KIND]: repairMoneyDocument },
-    { tenantId: op.tenantId, storeId: store, at: op.timestamp },
-    document,
-    { reduced: net - fee },
+  // Once charged, the fee is what was charged: a lower bill is a cut off the charge (money's
+  // charge_reduced, judged by its own limit), never a lower fee, so fee and ledger never part.
+  const charged = await documentTotal(
+    ctx.db as unknown as Kysely<never>,
+    storeOf(op),
+    { kind: REPAIR_DOCUMENT_KIND, id: op.entityId },
+    'charge_recorded',
   );
-  await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
+  if (fee < charged) {
+    throw invalidTransition(ticket, op.type, 'feeBelowCharged', 'the fee is already charged');
+  }
 };
 
 /**

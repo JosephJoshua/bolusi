@@ -12,10 +12,9 @@ import type { SignedOperation } from '@bolusi/schemas';
 import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
 import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
 import { registerRepairCatalog } from '../src/repair/i18n.js';
-import { repairAbilities, ticketActions } from '../src/repair/flows.js';
+import { amountOwed, repairAbilities, ticketActions } from '../src/repair/flows.js';
 
 import {
-  MANAGER_LIMITS,
   intake,
   openRepairHarness,
   paidHandover,
@@ -265,8 +264,10 @@ test('a fee lowered after a paid cancel gives back the difference', async () => 
   expect(await ticketOf(h, ticketId)).toMatchObject({ cancelFee: 50_000, downPayment: 50_000 });
 
   await h.run('changeCancelFee', { ticketId, fee: 20_000, reason: 'Pelanggan lama' }, h.ownerId);
+  // The fee stays what was charged; the bill comes down by the cut, as "Kurangi tagihan" does.
   const row = await ticketOf(h, ticketId);
-  expect(row).toMatchObject({ cancelFee: 20_000, reduced: 30_000 });
+  expect(row).toMatchObject({ cancelFee: 50_000, reduced: 30_000 });
+  expect(amountOwed(row)).toBe(20_000);
   // The store owes the 30 000 back now; the cashier may give it.
   expect(await openBalances(h)).toMatchObject([{ documentId: ticketId, balance: -30_000 }]);
   await expectBalancedBooks(h);
@@ -346,11 +347,18 @@ test('a fee change signed on a clock behind the cancel still folds to the new fe
   expect(await dump(other)).toStrictEqual(await dump(server));
 });
 
-test('a lower fee on a charged servisan is judged by what it takes off the bill, as money judges it', async () => {
-  // The store charges nothing to cancel, so a fee the owner set is all above the store's fee: what
-  // a lower fee drops counts only as the bill it cuts. The server judges the fee op alone (a forged
-  // client could send it without its cut), so the fee op must hold the cut to the same limit.
-  const h = await openRepairHarness(895);
+/** What the servisan says is left to pay (below zero: owed back), and what Kas says. */
+async function bothSides(h: RepairHarness, ticketId: string) {
+  const row = await ticketOf(h, ticketId);
+  const kas = (await openBalances(h)).find(
+    (b: { documentId: string }) => b.documentId === ticketId,
+  );
+  return { servisan: amountOwed(row) - (row.downPayment ?? 0), kas: kas?.balance ?? 0 };
+}
+
+/** Charged 70 000 as a cancel fee (the store's fee is 0), 50 000 of it paid, the rest owed. */
+async function chargedCancel(seed: number) {
+  const h = await openRepairHarness(seed);
   open.push(h);
   const { ticketId } = (await h.run('openTicket', intake(h), h.cashierId)) as { ticketId: string };
   await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 70_000 }, h.storeOwnerId);
@@ -362,6 +370,44 @@ test('a lower fee on a charged servisan is judged by what it takes off the bill,
     })) as never,
     h.ownerId,
   );
+  return { h, ticketId };
+}
+
+test('lowering then raising a charged fee keeps the servisan and Kas in step', async () => {
+  const { h, ticketId } = await chargedCancel(897);
+  expect(await bothSides(h, ticketId)).toEqual({ servisan: 20_000, kas: 20_000 });
+
+  await h.run('changeCancelFee', { ticketId, fee: 50_000, reason: 'Kenal' }, h.ownerId);
+  expect(await bothSides(h, ticketId)).toEqual({ servisan: 0, kas: 0 });
+
+  await h.run('changeCancelFee', { ticketId, fee: 60_000, reason: 'Salah hitung' }, h.ownerId);
+  expect(await bothSides(h, ticketId)).toEqual({ servisan: 10_000, kas: 10_000 });
+  expect(amountOwed(await ticketOf(h, ticketId))).toBe(60_000);
+
+  await h.run('changeCancelFee', { ticketId, fee: 40_000, reason: 'Pelanggan lama' }, h.ownerId);
+  expect(await bothSides(h, ticketId)).toEqual({ servisan: -10_000, kas: -10_000 });
+  await expectRefused(
+    h.run('changeCancelFee', { ticketId, fee: 40_000, reason: 'Sama' }, h.ownerId),
+    'repair.refusal.nothingChanged',
+  );
+  await expectBalancedBooks(h);
+});
+
+test('a manager cuts a charged bill only within the refund limit, as Kurangi tagihan', async () => {
+  const { h, ticketId } = await chargedCancel(898);
+  // 70 000 to 0 takes 70 000 off the bill: beyond the manager's refund limit.
+  await expectRefused(
+    h.run('changeCancelFee', { ticketId, fee: 0, reason: 'Gratis' }, h.managerId),
+    'money.refusal.overLimit',
+  );
+  await h.run('changeCancelFee', { ticketId, fee: 50_000, reason: 'Kenal' }, h.managerId);
+  expect(await bothSides(h, ticketId)).toEqual({ servisan: 0, kas: 0 });
+});
+
+test('a fee op alone never puts a charged fee below its charge', async () => {
+  // The server judges each op alone, so a forged client could send the fee without its cut: a
+  // charged fee only ever rises; the bill comes down through money's own cut.
+  const { h, ticketId } = await chargedCancel(899);
   const cancel = (await h.ownOps()).find((op) => op.type === 'repair.ticket_cancelled')!;
   const feeChange = (fee: number) => ({
     ...cancel,
@@ -372,15 +418,8 @@ test('a lower fee on a charged servisan is judged by what it takes off the bill,
     userId: h.managerId,
     timestamp: h.now(),
   });
-  const judged: [string, number][] = [];
-  const managerLimits = (_user: string, permission: string, amount: number) => {
-    judged.push([permission, amount]);
-    return Promise.resolve(
-      amount <= (permission === 'money.refund' ? MANAGER_LIMITS.refund : MANAGER_LIMITS.priceDrop),
-    );
-  };
-  await expectRefused(h.checkRule(feeChange(0), managerLimits), 'repair.refusal.overLimit');
-  expect(judged).toContainEqual(['money.refund', 70_000]);
-  // Within the refund limit it stands, and so does the cut the command pairs with it.
-  await h.checkRule(feeChange(50_000), managerLimits);
+  await expectRefused(h.checkRule(feeChange(0)), 'repair.refusal.feeBelowCharged');
+  await expectRefused(h.checkRule(feeChange(50_000)), 'repair.refusal.feeBelowCharged');
+  await h.checkRule(feeChange(80_000));
+  expect(ticketId).toBeTruthy();
 });

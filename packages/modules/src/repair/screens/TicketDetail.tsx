@@ -362,7 +362,7 @@ export function TicketDetail({
       return (
         <ChangeCancelFeeStep
           {...stepProps}
-          current={ticket?.cancelFee ?? 0}
+          current={(ticket?.cancelFee ?? 0) - (ticket?.reduced ?? 0)}
           paid={ticket?.downPayment ?? 0}
           onDone={() => {
             closeStep();

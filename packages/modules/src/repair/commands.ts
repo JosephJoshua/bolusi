@@ -593,37 +593,45 @@ export const changeCancelFeeInput = z
 export type ChangeCancelFeeInput = z.input<typeof changeCancelFeeInput>;
 
 /**
- * An owner changes what a cancelled servisan costs (when: `cancelFeeChangedRule`). One already
- * charged (it went home) is charged the difference, or has it taken off, in the same step, so what
- * the customer owes follows the new fee: paid on a phone that had not heard of the cancel, they
- * owe nothing more once the fee is what they paid.
+ * An owner changes what a cancelled servisan costs (when: `cancelFeeChangedRule`). `fee` is what the
+ * customer is billed in the end. Before a charge it is simply the fee. Once charged (it went home),
+ * the bill follows it in the same step: a lower bill is taken off the charge (as "Kurangi tagihan"
+ * does, so the fee stays what was charged), and a higher one raises the fee and charges the
+ * difference. A customer who paid on a phone that had not heard of the cancel owes nothing more
+ * once the bill is what they paid.
  */
 export async function changeCancelFeeHandler(
   input: z.output<typeof changeCancelFeeInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  const ops: OpDraft[] = [
-    ticketOp(ctx, ticket.id, REPAIR_OP.cancelFeeChanged, {
-      fee: input.fee,
-      reason: input.reason,
-    }),
-  ];
   const money = await ticketMoney(ctx, ticket.id);
-  const net = money.charged - money.reduced;
-  if (ticket.location === 'returned' || net > 0) {
-    const document = ticketDocument(ticket.id, ticket.ticketNumber);
-    const account = ticketCharge({
-      ...ticket,
-      outcome: 'cancelled',
-      cancelFee: input.fee,
-    })!.account;
-    if (input.fee > money.charged) {
-      ops.push(chargeOp(ctx, document, input.fee - money.charged, account));
-    } else if (input.fee < net) {
-      ops.push(reduceChargeOp(ctx, document, net - input.fee, input.reason));
-    }
+  const document = ticketDocument(ticket.id, ticket.ticketNumber);
+  const feeOp = (fee: number) =>
+    ticketOp(ctx, ticket.id, REPAIR_OP.cancelFeeChanged, { fee, reason: input.reason });
+  const charge = (amount: number) =>
+    chargeOp(
+      ctx,
+      document,
+      amount,
+      ticketCharge({ ...ticket, outcome: 'cancelled', cancelFee: input.fee })!.account,
+    );
+  if (money.charged === 0) {
+    // Nothing charged yet: pickup charges the fee, unless the phone went home already.
+    const ops = [feeOp(input.fee)];
+    if (ticket.location === 'returned' && input.fee > 0) ops.push(charge(input.fee));
+    return { ops, result: { ticketId: ticket.id } };
   }
+  const billed = money.charged - money.reduced;
+  if (input.fee === billed) {
+    throw REPAIR_REFUSALS.refuse('nothingChanged', {
+      details: { field: 'fee', issue: 'the bill is already this' },
+    });
+  }
+  const ops =
+    input.fee < billed
+      ? [reduceChargeOp(ctx, document, billed - input.fee, input.reason)]
+      : [feeOp(input.fee + money.reduced), charge(input.fee - billed)];
   return { ops, result: { ticketId: ticket.id } };
 }
 

@@ -739,7 +739,8 @@
     "cancelFeeChanged": "Biaya pembatalan toko sudah berubah. Batalkan lagi dengan biaya yang baru.",
     "repairTypeTerms": "Jenis servisan ini sudah diubah pemilik. Pilih lagi jenis servisannya.",
     "intakePhotoMissing": "Foto HP dari semua sisi yang diminta toko dulu.",
-    "notCancelled": "Servisan ini tidak dibatalkan."
+    "notCancelled": "Servisan ini tidak dibatalkan.",
+    "feeBelowCharged": "Tagihannya sudah dicatat di perangkat lain. Ubah biayanya lagi."
   },
   "paper": {
     "title": "Kertas nota",

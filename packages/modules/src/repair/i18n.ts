@@ -782,6 +782,7 @@ export const REPAIR_KEYS = [
   'repair.opType.handoverReversed',
   'repair.opType.cancelFeeChanged',
   'repair.refusal.notCancelled',
+  'repair.refusal.feeBelowCharged',
   'repair.action.changeCancelFee',
   'repair.done.cancelFeeChanged',
   'repair.history.fee',
