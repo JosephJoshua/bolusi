@@ -456,6 +456,7 @@ const source = {
           label: 'Buka saat Windows menyala',
           caption: 'Bolusi langsung terbuka begitu komputer dinyalakan.',
         },
+        language: { caption: 'Berlaku untuk semua orang di komputer ini.' },
         media: {
           title: 'Kamera dan mikrofon',
           caption: 'Dipakai untuk foto dan video kepemilikan di komputer ini.',
@@ -1263,6 +1264,7 @@ export const resources = {
             label: 'Open when Windows starts',
             caption: 'Bolusi opens as soon as the computer is switched on.',
           },
+          language: { caption: 'Applies to everyone on this computer.' },
           media: {
             title: 'Camera and microphone',
             caption: 'Used for photos and ownership videos on this computer.',

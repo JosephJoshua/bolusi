@@ -665,4 +665,26 @@ describe('one servisan from intake to handover, offline in between', () => {
     `.execute(running.server.db);
     expect(books.rows[0]!.net).toBe('0');
   }, 300_000);
+
+  test("the PC's language stays after a power cut and follows its person to the server", async () => {
+    const pc = await openDevice('PC Bahasa');
+    await signIn(pc, owner, lane.pin);
+    expect((await pc.state()).locale).toBe('id');
+    await pc.call('device.setLocale', owner, 'en');
+    expect((await pc.state()).locale).toBe('en');
+    // A language with no catalog yet is refused.
+    await expect(pc.call('device.setLocale', owner, 'zh')).rejects.toThrow();
+
+    const restarted = await powerCut(pc);
+    expect((await restarted.state()).locale).toBe('en');
+    await restarted.setOnline(true);
+    await signIn(restarted, owner, lane.pin);
+    await settle(restarted);
+    const { rows } = await sql<{ locale: string }>`
+      SELECT payload->>'locale' AS locale FROM operations
+      WHERE tenant_id = ${lane.tenantId} AND type = 'platform.user_locale_changed'
+        AND entity_id = ${owner}
+    `.execute(running.server.db);
+    expect(rows).toEqual([{ locale: 'en' }]);
+  }, 120_000);
 });

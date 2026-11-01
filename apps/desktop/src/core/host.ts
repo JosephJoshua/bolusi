@@ -29,6 +29,7 @@ import {
 } from '@bolusi/device/bootstrap/enroll-transport';
 import { createAppEnrollment, type AppEnrollment } from '@bolusi/device/bootstrap/enrollment';
 import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
+import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
 import { bootWithLocalRecovery } from '@bolusi/device/bootstrap/recovery';
 import {
@@ -69,6 +70,7 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
+import { DEFAULT_LOCALE, setLocale, type Locale } from '@bolusi/i18n';
 import { approvalsModule, inventoryModule, moneyModule, purchasingModule } from '@bolusi/modules';
 import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
@@ -96,7 +98,7 @@ import type {
 } from './api.js';
 import { createHandoffClient } from './handoff.js';
 import { heldPermissions } from './permissions.js';
-import { initCoreI18n } from './i18n.js';
+import { initCoreI18n, loadDeviceLocale, saveDeviceLocale, selectableLocale } from './i18n.js';
 import { nodeRealtimeSocket } from './websocket.js';
 
 /** The repair runtime the core builds for whoever is signed in. */
@@ -232,6 +234,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   let setupFor: string | null = null;
   let syncReads: SyncStatusReads = NO_SYNC_STATUS_READS;
   let bootError: string | null = null;
+  /** The language this PC shows; read from its database at boot. */
+  let locale: Locale = DEFAULT_LOCALE;
   let stopped = false;
   /** The owner's login, kept here so the control-session token never reaches the window. */
   let heldLogin: LoginResult | null = null;
@@ -269,6 +273,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     session: null,
     sync: null,
     statusSite: deps.apiBaseUrl,
+    locale: DEFAULT_LOCALE,
   };
 
   // Many changes land together (a pull applies ops one by one), so the window gets one state per
@@ -347,6 +352,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       session: sessionView(),
       sync: shell.sync,
       statusSite: deps.apiBaseUrl,
+      locale,
     };
   }
 
@@ -734,6 +740,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       return;
     }
     app = booting;
+    locale = await loadDeviceLocale(booting.db.db);
     const enroll = createAppEnrollment(
       booting,
       {
@@ -886,6 +893,28 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         appVersion: deps.appVersion,
       });
       emit();
+    },
+
+    // This PC's language, for everyone using it, as on the phone. It is also the person's own
+    // preference (a signed change that follows them), but that part must never hold up the switch.
+    async 'device.setLocale'(userId: string, next: string) {
+      actingSession(session, userId);
+      const chosen = selectableLocale(next);
+      const booted = app;
+      if (chosen === null || booted === null) throw new DomainError('VALIDATION_FAILED');
+      setLocale(chosen);
+      locale = chosen;
+      emit();
+      await saveDeviceLocale(booted.db.db, chosen).catch((error: unknown) =>
+        warn('the language was not saved for the next start', error),
+      );
+      const acting = repair;
+      if (enrollment !== null && acting !== null && acting.userId === userId) {
+        void createUserLocaleWriter(
+          enrollment.runtime,
+          acting.identity,
+        )(chosen).catch((error: unknown) => warn('per-user locale op failed', error));
+      }
     },
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
