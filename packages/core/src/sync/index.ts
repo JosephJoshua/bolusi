@@ -89,3 +89,12 @@ export {
   type ReadScopeRegistry,
 } from './read-scope.js';
 export { purgePulledOps, type PurgeDeps, type PurgedRecord } from './read-purge.js';
+export { clearHeldText, DeviceReads, isClearedOp } from './device-reads.js';
+export {
+  dropPersonStoreTables,
+  PersonStore,
+  projectionTableReads,
+  type PersonPullOutcome,
+  type PersonPullPort,
+  type PersonStoreDeps,
+} from './person-store.js';

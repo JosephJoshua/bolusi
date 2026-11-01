@@ -152,6 +152,10 @@ export const IDENTITY_LIMITS = {
   revokePerTenantHour: { limit: 20, windowMs: HOUR },
   bundlePerDeviceHour: { limit: 120, windowMs: HOUR },
   passwordPerUserDay: { limit: 5, windowMs: DAY },
+  /** A person session's PIN check: wrong PINs per person per device, then locked. */
+  personPinFailPerUserDevice: { limit: 5, windowMs: 15 * MINUTE },
+  /** Every PIN check one device asks for, right or wrong, whoever it names. */
+  personPinPerDevice: { limit: 30, windowMs: 15 * MINUTE },
 } as const;
 
 /** Throw `RATE_LIMITED` (429) when a decision denies — `respondError` stamps `Retry-After`. */

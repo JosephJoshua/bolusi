@@ -155,6 +155,19 @@ export default tseslint.config(
     },
   },
   {
+    // Least-privilege sync: once sent, the device's own changes of types it may not read keep
+    // only their chain links (id, hash, signature, seq); the signed text is cleared, and put back
+    // from the server if the device may read the type again. Nothing else in a row changes.
+    name: 'bolusi/oplog-held-text-allowlist',
+    files: ['packages/core/src/sync/device-reads.ts'],
+    rules: {
+      'bolusi/no-op-table-update': [
+        'error',
+        { allowFiles: ['packages/core/src/sync/device-reads.ts'] },
+      ],
+    },
+  },
+  {
     name: 'bolusi/money',
     files: ['packages/schemas/src/**/*.{ts,tsx}', 'packages/modules/src/**/*.{ts,tsx}'],
     rules: {

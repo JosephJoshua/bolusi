@@ -377,8 +377,8 @@ export class HarnessServer {
                                 AND role_id = md5(${identity.tenantId} || ':harness-all')::uuid)`.execute(
       this.db,
     );
-    // A staff role with every permission but the owner powers, granted to no one, as provisioning
-    // seeds the preset staff roles: shared devices are sent what staff roles may read.
+    // A staff role with every permission but the owner powers, held by one staff person at the
+    // store: a shared device is sent what its store's active staff may read (least-privilege sync).
     await sql`INSERT INTO roles (id, tenant_id, name, scope_type, created_at)
               VALUES (md5(${identity.tenantId} || ':harness-staff')::uuid, ${identity.tenantId}, ${'harness_staff'}, ${'store'}, ${CREATED_AT})
               ON CONFLICT (id) DO NOTHING`.execute(this.db);
@@ -386,6 +386,19 @@ export class HarnessServer {
               SELECT md5(${identity.tenantId} || ':harness-staff')::uuid, id, ${identity.tenantId} FROM permissions
               WHERE id NOT IN (${sql.join(OWNER_POWER_PERMISSIONS)})
               ON CONFLICT DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO users (id, tenant_id, name, created_at)
+              VALUES (md5(${identity.storeId} || ':harness-staff-user')::uuid, ${identity.tenantId}, ${'staff'}, ${CREATED_AT})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO user_stores (user_id, store_id, tenant_id)
+              VALUES (md5(${identity.storeId} || ':harness-staff-user')::uuid, ${identity.storeId}, ${identity.tenantId})
+              ON CONFLICT DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO user_roles (tenant_id, user_id, role_id, store_id)
+              SELECT ${identity.tenantId}, md5(${identity.storeId} || ':harness-staff-user')::uuid,
+                     md5(${identity.tenantId} || ':harness-staff')::uuid, ${identity.storeId}
+              WHERE NOT EXISTS (SELECT 1 FROM user_roles
+                                WHERE user_id = md5(${identity.storeId} || ':harness-staff-user')::uuid)`.execute(
+      this.db,
+    );
     await sql`INSERT INTO devices (id, tenant_id, store_id, kind, signing_key_public, status, revoked_at, enrolled_at, last_seq, last_hash, last_sync_at)
               VALUES (${identity.deviceId}, ${identity.tenantId}, ${identity.storeId}, ${'member'}, ${identity.publicKeyBase64}, ${status},
                       ${status === 'revoked' ? CREATED_AT : null}, ${CREATED_AT}, ${0n}, ${null}, ${null})

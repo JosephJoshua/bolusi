@@ -813,3 +813,45 @@ test("a store owner cannot reset a peer owner's PIN; they can reset a cashier's,
   expect((await reset(s.storeOwner, cashier)).status).toBe(200);
   expect((await reset(s.ownerId, peer)).status).toBe(200);
 });
+
+test('a new PIN ends the person sessions the old one opened, except where it was just changed', async () => {
+  const { tenantId, s1, ownerId } = await tenant();
+  const here = await seedDevice(h, { tenantId, storeId: s1, enrolledBy: ownerId });
+  const there = await seedDevice(h, { tenantId, storeId: s1, enrolledBy: ownerId });
+  const now = h.clock.now();
+  for (const [device, hash] of [
+    [here, 'b'],
+    [there, 'c'],
+  ] as const) {
+    await h.idb.db
+      .insertInto('personSessions')
+      .values({
+        id: uuidv7(now),
+        tenantId,
+        deviceId: device.deviceId,
+        userId: ownerId,
+        tokenHash: hash.repeat(64),
+        createdAt: BigInt(now),
+        expiresAt: BigInt(now + 3_600_000),
+        revokedAt: null,
+      })
+      .execute();
+  }
+  const res = await h.app.request(`http://srv.test/v1/users/${ownerId}/pin-verifier`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${here.token}`,
+      'X-Acting-User': ownerId,
+    },
+    body: verifierBody(here.deviceId),
+  });
+  expect(res.status).toBe(200);
+  const rows = await h.idb.db
+    .selectFrom('personSessions')
+    .select(['deviceId', 'revokedAt'])
+    .where('userId', '=', ownerId)
+    .execute();
+  expect(rows.find((row) => row.deviceId === here.deviceId)?.revokedAt).toBeNull();
+  expect(rows.find((row) => row.deviceId === there.deviceId)?.revokedAt).not.toBeNull();
+});

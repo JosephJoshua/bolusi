@@ -50,6 +50,9 @@ const source = {
       },
       language: { id: 'Bahasa Indonesia', en: 'English' },
       unauthorized: { askOwner: 'Minta pemilik toko untuk memberi akses.' },
+      notOnDevice: {
+        hint: 'Data ini tidak disimpan di perangkat ini. Akan muncul begitu tersambung.',
+      },
       opType: { unknown: 'Perubahan' },
       errors: {
         INVALID_TRANSITION:
@@ -67,6 +70,7 @@ const source = {
           'Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.',
         CLOCK_AHEAD:
           'Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.',
+        NOT_ON_DEVICE: 'Perlu internet untuk membuka ini.',
         IDEMPOTENCY_CONFLICT: 'Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.',
         RATE_LIMITED: 'Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.',
         UNEXPECTED: 'Terjadi kesalahan. Coba lagi.',
@@ -846,6 +850,7 @@ export const resources = {
         },
         language: { id: 'Bahasa Indonesia', en: 'English' },
         unauthorized: { askOwner: 'Ask your store owner for access.' },
+        notOnDevice: { hint: 'This isn’t kept on this device. It shows up once you’re online.' },
         opType: { unknown: 'Change' },
         errors: {
           INVALID_TRANSITION:
@@ -863,6 +868,7 @@ export const resources = {
             'This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.',
           CLOCK_AHEAD:
             'This device’s clock is ahead. Turn on automatic date and time in settings, then try again.',
+          NOT_ON_DEVICE: 'Needs internet to open this.',
           IDEMPOTENCY_CONFLICT: 'This request clashed with an earlier one. Try again.',
           RATE_LIMITED: 'Too many requests. Wait a moment, then try again.',
           UNEXPECTED: 'Something went wrong. Try again.',

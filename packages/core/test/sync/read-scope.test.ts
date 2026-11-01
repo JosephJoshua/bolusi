@@ -134,7 +134,7 @@ async function notesFrom(deviceId: string): Promise<number> {
 }
 
 describe('a shrunk read set drops what the device may no longer read', () => {
-  it('removes the pulled ops and their records, and keeps the device own ones', async () => {
+  it('removes the pulled ops and every record of the type, and keeps the device own ops as links', async () => {
     harness.transport.scriptPull(page(noteOps(other, 3), 30, [NOTES_READ]));
     await pull();
     await ownSyncedNote();
@@ -145,8 +145,8 @@ describe('a shrunk read set drops what the device may no longer read', () => {
 
     expect(await notesFrom(other.id)).toBe(0);
     expect(await notesFrom(own.id)).toBe(1);
-    // The records follow the log: only the device's own note is left.
-    expect(await countRows(harness.db, 'notes')).toBe(1);
+    // Least privilege: the device's own sent note stays a chain link, its text and record gone.
+    expect(await countRows(harness.db, 'notes')).toBe(0);
     const state = await readSyncState(harness.db);
     expect(state.readSet).toEqual([]);
     expect(state.backfill).toBeNull();

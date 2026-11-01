@@ -19,7 +19,7 @@ export function sha256Hex(input: string): string {
 }
 
 /** `<prefix>` + base64url(32 CSPRNG bytes) — the `bdt_`/`bcs_` token format (api/02-auth §4.3, §8). */
-export function mintToken(prefix: 'bdt_' | 'bcs_'): string {
+export function mintToken(prefix: 'bdt_' | 'bcs_' | 'bps_'): string {
   return `${prefix}${nodeRandomBytes(32).toString('base64url')}`;
 }
 

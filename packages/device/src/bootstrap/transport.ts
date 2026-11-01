@@ -12,7 +12,15 @@
 // merely-expired token permanently disable sync on a working device. `SyncTransportPort`'s own
 // contract says carry the code verbatim; this file is where "verbatim" is actually done.
 import { SyncTransportError, type SyncTransportPort } from '@bolusi/core';
-import type { PullRequest, PullResponse, PushRequest, PushResponse } from '@bolusi/schemas';
+import {
+  PERSON_SESSION_HEADER,
+  type PersonSessionRequest,
+  type PersonSessionResponse,
+  type PullRequest,
+  type PullResponse,
+  type PushRequest,
+  type PushResponse,
+} from '@bolusi/schemas';
 
 export interface SyncTransportConfig {
   /** Base URL of the server, no trailing slash (08 §6.1's `EXPO_PUBLIC_API_URL`). */
@@ -91,11 +99,19 @@ export async function toTransportError(response: Response): Promise<SyncTranspor
   return new SyncTransportError(message, { code, status: response.status });
 }
 
-export function createFetchSyncTransport(config: SyncTransportConfig): SyncTransportPort {
+/**
+ * One request with the device bearer, under the deadline, failing closed without a token. Shared by
+ * the device's sync legs and a signed-in person's (`createFetchPersonTransport`).
+ */
+function deviceRequester(config: SyncTransportConfig) {
   const doFetch = config.fetchImpl ?? fetch;
   const timeoutMs = config.timeoutMs ?? SYNC_REQUEST_TIMEOUT_MS;
-
-  async function post<T>(path: string, body: unknown): Promise<T> {
+  return async function send<T>(
+    method: 'POST' | 'DELETE',
+    path: string,
+    body: unknown,
+    headers: Readonly<Record<string, string>> = {},
+  ): Promise<T> {
     const token = await config.deviceToken();
     if (token === null) {
       // Fail closed rather than send an unauthenticated request. api/01-sync requires the device
@@ -110,18 +126,24 @@ export function createFetchSyncTransport(config: SyncTransportConfig): SyncTrans
     }
     return withDeadline(timeoutMs, async (signal) => {
       const response = await doFetch(`${config.baseUrl}${path}`, {
-        method: 'POST',
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...headers,
         },
-        body: JSON.stringify(body),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal,
       });
       if (!response.ok) throw await toTransportError(response);
-      return (await response.json()) as T;
+      return (response.status === 204 ? undefined : await response.json()) as T;
     });
-  }
+  };
+}
+
+export function createFetchSyncTransport(config: SyncTransportConfig): SyncTransportPort {
+  const send = deviceRequester(config);
+  const post = <T>(path: string, body: unknown): Promise<T> => send<T>('POST', path, body);
 
   return {
     // NOTE — api/01-sync §1 wants gzipped request bodies on bad 3G, and these are sent PLAIN.
@@ -138,5 +160,28 @@ export function createFetchSyncTransport(config: SyncTransportConfig): SyncTrans
     async pull(request: PullRequest): Promise<PullResponse> {
       return post<PullResponse>('/v1/sync/pull', request);
     },
+  };
+}
+
+/**
+ * A signed-in person's legs (least-privilege sync): prove them to the server with their PIN, pull
+ * what they may read beyond the device with the session that comes back, and end it.
+ */
+export interface PersonTransportPort {
+  open(request: PersonSessionRequest): Promise<PersonSessionResponse>;
+  pull(token: string, request: PullRequest): Promise<PullResponse>;
+  end(token: string): Promise<void>;
+}
+
+export function createFetchPersonTransport(config: SyncTransportConfig): PersonTransportPort {
+  const send = deviceRequester(config);
+  return {
+    open: (request) => send<PersonSessionResponse>('POST', '/v1/sync/person-session', request),
+    pull: (token, request) =>
+      send<PullResponse>('POST', '/v1/sync/pull', request, { [PERSON_SESSION_HEADER]: token }),
+    end: (token) =>
+      send<void>('DELETE', '/v1/sync/person-session', undefined, {
+        [PERSON_SESSION_HEADER]: token,
+      }),
   };
 }

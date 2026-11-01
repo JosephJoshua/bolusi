@@ -61,6 +61,11 @@ export interface QueryRuntimeOptions<DB> {
   readonly enforcement: PermissionEnforcementPoint;
   /** Live search indexes shared by every query (search/live-index.ts); devices pass one. */
   readonly search?: SearchIndexCache;
+  /**
+   * Whether the data `permission` reads is on this device (least-privilege sync): the device's own
+   * read set, or the signed-in person's store. Absent everything is here, as on the server.
+   */
+  readonly readHere?: (permissionId: string) => boolean;
 }
 
 /**
@@ -76,18 +81,21 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
   readonly #db: Kysely<DB>;
   readonly #enforcement: PermissionEnforcementPoint;
   readonly #search: SearchIndexCache | undefined;
+  readonly #readHere: ((permissionId: string) => boolean) | undefined;
 
   constructor(options: QueryRuntimeOptions<DB>) {
     this.#db = options.db;
     this.#enforcement = options.enforcement;
     this.#search = options.search;
+    this.#readHere = options.readHere;
   }
 
   /**
    * Execute a query (04 §6).
    *
    * @throws {DomainError} `VALIDATION_FAILED` (step 1, incl. a malformed cursor and `limit > 100`),
-   *   `PERMISSION_DENIED` (step 2 — never an empty result), or whatever the handler throws.
+   *   `PERMISSION_DENIED` (step 2 — never an empty result), `NOT_ON_DEVICE` (step 2b), or whatever
+   *   the handler throws.
    */
   async execute<TInput, TOutput>(
     query: QueryHandle<TInput, TOutput>,
@@ -134,6 +142,17 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
       'query',
       invocation,
     );
+
+    // Step 2b — may read it, but it is not here: the device holds only what its people may read,
+    // and this person's extra has not come down (offline at sign-in). Never an empty result, which
+    // would read as "nothing there".
+    if (this.#readHere?.(executable.permission) === false) {
+      throw new DomainError(
+        'NOT_ON_DEVICE',
+        { query: target, permission: executable.permission },
+        `${target} reads ${executable.permission}, which this device does not hold right now`,
+      );
+    }
 
     // Step 3 — the handler, with the §6 qctx and nothing else.
     return executable.handler(input, this.#contextFor(identity));

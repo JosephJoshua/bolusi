@@ -24,6 +24,7 @@
 // every connectivity change. `syncState()` is RE-READ from `sync_state` after each cycle, so the
 // banner clears from the real column (T-19), never a `?? Date.now()`.
 import {
+  clearHeldText,
   OP_SYNC_STATUS_TABLE,
   readSyncState,
   SyncLoop,
@@ -32,7 +33,6 @@ import {
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
-  type OperationRegistry,
   type SyncLoopState,
   type SyncState,
   type SyncSchedulerPort,
@@ -61,7 +61,8 @@ import type {
 } from './background-task.js';
 import { registerSyncTask } from './background-sync.js';
 import { readOldestOpAt } from './sync-status-reads.js';
-import { createFetchSyncTransport } from './transport.js';
+import { knowsOp } from './known-op.js';
+import { createFetchPersonTransport, createFetchSyncTransport } from './transport.js';
 import {
   createSyncTriggers,
   type AppStatePort,
@@ -102,6 +103,8 @@ export interface SyncClientDeps {
   readonly pullLimit?: number;
   /** After a push changed ops' sync status (see `SyncLoopOptions.onPushed`). */
   readonly onPushed?: () => void;
+  /** After each cycle settles, through or backed off (the person store follows the device's). */
+  readonly onCycleSettled?: () => void;
   /**
    * Task 105: given the loop's trigger, build the realtime controller (task 20). Its `start`/`stop`
    * RIDE the loop's — started after `hydrate()` (a trigger before hydrate throws), stopped on teardown —
@@ -451,6 +454,7 @@ class SyncClientImpl implements SyncClient {
     this.currentSyncState = await readSyncState(this.deps.db.db).catch(() => this.currentSyncState);
     if (this.currentSyncState.lastSuccessfulSyncAt !== null) this.firstSyncProgress = null;
     this.notify();
+    this.deps.onCycleSettled?.();
   }
 }
 
@@ -494,8 +498,12 @@ export interface SyncClientForAppConfig {
  * type, and how to rebuild a record or move the watermarks after a drop. The registry is read
  * lazily, like `knowsOp`: it is looked up when a pull needs it.
  */
-export function readScopeOf(app: Pick<Bootstrapped, 'registry' | 'engine'>): PullReadScope {
+export function readScopeOf(
+  app: Pick<Bootstrapped, 'registry' | 'engine' | 'deviceReads' | 'person'>,
+): PullReadScope {
   return {
+    deviceReads: app.deviceReads,
+    beforeGrow: (added) => app.person.beforeDeviceGrows(added),
     registry: {
       types: () => app.registry.operations.types(),
       readPermissionFor: (type) => app.registry.operations.readPermissionFor(type),
@@ -529,6 +537,14 @@ export function createSyncClientForApp(
       : { onBundleRefreshed: config.onBundleRefreshed }),
     ...(config.onBundleChecked === undefined ? {} : { onBundleChecked: config.onBundleChecked }),
   });
+  // A signed-in person's reads beyond the device go over the same server and device token.
+  app.person.bindTransport(
+    createFetchPersonTransport({
+      baseUrl: config.baseUrl,
+      deviceToken: config.loadDeviceToken,
+      ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
+    }),
+  );
   const phoneCatalog = createPhoneCatalogRefresher({
     baseUrl: config.baseUrl,
     deviceToken: config.loadDeviceToken,
@@ -555,7 +571,11 @@ export function createSyncClientForApp(
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
     knowsOp: (op) => knowsOp(app.registry.operations, op),
     readScope: readScopeOf(app),
-    refoldRefused: (op) => app.engine.refoldRefused(op),
+    // A refused change never happened, on disk or in the signed-in person's store.
+    refoldRefused: async (op) => {
+      await app.engine.refoldRefused(op);
+      await app.person.refuse(op);
+    },
     crypto: config.crypto,
     clock: config.clock,
     timer: config.timer ?? systemTimer,
@@ -564,7 +584,14 @@ export function createSyncClientForApp(
     initialSyncState: app.syncState,
     // Pushed ops changed status without a projection write: say so on the bus the screens read, so
     // a ticket's "waiting to sync" chip or rejected banner updates as the push lands.
-    onPushed: () => app.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE])),
+    // Own changes of types the device does not hold keep only their chain links once sent.
+    onPushed: () => {
+      app.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE]));
+      void clearHeldText(app.db.db, app.deviceReads.heldTypes()).catch(() => undefined);
+    },
+    // The person's store follows the device's after every cycle: a poke, the connection coming
+    // back (which is also when a PIN checked offline goes to the server) and the periodic one.
+    onCycleSettled: () => void app.person.sync(),
     ...(config.background === undefined ? {} : { background: config.background }),
     // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
     // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT
@@ -582,12 +609,4 @@ export function createSyncClientForApp(
       }),
   });
 }
-
-/** Is `op` a type this build registers, at a schemaVersion it can fold? */
-export function knowsOp(
-  operations: Pick<OperationRegistry, 'schemaVersionFor'>,
-  op: Pick<SignedOperation, 'type' | 'schemaVersion'>,
-): boolean {
-  const known = operations.schemaVersionFor(op.type);
-  return known !== undefined && op.schemaVersion <= known;
-}
+export { knowsOp } from './known-op.js';

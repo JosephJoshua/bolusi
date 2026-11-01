@@ -29,6 +29,7 @@ import type { ProjectionApply } from '../oplog/append.js';
 import type { ModuleProjectionManifest, ProjectionOperation } from './manifest.js';
 import { moduleVersionSignature } from './manifest.js';
 import {
+  DEVICE_OP_TABLE,
   hasNewerEntityOp,
   highestContiguousSeq,
   type FoldReadOptions,
@@ -36,6 +37,7 @@ import {
 } from './oplog-source.js';
 import type { ProjectionRegistry } from './registry.js';
 import {
+  clearEntityRows,
   createSqlRebuildStore,
   refoldEntities,
   runRebuild,
@@ -46,10 +48,19 @@ import {
 import { InvalidationBus } from './invalidation.js';
 import { ProjectionStats } from './stats.js';
 import { int8ToNumber, type Int8Value } from './int8.js';
-import { createSqlWatermarkStore, type WatermarkState, type WatermarkStore } from './watermarks.js';
+import {
+  createMemoryWatermarkStore,
+  createSqlWatermarkStore,
+  type WatermarkState,
+  type WatermarkStore,
+} from './watermarks.js';
 
 /** How an op was incorporated (§4.2), for tests + observability. */
-export type ApplyMode = 'head' | 'refold' | 'unregistered';
+/**
+ * `held`: the op is kept in this log but folds elsewhere: a type the device may not read, kept as a
+ * link in its chain and folded only in a signed-in person's store (least-privilege sync).
+ */
+export type ApplyMode = 'head' | 'refold' | 'unregistered' | 'held';
 
 export interface ApplyOutcome {
   /** The owning module id, or null when no module handles the op type. */
@@ -85,6 +96,18 @@ export interface ProjectionEngineOptions<DB> {
   readonly batchPulledWatermarks?: boolean;
   readonly invalidation?: InvalidationBus;
   readonly stats?: ProjectionStats;
+  /** The op log this engine folds: the device's own (default) or a person's session log. */
+  readonly opTable?: string;
+  /**
+   * Which op types this engine folds. Absent folds every registered type. A device folds only what
+   * it may read; the rest fold in a signed-in person's store. Asked per op, so it may change.
+   */
+  readonly folds?: (type: string) => boolean;
+  /**
+   * The SQLite database this engine's projection rows live in: `main` for the device, `temp` for a
+   * person store. The re-fold's deletes name it, so the two never clear each other's rows.
+   */
+  readonly tableSchema?: string;
 }
 
 /**
@@ -99,6 +122,7 @@ export class ProjectionEngine<DB> {
   private readonly watermarks: WatermarkStore;
   private readonly seqColumn: OpSeqColumn;
   private readonly fold: FoldReadOptions;
+  private readonly opTable: string;
   private readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
   private readonly batchPulledWatermarks: boolean;
   /** Modules with pulled ops since the last {@link advancePulledWatermarks} (batch mode only). */
@@ -111,7 +135,13 @@ export class ProjectionEngine<DB> {
     this.registry = options.registry;
     this.watermarks = options.watermarks;
     this.seqColumn = options.seqColumn;
-    this.fold = { skipRefused: options.logKeepsRefusedOps };
+    this.opTable = options.opTable ?? DEVICE_OP_TABLE;
+    this.fold = {
+      skipRefused: options.logKeepsRefusedOps,
+      opTable: this.opTable,
+      ...(options.folds === undefined ? {} : { folds: options.folds }),
+      ...(options.tableSchema === undefined ? {} : { tableSchema: options.tableSchema }),
+    };
     this.makeRebuildStore = options.makeRebuildStore;
     this.batchPulledWatermarks = options.batchPulledWatermarks ?? false;
     this.invalidation = options.invalidation ?? new InvalidationBus();
@@ -157,8 +187,14 @@ export class ProjectionEngine<DB> {
       return { module: null, mode: 'unregistered', writtenTables: [] };
     }
 
+    if (this.fold.folds !== undefined && !this.fold.folds(op.type)) {
+      // Held, not folded: the watermarks still move, so the log stays contiguous for them.
+      await this.advanceWatermarkFor(module.id, op, source);
+      return { module: module.id, mode: 'held', writtenTables: [] };
+    }
+
     const entityTables = this.registry.tablesForEntityType(module, op.entityType);
-    const outOfOrder = await hasNewerEntityOp(this.db, op);
+    const outOfOrder = await hasNewerEntityOp(this.db, op, this.opTable);
 
     let mode: ApplyMode;
     if (!outOfOrder) {
@@ -173,13 +209,7 @@ export class ProjectionEngine<DB> {
       mode = 'refold';
     }
 
-    if (source === 'append') {
-      await this.watermarks.advanceLocalSeq(module.id, op.seq);
-    } else if (this.batchPulledWatermarks) {
-      this.pulledModules.add(module.id);
-    } else {
-      await this.advancePulledWatermark(module.id);
-    }
+    await this.advanceWatermarkFor(module.id, op, source);
 
     const written = new Set(entityTables.map((ref) => ref.table));
     const concerns = source === 'pull' ? module.concerns?.[op.type]?.(op) : undefined;
@@ -192,6 +222,20 @@ export class ProjectionEngine<DB> {
     return { module: module.id, mode, writtenTables: [...written] };
   }
 
+  private async advanceWatermarkFor(
+    moduleId: string,
+    op: ProjectionOperation,
+    source: 'append' | 'pull',
+  ): Promise<void> {
+    if (source === 'append') {
+      await this.watermarks.advanceLocalSeq(moduleId, op.seq);
+    } else if (this.batchPulledWatermarks) {
+      this.pulledModules.add(moduleId);
+    } else {
+      await this.advancePulledWatermark(moduleId);
+    }
+  }
+
   /** Advance the watermark of every module a pulled op touched since the last call (batch mode). */
   async advancePulledWatermarks(): Promise<void> {
     for (const moduleId of this.pulledModules) await this.advancePulledWatermark(moduleId);
@@ -200,7 +244,12 @@ export class ProjectionEngine<DB> {
 
   private async advancePulledWatermark(moduleId: string): Promise<void> {
     const current = await this.watermarks.read(moduleId);
-    const next = await highestContiguousSeq(this.db, current.appliedServerSeq, this.seqColumn);
+    const next = await highestContiguousSeq(
+      this.db,
+      current.appliedServerSeq,
+      this.seqColumn,
+      this.opTable,
+    );
     if (next > current.appliedServerSeq) {
       await this.watermarks.advanceServerSeq(moduleId, next);
     }
@@ -225,6 +274,17 @@ export class ProjectionEngine<DB> {
   ): Promise<void> {
     const module = this.registry.moduleForType(op.type);
     if (module === undefined) return;
+    // A held type folds nowhere here: rows left from when the device could read it are cleared, and
+    // a person store's rows of the same table are not touched.
+    if (this.fold.folds !== undefined && !this.fold.folds(op.type)) {
+      const tables = this.registry.tablesForEntityType(module, op.entityType);
+      await clearEntityRows(this.db, tables, op.entityId, this.fold.tableSchema);
+      this.invalidation.emit(new Set(tables.map((ref) => ref.table)), {
+        entityType: op.entityType,
+        entityId: op.entityId,
+      });
+      return;
+    }
     await refoldEntities(this.db, this.registry, module, op.entityType, [op.entityId], this.fold);
     this.stats.recordRefold();
     const written = new Set(
@@ -245,7 +305,7 @@ export class ProjectionEngine<DB> {
     // `nextArrivalSeq`), so no module waits on a number that will never come.
     const result = await sql<{ maxSeq: Int8Value | null }>`
       SELECT MAX(seq) AS "maxSeq" FROM (
-        SELECT MAX(${sql.ref(this.seqColumn)}) AS seq FROM operations
+        SELECT MAX(${sql.ref(this.seqColumn)}) AS seq FROM ${sql.table(this.opTable)}
         UNION ALL
         SELECT MAX(applied_server_seq) AS seq FROM projection_watermarks
       )
@@ -346,7 +406,12 @@ export class ProjectionEngine<DB> {
 export function createProjectionEngine<DB>(
   db: Kysely<DB>,
   registry: ProjectionRegistry<DB>,
-  options?: { readonly invalidation?: InvalidationBus; readonly stats?: ProjectionStats },
+  options?: {
+    readonly invalidation?: InvalidationBus;
+    readonly stats?: ProjectionStats;
+    /** Which op types the device folds (least-privilege sync); absent folds every type. */
+    readonly folds?: (type: string) => boolean;
+  },
 ): ProjectionEngine<DB> {
   return new ProjectionEngine<DB>({
     db,
@@ -357,7 +422,36 @@ export function createProjectionEngine<DB>(
     seqColumn: 'arrival_seq',
     logKeepsRefusedOps: true,
     makeRebuildStore: (handle) => createSqlRebuildStore(handle),
+    tableSchema: 'main',
     ...(options?.invalidation !== undefined ? { invalidation: options.invalidation } : {}),
     ...(options?.stats !== undefined ? { stats: options.stats } : {}),
+    ...(options?.folds !== undefined ? { folds: options.folds } : {}),
+  });
+}
+
+/** The op log a person store keeps in memory for a signed-in person (least-privilege sync). */
+export const PERSON_OP_TABLE = 'person_operations';
+
+/**
+ * The engine of a person store: the same fold over the same registry, reading the person's log and
+ * writing the store's in-memory tables (SQLite `temp`, which shadow the device's empty ones of the
+ * same name for every query). Never rebuilt: a store lives one session and is pulled afresh.
+ */
+export function createPersonProjectionEngine<DB>(
+  db: Kysely<DB>,
+  registry: ProjectionRegistry<DB>,
+  options: { readonly invalidation: InvalidationBus; readonly folds: (type: string) => boolean },
+): ProjectionEngine<DB> {
+  return new ProjectionEngine<DB>({
+    db,
+    registry,
+    watermarks: createMemoryWatermarkStore(),
+    seqColumn: 'arrival_seq',
+    logKeepsRefusedOps: true,
+    makeRebuildStore: (handle) => createSqlRebuildStore(handle),
+    opTable: PERSON_OP_TABLE,
+    tableSchema: 'temp',
+    invalidation: options.invalidation,
+    folds: options.folds,
   });
 }

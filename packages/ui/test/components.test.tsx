@@ -254,6 +254,22 @@ describe('empty / error / unauthorized are three distinct components (§3.8, §5
     expect(ErrorState).not.toBe(UnauthorizedState);
   });
 
+  test('ErrorState shows data not on this device as offline, without a code to read out', () => {
+    const notHere = render(
+      <ErrorState
+        title="Perlu internet"
+        errorCode="NOT_ON_DEVICE"
+        retryLabel="Coba lagi"
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(notHere.query('ui.errorState.code')).toBeNull();
+    const failed = render(
+      <ErrorState title="Gagal" errorCode="NETWORK" retryLabel="Coba lagi" onRetry={vi.fn()} />,
+    );
+    expect(failed.query('ui.errorState.code')).not.toBeNull();
+  });
+
   test('EmptyState renders its CTA only when onCreate is supplied — the screen owns that decision', () => {
     const without = render(<EmptyState title="Belum ada catatan" />);
     expect(without.query('ui.emptyState.cta')).toBeNull();

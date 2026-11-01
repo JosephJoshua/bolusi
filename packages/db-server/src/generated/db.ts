@@ -342,6 +342,17 @@ export interface Permissions {
   scope: string;
 }
 
+export interface PersonSessions {
+  createdAt: Int8;
+  deviceId: string;
+  expiresAt: Int8;
+  id: string;
+  revokedAt: Int8 | null;
+  tenantId: string;
+  tokenHash: string;
+  userId: string;
+}
+
 export interface PhoneCatalogBrands {
   listedAt: Int8 | null;
   name: string;
@@ -772,6 +783,7 @@ export interface DB {
   notes: Notes;
   operations: Operations;
   permissions: Permissions;
+  personSessions: PersonSessions;
   phoneCatalogBrands: PhoneCatalogBrands;
   phoneModelPhotos: PhoneModelPhotos;
   phoneModels: PhoneModels;

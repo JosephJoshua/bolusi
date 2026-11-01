@@ -2,7 +2,7 @@
 // a refused action's banner and the dialog frame a task is filled in.
 import { t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import { Banner, Button, ConfirmDialog, Dialog, StatePanel } from '@bolusi/ui-web';
-import { FileQuestion, LoaderCircle, Lock } from 'lucide-react';
+import { CloudOff, FileQuestion, LoaderCircle, Lock } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import type { ActionRunner } from '../action.js';
@@ -53,6 +53,17 @@ export function QueryPanel<TData>({
         />
       );
     case 'error':
+      // Not kept on this device and not pulled for this person yet: it fills in once online.
+      if (query.code === 'NOT_ON_DEVICE') {
+        return (
+          <StatePanel
+            icon={CloudOff}
+            title={t('core.errors.NOT_ON_DEVICE')}
+            hint={t('core.notOnDevice.hint')}
+            testId="query.notOnDevice"
+          />
+        );
+      }
       return (
         <StatePanel
           icon={FileQuestion}
