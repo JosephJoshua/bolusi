@@ -119,7 +119,10 @@ export function OrderList({
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       bottomAction={
-        <Button label={tp('purchasing.list.new')} onPress={onNewOrder} testID={`${testID}.new`} />
+        // Offline with the orders not on this device, a new one could not pick a supplier either.
+        query.status === 'error' && query.code === 'NOT_ON_DEVICE' ? undefined : (
+          <Button label={tp('purchasing.list.new')} onPress={onNewOrder} testID={`${testID}.new`} />
+        )
       }
       testID={testID}
     >

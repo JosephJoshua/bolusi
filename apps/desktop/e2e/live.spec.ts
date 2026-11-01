@@ -400,3 +400,61 @@ test('the owner adds a cashier with a first PIN, and changes their own PIN, on t
   await counter.keyboard.type('135790');
   await expect(counter.getByTestId('desktop.shell')).toBeVisible();
 });
+
+/** Lock the counter and sign in with `pin` as the person shown with `name`, or as the owner. */
+async function signInAs(name: string | null, pin: string): Promise<void> {
+  await counter.getByTestId('desktop.person').click();
+  await counter.getByRole('menuitem', { name: 'Kunci layar' }).click();
+  await counter
+    .getByTestId('switcher.person')
+    .filter(name === null ? { hasNotText: 'Maria Kambu' } : { hasText: name })
+    .click();
+  await counter.keyboard.type(pin);
+  await expect(counter.getByTestId('desktop.shell')).toBeVisible();
+}
+
+test('the owner uses Belanja on the store PC, which keeps none of it once they leave', async () => {
+  const belanja = counter.getByRole('button', { name: 'Belanja', exact: true });
+  // The cashier may not buy: the PC shows no Belanja, and holds none of it.
+  await expect(counter.getByTestId('repair.desk.board.newIntake')).toBeVisible();
+  await expect(belanja).toHaveCount(0);
+
+  // The owner's PIN goes to the server, and what only they may read comes down for this sign-in.
+  await signInAs(null, '246802');
+  await belanja.click();
+  await expect(counter.getByTestId('purchasing.desk.table')).toBeVisible({ timeout: 15_000 });
+  await counter.getByTestId('purchasing.desk.openSuppliers').click();
+  await counter.getByTestId('purchasing.desk.suppliers.add').click();
+  await counter.getByTestId('purchasing.desk.supplierForm.name').fill('CV Sinar Jaya');
+  await counter
+    .getByTestId('purchasing.desk.supplierForm')
+    .getByRole('button', { name: /^Simpan/ })
+    .click();
+  await expect(counter.getByTestId('purchasing.desk.suppliers')).toContainText('CV Sinar Jaya');
+  await counter.keyboard.press('Escape');
+  await expect(counter.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
+    timeout: 60_000,
+  });
+
+  // The cashier again: no Belanja.
+  await signInAs('Maria Kambu', '135790');
+  await expect(belanja).toHaveCount(0);
+
+  // The owner again: it comes back from the server.
+  await signInAs(null, '246802');
+  await belanja.click();
+  await counter.getByTestId('purchasing.desk.openSuppliers').click();
+  await expect(counter.getByTestId('purchasing.desk.suppliers')).toContainText('CV Sinar Jaya', {
+    timeout: 15_000,
+  });
+  await counter.keyboard.press('Escape');
+
+  // With the server gone (this suite's last test), nothing of it is left on the PC to show.
+  server.kill('SIGTERM');
+  await signInAs(null, '246802');
+  await belanja.click();
+  await expect(counter.getByText('Perlu internet untuk membuka ini.')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(counter.getByTestId('purchasing.desk.new')).toBeDisabled();
+});

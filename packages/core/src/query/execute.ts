@@ -38,6 +38,7 @@ import { defaultInvocation } from '../runtime/ctx.js';
 import type { PermissionEnforcementPoint } from '../runtime/enforce.js';
 import type { SearchIndexCache } from '../search/live-index.js';
 import { readOnlyDb, type QueryContext } from './qctx.js';
+import { ReadNotHereError, ReadsHerePlugin } from './reads-here.js';
 
 /**
  * A query as the runtime sees it: task 10's `QueryHandle` (permission + input + inference carrier)
@@ -62,10 +63,21 @@ export interface QueryRuntimeOptions<DB> {
   /** Live search indexes shared by every query (search/live-index.ts); devices pass one. */
   readonly search?: SearchIndexCache;
   /**
-   * Whether the data `permission` reads is on this device (least-privilege sync): the device's own
-   * read set, or the signed-in person's store. Absent everything is here, as on the server.
+   * Which reads' data is on this device (least-privilege sync). Absent, everything is here, as on
+   * the server. With `tableReads`, every statement a handler runs is checked against the read of
+   * each table it touches (`ReadsHerePlugin`), on the server too, so a query that hides a read
+   * fails in every test and not only on a device short of that data.
    */
-  readonly readHere?: (permissionId: string) => boolean;
+  readonly dataHere?: DataHerePort;
+  /** Each projection table's read (`projectionTableReads`; null: every device holds it). */
+  readonly tableReads?: ReadonlyMap<string, string | null>;
+}
+
+/** Whether a read's data is on this device: the device's own, or the signed-in person's store. */
+export interface DataHerePort {
+  readHere(permissionId: string): boolean;
+  /** `readHere` after a pull of the person's store that is under way has finished. */
+  whenHere(permissionId: string): Promise<boolean>;
 }
 
 /**
@@ -81,13 +93,20 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
   readonly #db: Kysely<DB>;
   readonly #enforcement: PermissionEnforcementPoint;
   readonly #search: SearchIndexCache | undefined;
-  readonly #readHere: ((permissionId: string) => boolean) | undefined;
+  readonly #dataHere: DataHerePort | undefined;
 
   constructor(options: QueryRuntimeOptions<DB>) {
-    this.#db = options.db;
+    const dataHere = options.dataHere;
+    // Handlers read through the check; appliers keep the plain handle.
+    this.#db =
+      options.tableReads === undefined
+        ? options.db
+        : options.db.withPlugin(
+            new ReadsHerePlugin(options.tableReads, (read) => dataHere?.readHere(read) ?? true),
+          );
     this.#enforcement = options.enforcement;
     this.#search = options.search;
-    this.#readHere = options.readHere;
+    this.#dataHere = dataHere;
   }
 
   /**
@@ -143,19 +162,24 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
       invocation,
     );
 
-    // Step 2b — may read it, but it is not here: the device holds only what its people may read,
-    // and this person's extra has not come down (offline at sign-in). Never an empty result, which
-    // would read as "nothing there".
-    if (this.#readHere?.(executable.permission) === false) {
-      throw new DomainError(
-        'NOT_ON_DEVICE',
-        { query: target, permission: executable.permission },
-        `${target} reads ${executable.permission}, which this device does not hold right now`,
-      );
+    // Step 3 — the handler, with the §6 qctx and nothing else. Step 3b — it touched a table whose
+    // data the device does not hold right now (least-privilege sync: the person's extra has not come
+    // down, or nobody here may read it): never an answer from the empty copy, which would read as
+    // "nothing there" or "Rp 0". A pull of the person's store under way may bring it: run once more.
+    const qctx = this.#contextFor(identity);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await executable.handler(input, qctx);
+      } catch (cause) {
+        if (!(cause instanceof ReadNotHereError)) throw cause;
+        if (attempt === 0 && (await this.#dataHere?.whenHere(cause.read)) === true) continue;
+        throw new DomainError(
+          'NOT_ON_DEVICE',
+          { query: target, permission: cause.read },
+          `${target} reads ${cause.table}: ${cause.message}`,
+        );
+      }
     }
-
-    // Step 3 — the handler, with the §6 qctx and nothing else.
-    return executable.handler(input, this.#contextFor(identity));
   }
 
   /** Build the §6 `qctx`: `{ db, tenantId, storeId, userId, hasPermission }`, plus `search` on a device. */

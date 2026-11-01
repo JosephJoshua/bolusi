@@ -137,7 +137,8 @@ fails a build, a boot or a test rather than waiting for review:
 - Every op type also declares `read`: the permission a person needs to see its ops.
   Sync follows least privilege, the same rule for every person and role. A device is
   sent only the ops its read set covers (`sync/read-scope.ts`): a shared store device
-  gets what its store's active non-owner staff may read, and a phone set up as one
+  gets what its store's active non-owner staff may read (its owners' reads while it has
+  no staff yet), and a phone set up as one
   person's own (`devices.personal_user_id`, chosen at setup) gets what that person may
   read, and only they sign in on it. The server takes a personal phone's ops only as
   that person (its genesis and re-enrolment record aside), so a deactivated person's
@@ -153,14 +154,21 @@ fails a build, a boot or a test rather than waiting for review:
   the device's own, so module queries read it unchanged; it is dropped on sign-out,
   switch, idle lock and close. Their own changes of types the device does not hold
   stay in its log as chain links and lose their text once sent (`sync/device-reads.ts`).
-  A query whose data is not here (or not all pulled yet) throws `NOT_ON_DEVICE`
-  ("Perlu internet"), never an empty list. Limits, accepted for now: the extra is pulled
+  The extra is worked out when the PIN goes to the server: after a new device's first
+  pull, and after any PIN change made on the device has been sent. Until they leave, the
+  PIN stays in memory on a device that holds all they read, so if it comes to hold less
+  (the store's first staff person is added) their extra opens without asking again. A query whose data is still coming down waits for that pull;
+  one whose data is not here throws `NOT_ON_DEVICE` ("Perlu internet"), never an empty list. Limits, accepted for now: the extra is pulled
   again at every sign-in (nothing stays between sessions); a person granted more while
   signed in sees it from their next sign-in; and the server's PIN check guards against
   a modified app, not a rooted device, which holds every person's argon2 PIN verifier
   for offline sign-in, so a 6-digit PIN can be cracked off it. A new PIN ends the
-  person's other sessions. The check uses a query's own `permission`, so a query must
-  not join a table read with another permission. Each projection table must be read with one permission, so a record with
+  person's other sessions. Queries declare nothing for this: the query runtime checks
+  every statement a handler runs against the read of each table it touches
+  (`core/src/query/reads-here.ts`), so a new module's queries are covered as written;
+  a table named inside raw SQL is refused, so build subqueries with Kysely. A
+  handler that shows optional data to some readers only (refunds on a servisan) asks
+  `qctx.hasPermission` before selecting it, as for any gated field. Each projection table must be read with one permission, so a record with
   fields for different readers is split into separate op types and tables, one per
   reader (part costs live apart from stock moves; `projectionTableReads` throws otherwise).
 - When a type's rule judges only newer versions, set `minPushVersion` on the type. The
