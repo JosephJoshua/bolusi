@@ -8,7 +8,7 @@
     "syncing": "Datanya sedang disimpan ke server.",
     "pending": "{count} perubahan belum tersinkron",
     "pendingMedia": "{count} foto & video belum tersinkron",
-    "photosPending": "Perubahan sudah tersinkron. Foto & videonya menyusul.",
+    "photosPending": "Perubahan sudah tersinkron. Foto\u00a0&\u00a0videonya menyusul.",
     "attentionReassurance": "Cek daftarnya di bawah.",
     "offline": "Perubahan tersimpan di HP ini dan disinkronkan saat ada koneksi.",
     "reconnected": "Terhubung kembali",
@@ -18,11 +18,11 @@
     "titleSyncing": "Sedang menyinkronkan",
     "titleOffline": "Tidak ada koneksi",
     "titleAttention": "Ada yang perlu dicek",
-    "titlePhotosPending": "Foto & video belum tersinkron",
+    "titlePhotosPending": "Foto\u00a0&\u00a0video belum tersinkron",
     "screenTitle": "Status data",
     "savedHere": "{count} perubahan tersimpan di HP ini dan akan disinkronkan otomatis.",
     "changesLabel": "Perubahan",
-    "photosLabel": "Foto & video",
+    "photosLabel": "Foto\u00a0&\u00a0video",
     "waitingCount": "{count} belum tersinkron"
   },
   "banner": {
