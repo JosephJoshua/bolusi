@@ -657,7 +657,7 @@ export function TicketPane({
           {row.outcome === 'cancelled' ? (
             <Fact
               // Once cut, the bill is what the customer pays, as the board's total says.
-              label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancel.fee')}
+              label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancelFee.title')}
               value={cancelFeeText((row.cancelFee ?? 0) - row.reduced)}
               action={contextual('changeCancelFee', row)}
               testId="repair.desk.ticket.cancelFeeFact"
@@ -781,7 +781,7 @@ export function TicketPane({
           // owes, the same fee the board and the handover show (Rp 0 when none was set).
           <>
             <div className="flex items-baseline justify-between gap-4">
-              <p className="text-body font-semibold text-text">{tn('repair.cancel.fee')}</p>
+              <p className="text-body font-semibold text-text">{tn('repair.cancelFee.title')}</p>
               <p
                 className="tabular text-title font-bold text-text"
                 data-testid="repair.desk.ticket.cancelFee"

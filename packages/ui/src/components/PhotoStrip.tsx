@@ -45,7 +45,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: color.surfaceAlt,
   },
-  label: { ...type.caption, color: color.textMuted, marginTop: space.xs },
+  // No fixed lineHeight: on Android 15+ a one-word caption with one drew its last glyph on a
+  // second, hidden line at font 2.0 ("Belakan"), the same bounds bug the segmented labels had.
+  label: { ...type.caption, lineHeight: undefined, color: color.textMuted, marginTop: space.xs },
 });
 
 export function PhotoStrip({
