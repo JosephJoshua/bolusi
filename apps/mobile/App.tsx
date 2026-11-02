@@ -9,11 +9,13 @@ import {
   ListRow,
   NAV_BAR_INSET,
   Sheet,
+  ShellTabsProvider,
   SyncChip,
   TabBar,
   color,
   size,
   space,
+  useViewport,
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,7 +31,7 @@ import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
 import { PurchasingRoute } from './src/screens/purchasing/PurchasingRoute.js';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
-import type { SurfaceNav } from './src/navigation/surface.js';
+import { placeTabsShow, type SurfaceNav } from './src/navigation/surface.js';
 import {
   emptyWorkspace,
   withDraft,
@@ -947,23 +949,28 @@ export default function App(props: AppProps): React.JSX.Element {
           },
     );
   }, [registerSurfaceNav]);
+  // Tabs show only on a place's top level: a screen with its own back (a servisan, an intake, a Kas
+  // step) owns the bottom for its action, and a Kas step would lose what was typed on a switch.
+  const [repairTabs, setRepairTabs] = useState(true);
   const registerRepairNav = useCallback(
     (nav: SurfaceNav | null): void => {
       repairNavRef.current = nav;
+      setRepairTabs(placeTabsShow(nav));
       syncHomeNav();
     },
     [syncHomeNav],
   );
-  // A Kas step holds what was typed only while it shows, so the tabs give way to its own back.
-  const [kasStepOpen, setKasStepOpen] = useState(false);
+  const [kasTabs, setKasTabs] = useState(true);
   const registerKasNav = useCallback(
     (nav: SurfaceNav | null): void => {
       kasNavRef.current = nav;
-      setKasStepOpen(nav !== null);
+      setKasTabs(placeTabsShow(nav));
       syncHomeNav();
     },
     [syncHomeNav],
   );
+  // A wide tablet keeps the tabs down the left edge, so the bottom is the open servisan's alone.
+  const tabsAsRail = useViewport().widthClass === 'expanded';
   useEffect(() => {
     tabRef.current = tab;
     syncHomeNav();
@@ -1654,29 +1661,43 @@ export default function App(props: AppProps): React.JSX.Element {
                 if (!showsKas || moneyRuntime === null) return repairHome;
                 // Servisan stays mounted behind Kas, so a half-done intake survives a look at the
                 // drawer. Kas holds nothing worth keeping, so it is only there while it shows.
+                const tabs = (tab === 'repair' ? repairTabs : kasTabs) ? (
+                  <TabBar
+                    tabs={[
+                      { key: 'repair', label: tn('repair.board.title'), icon: 'repair' },
+                      { key: 'kas', label: tm('money.kas.title'), icon: 'money' },
+                    ]}
+                    selected={tab}
+                    onSelect={selectTab}
+                    variant={tabsAsRail ? 'rail' : 'bar'}
+                    testID="shell-tabs"
+                  />
+                ) : null;
+                // Along the bottom, the tabs go into the showing screen's own shell (one dock with
+                // its action, under its sheets); only the place in front gets them.
+                const bottomTabs = (place: HomeTab): React.ReactNode =>
+                  !tabsAsRail && tab === place ? tabs : null;
                 return (
-                  <View style={FILL}>
-                    <View style={tab === 'repair' ? FILL : HIDDEN}>{repairHome}</View>
+                  <View style={tabsAsRail ? ROW : FILL}>
+                    {tabsAsRail ? tabs : null}
+                    <View style={tab === 'repair' ? FILL : HIDDEN}>
+                      <ShellTabsProvider tabs={bottomTabs('repair')}>
+                        {repairHome}
+                      </ShellTabsProvider>
+                    </View>
                     {tab === 'kas' ? (
-                      <KasHome
-                        runtime={moneyRuntime}
-                        now={props.clock ?? systemClock.now}
-                        syncChip={homeSyncChip}
-                        avatar={homeAvatar}
-                        onRegisterSurfaceNav={registerKasNav}
-                      />
+                      <View style={FILL}>
+                        <ShellTabsProvider tabs={bottomTabs('kas')}>
+                          <KasHome
+                            runtime={moneyRuntime}
+                            now={props.clock ?? systemClock.now}
+                            syncChip={homeSyncChip}
+                            avatar={homeAvatar}
+                            onRegisterSurfaceNav={registerKasNav}
+                          />
+                        </ShellTabsProvider>
+                      </View>
                     ) : null}
-                    {tab === 'kas' && kasStepOpen ? null : (
-                      <TabBar
-                        tabs={[
-                          { key: 'repair', label: tn('repair.board.title'), icon: 'repair' },
-                          { key: 'kas', label: tm('money.kas.title'), icon: 'money' },
-                        ]}
-                        selected={tab}
-                        onSelect={selectTab}
-                        testID="shell-tabs"
-                      />
-                    )}
                   </View>
                 );
               }
@@ -1853,6 +1874,7 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 type HomeTab = 'repair' | 'kas';
 
 const FILL = { flex: 1 } as const;
+const ROW = { flex: 1, flexDirection: 'row' } as const;
 const HIDDEN = { display: 'none' } as const;
 
 /**
