@@ -79,7 +79,7 @@
     "UNEXPECTED": "Something went wrong. Try again.",
     "NETWORK": "Connection problem. Your changes are still saved on this device.",
     "MEDIA_NOT_FOUND": "The photo isn’t on the server yet. The app will try again.",
-    "MEDIA_IMMUTABLE": "A photo that has been sent can’t be replaced. Take a new photo if a correction is needed.",
+    "MEDIA_IMMUTABLE": "A photo that has been synced can’t be replaced. Take a new photo if a correction is needed.",
     "INIT_MISMATCH": "This photo’s details don’t match the server’s. Take a new photo.",
     "MEDIA_TOO_LARGE": "This photo is too large to send. Please report this.",
     "CHUNK_TOO_LARGE": "The photo couldn’t be sent because of an app problem. Please report this.",
