@@ -33,7 +33,7 @@ const BLEED = space.lg;
 
 const styles = StyleSheet.create({
   scroller: { flexGrow: 0, marginHorizontal: -BLEED },
-  row: { paddingHorizontal: BLEED, gap: space.sm },
+  row: { paddingHorizontal: BLEED, gap: space.md },
   // At least the photo's width, and wider for a caption that needs it (a large font, a long angle
   // name): a caption wraps between words and is never cut. Two photos wide at most, so a long
   // caption takes a second line instead of one very wide tile.
