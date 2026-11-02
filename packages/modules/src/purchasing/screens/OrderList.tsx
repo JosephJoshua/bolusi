@@ -38,6 +38,11 @@ export interface OrderListProps {
   readonly onOpenOrder: (orderId: string) => void;
   readonly onNewOrder: () => void;
   readonly onOpenSuppliers: () => void;
+  /**
+   * The order open beside the list on a wide screen: its row is marked, and a new order steps back
+   * to an outlined button so the open order's next step is the one filled action on screen.
+   */
+  readonly selectedId?: string | null | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -49,6 +54,7 @@ export function OrderList({
   onOpenOrder,
   onNewOrder,
   onOpenSuppliers,
+  selectedId = null,
   testID = 'purchasing.orders',
 }: OrderListProps): React.JSX.Element {
   const [pages, setPages] = useState(1);
@@ -102,8 +108,15 @@ export function OrderList({
   openRef.current = onOpenOrder;
   const open = useCallback((id: string) => openRef.current(id), []);
   const renderRow = useCallback(
-    (row: OrderRow) => <OrderListRow row={row} onOpen={open} testID={`${testID}.row.${row.id}`} />,
-    [open, testID],
+    (row: OrderRow) => (
+      <OrderListRow
+        row={row}
+        selected={row.id === selectedId}
+        onOpen={open}
+        testID={`${testID}.row.${row.id}`}
+      />
+    ),
+    [open, selectedId, testID],
   );
   const pick = (next: OrderFilter): void => {
     setPages(1);
@@ -121,7 +134,12 @@ export function OrderList({
       bottomAction={
         // Offline with the orders not on this device, a new one could not pick a supplier either.
         query.status === 'error' && query.code === 'NOT_ON_DEVICE' ? undefined : (
-          <Button label={tp('purchasing.list.new')} onPress={onNewOrder} testID={`${testID}.new`} />
+          <Button
+            label={tp('purchasing.list.new')}
+            variant={selectedId === null ? 'primary' : 'secondary'}
+            onPress={onNewOrder}
+            testID={`${testID}.new`}
+          />
         )
       }
       testID={testID}
@@ -171,12 +189,15 @@ export function orderProgress(row: OrderRow): string {
 
 interface OrderListRowProps {
   readonly row: OrderRow;
+  /** Open beside the list on a wide screen. */
+  readonly selected: boolean;
   readonly onOpen: (orderId: string) => void;
   readonly testID: string;
 }
 
 const OrderListRow = memo(function OrderListRow({
   row,
+  selected,
   onOpen,
   testID,
 }: OrderListRowProps): React.JSX.Element {
@@ -192,11 +213,12 @@ const OrderListRow = memo(function OrderListRow({
         orderProgress(row),
         meta,
       ].join(', ')}
+      accessibilityState={{ selected }}
       onPress={() => onOpen(row.id)}
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: pressed ? color.surfaceAlt : color.surface },
+        { backgroundColor: pressed ? color.surfaceAlt : selected ? color.infoBg : color.surface },
       ]}
     >
       <View style={styles.rowTop}>

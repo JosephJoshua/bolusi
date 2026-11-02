@@ -4,6 +4,7 @@
  * suppliers), as local navigation like PartsSurface. The order being written lives here, so a trip
  * to pick a part or add a supplier comes back to it. Back closes the open step first.
  */
+import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
@@ -113,106 +114,139 @@ export function PurchasingSurface({
     setView({ kind: 'form' });
   };
 
-  switch (view.kind) {
-    case 'list':
-      return (
-        <OrderList
-          chrome={chrome}
-          filter={filter}
-          onFilter={setFilter}
-          onBack={onClose}
-          onOpenOrder={(orderId) => openOrder(orderId)}
-          onNewOrder={() => write(EMPTY_ORDER)}
-          onOpenSuppliers={() => {
-            setSupplierNotice(null);
-            setView({ kind: 'suppliers' });
-          }}
-        />
-      );
-    case 'order':
-      return (
-        <OrderDetail
-          orderId={view.orderId}
-          chrome={chrome}
-          onBack={() => setView({ kind: 'list' })}
-          onEdit={(order) => write(draftOf(order), order.id)}
-          onReceive={(order) => setView({ kind: 'receive', order })}
-          notice={notice}
-          onClearNotice={() => setNotice(null)}
-        />
-      );
-    case 'form':
-      return (
-        <OrderForm
-          chrome={chrome}
-          orderId={writing?.orderId}
-          draft={draft}
-          onChange={setDraft}
-          onPickPart={() => setView({ kind: 'pick' })}
-          onAddSupplier={() => setView({ kind: 'formSupplier' })}
-          onDone={(orderId, placed) => {
-            setWriting(null);
-            openOrder(orderId, placed ? 'purchasing.done.placed' : 'purchasing.done.drafted');
-          }}
-          onCancel={closeForm}
-          dirty={writing !== null && draftChanged(draft, writing.from)}
-          onRegisterDiscardGuard={registerGuard}
-        />
-      );
-    case 'pick':
-      return (
-        <PickPartStep
-          chrome={chrome}
-          onOrder={new Set(draft.lines.map((line) => line.itemId))}
-          onPick={(item) => {
-            setDraft((now) => addLine(now, item));
-            setView({ kind: 'form' });
-          }}
-          onCancel={() => setView({ kind: 'form' })}
-        />
-      );
-    case 'formSupplier':
-      return (
-        <SupplierForm
-          chrome={chrome}
-          onDone={(supplierId) => {
-            setDraft((now) => ({ ...now, supplierId }));
-            setView({ kind: 'form' });
-          }}
-          onCancel={() => setView({ kind: 'form' })}
-        />
-      );
-    case 'receive':
-      return (
-        <ReceiveStep
-          chrome={chrome}
-          order={view.order}
-          onDone={() => openOrder(view.order.id, 'purchasing.done.received')}
-          onCancel={() => setView({ kind: 'order', orderId: view.order.id })}
-        />
-      );
-    case 'suppliers':
-      return (
-        <SupplierList
-          chrome={chrome}
-          onBack={() => setView({ kind: 'list' })}
-          onOpen={(supplier) => setView({ kind: 'supplier', supplier })}
-          onAdd={() => setView({ kind: 'supplier' })}
-          notice={supplierNotice}
-          onClearNotice={() => setSupplierNotice(null)}
-        />
-      );
-    case 'supplier':
-      return (
-        <SupplierForm
-          chrome={chrome}
-          supplier={view.supplier}
-          onDone={() => {
-            setSupplierNotice(tp('purchasing.done.supplierSaved'));
-            setView({ kind: 'suppliers' });
-          }}
-          onCancel={() => setView({ kind: 'suppliers' })}
-        />
-      );
+  // On a wide screen the list stays beside the open order. Writing or receiving an order is a task
+  // of its own and keeps the whole screen, so a tap on the list never throws away a half-done one.
+  const beside = view.kind === 'list' || view.kind === 'order';
+  const split = useListDetailSplit() && beside;
+  // The list's header carries the sync chip and the avatar; the pane beside it keeps neither.
+  const paneChrome: ScreenChrome = split ? { syncChip: null, avatar: null } : chrome;
+  const openId = view.kind === 'order' ? view.orderId : null;
+
+  const list = (
+    <OrderList
+      chrome={chrome}
+      filter={filter}
+      onFilter={setFilter}
+      onBack={onClose}
+      onOpenOrder={(orderId) => {
+        if (orderId !== openId) openOrder(orderId);
+      }}
+      onNewOrder={() => write(EMPTY_ORDER)}
+      onOpenSuppliers={() => {
+        setSupplierNotice(null);
+        setView({ kind: 'suppliers' });
+      }}
+      selectedId={split ? openId : null}
+    />
+  );
+
+  const detail =
+    view.kind === 'order' ? (
+      <OrderDetail
+        key={view.orderId}
+        orderId={view.orderId}
+        chrome={paneChrome}
+        hideBack={split}
+        onBack={() => setView({ kind: 'list' })}
+        onEdit={(order) => write(draftOf(order), order.id)}
+        onReceive={(order) => setView({ kind: 'receive', order })}
+        notice={notice}
+        onClearNotice={() => setNotice(null)}
+      />
+    ) : split ? (
+      <EmptyState title={tp('purchasing.list.pickOrder')} testID="purchasing.noOrderOpen" />
+    ) : null;
+
+  return (
+    <ListDetail
+      split={split}
+      list={split || view.kind === 'list' ? list : null}
+      detail={detail}
+      testID="purchasing.split"
+    >
+      {beside ? null : fullScreen()}
+    </ListDetail>
+  );
+
+  /** The tasks that keep the whole screen. */
+  function fullScreen(): React.JSX.Element | null {
+    switch (view.kind) {
+      case 'list':
+      case 'order':
+        return null;
+      case 'receive':
+        return (
+          <ReceiveStep
+            chrome={chrome}
+            order={view.order}
+            onDone={() => openOrder(view.order.id, 'purchasing.done.received')}
+            onCancel={() => setView({ kind: 'order', orderId: view.order.id })}
+          />
+        );
+      case 'form':
+        return (
+          <OrderForm
+            chrome={chrome}
+            orderId={writing?.orderId}
+            draft={draft}
+            onChange={setDraft}
+            onPickPart={() => setView({ kind: 'pick' })}
+            onAddSupplier={() => setView({ kind: 'formSupplier' })}
+            onDone={(orderId, placed) => {
+              setWriting(null);
+              openOrder(orderId, placed ? 'purchasing.done.placed' : 'purchasing.done.drafted');
+            }}
+            onCancel={closeForm}
+            dirty={writing !== null && draftChanged(draft, writing.from)}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+      case 'pick':
+        return (
+          <PickPartStep
+            chrome={chrome}
+            onOrder={new Set(draft.lines.map((line) => line.itemId))}
+            onPick={(item) => {
+              setDraft((now) => addLine(now, item));
+              setView({ kind: 'form' });
+            }}
+            onCancel={() => setView({ kind: 'form' })}
+          />
+        );
+      case 'formSupplier':
+        return (
+          <SupplierForm
+            chrome={chrome}
+            onDone={(supplierId) => {
+              setDraft((now) => ({ ...now, supplierId }));
+              setView({ kind: 'form' });
+            }}
+            onCancel={() => setView({ kind: 'form' })}
+          />
+        );
+      case 'suppliers':
+        return (
+          <SupplierList
+            chrome={chrome}
+            onBack={() => setView({ kind: 'list' })}
+            onOpen={(supplier) => setView({ kind: 'supplier', supplier })}
+            onAdd={() => setView({ kind: 'supplier' })}
+            notice={supplierNotice}
+            onClearNotice={() => setSupplierNotice(null)}
+          />
+        );
+      case 'supplier':
+        return (
+          <SupplierForm
+            chrome={chrome}
+            supplier={view.supplier}
+            onDone={() => {
+              setSupplierNotice(tp('purchasing.done.supplierSaved'));
+              setView({ kind: 'suppliers' });
+            }}
+            onCancel={() => setView({ kind: 'suppliers' })}
+          />
+        );
+    }
   }
 }

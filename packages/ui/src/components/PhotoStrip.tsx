@@ -11,6 +11,7 @@ import { Text } from '../text.js';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { color, radius, size, space, type } from '../tokens.js';
+import { bleedMargins, bleedPadding, useBleed } from '../layout.js';
 
 export interface PhotoStripItem {
   readonly key: string;
@@ -28,12 +29,10 @@ export interface PhotoStripProps {
   readonly testID?: string | undefined;
 }
 
-/** The screen padding the strip bleeds through (AppShell content uses `space.lg`). */
-const BLEED = space.lg;
-
+// It bleeds through the screen's gutter (`useBleed`), and only the outer one beside another column.
 const styles = StyleSheet.create({
-  scroller: { flexGrow: 0, marginHorizontal: -BLEED },
-  row: { paddingHorizontal: BLEED, gap: space.sm },
+  scroller: { flexGrow: 0 },
+  row: { gap: space.sm },
   tile: { width: size.photoStrip },
   image: {
     width: size.photoStrip,
@@ -51,12 +50,13 @@ export function PhotoStrip({
   openLabel,
   testID = 'ui.photoStrip',
 }: PhotoStripProps): React.JSX.Element {
+  const bleed = useBleed();
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={styles.scroller}
-      contentContainerStyle={styles.row}
+      style={[styles.scroller, bleedMargins(bleed)]}
+      contentContainerStyle={[styles.row, bleedPadding(bleed)]}
       testID={testID}
     >
       {photos.map((photo, index) => (

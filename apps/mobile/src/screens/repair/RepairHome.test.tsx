@@ -40,7 +40,7 @@ import {
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
-import { RepairHome, listPaneWidth } from './RepairHome.js';
+import { RepairHome } from './RepairHome.js';
 
 let h: RepairHarness | null = null;
 /** A second device in the same store, when a test needs changes that arrive by sync. */
@@ -1943,14 +1943,6 @@ describe('the slip, offered while the customer is still there', () => {
     await press(screen, 'repair.handover.primary');
     expect(screen.query('repair.print.primary')).toBeNull();
     expect(screen.query('repair.ticket.photos.strip.handover')).not.toBeNull();
-  });
-});
-
-describe('listPaneWidth', () => {
-  test('gives the board a phone width and the ticket the rest', () => {
-    expect(listPaneWidth(840)).toBe(340);
-    expect(listPaneWidth(960)).toBe(384);
-    expect(listPaneWidth(1280)).toBe(420);
   });
 });
 

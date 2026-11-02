@@ -38,7 +38,8 @@
     "manageCategories": "Atur kategori",
     "filter": "Filter",
     "filterCount": "Filter ({count})",
-    "scan": "Pindai"
+    "scan": "Pindai",
+    "pickPart": "Pilih barang untuk melihat detailnya."
   },
   "filter": {
     "active": "Semua",

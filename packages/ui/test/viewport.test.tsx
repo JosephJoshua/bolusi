@@ -53,6 +53,26 @@ describe('AppShell on a tablet', () => {
     },
   );
 
+  test.each([false, true])(
+    'a screen laid out in columns grows to the wide width; its action stays readable (scrollable: %s)',
+    (scrollable) => {
+      const screen = render(
+        <AppShell
+          title="t"
+          syncChip={null}
+          avatar={null}
+          scrollable={scrollable}
+          wide
+          bottomAction={<Text testID="action">a</Text>}
+        >
+          <Text testID="body">b</Text>
+        </AppShell>,
+      );
+      expect(maxWidthAbove(screen.get('body') as never)).toBe(size.wideMax);
+      expect(maxWidthAbove(screen.get('action') as never)).toBe(size.contentMax);
+    },
+  );
+
   // A list windows its rows against the slot's height. A slot that grew with its content let the
   // list lay out every row and pushed the bottom action off a short screen.
   test('a list screen gets exactly the room between the header and the action bar', () => {

@@ -21,10 +21,9 @@ import {
   type RepairRuntime,
   type StepBack,
 } from '@bolusi/modules/repair/screens';
-import { ViewportProvider, border, color, useViewport } from '@bolusi/ui';
+import { ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
@@ -43,16 +42,6 @@ type RepairView =
       readonly justOpened?: boolean;
     }
   | { readonly kind: 'handover'; readonly ticketId: string };
-
-/**
- * The board's share of a wide screen: wide enough for a row's name, amount and chips (a phone's
- * width), and no wider, so the ticket gets the rest.
- */
-const LIST_PANE = { share: 0.4, min: 340, max: 420 } as const;
-
-export function listPaneWidth(width: number): number {
-  return Math.min(LIST_PANE.max, Math.max(LIST_PANE.min, Math.round(width * LIST_PANE.share)));
-}
 
 export interface RepairHomeProps {
   readonly runtime: RepairRuntime;
@@ -95,8 +84,7 @@ export function RepairHome({
           ? { kind: 'intake' }
           : { kind: 'board' },
   );
-  const viewport = useViewport();
-  const split = viewport.widthClass === 'expanded' && view.kind !== 'intake';
+  const split = useListDetailSplit() && view.kind !== 'intake';
   // Inside a flow the header keeps only the sync chip: the title needs the width, and switching
   // user or language belongs on the board, not halfway through a step. Beside the board, whose
   // header already carries both, the pane keeps neither. An intake keeps the avatar: it belongs to
@@ -205,35 +193,18 @@ export function RepairHome({
       />
     ) : null;
 
-  const showBoard = split || view.kind === 'board';
-  const showDetail = split || view.kind === 'ticket' || view.kind === 'handover';
-  // The slots keep their places in both layouts, so turning the tablet redraws the open ticket
-  // instead of remounting it: a step half filled in survives the rotation.
   return (
     <RepairRuntimeProvider runtime={runtime}>
-      <View
-        style={split ? styles.split : styles.single}
-        testID={split ? 'repair.split' : undefined}
+      <ListDetail
+        split={split}
+        list={split || view.kind === 'board' ? board : null}
+        detail={
+          split || view.kind === 'ticket' || view.kind === 'handover'
+            ? (detail ?? <NoTicketOpen />)
+            : null
+        }
+        testID="repair.split"
       >
-        {showBoard ? (
-          <View
-            style={
-              split ? [styles.listPane, { width: listPaneWidth(viewport.width) }] : styles.single
-            }
-          >
-            {board}
-          </View>
-        ) : null}
-        {showDetail ? (
-          // The ticket sizes itself to its pane, not the window: beside the board on a small tablet
-          // it has a phone's width, and lays its photos out like one.
-          <ViewportProvider
-            style={styles.single}
-            testID={split ? 'repair.split.detail' : undefined}
-          >
-            {detail ?? <NoTicketOpen />}
-          </ViewportProvider>
-        ) : null}
         {view.kind === 'intake' ? (
           <IntakeWizard
             chrome={chrome}
@@ -249,13 +220,7 @@ export function RepairHome({
             onCancel={() => setView({ kind: 'board' })}
           />
         ) : null}
-      </View>
+      </ListDetail>
     </RepairRuntimeProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  single: { flex: 1 },
-  split: { flex: 1, flexDirection: 'row' },
-  listPane: { borderRightWidth: border.hairline, borderRightColor: color.border },
-});

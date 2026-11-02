@@ -55,7 +55,8 @@
     "emptyOpen": "Belum ada pesanan yang berjalan.",
     "emptyDone": "Belum ada pesanan yang selesai.",
     "parts": "{count} barang",
-    "progress": "{received} dari {ordered} diterima"
+    "progress": "{received} dari {ordered} diterima",
+    "pickOrder": "Pilih pesanan untuk melihat detailnya."
   },
   "order": {
     "lines": "Barang",

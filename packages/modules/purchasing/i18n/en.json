@@ -55,7 +55,8 @@
     "emptyOpen": "No open orders yet.",
     "emptyDone": "No finished orders yet.",
     "parts": "Parts: {count}",
-    "progress": "{received} of {ordered} received"
+    "progress": "{received} of {ordered} received",
+    "pickOrder": "Pick an order to see its details."
   },
   "order": {
     "lines": "Parts",
