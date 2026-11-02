@@ -137,6 +137,7 @@ export type { ToggleChipProps } from './components/ToggleChip.js';
 export type { UnauthorizedStateProps } from './components/UnauthorizedState.js';
 export type { AppShellProps } from './shell/AppShell.js';
 export { useScrollLock, type ScrollLock } from './shell/scroll-lock.js';
+export { ShellTabsProvider, useShellTabs } from './shell/shell-tabs.js';
 export { useRevealOnMount } from './shell/keyboard.js';
 export type { AvatarButtonProps } from './shell/AvatarButton.js';
 export type { SyncChipProps, SyncChipState } from './shell/SyncChip.js';

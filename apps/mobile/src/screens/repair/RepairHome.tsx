@@ -129,9 +129,10 @@ export function RepairHome({
       },
       requestLeave: runLeave,
       keepsWorkOnSwitch: view.kind === 'intake',
+      listBeside: split,
     });
     return () => onRegisterSurfaceNav?.(null);
-  }, [view, onRegisterSurfaceNav, runLeave]);
+  }, [view, split, onRegisterSurfaceNav, runLeave]);
 
   const board = (
     <RepairBoard

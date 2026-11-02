@@ -1,6 +1,6 @@
 /**
  * The Kas tab beside Servisan: shown to whoever counts the drawer or reads the store's money, and
- * to nobody else. Switching tabs keeps a half-typed intake, and hardware back on Kas goes back to
+ * to nobody else. The tabs show only on a place's top level, and hardware back on Kas goes back to
  * Servisan instead of leaving the app.
  *
  * Drives the real `Root` with the real repair runtime over the live shell's database.
@@ -34,7 +34,11 @@ vi.mock('expo-location', () => ({
 
 import { fire, type RenderResult } from '../../../packages/ui/test/render.js';
 import { createSessionRepairRuntime, repairMediaSeamsFor } from '@bolusi/device/bootstrap/repair';
-import { __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.js';
+import {
+  __emitHardwareBack,
+  __resetHardwareBack,
+  __windowMetrics,
+} from './doubles/react-native.js';
 import {
   bootFixture,
   closeClientDb,
@@ -113,35 +117,47 @@ describe('the Kas tab', () => {
     expect(shown.query('shell-tabs')).toBeNull();
   });
 
-  test('opens the drawer, and a half-typed intake is still there on Servisan', async () => {
+  test('opens the drawer from the board, and Servisan is as it was', async () => {
     const shown = await signedIn(COUNTER);
-    await press(shown, 'repair.board.newIntake');
-    fire(shown.get('repair.intake.customer.name.field'), 'onChangeText', 'Yohanis Wenda');
-    await settle();
-
     await press(shown, 'shell-tabs.kas');
     expect(await waitUntil(() => shown.query('money.kas.drawer') !== null)).toBe(true);
     expect(homeShown(shown)).toBe(true);
 
     await press(shown, 'shell-tabs.repair');
-    expect(shown.get('repair.intake.customer.name.field').props['value']).toBe('Yohanis Wenda');
+    expect(shown.query('repair.board.newIntake')).not.toBeNull();
   });
 
-  test('switching user from Kas first shows the half-typed intake and asks there', async () => {
+  test('are on the board, inside its screen, and give the bottom to an open intake', async () => {
     const shown = await signedIn(COUNTER);
+    // One dock with the board's action, so a sheet on the board covers the tabs too.
+    expect(shown.query('repair.board.dock')).not.toBeNull();
+    expect(shown.all('shell-tabs')).toHaveLength(1);
+
     await press(shown, 'repair.board.newIntake');
-    fire(shown.get('repair.intake.customer.name.field'), 'onChangeText', 'Yohanis Wenda');
-    await settle();
-    await press(shown, 'shell-tabs.kas');
-    await waitUntil(() => shown.query('money.kas.drawer') !== null);
+    expect(shown.query('repair.intake.customer.name.field')).not.toBeNull();
+    expect(shown.query('shell-tabs')).toBeNull();
 
-    fire(shown.all('ui.avatarButton').at(-1)!, 'onPress');
+    expect(__emitHardwareBack()).toBe(true);
     await settle();
-    await press(shown, 'account-menu-switch-user');
+    expect(await waitUntil(() => shown.query('repair.board.newIntake') !== null)).toBe(true);
+    expect(shown.query('shell-tabs')).not.toBeNull();
+  });
 
-    expect(shown.query('money.kas')).toBeNull();
-    expect(shown.query('repair.intake.discard')).not.toBeNull();
-    expect(shown.query('switcher-screen')).toBeNull();
+  test('stand down the left edge of a wide tablet, out of the bottom dock', async () => {
+    __windowMetrics.width = 1280;
+    __windowMetrics.height = 800;
+    try {
+      const shown = await signedIn(COUNTER);
+      expect(shown.query('shell-tabs')).not.toBeNull();
+      expect(shown.styleOf('shell-tabs')['width']).toBeGreaterThan(0);
+      expect(shown.styleOf('shell-tabs')['borderTopWidth']).toBeUndefined();
+      // An intake is one task across the whole screen: no rail beside it either.
+      await press(shown, 'repair.board.newIntake');
+      expect(shown.query('shell-tabs')).toBeNull();
+    } finally {
+      __windowMetrics.width = 411;
+      __windowMetrics.height = 914;
+    }
   });
 
   test('hardware back on Kas goes to Servisan, and from a Kas step (without tabs) back to the board', async () => {

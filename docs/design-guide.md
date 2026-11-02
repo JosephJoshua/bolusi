@@ -106,6 +106,10 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 - `AppShell` keeps content and the bottom action in one centred column of at
   most `size.contentMax`; sheets rise at the same width. Never stretch a form,
   a button or a line of text across a tablet.
+- The place tabs (Servisan, Kas) show only on a place's top level, inside its
+  screen's bottom dock under the action, so a sheet covers them. A screen with
+  a back arrow (a servisan, intake, Serah terima, a Kas step) owns the bottom
+  for its action alone. Expanded, the tabs stand down the left edge as a rail.
 - A list with a detail (the servisan board, parts, Belanja) shows both side by
   side when expanded, through `ListDetail`; a task from start to finish
   (intake, a new order) keeps the whole screen. Exactly one filled primary
