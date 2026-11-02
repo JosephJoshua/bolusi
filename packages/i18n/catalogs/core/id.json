@@ -79,7 +79,7 @@
     "UNEXPECTED": "Terjadi kesalahan. Coba lagi.",
     "NETWORK": "Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini.",
     "MEDIA_NOT_FOUND": "Foto belum ada di server. Aplikasi akan mencoba lagi.",
-    "MEDIA_IMMUTABLE": "Foto yang sudah terkirim tidak bisa diganti. Ambil foto baru kalau perlu koreksi.",
+    "MEDIA_IMMUTABLE": "Foto yang sudah tersinkron tidak bisa diganti. Ambil foto baru kalau perlu koreksi.",
     "INIT_MISMATCH": "Data foto ini tidak cocok dengan yang ada di server. Ambil foto baru.",
     "MEDIA_TOO_LARGE": "Foto ini terlalu besar untuk dikirim. Laporkan masalah ini.",
     "CHUNK_TOO_LARGE": "Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.",
