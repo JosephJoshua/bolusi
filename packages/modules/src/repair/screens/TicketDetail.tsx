@@ -85,6 +85,7 @@ import {
   repairTypesStale,
   staleStep,
   ticketActions,
+  takePartIsCorrection,
   ticketMoneyActions,
   ticketMoneyTarget,
   ticketStatus,
@@ -728,10 +729,18 @@ export function TicketDetail({
     </AppShell>
   );
 
-  /** The rarer moves, printing among them: on a phone a slip is a PDF to share, now and then. */
-  function moreActions(
-    row: TicketDetailRow,
-  ): readonly { readonly key: string; readonly label: string; readonly onPress: () => void }[] {
+  /**
+   * The rarer moves, printing among them: on a phone a slip is a PDF to share, now and then. A
+   * correction to a servisan that went home (money back, a part taken late) is always behind
+   * "Lainnya", never a button of its own that reads as the next step.
+   */
+  function moreActions(row: TicketDetailRow): readonly {
+    readonly key: string;
+    readonly label: string;
+    readonly onPress: () => void;
+    readonly correction?: true;
+  }[] {
+    const inventory = runtime.inventory;
     return [
       ...layout.more.map((action) => ({
         key: action,
@@ -747,6 +756,29 @@ export function TicketDetail({
               onPress: () => setStep({ kind: 'print' }),
             },
           ]),
+      ...(ticketMoneyActions(row, runtime.hasPermission).refund === 'correction'
+        ? [
+            {
+              key: 'refund',
+              label: tm('money.refund.title'),
+              onPress: () => setStep({ kind: 'refund' }),
+              correction: true as const,
+            },
+          ]
+        : []),
+      ...(inventory !== undefined &&
+      inventory.hasPermission(INVENTORY_PERMISSION.read) &&
+      takePartIsCorrection(row) &&
+      canTakeParts(row, runtime.userId, inventory.hasPermission)
+        ? [
+            {
+              key: 'takePart',
+              label: ti('inventory.use.takeTitle'),
+              onPress: () => setStep({ kind: 'takePart' }),
+              correction: true as const,
+            },
+          ]
+        : []),
     ];
   }
 
@@ -966,7 +998,7 @@ export function TicketDetail({
                   )}
                   {/* One rare move needs no sheet; several wait behind "Lainnya". Same level as the
                 alternative, so the two never read as a choice between a button and a link. */}
-                  {more.length === 0 ? null : more.length === 1 ? (
+                  {more.length === 0 ? null : more.length === 1 && more[0]!.correction !== true ? (
                     <Button
                       label={more[0]!.label}
                       variant="secondary"
@@ -1000,7 +1032,10 @@ export function TicketDetail({
                   <UsedPartsSection
                     use={partUse(row)}
                     editable={canUseParts(row, runtime.userId, runtime.inventory.hasPermission)}
-                    takeable={canTakeParts(row, runtime.userId, runtime.inventory.hasPermission)}
+                    takeable={
+                      !takePartIsCorrection(row) &&
+                      canTakeParts(row, runtime.userId, runtime.inventory.hasPermission)
+                    }
                     flagUnreturned={row.outcome === 'cancelled'}
                     onTake={() => setStep({ kind: 'takePart' })}
                     onPutBack={(part) => setStep({ kind: 'putBackPart', part })}
@@ -1119,8 +1154,9 @@ export function TicketDetail({
           // owes, the same fee the board and the handover show (Rp 0 when none was set).
           <>
             <View style={[repairStyles.row, styles.owed]}>
+              {/* Named as the bill "Ubah tagihan" changes, so the row and its link say it once. */}
               <Text style={[styles.totalLabel, repairStyles.rowText]}>
-                {tn('repair.cancel.fee')}
+                {tn('repair.cancelFee.title')}
               </Text>
               <Text
                 style={[styles.totalValue, styles.amount, repairStyles.rowValue]}
@@ -1172,9 +1208,9 @@ export function TicketDetail({
             />
           </View>
         ) : null}
-        {moneyActions.refund || moneyActions.reduce ? (
+        {moneyActions.refund === 'due' || moneyActions.reduce ? (
           <View style={styles.moneyActions}>
-            {moneyActions.refund ? (
+            {moneyActions.refund === 'due' ? (
               <TextButton
                 label={tm('money.refund.title')}
                 onPress={() => setStep({ kind: 'refund' })}

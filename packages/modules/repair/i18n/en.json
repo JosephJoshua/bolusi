@@ -59,7 +59,7 @@
     "more": "More",
     "correctDetails": "Edit details",
     "undoHandover": "Undo handover",
-    "changeCancelFee": "Change cancellation fee"
+    "changeCancelFee": "Change cancellation bill"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -348,7 +348,7 @@
     "refund": "Money given back.",
     "reduce": "Bill lowered.",
     "repairedPriceWaiting": "Repair done. The customer still needs to confirm the new price.",
-    "cancelFeeChanged": "Cancellation fee changed."
+    "cancelFeeChanged": "Cancellation bill changed."
   },
   "passcode": {
     "show": "Show",
@@ -745,7 +745,7 @@
     "cancelFeeChanged": "The store’s cancellation fee has changed. Cancel again with the new fee.",
     "repairTypeTerms": "The owner changed this repair type. Pick the repair types again.",
     "intakePhotoMissing": "Take photos of the phone from every angle the store asks for first.",
-    "feeBelowCharged": "The bill was already recorded on another device. Change the fee again.",
+    "feeBelowCharged": "The bill was already recorded on another device. Change the bill again.",
     "notCancelled": "This repair isn’t cancelled."
   },
   "paper": {
@@ -973,13 +973,13 @@
     "fee": "Cancellation fee: {amount}"
   },
   "cancelFee": {
-    "title": "Cancellation fee",
+    "title": "Cancellation bill",
     "paid": "Billed {bill} now, {amount} paid.",
     "unpaid": "Billed {bill} now.",
     "input": "New bill",
     "reason": "Why the change?",
     "save": "Save bill",
     "same": "Change the bill first.",
-    "short": "Change fee"
+    "short": "Change bill"
   }
 }

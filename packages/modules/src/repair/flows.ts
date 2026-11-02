@@ -517,6 +517,10 @@ export function ticketMoneyTarget(
  * What may be done with a servisan's money once the phone went home (refund.ts has the details):
  * give back an overpayment (the counter) or any of what was paid (an owner), and an owner lowers
  * what is still owed.
+ *
+ * `refund` says where giving money back is offered: `due` beside the money when the customer paid
+ * too much (it is what happens next), `correction` under "Lainnya" when an owner may give back a
+ * bill that was settled (rare, so it never reads as the next step).
  */
 export function ticketMoneyActions(
   ticket: Pick<
@@ -524,16 +528,25 @@ export function ticketMoneyActions(
     'location' | 'outcome' | 'cancelFee' | 'quoteTotal' | 'reduced' | 'downPayment'
   >,
   hasPermission: (permission: string) => boolean,
-): { readonly refund: boolean; readonly reduce: boolean } {
-  if (ticket.location !== 'returned') return { refund: false, reduce: false };
+): { readonly refund: 'due' | 'correction' | null; readonly reduce: boolean } {
+  if (ticket.location !== 'returned') return { refund: null, reduce: false };
   const owner = hasPermission(MONEY_PERMISSION.refund);
   const paid = ticket.downPayment ?? 0;
   const owed = amountOwed(ticket) - paid;
   // Money going back is the counter's command, so even an owner needs `receive` (manifest.ts).
+  const mayRefund = hasPermission(MONEY_PERMISSION.receive);
   return {
-    refund: hasPermission(MONEY_PERMISSION.receive) && ((owner && paid > 0) || owed < 0),
+    refund: mayRefund && owed < 0 ? 'due' : mayRefund && owner && paid > 0 ? 'correction' : null,
     reduce: owner && owed > 0,
   };
+}
+
+/**
+ * Whether taking a part for this servisan is a correction rather than work: once the phone went
+ * home, an owner putting the record right finds it under "Lainnya", not beside the parts.
+ */
+export function takePartIsCorrection(ticket: Pick<TicketSummaryRow, 'location'>): boolean {
+  return ticket.location === 'returned';
 }
 
 /**

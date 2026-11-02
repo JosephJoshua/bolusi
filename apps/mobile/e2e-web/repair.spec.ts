@@ -416,7 +416,7 @@ test('an owner changes a cancelled servisan’s fee beside it', async ({ page })
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-5');
   const change = page.getByTestId('repair.ticket.action.changeCancelFee');
-  await expect(change).toHaveText('Ubah biaya');
+  await expect(change).toHaveText('Ubah tagihan');
   await change.scrollIntoViewIfNeeded();
   await shoot(page, 'cancel-fee-beside');
   await tap(page, 'repair.ticket.action.changeCancelFee');
@@ -425,7 +425,7 @@ test('an owner changes a cancelled servisan’s fee beside it', async ({ page })
   await fill(page, 'repair.cancelFee.reason', 'Pelanggan lama');
   await shoot(page, 'cancel-fee-step');
   await tap(page, 'repair.cancelFee.primary');
-  await expect(page.getByTestId('repair.ticket.done')).toContainText('Biaya pembatalan diubah.');
+  await expect(page.getByTestId('repair.ticket.done')).toContainText('Tagihan pembatalan diubah.');
   // The DP less the new fee goes back at pickup.
   await expect(page.getByText('Rp 90.000').first()).toBeVisible();
   await shoot(page, 'cancel-fee-done');

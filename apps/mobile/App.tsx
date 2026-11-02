@@ -81,10 +81,12 @@ import {
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
 import type { UpdateCheckResult } from './src/bootstrap/app-updates.js';
 import {
+  dataArriving,
   firstSyncPercent,
   syncChipState,
   type SyncStatusInput,
 } from '@bolusi/device/models/sync-status/model';
+import { setDataArriving } from '@bolusi/ui/arrival';
 import { syncChipAccessibilityLabels } from './src/screens/sync-status/chip-a11y.js';
 import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
@@ -563,6 +565,10 @@ export default function App(props: AppProps): React.JSX.Element {
     },
     [publishWorkspace, onDeviceDraftChange],
   );
+
+  // Lists read it: while a new phone's first sync brings the store's data, empty is loading.
+  const arriving = dataArriving(props.sync);
+  useEffect(() => setDataArriving(arriving), [arriving]);
 
   // Record where this user is, continuously (never on a lock signal — by then the shell no longer
   // knows whose route it was; `shell-session.ts`'s header states the race in full).

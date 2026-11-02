@@ -59,7 +59,7 @@
     "more": "Lainnya",
     "correctDetails": "Ubah data",
     "undoHandover": "Batalkan penyerahan",
-    "changeCancelFee": "Ubah biaya pembatalan"
+    "changeCancelFee": "Ubah tagihan pembatalan"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -348,7 +348,7 @@
     "refund": "Uang sudah dikembalikan.",
     "reduce": "Tagihan sudah dikurangi.",
     "repairedPriceWaiting": "Selesai dikerjakan. Harga barunya masih perlu dikonfirmasi pelanggan.",
-    "cancelFeeChanged": "Biaya pembatalan diubah."
+    "cancelFeeChanged": "Tagihan pembatalan diubah."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -746,7 +746,7 @@
     "repairTypeTerms": "Jenis servisan ini sudah diubah pemilik. Pilih lagi jenis servisannya.",
     "intakePhotoMissing": "Foto HP dari semua sisi yang diminta toko dulu.",
     "notCancelled": "Servisan ini tidak dibatalkan.",
-    "feeBelowCharged": "Tagihannya sudah dicatat di perangkat lain. Ubah biayanya lagi."
+    "feeBelowCharged": "Tagihannya sudah dicatat di perangkat lain. Ubah tagihannya lagi."
   },
   "paper": {
     "title": "Kertas nota",
@@ -973,13 +973,13 @@
     "fee": "Biaya pembatalan: {amount}"
   },
   "cancelFee": {
-    "title": "Biaya pembatalan",
+    "title": "Tagihan pembatalan",
     "paid": "Tagihan sekarang {bill}, sudah dibayar {amount}.",
     "unpaid": "Tagihan sekarang {bill}.",
     "input": "Tagihan baru",
     "reason": "Kenapa diubah?",
     "save": "Simpan tagihan",
     "same": "Ubah tagihannya dulu.",
-    "short": "Ubah biaya"
+    "short": "Ubah tagihan"
   }
 }

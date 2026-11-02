@@ -12,7 +12,8 @@ import { withDraft, type UserWorkspace } from '@bolusi/device/state/user-workspa
 import { getLocale, setLocale, t, translateRoleKey } from '@bolusi/i18n';
 import { REPAIR_MODULE_ID, parseIntakeDraft } from '@bolusi/modules/repair';
 import { RepairRuntimeProvider, type IntakeDraft } from '@bolusi/modules/repair/desktop';
-import { Spinner, StatePanel } from '@bolusi/ui-web';
+import { dataArriving } from '@bolusi/device/models/sync-status/model';
+import { setDataArriving, Spinner, StatePanel } from '@bolusi/ui-web';
 import { CircleAlert, Lock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -123,6 +124,10 @@ function LiveApp({
     switching,
     route: 'home',
   });
+
+  // Tables read it: while a new PC's first sync brings the store's data, empty is loading.
+  const arriving = state.sync !== null && dataArriving(state.sync);
+  useEffect(() => setDataArriving(arriving), [arriving]);
 
   // A new session (or none) starts from a clean gate: no half-open switch from before.
   const activeUserId = active?.userId ?? null;

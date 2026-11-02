@@ -73,6 +73,7 @@ import {
   staleness,
   SYNC_TITLE_KEY,
   syncChipState,
+  syncLead,
   syncProblems,
   syncTitleState,
   type RejectedOpRow,
@@ -149,6 +150,9 @@ export function SyncStatusScreen({
   const hasWaiting = input.pendingOperationCount > 0 || waitingPhotos > 0;
   const openRejected = input.rejected.find((row) => row.opId === expandedRejectedOpId) ?? null;
   const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
+  // Collapsed again for each refused change opened.
+  const [technicalFor, setTechnicalFor] = useState<string | null>(null);
+  const technicalShown = openRejected !== null && technicalFor === openRejected.opId;
   const [updateCheck, setUpdateCheck] = useState<'idle' | 'checking' | 'none' | 'failed'>('idle');
   const checkForUpdate = (): void => {
     if (onCheckForUpdate === undefined) return;
@@ -159,6 +163,11 @@ export function SyncStatusScreen({
     );
   };
   const rejectedHidden = input.rejected.length - rejectedShown;
+  // One filled action (design guide §2): checking refused changes when there are some, sending when
+  // work waits, and otherwise none. "Kirim sekarang" then stays as a quiet link under the freshness
+  // line, where pressing it to check the connection still makes sense.
+  const lead = syncLead(input, onMarkRejectedHandled !== undefined);
+  const markHandled = (): void => onMarkRejectedHandled?.(input.rejected.map((row) => row.opId));
   const { icon, tone } = HERO[titleState];
 
   return (
@@ -208,21 +217,27 @@ export function SyncStatusScreen({
         )
       }
       bottomAction={
-        <View>
-          {sync.kind === 'disabled' ? (
-            // A disabled button with no reason is how a user decides the app is broken. The reason
-            // comes from the MODEL's `reasonCode` (task 144 item 1).
-            <Text style={styles.disabledReason} testID="sync-disabled-reason">
-              {translateRejectionCode(sync.reasonCode)}
-            </Text>
-          ) : null}
-          {sync.kind === 'reenroll' ? (
-            <Button
-              label={t('auth.unrecognised.action')}
-              onPress={onReenroll}
-              testID="sync-reenroll"
-            />
-          ) : (
+        lead === 'reenroll' ? (
+          <Button
+            label={t('auth.unrecognised.action')}
+            onPress={onReenroll}
+            testID="sync-reenroll"
+          />
+        ) : lead === 'markHandled' ? (
+          <Button
+            label={t('sync.rejected.handled')}
+            onPress={markHandled}
+            testID="sync-rejected-handled"
+          />
+        ) : lead === 'syncNow' ? (
+          <View>
+            {sync.kind === 'disabled' ? (
+              // A disabled button with no reason is how a user decides the app is broken. The reason
+              // comes from the MODEL's `reasonCode` (task 144 item 1).
+              <Text style={styles.disabledReason} testID="sync-disabled-reason">
+                {translateRejectionCode(sync.reasonCode)}
+              </Text>
+            ) : null}
             <Button
               label={t('sync.action.syncNow')}
               onPress={onSyncNow}
@@ -230,8 +245,8 @@ export function SyncStatusScreen({
               disabled={sync.kind === 'disabled'}
               testID="sync-now"
             />
-          )}
-        </View>
+          </View>
+        ) : undefined
       }
       overlay={
         openRejected === null ? null : (
@@ -249,20 +264,36 @@ export function SyncStatusScreen({
             <Text style={styles.sheetBody}>
               {translateRejection(openRejected.rejectionCode, openRejected.rejectionReason)}
             </Text>
-            <View style={styles.technical}>
-              <Text style={styles.technicalTitle}>{t('sync.rejected.technicalDetails')}</Text>
-              <Text style={styles.technicalText} testID={`sync-rejected-code-${openRejected.opId}`}>
-                {openRejected.rejectionCode}
-              </Text>
-              {/* The server's own words, and ONLY here (07-i18n §4.3). */}
-              <Text
-                style={styles.technicalText}
-                selectable
-                testID={`sync-rejected-reason-${openRejected.opId}`}
-              >
-                {openRejected.rejectionReason ?? t('sync.rejected.noReason')}
-              </Text>
+            {/* The code and the server's own words are for whoever helps the shop, never read at the
+                counter (design guide §8), so they wait behind a link (07-i18n §4.3). */}
+            <View style={styles.technicalToggle}>
+              <TextButton
+                label={t(
+                  technicalShown ? 'sync.rejected.technicalHide' : 'sync.rejected.technicalDetails',
+                )}
+                onPress={() => setTechnicalFor(technicalShown ? null : openRejected.opId)}
+                testID={`sync-rejected-technical-${openRejected.opId}`}
+              />
             </View>
+            {technicalShown ? (
+              <View style={styles.technical}>
+                <Text
+                  style={styles.technicalText}
+                  selectable
+                  testID={`sync-rejected-code-${openRejected.opId}`}
+                >
+                  {openRejected.rejectionCode}
+                </Text>
+                {/* The server's own words, and ONLY here (07-i18n §4.3). */}
+                <Text
+                  style={styles.technicalText}
+                  selectable
+                  testID={`sync-rejected-reason-${openRejected.opId}`}
+                >
+                  {openRejected.rejectionReason ?? t('sync.rejected.noReason')}
+                </Text>
+              </View>
+            ) : null}
           </Sheet>
         )
       }
@@ -287,6 +318,17 @@ export function SyncStatusScreen({
               relative: relativeLabel(input),
             })}
           </Text>
+          {lead === 'syncNow' || lead === 'reenroll' ? null : (
+            <View style={styles.sectionAction}>
+              <TextButton
+                label={t('sync.action.syncNow')}
+                icon="retry"
+                onPress={onSyncNow}
+                disabled={sync.kind !== 'ready'}
+                testID="sync-now"
+              />
+            </View>
+          )}
         </View>
       </View>
 
@@ -448,16 +490,6 @@ export function SyncStatusScreen({
               />
             </View>
           ) : null}
-          {onMarkRejectedHandled === undefined ? null : (
-            <View style={styles.handled}>
-              <Button
-                label={t('sync.rejected.handled')}
-                variant="secondary"
-                onPress={() => onMarkRejectedHandled(input.rejected.map((row) => row.opId))}
-                testID="sync-rejected-handled"
-              />
-            </View>
-          )}
         </View>
       ) : null}
     </AppShell>
@@ -520,7 +552,6 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.bodyBold, color: color.text },
   sectionText: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
   sectionAction: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: space.xs },
-  handled: { alignItems: 'flex-start', marginTop: space.md },
   rows: {
     marginTop: space.md,
     marginHorizontal: -space.lg,
@@ -541,13 +572,14 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
     textAlign: 'center',
   },
-  sheetBody: { ...type.body, color: color.text, marginBottom: space.md },
+  sheetBody: { ...type.body, color: color.text },
+  technicalToggle: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: space.sm },
   technical: {
     backgroundColor: color.surfaceAlt,
     borderRadius: radius.md,
     padding: space.md,
     gap: space.xs,
+    marginTop: space.xs,
   },
-  technicalTitle: { ...type.caption, color: color.textMuted },
   technicalText: { ...type.caption, color: color.text },
 });

@@ -18,6 +18,7 @@ import {
 
 import {
   bannerCauses,
+  dataArriving,
   FIRST_SYNC_BANNER_ID,
   firstSyncPercent,
   isOfflineButHealthy,
@@ -29,6 +30,7 @@ import {
   showsRejectedSection,
   staleness,
   syncChipState,
+  syncLead,
   syncProblems,
   SYNC_TITLE_KEY,
   syncTitleState,
@@ -598,5 +600,69 @@ describe('a new device in its first sync', () => {
       rejected: [rejectedRow('SCHEMA_INVALID')],
     });
     expect(selectBanner(bannerCauses(given))?.cause.kind).toBe('rejectedOps');
+  });
+});
+
+describe('the one filled action on Status data (design guide §2)', () => {
+  test('nothing waiting: nothing leads, "Kirim sekarang" stays a quiet link', () => {
+    expect(syncLead(input(), true)).toBe('none');
+  });
+
+  test('work waiting to go up: sending leads', () => {
+    expect(syncLead(input({ pendingOperationCount: 2 }), true)).toBe('syncNow');
+    expect(syncLead(input({ pendingMediaCount: 1 }), true)).toBe('syncNow');
+  });
+
+  test('refused changes: checking them leads, even with work waiting', () => {
+    const refused = [rejectedRow('RULE_VIOLATED')];
+    expect(syncLead(input({ rejected: refused }), true)).toBe('markHandled');
+    expect(syncLead(input({ rejected: refused, pendingOperationCount: 3 }), true)).toBe(
+      'markHandled',
+    );
+    // Where the screen cannot mark them, sending is all that is left to lead.
+    expect(syncLead(input({ rejected: refused, pendingOperationCount: 3 }), false)).toBe('syncNow');
+  });
+
+  test('a forgotten device leads with registering again, before anything else', () => {
+    const given = input({
+      state: state({ syncDisabled: true, syncDisabledReason: 'device_unrecognised' }),
+      rejected: [rejectedRow('RULE_VIOLATED')],
+    });
+    expect(manualSync(given)).toEqual({ kind: 'reenroll' });
+    expect(syncLead(given, true)).toBe('reenroll');
+  });
+
+  test('a revoked device keeps its disabled button and its reason', () => {
+    const given = input({
+      state: state({ syncDisabled: true, syncDisabledReason: 'device_revoked' }),
+    });
+    expect(syncLead(given, true)).toBe('syncNow');
+  });
+});
+
+describe("lists wait for a new device's first sync instead of saying they are empty", () => {
+  test('never synced and online: the data is on its way', () => {
+    expect(dataArriving(input({ state: state({ lastSuccessfulSyncAt: null }) }))).toBe(true);
+  });
+
+  test('synced once: an empty list is real', () => {
+    expect(dataArriving(input())).toBe(false);
+  });
+
+  test('offline or stopped before the first sync: nothing is coming, so empty may say so', () => {
+    expect(
+      dataArriving(input({ state: state({ lastSuccessfulSyncAt: null }), isOffline: true })),
+    ).toBe(false);
+    expect(
+      dataArriving(
+        input({
+          state: state({
+            lastSuccessfulSyncAt: null,
+            syncDisabled: true,
+            syncDisabledReason: 'device_revoked',
+          }),
+        }),
+      ),
+    ).toBe(false);
   });
 });

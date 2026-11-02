@@ -25,6 +25,7 @@ import {
 } from 'react';
 
 import { FreshGlow } from './FreshGlow.js';
+import { useDataArriving } from '@bolusi/ui/arrival';
 import { Skeleton } from './States.js';
 
 declare module '@tanstack/react-table' {
@@ -189,6 +190,8 @@ export function DataTable<T>({
   const visibleColumns = table.getVisibleLeafColumns();
   const template = visibleColumns.map((column) => column.columnDef.meta?.track ?? '1fr').join(' ');
   const modelRows = table.getRowModel().rows;
+  // A new PC's first sync is still bringing the rows: an empty table then is loading, not news.
+  const arriving = useDataArriving();
 
   const ownScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = bodyRef ?? ownScrollRef;
@@ -330,7 +333,7 @@ export function DataTable<T>({
         onKeyDown={onKeyDown}
         className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
       >
-        {loading && modelRows.length === 0 ? (
+        {(loading || arriving) && modelRows.length === 0 ? (
           Array.from({ length: SKELETON_ROWS }, (_, index) => (
             <div
               key={index}

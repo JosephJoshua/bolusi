@@ -35,7 +35,8 @@
     "explain": "These changes didn’t count. Each one says why.",
     "opMeta": "{opType} · {time}",
     "opMetaSubject": "{opType} · {subject} · {time}",
-    "technicalDetails": "Technical details",
+    "technicalDetails": "Show details for support",
+    "technicalHide": "Hide details",
     "noReason": "The server sent no details.",
     "more": "Show {count} more",
     "handled": "Mark as checked"

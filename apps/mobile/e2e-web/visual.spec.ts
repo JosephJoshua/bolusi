@@ -101,14 +101,12 @@ const MATRIX: readonly Row[] = [
     testId: 'sync-unrecognised',
     text: 'HP ini perlu didaftarkan ulang',
   },
-  // The §8.4-item-4 disclosure (task 130). Probed on the REASON node, not the section: the section
-  // is already visible in `attention`, so keying this row on it would pass with the detail collapsed
-  // — a screenshot row that cannot see the thing it was added for.
+  // The §8.4-item-4 disclosure (task 130), probed on the sheet itself: the section is already
+  // visible in `attention`. The code and the server's words stay behind "Lihat detail untuk laporan".
   {
     screen: 'sync-status',
     state: 'rejectedDetail',
-    testId: 'sync-rejected-reason-op_9f3a',
-    text: 'repair.refusal.cancelled',
+    testId: 'sync-rejected-detail-op_9f3a',
   },
 
   // Enrollment — steps + revoked banner.
