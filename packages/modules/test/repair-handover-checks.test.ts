@@ -192,3 +192,10 @@ describe('handing the phone back', () => {
     expect(event.detail).toEqual({ note: '' });
   });
 });
+
+describe('the cancel bill in history', () => {
+  test('uses the bill wording and says a free cancel once, without Rp 0', () => {
+    expect(eventNote({ fee: 50000 })).toBe('Tagihan pembatalan: Rp 50.000');
+    expect(eventNote({ fee: 0 })).toBe('Tagihan pembatalan: tanpa biaya');
+  });
+});

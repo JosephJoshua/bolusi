@@ -26,7 +26,7 @@
     "ticketRepairTypesChanged": "Jenis servisan diubah",
     "handoverReversed": "Penyerahan dibatalkan",
     "ticketDetailsCorrected": "Data servisan diubah",
-    "cancelFeeChanged": "Biaya pembatalan servisan diubah"
+    "cancelFeeChanged": "Tagihan pembatalan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -970,7 +970,8 @@
   },
   "history": {
     "technician": "Teknisi: {name}",
-    "fee": "Biaya pembatalan: {amount}"
+    "fee": "Tagihan pembatalan: {amount}",
+    "noFee": "Tagihan pembatalan: tanpa biaya"
   },
   "cancelFee": {
     "title": "Tagihan pembatalan",

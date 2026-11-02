@@ -26,7 +26,7 @@
     "ticketRepairTypesChanged": "Repair type changed",
     "handoverReversed": "Handover undone",
     "ticketDetailsCorrected": "Details corrected",
-    "cancelFeeChanged": "Repair cancellation fee changed"
+    "cancelFeeChanged": "Cancellation bill changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -970,7 +970,8 @@
   },
   "history": {
     "technician": "Technician: {name}",
-    "fee": "Cancellation fee: {amount}"
+    "fee": "Cancellation bill: {amount}",
+    "noFee": "Cancellation bill: no charge"
   },
   "cancelFee": {
     "title": "Cancellation bill",
