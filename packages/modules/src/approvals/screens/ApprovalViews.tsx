@@ -9,11 +9,13 @@ import {
   Text,
   TextButton,
   TextInput,
+  bleedMargins,
   color,
   radius,
   space,
   type,
   type IconName,
+  useBleed,
 } from '@bolusi/ui';
 import { t } from '@bolusi/i18n';
 import { useState } from 'react';
@@ -73,11 +75,12 @@ export function ApprovalSection({
   readonly onOpen: (row: ApprovalRow) => void;
   readonly testID: string;
 }): React.JSX.Element | null {
+  const bleed = useBleed();
   if (rows.length === 0) return null;
   return (
     <Section title={ta('approvals.section.title')} testID={testID}>
       {/* A row's own padding is hit area: its text lines up with the screen's content edge. */}
-      <View style={styles.rows}>
+      <View style={bleedMargins(bleed)}>
         {rows.map((row) => {
           const description = describe(row);
           return (
@@ -91,6 +94,7 @@ export function ApprovalSection({
                 <ApprovalStatusChip status={row.status} testID={`${testID}.${row.id}.status`} />
               }
               onPress={approvalActionable(row) ? () => onOpen(row) : undefined}
+              bleed={bleed}
               testID={`${testID}.${row.id}`}
             />
           );
@@ -239,7 +243,6 @@ export function ApprovalStep({
 }
 
 const styles = StyleSheet.create({
-  rows: { marginHorizontal: -space.lg },
   box: { padding: space.md, borderRadius: radius.sm, backgroundColor: color.surfaceAlt },
   header: {
     flexDirection: 'row',

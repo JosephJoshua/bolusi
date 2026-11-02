@@ -4,7 +4,7 @@
 // this component's state while it is typed, and never in the DOM as text.
 import { clsx } from 'clsx';
 import { Delete } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
 export type PinPadState = 'entry' | 'error' | 'locked' | 'busy';
 
@@ -50,7 +50,9 @@ export function PinPad({
   );
 
   // The whole window types into the pad: there is nothing else on a PIN screen to type into.
-  useEffect(() => {
+  // Attached as the pad shows and detached as it goes, in the same commit: a passive effect lags a
+  // frame, so keys typed straight after the next step appeared went to the pad it replaced.
+  useLayoutEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.ctrlKey || event.altKey || event.metaKey) return;
       if (/^[0-9]$/.test(event.key)) press(event.key);

@@ -44,6 +44,7 @@ export function useViewport(): Viewport {
 export function ViewportProvider({
   style,
   deferUntilMeasured = false,
+  estimate,
   testID,
   children,
 }: {
@@ -54,6 +55,8 @@ export function ViewportProvider({
    * next frame instead of flashing empty.
    */
   readonly deferUntilMeasured?: boolean | undefined;
+  /** The box's size until it is measured, when it is known to differ from the box around it. */
+  readonly estimate?: { readonly width: number; readonly height: number } | undefined;
   readonly testID?: string | undefined;
   readonly children: ReactNode;
 }): React.JSX.Element {
@@ -72,7 +75,9 @@ export function ViewportProvider({
       }}
     >
       {box === null && deferUntilMeasured ? null : (
-        <MeasuredContext.Provider value={box ?? outer}>{children}</MeasuredContext.Provider>
+        <MeasuredContext.Provider value={box ?? estimate ?? outer}>
+          {children}
+        </MeasuredContext.Provider>
       )}
     </View>
   );

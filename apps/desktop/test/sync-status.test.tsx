@@ -149,7 +149,7 @@ test('only what is waiting is counted, and the filled action follows it', () => 
 
   panel({ pendingOperationCount: 2 });
   expect(screen.getByTestId('desktop.sync.waiting.changes').textContent).toContain(
-    '2 belum terkirim',
+    '2 belum tersinkron',
   );
   expect(screen.queryByTestId('desktop.sync.waiting.photos')).toBeNull();
 });

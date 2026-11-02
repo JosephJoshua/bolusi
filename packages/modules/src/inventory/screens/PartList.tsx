@@ -45,6 +45,11 @@ export interface PartListProps {
   readonly onBack: () => void;
   readonly onOpenPart: (itemId: string) => void;
   readonly onAddPart: () => void;
+  /**
+   * The part open beside the list on a wide screen: its row is marked, and adding one steps back to
+   * an outlined button so the open part's next step is the one filled action on screen.
+   */
+  readonly selectedId?: string | null | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -63,6 +68,7 @@ export function PartList({
   onBack,
   onOpenPart,
   onAddPart,
+  selectedId = null,
   testID = 'inventory.list',
 }: PartListProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
@@ -197,8 +203,15 @@ export function PartList({
   openRef.current = onOpenPart;
   const open = useCallback((id: string) => openRef.current(id), []);
   const renderRow = useCallback(
-    (row: ItemRow) => <PartListRow row={row} onOpen={open} testID={`${testID}.row.${row.id}`} />,
-    [open, testID],
+    (row: ItemRow) => (
+      <PartListRow
+        row={row}
+        selected={row.id === selectedId}
+        onOpen={open}
+        testID={`${testID}.row.${row.id}`}
+      />
+    ),
+    [open, selectedId, testID],
   );
 
   return (
@@ -211,7 +224,12 @@ export function PartList({
       avatar={chrome.avatar}
       bottomAction={
         canManage ? (
-          <Button label={ti('inventory.action.add')} onPress={onAddPart} testID={`${testID}.add`} />
+          <Button
+            label={ti('inventory.action.add')}
+            variant={selectedId === null ? 'primary' : 'secondary'}
+            onPress={onAddPart}
+            testID={`${testID}.add`}
+          />
         ) : undefined
       }
       testID={testID}
@@ -285,13 +303,15 @@ export function PartList({
 
 interface PartListRowProps {
   readonly row: ItemRow;
+  /** Open beside the list on a wide screen. */
+  readonly selected: boolean;
   readonly onOpen: (itemId: string) => void;
   readonly testID: string;
 }
 
 /** One item: its name, what it fits, and the store's stock on the right, flagged below zero. */
 const PartListRow = memo(
-  function PartListRow({ row, onOpen, testID }: PartListRowProps): React.JSX.Element {
+  function PartListRow({ row, selected, onOpen, testID }: PartListRowProps): React.JSX.Element {
     const details = [row.code, row.fits].filter((s) => s !== null && s !== '').join(' · ');
     const below = row.onHand < 0;
     const label = [
@@ -308,11 +328,14 @@ const PartListRow = memo(
         testID={testID}
         accessibilityRole="button"
         accessibilityLabel={label}
+        accessibilityState={{ selected }}
         onPress={() => onOpen(row.id)}
         android_ripple={{ color: color.surfaceAlt }}
         style={({ pressed }) => [
           styles.row,
-          { backgroundColor: pressed ? color.surfaceAlt : color.surface },
+          {
+            backgroundColor: pressed ? color.surfaceAlt : selected ? color.infoBg : color.surface,
+          },
         ]}
       >
         <View style={styles.rowText}>
@@ -335,6 +358,7 @@ const PartListRow = memo(
     );
   },
   (prev, next) =>
+    prev.selected === next.selected &&
     prev.onOpen === next.onOpen &&
     prev.testID === next.testID &&
     (Object.keys(next.row) as (keyof ItemRow)[]).every((key) =>

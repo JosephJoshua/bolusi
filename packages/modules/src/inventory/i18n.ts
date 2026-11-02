@@ -24,6 +24,7 @@ export const INVENTORY_KEYS = [
   'inventory.refusal.categoryNotFound',
   'inventory.refusal.categoryInvalid',
   'inventory.list.title',
+  'inventory.list.pickPart',
   'inventory.list.searchHint',
   'inventory.list.clearSearch',
   'inventory.list.emptyHint',

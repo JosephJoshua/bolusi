@@ -1,7 +1,17 @@
 // A repair's photos, kept to one row: a scrolling strip, a sheet with every photo by group, and the
 // full-screen viewer (zoom, save or send). Used wherever a screen shows photos it does not capture.
 import { t } from '@bolusi/i18n';
-import { PhotoStrip, PhotoViewer, Sheet, TextButton, color, space, type, Text } from '@bolusi/ui';
+import {
+  PhotoStrip,
+  PhotoViewer,
+  Sheet,
+  TextButton,
+  TileGrid,
+  color,
+  space,
+  type,
+  Text,
+} from '@bolusi/ui';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -9,7 +19,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
 import { tn } from '../i18n.js';
-import { PhotoGrid, PhotoThumb, Section, repairStyles, usePhotoGridCell } from './parts.js';
+import { PhotoThumb, Section, repairStyles } from './parts.js';
 import { useRepairRuntime } from '../runtime.js';
 
 export interface BrowsablePhoto {
@@ -44,7 +54,6 @@ export function usePhotoBrowser(
 ): PhotoBrowser {
   const runtime = useRepairRuntime();
   const [view, setView] = useState<Showing>({ kind: 'none' });
-  const gridCell = usePhotoGridCell();
   const share = runtime.sharePhoto;
 
   const back = (): boolean => {
@@ -103,7 +112,7 @@ export function usePhotoBrowser(
         {groups.map((group) => (
           <View key={group} style={styles.group}>
             <Text style={styles.groupTitle}>{group}</Text>
-            <PhotoGrid>
+            <TileGrid>
               {photos.map((photo, index) =>
                 photo.group !== group ? null : (
                   <Pressable
@@ -111,7 +120,6 @@ export function usePhotoBrowser(
                     accessibilityRole="imagebutton"
                     accessibilityLabel={`${tn('repair.photo.open')} ${photo.label}`}
                     onPress={() => setView({ kind: 'one', index, fromAll: true })}
-                    style={gridCell}
                     testID={`${testID}.sheet.${photo.key}`}
                   >
                     <PhotoThumb photo={photo.ref} testID={`${testID}.sheetThumb.${photo.key}`} />
@@ -121,7 +129,7 @@ export function usePhotoBrowser(
                   </Pressable>
                 ),
               )}
-            </PhotoGrid>
+            </TileGrid>
           </View>
         ))}
       </Sheet>

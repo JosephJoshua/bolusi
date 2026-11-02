@@ -181,7 +181,7 @@ test("a second PC gets the servisan, and the first sees the second's change live
   await workshop.getByRole('menuitem', { name: 'Tunggu sparepart' }).click();
   await workshop.getByRole('dialog').getByRole('button', { name: 'Tunggu sparepart' }).click();
 
-  // No refresh and no "Kirim sekarang" on the counter: the server's nudge brings it in.
+  // No refresh and no "Sinkronkan sekarang" on the counter: the server's nudge brings it in.
   await expect(
     counter.getByTestId('repair.desk.board.table').getByText('Tunggu sparepart', { exact: true }),
   ).toBeVisible({ timeout: 10_000 });

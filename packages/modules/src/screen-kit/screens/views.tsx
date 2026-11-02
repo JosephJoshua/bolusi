@@ -136,6 +136,7 @@ export function FlowScreen({
   overlay,
   stale,
   scrollKey,
+  wide,
   testID,
   children,
 }: {
@@ -175,6 +176,8 @@ export function FlowScreen({
   readonly stale?: { readonly message: string; readonly backLabel: string } | null | undefined;
   /** A multi-step flow's step: each step opens scrolled to the top (AppShell `scrollKey`). */
   readonly scrollKey?: string | number | undefined;
+  /** The step lays its halves out in `Columns` (AppShell `wide`). */
+  readonly wide?: boolean | undefined;
   readonly testID: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
@@ -183,6 +186,7 @@ export function FlowScreen({
     <AppShell
       scrollable
       scrollKey={scrollKey}
+      wide={wide}
       title={title}
       titleVariant="detail"
       onBack={onBack}

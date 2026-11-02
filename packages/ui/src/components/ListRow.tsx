@@ -9,6 +9,7 @@ import { Text } from '../text.js';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
+import { bleedPadding, type Bleed } from '../layout.js';
 import { Icon } from './Icon.js';
 import { FreshGlow } from './FreshGlow.js';
 
@@ -42,6 +43,12 @@ export interface ListRowProps {
   readonly below?: ReactNode;
   /** The record the row shows: it glows once when another device changes it (`FreshGlow`). */
   readonly freshId?: string | undefined;
+  /**
+   * How far the row reaches through the gutter (`useBleed`), when it sits in a list pulled out by
+   * `bleedMargins`: its padding puts the text back on the column's edge. Rows of a full-screen list
+   * keep the gutter's own padding.
+   */
+  readonly bleed?: Bleed | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -92,6 +99,7 @@ export function ListRow({
   emphasis = false,
   below,
   freshId,
+  bleed,
   testID = 'ui.listRow',
 }: ListRowProps): React.JSX.Element {
   const content = (
@@ -148,7 +156,7 @@ export function ListRow({
 
   if (onPress === undefined) {
     return (
-      <View testID={testID} style={styles.base}>
+      <View testID={testID} style={[styles.base, bleed === undefined ? null : bleedPadding(bleed)]}>
         {content}
       </View>
     );
@@ -170,6 +178,7 @@ export function ListRow({
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [
         styles.base,
+        bleed === undefined ? null : bleedPadding(bleed),
         { backgroundColor: pressed ? color.surfaceAlt : color.surface },
       ]}
     >

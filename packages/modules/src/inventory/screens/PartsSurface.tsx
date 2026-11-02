@@ -4,11 +4,12 @@
  * lives here, so it holds across a trip into an item and back. Back closes the open step first, then the part, then the
  * surface, through the registered step back.
  */
+import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 import type { ScreenChrome } from '../../screen-kit/screens/views.js';
-import type { InventoryKey } from '../i18n.js';
+import { ti, type InventoryKey } from '../i18n.js';
 import { NO_CATEGORY, type CategoryRow, type ItemDetailRow, type ItemRow } from '../queries.js';
 import { CategoryForm, CategoryList } from './CategoryScreens.js';
 import { CountStep } from './CountStep.js';
@@ -89,104 +90,138 @@ export function PartsSurface({
     setView({ kind: 'part', itemId });
   };
 
-  switch (view.kind) {
-    case 'list':
-      return (
-        <PartList
-          chrome={chrome}
-          filter={filter}
-          onFilter={setFilter}
-          onOpenFilters={() => setView({ kind: 'filter' })}
-          onManageCategories={() => {
-            setCategoryNotice(null);
-            setView({ kind: 'categories' });
-          }}
-          onBack={onClose}
-          onOpenPart={(itemId) => openPart(itemId)}
-          onAddPart={() => setView({ kind: 'add' })}
-        />
-      );
-    case 'part':
-      return (
-        <PartDetail
-          itemId={view.itemId}
-          chrome={chrome}
-          onBack={() => setView({ kind: 'list' })}
-          onEdit={(part) => setView({ kind: 'edit', part })}
-          onCount={(part) => setView({ kind: 'count', part })}
-          notice={notice}
-          onClearNotice={() => setNotice(null)}
-        />
-      );
-    case 'add':
-      return (
-        <PartForm
-          chrome={chrome}
-          categoryId={filter.categoryId === NO_CATEGORY ? null : filter.categoryId}
-          onDone={(itemId) => openPart(itemId, 'inventory.done.added')}
-          onCancel={() => setView({ kind: 'list' })}
-          onRegisterDiscardGuard={registerGuard}
-        />
-      );
-    case 'edit':
-      return (
-        <PartForm
-          chrome={chrome}
-          part={view.part}
-          onDone={(itemId) => openPart(itemId, 'inventory.done.saved')}
-          onCancel={() => openPart(view.part.id)}
-          onRegisterDiscardGuard={registerGuard}
-        />
-      );
-    case 'count':
-      return (
-        <CountStep
-          chrome={chrome}
-          part={view.part}
-          onDone={() => openPart(view.part.id, 'inventory.done.counted')}
-          onCancel={() => openPart(view.part.id)}
-          onRegisterDiscardGuard={registerGuard}
-        />
-      );
-    case 'filter':
-      return (
-        <FilterStep
-          chrome={chrome}
-          filter={filter}
-          onApply={(next) => {
-            setFilter(next);
-            setView({ kind: 'list' });
-          }}
-          onCancel={() => setView({ kind: 'list' })}
-        />
-      );
-    case 'categories':
-      return (
-        <CategoryList
-          chrome={chrome}
-          onBack={() => setView({ kind: 'list' })}
-          onOpen={(category) => setView({ kind: 'category', category })}
-          onAdd={() => setView({ kind: 'category' })}
-          notice={categoryNotice}
-          onClearNotice={() => setCategoryNotice(null)}
-        />
-      );
-    case 'category':
-      return (
-        <CategoryForm
-          chrome={chrome}
-          category={view.category}
-          onDone={(done) => {
-            setCategoryNotice(done);
-            // Its fields may have changed, or it left the list: a filter on it starts over.
-            if (view.category !== undefined && filter.categoryId === view.category.id) {
-              setFilter(NO_FILTER);
-            }
-            setView({ kind: 'categories' });
-          }}
-          onCancel={() => setView({ kind: 'categories' })}
-          onRegisterDiscardGuard={registerGuard}
-        />
-      );
+  // On a wide screen the list stays beside the open part. Changing a part (adding, editing, counting)
+  // and the filters and categories are tasks of their own and keep the whole screen, so a tap on
+  // the list never throws away a half-done one.
+  const beside = view.kind === 'list' || view.kind === 'part';
+  const split = useListDetailSplit() && beside;
+  // The list's header carries the sync chip and the avatar; the pane beside it keeps neither.
+  const paneChrome: ScreenChrome = split ? { syncChip: null, avatar: null } : chrome;
+  const openId = view.kind === 'part' ? view.itemId : null;
+
+  const list = (
+    <PartList
+      chrome={chrome}
+      filter={filter}
+      onFilter={setFilter}
+      onOpenFilters={() => setView({ kind: 'filter' })}
+      onManageCategories={() => {
+        setCategoryNotice(null);
+        setView({ kind: 'categories' });
+      }}
+      onBack={onClose}
+      onOpenPart={(itemId) => {
+        if (itemId !== openId) openPart(itemId);
+      }}
+      onAddPart={() => setView({ kind: 'add' })}
+      selectedId={split ? openId : null}
+    />
+  );
+
+  const detail =
+    view.kind === 'part' ? (
+      <PartDetail
+        key={view.itemId}
+        itemId={view.itemId}
+        chrome={paneChrome}
+        hideBack={split}
+        onBack={() => setView({ kind: 'list' })}
+        onEdit={(part) => setView({ kind: 'edit', part })}
+        onCount={(part) => setView({ kind: 'count', part })}
+        notice={notice}
+        onClearNotice={() => setNotice(null)}
+      />
+    ) : split ? (
+      <EmptyState title={ti('inventory.list.pickPart')} testID="inventory.noPartOpen" />
+    ) : null;
+
+  return (
+    <ListDetail
+      split={split}
+      list={split || view.kind === 'list' ? list : null}
+      detail={detail}
+      testID="inventory.split"
+    >
+      {beside ? null : fullScreen()}
+    </ListDetail>
+  );
+
+  /** The tasks that keep the whole screen. */
+  function fullScreen(): React.JSX.Element | null {
+    switch (view.kind) {
+      case 'list':
+      case 'part':
+        return null;
+      case 'edit':
+        return (
+          <PartForm
+            chrome={chrome}
+            part={view.part}
+            onDone={(itemId) => openPart(itemId, 'inventory.done.saved')}
+            onCancel={() => openPart(view.part.id)}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+      case 'count':
+        return (
+          <CountStep
+            chrome={chrome}
+            part={view.part}
+            onDone={() => openPart(view.part.id, 'inventory.done.counted')}
+            onCancel={() => openPart(view.part.id)}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+      case 'add':
+        return (
+          <PartForm
+            chrome={chrome}
+            categoryId={filter.categoryId === NO_CATEGORY ? null : filter.categoryId}
+            onDone={(itemId) => openPart(itemId, 'inventory.done.added')}
+            onCancel={() => setView({ kind: 'list' })}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+      case 'filter':
+        return (
+          <FilterStep
+            chrome={chrome}
+            filter={filter}
+            onApply={(next) => {
+              setFilter(next);
+              setView({ kind: 'list' });
+            }}
+            onCancel={() => setView({ kind: 'list' })}
+          />
+        );
+      case 'categories':
+        return (
+          <CategoryList
+            chrome={chrome}
+            onBack={() => setView({ kind: 'list' })}
+            onOpen={(category) => setView({ kind: 'category', category })}
+            onAdd={() => setView({ kind: 'category' })}
+            notice={categoryNotice}
+            onClearNotice={() => setCategoryNotice(null)}
+          />
+        );
+      case 'category':
+        return (
+          <CategoryForm
+            chrome={chrome}
+            category={view.category}
+            onDone={(done) => {
+              setCategoryNotice(done);
+              // Its fields may have changed, or it left the list: a filter on it starts over.
+              if (view.category !== undefined && filter.categoryId === view.category.id) {
+                setFilter(NO_FILTER);
+              }
+              setView({ kind: 'categories' });
+            }}
+            onCancel={() => setView({ kind: 'categories' })}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+    }
   }
 }
