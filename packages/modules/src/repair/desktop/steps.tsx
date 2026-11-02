@@ -21,7 +21,8 @@ import {
 import { Check, Printer, Signature } from 'lucide-react';
 import { Fragment, useState, type ReactNode } from 'react';
 
-import { PaymentLines } from '../../money/desktop/PaymentLines.js';
+import { useChangeCheck } from '../../money/change-check.js';
+import { ChangeCheckDialog, PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { QrisDialog } from '../../money/desktop/QrisDialog.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
@@ -1427,22 +1428,25 @@ export function HandoverDialog({
     freeHandoverNeedsOwner(ticket) && !runtime.hasPermission(REPAIR_PERMISSION.warrantyException);
   const complete =
     !ownerNeeded && captured && settled && loadedAccounts !== null && checks.ready(note);
+  const changeCheck = useChangeCheck();
   const submit = (): void => {
     if (!complete || photo === null || signature === null) return;
-    void runner
-      .run(() =>
-        runtime.run('returnDevice', {
-          ticketId,
-          handoverPhoto: photo,
-          signature,
-          note,
-          checklist: [...checks.lines],
-          ...payment.input,
-        }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
+    changeCheck.guard(payment.input.payments, () => {
+      void runner
+        .run(() =>
+          runtime.run('returnDevice', {
+            ticketId,
+            handoverPhoto: photo,
+            signature,
+            note,
+            checklist: [...checks.lines],
+            ...payment.input,
+          }),
+        )
+        .then((result) => {
+          if (result !== undefined) onDone();
+        });
+    });
   };
 
   return (
@@ -1689,6 +1693,7 @@ export function HandoverDialog({
         />
       ) : null}
       {leave.confirm}
+      <ChangeCheckDialog check={changeCheck} testId="repair.desk.handover" />
     </>
   );
 }

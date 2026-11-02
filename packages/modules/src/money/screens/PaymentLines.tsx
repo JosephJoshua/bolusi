@@ -11,6 +11,7 @@ import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';
 import {
   Button,
   ChipRow,
+  ConfirmSheet,
   TextButton,
   TextInput,
   ToggleChip,
@@ -22,9 +23,11 @@ import {
 } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
+import { changeCheckCopy, type ChangeCheck } from '../change-check.js';
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
+  changeLooksWrong,
   digitsOf,
   digitsText,
   lineKind,
@@ -94,6 +97,7 @@ export function PaymentLines({
         const problem = entry.problems[line.key];
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
+        const big = changeLooksWrong(tendered, amount);
         const connected = qris?.qrAccounts.has(account) === true;
         const byQr = connected && paidByQr(line, qris.qrAccounts);
         return (
@@ -150,11 +154,24 @@ export function PaymentLines({
                 />
                 {/* Handed over exactly: no change to give, so nothing to say. */}
                 {line.tendered !== '' && tendered > amount && amount > 0 ? (
-                  <View style={styles.changeRow}>
-                    <Text style={styles.changeLabel}>{tm('money.pay.change')}</Text>
-                    <Text style={styles.changeValue} testID={`${id}.change`}>
-                      {formatMoney(tendered - amount)}
-                    </Text>
+                  <View>
+                    <View style={styles.changeRow}>
+                      <Text style={[styles.changeLabel, big && styles.changeWarn]}>
+                        {tm('money.pay.change')}
+                      </Text>
+                      <Text
+                        style={[styles.changeValue, big && styles.changeWarn]}
+                        testID={`${id}.change`}
+                      >
+                        {formatMoney(tendered - amount)}
+                      </Text>
+                    </View>
+                    {/* Change of a whole note or more is far more often a mistyped zero. */}
+                    {big ? (
+                      <Text style={styles.changeBig} testID={`${id}.changeBig`}>
+                        {tm('money.pay.changeBig')}
+                      </Text>
+                    ) : null}
                   </View>
                 ) : null}
               </View>
@@ -263,6 +280,8 @@ const styles = StyleSheet.create({
   },
   changeLabel: { ...type.bodySm, color: color.textMuted, flexShrink: 1 },
   changeValue: { ...type.bodyBold, color: color.text, fontVariant: ['tabular-nums'] },
+  changeWarn: { color: color.warning },
+  changeBig: { ...type.bodySm, color: color.warning },
   qr: { gap: space.sm, alignItems: 'flex-start' },
   qrNote: { ...type.bodySm, color: color.textMuted },
   received: { ...type.bodySm, color: color.success },
@@ -274,3 +293,27 @@ const styles = StyleSheet.create({
   // The text, not the hit box, lines up with the fields above.
   add: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: -space.md },
 });
+
+/** Asks before saving a payment whose change looks wrong (`useChangeCheck`); a screen overlay. */
+export function ChangeCheckSheet({
+  check,
+  testID,
+}: {
+  readonly check: ChangeCheck;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  if (check.asking === null) return null;
+  const copy = changeCheckCopy(check.asking);
+  return (
+    <ConfirmSheet
+      title={copy.title}
+      message={copy.message}
+      confirmLabel={copy.confirm}
+      tone="primary"
+      onConfirm={check.confirm}
+      cancelLabel={copy.keep}
+      onCancel={check.cancel}
+      testID={`${testID}.changeCheck`}
+    />
+  );
+}

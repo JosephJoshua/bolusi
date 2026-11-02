@@ -473,7 +473,11 @@ describe('price changes and handover', () => {
 
     const owner = await mount(h, h.storeOwnerId);
     await press(owner, `repair.board.row.${ticketId}`);
-    await press(owner, 'repair.ticket.action.cancel');
+    // QA round F: Batalkan servisan is in "Lainnya" too, besides the end of the page.
+    expect(owner.query('repair.ticket.action.cancel')).not.toBeNull();
+    await press(owner, 'repair.ticket.more.open');
+    expect(text(owner, 'repair.ticket.more.cancel')).toContain('Batalkan servisan');
+    await press(owner, 'repair.ticket.more.cancel');
     expect(text(owner, 'repair.cancel.consequence')).toContain('80.000');
     owner.unmount();
 
@@ -898,7 +902,10 @@ describe('putting a mistake right', () => {
     const owner = await mount(h, h.storeOwnerId, { now: () => h!.now() });
     await press(owner, 'repair.board.views.returned');
     await press(owner, `repair.board.row.${ticketId}`);
-    await press(owner, 'repair.ticket.action.undoHandover');
+    // QA round F: at the end of the page, and in "Lainnya" where people look for it too.
+    expect(owner.query('repair.ticket.action.undoHandover')).not.toBeNull();
+    await press(owner, 'repair.ticket.more.open');
+    await press(owner, 'repair.ticket.more.undoHandover');
     expect(owner.all('repair.undoHandover.primary')[0]!.props['disabled']).toBe(true);
     type(owner, 'repair.undoHandover.reason', 'Salah servisan, HP masih di rak');
     await settle();

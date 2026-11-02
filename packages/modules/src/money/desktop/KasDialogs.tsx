@@ -32,6 +32,7 @@ import {
   type NamedBalance,
   voidKind,
 } from '../kas.js';
+import { useChangeCheck } from '../change-check.js';
 import { rupiah } from '../payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { canSimulateQris } from '../qris.js';
@@ -51,7 +52,7 @@ import {
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { AmountField, AmountLine, MoneyDialog } from './parts.js';
-import { PaymentLines } from './PaymentLines.js';
+import { ChangeCheckDialog, PaymentLines } from './PaymentLines.js';
 import { QrisDialog } from './QrisDialog.js';
 
 interface TaskProps {
@@ -102,6 +103,7 @@ export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Eleme
   );
   const view = cashCountView(form, drawer.status === 'ready' ? drawer.data.expected : null, blind);
   const { amount } = view;
+  const noteMissing = view.noteRequired && note.trim() === '';
   const testId = 'money.desk.count';
 
   const submit = (): void => {
@@ -110,6 +112,7 @@ export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Eleme
       setForm({ ...form, checked: true });
       return;
     }
+    if (noteMissing) return;
     void runner
       .run(() => runtime.run('countCash', { counted: amount, note }))
       .then((result) => {
@@ -126,12 +129,15 @@ export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Eleme
       onClose={onClose}
       submitLabel={tm(view.next === 'check' ? 'money.count.check' : 'money.count.save')}
       onSubmit={submit}
-      submitDisabled={amount === null}
+      submitDisabled={amount === null || noteMissing}
+      hint={noteMissing ? tm('money.count.reasonHint') : undefined}
       secondary={
         view.mayRecount
           ? {
               label: tm('money.count.recount'),
               onClick: () => setForm(RECOUNT_CASH),
+              // Counting again needs no reason: the reason is for the count that is saved.
+              disabled: false,
               testId: `${testId}.recount`,
             }
           : undefined
@@ -172,7 +178,7 @@ export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Eleme
         </div>
       )}
       <ReasonField
-        label={tm('money.count.note')}
+        label={tm(view.noteRequired ? 'money.count.reason' : 'money.count.note')}
         value={note}
         onChange={setNote}
         testId={`${testId}.note`}
@@ -383,6 +389,7 @@ export function ReceiveDebtDialog({
   // An owner lowers the bill over this dialog, so what was typed here waits underneath.
   const [reducing, setReducing] = useState(false);
   const testId = 'money.desk.receive';
+  const changeCheck = useChangeCheck();
 
   const submit = (): void => {
     if (receipt.paidByQr) {
@@ -390,11 +397,13 @@ export function ReceiveDebtDialog({
       return;
     }
     if (input === null) return;
-    void runner
-      .run(() => runtime.run('receivePayments', input))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
+    changeCheck.guard(input.payments, () => {
+      void runner
+        .run(() => runtime.run('receivePayments', input))
+        .then((result) => {
+          if (result !== undefined) onDone();
+        });
+    });
   };
 
   return (
@@ -446,6 +455,7 @@ export function ReceiveDebtDialog({
           />
         ) : null}
       </MoneyDialog>
+      <ChangeCheckDialog check={changeCheck} testId={testId} />
       {reducing ? (
         <ReduceChargeDialog
           target={targetOf(balance)}

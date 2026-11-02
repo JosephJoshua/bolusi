@@ -67,6 +67,8 @@ async function countDrawer(amount: string): Promise<void> {
   fireEvent.click(byTestId('money.desk.kas.count'));
   await screen.findByTestId('money.desk.count');
   fireEvent.change(byTestId('money.desk.count.counted'), { target: { value: amount } });
+  // A count that is off says why; one that is right may say it too.
+  fireEvent.change(byTestId('money.desk.count.note'), { target: { value: 'Dihitung dua kali' } });
   fireEvent.click(byTestId('money.desk.count.submit'));
   await waitFor(() => expect(screen.queryByTestId('money.desk.count')).toBeNull());
 }
@@ -115,6 +117,11 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.count.submit'));
     expect(screen.queryByTestId('money.desk.count.recount')).toBeNull();
     expect(byTestId('money.desk.count.submit').textContent).toBe('Simpan hitungan');
+    // QA round F: a count that is off is saved with a reason, for the owner who settles it.
+    expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Alasan selisih')).toBeTruthy();
+    expect(byTestId('money.desk.count').textContent).toContain('Tulis alasan selisihnya dulu.');
+    fireEvent.change(byTestId('money.desk.count.note'), { target: { value: 'Uang kembalian' } });
     fireEvent.click(byTestId('money.desk.count.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.count')).toBeNull());
     expect(byTestId('money.desk.kas.lastCount').textContent).toMatch(/^Sudah tutup kas pukul/);
@@ -137,6 +144,11 @@ describe('Kas on the PC', () => {
     });
     expect(text('money.desk.count.difference')).toBe('KurangRp5.000');
     expect(byTestId('money.desk.count.submit').textContent).toBe('Simpan hitungan');
+    expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', true);
+    // Right on the figure: no reason needed.
+    fireEvent.change(byTestId('money.desk.count.counted'), { target: { value: String(drawer) } });
+    expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Catatan (opsional)')).toBeTruthy();
   });
 
   it('lets an owner settle a counted difference with a reason', async () => {
@@ -194,7 +206,15 @@ describe('Kas on the PC', () => {
     expect(byTestId('money.desk.receive.submit')).toHaveProperty('disabled', true);
     pick('money.desk.receive.pay.line0');
     expect(screen.queryByTestId('money.desk.receive.pay.line0.pick')).toBeNull();
+    // QA round F: 2.000.000 handed over for 200.000 is asked about; the counter says it is right.
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.tendered'), {
+      target: { value: '2000000' },
+    });
     fireEvent.click(byTestId('money.desk.receive.submit'));
+    const check = await screen.findByTestId('money.desk.receive.changeCheck');
+    expect(check.textContent).toMatch(/Kembalian Rp\s?1\.800\.000, sudah benar\?/);
+    expect(screen.getByTestId('money.desk.receive')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Sudah benar' }));
     await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
     expect(Number(text('money.desk.kas.in.total.value').replace(/\D/g, ''))).toBe(
