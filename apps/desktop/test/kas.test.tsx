@@ -90,6 +90,13 @@ describe('Kas on the PC', () => {
     expect(screen.queryByTestId('money.desk.kas.expected')).toBeNull();
     // Nor today's takings, which add up to it.
     expect(screen.queryByTestId('money.desk.kas.in')).toBeNull();
+    // QA round E: until the drawer is counted, a drawer with no figure says the count is theirs to
+    // make, so it does not look broken. (The demo's own count may fall on today or yesterday.)
+    expect(screen.queryByTestId('money.desk.kas.blindHint')?.textContent ?? null).toBe(
+      byTestId('money.desk.kas.lastCount').textContent === 'Belum tutup kas hari ini'
+        ? 'Hitung uang di laci saat tutup kas.'
+        : null,
+    );
     fireEvent.click(byTestId('money.desk.kas.count'));
     await screen.findByTestId('money.desk.count');
     expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', true);
@@ -111,6 +118,7 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.count.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.count')).toBeNull());
     expect(byTestId('money.desk.kas.lastCount').textContent).toMatch(/^Sudah tutup kas pukul/);
+    expect(screen.queryByTestId('money.desk.kas.blindHint')).toBeNull();
     // The counter cannot settle it: an owner does.
     expect(byTestId('money.desk.kas.differences').textContent).toContain('Menunggu pemilik');
     expect(screen.queryByTestId('money.desk.kas.settle')).toBeNull();
@@ -119,6 +127,7 @@ describe('Kas on the PC', () => {
   it('an owner sees what should be in the drawer up front, and the difference as they type', async () => {
     await openKas('Andi Pratama');
     const expected = byTestId('money.desk.kas.expected').textContent!;
+    expect(screen.queryByTestId('money.desk.kas.blindHint')).toBeNull();
     fireEvent.click(byTestId('money.desk.kas.count'));
     await screen.findByTestId('money.desk.count');
     expect(byTestId('money.desk.count.expected').textContent).toBe(expected);

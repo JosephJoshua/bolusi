@@ -9,7 +9,7 @@
  * the list. The intake is one task from start to finish and keeps the whole screen. Navigation is
  * the same state either way: turning the tablet only changes how it is drawn.
  */
-import type { IntakeDraft, RepairDraft } from '@bolusi/modules/repair';
+import type { BoardView, IntakeDraft, RepairDraft } from '@bolusi/modules/repair';
 import {
   Handover,
   IntakeWizard,
@@ -93,6 +93,9 @@ export function RepairHome({
     ? { syncChip: null, avatar: null }
     : { syncChip, avatar: view.kind === 'intake' ? avatar : null };
 
+  // Held here: on a phone the board unmounts while a servisan is open, and its queue must survive.
+  const [boardView, setBoardView] = useState<BoardView | null>(null);
+
   const discardGuardRef = useRef<DiscardGuard | null>(null);
   const registerDiscardGuard = useCallback((guard: DiscardGuard | null): void => {
     discardGuardRef.current = guard;
@@ -132,6 +135,8 @@ export function RepairHome({
 
   const board = (
     <RepairBoard
+      view={boardView}
+      onViewChange={setBoardView}
       syncChip={syncChip}
       avatar={avatar}
       now={now}

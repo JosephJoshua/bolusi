@@ -2,7 +2,7 @@
  * The six intake steps the wizard walks through (IntakeWizard.tsx): each edits its part of the one
  * draft through `update` and shows the problems the wizard hands it.
  */
-import { formatMoney, formatNumber, formatPhone, t } from '@bolusi/i18n';
+import { formatMoney, formatNumber, formatPhone, keepNumbersWhole, t } from '@bolusi/i18n';
 import {
   Button,
   Card,
@@ -120,7 +120,7 @@ export function CustomerStep({
       <Card testID={`${testID}.picked`}>
         <Text style={repairStyles.heading}>{customer.name}</Text>
         {customer.phone === null ? null : (
-          <Text style={repairStyles.muted}>{formatPhone(customer.phone)}</Text>
+          <Text style={repairStyles.muted}>{keepNumbersWhole(formatPhone(customer.phone))}</Text>
         )}
         <View style={repairStyles.gap}>
           <Button
@@ -162,7 +162,9 @@ export function CustomerStep({
             <ListRow
               key={row.id}
               primaryText={row.name}
-              secondaryText={row.phone === null ? undefined : formatPhone(row.phone)}
+              secondaryText={
+                row.phone === null ? undefined : keepNumbersWhole(formatPhone(row.phone))
+              }
               onPress={() =>
                 update({
                   customer: {
@@ -838,7 +840,9 @@ export function ReviewStep({
             {draft.customer.name}
           </Text>
           {draft.customer.phone === null || draft.customer.phone === '' ? null : (
-            <Text style={repairStyles.muted}>{formatPhone(draft.customer.phone)}</Text>
+            <Text style={repairStyles.muted}>
+              {keepNumbersWhole(formatPhone(draft.customer.phone))}
+            </Text>
           )}
         </>,
       )}
@@ -861,7 +865,7 @@ export function ReviewStep({
             </Text>
           </View>
           {draft.device.imei === '' ? null : (
-            <Field label={tn('repair.device.imei')} value={draft.device.imei} />
+            <Field label={tn('repair.device.imei')} value={keepNumbersWhole(draft.device.imei)} />
           )}
           {/* Which lock was noted, not the code itself: the review is read out at the counter. */}
           {draft.device.lockKind === 'none' || draft.device.passcode === '' ? null : (

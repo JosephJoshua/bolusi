@@ -3,7 +3,7 @@
  * change one: a name and the WhatsApp number orders are sent to. A supplier taken off the list keeps
  * its orders; it is just not offered for new ones.
  */
-import { formatPhone, t } from '@bolusi/i18n';
+import { formatPhone, keepNumbersWhole, t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -113,7 +113,9 @@ export function SupplierList({
                 <ListRow
                   key={row.id}
                   primaryText={row.name}
-                  secondaryText={row.phone === null ? undefined : formatPhone(row.phone)}
+                  secondaryText={
+                    row.phone === null ? undefined : keepNumbersWhole(formatPhone(row.phone))
+                  }
                   onPress={() => onOpen(row)}
                   showChevron
                   testID={`${testID}.row.${row.id}`}

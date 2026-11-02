@@ -107,6 +107,19 @@ const REPAIR_TYPE_KEY: Readonly<Record<RepairTypeId, RepairKey>> = {
 export const statusLabel = (status: TicketStatus): string => tn(STATUS_KEY[status]);
 
 /** "Hari ini", "Besok", "3 hari", "Belum tahu": a ready-by choice reads as its number of days. */
+/**
+ * What a cancelled servisan costs, as a record shows it: most stores charge nothing to cancel, so a
+ * zero fee reads "Tanpa biaya" rather than "Rp 0".
+ */
+export function cancelFeeText(amount: number): string {
+  return amount === 0 ? tn('repair.cancel.noFee') : formatMoney(amount);
+}
+
+/** What cancelling tells the owner happens at pickup, for the fee it will charge. */
+export function cancelConsequenceKey(fee: number | null): RepairKey {
+  return fee === 0 ? 'repair.cancel.consequenceFree' : 'repair.cancel.consequence';
+}
+
 export function readyLabel(id: string): string {
   if (id === READY_UNKNOWN) return tn('repair.ready.unknown');
   const days = readyDays(id);

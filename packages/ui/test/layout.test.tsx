@@ -87,14 +87,14 @@ describe('Columns', () => {
         end={<ChipRow testID="endRow">{null}</ChipRow>}
       />,
     );
-    expect(screen.styleOf('startRow')).toMatchObject({ marginLeft: -space.lg, marginRight: -0 });
-    expect(screen.styleOf('endRow')).toMatchObject({ marginLeft: -0, marginRight: -space.lg });
+    // The row's chips start on the column's edge: padded back by as much as the row bleeds.
+    const padding = (id: string) =>
+      StyleSheet.flatten(screen.get(id).props['contentContainerStyle'] as never);
+    expect(padding('startRow')).toMatchObject({ paddingLeft: space.lg, paddingRight: 0 });
+    expect(padding('endRow')).toMatchObject({ paddingLeft: 0, paddingRight: space.lg });
     layOut(screen, 'ui.columns.two', 360);
     // Stacked, both reach through both gutters as on a phone.
-    expect(screen.styleOf('startRow')).toMatchObject({
-      marginLeft: -space.lg,
-      marginRight: -space.lg,
-    });
+    expect(padding('startRow')).toMatchObject({ paddingLeft: space.lg, paddingRight: space.lg });
   });
 });
 

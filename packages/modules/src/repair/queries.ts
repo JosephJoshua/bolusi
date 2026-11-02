@@ -1028,15 +1028,18 @@ export interface CancelFees {
 }
 
 /**
- * The store's fee for cancelling this ticket now: after-work once work has ever started. A warranty
- * claim was free, so it costs nothing to cancel unless the owner sets a fee.
+ * The store's fee for cancelling this ticket now: after-work once work has ever started, but never
+ * more than the agreed repair price, since no customer pays more to cancel than to repair (Joseph,
+ * 2026-11-01). With no price agreed yet the store's fee stands. A warranty claim was free, so it
+ * costs nothing to cancel unless the owner sets a fee.
  */
 export function standardCancelFee(
-  ticket: Pick<TicketDetailRow, 'workStarted' | 'claimOfTicketId'>,
+  ticket: Pick<TicketDetailRow, 'workStarted' | 'claimOfTicketId' | 'quoteTotal'>,
   fees: CancelFees,
 ): number {
   if (ticket.claimOfTicketId !== null) return 0;
-  return ticket.workStarted ? fees.afterWork : fees.beforeWork;
+  const fee = ticket.workStarted ? fees.afterWork : fees.beforeWork;
+  return ticket.quoteTotal > 0 ? Math.min(fee, ticket.quoteTotal) : fee;
 }
 
 /**

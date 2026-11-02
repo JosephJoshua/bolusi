@@ -137,7 +137,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 
 Prefer a proper component over a hand-made approximation. Already built:
 `SearchField`, `SegmentedControl` (compact, bleed), `TextButton`, `Timeline`
-(history, "Riwayat"), `PhotoStrip`, `ChipRow` (choice chips that scroll sideways), `Sheet` (bottom sheet to show more, never a
+(history, "Riwayat"), `PhotoStrip`, `ChipRow` (choice chips that scroll sideways; an edge with more to swipe to fades), `Sheet` (bottom sheet to show more, never a
 form), `PhotoViewer` (pinch and double-tap zoom, pager, share), `ConfirmSheet`,
 `Chip`/`StatusChip`, `FactGrid`/`Fact`, `Banner`, `EmptyState`,
 `ReorderableList` (drag a handle to reorder, iOS style), `SwitchRow` (an on/off
@@ -208,7 +208,9 @@ choice shows its whole text at every supported width and font size. The
 Android run showed "Tidak" for "Tidak dicek"; that is a defect, not a style.
 When text does not fit, change the layout (wrap, stack the label above its
 control, share the width equally), or shorten the copy so it still reads
-naturally. Never rely on `numberOfLines` to hide the overflow. The only
+naturally. Never rely on `numberOfLines` to hide the overflow. A chip
+that runs past a scrolling row's edge sits under that edge's fade, so it
+reads as "more", never as a cut label. The only
 ellipsis allowed is a long user-entered value in a list row (a customer
 name), whose full text is one tap away.
 

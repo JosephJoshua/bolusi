@@ -44,6 +44,7 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import {
+  cancelConsequenceKey,
   DOWN_PAYMENT_GAP_KEY,
   PRICE_KIND_KEY,
   discountLimitHint,
@@ -284,6 +285,7 @@ export function CancelStep({
   ticketId,
   stale,
   workStarted,
+  price,
   claimOf,
   downPayment,
   discounted,
@@ -294,6 +296,8 @@ export function CancelStep({
   testID = 'repair.cancel',
 }: StepProps & {
   readonly workStarted: boolean;
+  /** The agreed repair price, which the store's fee never goes above. */
+  readonly price: number;
   /** The discounts standing on the servisan, which a smaller fee counts with against a limit. */
   readonly discounted: number;
   /** Paid in so far: what is above the fee goes back at pickup. */
@@ -319,7 +323,7 @@ export function CancelStep({
 
   const standard =
     fees.status === 'ready'
-      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf }, fees.data)
+      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf, quoteTotal: price }, fees.data)
       : null;
   const fee = feeText === null ? standard : parseRupiah(feeText);
   const changed = standard !== null && fee !== null && fee !== standard;
@@ -375,7 +379,7 @@ export function CancelStep({
       <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
         {cancelRefund(downPayment, fee) > 0
           ? tn('repair.cancel.refundsDp', { amount: formatMoney(cancelRefund(downPayment, fee)) })
-          : tn('repair.cancel.consequence')}
+          : tn(cancelConsequenceKey(fee))}
       </Text>
       {asking ? (
         <Text style={[repairStyles.caption, styles.consequence]} testID={`${testID}.asks`}>
@@ -595,8 +599,11 @@ export function ChangeCancelFeeStep({
     >
       <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.explain`}>
         {paid > 0
-          ? tn('repair.cancelFee.paid', { amount: formatMoney(paid) })
-          : tn('repair.cancelFee.unpaid')}
+          ? tn('repair.cancelFee.paid', {
+              bill: formatMoney(current),
+              amount: formatMoney(paid),
+            })
+          : tn('repair.cancelFee.unpaid', { bill: formatMoney(current) })}
       </Text>
       {ask.asking ? (
         <Text style={[repairStyles.caption, styles.consequence]} testID={`${testID}.asks`}>

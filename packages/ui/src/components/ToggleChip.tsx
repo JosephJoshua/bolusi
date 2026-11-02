@@ -26,14 +26,19 @@ const styles = StyleSheet.create({
   chip: {
     // Sized to its label: in a column it would otherwise stretch into something that reads as a field.
     alignSelf: 'flex-start',
+    // In a wrapped list (the handover checks) a label wider than the screen at a large font
+    // wraps inside the chip instead of running off the edge. A sideways ChipRow never squeezes it.
+    flexShrink: 1,
     minHeight: touch.min,
+    // Room above and below a label that took a second line.
+    paddingVertical: space.xs,
     borderRadius: radius.full,
     borderWidth: border.hairline,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs,
   },
-  label: { ...type.bodySm },
+  label: { ...type.bodySm, flexShrink: 1 },
 });
 
 export function ToggleChip({

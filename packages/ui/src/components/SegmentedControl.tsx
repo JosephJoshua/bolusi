@@ -1,18 +1,19 @@
 /**
  * SegmentedControl — one choice from a short, fixed set (a board's views, a checklist item's
  * state). Every option shows its label; the selected one is filled, so the state never rides on
- * colour alone (§6.3): it is also announced as `selected`. Scrolls sideways when the labels do not
- * fit a narrow phone, rather than truncating them.
+ * colour alone (§6.3): it is also announced as `selected`. Scrolls sideways in a `ChipRow` when the
+ * labels do not fit a narrow phone or a large font, rather than truncating them: the edge with more
+ * fades, and the picked option is scrolled into sight.
  *
  * `compact` is for a control that is not the screen's subject (a board's filters, a checklist row's
  * state): a 36 dp pill whose hit area is still padded to the 48 dp floor, so it does not outweigh
  * the content it filters.
  */
 import { Text } from '../text.js';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
+import { ChipRow, useRevealInRow } from './ChipRow.js';
 import { border, color, radius, size as sizes, space, touch, type } from '../tokens.js';
-import { bleedMargins, bleedPadding, useBleed } from '../layout.js';
 
 /** Grows a compact pill's touch height to the §1.4 floor without growing what is drawn. */
 const COMPACT_SLOP = (touch.min - sizes.control) / 2;
@@ -45,9 +46,7 @@ export interface SegmentedControlProps<V extends string> {
 }
 
 const styles = StyleSheet.create({
-  // A ScrollView grows by default; inside a scrolling screen that stretched the options to fill it.
-  scroller: { flexGrow: 0 },
-  row: { flexDirection: 'row', gap: touch.gap },
+  row: { gap: touch.gap },
   wrapped: { flexDirection: 'row', flexWrap: 'wrap', gap: touch.gap },
   // Compact pills carry vertical slop; wrapped rows sit far enough apart that the slops never meet.
   compactWrapped: { rowGap: 2 * COMPACT_SLOP },
@@ -89,12 +88,12 @@ export function SegmentedControl<V extends string>({
   testID = 'ui.segmented',
 }: SegmentedControlProps<V>): React.JSX.Element {
   const compact = size === 'compact';
-  const gutter = useBleed();
   const items = options.map((option) => {
     const selected = option.value === value;
     return (
-      <Pressable
+      <Option
         key={option.value}
+        selected={selected}
         testID={`${testID}.${option.value}`}
         // One choice of several: a radio in a radio group, so a screen reader says "1 of 3, selected".
         accessibilityRole="radio"
@@ -123,7 +122,7 @@ export function SegmentedControl<V extends string>({
         >
           {option.label}
         </Text>
-      </Pressable>
+      </Option>
     );
   });
   if (inline) {
@@ -145,19 +144,29 @@ export function SegmentedControl<V extends string>({
     );
   }
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={[styles.scroller, bleed ? bleedMargins(gutter) : null]}
-      contentContainerStyle={[
-        styles.row,
-        compact ? styles.compactRow : null,
-        bleed ? bleedPadding(gutter) : null,
-      ]}
+    <ChipRow
+      bleed={bleed}
+      contentStyle={[styles.row, compact ? styles.compactRow : null]}
       accessibilityRole="radiogroup"
       testID={testID}
     >
       {items}
-    </ScrollView>
+    </ChipRow>
   );
+}
+
+/** One option's pressable; inside a scrolling row the picked one asks to be in sight. */
+function Option({
+  selected,
+  ...props
+}: React.ComponentProps<typeof Pressable> & { readonly selected: boolean }): React.JSX.Element {
+  const reveal = useRevealInRow();
+  const onLayout =
+    selected && reveal !== null
+      ? (event: LayoutChangeEvent) => {
+          const { x, width } = event.nativeEvent.layout;
+          reveal(x, width);
+        }
+      : undefined;
+  return <Pressable {...props} onLayout={onLayout} />;
 }

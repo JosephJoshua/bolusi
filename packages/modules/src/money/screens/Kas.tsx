@@ -144,6 +144,12 @@ export function KasBoard({
                     ? tm('money.kas.notCounted')
                     : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
                 </Text>
+                {/* A blind count hides what the drawer should hold; until it is counted, say why. */}
+                {may.seeExpected || counted !== null ? null : (
+                  <Text style={styles.muted} testID={`${testID}.blindHint`}>
+                    {tm('money.kas.blindHint')}
+                  </Text>
+                )}
                 {may.move || (onHistory !== undefined && mayRead) ? (
                   <View style={styles.drawerAction}>
                     {may.move ? (

@@ -1088,11 +1088,16 @@ export const ticketCancelledRule: Rule = async (op, ctx) => {
     NO_CANCEL_FEES,
     ...(await pastPayloads<CancelFees>(ctx.db, REPAIR_OP.storeCancelFeesChanged, storeOf(op))),
   ];
+  // Capped at the repair price as it stands here, or not at all: a phone from before the cap.
   const known = versions.some((version) =>
-    [false, true].some(
-      (workStarted) =>
-        standardCancelFee({ workStarted, claimOfTicketId: ticket.claimOfTicketId }, version) ===
-        standardFee,
+    [false, true].some((workStarted) =>
+      [0, ticket.quoteTotal].some(
+        (quoteTotal) =>
+          standardCancelFee(
+            { workStarted, claimOfTicketId: ticket.claimOfTicketId, quoteTotal },
+            version,
+          ) === standardFee,
+      ),
     ),
   );
   if (named !== undefined && standardFee !== standard && !known) {
@@ -1114,7 +1119,11 @@ async function standardFeeOf(db: Db, ref: TicketRef, ticket: TicketState): Promi
     .where('storeId', '=', storeOf(ref))
     .executeTakeFirst();
   return standardCancelFee(
-    { workStarted: (await lastStartedAt(db, ref)) > 0, claimOfTicketId: ticket.claimOfTicketId },
+    {
+      workStarted: (await lastStartedAt(db, ref)) > 0,
+      claimOfTicketId: ticket.claimOfTicketId,
+      quoteTotal: ticket.quoteTotal,
+    },
     fees === undefined
       ? NO_CANCEL_FEES
       : { beforeWork: Number(fees.beforeWork), afterWork: Number(fees.afterWork) },
