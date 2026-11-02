@@ -26,6 +26,10 @@ const bridge: DesktopBridge = {
     printRaw: (bytes, jobName) => electron.ipcRenderer.invoke('printers:raw', bytes, jobName),
     printPage: (html, paper) => electron.ipcRenderer.invoke('printers:page', html, paper),
   },
+  media: {
+    choices: () => electron.ipcRenderer.invoke('media:choices'),
+    choose: (kind, choice) => electron.ipcRenderer.invoke('media:choose', kind, choice),
+  },
   updates: {
     version: () => electron.ipcRenderer.invoke('updates:version'),
     state: () => electron.ipcRenderer.invoke('updates:state'),
@@ -35,6 +39,7 @@ const bridge: DesktopBridge = {
       return () => electron.ipcRenderer.removeListener('updates:changed', relay);
     },
     install: () => electron.ipcRenderer.invoke('updates:install'),
+    busy: (busy) => electron.ipcRenderer.send('updates:busy', busy),
   },
   window: {
     fullscreen: () => electron.ipcRenderer.invoke('window:fullscreen'),
@@ -43,6 +48,10 @@ const bridge: DesktopBridge = {
       electron.ipcRenderer.on('window:fullscreen-changed', relay);
       return () => electron.ipcRenderer.removeListener('window:fullscreen-changed', relay);
     },
+  },
+  startup: {
+    get: () => electron.ipcRenderer.invoke('startup:get'),
+    set: (open) => electron.ipcRenderer.invoke('startup:set', open),
   },
   core: {
     connect: () => electron.ipcRenderer.send('core:connect'),

@@ -14,7 +14,8 @@
 import { allowanceCovers } from '../authz/limits.js';
 import { CommandRuntime, type CommandRuntimeOptions } from '../runtime/execute.js';
 import type { CommandIdentity, QueryExecutorPort, QueryHandle } from '../runtime/ctx.js';
-import { QueryRuntime } from '../query/execute.js';
+import { QueryRuntime, type DataHerePort } from '../query/execute.js';
+import { projectionTableReads } from '../sync/person-store.js';
 import type { ProjectionDb } from '../projection/manifest.js';
 import type { SearchIndexCache } from '../search/live-index.js';
 import type { ModuleRegistry } from './registry.js';
@@ -30,6 +31,8 @@ export type ModuleRuntimeOptions = Omit<
 > & {
   /** Live search indexes for every query (search/live-index.ts). Devices pass one. */
   readonly search?: SearchIndexCache;
+  /** Which reads' data is on this device (`QueryRuntimeOptions.dataHere`). Devices pass one. */
+  readonly dataHere?: DataHerePort;
 };
 
 /** A wired build: the registries plus the two runtimes, sharing one enforcement point. */
@@ -81,7 +84,7 @@ export function createModuleRuntime<DB>(
     },
   };
 
-  const { search, ...commandOptions } = options;
+  const { search, dataHere, ...commandOptions } = options;
   const commands = new CommandRuntime({
     ...commandOptions,
     operations: registry.operations,
@@ -100,6 +103,7 @@ export function createModuleRuntime<DB>(
               permissionId,
             }).allowed,
           ),
+        sha256: (data) => options.crypto.sha256(data),
         withinLimit: (userId, permissionId, amount) =>
           Promise.resolve(
             allowanceCovers(
@@ -119,6 +123,8 @@ export function createModuleRuntime<DB>(
     db,
     enforcement: commands.enforcementPoint,
     ...(search !== undefined ? { search } : {}),
+    ...(dataHere !== undefined ? { dataHere } : {}),
+    tableReads: projectionTableReads(registry.projections, registry.operations),
   });
 
   return { registry, commands, queries: queryRuntime };

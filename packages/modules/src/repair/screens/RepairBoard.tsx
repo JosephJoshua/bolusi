@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   EmptyState,
+  FreshGlow,
   List,
   SearchField,
   SegmentedControl,
@@ -21,10 +22,11 @@ import {
   type,
   type ListState,
   type OperationSyncStatus,
+  Text,
 } from '@bolusi/ui';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { TicketSummaryRow } from '../queries.js';
 import {
@@ -34,37 +36,33 @@ import {
   type EntitySyncStatuses,
 } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import {
+  APPROVALS_VIEW_MAX,
+  BOARD_EMPTY_KEY,
   boardFilter,
+  amountOwed,
   boardSort,
+  boardViewLabel,
   boardViews,
+  countsPickup,
   defaultBoardView,
   repairAbilities,
   ticketStatus,
   UNCOLLECTED_REFRESH_MS,
   flagsUncollected,
+  pointsToPickup,
   uncollectedBefore,
   uncollectedDays,
   type BoardView,
 } from '../flows.js';
 import { statusLabel } from '../labels.js';
 import { StatusChip, repairStyles } from './parts.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { readApprovals, useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 const PAGE = 50;
 /** Search is ranked, so its best matches come first and one page is enough. */
 const SEARCH_LIMIT = 100;
-
-const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
-  active: 'repair.board.view.active',
-  mine: 'repair.board.view.mine',
-  unassigned: 'repair.board.view.unassigned',
-  pickup: 'repair.board.view.pickup',
-  uncollected: 'repair.board.view.uncollected',
-  returned: 'repair.board.view.returned',
-  cancelled: 'repair.board.view.cancelled',
-};
 
 export interface RepairBoardProps {
   readonly syncChip: ReactNode;
@@ -73,12 +71,21 @@ export interface RepairBoardProps {
   readonly now: () => number;
   readonly onOpenTicket: (ticketId: string) => void;
   readonly onNewIntake: () => void;
+  /** An unfinished intake or claim waits on this device: the button carries on with it. */
+  readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
   readonly onOpenSyncStatus: () => void;
   /**
    * The ticket open beside the board on a tablet, marked so the eye finds it in the list. Its next
    * step is then the screen's primary action, so "Servisan baru" steps back to an outlined button.
    */
   readonly selectedTicketId?: string | null | undefined;
+  /**
+   * The picked view, kept by the screen that holds the board, so opening a servisan and coming
+   * back lands on the same queue (an owner working through Persetujuan). Without it the board
+   * keeps its own and opens on its default.
+   */
+  readonly view?: BoardView | null | undefined;
+  readonly onViewChange?: ((view: BoardView) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -89,6 +96,11 @@ interface LoadedBoard {
   /** The store's not-collected limit in days, and the time the board was read against it. */
   readonly uncollectedLimit: number;
   readonly readAt: number;
+  /** Servisan waiting on this user's approval, and those with any waiting request they see. */
+  readonly approvalIds: readonly string[];
+  readonly approvalWaiting: ReadonlySet<string>;
+  /** Phones waiting for pickup, for the tab and an empty active queue; null when not counted. */
+  readonly pickup: number | null;
 }
 
 export function RepairBoard({
@@ -97,13 +109,29 @@ export function RepairBoard({
   now,
   onOpenTicket,
   onNewIntake,
+  waitingDraft = null,
   onOpenSyncStatus,
   selectedTicketId = null,
+  view: heldView,
+  onViewChange,
   testID = 'repair.board',
 }: RepairBoardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  const [view, setView] = useState<BoardView>(() => defaultBoardView(can));
+  // A kept view this user may not see (a colleague took the phone over) is not offered.
+  const kept =
+    heldView !== null && heldView !== undefined && boardViews(can, 1).includes(heldView)
+      ? heldView
+      : null;
+  const [ownView, setOwnView] = useState<BoardView>(() => kept ?? defaultBoardView(can));
+  const view = kept ?? ownView;
+  const setView = useCallback(
+    (next: BoardView) => {
+      setOwnView(next);
+      onViewChange?.(next);
+    },
+    [onViewChange],
+  );
   const [text, setText] = useState('');
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -121,10 +149,28 @@ export function RepairBoard({
       let hasMore = false;
       const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
       const readAt = now();
+      const requests = await readApprovals(rt);
+      const approvalIds = [
+        ...new Set(requests.filter((row) => row.canDecide).map((row) => row.targetId)),
+      ];
+      const approvalWaiting = new Set(requests.map((row) => row.targetId));
       if (searching) {
         rows = [
           ...(await rt.query('searchTickets', { text: searchText, limit: SEARCH_LIMIT })).rows,
         ];
+      } else if (view === 'approvals') {
+        // A short list, read whole; it empties as requests are answered.
+        if (approvalIds.length > 0) {
+          rows = [
+            ...(
+              await rt.query('listTickets', {
+                filter: boardFilter(view, rt.userId, 0, approvalIds),
+                sort: boardSort(view),
+                limit: APPROVALS_VIEW_MAX,
+              })
+            ).rows,
+          ];
+        }
       } else {
         // Every page the user has scrolled to, re-read on each refresh so the live board stays whole.
         let cursor: string | null = null;
@@ -145,7 +191,25 @@ export function RepairBoard({
         hasMore = cursor !== null;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
-      return { rows, statuses, hasMore, uncollectedLimit, readAt };
+      // The tabs are hidden while searching, so the count waits until the search is cleared.
+      const pickup =
+        !searching && countsPickup(can)
+          ? ((
+              await rt.query('countTickets', {
+                filter: boardFilter('pickup', rt.userId, 0),
+              })
+            ).rows[0]?.count ?? 0)
+          : null;
+      return {
+        rows,
+        statuses,
+        hasMore,
+        uncollectedLimit,
+        readAt,
+        approvalIds,
+        approvalWaiting,
+        pickup,
+      };
     },
     `board:${searching ? `q:${searchText}` : view}:${String(pages)}:${String(reloadNonce)}:${String(hour)}`,
   );
@@ -176,22 +240,41 @@ export function RepairBoard({
             onRetry: () => setReloadNonce((current) => current + 1),
           },
         };
-      case 'ready':
-        if (query.data.rows.length === 0) {
-          return {
-            kind: 'empty',
-            empty: {
-              title: searching ? tn('repair.board.noMatches') : t('core.status.empty'),
-              ...(searching ? {} : { hint: tn('repair.board.emptyHint') }),
-            },
-          };
-        }
-        return { kind: 'ready', items: query.data.rows };
+      case 'ready': {
+        if (query.data.rows.length > 0) return { kind: 'ready', items: query.data.rows };
+        const { pickup } = query.data;
+        return {
+          kind: 'empty',
+          empty: {
+            title: tn(searching ? 'repair.board.noMatches' : BOARD_EMPTY_KEY[view]),
+            // Nothing being worked on, but customers are due: the way to them, not a dead end.
+            ...(pointsToPickup(view, searching, pickup)
+              ? {
+                  createLabel: tn('repair.board.pickupWaiting', { count: pickup ?? 0 }),
+                  onCreate: () => {
+                    setView('pickup');
+                    setPages(1);
+                  },
+                  ctaVariant: 'secondary' as const,
+                }
+              : !searching && view === 'active'
+                ? { hint: tn('repair.board.emptyHint') }
+                : {}),
+          },
+        };
+      }
     }
-  }, [query, searching, onOpenSyncStatus]);
+  }, [query, searching, view, onOpenSyncStatus]);
 
   const loaded = query.status === 'ready' ? query.data : null;
   const statuses = loaded?.statuses;
+  const waitingApprovals = loaded?.approvalIds.length ?? 0;
+  const approvalWaiting = loaded?.approvalWaiting;
+  // Every request answered: the approvals view goes, and the board returns to its usual queue.
+  const viewGone = loaded !== null && view === 'approvals' && waitingApprovals === 0;
+  useEffect(() => {
+    if (viewGone) setView(defaultBoardView(can));
+  }, [viewGone, can, setView]);
   const showCancel = !searching && view === 'cancelled';
   // The counter and owners call the customer about a phone left too long; technicians need not.
   const flagUncollected = flagsUncollected(can);
@@ -212,6 +295,7 @@ export function RepairBoard({
             : null
         }
         syncStatuses={statusesFor(statuses ?? {}, row.id)}
+        approvalWaiting={approvalWaiting?.has(row.id) === true}
         onOpen={openTicket}
         onOpenSyncStatus={openSyncStatus}
         testID={`${testID}.row.${row.id}`}
@@ -224,6 +308,7 @@ export function RepairBoard({
       flagUncollected,
       loaded,
       statuses,
+      approvalWaiting,
       openTicket,
       openSyncStatus,
       testID,
@@ -239,7 +324,13 @@ export function RepairBoard({
       bottomAction={
         can.intake ? (
           <Button
-            label={tn('repair.action.newIntake')}
+            label={tn(
+              waitingDraft === 'claim'
+                ? 'repair.action.resumeClaim'
+                : waitingDraft === 'intake'
+                  ? 'repair.action.resumeIntake'
+                  : 'repair.action.newIntake',
+            )}
             // One primary on screen: with a ticket open beside the board, its next step leads.
             variant={selectedTicketId === null ? 'primary' : 'secondary'}
             onPress={onNewIntake}
@@ -262,7 +353,13 @@ export function RepairBoard({
       {searching ? null : (
         <View style={styles.views}>
           <SegmentedControl
-            options={boardViews(can).map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
+            options={boardViews(can, waitingApprovals).map((value) => {
+              const label = boardViewLabel(value, {
+                approvals: waitingApprovals,
+                pickup: loaded?.pickup ?? null,
+              });
+              return { value, label: tn(label.key, { count: label.count }) };
+            })}
             value={view}
             // One compact row that scrolls sideways and runs to the screen edges: the cut-off pill
             // at the edge shows there are more queues, and the list keeps the screen.
@@ -308,6 +405,8 @@ interface TicketRowProps {
   /** Days a finished phone has waited past the store's limit; null when it is not flagged. */
   readonly waitedDays: number | null;
   readonly syncStatuses: readonly OperationSyncStatus[];
+  /** A request on it waits on an owner's answer (one this user asked, or may give). */
+  readonly approvalWaiting: boolean;
   readonly onOpen: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
   readonly testID: string;
@@ -324,6 +423,7 @@ function sameRow(prev: TicketRowProps, next: TicketRowProps): boolean {
     prev.selected === next.selected &&
     prev.showCancel === next.showCancel &&
     prev.waitedDays === next.waitedDays &&
+    prev.approvalWaiting === next.approvalWaiting &&
     prev.onOpen === next.onOpen &&
     prev.onOpenSyncStatus === next.onOpenSyncStatus &&
     prev.testID === next.testID &&
@@ -346,6 +446,7 @@ const TicketRow = memo(function TicketRow({
   showCancel,
   waitedDays,
   syncStatuses,
+  approvalWaiting,
   onOpen,
   onOpenSyncStatus,
   testID,
@@ -360,7 +461,7 @@ const TicketRow = memo(function TicketRow({
   const details = [device, who].filter((s) => s !== null && s !== '').join(' · ');
   const reason = showCancel ? row.outcomeNote : null;
   // A cancelled servisan costs the customer its fee, never the repair price (none before fees).
-  const amount = row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+  const amount = amountOwed(row);
   const feeChanged =
     showCancel &&
     row.cancelFee !== null &&
@@ -377,6 +478,7 @@ const TicketRow = memo(function TicketRow({
     feeChanged ? tn('repair.board.feeChanged') : '',
     row.cancelledAt !== null && showCancel ? formatDateTime(row.cancelledAt) : '',
     row.pendingProposals > 0 ? tn('repair.board.priceChangeWaiting') : '',
+    approvalWaiting ? tn('repair.board.approvalWaiting') : '',
     waitedDays === null ? '' : tn('repair.board.waited', { days: waitedDays }),
   ]
     .filter((s) => s !== '')
@@ -396,6 +498,7 @@ const TicketRow = memo(function TicketRow({
         },
       ]}
     >
+      <FreshGlow id={row.id} testID={`${testID}.fresh`} />
       <View style={styles.rowBody}>
         <View style={repairStyles.row}>
           <Text style={[styles.customer, repairStyles.rowText]} numberOfLines={1}>
@@ -429,6 +532,14 @@ const TicketRow = memo(function TicketRow({
               icon="warning"
               tone="warning"
               testID={`${testID}.priceWaiting`}
+            />
+          ) : null}
+          {approvalWaiting ? (
+            <Chip
+              label={tn('repair.board.approvalWaiting')}
+              icon="pending"
+              tone="warning"
+              testID={`${testID}.approvalWaiting`}
             />
           ) : null}
           {waitedDays === null ? null : (

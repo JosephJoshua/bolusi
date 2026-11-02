@@ -25,11 +25,19 @@ import {
   type DirectoryRole,
   type ModulePermissionManifest,
   type ModuleRuntime,
+  type OpRuleContext,
 } from '@bolusi/core';
 
-import { inventoryModule, moneyModule } from '../../src/index.js';
+import { APPROVAL_PERMISSION } from '../../src/approvals/index.js';
+import {
+  approvalsModule,
+  inventoryModule,
+  moneyModule,
+  purchasingModule,
+} from '../../src/index.js';
 import { INVENTORY_PERMISSION } from '../../src/inventory/index.js';
 import { MONEY_PERMISSION } from '../../src/money/index.js';
+import { PURCHASING_PERMISSION } from '../../src/purchasing/index.js';
 import { repairModule, REPAIR_PERMISSION } from '../../src/repair/index.js';
 import { SqliteOpStore } from './harness.js';
 
@@ -45,10 +53,12 @@ const MANAGER_ID = '0191e000-0000-7000-8000-00000000a11a';
 const P = REPAIR_PERMISSION;
 const M = MONEY_PERMISSION;
 const I = INVENTORY_PERMISSION;
+const B = PURCHASING_PERMISSION;
 
+// Every role asks for and answers approvals; the decision's own permission says what.
 const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
   scopeType,
-  permissionIdsJson: JSON.stringify(permissionIds),
+  permissionIdsJson: JSON.stringify([...permissionIds, APPROVAL_PERMISSION.use]),
 });
 
 // Query rows are read loosely in tests; the query modules own the real row types.
@@ -64,6 +74,8 @@ export interface RepairHarness {
   readonly checkRule: (
     op: SignedOperation,
     withinLimit?: (userId: string, permissionId: string, amount: number) => Promise<boolean>,
+    /** Who holds what instead, and the server's clock (none: judged as a device does). */
+    extra?: Partial<Pick<OpRuleContext<never>, 'holdsPermission' | 'receivedAt'>>,
   ) => Promise<void>;
   readonly tenantId: string;
   readonly storeId: string;
@@ -102,6 +114,18 @@ export interface RepairHarness {
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Run a purchasing command as `userId`. */
+  purchasing<K extends keyof typeof purchasingModule.commands>(
+    command: K,
+    input: Parameters<(typeof purchasingModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run a purchasing query as `userId`. */
+  purchasingQuery<K extends keyof typeof purchasingModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
   /** Run a money command as `userId`. */
   money<K extends keyof typeof moneyModule.commands>(
     command: K,
@@ -114,12 +138,26 @@ export interface RepairHarness {
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Run an approvals command as `userId`. */
+  approvals<K extends keyof typeof approvalsModule.commands>(
+    command: K,
+    input: Parameters<(typeof approvalsModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run an approvals query as `userId`. */
+  approvalsQuery<K extends keyof typeof approvalsModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
   /** Run a repair query as `userId`. */
   query<K extends keyof typeof repairModule.queries>(
     query: K,
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Whether `userId` holds `permission` here, as the screens ask it. */
+  hasPermission(userId: string, permission: string): boolean;
   /** Every op this device appended, in seq order (for replaying onto another harness). */
   ownOps(): Promise<SignedOperation[]>;
   deliverPulled(op: SignedOperation, arrivalSeq: number): Promise<void>;
@@ -128,12 +166,15 @@ export interface RepairHarness {
   video(n: number): VideoRef;
   /** Moves the device's clock on, so changes after it are signed that much later. */
   advance(ms: number): void;
+  /** The device's clock now, for checks that mirror a rule's time window. */
+  now(): number;
   close(): Promise<void>;
 }
 
 export async function openRepairHarness(
   seed: number,
   shared?: { tenantId: string; storeId: string; users: readonly string[] },
+  options: { readonly readHere?: (permissionId: string) => boolean } = {},
 ): Promise<RepairHarness> {
   const driver = openMemoryDriver();
   await runClientMigrations(driver, { now: () => 1 });
@@ -145,7 +186,9 @@ export async function openRepairHarness(
   const registry = registerModules([
     repairModule as unknown as AnyModuleDefinition<ClientDatabase>,
     inventoryModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    purchasingModule as unknown as AnyModuleDefinition<ClientDatabase>,
     moneyModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    approvalsModule as unknown as AnyModuleDefinition<ClientDatabase>,
   ]);
   const engine = createProjectionEngine(db, registry.projections);
 
@@ -170,7 +213,9 @@ export async function openRepairHarness(
     assemblePermissionRegistry([
       repairModule as unknown as ModulePermissionManifest,
       inventoryModule as unknown as ModulePermissionManifest,
+      purchasingModule as unknown as ModulePermissionManifest,
       moneyModule as unknown as ModulePermissionManifest,
+      approvalsModule as unknown as ModulePermissionManifest,
     ]),
     {
       load: () =>
@@ -207,7 +252,15 @@ export async function openRepairHarness(
             [TECHNICIAN_ROLE, role([P.read, P.work, I.read, I.useParts])],
             [
               OWNER_ROLE,
-              role([...Object.values(P), ...Object.values(I), ...Object.values(M)], 'tenant'),
+              role(
+                [
+                  ...Object.values(P),
+                  ...Object.values(I),
+                  ...Object.values(M),
+                  ...Object.values(B),
+                ],
+                'tenant',
+              ),
             ],
             [
               STORE_OWNER_ROLE,
@@ -226,6 +279,7 @@ export async function openRepairHarness(
                 // Categories are the business owner's alone (a tenant-wide permission).
                 ...Object.values(I).filter((id) => id !== I.manageCategories),
                 ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
+                ...Object.values(B),
               ]),
             ],
             [
@@ -283,6 +337,15 @@ export async function openRepairHarness(
     syncScheduler: { schedule: () => undefined },
     // The device's live search cache, fed by this engine's applies (local and pulled).
     search: new SearchIndexCache(engine.invalidation),
+    ...(options.readHere === undefined
+      ? {}
+      : {
+          dataHere: {
+            readHere: options.readHere,
+            whenHere: (permissionId: string) =>
+              Promise.resolve(options.readHere?.(permissionId) ?? true),
+          },
+        }),
   });
 
   await runtime.commands.emitRuntimeOp({
@@ -315,11 +378,13 @@ export async function openRepairHarness(
     runtime,
     db,
     engine,
-    checkRule: (op, withinLimit = () => Promise.resolve(true)) =>
+    checkRule: (op, withinLimit = () => Promise.resolve(true), extra = {}) =>
       registry.checkOpRule(op, {
         db: db as never,
         holdsPermission: () => Promise.resolve(true),
         withinLimit,
+        sha256: (data) => noblePort.sha256(data),
+        ...extra,
       }),
     tenantId,
     storeId,
@@ -355,6 +420,21 @@ export async function openRepairHarness(
         { tenantId, storeId, userId, deviceId },
       )) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    purchasing: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        purchasingModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    purchasingQuery: async (query, input, userId) => {
+      return (await runtime.queries.execute(
+        purchasingModule.queries[query] as never,
+        input as never,
+        { tenantId, storeId, userId, deviceId },
+      )) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
     money: async (command, input, userId) => {
       const outcome = await runtime.commands.execute(
         moneyModule.commands[command] as never,
@@ -371,6 +451,21 @@ export async function openRepairHarness(
         deviceId,
       })) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    approvals: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        approvalsModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    approvalsQuery: async (query, input, userId) => {
+      return (await runtime.queries.execute(
+        approvalsModule.queries[query] as never,
+        input as never,
+        { tenantId, storeId, userId, deviceId },
+      )) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
     query: async (query, input, userId) => {
       return (await runtime.queries.execute(repairModule.queries[query] as never, input as never, {
         tenantId,
@@ -379,6 +474,8 @@ export async function openRepairHarness(
         deviceId,
       })) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    hasPermission: (userId, permission) =>
+      runtime.commands.createContext(userId).colleagueHasPermission(userId, permission),
     ownOps: async () => {
       const rows = await db
         .selectFrom('operations')
@@ -389,6 +486,8 @@ export async function openRepairHarness(
             eb('type', 'like', 'repair.%'),
             eb('type', 'like', 'inventory.%'),
             eb('type', 'like', 'money.%'),
+            eb('type', 'like', 'purchasing.%'),
+            eb('type', 'like', 'approvals.%'),
           ]),
         )
         .orderBy('seq', 'asc')
@@ -406,6 +505,7 @@ export async function openRepairHarness(
     advance: (ms: number): void => {
       clock.value += ms;
     },
+    now: (): number => clock.value,
     photo,
     video: (n: number): VideoRef => ({
       ...photo(n),
@@ -437,7 +537,7 @@ export function accessoriesBack(
 export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}) {
   return {
     customer: { name: 'Yohanis Wenda', phone: '0812-4455-6677' },
-    device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455667' },
+    device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455660' },
     complaint: 'Layar retak, sentuhan tidak responsif',
     checklist: [
       { item: 'screen', label: null, state: 'issue', note: 'retak kiri atas' },

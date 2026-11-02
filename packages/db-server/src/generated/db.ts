@@ -23,6 +23,25 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
+export interface ApprovalRequests {
+  amount: Int8;
+  basis: string;
+  decidedAt: Int8 | null;
+  decidedBy: string | null;
+  id: string;
+  inputJson: string;
+  kind: string;
+  note: string | null;
+  reason: string;
+  requestedAt: Int8;
+  requestedBy: string;
+  status: string;
+  storeId: string;
+  targetId: string;
+  targetType: string;
+  tenantId: string;
+}
+
 export interface AuthPermissionDenials {
   deviceId: string;
   id: string;
@@ -96,6 +115,7 @@ export interface Devices {
   lastSeq: Generated<Int8>;
   lastSyncAt: Int8 | null;
   name: string | null;
+  personalUserId: string | null;
   revokedAt: Int8 | null;
   revokedBy: string | null;
   signingKeyPublic: string;
@@ -322,6 +342,17 @@ export interface Permissions {
   scope: string;
 }
 
+export interface PersonSessions {
+  createdAt: Int8;
+  deviceId: string;
+  expiresAt: Int8;
+  id: string;
+  revokedAt: Int8 | null;
+  tenantId: string;
+  tokenHash: string;
+  userId: string;
+}
+
 export interface PhoneCatalogBrands {
   listedAt: Int8 | null;
   name: string;
@@ -369,6 +400,65 @@ export interface ProjectionWatermarks {
   appliedServerSeq: Generated<Int8>;
   moduleId: string;
   tenantId: string;
+}
+
+export interface PurchasingOrderLines {
+  itemId: string;
+  itemName: string;
+  orderId: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+}
+
+export interface PurchasingOrders {
+  cancelledAt: Int8 | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  note: string | null;
+  orderedAt: Int8 | null;
+  orderedBy: string | null;
+  orderNumber: string;
+  status: string;
+  storeId: string;
+  supplierId: string;
+  tenantId: string;
+  updatedAt: Int8;
+}
+
+export interface PurchasingReceiptLines {
+  itemId: string;
+  orderId: string;
+  position: number;
+  qty: number;
+  receiptId: string;
+  tenantId: string;
+}
+
+export interface PurchasingReceipts {
+  at: Int8;
+  id: string;
+  note: string | null;
+  orderId: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+}
+
+export interface PurchasingSuppliers {
+  archived: number;
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  name: string;
+  note: string | null;
+  phone: string | null;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
 }
 
 export interface PushTokens {
@@ -563,6 +653,7 @@ export interface RepairTickets {
   repairTypesJson: Generated<string>;
   returnedAt: Int8 | null;
   returnedBy: string | null;
+  statusCode: string | null;
   storeId: string;
   technicianId: string | null;
   tenantId: string;
@@ -670,6 +761,7 @@ export interface UserStores {
 }
 
 export interface DB {
+  approvalRequests: ApprovalRequests;
   authPermissionDenials: AuthPermissionDenials;
   authSessions: AuthSessions;
   conflicts: Conflicts;
@@ -691,11 +783,17 @@ export interface DB {
   notes: Notes;
   operations: Operations;
   permissions: Permissions;
+  personSessions: PersonSessions;
   phoneCatalogBrands: PhoneCatalogBrands;
   phoneModelPhotos: PhoneModelPhotos;
   phoneModels: PhoneModels;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
+  purchasingOrderLines: PurchasingOrderLines;
+  purchasingOrders: PurchasingOrders;
+  purchasingReceiptLines: PurchasingReceiptLines;
+  purchasingReceipts: PurchasingReceipts;
+  purchasingSuppliers: PurchasingSuppliers;
   pushTokens: PushTokens;
   qrisCharges: QrisCharges;
   qrisConnections: QrisConnections;

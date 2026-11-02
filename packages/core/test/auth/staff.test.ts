@@ -11,11 +11,15 @@ import {
   applyBundle,
   canManageMember,
   grantableRoles,
+  mayManageOwnerPin,
   readStaffDirectory,
+  resolveDisplayRoleKeys,
   settableLimitRoles,
   staffAdminFailure,
   StaffAdminError,
   staffDraftProblem,
+  STORE_ID_META_KEY,
+  writeMeta,
   type BundleUser,
   type DeviceBundle,
   type StaffMember,
@@ -131,6 +135,8 @@ describe('readStaffDirectory', () => {
       ['cashier', false],
       ['technician', false],
       ['manager', false],
+      // The notes-only base role is offered too, so the main owner can fill it in.
+      ['staff', false],
       ['store_owner', true],
     ]);
     expect(directory.members.map((m) => [m.name, m.active, m.owner, m.roleKeys.join('+')])).toEqual(
@@ -144,6 +150,27 @@ describe('readStaffDirectory', () => {
     );
     // Nobody in this bundle carries a PIN yet.
     expect(directory.members.every((m) => !m.hasPin)).toBe(true);
+  });
+});
+
+describe('an owner at another store', () => {
+  it('is an owner here too, though the roles shown are the ones held here', async () => {
+    const elsewhere: BundleUser = {
+      ...user('u-both', 'Ana', ['r-cashier']),
+      // The bundle carries an owner-role grant at another store, as the server judges owners there.
+      grants: [
+        { roleId: 'r-cashier', storeId: STORE },
+        { roleId: 'r-store', storeId: 'store-2' },
+      ],
+    };
+    const db = await seeded([user('u-so', 'Budi', ['r-store']), elsewhere]);
+    await writeMeta(db, STORE_ID_META_KEY, STORE);
+
+    const ana = (await readStaffDirectory(db)).members.find((m) => m.id === 'u-both');
+    expect(ana).toMatchObject({ owner: true, roleKeys: ['cashier'], roleIds: ['r-cashier'] });
+    expect(await resolveDisplayRoleKeys(db, 'u-both')).toEqual(['cashier']);
+    // This store's owner is not offered her PIN, which the server would refuse.
+    expect(await mayManageOwnerPin(db, 'u-so', 'u-both')).toBe(false);
   });
 });
 
@@ -193,11 +220,13 @@ describe('who may manage what', () => {
       'cashier',
       'technician',
       'manager',
+      'staff',
     ]);
     expect(grantableRoles(roles, mainOwner).map((r) => r.key)).toEqual([
       'cashier',
       'technician',
       'manager',
+      'staff',
       'store_owner',
     ]);
   });

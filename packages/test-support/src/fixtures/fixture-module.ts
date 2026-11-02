@@ -339,6 +339,7 @@ export function makeFixtureModuleManifest(
         apply: itemCreatedApplier,
         rule: null,
         permission: 'fixture.create',
+        read: 'fixture.read',
         entityType: 'fixture_item',
       },
     },

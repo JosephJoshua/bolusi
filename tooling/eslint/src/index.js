@@ -116,7 +116,13 @@ export default tseslint.config(
         'error',
         {
           allowFiles: ['packages/core/src/oplog/bookkeeping.ts'],
-          allowColumns: ['syncStatus', 'syncedAt', 'rejectionCode', 'rejectionReason'],
+          allowColumns: [
+            'syncStatus',
+            'syncedAt',
+            'rejectionCode',
+            'rejectionReason',
+            'rejectionHandledAt',
+          ],
         },
       ],
     },
@@ -131,6 +137,33 @@ export default tseslint.config(
       'bolusi/no-op-table-update': [
         'error',
         { allowFiles: ['packages/core/src/auth/carry-over.ts'] },
+      ],
+    },
+  },
+  {
+    // Permission-scoped sync drops PULLED ops a device may no longer read (another device's
+    // history, held only as a copy) and re-folds their records. The device's own ops, which its
+    // signing chain runs through, are never touched (the query requires arrival_seq IS NOT NULL).
+    // The server's log stays append-only.
+    name: 'bolusi/oplog-read-purge-allowlist',
+    files: ['packages/core/src/sync/read-purge.ts'],
+    rules: {
+      'bolusi/no-op-table-update': [
+        'error',
+        { allowFiles: ['packages/core/src/sync/read-purge.ts'] },
+      ],
+    },
+  },
+  {
+    // Least-privilege sync: once sent, the device's own changes of types it may not read keep
+    // only their chain links (id, hash, signature, seq); the signed text is cleared, and put back
+    // from the server if the device may read the type again. Nothing else in a row changes.
+    name: 'bolusi/oplog-held-text-allowlist',
+    files: ['packages/core/src/sync/device-reads.ts'],
+    rules: {
+      'bolusi/no-op-table-update': [
+        'error',
+        { allowFiles: ['packages/core/src/sync/device-reads.ts'] },
       ],
     },
   },
@@ -218,6 +251,33 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
+    },
+  },
+  {
+    // A live system font size change remounts only the text nodes, through @bolusi/ui's wrappers
+    // (packages/ui/src/text.tsx). A raw react-native Text keeps drawing at the old size.
+    name: 'bolusi/font-scaled-text',
+    files: [
+      'apps/mobile/**/*.{ts,tsx}',
+      'packages/modules/src/**/*.{ts,tsx}',
+      'packages/ui/src/**/*.{ts,tsx}',
+    ],
+    ignores: ['packages/ui/src/text.tsx', '**/*.test.{ts,tsx}', '**/test/**'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react-native',
+              importNames: ['Text', 'TextInput'],
+              allowTypeImports: true,
+              message:
+                'Use Text from @bolusi/ui (and its TextInput field), so text redraws at a new system font size.',
+            },
+          ],
+        },
+      ],
     },
   },
   {

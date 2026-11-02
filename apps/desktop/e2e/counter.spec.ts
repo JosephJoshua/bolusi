@@ -30,13 +30,21 @@ async function launch(flags: readonly string[] = FLAGS): Promise<void> {
       : { executablePath: INSTALLED, args: [...flags], env },
   );
   page = await app.firstWindow();
+  // Electron shows no dialog for an unload the page holds back (the close guard); Playwright still
+  // reports one, and answering it itself fails. Taking it over leaves the page's question alone.
+  page.on('dialog', (dialog) => void dialog.dismiss().catch(() => undefined));
   await page.getByTestId('repair.desk.board').waitFor();
 }
 
 test.beforeEach(() => launch());
 
 test.afterEach(async () => {
-  await app.close();
+  // Quits outright: a test may end with a dialog open, which the close guard would ask about.
+  // A test that closed the window itself has already quit the app.
+  await app
+    .evaluate(({ app: electronApp }) => setImmediate(() => electronApp.exit(0)))
+    .catch(() => undefined);
+  await app.close().catch(() => undefined);
 });
 
 test('Escape closes the dialog and keeps the servisan open; a second Escape closes it', async () => {
@@ -60,6 +68,7 @@ test('F2 does not start an intake while a dialog is open', async () => {
 });
 
 for (const [width, height] of [
+  [1024, 600],
   [1024, 640],
   [1280, 720],
   [1366, 768],
@@ -69,7 +78,7 @@ for (const [width, height] of [
 ] as const) {
   test(`the board fits a ${String(width)}×${String(height)} screen, with and without a servisan open`, async () => {
     await page.setViewportSize({ width, height });
-    const fits = async (): Promise<void> => {
+    const fits = async (paneOpen: boolean): Promise<void> => {
       const table = page.getByTestId('repair.desk.board.table');
       const overflow = await table.evaluate((grid) =>
         [...grid.querySelectorAll('[role="row"]')].some(
@@ -88,17 +97,33 @@ for (const [width, height] of [
           .map((name) => name!.textContent);
       });
       expect(cutNames).toEqual([]);
-      await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({ ratio: 1 });
+      // Every queue is in sight: the tabs wrap rather than scroll sideways.
+      const views = page.getByTestId('repair.desk.board.views');
+      expect(await views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1)).toBe(true);
+      await expect(page.getByTestId('repair.desk.board.views.active')).toBeInViewport({ ratio: 1 });
+      // Every filter shows whole: none runs under the toolbar's faded edge.
+      const filters = page.getByTestId('repair.desk.board.filters').locator('> div').first();
+      expect(await filters.evaluate((row) => row.scrollWidth <= row.clientWidth + 1)).toBe(true);
+      if (paneOpen) {
+        // The servisan sits beside the table, never over part of it (its pane shows the total).
+        const tableBox = (await table.boundingBox())!;
+        const paneBox = (await page.getByTestId('repair.desk.ticket').boundingBox())!;
+        expect(paneBox.x).toBeGreaterThanOrEqual(tableBox.x + tableBox.width - 1);
+      } else {
+        await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({
+          ratio: 1,
+        });
+      }
       // Only the table and the pane scroll; the window never does, so paging stays in reach.
       expect(
         await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight),
       ).toBe(true);
       await expect(page.getByTestId('repair.desk.board.pagination')).toBeInViewport({ ratio: 1 });
     };
-    await fits();
+    await fits(false);
     await page.getByText('Maria Kogoya').click();
     await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();
-    await fits();
+    await fits(true);
   });
 }
 
@@ -137,6 +162,28 @@ for (const [width, height, sidebar] of [
   });
 }
 
+test('an owner sees every queue beside an open servisan on a 1366×768 screen', async () => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.getByTestId('desktop.person').click();
+  await page.getByRole('menuitem', { name: 'Yosua Wonda' }).click();
+  await page.getByTestId('repair.desk.board.views.cancelled').click();
+  await page.getByText('Lince Wakerkwa').click();
+  await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();
+  const views = page.getByTestId('repair.desk.board.views');
+  // Measured once the pane and the approvals count have settled, not mid-layout.
+  await expect
+    .poll(() => views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1))
+    .toBe(true);
+  for (const view of ['active', 'cancelled']) {
+    await expect(page.getByTestId(`repair.desk.board.views.${view}`)).toBeInViewport({ ratio: 1 });
+  }
+  // Nor is a filter cut off at the toolbar's edge.
+  await expect(page.getByTestId('repair.desk.filter.priceWaiting')).toBeInViewport({ ratio: 1 });
+  const toolbar = (await page.getByTestId('repair.desk.board.filters').boundingBox())!;
+  const price = (await page.getByTestId('repair.desk.filter.priceWaiting').boundingBox())!;
+  expect(price.x + price.width).toBeLessThanOrEqual(toolbar.x + toolbar.width);
+});
+
 test('a phone nobody collected shows in its own list, and the message opens WhatsApp outside the app', async () => {
   // Stands in for the OS: records what the app asked to open instead of starting a browser.
   await app.evaluate(({ shell }) => {
@@ -158,7 +205,7 @@ test('a phone nobody collected shows in its own list, and the message opens What
   expect(app.windows()).toHaveLength(1);
 });
 
-test('the page gets only the narrow print, update, window and core calls, through the real preload', async () => {
+test('the page gets only the narrow print, update, startup, camera, window and core calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;
     return {
@@ -166,15 +213,19 @@ test('the page gets only the narrow print, update, window and core calls, throug
       printers: bridge?.['printers'] === undefined ? null : Object.keys(bridge['printers']).sort(),
       core: bridge?.['core'] === undefined ? null : Object.keys(bridge['core']).sort(),
       window: bridge?.['window'] === undefined ? null : Object.keys(bridge['window']).sort(),
+      startup: bridge?.['startup'] === undefined ? null : Object.keys(bridge['startup']).sort(),
+      media: bridge?.['media'] === undefined ? null : Object.keys(bridge['media']).sort(),
       node: typeof (window as { require?: unknown }).require,
       process: typeof (window as { process?: unknown }).process,
     };
   });
   expect(shape).toEqual({
-    keys: ['core', 'printers', 'updates', 'window'],
+    keys: ['core', 'media', 'printers', 'startup', 'updates', 'window'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
     core: ['connect'],
     window: ['fullscreen', 'onFullscreenChange'],
+    startup: ['get', 'set'],
+    media: ['choices', 'choose'],
     node: 'undefined',
     process: 'undefined',
   });
@@ -353,4 +404,28 @@ test('the title bar is ours, but minimise, maximise, close and snapping stay Win
   await expect(bar).toHaveAttribute('data-fullscreen', 'true');
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setFullScreen(false));
   await expect(bar).not.toHaveAttribute('data-fullscreen');
+});
+
+test('closing the window with a dialog open asks first; "Tutup" closes it', async () => {
+  await page.getByText('Maria Kogoya').click();
+  await page.getByTestId('repair.desk.ticket.action.decidePrice').click();
+  await expect(page.getByTestId('repair.desk.proposal')).toBeVisible();
+  const closeWindow = (): Promise<void> =>
+    app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+
+  await closeWindow();
+  await expect(page.getByTestId('desktop.closeGuard')).toContainText('Tutup Bolusi?');
+  await page.getByTestId('desktop.closeGuard.cancel').click();
+  await expect(page.getByTestId('repair.desk.proposal')).toBeVisible();
+
+  await closeWindow();
+  const closed = page.waitForEvent('close');
+  await page.getByTestId('desktop.closeGuard.confirm').click();
+  await closed;
+});
+
+test('closing the window with nothing open closes it at once', async () => {
+  const closed = page.waitForEvent('close');
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await closed;
 });

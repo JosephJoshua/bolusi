@@ -9,10 +9,13 @@
  */
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/schemas';
+import { markFresh } from '@bolusi/ui/fresh';
 
+import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import { demoApprovals } from '../approvals/demo.js';
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
-import { MONEY_PERMISSION } from '../money/constants.js';
+import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, MONEY_PERMISSION } from '../money/constants.js';
 import { demoMoneyLedger, demoQris } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
@@ -21,8 +24,11 @@ import {
   ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
-import { partsInWork } from './flows.js';
+import { normalizePhone } from './contact.js';
+import { partsInWork, ticketMoneyTarget, undoableHandover } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
+import { PURCHASING_PERMISSION } from '../purchasing/constants.js';
+import { demoPurchasingRuntime } from '../purchasing/demo.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
@@ -37,8 +43,11 @@ import {
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { refundsFor } from './commands.js';
 import { amountOwed } from './flows.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { REPAIR_REFUSALS, claimProblem, freeHandoverNeedsOwner } from './rules.js';
+import { statusCodeFor } from './status-link.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -68,7 +77,12 @@ export const DEMO_REPAIR_ROLES = {
   owner: {
     userId: 'u-andi',
     name: 'Andi Pratama',
-    permissions: [...Object.values(P), ...Object.values(I), ...Object.values(M)],
+    permissions: [
+      ...Object.values(P),
+      ...Object.values(I),
+      ...Object.values(M),
+      PURCHASING_PERMISSION.buy,
+    ],
   },
   counter: {
     userId: 'u-siti',
@@ -300,8 +314,12 @@ function ticket(spec: {
   returnedBy?: string;
   /** Hours since it was marked repaired; a cancel is ready to collect when it was cancelled. */
   readyHoursAgo?: number;
+  /** When it went home, for a returned one; else 40 hours after intake. */
+  returnedHoursAgo?: number;
   /** Repair type ids from the default list. */
   repairTypes?: readonly string[];
+  /** What its handover gives back through each method. */
+  refunds?: TicketDetailRow['refunds'];
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -313,7 +331,7 @@ function ticket(spec: {
     deviceBrand: spec.brand,
     deviceModel: spec.model,
     deviceColor: spec.color,
-    deviceImei: '356789104455667',
+    deviceImei: '356789104455660',
     complaint: spec.complaint,
     outcome: spec.outcome,
     location: spec.location ?? 'in_store',
@@ -353,15 +371,29 @@ function ticket(spec: {
     claimOfTicketId: null,
     claimOf: null,
     claims: [],
+    // A fixed code per demo servisan, so a preview's QR and link stay the same between reloads. The
+    // demo has no crypto port, and its codes only need to differ, so the "hash" is the input's tail.
+    statusCode: statusCodeFor(
+      { tenantId: 'demo', storeId: 'demo', ticketId: spec.id },
+      '',
+      (data) => data.subarray(-8),
+    ),
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',
     createdByName: 'Siti Rahayu',
     returnedBy: spec.returnedBy ?? null,
     returnedByName: spec.returnedBy === undefined ? null : (NAMES.get(spec.returnedBy) ?? null),
-    returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
+    returnedAt:
+      spec.returnedBy === undefined
+        ? null
+        : spec.returnedHoursAgo === undefined
+          ? createdAt + 40 * HOUR
+          : HARNESS_NOW - spec.returnedHoursAgo * HOUR,
     downPayment: spec.downPayment ?? null,
+    reduced: 0,
     slipPrints: { intake: 1, handover: 0 },
+    refunds: spec.refunds ?? [],
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
     events: [
@@ -370,6 +402,7 @@ function ticket(spec: {
         kind: 'repair.ticket_opened',
         actorId: 'u-siti',
         actorName: 'Siti Rahayu',
+        technicianName: null,
         at: createdAt,
         detail: {},
       },
@@ -473,6 +506,15 @@ function seedTickets(): TicketDetailRow[] {
       hoursAgo: 90,
       extraPhotos: [photoRow('before:m6')],
       downPayment: 100_000,
+      // The DP came in partly by QRIS, so part of what goes back goes back through it.
+      refunds: [
+        { account: 'cash', name: null, amount: 20_000 },
+        {
+          account: 'account:01920000-0000-7000-8000-00000000a001',
+          name: 'QRIS BCA',
+          amount: 30_000,
+        },
+      ],
       cancel: {
         fee: 50_000,
         standardFee: 50_000,
@@ -560,6 +602,8 @@ function seedTickets(): TicketDetailRow[] {
       readyHoursAgo: 7 * 24,
       location: 'returned',
       returnedBy: 'u-siti',
+      // Picked up this morning: recent enough that an owner can still take the handover back.
+      returnedHoursAgo: 2,
       extraPhotos: [photoRow('before:m12'), photoRow('after:m13')],
     }),
   ].map(withTotals);
@@ -861,10 +905,16 @@ export function demoRepairRuntime(
   ) => {
     // The one rule every step but the handover shares (repair rules.ts): a change that raced a
     // cancel or a handover on another device is refused with its own reason, as on a phone.
+    // Taking a handover back, correcting a cancelled servisan's details and changing its fee check
+    // their own.
     const current = find(ticketId);
-    if (kind !== 'repair.device_returned') {
+    // Changing a cancelled servisan's fee is about the cancel itself, before or after pickup.
+    const lifecycle = kind === 'repair.device_returned' || kind === 'repair.handover_reversed';
+    if (!lifecycle && kind !== 'repair.cancel_fee_changed') {
       if (current.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
-      if (current.outcome === 'cancelled') throw REPAIR_REFUSALS.refuse('cancelled');
+      if (current.outcome === 'cancelled' && kind !== 'repair.ticket_details_corrected') {
+        throw REPAIR_REFUSALS.refuse('cancelled');
+      }
     }
     tickets = tickets.map((t) =>
       t.id === ticketId
@@ -879,6 +929,8 @@ export function demoRepairRuntime(
                 kind,
                 actorId: actor.userId,
                 actorName: actor.name,
+                technicianName:
+                  kind === 'repair.technician_assigned' ? (patch.technicianName ?? null) : null,
                 at: HARNESS_NOW,
                 detail,
               },
@@ -1086,6 +1138,8 @@ export function demoRepairRuntime(
         const problem = claimProblem(find(claimOf), {
           customerId: customer.customerId ?? '',
           imei: (input['device'] as { imei?: string | null }).imei ?? null,
+          brand: device.brand,
+          model: device.model,
           repairTypes: (input['repairTypes'] as string[] | undefined) ?? [],
           total: lines.reduce((sum, l) => sum + l.amount, 0),
           at: HARNESS_NOW,
@@ -1112,6 +1166,7 @@ export function demoRepairRuntime(
             kind: 'repair.ticket_opened',
             actorId: actor.userId,
             actorName: actor.name,
+            technicianName: null,
             at: HARNESS_NOW,
             detail: {},
           },
@@ -1135,6 +1190,7 @@ export function demoRepairRuntime(
         createdAt: HARNESS_NOW,
         downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
         slipPrints: { intake: 0, handover: 0 },
+        refunds: [],
         quoteLines: lines.map((l) =>
           line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
         ),
@@ -1184,16 +1240,30 @@ export function demoRepairRuntime(
     },
     cancelTicket: (input) => {
       const t = find(String(input['ticketId']));
+      if (t.returnedAt !== null) throw REPAIR_REFUSALS.refuse('handedOverBefore');
       return update(t.id, 'repair.ticket_cancelled', {
         outcome: 'cancelled',
         outcomeNote: String(input['reason']),
-        cancelFee: Number(input['fee']),
+        // Left out, the store's fee for the ticket's stage, as the command does.
+        cancelFee:
+          input['fee'] === undefined ? standardCancelFee(t, cancelFees) : Number(input['fee']),
         cancelStandardFee: standardCancelFee(t, cancelFees),
         cancelledBy: actor.userId,
         cancelledByName: actor.name,
         cancelledAt: HARNESS_NOW,
         readyAt: HARNESS_NOW,
       });
+    },
+    changeCancelFee: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.outcome !== 'cancelled') throw REPAIR_REFUSALS.refuse('notCancelled');
+      const fee = Number(input['fee']);
+      return update(
+        t.id,
+        'repair.cancel_fee_changed',
+        { cancelFee: fee },
+        { fee, reason: String(input['reason']) },
+      );
     },
     setUncollectedDays: (input) => {
       uncollectedLimit = Number(input['days']);
@@ -1295,15 +1365,17 @@ export function demoRepairRuntime(
       const note = String(input['note'] ?? '');
       const problem = handoverProblem(checklist, t.peripherals, note);
       if (problem !== null) throw REPAIR_REFUSALS.refuse(problem);
+      settleInLedger(t, (input['payments'] as { account: string; amount: number }[]) ?? []);
       return update(
         t.id,
         'repair.device_returned',
         {
           downPayment: paid === 0 ? null : paid,
           location: 'returned',
+          refunds: [],
           returnedBy: actor.userId,
           returnedByName: actor.name,
-          returnedAt: HARNESS_NOW,
+          returnedAt: t.returnedAt ?? HARNESS_NOW,
           photos: [
             ...t.photos,
             photoRow('handover', input['handoverPhoto'] as MediaRef),
@@ -1311,6 +1383,98 @@ export function demoRepairRuntime(
           ],
         },
         { note, checklist },
+      );
+    },
+    undoHandover: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location !== 'returned') throw REPAIR_REFUSALS.refuse('notReturned');
+      if (!undoableHandover(t, HARNESS_NOW)) throw REPAIR_REFUSALS.refuse('undoTooLate');
+      return update(
+        t.id,
+        'repair.handover_reversed',
+        {
+          location: 'in_store',
+          returnedBy: null,
+          returnedByName: null,
+          photos: t.photos.filter((p) => p.slot !== 'handover' && p.slot !== 'signature'),
+        },
+        { reason: String(input['reason']) },
+      );
+    },
+    // The demo keeps one record per servisan: the customer's name and number change on it.
+    correctTicketDetails: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
+      const handedOver = t.returnedAt !== null;
+      if (handedOver && input['customer'] !== undefined) {
+        throw REPAIR_REFUSALS.refuse('handedOverBefore');
+      }
+      const given = input['customer'] as
+        { name: string; phone: string | null } | { customerId: string } | undefined;
+      // A picked customer is known by their other servisans here.
+      const picked =
+        given !== undefined && 'customerId' in given
+          ? tickets.find((other) => other.customerId === given.customerId)
+          : undefined;
+      const customer =
+        picked !== undefined
+          ? { name: picked.customerName, phone: picked.customerPhone }
+          : given !== undefined && 'name' in given
+            ? given
+            : undefined;
+      const device = input['device'] as
+        { brand: string; model: string; color?: string; imei?: string | null } | undefined;
+      const changes: { field: string; from?: string | null; to?: string | null }[] = [];
+      const note = (field: string, from: string | null, to: string | null): void => {
+        if (from !== to) changes.push({ field, from, to });
+      };
+      const phone = customer?.phone == null ? null : normalizePhone(customer.phone);
+      if (customer !== undefined) {
+        note('customerName', t.customerName, customer.name);
+        note('customerPhone', t.customerPhone, phone);
+      }
+      if (device !== undefined) {
+        note('brand', t.deviceBrand, device.brand);
+        note('model', t.deviceModel, device.model);
+        note('color', t.deviceColor, device.color ?? '');
+        note('imei', t.deviceImei, device.imei ?? null);
+      }
+      const passcode = input['passcode'] as string | null | undefined;
+      if (passcode !== undefined && passcode !== t.devicePasscode)
+        changes.push({ field: 'passcode' });
+      const complaint = input['complaint'] as string | undefined;
+      if (complaint !== undefined) note('complaint', t.complaint, complaint);
+      const peripherals = input['peripherals'] as TicketDetailRow['peripherals'] | undefined;
+      if (
+        peripherals !== undefined &&
+        JSON.stringify(peripherals) !== JSON.stringify(t.peripherals)
+      ) {
+        changes.push({ field: 'peripherals' });
+      }
+      if (changes.length === 0) throw REPAIR_REFUSALS.refuse('nothingChanged');
+      const phoneChanged = changes.some((c) => ['brand', 'model', 'imei'].includes(c.field));
+      if (phoneChanged && (handedOver || t.claimOfTicketId !== null)) {
+        throw REPAIR_REFUSALS.refuse(handedOver ? 'handedOverBefore' : 'claimSamePhone');
+      }
+      return update(
+        t.id,
+        'repair.ticket_details_corrected',
+        {
+          ...(customer === undefined ? {} : { customerName: customer.name, customerPhone: phone }),
+          ...(picked === undefined ? {} : { customerId: picked.customerId }),
+          ...(device === undefined
+            ? {}
+            : {
+                deviceBrand: device.brand,
+                deviceModel: device.model,
+                deviceColor: device.color ?? '',
+                deviceImei: device.imei ?? null,
+              }),
+          ...(passcode === undefined ? {} : { devicePasscode: passcode }),
+          ...(complaint === undefined ? {} : { complaint }),
+          ...(peripherals === undefined ? {} : { peripherals }),
+        },
+        { changes, reason: String(input['reason'] ?? '') },
       );
     },
   };
@@ -1376,11 +1540,16 @@ export function demoRepairRuntime(
   const colleague = (name: string, input: Input): unknown => {
     const self = actor;
     actor = DEMO_REPAIR_ROLES.owner;
+    let result: unknown;
     try {
-      return commands[name]!(input);
+      result = commands[name]!(input);
     } finally {
       actor = self;
     }
+    // Arrived "by sync", so it glows where it shows, as a pulled change does.
+    const ticketId = (result as { ticketId?: unknown } | null)?.ticketId;
+    if (typeof ticketId === 'string') markFresh(ticketId);
+    return result;
   };
   if (browser.window !== undefined) {
     browser.window[DEMO_COLLEAGUE_HOOK] = { run: colleague };
@@ -1390,7 +1559,6 @@ export function demoRepairRuntime(
   // reviewer sees the very page a phone would print. "Share" downloads the same page.
   const printing: RepairPrinting = {
     storeName: () => Promise.resolve('Bolusi Wamena'),
-    userName: () => Promise.resolve(actor.name),
     readPaper: () => Promise.resolve(paper),
     writePaper: (next) => {
       paper = next;
@@ -1447,6 +1615,8 @@ export function demoRepairRuntime(
       now,
       accounts: DEMO_ACCOUNTS,
       actor: () => actor.userId,
+      nameOf: (userId) => NAMES.get(userId) ?? null,
+      mayRefund: () => permitted.has(MONEY_PERMISSION.refund),
       debt:
         unpaid === undefined
           ? undefined
@@ -1476,15 +1646,238 @@ export function demoRepairRuntime(
       }
     },
   });
-  let permitted = new Set<string>(actor.permissions);
+  /**
+   * The handover as the ledger records it: the charge, a DP taken by hand before it (in cash) and
+   * what was paid now, so money can go back or the bill come down afterwards.
+   */
+  function settleInLedger(
+    t: TicketDetailRow,
+    payments: readonly { readonly account: string; readonly amount: number }[],
+    at?: number,
+  ): void {
+    const document = { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber };
+    const owed = amountOwed(t);
+    if ((ledger.documentMoney(t.id)?.charged ?? 0) > 0) return;
+    if (owed > 0) ledger.recordCharge({ document, amount: owed, at });
+    const byHand = (t.downPayment ?? 0) - (ledger.documentMoney(t.id)?.paid ?? 0);
+    const all = byHand > 0 ? [{ account: CASH_ACCOUNT, amount: byHand }, ...payments] : payments;
+    all.forEach((payment, n) => {
+      ledger.recordPayment({ id: `m-${t.id}-${String(n)}`, document, ...payment, at });
+    });
+    // As the real handover: what was paid beyond the bill goes back through how it came in.
+    const money = ledger.documentMoney(t.id);
+    if (money === null || money.balance >= 0) return;
+    for (const refund of refundsFor(money, -money.balance, money.charged - money.reduced)) {
+      void ledger.run('refund', {
+        document,
+        ...refund,
+        reason: HANDOVER_REFUND_REASON,
+        reference: null,
+      });
+    }
+  }
+  // What went home before today was paid in full at the counter, except the one debt.
+  tickets = tickets.map((t) => {
+    if (t.location !== 'returned' || t.id === unpaid?.id || amountOwed(t) <= 0) return t;
+    const paidUp = { ...t, downPayment: amountOwed(t) };
+    settleInLedger(paidUp, [], t.returnedAt ?? t.createdAt);
+    return paidUp;
+  });
+  // A DP still waiting at the counter is in the ledger as the cash it came in as, so a handover
+  // shows what goes back through what, as on a real device.
+  for (const t of tickets) {
+    if (t.location === 'returned' || (t.downPayment ?? 0) <= 0) continue;
+    if ((ledger.documentMoney(t.id)?.paid ?? 0) > 0) continue;
+    ledger.recordPayment({
+      id: `m-${t.id}-dp`,
+      document: { kind: REPAIR_DOCUMENT_KIND, id: t.id, label: t.ticketNumber },
+      account: CASH_ACCOUNT,
+      amount: t.downPayment!,
+      at: t.createdAt,
+    });
+  }
+  /** A servisan's money as the ledger has it now: Kas and refunds change it after pickup. */
+  function syncTicketMoney(documentId: string): void {
+    const recorded = ledger.documentMoney(documentId);
+    if (recorded === null || recorded.charged === 0) return;
+    tickets = tickets.map((t) =>
+      t.id === documentId
+        ? {
+            ...t,
+            downPayment: recorded.paid === 0 ? null : recorded.paid,
+            reduced: recorded.reduced,
+          }
+        : t,
+    );
+  }
+  // Everyone asks for and answers approvals; the decision's own permission says what.
+  let permitted = new Set<string>([...actor.permissions, APPROVAL_PERMISSION.use]);
+  const approvals = demoApprovals({
+    kinds: {
+      'repair.discount': {
+        permission: P.discount,
+        commandPermission: P.quoteChange,
+        amount: (input) => -Number(input['amount']),
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['changeQuote']!(input),
+      },
+      'repair.cancel': {
+        permission: P.cancel,
+        commandPermission: P.cancel,
+        amount: (input) => {
+          const standard = standardCancelFee(find(String(input['ticketId'])), cancelFees);
+          return Math.max(0, standard - Number(input['fee'] ?? standard));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['cancelTicket']!(input),
+      },
+      // A cancelled servisan's fee lowered before pickup, beyond a manager's limit.
+      'repair.cancelFee': {
+        permission: P.cancel,
+        commandPermission: P.cancel,
+        amount: (input) => {
+          const standard = standardCancelFee(find(String(input['ticketId'])), cancelFees);
+          return Math.max(0, standard - Number(input['fee']));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['changeCancelFee']!(input),
+      },
+      // The same once charged: the bill comes down to the fee, as the ledger takes it off.
+      'repair.cancelFeeCharged': {
+        permission: P.cancel,
+        commandPermission: P.cancel,
+        limitPermission: MONEY_PERMISSION.refund,
+        amount: (input) => {
+          const money = ledger.documentMoney(String(input['ticketId']));
+          return money === null
+            ? 0
+            : Math.max(0, money.charged - money.reduced - Number(input['fee']));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: async (input) => {
+          const t = find(String(input['ticketId']));
+          const money = ledger.documentMoney(t.id);
+          const result = await ledger.run('reduceCharge', {
+            document: ticketMoneyTarget(t).document,
+            amount: Math.max(
+              0,
+              (money?.charged ?? 0) - (money?.reduced ?? 0) - Number(input['fee']),
+            ),
+            reason: input['reason'],
+          });
+          syncTicketMoney(t.id);
+          return result;
+        },
+      },
+      // A permit: approving changes nothing until the counter hands the phone over.
+      'repair.payLater': {
+        permission: MONEY_PERMISSION.extendCredit,
+        commandPermission: MONEY_PERMISSION.extendCredit,
+        amount: (input) => {
+          const t = find(String(input['ticketId']));
+          return Math.max(0, amountOwed(t) - (t.downPayment ?? 0));
+        },
+        targetId: (input) => String(input['ticketId']),
+        apply: () => null,
+      },
+      // The demo counts a fix through the same method: what the DP goes down by.
+      'repair.downPayment': {
+        permission: P.correctDownPayment,
+        commandPermission: P.correctDownPayment,
+        limitPermission: MONEY_PERMISSION.voidPayment,
+        amount: (input) =>
+          Math.max(0, (find(String(input['ticketId'])).downPayment ?? 0) - Number(input['amount'])),
+        targetId: (input) => String(input['ticketId']),
+        apply: (input) => commands['correctDownPayment']!(input),
+      },
+      // A payment cancelled from Kas, asked about its servisan.
+      'money.voidPayment': {
+        permission: MONEY_PERMISSION.voidPayment,
+        commandPermission: MONEY_PERMISSION.voidPayment,
+        amount: (input) =>
+          ledger
+            .documentMoney(String((input['document'] as { id: string }).id))
+            ?.entries.find((e) => e.id === input['entryId'])?.amount ?? 0,
+        targetId: (input) => String((input['document'] as { id: string }).id),
+        apply: async (input) => {
+          const result = await ledger.run('voidPayment', {
+            entryId: input['entryId'],
+            reason: input['reason'],
+          });
+          syncTicketMoney(String((input['document'] as { id: string }).id));
+          return result;
+        },
+      },
+      // Money given back or taken off the bill beyond a manager's limit, asked on the servisan.
+      'money.refund': {
+        permission: MONEY_PERMISSION.refund,
+        commandPermission: MONEY_PERMISSION.receive,
+        amount: (input) => Number(input['amount'] ?? 0),
+        targetId: (input) => String((input['document'] as { id: string }).id),
+        apply: async (input) => {
+          const refund = { ...input };
+          delete refund['methodLabel'];
+          const result = await ledger.run('refund', refund);
+          syncTicketMoney(String((input['document'] as { id: string }).id));
+          return result;
+        },
+      },
+      'money.reduceCharge': {
+        permission: MONEY_PERMISSION.refund,
+        commandPermission: MONEY_PERMISSION.refund,
+        amount: (input) => Number(input['amount'] ?? 0),
+        targetId: (input) => String((input['document'] as { id: string }).id),
+        apply: async (input) => {
+          const result = await ledger.run('reduceCharge', input);
+          syncTicketMoney(String((input['document'] as { id: string }).id));
+          return result;
+        },
+      },
+    },
+    actor: () => ({ userId: actor.userId, name: actor.name, can: (id) => permitted.has(id) }),
+    now: () => HARNESS_NOW,
+    notify,
+    // The counter asked for a discount on the first servisan, waiting for an owner.
+    seed: [
+      {
+        kind: 'repair.discount',
+        input: {
+          ticketId: 't-1',
+          kind: 'discount',
+          description: 'Diskon pelanggan tetap',
+          amount: -25_000,
+          reason: 'Pelanggan tetap, sudah 3 kali servis di sini',
+          customerAgreed: false,
+        },
+        reason: 'Pelanggan tetap, sudah 3 kali servis di sini',
+        by: DEMO_REPAIR_ROLES.counter,
+        at: HARNESS_NOW - 20 * 60_000,
+      },
+    ],
+  });
+  // Orders to suppliers: a delivery received lands on the shelf above.
+  const purchasing = demoPurchasingRuntime({
+    now: HARNESS_NOW,
+    actor: () => actor,
+    inventory,
+    storeName: 'Bolusi Wamena',
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    notify,
+  });
   const runtime = {
     inventory,
+    purchasing,
+    // The demo keeps no log; the apps wire their diagnostics channel.
+    diagnostics: { warn: () => {} },
     get userId() {
       return actor.userId;
     },
     actAs: (next: DemoRepairRole) => {
       actor = DEMO_REPAIR_ROLES[next];
-      permitted = new Set<string>(actor.permissions);
+      permitted = new Set<string>([...actor.permissions, APPROVAL_PERMISSION.use]);
       notify();
     },
     query: (name: string, input: Input) => queries[name]!(input),
@@ -1532,12 +1925,30 @@ export function demoRepairRuntime(
         return ledger.query(name, input);
       },
       qris,
-      run: (name: string, input: Input) => ledger.run(name, input),
+      run: async (name: string, input: Input) => {
+        const result = await ledger.run(name, input);
+        const document = input['document'] as { readonly id: string } | undefined;
+        if (document !== undefined) syncTicketMoney(document.id);
+        else if (name === 'voidPayment') tickets.forEach((t) => syncTicketMoney(t.id));
+        notify();
+        return result;
+      },
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
       limitOf: (id: string) => demoLimitOf(actor, permitted, id),
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
       stores: () => Promise.resolve(DEMO_STORES),
+      get userId() {
+        return actor.userId;
+      },
+    },
+    approvals: {
+      query: approvals.query,
+      run: approvals.run,
+      hasPermission: (id: string) => permitted.has(id),
+      colleagueHasPermission: () => false,
+      limitOf: (id: string) => demoLimitOf(actor, permitted, id),
+      newId: () => `a-new-${String(Math.random()).slice(2, 10)}`,
       get userId() {
         return actor.userId;
       },
@@ -1552,6 +1963,8 @@ export function demoRepairRuntime(
     playVideo: () => Promise.resolve(),
     printing,
     loadModelPhoto: demoModelPhoto,
+    // An example site, so the demo's slips and servisan show a link as a store's would.
+    statusSite: 'https://bolusi.example',
     loadThumbnail: (ref: ThumbnailRef) =>
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.

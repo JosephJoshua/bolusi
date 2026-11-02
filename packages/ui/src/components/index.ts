@@ -11,6 +11,7 @@
  */
 export { Avatar } from './Avatar.js';
 export { Banner } from './Banner.js';
+export { BrandMark } from './BrandMark.js';
 export { Button } from './Button.js';
 export { Card } from './Card.js';
 export { Chip } from './Chip.js';
@@ -26,6 +27,7 @@ export { Icon } from './Icon.js';
 export { List } from './List.js';
 export { ListRow } from './ListRow.js';
 export { LoadingState } from './LoadingState.js';
+export { FreshGlow } from './FreshGlow.js';
 export { OutcomeState } from './OutcomeState.js';
 export { PhotoSlot } from './PhotoSlot.js';
 export { PatternLock } from './PatternLock.js';
@@ -33,6 +35,7 @@ export { PhotoStrip } from './PhotoStrip.js';
 export { PhotoViewer } from './PhotoViewer.js';
 export { PinPad } from './PinPad.js';
 export { QrCode } from './QrCode.js';
+export { RollingText } from './RollingText.js';
 export { QuantityStepper } from './QuantityStepper.js';
 export { ReorderableList } from './ReorderableList.js';
 export { SearchField } from './SearchField.js';

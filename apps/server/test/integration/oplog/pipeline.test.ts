@@ -489,6 +489,82 @@ describe('scope validation (05 §9)', () => {
   });
 });
 
+describe('a personal device writes only as its person (migration 0031)', () => {
+  /** A world whose device is set up as `personId`'s own phone, the owner having enrolled it. */
+  async function personalWorld(seed: number, status: 'active' | 'deactivated' = 'active') {
+    const { world, builder } = await setupWorld(seed);
+    const personId = testId(98);
+    await seedUser(testDb.db, world.tenantId, personId, status);
+    await grantAllPermissions(testDb.db, world.tenantId, personId);
+    await testDb.db
+      .updateTable('devices')
+      .set({ personalUserId: personId })
+      .where('id', '=', world.deviceId)
+      .execute();
+    return { world, builder, personId };
+  }
+
+  test('the owner’s genesis and the person’s own ops land; an op signed as anyone else is tamper', async () => {
+    const { world, builder, personId } = await personalWorld(1057);
+    // The owner who set the phone up signs its genesis.
+    const genesis = builder.genesis();
+    const own = builder.append({ ...note('a', 'b'), userId: personId });
+    const forged = builder.append(note('c', 'd'));
+    const after = builder.append({ ...note('e', 'f'), userId: personId });
+    const deps = makeDeps({ forTenant: testDb.appForTenant });
+
+    const result = await processPushBatch(deps, identityOf(world), [genesis, own, forged, after]);
+
+    expect(result.results.map((r) => r.status)).toEqual([
+      'accepted',
+      'accepted',
+      'rejected',
+      'accepted',
+    ]);
+    expect(result.results[2]).toMatchObject({
+      code: 'SCOPE_VIOLATION',
+      reason: expect.stringContaining('personal device'),
+    });
+    expect((await readAnomalies(testDb.db, world.deviceId)).map((a) => a.kind)).toEqual([
+      'SCOPE_VIOLATION',
+    ]);
+    // The forgery never reached the log.
+    expect((await readOps(testDb.db, world.tenantId)).map((row) => row.id)).not.toContain(
+      forged.id,
+    );
+  });
+
+  test('once its person is deactivated, the phone writes nothing: not as them, not as anyone', async () => {
+    const { world, builder, personId } = await personalWorld(1058, 'deactivated');
+    const genesis = builder.genesis();
+    const own = builder.append({ ...note('a', 'b'), userId: personId });
+    const forged = builder.append(note('c', 'd'));
+    const deps = makeDeps({ forTenant: testDb.appForTenant });
+
+    const result = await processPushBatch(deps, identityOf(world), [genesis, own, forged]);
+
+    expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'PERMISSION_DENIED' });
+    expect(result.results[2]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+  });
+
+  test('a shared device still takes ops from anyone in the business', async () => {
+    const { world, builder } = await setupWorld(1059);
+    const otherId = testId(97);
+    await seedUser(testDb.db, world.tenantId, otherId, 'active');
+    await grantAllPermissions(testDb.db, world.tenantId, otherId);
+    const ops = [
+      builder.genesis(),
+      builder.append(note('a', 'b')),
+      builder.append({ ...note('c', 'd'), userId: otherId }),
+    ];
+    const deps = makeDeps({ forTenant: testDb.appForTenant });
+
+    const result = await processPushBatch(deps, identityOf(world), ops);
+
+    expect(result.results.map((r) => r.status)).toEqual(['accepted', 'accepted', 'accepted']);
+  });
+});
+
 describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
   test('auth.device_enrolled at seq != 1 is SCOPE_VIOLATION', async () => {
     const { world, builder } = await setupWorld(1060);
@@ -607,7 +683,7 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
   });
 
   test('auth.pin_reset targeting a main_owner by a non-main_owner actor is SCOPE_VIOLATION', async () => {
-    const { world, builder } = await setupWorld(1066);
+    const { world, builder } = await setupWorld(1066, { grants: 'none' });
     const genesis = builder.genesis();
     const mainOwnerId = testId(128);
     await seedUser(testDb.db, world.tenantId, mainOwnerId);
@@ -641,7 +717,46 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
 
     // Blocks store_owner → main_owner impersonation (api/02-auth §6.6).
     expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+    // Not tamper: a device whose bundle predates the target becoming an owner sends this honestly.
+    expect(await readAnomalies(testDb.db, world.deviceId)).toEqual([]);
   });
+
+  test.each([
+    { type: 'auth.pin_reset', seed: 1090 },
+    { type: 'auth.pin_lockout_cleared', seed: 1091 },
+  ])(
+    '$type targeting a peer store owner by a store owner is SCOPE_VIOLATION',
+    async ({ type, seed }) => {
+      const { world, builder } = await setupWorld(seed, { grants: 'none' });
+      const genesis = builder.genesis();
+      const peerId = testId(seed * 10);
+      await seedUser(testDb.db, world.tenantId, peerId);
+      // Both hold the same store_owner role: power over accounts, but not the main owner.
+      for (const userId of [peerId, world.userId]) {
+        await grantRole(testDb.db, {
+          tenantId: world.tenantId,
+          userId,
+          roleId: testId(seed * 10 + 1),
+          roleName: 'store_owner',
+          permissionIds: ['auth.user_reset_pin', 'auth.pin_unlock'],
+        });
+      }
+      const op = builder.append({
+        type,
+        entityType: 'user_credential',
+        entityId: peerId,
+        payload: type === 'auth.pin_reset' ? { targetUserId: peerId, verifierRef: peerId } : {},
+      });
+
+      const result = await processPushBatch(
+        makeDeps({ forTenant: testDb.appForTenant }),
+        identityOf(world),
+        [genesis, op],
+      );
+
+      expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+    },
+  );
 
   test('auth.pin_reset targeting a main_owner by a main_owner actor is ACCEPTED', async () => {
     const { world, builder } = await setupWorld(1067);

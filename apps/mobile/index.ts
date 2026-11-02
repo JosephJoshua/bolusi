@@ -3,8 +3,10 @@ import { createElement } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
+import { FontScaleProvider } from '@bolusi/ui';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
@@ -51,7 +53,11 @@ import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstra
 import { MEDIA_DRAIN_TASK } from '@bolusi/device/media/background-task';
 import type { MediaClient } from '@bolusi/device/media/client';
 import { createMediaClientForApp } from './src/media/native.js';
-import { createExpoCapturePlatform, createExpoScanPlatform } from './src/media/native-capture.js';
+import {
+  createExpoCapturePlatform,
+  createExpoScanPlatform,
+  expoCameraPermission,
+} from './src/media/native-capture.js';
 import { createExpoVideoPlatform } from './src/media/native-video.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
@@ -59,6 +65,8 @@ import { createFetchMediaTransport } from '@bolusi/device/media/transport';
 import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
 import { createPhonePhotoLoader } from '@bolusi/device/media/phone-photos';
 import { appStatePort } from './src/ports/app-state.js';
+import { startAppUpdates, updateNow } from './src/bootstrap/app-updates.js';
+import { expoUpdatesPort } from './src/ports/updates.js';
 import { expoPrintPlatform } from './src/ports/print.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
 import { systemClock } from '@bolusi/device/ports/clock';
@@ -468,6 +476,7 @@ function createRepair(
     scanCode,
     // QRIS through Xendit: online-only server calls as the signed-in person, on the device bearer.
     qris: createFetchQris({ baseUrl: apiBaseUrl(), deviceToken: () => keystore.loadDeviceToken() }),
+    statusSite: apiBaseUrl(),
   });
 }
 
@@ -570,6 +579,7 @@ let rootProps: RootProps | null = null;
 
 function buildRootProps(): RootProps {
   return {
+    checkForUpdate: expoUpdatesPort.isEnabled ? () => updateNow(expoUpdatesPort) : undefined,
     boot: foregroundBoot,
     createSync,
     createEnrollment,
@@ -612,7 +622,16 @@ function buildRootProps(): RootProps {
     capturePlatform: createExpoCapturePlatform(),
     scanPlatform: createExpoScanPlatform(),
     videoPlatform: createExpoVideoPlatform(),
+    cameraPermission: expoCameraPermission,
     localeStore: fileLocaleStore,
+    // Synchronous, so the splash lets go on this frame even while loading keeps the JS thread busy.
+    hideSplash: () => {
+      try {
+        SplashScreen.hide();
+      } catch {
+        // No splash to hide (already gone): nothing to do.
+      }
+    },
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process
     // facts, not DB values); the deviceId + names come from meta_kv.
@@ -627,9 +646,26 @@ function buildRootProps(): RootProps {
 function Bootstrapped(): React.JSX.Element | null {
   rootProps ??= buildRootProps();
   // Live system insets for the shell, so the header follows the status bar when a tablet turns.
-  return createElement(SafeAreaProvider, null, Root(rootProps));
+  // The font scale redraws every text after a system font size change (packages/ui/src/text.tsx).
+  return createElement(
+    SafeAreaProvider,
+    null,
+    createElement(FontScaleProvider, null, Root(rootProps)),
+  );
 }
 
 // Before the first screen, so a phone held sideways at launch turns upright straight away.
 lockPhonesToPortrait();
+// The splash stays until the opening cover (BrandIntro) is drawn over it, so no blank frame shows.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+// The cover is the splash's exact twin, so the splash goes at once rather than with its default
+// 400 ms fade, which kept it on top of the cover's whole intro on Android.
+SplashScreen.setOptions({ duration: 0, fade: false });
+// Over-the-air updates apply on a fresh start or after a long break (src/bootstrap/app-updates.ts).
+startAppUpdates({
+  updates: expoUpdatesPort,
+  appState: appStatePort,
+  now: () => Date.now(),
+  onError: (error) => consoleDiagnostics.warn('app update check failed', { error: String(error) }),
+});
 registerRootComponent(Bootstrapped);

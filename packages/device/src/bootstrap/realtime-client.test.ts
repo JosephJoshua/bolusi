@@ -163,9 +163,15 @@ async function build(options: { online?: boolean } = {}): Promise<Built> {
     db,
     deviceId: DEVICE_ID,
     transport,
+    readScope: {
+      registry: { types: () => [], readPermissionFor: () => undefined },
+      refold: () => Promise.resolve(),
+      catchUpWatermarks: () => Promise.resolve(),
+    },
     bundle: { refresh: () => Promise.resolve('unchanged') },
     applyPulledOp: () => Promise.resolve(),
     refoldRefused: () => Promise.resolve(),
+    knowsOp: () => true,
     crypto: noblePort,
     clock: clockT,
     timer,
@@ -243,6 +249,7 @@ describe('the RN realtime adapters compose with the sync loop (task 105 acceptan
     const handle = ws.open({
       onOpen: () => undefined,
       onMessage: () => undefined,
+      onHeartbeat: () => undefined,
       onError: () => {
         errors += 1;
       },
@@ -371,7 +378,9 @@ describe('the SSE reader reconstructs the WS-frame shape the controller consumes
     }) as unknown as typeof fetch;
   }
 
-  async function drainSse(chunks: string[]): Promise<{ messages: unknown[]; opened: number }> {
+  async function drainSse(
+    chunks: string[],
+  ): Promise<{ messages: unknown[]; opened: number; heartbeats: number }> {
     const { sse } = createRnRealtimeTransports({
       baseUrl: BASE_URL,
       loadDeviceToken: () => Promise.resolve(TOKEN),
@@ -379,17 +388,21 @@ describe('the SSE reader reconstructs the WS-frame shape the controller consumes
     });
     const messages: unknown[] = [];
     let opened = 0;
+    let heartbeats = 0;
     const handle = sse.open({
       onOpen: () => {
         opened += 1;
       },
       onMessage: (data) => messages.push(data),
+      onHeartbeat: () => {
+        heartbeats += 1;
+      },
       onError: () => undefined,
       onClose: () => undefined,
     });
     await flush();
     handle.close();
-    return { messages, opened };
+    return { messages, opened, heartbeats };
   }
 
   test('an `event: sync.poke` / `data: {}` SSE event becomes the frozen WS poke frame', async () => {
@@ -402,5 +415,11 @@ describe('the SSE reader reconstructs the WS-frame shape the controller consumes
     const { messages } = await drainSse([': hb\n\n', 'event: sync.poke\ndata: {}\n\n']);
     // Only the poke — the `: hb` heartbeat produced nothing.
     expect(messages).toEqual(['{"type":"sync.poke","payload":{}}']);
+  });
+
+  test('every chunk, a lone heartbeat included, tells the idle watchdog the server is there', async () => {
+    const { messages, heartbeats } = await drainSse([': hb\n\n', ': hb\n\n']);
+    expect(messages).toEqual([]);
+    expect(heartbeats).toBe(2);
   });
 });

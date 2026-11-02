@@ -32,12 +32,13 @@
   "rejected": {
     "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
     "title": "Refused by the server ({count})",
-    "explain": "Also undone on this phone. Redo them if they’re still needed.",
+    "explain": "These changes didn’t count. Each one says why.",
     "opMeta": "{opType} · {time}",
     "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Technical details",
     "noReason": "The server sent no details.",
-    "more": "Show {count} more"
+    "more": "Show {count} more",
+    "handled": "Mark as checked"
   },
   "quarantine": {
     "title": "Changes on hold",
@@ -63,7 +64,16 @@
     "savedHere": "{count, plural, one {# change is saved on this computer and will be synced automatically.} other {# changes are saved on this computer and will be synced automatically.}}",
     "offline": "Changes are saved on this computer and synced when it is online.",
     "mediaFailed": "{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}",
-    "rejectedExplain": "Also undone on this computer. Redo them if they’re still needed.",
+    "rejectedExplain": "These changes didn’t count. Each one says why.",
     "rejectedBanner": "{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}"
+  },
+  "updateNeeded": {
+    "title": "Update the app",
+    "body": "Another device runs a newer version. New data from other devices waits until this app is updated. Changes made here still sync.",
+    "check": "Check for updates",
+    "checking": "Checking for updates…",
+    "none": "No update for this phone yet. Try again later.",
+    "failed": "Couldn’t check for updates. Check the connection, then try again.",
+    "lastArrived": "New data last arrived {relative}"
   }
 }

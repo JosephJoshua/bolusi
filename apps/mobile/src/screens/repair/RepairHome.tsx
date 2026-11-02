@@ -9,7 +9,7 @@
  * the list. The intake is one task from start to finish and keeps the whole screen. Navigation is
  * the same state either way: turning the tablet only changes how it is drawn.
  */
-import type { IntakeDraft } from '@bolusi/modules/repair';
+import type { BoardView, IntakeDraft, RepairDraft } from '@bolusi/modules/repair';
 import {
   Handover,
   IntakeWizard,
@@ -32,7 +32,16 @@ type RepairView =
   | { readonly kind: 'board' }
   /** A warranty claim's intake starts from a draft made from the servisan it claims on. */
   | { readonly kind: 'intake'; readonly draft?: IntakeDraft }
-  | { readonly kind: 'ticket'; readonly ticketId: string }
+  /**
+   * `print`: just opened or handed over, so it opens on the customer's slip. `justOpened`: the
+   * intake that made it just finished, so its number is stamped in.
+   */
+  | {
+      readonly kind: 'ticket';
+      readonly ticketId: string;
+      readonly print?: true;
+      readonly justOpened?: boolean;
+    }
   | { readonly kind: 'handover'; readonly ticketId: string };
 
 /**
@@ -52,9 +61,17 @@ export interface RepairHomeProps {
   readonly avatar: ReactNode;
   readonly onOpenSyncStatus: () => void;
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
-  /** This user's intake in progress when they last locked, already owner-checked by the shell. */
-  readonly restoredDraft?: IntakeDraft | null;
-  readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
+  /**
+   * This user's intake or handover in progress when the screens last went away (a lock, a system
+   * font change, Android recreating the app), already owner-checked by the shell.
+   */
+  readonly restoredDraft?: RepairDraft | null;
+  /**
+   * The colleague who started the restored intake, when it was not this person: the intake belongs
+   * to the device, so they may carry on with it, but it waits on the board rather than opening.
+   */
+  readonly intakeStartedBy?: string | null | undefined;
+  readonly onDraftChange?: ((draft: RepairDraft | null) => void) | undefined;
 }
 
 export function RepairHome({
@@ -65,18 +82,31 @@ export function RepairHome({
   onOpenSyncStatus,
   onRegisterSurfaceNav,
   restoredDraft,
+  intakeStartedBy = null,
   onDraftChange,
 }: RepairHomeProps): React.JSX.Element {
   // Read once at mount: the lock unmounts this surface and the unlock remounts it.
   const [view, setView] = useState<RepairView>(() =>
-    restoredDraft === null || restoredDraft === undefined ? { kind: 'board' } : { kind: 'intake' },
+    restoredDraft === null || restoredDraft === undefined
+      ? { kind: 'board' }
+      : restoredDraft.kind === 'handover'
+        ? { kind: 'handover', ticketId: restoredDraft.ticketId }
+        : intakeStartedBy === null
+          ? { kind: 'intake' }
+          : { kind: 'board' },
   );
   const viewport = useViewport();
   const split = viewport.widthClass === 'expanded' && view.kind !== 'intake';
   // Inside a flow the header keeps only the sync chip: the title needs the width, and switching
   // user or language belongs on the board, not halfway through a step. Beside the board, whose
-  // header already carries both, the pane keeps neither.
-  const chrome = split ? { syncChip: null, avatar: null } : { syncChip, avatar: null };
+  // header already carries both, the pane keeps neither. An intake keeps the avatar: it belongs to
+  // the device, so the phone may be handed to a colleague halfway through.
+  const chrome = split
+    ? { syncChip: null, avatar: null }
+    : { syncChip, avatar: view.kind === 'intake' ? avatar : null };
+
+  // Held here: on a phone the board unmounts while a servisan is open, and its queue must survive.
+  const [boardView, setBoardView] = useState<BoardView | null>(null);
 
   const discardGuardRef = useRef<DiscardGuard | null>(null);
   const registerDiscardGuard = useCallback((guard: DiscardGuard | null): void => {
@@ -110,12 +140,15 @@ export function RepairHome({
         return true;
       },
       requestLeave: runLeave,
+      keepsWorkOnSwitch: view.kind === 'intake',
     });
     return () => onRegisterSurfaceNav?.(null);
   }, [view, onRegisterSurfaceNav, runLeave]);
 
   const board = (
     <RepairBoard
+      view={boardView}
+      onViewChange={setBoardView}
       syncChip={syncChip}
       avatar={avatar}
       now={now}
@@ -129,6 +162,13 @@ export function RepairHome({
         runLeave(() => setView({ kind: 'ticket', ticketId }));
       }}
       onNewIntake={() => runLeave(() => setView({ kind: 'intake' }))}
+      waitingDraft={
+        restoredDraft?.kind !== 'intake'
+          ? null
+          : restoredDraft.claimOf === null
+            ? 'intake'
+            : 'claim'
+      }
       onOpenSyncStatus={onOpenSyncStatus}
     />
   );
@@ -139,9 +179,11 @@ export function RepairHome({
         // A new ticket is a new screen: its open step and scroll position stay with the last one.
         key={view.ticketId}
         ticketId={view.ticketId}
+        printFirst={view.print === true}
         chrome={chrome}
         now={now}
         hideBack={split}
+        justOpened={view.justOpened === true}
         onBack={() => setView({ kind: 'board' })}
         onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
         onStartClaim={(draft) => setView({ kind: 'intake', draft })}
@@ -155,9 +197,11 @@ export function RepairHome({
         key={view.ticketId}
         ticketId={view.ticketId}
         chrome={chrome}
-        onDone={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
+        onDone={() => setView({ kind: 'ticket', ticketId: view.ticketId, print: true })}
         onCancel={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
         onRegisterDiscardGuard={registerDiscardGuard}
+        restoredDraft={restoredDraft?.kind === 'handover' ? restoredDraft : null}
+        onDraftChange={onDraftChange}
       />
     ) : null;
 
@@ -194,11 +238,14 @@ export function RepairHome({
           <IntakeWizard
             chrome={chrome}
             now={now}
-            restoredDraft={view.draft ?? restoredDraft}
+            restoredDraft={view.draft ?? (restoredDraft?.kind === 'intake' ? restoredDraft : null)}
+            startedBy={view.draft === undefined ? intakeStartedBy : null}
             onDraftChange={onDraftChange}
             onRegisterDiscardGuard={registerDiscardGuard}
             onRegisterStepBack={registerStepBack}
-            onOpened={(ticketId) => setView({ kind: 'ticket', ticketId })}
+            onOpened={(ticketId) =>
+              setView({ kind: 'ticket', ticketId, print: true, justOpened: true })
+            }
             onCancel={() => setView({ kind: 'board' })}
           />
         ) : null}

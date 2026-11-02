@@ -22,6 +22,8 @@ export interface ActingUser {
   readonly deviceStoreId: string | null;
 }
 
+const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 /**
  * Resolve + validate the acting user for a control-plane request, inside `db` (the request's
  * forTenant tx). Throws `ACTING_USER_INVALID` (403) when the claim is missing/unknown/other-tenant
@@ -36,7 +38,11 @@ export async function resolveActingUser(c: Context<AppEnv>, db: TenantDb): Promi
   const device = c.get('device');
   if (device !== undefined) {
     const claimed = c.req.header('X-Acting-User');
-    if (claimed === undefined || claimed === '') throw new IdentityError('ACTING_USER_INVALID');
+    // Shape first (ids are lowercase uuids): a non-uuid would reach Postgres as a cast error (a 500), and a repeated header
+    // arrives joined ("a, b"). Either is simply not a user.
+    if (claimed === undefined || !USER_ID.test(claimed)) {
+      throw new IdentityError('ACTING_USER_INVALID');
+    }
 
     // Exists in THIS tenant? RLS scopes the read, so an other-tenant id reads as absent.
     const user = await db

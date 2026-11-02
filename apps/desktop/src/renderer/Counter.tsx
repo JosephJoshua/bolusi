@@ -1,9 +1,25 @@
 // The counter app's frame once someone is signed in: the title bar (store, update, sync, who is
-// here), the sidebar's sections, and the servisan board, the intake page, Kas or Settings beside
-// them. The same frame runs over the offline core and over the seeded demo; what differs (who is
+// here), the sidebar's sections, and the servisan board, the intake page, parts, Kas or Settings
+// beside them. The same frame runs over the offline core and over the seeded demo; what differs (who is
 // here, the person menu, the sync status) comes in as props.
 import { t } from '@bolusi/i18n';
+import {
+  INVENTORY_PERMISSION,
+  InventoryRuntimeProvider,
+  NO_FILTER,
+  PartsPage,
+  ti,
+  type ListFilter,
+} from '@bolusi/modules/inventory/desktop';
 import { KasPage, MONEY_PERMISSION, MoneyRuntimeProvider, tm } from '@bolusi/modules/money/desktop';
+import { keptIntakeDraft, startedByOther } from '@bolusi/modules/repair';
+import {
+  OrdersPage,
+  PURCHASING_PERMISSION,
+  PurchasingRuntimeProvider,
+  tp,
+  type OrderFilter,
+} from '@bolusi/modules/purchasing/desktop';
 import {
   IntakePage,
   RepairBoardPage,
@@ -13,13 +29,21 @@ import {
   type BoardFilters,
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
-import { AppShell, Avatar, Menu, Sidebar, SidebarToggle, type MenuItem } from '@bolusi/ui-web';
-import { Banknote, ChevronDown, Settings, Wrench } from 'lucide-react';
+import {
+  AppShell,
+  Avatar,
+  ConfirmDialog,
+  Menu,
+  Sidebar,
+  SidebarToggle,
+  type MenuItem,
+} from '@bolusi/ui-web';
+import { Banknote, ChevronDown, Package, Settings, ShoppingCart, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { SettingsAccess } from './settings/access.js';
 import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
-import { DeviceSetupPage } from './setup/DeviceSetupPage.js';
+import { DeviceSetupPage, type StoreBasicSetting } from './setup/DeviceSetupPage.js';
 import { PrinterReminder } from './setup/PrinterReminder.js';
 import { BAR_CONTROL, TitleBar } from './TitleBar.js';
 import { UpdateNotice } from './updates.js';
@@ -28,8 +52,10 @@ type Page =
   | { readonly kind: 'board' }
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
+  | { readonly kind: 'parts' }
+  | { readonly kind: 'purchasing' }
   | { readonly kind: 'kas' }
-  | { readonly kind: 'settings'; readonly section?: 'computer' }
+  | { readonly kind: 'settings'; readonly section?: 'computer' | StoreBasicSetting }
   // The first-run setup of this PC (setup/DeviceSetupPage.tsx).
   | { readonly kind: 'setup' };
 
@@ -104,7 +130,7 @@ export function Counter({
   readonly onOpenSyncStatus?: (() => void) | undefined;
   /** What Settings may do for this person besides the repair settings; the demo has only staff. */
   readonly settings?: SettingsAccess | undefined;
-  /** This person's unfinished intake, kept across a lock or a switch to someone else. */
+  /** This PC's unfinished intake, kept across a lock, a restart or a switch to someone else. */
   readonly restoredDraft: IntakeDraft | null;
   readonly onDraftChange: (draft: IntakeDraft | null) => void;
   /** This PC's first-run setup waits for this person: it opens first. */
@@ -112,21 +138,58 @@ export function Counter({
   /** The setup was finished or put off; absent where there is none to record (the demo). */
   readonly onSetupDone?: (() => void) | undefined;
 }): React.JSX.Element {
-  // Someone who left an intake half done comes back to it, as on the phone.
+  // Someone who left an intake half done comes back to it, as on the phone. One a colleague left
+  // waits on the board instead, for whoever picks it up.
+  const startedBy = startedByOther(restoredDraft, person.userId);
+  const ownDraft = restoredDraft !== null && startedBy === null;
   const [page, setPage] = useState<Page>(() =>
-    setupPending
-      ? { kind: 'setup' }
-      : restoredDraft === null
-        ? { kind: 'board' }
-        : { kind: 'intake' },
+    setupPending ? { kind: 'setup' } : ownDraft ? { kind: 'intake' } : { kind: 'board' },
+  );
+  // The intake belongs to the PC; it names who started it the first time it is kept.
+  const { userId: personId, name: personName } = person;
+  const keepDraft = useCallback(
+    (draft: IntakeDraft | null) =>
+      onDraftChange(
+        draft === null ? null : keptIntakeDraft(draft, { userId: personId, name: personName }),
+      ),
+    [onDraftChange, personId, personName],
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // The servisan an intake just opened, so its number is stamped in once; any other pick clears it.
+  const [justOpenedTicketId, setJustOpenedTicketId] = useState<string | null>(null);
+  const selectTicket = useCallback((ticketId: string | null) => {
+    setJustOpenedTicketId(null);
+    setSelectedTicketId(ticketId);
+  }, []);
+  // The servisan an intake just saved: its pane offers the slip once.
+  const [openedTicketId, setOpenedTicketId] = useState<string | null>(null);
+  // A claim asked for while another intake waits unsaved: it would take that intake's place.
+  const [claimAsked, setClaimAsked] = useState<IntakeDraft | null>(null);
+  const startClaim = (claim: IntakeDraft): void => {
+    if (restoredDraft === null) setPage({ kind: 'intake', claim });
+    // A claim on the same servisan already started: carry on with it.
+    else if (
+      restoredDraft.claimOf !== null &&
+      restoredDraft.claimOf.ticketId === claim.claimOf?.ticketId
+    ) {
+      setPage({ kind: 'intake' });
+    } else setClaimAsked(claim);
+  };
   // The queue and search the person was on are still there when they come back from an intake.
   const [filters, setFilters] = useState<BoardFilters | null>(null);
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
   // The ledger as Kas and the payment settings read it: repair's money port, live on its feed.
   const repair = useRepairRuntime();
   const money = useMemo(() => moneyRuntimeOf(repair, nameOf), [repair, nameOf]);
+  // Parts, for whoever may read the list; their filter is still there when they come back.
+  const inventory = repair.inventory;
+  const showsParts = inventory?.hasPermission(INVENTORY_PERMISSION.read) === true;
+  const [partsFilter, setPartsFilter] = useState<ListFilter>(NO_FILTER);
+  // Belanja, for whoever orders from suppliers; it picks parts from the same list.
+  const purchasing = repair.purchasing;
+  const showsPurchasing =
+    showsParts && purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true;
+  const [ordersFilter, setOrdersFilter] = useState<OrderFilter>('open');
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
   const showsKas =
     money.hasPermission(MONEY_PERMISSION.read) || money.hasPermission(MONEY_PERMISSION.countCash);
@@ -156,7 +219,7 @@ export function Counter({
   }, [setupPending]);
   const finishSetup = (): void => {
     onSetupDone?.();
-    setPage(restoredDraft === null ? { kind: 'board' } : { kind: 'intake' });
+    setPage(ownDraft ? { kind: 'intake' } : { kind: 'board' });
   };
   // Settings opens from the person menu too, as on the phone. Switching person leaves Settings
   // as well; locking keeps everything as it is.
@@ -180,6 +243,7 @@ export function Counter({
     <AppShell
       testId="desktop.shell"
       collapsed={collapsed}
+      pageKey={page.kind}
       titleBar={
         <TitleBar
           storeName={storeName}
@@ -217,9 +281,33 @@ export function Counter({
               active:
                 page.kind === 'board' ||
                 page.kind === 'intake' ||
-                (page.kind === 'kas' && !showsKas),
+                (page.kind === 'kas' && !showsKas) ||
+                (page.kind === 'parts' && !showsParts) ||
+                (page.kind === 'purchasing' && !showsPurchasing),
               onSelect: () => go({ kind: 'board' }),
             },
+            ...(showsParts
+              ? [
+                  {
+                    key: 'parts',
+                    label: ti('inventory.list.title'),
+                    icon: Package,
+                    active: page.kind === 'parts',
+                    onSelect: () => go({ kind: 'parts' }),
+                  },
+                ]
+              : []),
+            ...(showsPurchasing
+              ? [
+                  {
+                    key: 'purchasing',
+                    label: tp('purchasing.list.title'),
+                    icon: ShoppingCart,
+                    active: page.kind === 'purchasing',
+                    onSelect: () => go({ kind: 'purchasing' }),
+                  },
+                ]
+              : []),
             ...(showsKas
               ? [
                   {
@@ -243,7 +331,14 @@ export function Counter({
       }
     >
       {page.kind === 'setup' ? (
-        <DeviceSetupPage onDone={finishSetup} />
+        <DeviceSetupPage
+          onDone={finishSetup}
+          onOpenSetting={(section) => {
+            onSetupDone?.();
+            setSettingsVisit((n) => n + 1);
+            setPage({ kind: 'settings', section });
+          }}
+        />
       ) : page.kind === 'settings' ? (
         <SettingsPage
           key={`${page.section ?? 'settings'}.${settingsVisit}`}
@@ -253,18 +348,36 @@ export function Counter({
           onOpenSetup={() => setPage({ kind: 'setup' })}
           onRegisterLeaveGuard={registerLeaveGuard}
         />
+      ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
+        <InventoryRuntimeProvider runtime={inventory}>
+          <PartsPage filter={partsFilter} onFilterChange={setPartsFilter} />
+        </InventoryRuntimeProvider>
+      ) : page.kind === 'purchasing' &&
+        showsPurchasing &&
+        inventory !== undefined &&
+        purchasing !== undefined ? (
+        <InventoryRuntimeProvider runtime={inventory}>
+          <PurchasingRuntimeProvider runtime={purchasing}>
+            <OrdersPage filter={ordersFilter} onFilterChange={setOrdersFilter} />
+          </PurchasingRuntimeProvider>
+        </InventoryRuntimeProvider>
       ) : page.kind === 'kas' && showsKas ? (
         <KasPage now={Date.now} />
       ) : page.kind === 'intake' ? (
         <IntakePage
-          // A claim is its own intake: it starts from its servisan and leaves the other one be.
+          // A claim starts from its servisan; kept like any intake, it survives a lock or a visit to
+          // another section and reopens as the intake in progress.
           key={page.claim === undefined ? 'intake' : 'claim'}
           now={Date.now}
           restoredDraft={page.claim ?? restoredDraft}
-          onDraftChange={page.claim === undefined ? onDraftChange : undefined}
+          prefilled={page.claim !== undefined}
+          startedBy={page.claim === undefined ? startedBy : null}
+          onDraftChange={keepDraft}
           onOpened={(ticketId) => {
-            if (page.claim === undefined) onDraftChange(null);
+            keepDraft(null);
             setSelectedTicketId(ticketId);
+            setJustOpenedTicketId(ticketId);
+            setOpenedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
           onCancel={() => setPage({ kind: 'board' })}
@@ -272,14 +385,35 @@ export function Counter({
       ) : (
         <RepairBoardPage
           selectedTicketId={selectedTicketId}
-          onSelectTicket={setSelectedTicketId}
+          onSelectTicket={selectTicket}
+          justOpenedTicketId={justOpenedTicketId}
+          openedTicketId={openedTicketId}
+          onOpenedShown={() => setOpenedTicketId(null)}
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
-          onStartClaim={(claim) => setPage({ kind: 'intake', claim })}
+          waitingDraft={
+            restoredDraft === null ? null : restoredDraft.claimOf === null ? 'intake' : 'claim'
+          }
+          onStartClaim={startClaim}
           onOpenSyncStatus={onOpenSyncStatus}
         />
       )}
+      <ConfirmDialog
+        open={claimAsked !== null}
+        title={tn('repair.warrantyClaim.replaceTitle')}
+        message={tn('repair.warrantyClaim.replaceMessage')}
+        confirmLabel={tn('repair.warrantyClaim.replaceConfirm')}
+        cancelLabel={t('core.action.cancel')}
+        closeLabel={t('core.action.close')}
+        destructive
+        onConfirm={() => {
+          if (claimAsked !== null) setPage({ kind: 'intake', claim: claimAsked });
+          setClaimAsked(null);
+        }}
+        onCancel={() => setClaimAsked(null)}
+        testId="desktop.claimReplacesIntake"
+      />
     </AppShell>
   );
   return <MoneyRuntimeProvider runtime={money}>{shell}</MoneyRuntimeProvider>;

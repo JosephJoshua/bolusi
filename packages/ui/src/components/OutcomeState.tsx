@@ -4,11 +4,15 @@
  * next. The screen's one action goes in the bottom bar, not here.
  *
  * The tone is carried by the icon as well as the colour (§6.3), and the text wraps, never truncates.
+ *
+ * Success is a tick that draws itself in the disc once the disc has landed (a payment received, a
+ * PIN changed): the moment the work is done should feel done.
  */
 import type { ReactNode } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, StyleSheet, View } from 'react-native';
 
-import { useEntrance, usePop } from '../motion.js';
+import { useEntrance, usePop, useWipe } from '../motion.js';
 import { color, radius, size, space, type } from '../tokens.js';
 import { Icon, type IconName } from './Icon.js';
 
@@ -34,6 +38,8 @@ const TONE: Record<OutcomeTone, { readonly bg: string; readonly fg: string }> = 
 };
 
 const DISC = size.iconState + space.xl;
+/** The tick starts once the disc has mostly landed. */
+const TICK_DELAY = 120;
 
 const styles = StyleSheet.create({
   root: { alignItems: 'center', paddingTop: space['3xl'], paddingHorizontal: space.lg },
@@ -65,7 +71,11 @@ export function OutcomeState({
   return (
     <View testID={testID} style={styles.root}>
       <Animated.View style={[styles.disc, { backgroundColor: bg }, disc]}>
-        <Icon name={icon} size={size.iconState} color={fg} />
+        {icon === 'success' ? (
+          <Tick color={fg} testID={`${testID}.tick`} />
+        ) : (
+          <Icon name={icon} size={size.iconState} color={fg} />
+        )}
       </Animated.View>
       <Animated.View style={[styles.words, words]}>
         <Text testID={`${testID}.title`} accessibilityRole="header" style={styles.title}>
@@ -79,5 +89,17 @@ export function OutcomeState({
         {children === undefined ? null : <View style={styles.extra}>{children}</View>}
       </Animated.View>
     </View>
+  );
+}
+
+/** The success disc already circles it, so the tick goes in bare. */
+function Tick({ color: tint, testID }: { readonly color: string; readonly testID: string }) {
+  const wipe = useWipe(size.iconState, TICK_DELAY);
+  return (
+    <Animated.View testID={testID} style={wipe.window}>
+      <Animated.View style={wipe.content}>
+        <Icon name="check" size={size.iconState} color={tint} />
+      </Animated.View>
+    </Animated.View>
   );
 }

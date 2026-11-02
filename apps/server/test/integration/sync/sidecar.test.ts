@@ -1,6 +1,6 @@
 // Devices sidecar snapshot semantics (api/01-sync §4.1). The server keeps a per-tenant
 // devicesDirectoryVersion (derived — see sync/pull.ts); when the client's echoed version differs,
-// the pull response carries a FULL snapshot of the device's pull scope. Revoked devices remain
+// the pull response carries a FULL snapshot of the tenant's devices. Revoked devices remain
 // listed (their historical signatures must stay verifiable) and the system device is included.
 import type { DeviceInfo, PullResponse } from '@bolusi/schemas';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -22,7 +22,7 @@ const idsOf = (devices: DeviceInfo[] | undefined): string[] =>
   (devices ?? []).map((d) => d.id).sort();
 
 describe('sidecar snapshot semantics (api/01-sync §4.1)', () => {
-  test('stale echo (0) → full snapshot of the pull scope + the current version', async () => {
+  test('stale echo (0) → full snapshot of the tenant’s devices + the current version', async () => {
     const a1 = await h.seedDevice(70); // tenant A, store 1
     const sys = await h.seedDeviceIn(a1.world.tenantId, null, 71, { kind: 'system' });
     const revoked = await h.seedDeviceIn(a1.world.tenantId, a1.world.storeId, 72, {
@@ -33,7 +33,7 @@ describe('sidecar snapshot semantics (api/01-sync §4.1)', () => {
     expect(body.devices).toBeDefined();
     expect(typeof body.devicesDirectoryVersion).toBe('number');
 
-    // The snapshot is the device's pull scope: own store + the tenant-scoped (system) device.
+    // The snapshot is the tenant's directory: here, own store + the tenant-scoped (system) device.
     expect(idsOf(body.devices)).toEqual(
       [a1.world.deviceId, sys.world.deviceId, revoked.world.deviceId].sort(),
     );
@@ -97,7 +97,30 @@ describe('sidecar snapshot semantics (api/01-sync §4.1)', () => {
     expect(peerInfo?.revokedAt).not.toBeNull(); // still listed, with its revocation time
   });
 
-  test('snapshot never contains another store’s or another tenant’s devices', async () => {
+  test('a device holding a version from before the snapshot held every store refetches it once', async () => {
+    const a1 = await h.seedDevice(82);
+    const store2 = await h.seedStore(a1.world.tenantId, 83);
+    const a2 = await h.seedDeviceIn(a1.world.tenantId, store2, 84);
+    // What the earlier formula (devices + revoked devices) gave this tenant, for a snapshot that
+    // left store 2 out: a device holding it must not be told its snapshot is current.
+    const earlier = 2;
+    const body = await pullJson(
+      await h.pull(a1.auth, { cursor: 0, devicesDirectoryVersion: earlier }),
+    );
+    expect(idsOf(body.devices)).toContain(a2.world.deviceId);
+    expect(body.devicesDirectoryVersion).not.toBe(earlier);
+
+    // Once it holds the new version, it is current again.
+    const again = await pullJson(
+      await h.pull(a1.auth, {
+        cursor: 0,
+        devicesDirectoryVersion: body.devicesDirectoryVersion as number,
+      }),
+    );
+    expect(again.devices).toBeUndefined();
+  });
+
+  test('snapshot carries the other stores’ devices of the tenant, never another tenant’s', async () => {
     const a1 = await h.seedDevice(78); // tenant A, store 1
     const store2 = await h.seedStore(a1.world.tenantId, 79);
     const a2 = await h.seedDeviceIn(a1.world.tenantId, store2, 80); // tenant A, store 2
@@ -105,9 +128,9 @@ describe('sidecar snapshot semantics (api/01-sync §4.1)', () => {
 
     const body = await pullJson(await h.pull(a1.auth, { cursor: 0, devicesDirectoryVersion: 0 }));
     const ids = idsOf(body.devices);
-    expect(ids).toContain(a1.world.deviceId); // own store — the positive control
-    expect(ids).not.toContain(a2.world.deviceId); // other store of the same tenant
+    expect(ids).toContain(a1.world.deviceId); // own store
+    // Other store of the same tenant: it may sign tenant-wide ops (storeId null) this device pulls.
+    expect(ids).toContain(a2.world.deviceId);
     expect(ids).not.toContain(b.world.deviceId); // other tenant (RLS)
-    for (const d of body.devices ?? []) expect([a1.world.storeId, null]).toContain(d.storeId);
   });
 });

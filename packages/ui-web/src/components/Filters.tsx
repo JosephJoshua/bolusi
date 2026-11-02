@@ -50,14 +50,15 @@ export function FilterPopover({
             data-testid={testId}
             className={clsx(
               'inline-flex h-full cursor-pointer items-center gap-2 rounded-sm pl-3 font-semibold',
-              active ? 'pr-1 text-text' : 'pr-2 text-text-muted hover:text-text',
+              active ? 'pr-1 text-text' : 'pr-3 text-text-muted hover:text-text @min-[54rem]:pr-2',
             )}
           >
             <span>{label}</span>
             {active ? (
               <OverflowText text={summary} className="max-w-48 font-normal text-info" />
             ) : (
-              <ChevronDown size={14} aria-hidden />
+              // A narrow toolbar (its nearest `@container`) drops the arrow, so every filter fits.
+              <ChevronDown size={14} aria-hidden className="hidden @min-[54rem]:block" />
             )}
           </button>
         </RadixPopover.Trigger>
@@ -224,16 +225,23 @@ export function ColumnsMenu({
 }): React.JSX.Element {
   return (
     <RadixMenu.Root>
-      <RadixMenu.Trigger asChild>
-        <button
-          type="button"
-          data-testid={testId}
-          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border border-border bg-surface px-3 text-small font-semibold text-text-muted transition-colors hover:bg-surface-alt hover:text-text"
-        >
-          <Columns3 size={14} aria-hidden />
-          {label}
-        </button>
-      </RadixMenu.Trigger>
+      {/* In a narrow toolbar (its nearest `@container`) only the icon shows, like a collapsed
+          FilterToggle, so the filters beside it keep their room. */}
+      <Tooltip label={label}>
+        <RadixMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label={label}
+            data-testid={testId}
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border border-border bg-surface px-3 text-small font-semibold text-text-muted transition-colors hover:bg-surface-alt hover:text-text"
+          >
+            <Columns3 size={14} aria-hidden />
+            <span aria-hidden className="hidden whitespace-nowrap @min-[54rem]:inline">
+              {label}
+            </span>
+          </button>
+        </RadixMenu.Trigger>
+      </Tooltip>
       <RadixMenu.Portal>
         <RadixMenu.Content
           align="end"
@@ -381,18 +389,26 @@ export function FilterToggle({
   pressed,
   onChange,
   icon: Icon,
+  collapse = false,
   testId,
 }: {
   readonly label: string;
   readonly pressed: boolean;
   readonly onChange: (pressed: boolean) => void;
   readonly icon?: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }> | undefined;
+  /**
+   * In a narrow toolbar (its nearest `@container`), only the icon shows, with the label as its
+   * tooltip, so the label is never cut off. Needs an icon.
+   */
+  readonly collapse?: boolean | undefined;
   readonly testId?: string | undefined;
 }): React.JSX.Element {
-  return (
+  const collapsible = collapse && Icon !== undefined;
+  const button = (
     <button
       type="button"
       aria-pressed={pressed}
+      aria-label={collapsible ? label : undefined}
       onClick={() => onChange(!pressed)}
       data-testid={testId}
       className={clsx(
@@ -403,7 +419,14 @@ export function FilterToggle({
       )}
     >
       {Icon === undefined ? null : <Icon size={14} aria-hidden />}
-      {label}
+      {collapsible ? (
+        <span aria-hidden className="hidden whitespace-nowrap @min-[54rem]:inline">
+          {label}
+        </span>
+      ) : (
+        label
+      )}
     </button>
   );
+  return collapsible ? <Tooltip label={label}>{button}</Tooltip> : button;
 }

@@ -29,6 +29,10 @@ import {
   operationFromSignedCoreJcs,
   readHeldPhone,
   carriedRegistrations,
+  enqueuePendingVerifier,
+  readPendingVerifiers,
+  readVerifier,
+  writeVerifier,
   readSyncState,
   verifyOp,
   PermissionEvaluator,
@@ -567,6 +571,24 @@ describe('the enrolling owner’s own first PIN', () => {
     await runEnrollment(fx.deps, fx.params);
     expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBeNull();
   });
+
+  it('is not offered on a phone set up as someone else’s own, where the owner never signs in', async () => {
+    const someoneElse = '0190a000-0000-7000-8000-00000000beef';
+    fx = await fixture(181, undefined, undefined, (bundle) => {
+      (bundle as { personalUserId?: string }).personalUserId = someoneElse;
+    });
+    await runEnrollment(fx.deps, { ...fx.params, personalUserId: someoneElse });
+    expect(fx.transport.calls.at(-1)!.body.personalUserId).toBe(someoneElse);
+    expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBeNull();
+  });
+
+  it('is still offered on the owner’s own phone', async () => {
+    fx = await fixture(182, undefined, undefined, (bundle) => {
+      (bundle as { personalUserId?: string }).personalUserId = bundle.users[0]!.id;
+    });
+    await runEnrollment(fx.deps, { ...fx.params, personalUserId: fx.params.ownerUserId });
+    expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBe(fx.params.ownerUserId);
+  });
 });
 
 describe('applyBundle atomicity on the enrollment path (task 179)', () => {
@@ -883,6 +905,35 @@ describe('re-enrolling a phone that still holds unsynced changes', () => {
       [mediaId]: second.deviceId,
       [uploadedId]: oldDeviceId,
     });
+  });
+
+  it('moves a PIN verifier still waiting for upload to the new device, with its local copy', async () => {
+    // The server takes a verifier only at a position on the posting device's own log, so one queued
+    // under the old registration would be refused for good once the phone posts as the new one.
+    const { f, oldDeviceId } = await enrolledWithBacklog(48);
+    fx = f;
+    const asOf = { timestamp: START + 5_000, deviceId: oldDeviceId, seq: 3 };
+    const verifier = {
+      algorithm: 'argon2id' as const,
+      saltB64: Buffer.alloc(16, 1).toString('base64'),
+      mKiB: 19456,
+      t: 2,
+      p: 1 as const,
+      hashB64: Buffer.alloc(32, 2).toString('base64'),
+      asOf,
+    };
+    await enqueuePendingVerifier(f.db, {
+      userId: f.ownerId,
+      actorUserId: f.ownerId,
+      verifierRef: 'ref-1',
+      verifier,
+    });
+    await writeVerifier(f.db, f.ownerId, verifier);
+
+    const second = await runEnrollment(f.deps, f.params);
+    const moved = { ...asOf, deviceId: second.deviceId };
+    expect((await readPendingVerifiers(f.db)).map((p) => p.verifier.asOf)).toEqual([moved]);
+    expect((await readVerifier(f.db, f.ownerId))?.asOf).toEqual(moved);
   });
 
   it('refuses to bind a phone holding one store’s data to another store, before calling the server', async () => {

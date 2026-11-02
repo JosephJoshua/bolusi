@@ -4,6 +4,10 @@
 // re-derive what they show. Photos, signatures and the ownership video are taken in the window and
 // handed to the core.
 import { createUuidV7Generator } from '@bolusi/core';
+import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
+import type { InventoryRuntime } from '@bolusi/modules/inventory/desktop';
+import type { PurchasingRuntime } from '@bolusi/modules/purchasing/desktop';
+import { catalogModelSearch } from '@bolusi/modules/repair';
 import type { RepairPrinting, RepairRuntime } from '@bolusi/modules/repair/desktop';
 import type { CapturedMedia, CaptureRequest } from '@bolusi/modules/screen-kit';
 
@@ -48,6 +52,7 @@ export function createCoreRepairRuntime(deps: {
   readonly userId: string;
   readonly storeName: string;
   readonly capture: PcCapture;
+  readonly statusSite: string;
 }): RepairRuntime {
   const { client, userId, capture } = deps;
   const granted = new Set(deps.session.permissions);
@@ -59,7 +64,6 @@ export function createCoreRepairRuntime(deps: {
   const printing: RepairPrinting = desktopPrinting(
     {
       storeName: () => call('repair.print.storeName'),
-      userName: () => call('repair.print.userName'),
       readPaper: () => call('repair.print.readPaper'),
       writePaper: (paper) => call('repair.print.writePaper', paper),
       // Replaced by the PC's printers below; the window prints, never the core.
@@ -69,10 +73,45 @@ export function createCoreRepairRuntime(deps: {
     deps.storeName,
   );
 
-  const runtime: RepairRuntime = {
+  const query = ((name: string, input: unknown) =>
+    call('repair.query', name, input)) as RepairRuntime['query'];
+  // The parts list and each servisan's parts: the same person, permissions and change feed. Its
+  // "fits" picker searches the phone catalog the intake uses. No camera scan: a USB scanner types.
+  const inventory: InventoryRuntime = {
     userId,
     query: ((name: string, input: unknown) =>
-      call('repair.query', name, input)) as RepairRuntime['query'],
+      call('inventory.query', name, input)) as InventoryRuntime['query'],
+    run: ((name: string, input: unknown) =>
+      call('inventory.run', name, input)) as InventoryRuntime['run'],
+    hasPermission: (permission) => granted.has(permission),
+    colleagueHasPermission: (colleague, permission) =>
+      deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+    limitOf,
+    newId,
+    subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
+    searchModels: catalogModelSearch({ query }),
+  };
+
+  // Orders to suppliers: the same person, permissions and change feed; the order message is signed
+  // with the store's name as the slips print it.
+  const purchasing: PurchasingRuntime = {
+    userId,
+    query: ((name: string, input: unknown) =>
+      call('purchasing.query', name, input)) as PurchasingRuntime['query'],
+    run: ((name: string, input: unknown) =>
+      call('purchasing.run', name, input)) as PurchasingRuntime['run'],
+    hasPermission: (permission) => granted.has(permission),
+    colleagueHasPermission: (colleague, permission) =>
+      deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+    limitOf,
+    newId,
+    subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
+    storeName: () => call('purchasing.storeName'),
+  };
+
+  const runtime: RepairRuntime = {
+    userId,
+    query,
     run: ((name: string, input: unknown) =>
       call('repair.run', name, input)) as RepairRuntime['run'],
     hasPermission: (permission) => granted.has(permission),
@@ -103,11 +142,26 @@ export function createCoreRepairRuntime(deps: {
         simulate: (id) => call('money.qris.simulate', id),
       },
     },
+    approvals: {
+      userId,
+      query: ((name: string, input: unknown) =>
+        call('approvals.query', name, input)) as RepairRuntime['approvals']['query'],
+      run: ((name: string, input: unknown) =>
+        call('approvals.run', name, input)) as RepairRuntime['approvals']['run'],
+      hasPermission: (permission) => granted.has(permission),
+      colleagueHasPermission: (colleague, permission) =>
+        deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
+      limitOf,
+      newId,
+    },
     subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
+    inventory,
+    purchasing,
     ticketSyncStatuses: (ticketIds) => call('repair.ticketSyncStatuses', ticketIds),
     technicians: () => call('repair.technicians'),
     loadThumbnail: (ref) => call('repair.loadThumbnail', ref),
     loadModelPhoto: (photo) => call('repair.loadModelPhoto', photo),
+    statusSite: deps.statusSite,
     async capturePhoto(request?: CaptureRequest) {
       const photo = await capture.photo(request);
       if (photo === null) return null;
@@ -137,6 +191,7 @@ export function createCoreRepairRuntime(deps: {
         playableVideo(await call<CoreVideoLoad>('media.loadVideo', ref)),
       ),
     printing,
+    diagnostics: consoleDiagnostics,
   };
   return runtime;
 }

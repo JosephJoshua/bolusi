@@ -12,7 +12,15 @@
 // merely-expired token permanently disable sync on a working device. `SyncTransportPort`'s own
 // contract says carry the code verbatim; this file is where "verbatim" is actually done.
 import { SyncTransportError, type SyncTransportPort } from '@bolusi/core';
-import type { PullRequest, PullResponse, PushRequest, PushResponse } from '@bolusi/schemas';
+import {
+  PERSON_SESSION_HEADER,
+  type PersonSessionRequest,
+  type PersonSessionResponse,
+  type PullRequest,
+  type PullResponse,
+  type PushRequest,
+  type PushResponse,
+} from '@bolusi/schemas';
 
 export interface SyncTransportConfig {
   /** Base URL of the server, no trailing slash (08 §6.1's `EXPO_PUBLIC_API_URL`). */
@@ -21,6 +29,51 @@ export interface SyncTransportConfig {
   readonly deviceToken: () => Promise<string | null>;
   /** Injected for tests; defaults to the global. */
   readonly fetchImpl?: typeof fetch;
+  /** How long one request may take before it counts as a network failure; defaults to a minute. */
+  readonly timeoutMs?: number;
+}
+
+/**
+ * A server that accepts the connection and never answers (a hung process, a captive portal) would
+ * otherwise hold the loop's one in-flight sync forever: no backoff, no retry, and a status line that
+ * never learns anything went wrong. A batch is capped at 1 MiB, which bad 3G (about 50 KB/s) moves
+ * in about 20 s; much longer leaves the counter watching "Sedang mengirim" for nothing.
+ */
+export const SYNC_REQUEST_TIMEOUT_MS = 30_000;
+
+/** The device bundle (the store's settings and directory) is larger and fetched rarely. */
+export const BUNDLE_REQUEST_TIMEOUT_MS = 60_000;
+
+/**
+ * Run one request, body included, against a deadline. Past it the request is aborted and fails as
+ * a network-class error (`code: null`), so the loop backs off and tries again (03 §10). The race
+ * also covers a fetch that ignores its abort signal.
+ */
+export async function withDeadline<T>(
+  timeoutMs: number,
+  request: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const abort = new AbortController();
+  const work = request(abort.signal);
+  // Once the deadline wins the race, the aborted request's own failure has nowhere to go.
+  work.catch(() => undefined);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      abort.abort();
+      reject(
+        new SyncTransportError(`no answer within ${String(timeoutMs)} ms`, {
+          code: null,
+          status: null,
+        }),
+      );
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([work, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -46,10 +99,19 @@ export async function toTransportError(response: Response): Promise<SyncTranspor
   return new SyncTransportError(message, { code, status: response.status });
 }
 
-export function createFetchSyncTransport(config: SyncTransportConfig): SyncTransportPort {
+/**
+ * One request with the device bearer, under the deadline, failing closed without a token. Shared by
+ * the device's sync legs and a signed-in person's (`createFetchPersonTransport`).
+ */
+function deviceRequester(config: SyncTransportConfig) {
   const doFetch = config.fetchImpl ?? fetch;
-
-  async function post<T>(path: string, body: unknown): Promise<T> {
+  const timeoutMs = config.timeoutMs ?? SYNC_REQUEST_TIMEOUT_MS;
+  return async function send<T>(
+    method: 'POST' | 'DELETE',
+    path: string,
+    body: unknown,
+    headers: Readonly<Record<string, string>> = {},
+  ): Promise<T> {
     const token = await config.deviceToken();
     if (token === null) {
       // Fail closed rather than send an unauthenticated request. api/01-sync requires the device
@@ -62,17 +124,26 @@ export function createFetchSyncTransport(config: SyncTransportConfig): SyncTrans
         status: null,
       });
     }
-    const response = await doFetch(`${config.baseUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
+    return withDeadline(timeoutMs, async (signal) => {
+      const response = await doFetch(`${config.baseUrl}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...headers,
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal,
+      });
+      if (!response.ok) throw await toTransportError(response);
+      return (response.status === 204 ? undefined : await response.json()) as T;
     });
-    if (!response.ok) throw await toTransportError(response);
-    return (await response.json()) as T;
-  }
+  };
+}
+
+export function createFetchSyncTransport(config: SyncTransportConfig): SyncTransportPort {
+  const send = deviceRequester(config);
+  const post = <T>(path: string, body: unknown): Promise<T> => send<T>('POST', path, body);
 
   return {
     // NOTE — api/01-sync §1 wants gzipped request bodies on bad 3G, and these are sent PLAIN.
@@ -89,5 +160,32 @@ export function createFetchSyncTransport(config: SyncTransportConfig): SyncTrans
     async pull(request: PullRequest): Promise<PullResponse> {
       return post<PullResponse>('/v1/sync/pull', request);
     },
+  };
+}
+
+/**
+ * A signed-in person's legs (least-privilege sync): prove them to the server with their PIN, pull
+ * what they may read beyond the device with the session that comes back, and end it.
+ */
+export interface PersonTransportPort {
+  open(request: PersonSessionRequest): Promise<PersonSessionResponse>;
+  pull(token: string, request: PullRequest): Promise<PullResponse>;
+  end(token: string): Promise<void>;
+  /** Send this device's PIN changes still waiting for the server (they precede a PIN check). */
+  sendPendingPins(): Promise<void>;
+}
+
+export function createFetchPersonTransport(
+  config: SyncTransportConfig,
+): Omit<PersonTransportPort, 'sendPendingPins'> {
+  const send = deviceRequester(config);
+  return {
+    open: (request) => send<PersonSessionResponse>('POST', '/v1/sync/person-session', request),
+    pull: (token, request) =>
+      send<PullResponse>('POST', '/v1/sync/pull', request, { [PERSON_SESSION_HEADER]: token }),
+    end: (token) =>
+      send<void>('DELETE', '/v1/sync/person-session', undefined, {
+        [PERSON_SESSION_HEADER]: token,
+      }),
   };
 }

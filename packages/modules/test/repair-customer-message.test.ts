@@ -12,6 +12,7 @@ import {
   whatsAppUrl,
 } from '../src/repair/customer-message.js';
 import { registerRepairCatalog } from '../src/repair/i18n.js';
+import { whatsAppAppUrl } from '../src/shared/whatsapp.js';
 
 import { line, sampleTicket } from './support/repair-rows.js';
 
@@ -27,6 +28,7 @@ const repaired = sampleTicket({
   outcome: 'repaired',
   quoteTotal: 950_000,
   pendingProposals: 0,
+  reduced: 0,
   quoteLines: [
     line({ id: 'l1' }),
     line({ id: 'l2', kind: 'labour', description: 'Jasa pasang', amount: 100_000 }),
@@ -61,6 +63,12 @@ describe('the number WhatsApp opens', () => {
       'https://wa.me/6281234567890?text=Halo%20Kak%2C%20total%3A%20Rp%201.000%20%26%20DP',
     );
   });
+
+  it('opens the app itself on a phone, so a phone without WhatsApp fails instead of opening a browser', () => {
+    expect(whatsAppAppUrl('6281234567890', 'Halo Kak, total: Rp 1.000 & DP')).toBe(
+      'whatsapp://send?phone=6281234567890&text=Halo%20Kak%2C%20total%3A%20Rp%201.000%20%26%20DP',
+    );
+  });
 });
 
 describe('which message the counter can send', () => {
@@ -89,7 +97,7 @@ describe('the words', () => {
   it('says the phone is ready, where, its number and the total', () => {
     expect(customerMessage('ready', repaired, 'Bolusi Cell Sorong')).toBe(
       [
-        'Halo Kak Yohanes Wanimbo, HP Samsung Galaxy A15 sudah selesai diservis dan bisa diambil di Bolusi Cell Sorong.',
+        'Halo Kak Yohanes, HP Samsung Galaxy A15 sudah selesai diservis dan bisa diambil di Bolusi Cell Sorong.',
         'No. servisan: K7Q-0042',
         'Total: Rp 950.000',
         'Terima kasih.',
@@ -131,7 +139,7 @@ describe('the words', () => {
     };
     expect(customerMessage('priceChange', waiting, 'Bolusi Cell')).toBe(
       [
-        'Halo Kak Yohanes Wanimbo, ada perubahan biaya untuk servisan HP Samsung Galaxy A15.',
+        'Halo Kak Yohanes, ada perubahan biaya untuk servisan HP Samsung Galaxy A15.',
         'No. servisan: K7Q-0042',
         '- Ganti baterai: Rp 300.000',
         'Total jadi Rp 1.250.000.',
@@ -150,10 +158,45 @@ describe('the words', () => {
     setLocale('en');
     try {
       expect(customerMessage('ready', repaired, null)).toContain(
-        'Hi Yohanes Wanimbo, your Samsung Galaxy A15 is repaired and ready to collect.',
+        'Hi Yohanes, your Samsung Galaxy A15 is repaired and ready to collect.',
       );
     } finally {
       setLocale('id');
     }
+  });
+});
+
+describe('the status link', () => {
+  const SITE = 'https://bolusi.id';
+  const inRepair = { ...repaired, outcome: 'in_repair' as const };
+
+  it('is what the counter sends while the phone is in the store and nothing else is due', () => {
+    expect(customerMessageKind(inRepair, COUNTER, SITE)).toBe('statusLink');
+    // Ready or waiting for a yes: those messages come first, and carry the link too.
+    expect(customerMessageKind(repaired, COUNTER, SITE)).toBe('ready');
+    expect(customerMessageKind({ ...inRepair, pendingProposals: 1 }, COUNTER, SITE)).toBe(
+      'priceChange',
+    );
+    // Nothing to send without a site, a code, a number or the counter's job.
+    expect(customerMessageKind(inRepair, COUNTER, null)).toBeNull();
+    expect(customerMessageKind({ ...inRepair, statusCode: null }, COUNTER, SITE)).toBeNull();
+    expect(customerMessageKind({ ...inRepair, customerPhone: null }, COUNTER, SITE)).toBeNull();
+    expect(customerMessageKind(inRepair, TECHNICIAN, SITE)).toBeNull();
+    expect(customerMessageKind({ ...inRepair, location: 'returned' }, COUNTER, SITE)).toBeNull();
+  });
+
+  it('says the phone was received and where to follow it', () => {
+    expect(customerMessage('statusLink', inRepair, 'Bolusi Cell Sorong', SITE)).toBe(
+      [
+        'Halo Kak Yohanes, HP Samsung Galaxy A15 sudah kami terima untuk diservis di Bolusi Cell Sorong.',
+        'No. servisan: K7Q-0042',
+        'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
+        'Terima kasih.',
+      ].join('\n'),
+    );
+    expect(customerMessage('ready', repaired, null, SITE)).toContain(
+      'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
+    );
+    expect(customerMessage('ready', repaired, null)).not.toContain('/c/');
   });
 });

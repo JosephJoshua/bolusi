@@ -4,13 +4,15 @@
  * owes or is owed on the right; Riwayat lists a day's records, where an owner cancels a payment.
  * Each task opens as a dialog over the page.
  */
-import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatTime, t } from '@bolusi/i18n';
 import {
+  Banner,
   Button,
   Card,
   DataTable,
   OverflowText,
   PageHeader,
+  RollingText,
   Section,
   StatePanel,
   Tabs,
@@ -21,25 +23,32 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
-import { MONEY_PERMISSION } from '../constants.js';
-import { shiftDay, useDayRecords } from '../day-records.js';
+import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
+import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { tm } from '../i18n.js';
+import { ta } from '../../approvals/i18n.js';
 import {
   accountLabel,
   dayStart,
   differenceText,
   historyLine,
+  voidAbilities,
   voidable,
+  voidKind,
   type NamedBalance,
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
+import { turnedDownLines, useAskedAbout, useOnVoidDecided, useVoidRequests } from '../void-ask.js';
+import { approvalByLine } from '../../approvals/copy.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
+import { targetOf, type MoneyTarget } from '../refund.js';
 import { useMoneyRuntime } from '../runtime.js';
 
 import {
   CountCashDialog,
   MoveCashDialog,
   ReceiveDebtDialog,
+  RefundDialog,
   SettleCountDialog,
   VoidPaymentDialog,
 } from './KasDialogs.js';
@@ -51,6 +60,7 @@ type Task =
   | { readonly kind: 'move' }
   | { readonly kind: 'settle'; readonly count: CashCountRow }
   | { readonly kind: 'receive'; readonly balance: NamedBalance }
+  | { readonly kind: 'refund'; readonly target: MoneyTarget }
   | {
       readonly kind: 'void';
       readonly entry: MoneyEntryRow;
@@ -69,6 +79,24 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   // The day Riwayat shows; null for today, so a page left open overnight moves on with the clock.
   const [historyDay, setHistoryDay] = useState<number | null>(null);
   const close = (): void => setTask(null);
+  /** A refund or lower bill asked of an owner; its answer shows here if it is no. */
+  const asked = (): void => {
+    setNoticeEntryId(null);
+    close();
+    setNotice(ta('approvals.done.asked'));
+  };
+  // Said once an owner has been asked for something: a cancel, a refund or a lower bill.
+  const [notice, setNotice] = useState<string | null>(null);
+  const [noticeEntryId, setNoticeEntryId] = useState<string | null>(null);
+  // Once an owner answers that ask, its notice goes rather than sit above the answer.
+  useOnVoidDecided(notice === null ? null : noticeEntryId, () => setNotice(null));
+  // Cancels this person asked for that an owner turned down today, until closed.
+  const asks = useVoidRequests();
+  const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
+  const about = useAskedAbout(asks.turnedDown);
+  const turnedDown = turnedDownLines(asks, dayStart(now()), about).filter(
+    (line) => !seen.has(line.id),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="money.desk.kas">
@@ -95,6 +123,30 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           </>
         }
       />
+      {turnedDown.map((line) => (
+        <div
+          key={line.id}
+          className="px-6 pb-3"
+          data-testid={`money.desk.kas.turnedDown.${line.id}`}
+        >
+          <Banner
+            tone="warning"
+            message={line.text}
+            onDismiss={() => setSeen((ids) => new Set([...ids, line.id]))}
+            dismissLabel={t('core.action.close')}
+          />
+        </div>
+      ))}
+      {notice === null ? null : (
+        <div className="px-6 pb-3">
+          <Banner
+            tone="success"
+            message={notice}
+            onDismiss={() => setNotice(null)}
+            dismissLabel={t('core.action.close')}
+          />
+        </div>
+      )}
       {may.read ? (
         <div className="px-6">
           <Tabs
@@ -121,6 +173,7 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           day={day}
           onSettle={(count) => setTask({ kind: 'settle', count })}
           onReceive={(balance) => setTask({ kind: 'receive', balance })}
+          onRefund={(balance) => setTask({ kind: 'refund', target: targetOf(balance) })}
         />
       )}
 
@@ -130,13 +183,21 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
         <SettleCountDialog count={task.count} onDone={close} onClose={close} />
       ) : null}
       {task?.kind === 'receive' ? (
-        <ReceiveDebtDialog balance={task.balance} onDone={close} onClose={close} />
+        <ReceiveDebtDialog balance={task.balance} onDone={close} onAsked={asked} onClose={close} />
+      ) : null}
+      {task?.kind === 'refund' ? (
+        <RefundDialog target={task.target} onDone={close} onAsked={asked} onClose={close} />
       ) : null}
       {task?.kind === 'void' ? (
         <VoidPaymentDialog
           entry={task.entry}
           accounts={task.accounts}
           onDone={close}
+          onAsked={() => {
+            setNoticeEntryId(task.entry.id);
+            close();
+            setNotice(ta('approvals.done.asked'));
+          }}
           onClose={close}
         />
       ) : null}
@@ -150,13 +211,15 @@ function Today({
   day,
   onSettle,
   onReceive,
+  onRefund,
 }: {
   readonly day: ReturnType<typeof useKasDay>;
   readonly onSettle: (count: CashCountRow) => void;
   readonly onReceive: (balance: NamedBalance) => void;
+  readonly onRefund: (balance: NamedBalance) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const { drawerQuery, drawer, accounts, entriesReady, methods, moves, open, difference, counted } =
+  const { drawerQuery, drawer, accounts, entriesReady, moneyIn, moves, open, difference, counted } =
     day;
   const { may } = day;
   const testId = 'money.desk.kas';
@@ -172,18 +235,33 @@ function Today({
             {() =>
               drawer === null ? null : (
                 <Card testId={`${testId}.drawer`}>
-                  <p className="text-body text-text-muted">{tm('money.kas.expected')}</p>
-                  <p
-                    className="tabular mt-1 text-display font-bold text-text"
-                    data-testid={`${testId}.expected`}
-                  >
-                    {formatMoney(drawer.expected)}
-                  </p>
+                  {may.seeExpected ? (
+                    <>
+                      <p className="text-body text-text-muted">{tm('money.kas.expected')}</p>
+                      <p
+                        className="tabular mt-1 text-display font-bold text-text"
+                        data-testid={`${testId}.expected`}
+                      >
+                        <RollingText value={drawer.expected}>
+                          {formatMoney(drawer.expected)}
+                        </RollingText>
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-heading font-semibold text-text">{tm('money.kas.drawer')}</p>
+                  )}
                   <p className="mt-1 text-body text-text-muted" data-testid={`${testId}.lastCount`}>
                     {counted === null
                       ? tm('money.kas.notCounted')
                       : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
                   </p>
+                  {/* A blind count hides what the drawer should hold; until it is counted, say
+                      why. */}
+                  {may.seeExpected || counted !== null ? null : (
+                    <p className="text-body text-text-muted" data-testid={`${testId}.blindHint`}>
+                      {tm('money.kas.blindHint')}
+                    </p>
+                  )}
                 </Card>
               )
             }
@@ -231,14 +309,15 @@ function Today({
             </Section>
           )}
 
-          {entriesReady ? (
+          {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+          {entriesReady && may.seeExpected ? (
             <Section title={tm('money.kas.inToday')} testId={`${testId}.in`}>
               <Card>
-                {methods.length === 0 ? (
+                {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
                   <p className="text-body text-text-muted">{tm('money.kas.nothingIn')}</p>
                 ) : (
                   <>
-                    {methods.map((method) => (
+                    {moneyIn.methods.map((method) => (
                       <Line
                         key={method.account}
                         label={accountLabel(method.account, accounts)}
@@ -246,9 +325,16 @@ function Today({
                         testId={`${testId}.in.${method.account}`}
                       />
                     ))}
+                    {moneyIn.refunded === 0 ? null : (
+                      <Line
+                        label={tm('money.kas.refunded')}
+                        value={formatMoney(-moneyIn.refunded)}
+                        testId={`${testId}.in.refunded`}
+                      />
+                    )}
                     <Line
                       label={tm('money.kas.total')}
-                      value={formatMoney(methods.reduce((sum, method) => sum + method.amount, 0))}
+                      value={formatMoney(moneyIn.total)}
                       strong
                       testId={`${testId}.in.total`}
                     />
@@ -266,7 +352,7 @@ function Today({
                     key={entry.id}
                     label={tm(label)}
                     detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
-                    value={`${delta < 0 ? '−' : '+'}${formatMoney(Math.abs(delta))}`}
+                    value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
                     testId={`${testId}.moves.${entry.id}`}
                   />
                 ))}
@@ -319,6 +405,16 @@ function Today({
                     label={row.customer ?? row.documentLabel}
                     detail={row.customer === null ? undefined : row.documentLabel}
                     value={formatMoney(-row.balance)}
+                    action={
+                      may.receive ? (
+                        <Button
+                          label={tm('money.refund.action')}
+                          size="sm"
+                          onClick={() => onRefund(row)}
+                          data-testid={`${testId}.owedBack.${row.documentId}.refund`}
+                        />
+                      ) : undefined
+                    }
                     testId={`${testId}.owedBack.${row.documentId}`}
                   />
                 ))}
@@ -392,7 +488,14 @@ function History({
   readonly onVoid: (entry: MoneyEntryRow, accounts: readonly PaymentAccountRow[]) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const mayVoid = runtime.hasPermission(MONEY_PERMISSION.voidPayment);
+  const asks = useVoidRequests();
+  const waiting = asks.waiting;
+  const can = voidAbilities(
+    (id) => runtime.hasPermission(id),
+    (id) => runtime.limitOf(id),
+    runtime.approvals.hasPermission(APPROVAL_PERMISSION.use),
+  );
+  const mayVoid = can.payments || can.askPayments || can.cashMoves;
   const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -421,6 +524,11 @@ function History({
       ]),
     );
     const lineOf = (entry: MoneyEntryRow) => lines.get(entry.id) ?? historyLine(entry, []);
+    // An owner said no to this person's ask: said on the record, which can be asked about again.
+    const turnedDownOf = (entry: MoneyEntryRow) =>
+      entry.voidedAt === null && !asks.waiting.has(entry.id)
+        ? asks.rejected.get(entry.id)
+        : undefined;
     const accounts = loaded?.accounts ?? [];
     return [
       {
@@ -445,7 +553,12 @@ function History({
               </span>
               {line.details.length === 0 ? null : (
                 <OverflowText
-                  text={line.details.join(' · ')}
+                  text={[
+                    ...line.details,
+                    ...(turnedDownOf(entry) === undefined
+                      ? []
+                      : [approvalByLine(turnedDownOf(entry)!)]),
+                  ].join(' · ')}
                   className="text-small text-text-muted"
                 />
               )}
@@ -477,12 +590,20 @@ function History({
             {
               id: 'action',
               header: '',
-              meta: { track: '112px', align: 'end' as const },
+              // Wide enough for a cancel button or, once asked, "Menunggu persetujuan" on one line.
+              meta: { track: '176px', align: 'end' as const },
               cell: ({ row: { original: entry } }: { row: { original: MoneyEntryRow } }) =>
-                voidable(entry) ? (
+                waiting.has(entry.id) && entry.voidedAt === null ? (
+                  <span
+                    className="whitespace-nowrap text-small text-text-muted"
+                    data-testid={`${testId}.waiting.${entry.id}`}
+                  >
+                    {tm('money.void.waiting')}
+                  </span>
+                ) : voidable(entry, can) ? (
                   <Button
                     label={tm('money.history.void')}
-                    aria-label={tm('money.history.voidLabel', {
+                    aria-label={tm(voidKind(entry).label, {
                       amount: formatMoney(entry.amount),
                       time: formatTime(entry.createdAt),
                     })}
@@ -499,7 +620,7 @@ function History({
           ]
         : []),
     ];
-  }, [loaded, mayVoid, onVoid]);
+  }, [loaded, mayVoid, can, onVoid, waiting, asks]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>
@@ -548,7 +669,7 @@ function History({
           selectedId={selected}
           onSelect={(row) => setSelected(row.id)}
           onActivate={(row) => {
-            if (mayVoid && voidable(row)) onVoid(row, loaded?.accounts ?? []);
+            if (!waiting.has(row.id) && voidable(row, can)) onVoid(row, loaded?.accounts ?? []);
           }}
           // Newest first, as the query reads them across pages.
           sortable={false}
@@ -558,7 +679,7 @@ function History({
           empty={
             <StatePanel
               icon={day === today ? Inbox : ReceiptText}
-              title={tm('money.history.none')}
+              title={tm(historyEmptyKey(day, today))}
               testId={`${testId}.empty`}
             />
           }

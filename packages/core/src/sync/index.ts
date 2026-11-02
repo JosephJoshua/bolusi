@@ -36,10 +36,13 @@ export {
   type TimerPort,
 } from './ports.js';
 export {
+  APP_UPDATE_REQUIRED_ERROR_CODE,
+  AppUpdateRequiredError,
   parsePullResponse,
   runPullPhase,
   type PullPhaseDeps,
   type PullPhaseResult,
+  type PullReadScope,
   type PulledBatch,
 } from './pull.js';
 export {
@@ -66,6 +69,7 @@ export {
   resetSyncStateForNewDevice,
   writeSyncState,
   type SyncState,
+  type PullBackfill,
   type SyncStatePatch,
 } from './state.js';
 export {
@@ -76,3 +80,21 @@ export {
   type StalenessInput,
   type StalenessLevel,
 } from './staleness.js';
+export {
+  readPermissionsOf,
+  readSetChange,
+  readSetOf,
+  typesReadableWith,
+  typesReadWith,
+  type ReadScopeRegistry,
+} from './read-scope.js';
+export { purgePulledOps, type PurgeDeps, type PurgedRecord } from './read-purge.js';
+export { clearHeldText, DeviceReads, isClearedOp } from './device-reads.js';
+export {
+  dropPersonStoreTables,
+  PersonStore,
+  projectionTableReads,
+  type PersonPullOutcome,
+  type PersonPullPort,
+  type PersonStoreDeps,
+} from './person-store.js';

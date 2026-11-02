@@ -169,7 +169,7 @@ export function createSessionNotesRuntime(deps: {
     }),
     invalidation: app.invalidation,
     identity,
-    noteSyncStatuses: (ids) => readEntitySyncStatuses(app.db.db, NOTE_ENTITY, ids),
+    noteSyncStatuses: (ids) => readEntitySyncStatuses(app.db.db, NOTE_ENTITY, ids, identity.userId),
     capturePhoto: deps.media.capturePhoto,
     loadThumbnail: deps.media.loadThumbnail,
   });

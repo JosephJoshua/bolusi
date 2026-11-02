@@ -58,6 +58,8 @@ export interface PcCapture {
   video(request: PcVideoRequest): Promise<PcVideo | null>;
   /** Plays a stored clip; `load` is asked again on retry. Resolves when the player is closed. */
   play(request: CaptureRequest, load: () => Promise<PcVideoSource>): Promise<void>;
+  /** Backs out of whatever capture or clip is open, as if the person closed it. */
+  backOut(): void;
 }
 
 function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {

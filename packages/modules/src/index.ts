@@ -36,30 +36,49 @@
 // site. The cast lives ONCE here now, in the manifests' home, rather than per element in two apps.
 import { authModule, platformModule, type AnyModuleDefinition } from '@bolusi/core';
 
+import { createApprovalsModule, type ApprovalsModule } from './approvals/manifest.js';
 import { defineInventoryModule, type InventoryModule } from './inventory/index.js';
+import { createMoneyApprovalKinds } from './money/approval-kinds.js';
 import { createMoneyModule } from './money/manifest.js';
 import { notesModule } from './notes/manifest.js';
+import { purchasingModule } from './purchasing/manifest.js';
+import { purchaseReceiptSource } from './purchasing/stock-source.js';
+import { repairApprovalKinds } from './repair/approval-kinds.js';
 import { repairModule } from './repair/manifest.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './repair/money-document.js';
 import { repairPartUse } from './repair/part-use.js';
 
 /**
  * The one `inventory` instance: stock rules ask the module that owns each use whether parts may be
- * drawn for it, so the uses are wired here, where every module is in reach.
+ * drawn for it, and each source whether parts came in from it, so both are wired here, where every
+ * module is in reach.
  */
-export const inventoryModule: InventoryModule = defineInventoryModule({
-  repair_ticket: repairPartUse,
-});
+export const inventoryModule: InventoryModule = defineInventoryModule(
+  { repair_ticket: repairPartUse },
+  { purchase_receipt: purchaseReceiptSource },
+);
+
+export { purchasingModule };
 
 /**
  * The money ledger, checking each charge against the module that issued the document. A module that
  * charges customers adds its document source here.
  */
-export const moneyModule = createMoneyModule({ [REPAIR_DOCUMENT_KIND]: repairMoneyDocument });
+const moneyDocumentSources = { [REPAIR_DOCUMENT_KIND]: repairMoneyDocument };
+export const moneyModule = createMoneyModule(moneyDocumentSources);
+
+/**
+ * Approval requests, for the decisions each module lets an owner hand out. A module with such
+ * decisions adds its kinds here.
+ */
+export const approvalsModule: ApprovalsModule = createApprovalsModule({
+  ...repairApprovalKinds,
+  ...createMoneyApprovalKinds(moneyDocumentSources),
+});
 
 /**
  * The modules every Bolusi build registers — the ONE list `SERVER_MODULES` and `CLIENT_MODULES`
- * both are (04 §1/§3/§4; 02 §3.2). Order is `platform`, `notes`, `repair`, `inventory`, `money`, `auth`; a registration list's
+ * both are (04 §1/§3/§4; 02 §3.2). Order is `platform`, `notes`, `repair`, `inventory`, `purchasing`, `money`, `approvals`, `auth`; a registration list's
  * failure mode is a silent omission, so the count is guarded in `index.test.ts` (T-14) and folded
  * on the real push path (server) and real bootstrap (client) — an empty list would fold nothing.
  */
@@ -68,7 +87,9 @@ export const ALL_MODULES = [
   notesModule,
   repairModule,
   inventoryModule,
+  purchasingModule,
   moneyModule,
+  approvalsModule,
   authModule,
 ] as unknown as readonly AnyModuleDefinition<never>[];
 export * from './role-abilities.js';

@@ -37,9 +37,9 @@ async function flush(): Promise<void> {
 
 /** Walk current → new → repeat with a matching new PIN, reaching the submit effect. */
 function submitChange(screen: ReturnType<typeof render>): void {
-  enterPin(screen, '111111'); // current
-  enterPin(screen, '222222'); // new
-  enterPin(screen, '222222'); // repeat (matches) → submitting → effect fires onChangePin
+  enterPin(screen, '571938'); // current
+  enterPin(screen, '593026'); // new
+  enterPin(screen, '593026'); // repeat (matches) → submitting → effect fires onChangePin
 }
 
 describe('ChangePinScreen wires the flow reject through — a rejected change is never a success', () => {
@@ -52,7 +52,7 @@ describe('ChangePinScreen wires the flow reject through — a rejected change is
     submitChange(screen);
     await flush();
 
-    expect(onChangePin).toHaveBeenCalledWith('111111', '222222');
+    expect(onChangePin).toHaveBeenCalledWith('571938', '593026');
     // The line that reds if the reject is mapped to `{ ok: true }`: a rejected change must NOT render
     // the done panel, and the pad must come back for another attempt.
     expect(screen.query('change-pin-done')).toBeNull();
@@ -133,7 +133,7 @@ describe('a re-render during the save never runs the change twice (VPS QA on PR 
     finish();
     await flush();
 
-    expect(calls).toEqual([['111111', '222222']]);
+    expect(calls).toEqual([['571938', '593026']]);
     expect(screen.query('change-pin-done')).not.toBeNull();
   });
 });

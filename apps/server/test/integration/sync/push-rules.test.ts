@@ -6,7 +6,7 @@
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
 import { CLOCK_AHEAD_MARGIN_MS } from '@bolusi/core';
-import { formatTicketNumber } from '@bolusi/modules/repair';
+import { formatTicketNumber, INTAKE_PHOTO_SLOTS } from '@bolusi/modules/repair';
 import type { MediaRef } from '@bolusi/schemas';
 import { ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
 import { sql, type Kysely } from 'kysely';
@@ -122,7 +122,12 @@ function ticketOp(
 }
 
 const cancel = (builder: ChainBuilder, extra?: { readonly timestamp?: number }) =>
-  ticketOp(builder, 'repair.ticket_cancelled', { reason: 'Pelanggan batal' }, extra);
+  ticketOp(
+    builder,
+    'repair.ticket_cancelled',
+    { reason: 'Pelanggan batal', fee: 0, standardFee: 0 },
+    { ...extra, schemaVersion: 2 },
+  );
 
 async function outcome(ticketId = TICKET): Promise<string | undefined> {
   const row = await db
@@ -176,16 +181,16 @@ function openTicket(
       peripherals: [],
       estimatedReadyAt: null,
       quoteLines: [{ lineId, kind: 'labour', description: 'Ganti konektor', amount: 150_000 }],
-      photos: {
-        front: photo(world, 1),
-        back: photo(world, 2),
-        left: photo(world, 3),
-        right: photo(world, 4),
-        top: photo(world, 5),
-        bottom: photo(world, 6),
-      },
+      photos: INTAKE_PHOTO_SLOTS.map((slot, i) => ({
+        slot,
+        label: null,
+        ref: photo(world, i + 1),
+      })),
+      repairTypes: [],
+      claimOf: null,
+      ownershipVideo: null,
     },
-    { entityId: ticketId },
+    { entityId: ticketId, schemaVersion: 4 },
   );
 }
 
@@ -244,8 +249,8 @@ describe('a pushed repair op must be legal against the server`s records', () => 
     const op = ticketOp(
       builder,
       'repair.ticket_cancelled',
-      { reason: 'x' },
-      { entityId: otherTicket },
+      { reason: 'x', fee: 0, standardFee: 0 },
+      { entityId: otherTicket, schemaVersion: 2 },
     );
     const result = await push(world, [op]);
 
@@ -396,15 +401,21 @@ describe('a pushed repair op must be legal against the server`s records', () => 
   test('a discount line that raises the price is refused', async () => {
     const { world, builder } = await setupWorld(3305);
     const line = (lineId: string, amount: number) =>
-      ticketOp(builder, 'repair.quote_changed', {
-        lineId,
-        kind: 'discount',
-        description: 'Diskon',
-        amount,
-        reason: 'Langganan',
-        customerAgreed: true,
-        fromProposal: false,
-      });
+      ticketOp(
+        builder,
+        'repair.quote_changed',
+        {
+          lineId,
+          kind: 'discount',
+          description: 'Diskon',
+          amount,
+          reason: 'Langganan',
+          customerAgreed: true,
+          fromProposal: false,
+          waitsForCustomer: false,
+        },
+        { schemaVersion: 2 },
+      );
 
     const result = await push(world, [
       line('01920000-0000-7000-8000-0000000e0a01', 50_000),
@@ -647,7 +658,8 @@ describe('money: the counter cannot take cash out through the ledger', () => {
       'rejected',
     ]);
     expect(result.results[0]).toMatchObject({ reason: 'money.refusal.notChargeable' });
-    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.notCharged' });
+    // More than the customer paid goes back to nobody, owner or not.
+    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.refundAbovePaid' });
     expect(result.results[3]).toMatchObject({ reason: 'money.refusal.notCharged' });
     const cash = await sql<{ net: string }>`
       SELECT COALESCE(SUM(debit - credit), 0) AS net FROM money_lines WHERE account = 'cash'
@@ -656,8 +668,60 @@ describe('money: the counter cannot take cash out through the ledger', () => {
   });
 });
 
-describe('a phone goes home paid, whatever version sent it', () => {
-  test('a version-1 handover of an unpaid repaired phone is refused', async () => {
+describe('money: not even an owner takes out what never came in', () => {
+  test('two refunds of one DP, and a cash correction with no count, are refused', async () => {
+    const { world, builder } = await setupWorld(3365);
+    const document = { kind: 'repair.ticket', id: TICKET, label: 'ABC-0001' };
+    const entry = (n: number, type: string, payload: Record<string, unknown>) =>
+      builder.append({
+        type,
+        entityType: 'money_entry',
+        entityId: `01920000-0000-7000-8000-0000000e0d0${n}`,
+        payload,
+      });
+    const refund = (n: number) =>
+      entry(n, 'money.refund_paid', {
+        document,
+        account: 'cash',
+        amount: 100_000,
+        reason: 'Batal',
+        reference: null,
+      });
+    const dp = entry(1, 'money.payment_received', {
+      document,
+      account: 'cash',
+      amount: 100_000,
+      reference: null,
+      tendered: null,
+    });
+    // Two owner phones each handed the same DP back while offline.
+    const first = refund(2);
+    const second = refund(3);
+    const unbound = entry(4, 'money.cash_adjusted', {
+      amount: 50_000,
+      countId: null,
+      reason: 'Tambah',
+    });
+
+    const result = await push(world, [dp, first, second, unbound]);
+
+    expect(result.results.map((r) => r.status)).toEqual([
+      'accepted',
+      'accepted',
+      'rejected',
+      'rejected',
+    ]);
+    expect(result.results[2]).toMatchObject({ reason: 'money.refusal.refundAbovePaid' });
+    expect(result.results[3]).toMatchObject({ reason: 'money.refusal.countRequired' });
+    const cash = await sql<{ net: string }>`
+      SELECT COALESCE(SUM(debit - credit), 0) AS net FROM money_lines WHERE account = 'cash'
+    `.execute(db);
+    expect(Number(cash.rows[0]!.net)).toBe(0);
+  });
+});
+
+describe('a phone goes home paid', () => {
+  test('a handover of an unpaid repaired phone is refused', async () => {
     const { world, builder } = await setupWorld(3370);
     await db
       .updateTable('repairTickets')
@@ -667,8 +731,14 @@ describe('a phone goes home paid, whatever version sent it', () => {
     const handover = ticketOp(
       builder,
       'repair.device_returned',
-      { handoverPhoto: photo(world, 7), signature: photo(world, 8), note: '' },
-      { schemaVersion: 1 },
+      {
+        handoverPhoto: photo(world, 7),
+        signature: photo(world, 8),
+        note: '',
+        unpaidReason: null,
+        checklist: [],
+      },
+      { schemaVersion: 3 },
     );
 
     const result = await push(world, [handover]);
@@ -678,6 +748,85 @@ describe('a phone goes home paid, whatever version sent it', () => {
       code: 'RULE_VIOLATED',
       reason: 'repair.refusal.notPaid',
     });
+  });
+});
+
+describe('Bayar nanti', () => {
+  test('the counter leaves a debt only with an owner’s approved Bayar nanti that covers it', async () => {
+    const { world, builder } = await setupWorld(3380, 'none');
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId: testId(3381),
+      roleName: 'cashier',
+      permissionIds: ['repair.read', 'repair.handover', 'money.read', 'money.receive'],
+    });
+    await db
+      .updateTable('repairTickets')
+      .set({ outcome: 'repaired' })
+      .where('id', '=', TICKET)
+      .execute();
+    const permit = async (id: string, amount: number) =>
+      db
+        .insertInto('approvalRequests')
+        .values({
+          id,
+          tenantId: world.tenantId,
+          storeId: world.storeId,
+          kind: 'repair.payLater',
+          targetType: 'repair_ticket',
+          targetId: TICKET,
+          inputJson: JSON.stringify({ ticketId: TICKET }),
+          amount: BigInt(amount),
+          reason: 'Gajian Jumat',
+          basis: 'x',
+          requestedBy: world.userId,
+          requestedAt: BigInt(NOW),
+          status: 'approved',
+          decidedBy: testId(3382),
+          decidedAt: BigInt(NOW),
+          note: null,
+        })
+        .execute();
+    const charge = builder.append({
+      type: 'money.charge_recorded',
+      entityType: 'money_entry',
+      entityId: '01920000-0000-7000-8000-0000000e0d01',
+      payload: {
+        document: { kind: 'repair.ticket', id: TICKET, label: 'SEED-0001' },
+        amount: 650_000,
+        account: 'service_revenue',
+      },
+    });
+    const handover = () =>
+      ticketOp(
+        builder,
+        'repair.device_returned',
+        {
+          handoverPhoto: photo(world, 7),
+          signature: photo(world, 8),
+          note: '',
+          unpaidReason: 'Gajian Jumat',
+          checklist: [],
+        },
+        { schemaVersion: 3 },
+      );
+
+    // Approved for less than is left: refused like no approval at all.
+    await permit('01920000-0000-7000-8000-0000000e0d10', 600_000);
+    const first = await push(world, [charge, handover()]);
+    expect(first.results.map((r) => r.status)).toEqual(['accepted', 'rejected']);
+    expect(first.results[1]).toMatchObject({ reason: 'repair.refusal.unpaidOwnerOnly' });
+
+    await permit('01920000-0000-7000-8000-0000000e0d11', 650_000);
+    const second = await push(world, [handover()]);
+    expect(second.results[0]).toMatchObject({ status: 'accepted' });
+    const row = await db
+      .selectFrom('repairTickets')
+      .select('location')
+      .where('id', '=', TICKET)
+      .executeTakeFirst();
+    expect(row?.location).toBe('returned');
   });
 });
 

@@ -94,6 +94,8 @@ export type AssertHttpErrorCodeUnion = Expect<
     | 'QRIS_KEY_REFUSED'
     | 'QRIS_AMOUNT_REFUSED'
     | 'CHANGE_REFUSED'
+    // Least-privilege sync: a person session that is unknown, expired or no longer usable here.
+    | 'PERSON_SESSION_INVALID'
   >
 >;
 export type AssertSyncStatusUnion = Expect<Equal<SyncStatus, 'local' | 'synced' | 'rejected'>>;

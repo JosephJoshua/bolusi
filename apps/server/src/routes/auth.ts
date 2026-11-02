@@ -13,7 +13,9 @@ import { appendAudit } from '../identity/audit.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
+import { personalDeviceChoices, type PersonalChoice } from '../identity/personal-devices.js';
 import { LoginReq, PasswordChangeReq, type LoginRes } from '@bolusi/schemas';
+import { ipRateKey } from '../middleware/rate-limit.js';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant } from '../tenant.js';
 
@@ -29,16 +31,19 @@ export function createAuthRouter(deps: ServerDeps) {
         // §9: 30 requests / IP / hour (pre-auth, per source IP).
         enforce(
           deps.identityRateStore.hit(
-            `login-ip:${deps.clientIp(c)}`,
+            `login-ip:${ipRateKey(deps.clientIp(c))}`,
             IDENTITY_LIMITS.loginRequestsPerIp.limit,
             IDENTITY_LIMITS.loginRequestsPerIp.windowMs,
             t,
           ),
         );
-        // §9: 5 failures / identifier / 15 min → locked. Checked (not incremented) up front.
+        // §9: 5 failures / identifier / 15 min → locked. Each attempt reserves a failure slot
+        // synchronously, BEFORE the first await, and a success hands it back. Checking first and
+        // counting the failure after the KDF let concurrent wrong guesses all pass the check.
+        const failKey = `login-fail:${body.loginIdentifier}`;
         enforce(
-          deps.identityRateStore.check(
-            `login-fail:${body.loginIdentifier}`,
+          deps.identityRateStore.hit(
+            failKey,
             IDENTITY_LIMITS.loginFailPerIdentifier.limit,
             IDENTITY_LIMITS.loginFailPerIdentifier.windowMs,
             t,
@@ -47,12 +52,7 @@ export function createAuthRouter(deps: ServerDeps) {
 
         const cred = await deps.authDirectory.findLoginCredential(body.loginIdentifier);
 
-        const fail = async (): Promise<never> => {
-          deps.identityRateStore.add(
-            `login-fail:${body.loginIdentifier}`,
-            IDENTITY_LIMITS.loginFailPerIdentifier.windowMs,
-            t,
-          );
+        const fail = (): never => {
           throw new IdentityError('AUTH_INVALID_CREDENTIALS');
         };
 
@@ -65,6 +65,7 @@ export function createAuthRouter(deps: ServerDeps) {
 
         const ok = await deps.passwordKdf.verify(body.password, cred.passwordVerifier);
         if (!ok || cred.status !== 'active') return fail();
+        deps.identityRateStore.refund(failKey, IDENTITY_LIMITS.loginFailPerIdentifier.windowMs, t);
 
         // Success: mint the session + gather the store list, under the resolved tenant.
         const result = await deps.forTenant(cred.tenantId, async (db) => {
@@ -103,6 +104,14 @@ export function createAuthRouter(deps: ServerDeps) {
               .orderBy('stores.id')
               .execute()
           ).filter((store) => enrollable.storeIds.includes(store.id));
+          // Who each store's phones may be set up for as their own (permission-scoped sync).
+          const people = new Map<string, readonly PersonalChoice[]>();
+          for (const store of stores) {
+            people.set(
+              store.id,
+              await personalDeviceChoices(db, cred.tenantId, store.id, cred.userId),
+            );
+          }
           await appendAudit(db, cred.tenantId, {
             actorUserId: cred.userId,
             action: 'auth.login',
@@ -111,7 +120,7 @@ export function createAuthRouter(deps: ServerDeps) {
             after: { userId: cred.userId },
             at: t,
           });
-          return { session, user, stores, tenant };
+          return { session, user, stores, tenant, people };
         });
 
         const res: LoginRes = {
@@ -120,7 +129,11 @@ export function createAuthRouter(deps: ServerDeps) {
           tenantId: cred.tenantId,
           tenantName: result.tenant.name,
           user: { id: result.user.id, name: result.user.name },
-          stores: result.stores.map((s) => ({ id: s.id, name: s.name })),
+          stores: result.stores.map((s) => ({
+            id: s.id,
+            name: s.name,
+            people: (result.people.get(s.id) ?? []).map((p) => ({ id: p.id, name: p.name })),
+          })),
         };
         return c.json(res);
       }),

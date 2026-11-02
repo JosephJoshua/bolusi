@@ -6,6 +6,7 @@ import { INTL_LOCALE_TAG, type Locale } from './locale.js';
 import { t } from './t.js';
 
 /** Intl inserts U+00A0 after `Rp`; thermal printers and cheap Android font fallbacks mangle it. */
+const MINUS = '\u2212';
 const NBSP = / /g;
 
 const SECOND_MS = 1000;
@@ -65,9 +66,13 @@ function timeFormatFor(locale: Locale): Intl.DateTimeFormat {
   return format;
 }
 
-/** Integer IDR → `Rp 250.000`. Identical in every locale (§5.1). */
+/**
+ * Integer IDR → `Rp 250.000`. Identical in every locale (§5.1). Below zero it takes a true minus
+ * sign, `−Rp 50.000`, so it matches the `+Rp`/`−Rp` the app writes itself and never reads as a dash.
+ * The dot-matrix printer folds it back to ASCII.
+ */
 export function formatMoney(amountIdr: number): string {
-  return moneyFormat.format(amountIdr).replace(NBSP, ' ');
+  return moneyFormat.format(amountIdr).replace(NBSP, ' ').replace(/^-/, MINUS);
 }
 
 /**
@@ -81,6 +86,18 @@ export function formatPhone(phone: string): string {
   const digits = compact.replace(/^\+?62/, '0');
   if (!/^08\d{8,11}$/.test(digits)) return phone;
   return [digits.slice(0, 4), digits.slice(4, 8), digits.slice(8)].join('-');
+}
+
+/**
+ * A number written on screen (a phone, an IMEI) that may only wrap where its words do: the spaces
+ * and hyphens between its digits become non-breaking ones, so a large font moves the whole number
+ * to the next line instead of splitting it ("0812-3456-" / "7890"). Screen text only: the
+ * dot-matrix codepage has no non-breaking hyphen, so slips print `formatPhone` as it is.
+ */
+export function keepNumbersWhole(text: string): string {
+  return text.replace(/(\d)([ -])(?=\d)/g, (_, digit: string, gap: string) =>
+    gap === ' ' ? `${digit}\u00A0` : `${digit}\u2011`,
+  );
 }
 
 /** Counts and quantities, never money — active-locale grouping (§5.2). */

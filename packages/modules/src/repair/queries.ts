@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -42,7 +42,11 @@ import {
   type RecordedRepairType,
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
-import { paidOnDocumentSql } from '../money/queries.js';
+import { paidOnDocumentSql, reducedOnDocumentSql } from '../money/queries.js';
+import { CASH_ACCOUNT, MONEY_PERMISSION, paymentAccountIdOf } from '../money/constants.js';
+import { refundSplit } from '../money/rules.js';
+import { amountOwed } from './flows.js';
+import type { MoneyDatabase } from '../money/schema.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
@@ -95,6 +99,8 @@ export interface TicketSummaryRow {
    * before handover. Null when nothing was.
    */
   readonly downPayment: number | null;
+  /** What an owner took off the bill after it was charged (the money ledger); 0 when nothing. */
+  readonly reduced: number;
   /** When the phone was last ready to collect (repaired or cancelled); null while worked on. */
   readonly readyAt: number | null;
 }
@@ -127,6 +133,8 @@ export interface TicketEventRow {
   readonly kind: string;
   readonly actorId: string;
   readonly actorName: string | null;
+  /** The technician an assignment gave the work to, by name; null for every other event. */
+  readonly technicianName: string | null;
   readonly at: number;
   readonly detail: Readonly<Record<string, unknown>>;
 }
@@ -154,6 +162,12 @@ export interface ClaimedTicket {
   readonly returnedAt: number | null;
 }
 
+export interface TicketRefund {
+  readonly account: string;
+  readonly name: string | null;
+  readonly amount: number;
+}
+
 export interface TicketDetailRow extends TicketSummaryRow {
   readonly devicePasscode: string | null;
   readonly intakeNotes: string;
@@ -167,6 +181,8 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly claimOf: ClaimedTicket | null;
   /** The warranty claims opened on this servisan, oldest first. */
   readonly claims: readonly { readonly id: string; readonly ticketNumber: string }[];
+  /** The code of the customer's status link (status-link.ts); null on servisan made before it. */
+  readonly statusCode: string | null;
   readonly intakePhotos: readonly IntakePhotoAngle[];
   readonly createdBy: string;
   readonly createdByName: string | null;
@@ -177,6 +193,12 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly workStarted: boolean;
   /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
   readonly slipPrints: Readonly<Record<SlipKind, number>>;
+  /**
+   * What goes back to the customer at handover, through each method that overpaid
+   * (`refundSplit`), as the handover records it; empty when nothing does or once handed back.
+   * `name` is the method's name, null for cash.
+   */
+  readonly refunds: readonly TicketRefund[];
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -185,6 +207,9 @@ export interface TicketDetailRow extends TicketSummaryRow {
 // ── shared pieces ──────────────────────────────────────────────────────────────────────────────
 
 function summaryQuery(qctx: Qctx) {
+  // Money records are read with money.read: whoever may not read them (a technician) sees no DP and
+  // no reductions, and a device whose people may not read them need not hold them.
+  const money = qctx.hasPermission(MONEY_PERMISSION.read);
   return qctx.db
     .selectFrom('repairTickets as t')
     .innerJoin('repairCustomers as c', 'c.id', 't.customerId')
@@ -211,7 +236,12 @@ function summaryQuery(qctx: Qctx) {
       't.cancelStandardFee',
       't.cancelledBy',
       't.cancelledAt',
-      paidOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('downPayment'),
+      money
+        ? paidOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('downPayment')
+        : sql<number | string | null>`NULL`.as('downPayment'),
+      money
+        ? reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId').as('reduced')
+        : sql<number | string | null>`NULL`.as('reduced'),
       't.readyAt',
       eb
         .selectFrom('repairQuoteLines as l')
@@ -255,6 +285,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
     downPayment:
       row.downPayment === null || Number(row.downPayment) === 0 ? null : Number(row.downPayment),
+    reduced: Number(row.reduced ?? 0),
     readyAt: row.readyAt === null ? null : Number(row.readyAt),
   };
 }
@@ -395,7 +426,9 @@ function filteredSummaries(qctx: Qctx, filter: TicketFilter, cancelledOnly: bool
 /** The ORDER BY column behind each column sort, with the ticket id as the tie-breaker. */
 const SORT_COLUMN = {
   number: sql.ref('t.ticketNumber'),
-  // What the customer owes: a cancelled servisan's fee, never its repair price.
+  // What the customer owes: a cancelled servisan's fee, never its repair price, less what an owner
+  // took off it.
+  // Without money.read (a technician), the price before reductions: they see no reductions.
   total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end`,
   readyBy: sql.ref('t.estimatedReadyAt'),
   createdAt: sql.ref('t.createdAt'),
@@ -414,7 +447,10 @@ export async function listTicketsHandler(
 
   if (!(CURSOR_SORTS as readonly string[]).includes(input.sort) || input.offset !== undefined) {
     const [key, direction] = input.sort.split('.') as [string, 'asc' | 'desc'];
-    const column = SORT_COLUMN[key as keyof typeof SORT_COLUMN];
+    const column =
+      key === 'total' && qctx.hasPermission(MONEY_PERMISSION.read)
+        ? sql`${SORT_COLUMN.total} - coalesce(${reducedOnDocumentSql(REPAIR_DOCUMENT_KIND, 't.id', 't.storeId')}, 0)`
+        : SORT_COLUMN[key as keyof typeof SORT_COLUMN];
     const rows = await query
       .orderBy(sql`${column} ${sql.raw(direction)}`)
       .orderBy('t.createdAt', 'desc')
@@ -634,6 +670,45 @@ function intakePhotoAngles(json: string | null): readonly IntakePhotoAngle[] {
   return parseJson<IntakePhotoAngle[]>(json, []);
 }
 
+/**
+ * What a servisan's handover would give back through each method: what was paid beyond the bill
+ * (`amountOwed`), split as `returnDevice` records it.
+ */
+async function ticketRefunds(qctx: Qctx, ticket: TicketSummaryRow): Promise<TicketRefund[]> {
+  const db = qctx.db as unknown as Kysely<MoneyDatabase>;
+  const entries = (
+    await db
+      .selectFrom('moneyEntries')
+      .select(['kind', 'account', 'amount', 'voidedBy'])
+      .where('storeId', '=', qctx.storeId ?? '')
+      .where('documentKind', '=', REPAIR_DOCUMENT_KIND)
+      .where('documentId', '=', ticket.id)
+      .orderBy('createdAt')
+      .orderBy('id')
+      .execute()
+  ).map((entry) => ({ ...entry, amount: Number(entry.amount) }));
+  const bill = amountOwed(ticket);
+  const credit = (ticket.downPayment ?? 0) - bill;
+  const split =
+    ticket.location === 'returned' || credit <= 0 ? [] : refundSplit(entries, credit, bill);
+  const ids = split.flatMap(({ account }) => paymentAccountIdOf(account) ?? []);
+  const names =
+    ids.length === 0
+      ? []
+      : await db
+          .selectFrom('moneyAccounts')
+          .select(['id', 'name'])
+          .where('tenantId', '=', qctx.tenantId)
+          .where('id', 'in', ids)
+          .execute();
+  return split.map((refund) => ({
+    ...refund,
+    name:
+      names.find((row) => row.id === paymentAccountIdOf(refund.account))?.name ??
+      (refund.account === CASH_ACCOUNT ? null : refund.account),
+  }));
+}
+
 export async function getTicketHandler(
   input: GetTicketInput,
   qctx: Qctx,
@@ -656,6 +731,7 @@ export async function getTicketHandler(
       'peripheralsJson',
       'repairTypesJson',
       'claimOfTicketId',
+      'statusCode',
       'intakePhotosJson',
       'createdBy',
       'returnedBy',
@@ -709,11 +785,22 @@ export async function getTicketHandler(
     .orderBy('id', 'asc')
     .execute();
 
+  const assignedTo = (event: (typeof events)[number]): string | null => {
+    if (event.kind !== REPAIR_OP.technicianAssigned) return null;
+    const { technicianId } = parseJson<{ technicianId?: unknown }>(event.detailJson, {});
+    return typeof technicianId === 'string' ? technicianId : null;
+  };
   const names = await userNames(qctx.db, [
     summary.technicianId,
     detail.createdBy,
     ...events.map((event) => event.actorId),
+    ...events.flatMap((event) => assignedTo(event) ?? []),
   ]);
+  // Money records are read with money.read: a technician's servisan shows none, and a store device
+  // whose people may not read them may not hold them.
+  const refunds = qctx.hasPermission(MONEY_PERMISSION.read)
+    ? await ticketRefunds(qctx, toSummary(summary, names))
+    : [];
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -734,6 +821,7 @@ export async function getTicketHandler(
         peripherals: parseJson<unknown[]>(detail.peripheralsJson, []).map(recordedOption),
         repairTypes: parseJson<RecordedRepairType[]>(detail.repairTypesJson, []),
         claimOfTicketId: detail.claimOfTicketId,
+        statusCode: detail.statusCode,
         claimOf:
           claimed === undefined
             ? null
@@ -752,6 +840,7 @@ export async function getTicketHandler(
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
         slipPrints,
+        refunds,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,
@@ -772,6 +861,7 @@ export async function getTicketHandler(
           kind: event.kind,
           actorId: event.actorId,
           actorName: names.get(event.actorId) ?? null,
+          technicianName: names.get(assignedTo(event) ?? '') ?? null,
           at: Number(event.at),
           detail: parseJson(event.detailJson, {}),
         })),
@@ -885,30 +975,40 @@ export async function intakeOptionSettingsHandler(
   _input: z.infer<typeof intakeOptionSettingsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<IntakeOptionSettings>> {
+  const settings = await readIntakeOptionSettings(qctx.db, qctx.tenantId, qctx.storeId);
+  return { rows: [settings], nextCursor: null };
+}
+
+/** The franchise's intake lists and one store's hidden items, as these records hold them now. */
+export async function readIntakeOptionSettings(
+  db: Qctx['db'],
+  tenantId: string,
+  storeId: string | null,
+): Promise<IntakeOptionSettings> {
   const known = (list: string): list is IntakeOptionList =>
     (INTAKE_OPTION_LISTS as readonly string[]).includes(list);
 
   const lists: Record<IntakeOptionList, readonly IntakeOption[]> = { ...DEFAULT_INTAKE_OPTIONS };
-  const franchise = await qctx.db
+  const franchise = await db
     .selectFrom('repairIntakeOptions')
     .select(['list', 'itemsJson'])
-    .where('tenantId', '=', qctx.tenantId)
+    .where('tenantId', '=', tenantId)
     .execute();
   for (const row of franchise) {
     if (known(row.list)) lists[row.list] = parseJson<IntakeOption[]>(row.itemsJson, []);
   }
 
   const hidden: Record<IntakeOptionList, readonly string[]> = { ...NOTHING_HIDDEN };
-  const store = await qctx.db
+  const store = await db
     .selectFrom('repairStoreIntakeOptions')
     .select(['list', 'hiddenJson'])
-    .where('storeId', '=', qctx.storeId)
+    .where('storeId', '=', storeId)
     .execute();
   for (const row of store) {
     if (known(row.list)) hidden[row.list] = parseJson<string[]>(row.hiddenJson, []);
   }
 
-  return { rows: [{ lists, hidden }], nextCursor: null };
+  return { lists, hidden };
 }
 
 export const intakeOptionSettingsQuery = {
@@ -928,15 +1028,42 @@ export interface CancelFees {
 }
 
 /**
- * The store's fee for cancelling this ticket now: after-work once work has ever started. A warranty
- * claim was free, so it costs nothing to cancel unless the owner sets a fee.
+ * The store's fee for cancelling this ticket now: after-work once work has ever started, but never
+ * more than the agreed repair price, since no customer pays more to cancel than to repair (Joseph,
+ * 2026-11-01). With no price agreed yet the store's fee stands. A warranty claim was free, so it
+ * costs nothing to cancel unless the owner sets a fee.
  */
 export function standardCancelFee(
-  ticket: Pick<TicketDetailRow, 'workStarted' | 'claimOfTicketId'>,
+  ticket: Pick<TicketDetailRow, 'workStarted' | 'claimOfTicketId' | 'quoteTotal'>,
   fees: CancelFees,
 ): number {
   if (ticket.claimOfTicketId !== null) return 0;
-  return ticket.workStarted ? fees.afterWork : fees.beforeWork;
+  const fee = ticket.workStarted ? fees.afterWork : fees.beforeWork;
+  return ticket.quoteTotal > 0 ? Math.min(fee, ticket.quoteTotal) : fee;
+}
+
+/**
+ * What a cancel at `fee` counts against a limited role's limit: a fee below the store's is a price
+ * drop on the servisan, counted with the discounts already on it (`discounts`); otherwise nothing.
+ * The same for the rule, an approval request and the step that decides whether to ask.
+ */
+export function cancelDrop(standard: number, fee: number, discounts: number): number {
+  const drop = standard - fee;
+  return drop > 0 ? drop + discounts : drop;
+}
+
+/**
+ * How far below the store's fee a limited role may cut a cancel's fee without asking, or null when
+ * it is not limited or has no room (any cut is then asked, and the step says so).
+ */
+export function cancelRoom(
+  limit: number | null,
+  standard: number | null,
+  discounts: number,
+): number | null {
+  if (limit === null || standard === null || standard === 0) return null;
+  const room = Math.min(limit - discounts, standard);
+  return room > 0 ? room : null;
 }
 
 /** A store that never set its fees charges nothing, as before fees existed. */

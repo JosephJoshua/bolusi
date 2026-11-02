@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, space } from '../tokens.js';
+import { FreshGlow } from './FreshGlow.js';
 
 export interface CardProps {
   readonly children: ReactNode;
@@ -18,6 +19,8 @@ export interface CardProps {
   readonly onPress?: (() => void) | undefined;
   /** Already-localized; required when the card is tappable so the target announces itself (§6.4). */
   readonly accessibilityLabel?: string | undefined;
+  /** The record the card shows: it glows once when another device changes it (`FreshGlow`). */
+  readonly freshId?: string | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -34,11 +37,17 @@ export function Card({
   children,
   onPress,
   accessibilityLabel,
+  freshId,
   testID = 'ui.card',
 }: CardProps): React.JSX.Element {
+  const glow =
+    freshId === undefined ? null : (
+      <FreshGlow id={freshId} radius={radius.md} testID={`${testID}.fresh`} />
+    );
   if (onPress === undefined) {
     return (
       <View testID={testID} style={[styles.base, { backgroundColor: color.surface }]}>
+        {glow}
         {children}
       </View>
     );
@@ -56,6 +65,7 @@ export function Card({
         { backgroundColor: pressed ? color.surfaceAlt : color.surface },
       ]}
     >
+      {glow}
       {children}
     </Pressable>
   );

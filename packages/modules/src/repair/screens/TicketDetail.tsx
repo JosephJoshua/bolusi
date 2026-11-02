@@ -4,7 +4,7 @@
  * own full-screen step (TicketSteps.tsx); the rest run in place. The rejected-op banner shows here,
  * where the change was made (05-operation-log §8).
  */
-import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, keepNumbersWhole, t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -14,6 +14,7 @@ import {
   Icon,
   ListRow,
   PatternLock,
+  RollingText,
   Sheet,
   TextButton,
   Timeline,
@@ -24,12 +25,17 @@ import {
   space,
   touch,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { ApprovalSection, ApprovalStep } from '../../approvals/screens/ApprovalViews.js';
+import { ta } from '../../approvals/i18n.js';
+import type { ApprovalRow } from '../../approvals/queries.js';
+import { describeRepairApproval } from '../approval-copy.js';
+import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
 import {
   MESSAGE_ACTION_KEY,
   customerMessageKind,
@@ -37,6 +43,7 @@ import {
   type CustomerMessageKind,
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
+import { whatsAppAppUrl, whatsAppUrl } from '../../shared/whatsapp.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   rejectedCount,
@@ -48,19 +55,25 @@ import {
 
 import { tn, type RepairKey } from '../i18n.js';
 import {
+  cancelFeeText,
   actionKey,
-  eventNote,
+  downPaymentTitleKey,
+  historyEntry,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
   warrantyLine,
 } from '../labels.js';
 import {
+  discountsStanding,
   amountOwed,
   arrangeTicketActions,
   CONTEXTUAL_ACTIONS,
+  FINAL_ACTIONS,
   canSetRepairTypes,
+  canTakeParts,
   canUseParts,
+  partUse,
   claimIntakeDraft,
   downPaymentAction,
   downPaymentStale,
@@ -71,6 +84,8 @@ import {
   repairTypesStale,
   staleStep,
   ticketActions,
+  ticketMoneyActions,
+  ticketMoneyTarget,
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
@@ -80,7 +95,9 @@ import {
   type StaleStep,
   type TicketAction,
   type TicketStep,
+  repairedDoneKey,
 } from '../flows.js';
+import { useClearAskedNotice } from '../asked-notice.js';
 import {
   ActionErrorBanner,
   DownPaymentRows,
@@ -97,25 +114,28 @@ import {
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { TicketVideoSection } from './video.js';
 import {
+  readApprovals,
+  moneyRuntimeOf,
   useRepairQuery,
   useRepairRuntime,
   useStoreDisplayName,
   useUncollectedLimit,
 } from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
+import { CorrectDetailsStep } from './CorrectDetailsStep.js';
+import { tm } from '../../money/i18n.js';
+import { MoneyRuntimeProvider } from '../../money/runtime.js';
+import { ReduceChargeStep, RefundStep } from '../../money/screens/KasSteps.js';
 import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
 import { ti } from '../../inventory/i18n.js';
 import type { UsedPartRow } from '../../inventory/queries.js';
 import { InventoryRuntimeProvider } from '../../inventory/runtime.js';
-import {
-  PutBackStep,
-  TakePartStep,
-  UsedPartsSection,
-  type PartUse,
-} from '../../inventory/screens/UsedParts.js';
+import { PutBackStep, TakePartStep, UsedPartsSection } from '../../inventory/screens/UsedParts.js';
 import {
   AssignStep,
   CancelStep,
+  UndoHandoverStep,
+  ChangeCancelFeeStep,
   DownPaymentStep,
   WaitForPartsStep,
   PriceChangeStep,
@@ -123,11 +143,6 @@ import {
   RepairTypesStep,
   WorkPhotosStep,
 } from './TicketSteps.js';
-
-/** The servisan as stock records it: parts taken for it carry its number. */
-function partUse(ticket: Pick<TicketDetailRow, 'id' | 'ticketNumber'>): PartUse {
-  return { kind: 'repair_ticket', id: ticket.id, label: ticket.ticketNumber };
-}
 
 /** What an action that runs in place says once it lands, in the fixed banner slot. */
 const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
@@ -140,22 +155,34 @@ const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
 /** The open step, if any. A proposal keeps the line as it was opened, for when no fresher read is at hand. */
 type Step =
   | { readonly kind: 'none' }
-  | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
+  | { readonly kind: Exclude<TicketStep['kind'], 'proposal' | 'handover' | 'correctDetails'> }
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
+  /** The servisan as it read when the correction opened: the form starts from it. */
+  | { readonly kind: 'correctDetails'; readonly ticket: TicketDetailRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
   | { readonly kind: 'repairTypes' }
   | { readonly kind: 'print' }
   | { readonly kind: 'takePart' }
-  | { readonly kind: 'putBackPart'; readonly part: UsedPartRow };
+  | { readonly kind: 'putBackPart'; readonly part: UsedPartRow }
+  | { readonly kind: 'approval'; readonly requestId: string }
+  | { readonly kind: 'refund' }
+  | { readonly kind: 'reduce' };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
+  /**
+   * Just opened by an intake or handed over: opens on its slip, as the customer is still at the
+   * counter. Read once, when the screen opens.
+   */
+  readonly printFirst?: boolean | undefined;
   readonly chrome: RepairChrome;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
   readonly onBack: () => void;
   /** Beside the board on a tablet there is nothing to go back to: the board is already in view. */
   readonly hideBack?: boolean | undefined;
+  /** It was opened just now by an intake: its number lands like a stamp once it shows. */
+  readonly justOpened?: boolean | undefined;
   readonly onHandover: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
   /** Starts a warranty claim's intake from this servisan; without it the claim is not offered. */
@@ -172,14 +199,18 @@ export interface TicketDetailProps {
 interface LoadedTicket {
   readonly ticket: TicketDetailRow | undefined;
   readonly statuses: EntitySyncStatuses;
+  /** The approval requests on it (a discount or a cancel asked of an owner), newest first. */
+  readonly approvals: readonly ApprovalRow[];
 }
 
 export function TicketDetail({
   ticketId,
+  printFirst = false,
   chrome,
   now,
   onBack,
   hideBack = false,
+  justOpened = false,
   onHandover,
   onOpenSyncStatus,
   onStartClaim,
@@ -190,8 +221,12 @@ export function TicketDetail({
 }: TicketDetailProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  // Money back to the customer and a lowered bill are the ledger's steps, over repair's port.
+  const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
-  const [step, setStep] = useState<Step>({ kind: 'none' });
+  const [step, setStep] = useState<Step>(() =>
+    printFirst && runtime.printing !== undefined ? { kind: 'print' } : { kind: 'none' },
+  );
   const [reloadNonce, setReloadNonce] = useState(0);
   // What the last action did, already in words: repair's own steps and the parts steps say it.
   const [done, setDone] = useState<string | null>(null);
@@ -208,9 +243,18 @@ export function TicketDetail({
   const query = useRepairQuery<LoadedTicket>(
     async (rt) => {
       const page = await rt.query('getTicket', { ticketId });
-      return { ticket: page.rows[0], statuses: await rt.ticketSyncStatuses([ticketId]) };
+      return {
+        ticket: page.rows[0],
+        statuses: await rt.ticketSyncStatuses([ticketId]),
+        approvals: await readApprovals(rt, ticketId),
+      };
     },
     `ticket:${ticketId}:${String(reloadNonce)}`,
+  );
+  useClearAskedNotice(
+    done,
+    () => setDone(null),
+    query.status === 'ready' ? query.data.approvals : undefined,
   );
 
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
@@ -266,13 +310,22 @@ export function TicketDetail({
     step.kind === 'print' ||
     step.kind === 'takePart' ||
     step.kind === 'putBackPart' ||
+    step.kind === 'approval' ||
+    step.kind === 'refund' ||
+    step.kind === 'reduce' ||
     ticket === undefined
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
         : step.kind === 'repairTypes'
           ? repairTypesStale(ticket, can)
-          : staleStep(step, ticket, can, runtime.userId);
+          : staleStep(step, ticket, can, runtime.userId, now());
+  // A step that asked an owner instead (a discount, a cancel, a DP fix, a refund or a lower bill
+  // beyond this person) says so.
+  const asked = (): void => {
+    closeStep();
+    setDone(ta('approvals.done.asked'));
+  };
   const stepProps = {
     chrome,
     ticketId,
@@ -291,31 +344,85 @@ export function TicketDetail({
           stage={step.kind}
           onDone={() => {
             closeStep();
-            setDone(tn(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired'));
+            setDone(tn(step.kind === 'before' ? 'repair.done.start' : repairedDoneKey(ticket)));
           }}
         />
       );
     case 'waitForParts':
       return <WaitForPartsStep {...stepProps} />;
+    case 'undoHandover':
+      return (
+        <UndoHandoverStep
+          {...stepProps}
+          onDone={() => {
+            closeStep();
+            setDone(tn('repair.done.handoverUndone'));
+          }}
+        />
+      );
+    case 'changeCancelFee':
+      if (ticket === undefined) break;
+      return (
+        <ChangeCancelFeeStep
+          {...stepProps}
+          ticket={ticket}
+          onAsked={asked}
+          current={(ticket.cancelFee ?? 0) - ticket.reduced}
+          paid={ticket.downPayment ?? 0}
+          onDone={() => {
+            closeStep();
+            setDone(tn('repair.done.cancelFeeChanged'));
+          }}
+        />
+      );
+    case 'correctDetails':
+      return (
+        <CorrectDetailsStep
+          {...stepProps}
+          ticket={step.ticket}
+          onDone={() => {
+            closeStep();
+            setDone(tn('repair.done.corrected'));
+          }}
+        />
+      );
     case 'cancel':
       return (
         <CancelStep
           {...stepProps}
           workStarted={ticket?.workStarted ?? false}
+          price={ticket?.quoteTotal ?? 0}
           claimOf={ticket?.claimOfTicketId ?? null}
+          onAsked={asked}
+          downPayment={ticket?.downPayment ?? 0}
+          discounted={discountsStanding(ticket?.quoteLines ?? [])}
         />
       );
     case 'assign':
       return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
     case 'changePrice':
-      return <PriceChangeStep {...stepProps} mode="change" />;
+      return (
+        <PriceChangeStep
+          {...stepProps}
+          mode="change"
+          discounted={discountsStanding(ticket?.quoteLines ?? [])}
+          onAsked={asked}
+        />
+      );
     case 'proposePrice':
-      return <PriceChangeStep {...stepProps} mode="propose" />;
+      return (
+        <PriceChangeStep
+          {...stepProps}
+          mode="propose"
+          discounted={discountsStanding(ticket?.quoteLines ?? [])}
+        />
+      );
     case 'proposal':
       return (
         <ProposalStep
           {...stepProps}
           line={ticket?.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+          total={ticket?.quoteTotal ?? 0}
         />
       );
     case 'downPayment':
@@ -329,6 +436,7 @@ export function TicketDetail({
             closeStep();
             setDone(tn('repair.done.downPayment'));
           }}
+          onAsked={asked}
         />
       );
     case 'repairTypes':
@@ -389,6 +497,51 @@ export function TicketDetail({
         </InventoryRuntimeProvider>
       );
     }
+    case 'approval': {
+      const request =
+        query.status === 'ready'
+          ? query.data.approvals.find((row) => row.id === step.requestId)
+          : undefined;
+      if (request === undefined) break;
+      return (
+        <ApprovalStep
+          chrome={chrome}
+          port={runtime.approvals}
+          request={request}
+          description={describeRepairApproval(request)}
+          onCancel={closeStep}
+          onDone={(notice) => {
+            closeStep();
+            setDone(notice);
+          }}
+          testID={`${testID}.approval`}
+        />
+      );
+    }
+    case 'refund':
+    case 'reduce': {
+      if (ticket === undefined) break;
+      const moneyStep = {
+        chrome,
+        target: ticketMoneyTarget(ticket),
+        onCancel: leaveStep,
+        onRegisterDiscardGuard: registerStepGuard,
+        onDone: () => {
+          closeStep();
+          setDone(tn(step.kind === 'refund' ? 'repair.done.refund' : 'repair.done.reduce'));
+        },
+        onAsked: asked,
+      };
+      return (
+        <MoneyRuntimeProvider runtime={money}>
+          {step.kind === 'refund' ? (
+            <RefundStep {...moneyStep} />
+          ) : (
+            <ReduceChargeStep {...moneyStep} />
+          )}
+        </MoneyRuntimeProvider>
+      );
+    }
     case 'none':
       break;
   }
@@ -424,8 +577,13 @@ export function TicketDetail({
       case 'handover':
         onHandover(ticketId);
         return;
+      case 'correctDetails':
+        setStep({ kind: action, ticket: row });
+        return;
       case 'waitForParts':
       case 'cancel':
+      case 'undoHandover':
+      case 'changeCancelFee':
       case 'assign':
       case 'changePrice':
       case 'proposePrice':
@@ -437,32 +595,54 @@ export function TicketDetail({
   // The next step is the bottom action, in the thumb zone like every other flow; its one real
   // alternative sits under the summary with the rarer moves behind "Lainnya", and cancelling is kept
   // apart at the end so it is never hit by habit.
-  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
+  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId, now());
   const layout =
     ticket === undefined
       ? { next: null, alternative: null, more: [] }
       : arrangeTicketActions(actions, ticket, runtime.userId);
   const primary = layout.next ?? undefined;
-  const canCancel = actions.includes('cancel');
-  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const messageKind =
+    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
       ? null
       : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
+  // A phone opens the app itself, so a phone without WhatsApp says so instead of landing in a
+  // browser; the web preview keeps the wa.me link.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
-    const url = customerMessageUrl(kind, row, storeName);
+    const url = customerMessageUrl(
+      kind,
+      row,
+      storeName,
+      runtime.statusSite,
+      Platform.OS === 'web' ? whatsAppUrl : whatsAppAppUrl,
+    );
     if (url === null) return;
     setDone(null);
     setMessageFailed(false);
     Linking.openURL(url).catch(() => setMessageFailed(true));
   };
+  // The counter's "cancel" asks an owner to cancel.
   const label = (action: TicketAction): string =>
-    tn(actionKey(action, ticket?.technicianId ?? null));
+    action === 'cancel' && !can.cancel
+      ? tn('repair.approval.askCancel')
+      : tn(actionKey(action, ticket?.technicianId ?? null));
 
-  // One banner at a time, in the fixed slot so it shows wherever the user has scrolled: a refusal of
-  // what they just did (WhatsApp not opening included; dismissing it shows what it covered), then a
-  // rejected op from sync, then what their last action did.
+  // One banner at a time: a refusal of what they just did (WhatsApp not opening included;
+  // dismissing it shows what it covered), then a rejected op from sync, then what their last action
+  // did. The answers to an action sit in the fixed slot so they show wherever the user has
+  // scrolled; the rejected op is lasting news about this servisan, so the same strip sits at the top
+  // of the page and scrolls away with it, never holding the screen over the rows (font 2.0).
+  const rejectedBanner =
+    runner.errorCode === null && !messageFailed && rejected > 0 ? (
+      <Banner
+        variant="danger"
+        message={t('sync.rejected.banner', { count: rejected })}
+        onPress={onOpenSyncStatus}
+        testID={`${testID}.rejectedBanner`}
+      />
+    ) : null;
   const banner =
     runner.errorCode !== null ? (
       <ActionErrorBanner
@@ -477,14 +657,7 @@ export function TicketDetail({
         onPress={() => setMessageFailed(false)}
         testID={`${testID}.messageFailed`}
       />
-    ) : rejected > 0 ? (
-      <Banner
-        variant="danger"
-        message={t('sync.rejected.banner', { count: rejected })}
-        onPress={onOpenSyncStatus}
-        testID={`${testID}.rejectedBanner`}
-      />
-    ) : done !== null ? (
+    ) : rejected === 0 && done !== null ? (
       <Banner
         variant="info"
         message={done}
@@ -498,11 +671,13 @@ export function TicketDetail({
       scrollable
       title={ticket?.ticketNumber ?? tn('repair.ticket.title')}
       titleVariant="detail"
+      stampTitle={justOpened && ticket !== undefined}
       onBack={hideBack ? undefined : onBack}
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       banner={banner}
+      pageBanner={rejectedBanner ?? undefined}
       overlay={
         moreOpen && ticket !== undefined ? (
           <Sheet
@@ -546,7 +721,7 @@ export function TicketDetail({
         onRetry={() => setReloadNonce((n) => n + 1)}
         testID={testID}
       >
-        {(data) => (data.ticket === undefined ? null : renderTicket(data.ticket))}
+        {(data) => (data.ticket === undefined ? null : renderTicket(data.ticket, data.approvals))}
       </QueryView>
     </AppShell>
   );
@@ -573,7 +748,10 @@ export function TicketDetail({
     ];
   }
 
-  function renderTicket(row: TicketDetailRow): React.JSX.Element {
+  function renderTicket(
+    row: TicketDetailRow,
+    approvals: readonly ApprovalRow[],
+  ): React.JSX.Element {
     const lock = row.devicePasscode === null ? null : decodeScreenLock(row.devicePasscode);
     const device = [row.deviceBrand, row.deviceModel, row.deviceColor]
       .filter((s) => s !== '')
@@ -585,7 +763,13 @@ export function TicketDetail({
     const contextual = (action: TicketAction): ReactNode =>
       CONTEXTUAL_ACTIONS.has(action) && actions.includes(action) && layout.next !== action ? (
         <TextButton
-          label={action === 'assign' ? tn(shortAssignKey) : label(action)}
+          label={
+            action === 'assign'
+              ? tn(shortAssignKey)
+              : action === 'changeCancelFee'
+                ? tn('repair.cancelFee.short')
+                : label(action)
+          }
           accessibilityLabel={label(action)}
           onPress={() => perform(action, row)}
           disabled={runner.busy}
@@ -600,7 +784,7 @@ export function TicketDetail({
         : null;
     return (
       <View testID={`${testID}.content`}>
-        <Card testID={`${testID}.summary`}>
+        <Card freshId={row.id} testID={`${testID}.summary`}>
           <View style={styles.statusRow}>
             <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
             {row.claimOf === null ? null : (
@@ -619,9 +803,12 @@ export function TicketDetail({
               />
             )}
           </View>
-          <Text style={styles.customer} testID={`${testID}.customer`}>
-            {row.customerName}
-          </Text>
+          <View style={styles.customerRow}>
+            <Text style={styles.customer} testID={`${testID}.customer`}>
+              {row.customerName}
+            </Text>
+            {contextual('correctDetails')}
+          </View>
           {row.customerPhone === null ? null : (
             // Tap to call: the counter rings the customer when the phone is ready or a price changes.
             <Pressable
@@ -631,7 +818,7 @@ export function TicketDetail({
               testID={`${testID}.phone`}
             >
               <Icon name="phone" size={size.iconChip} color={color.primary} />
-              <Text style={styles.link}>{formatPhone(row.customerPhone)}</Text>
+              <Text style={styles.link}>{keepNumbersWhole(formatPhone(row.customerPhone))}</Text>
             </Pressable>
           )}
           <View style={styles.deviceBox}>
@@ -653,6 +840,13 @@ export function TicketDetail({
           </View>
         </Card>
 
+        <ApprovalSection
+          rows={approvals}
+          describe={describeRepairApproval}
+          onOpen={(request) => setStep({ kind: 'approval', requestId: request.id })}
+          testID={`${testID}.approvals`}
+        />
+
         <View style={styles.facts}>
           <FactGrid>
             {renderRepairTypes(row)}
@@ -670,7 +864,12 @@ export function TicketDetail({
               />
             )}
             {row.deviceImei === null ? null : (
-              <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
+              // Wide: 15 digits do not fit half a row at a large font, and a number never splits.
+              <Fact
+                label={tn('repair.device.imei')}
+                value={keepNumbersWhole(row.deviceImei)}
+                wide
+              />
             )}
             {lock === null ? null : (
               // The technician needs it to test the phone; hidden until asked so it is not read
@@ -778,13 +977,17 @@ export function TicketDetail({
           </View>
         )}
 
-        {renderPrice(row, contextual('changePrice') ?? contextual('proposePrice'))}
+        {renderPrice(
+          row,
+          contextual('changePrice') ?? contextual('proposePrice') ?? contextual('changeCancelFee'),
+        )}
         {runtime.inventory === undefined ||
         !runtime.inventory.hasPermission(INVENTORY_PERMISSION.read) ? null : (
           <InventoryRuntimeProvider runtime={runtime.inventory}>
             <UsedPartsSection
               use={partUse(row)}
               editable={canUseParts(row, runtime.userId, runtime.inventory.hasPermission)}
+              takeable={canTakeParts(row, runtime.userId, runtime.inventory.hasPermission)}
               flagUnreturned={row.outcome === 'cancelled'}
               onTake={() => setStep({ kind: 'takePart' })}
               onPutBack={(part) => setStep({ kind: 'putBackPart', part })}
@@ -804,38 +1007,26 @@ export function TicketDetail({
 
         <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
           <Timeline
-            entries={[...row.events].reverse().map((event) => {
-              const note = eventNote(event.detail);
-              return {
-                key: event.id,
-                // A change saved before the customer agreed reads as waiting, not as changed.
-                title:
-                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
-                    ? tn('repair.price.waitingEvent')
-                    : translateOpType(event.kind),
-                meta: [formatDateTime(event.at), event.actorName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(note === null ? {} : { detail: note }),
-              };
-            })}
+            entries={[...row.events].reverse().map(historyEntry)}
             testID={`${testID}.timeline`}
           />
         </Section>
 
-        {canCancel ? (
-          <View style={styles.cancel}>
-            {/* Red text, kept apart at the end: it is final for the repair, so it never looks like
-                the next step. The step it opens says what cancelling means. */}
-            <TextButton
-              label={tn(actionKey('cancel', row.technicianId))}
-              tone="danger"
-              onPress={() => perform('cancel', row)}
-              disabled={runner.busy}
-              testID={`${testID}.action.cancel`}
-            />
-          </View>
-        ) : null}
+        {[...FINAL_ACTIONS]
+          .filter((action) => actions.includes(action))
+          .map((action) => (
+            <View key={action} style={styles.cancel}>
+              {/* Red text, kept apart at the end: final for the repair, or taking a handover back,
+                  so it never looks like the next step. The step it opens says what it means. */}
+              <TextButton
+                label={tn(actionKey(action, row.technicianId))}
+                tone="danger"
+                onPress={() => perform(action, row)}
+                disabled={runner.busy}
+                testID={`${testID}.action.${action}`}
+              />
+            </View>
+          ))}
       </View>
     );
   }
@@ -848,6 +1039,7 @@ export function TicketDetail({
     const perLine = deciding && pending.length > 1;
     const cancelled = row.outcome === 'cancelled';
     const paymentAction = downPaymentAction(row, can);
+    const moneyActions = ticketMoneyActions(row, runtime.hasPermission);
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -890,7 +1082,8 @@ export function TicketDetail({
           <Text style={[cancelled ? styles.notCharged : styles.totalLabel, repairStyles.rowText]}>
             {tn('repair.price.total')}
           </Text>
-          <Text
+          <RollingText
+            value={row.quoteTotal}
             style={[
               cancelled ? styles.notCharged : styles.totalValue,
               styles.amount,
@@ -899,7 +1092,7 @@ export function TicketDetail({
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
-          </Text>
+          </RollingText>
         </View>
         {cancelled ? (
           // The repair price stays as quiet history; the number that leads is what the customer
@@ -913,7 +1106,7 @@ export function TicketDetail({
                 style={[styles.totalValue, styles.amount, repairStyles.rowValue]}
                 testID={`${testID}.cancelFee`}
               >
-                {formatMoney(row.cancelFee ?? 0)}
+                {cancelFeeText(row.cancelFee ?? 0)}
               </Text>
             </View>
             <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>
@@ -931,13 +1124,15 @@ export function TicketDetail({
         )}
         <DownPaymentRows
           total={amountOwed(row)}
+          reduced={row.reduced}
           downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
+          returned={row.location === 'returned'}
           action={
             paymentAction === 'correct' ? (
               <TextButton
                 label={tn('repair.downPayment.change')}
-                accessibilityLabel={tn('repair.downPayment.correctTitle')}
+                accessibilityLabel={tn(downPaymentTitleKey('correct', can.correctDownPayment))}
                 onPress={() => setStep({ kind: 'downPayment', mode: 'correct' })}
                 disabled={runner.busy}
                 testID={`${testID}.downPayment.correct`}
@@ -955,6 +1150,26 @@ export function TicketDetail({
               disabled={runner.busy}
               testID={`${testID}.downPayment.record`}
             />
+          </View>
+        ) : null}
+        {moneyActions.refund || moneyActions.reduce ? (
+          <View style={styles.moneyActions}>
+            {moneyActions.refund ? (
+              <TextButton
+                label={tm('money.refund.title')}
+                onPress={() => setStep({ kind: 'refund' })}
+                disabled={runner.busy}
+                testID={`${testID}.refund`}
+              />
+            ) : null}
+            {moneyActions.reduce ? (
+              <TextButton
+                label={tm('money.reduce.action')}
+                onPress={() => setStep({ kind: 'reduce' })}
+                disabled={runner.busy}
+                testID={`${testID}.reduce`}
+              />
+            ) : null}
           </View>
         ) : null}
       </Section>
@@ -1154,7 +1369,14 @@ function ticketPhotos(row: TicketDetailRow): BrowsablePhoto[] {
 }
 
 const styles = StyleSheet.create({
-  customer: { ...type.title, color: color.text, marginTop: space.md },
+  customerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.sm,
+    marginTop: space.md,
+  },
+  customer: { ...type.title, color: color.text, flexShrink: 1 },
   phone: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1188,6 +1410,13 @@ const styles = StyleSheet.create({
   lineKind: { ...type.caption, color: color.textMuted },
   lineWarning: { ...type.caption, color: color.warning },
   lineAction: { alignItems: 'flex-start', marginLeft: -space.sm },
+  moneyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: space.md,
+    marginLeft: -space.sm,
+    marginTop: space.xs,
+  },
   total: {
     marginTop: space.sm,
     paddingTop: space.md,

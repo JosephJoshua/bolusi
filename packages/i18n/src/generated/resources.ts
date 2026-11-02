@@ -7,9 +7,9 @@ const source = {
       action: {
         save: 'Simpan',
         cancel: 'Batal',
-        retry: 'Coba Lagi',
+        retry: 'Coba lagi',
         delete: 'Hapus',
-        confirm: 'Ya, Lanjutkan',
+        confirm: 'Ya, lanjutkan',
         back: 'Kembali',
         close: 'Tutup',
         edit: 'Ubah',
@@ -50,6 +50,9 @@ const source = {
       },
       language: { id: 'Bahasa Indonesia', en: 'English' },
       unauthorized: { askOwner: 'Minta pemilik toko untuk memberi akses.' },
+      notOnDevice: {
+        hint: 'Data ini tidak disimpan di perangkat ini. Akan muncul begitu tersambung.',
+      },
       opType: { unknown: 'Perubahan' },
       errors: {
         INVALID_TRANSITION:
@@ -67,6 +70,7 @@ const source = {
           'Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.',
         CLOCK_AHEAD:
           'Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.',
+        NOT_ON_DEVICE: 'Perlu internet untuk membuka ini.',
         IDEMPOTENCY_CONFLICT: 'Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.',
         RATE_LIMITED: 'Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.',
         UNEXPECTED: 'Terjadi kesalahan. Coba lagi.',
@@ -89,6 +93,7 @@ const source = {
         AUTH_TOKEN_MISSING: 'Masuk lagi untuk melanjutkan pengiriman foto.',
         AUTH_TOKEN_INVALID:
           'Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.',
+        APP_UPDATE_REQUIRED: 'Perbarui aplikasi dulu agar data terbaru bisa masuk.',
       },
       rejection: {
         BAD_SIGNATURE: 'Gagal diverifikasi server. Kabari pemilik toko.',
@@ -97,7 +102,7 @@ const source = {
         CHAIN_GAP: 'Ada yang tertinggal. Dikirim ulang otomatis.',
         CHAIN_HALTED: 'Menunggu perubahan sebelumnya beres.',
         CLOCK_AHEAD:
-          'Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
+          'Jam perangkat ini terlalu cepat saat perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
         DEVICE_REVOKED: 'Perangkat ini sudah diblokir. Daftarkan ulang.',
         PERMISSION_DENIED: 'Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.',
         RULE_VIOLATED:
@@ -156,11 +161,16 @@ const source = {
           rotate: 'Putar HP ke posisi mendatar.',
           rotateNow: 'Putar layar',
           withdrawn: 'Dibatalkan di komputer.',
+          videoDenied:
+            'Kamera atau mikrofon belum diizinkan. Izinkan untuk situs ini di browser, lalu coba lagi.',
+          videoUnsupported:
+            'Browser ini belum bisa merekam video. Buka kodenya di Chrome atau Safari.',
         },
         newCode: 'Ganti HP',
         photoOnPhone: 'Ambil fotonya di HP',
         signOnPhone: 'Minta pelanggan tanda tangan di HP',
         waitingSend: 'Menunggu kiriman dari HP…',
+        videoOnPhone: 'Rekam videonya di HP',
       },
       video: {
         denied:
@@ -171,13 +181,19 @@ const source = {
         noMicrophone:
           'Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi.',
       },
+      closeWindow: {
+        title: 'Tutup Bolusi?',
+        message: 'Yang sedang diisi belum tersimpan dan akan hilang.',
+        confirm: 'Tutup',
+        keep: 'Lanjut isi',
+      },
     },
     auth: {
       switcher: {
         title: 'Siapa yang pakai?',
-        addUser: 'Tambah Pengguna',
-        reenroll: 'Daftarkan Ulang Perangkat',
-        emptyUsers: 'Belum ada pengguna di HP ini. Minta pemilik toko menambahkannya.',
+        addUser: 'Tambah pengguna',
+        reenroll: 'Daftarkan ulang',
+        emptyUsers: 'Belum ada yang bisa masuk di HP ini. Minta bantuan pemilik toko.',
         idleLocked: 'Terkunci karena lama tidak dipakai. Pekerjaanmu aman.',
         search: 'Cari nama',
         noMatches: 'Tidak ada nama yang cocok',
@@ -190,14 +206,16 @@ const source = {
         wrong: 'PIN salah.',
         attemptsLeft: 'Sisa {count} kali coba.',
         wait: 'Terlalu sering salah. Coba lagi dalam {duration}.',
+        nextWait: 'Salah sekali lagi, harus tunggu {duration}.',
         lockedOut: 'Minta pemilik toko membuka kuncinya.',
         forgot: 'Minta pemilik toko membuatkan PIN baru. Bisa tanpa internet.',
         setup: {
           title: 'Buat PIN baru',
           repeat: 'Ulangi PIN baru',
           mismatch: 'PIN tidak sama. Buat lagi dari awal.',
+          weak: 'PIN ini terlalu gampang ditebak. Pilih angka lain.',
           screenTitle: 'Buat PIN',
-          hint: '6 angka. Jangan pakai tanggal lahir.',
+          hint: '6 angka. Jangan pakai tanggal lahir atau 123456.',
           failed: 'PIN belum bisa dibuat. Coba lagi.',
         },
         change: {
@@ -210,7 +228,7 @@ const source = {
         reset: {
           noUsers: 'Belum ada karyawan lain di HP ini.',
           done: 'PIN baru sudah dibuat',
-          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain.',
+          denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik.',
         },
         unlock: {
           confirm: 'Bisa langsung masuk dengan PIN lamanya.',
@@ -258,6 +276,13 @@ const source = {
         account: 'Akun {tenant}',
         deviceNameField: 'Nama HP',
         deviceNamePlaceholder: 'Contoh: HP Kasir 1',
+        ownerField: 'HP siapa?',
+        ownerShared: 'Toko',
+        ownerSelf: 'Saya',
+        ownerSharedHint: 'Semua karyawan toko bisa masuk.',
+        ownerSelfHint: 'Hanya kamu yang bisa masuk.',
+        ownerPersonHint:
+          'Hanya {name} yang bisa masuk, pemilik pun tidak bisa. Untuk mengubahnya, daftarkan ulang HP ini.',
         bind: 'Daftarkan ke {store}',
         bindWithoutStore: 'Daftarkan',
         pickStoreFirst: 'Pilih tokonya dulu.',
@@ -268,6 +293,7 @@ const source = {
         success: 'Pendaftaran selesai',
         successStore: 'Terdaftar di',
         successNext: 'Berikutnya, pilih siapa yang pakai.',
+        successNextPersonal: 'Berikutnya, masuk pakai PIN.',
         finish: 'Lanjut',
         discardTitle: 'Batalkan pendaftaran?',
         discardMessage: 'Yang sudah kamu isi akan hilang.',
@@ -312,6 +338,7 @@ const source = {
           cashier: 'Terima HP, atur harga, dan serahkan HP ke pelanggan',
           technician: 'Kerjakan servisan, termasuk foto sebelum dan sesudah',
           manager: 'Tugas kasir dan teknisi, plus diskon dan refund terbatas',
+          staff: 'Hanya menulis catatan',
           storeOwner: 'Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan',
         },
         save: 'Simpan',
@@ -405,16 +432,16 @@ const source = {
           back: 'Kembali',
           later: 'Nanti saja',
           laterHint: 'Bisa dibuka lagi di Pengaturan > Komputer ini.',
-          cameraTitle: 'Foto dan tanda tangan',
-          cameraWebcam: 'Foto HP pelanggan diambil dengan webcam ini.',
+          cameraTitle: 'Foto, video dan tanda tangan',
+          cameraWebcam: 'Foto dan video kepemilikan diambil dengan webcam ini.',
           cameraPhone:
-            'Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.',
+            'Komputer ini belum punya webcam, jadi foto dan video diambil lewat HP toko. Saat pertama kali, scan kode QR yang muncul dengan HP.',
           signatureScreen: 'Pelanggan tanda tangan langsung di layar sentuh ini.',
           signaturePhone: 'Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.',
-          doneTitle: 'Komputer siap dipakai',
+          doneTitle: 'Komputer ini siap',
           donePrinter: 'Printer',
           donePaper: 'Kertas',
-          donePhotos: 'Foto',
+          donePhotos: 'Foto & video',
           doneSignature: 'Tanda tangan',
           noPrinter: 'Belum dipilih',
           viaWebcam: 'Webcam',
@@ -426,6 +453,26 @@ const source = {
           printerGone: 'Printer tidak ditemukan',
           printerReminderHint: 'Nota belum bisa dicetak dari komputer ini.',
         },
+        startup: {
+          label: 'Buka saat Windows menyala',
+          caption: 'Bolusi langsung terbuka begitu komputer dinyalakan.',
+        },
+        language: { caption: 'Berlaku untuk semua orang di komputer ini.' },
+        media: {
+          title: 'Kamera dan mikrofon',
+          caption: 'Dipakai untuk foto dan video kepemilikan di komputer ini.',
+          camera: 'Kamera',
+          microphone: 'Mikrofon',
+          unnamedCamera: 'Kamera {number}',
+          unnamedMicrophone: 'Mikrofon {number}',
+          level: 'Suara mikrofon',
+          hint: 'Coba bicara, garisnya ikut bergerak.',
+          micNone: 'Mikrofon tidak ditemukan. Video kepemilikan butuh suara pelanggan.',
+          micDenied:
+            'Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.',
+          micFailed: 'Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon.',
+        },
+        idleLocked: 'Terkunci karena lama tidak dipakai. Isian servisan baru tetap tersimpan.',
       },
       limits: {
         title: 'Batas wewenang',
@@ -438,6 +485,7 @@ const source = {
         refundHint: 'Termasuk membatalkan pembayaran dan DP',
         credit: 'Bayar nanti',
         creditHint: 'Sisa tagihan saat HP dibawa pulang',
+        checkAmount: 'Besar sekali untuk satu servisan. Cek lagi jumlahnya.',
         save: 'Simpan',
         saved: 'Batas {role} tersimpan.',
         missing: 'Isi ketiga batas. Tulis 0 kalau harus pemilik toko.',
@@ -450,6 +498,39 @@ const source = {
           lastOwner: 'Harus tetap ada satu pemilik utama.',
           rateLimited: 'Sudah terlalu banyak perubahan hari ini. Coba lagi besok.',
           unexpected: 'Batasnya belum tersimpan. Coba lagi sebentar lagi.',
+        },
+      },
+      setup: {
+        title: 'Siapkan HP ini',
+        step: 'Langkah {step} dari {total}',
+        permissionsTitle: 'Izin HP',
+        camera: 'Kamera',
+        cameraWhy: 'Untuk foto HP pelanggan dan scan kode QR.',
+        notifications: 'Notifikasi',
+        notificationsWhy: 'Kabar kalau ada servisan yang perlu dicek.',
+        allow: 'Izinkan',
+        allowed: 'Diizinkan',
+        notAllowed: 'Belum diizinkan',
+        openSettings: 'Buka pengaturan',
+        blockedHint: 'Izinnya ditolak. Nyalakan lewat pengaturan HP.',
+        paperTitle: 'Kertas nota',
+        next: 'Lanjut',
+        later: 'Nanti saja',
+        doneTitle: 'HP ini siap',
+        start: 'Mulai',
+        reopen: 'Panduan persiapan',
+        reopenSummary: 'Izin HP, kertas nota, dan halaman uji',
+      },
+      rename: {
+        titlePhone: 'Ganti nama HP',
+        titlePc: 'Ganti nama komputer',
+        hint: 'Pakai nama yang mudah dikenali di toko.',
+        problem: { nameMissing: 'Isi namanya dulu.', nameTooLong: 'Maksimal 64 karakter.' },
+        failure: {
+          offline: 'Butuh internet untuk ganti nama. Sambungkan HP, lalu ulangi.',
+          denied: 'Hanya pemilik toko yang bisa ganti nama perangkat.',
+          rateLimited: 'Terlalu banyak percobaan. Coba lagi nanti.',
+          unexpected: 'Namanya belum tersimpan. Coba lagi sebentar lagi.',
         },
       },
       roles: {
@@ -537,6 +618,8 @@ const source = {
           stockCorrectHint: 'Ubah part yang sudah terpakai',
           stockManage: 'Atur daftar part',
           stockManageHint: 'Tambah dan ubah part',
+          stockBuy: 'Belanja sparepart',
+          stockBuyHint: 'Pesan ke supplier dan terima barangnya',
           notes: 'Catatan',
           notesHint: 'Tulis dan arsipkan catatan toko',
           syncProblems: 'Masalah sinkron',
@@ -576,12 +659,13 @@ const source = {
       rejected: {
         banner: '{count} perubahan ditolak server. Ketuk untuk melihat.',
         title: 'Ditolak server ({count})',
-        explain: 'Sudah dibatalkan juga di HP ini. Ulangi kalau masih perlu.',
+        explain: 'Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.',
         opMeta: '{opType} · {time}',
         opMetaSubject: '{opType} · {subject} · {time}',
         technicalDetails: 'Detail teknis',
         noReason: 'Server tidak mengirim keterangan.',
         more: 'Tampilkan {count} lainnya',
+        handled: 'Tandai sudah dicek',
       },
       quarantine: {
         title: 'Perubahan ditahan',
@@ -604,8 +688,17 @@ const source = {
         savedHere: '{count} perubahan tersimpan di komputer ini dan akan disinkronkan otomatis.',
         offline: 'Perubahan tersimpan di komputer ini dan disinkronkan saat ada koneksi.',
         mediaFailed: '{count} foto belum bisa dikirim. Fotonya aman di komputer ini.',
-        rejectedExplain: 'Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.',
+        rejectedExplain: 'Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.',
         rejectedBanner: '{count} perubahan ditolak server.',
+      },
+      updateNeeded: {
+        title: 'Perbarui aplikasi',
+        body: 'Perangkat lain sudah pakai versi baru. Data baru dari perangkat lain tertahan sampai aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron.',
+        check: 'Cek pembaruan',
+        checking: 'Mengecek pembaruan…',
+        none: 'Belum ada pembaruan untuk HP ini. Coba lagi nanti.',
+        failed: 'Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.',
+        lastArrived: 'Data baru terakhir masuk {relative}',
       },
     },
     conflict: {
@@ -629,10 +722,10 @@ const source = {
         waitingForConnection: 'Menunggu koneksi',
       },
       action: {
-        takePhoto: 'Ambil Foto',
-        retake: 'Foto Ulang',
-        usePhoto: 'Pakai Foto Ini',
-        retryUpload: 'Kirim Ulang',
+        takePhoto: 'Ambil foto',
+        retake: 'Foto ulang',
+        usePhoto: 'Pakai foto ini',
+        retryUpload: 'Kirim ulang',
       },
       permission: {
         camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
@@ -664,7 +757,7 @@ const source = {
           'Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
         unavailableTitle: 'Video belum ada di HP ini',
         unavailableBody: 'Videonya belum tersinkron dari HP yang merekam. Coba lagi nanti.',
-        tooLarge: 'Videonya terlalu besar. Rekam ulang lebih singkat.',
+        tooLarge: 'Videonya terlalu besar. Rekam lebih singkat.',
       },
     },
     platform: {
@@ -676,6 +769,7 @@ const source = {
       refusal: {
         conflictNotFound: 'Data bentrok ini tidak ditemukan.',
         notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
+        idTaken: 'Data ini belum bisa disimpan. Buat ulang, ya.',
       },
     },
     push: {
@@ -715,9 +809,9 @@ export const resources = {
         action: {
           save: 'Save',
           cancel: 'Cancel',
-          retry: 'Try Again',
+          retry: 'Try again',
           delete: 'Delete',
-          confirm: 'Yes, Continue',
+          confirm: 'Yes, continue',
           back: 'Back',
           close: 'Close',
           edit: 'Edit',
@@ -758,6 +852,7 @@ export const resources = {
         },
         language: { id: 'Bahasa Indonesia', en: 'English' },
         unauthorized: { askOwner: 'Ask your store owner for access.' },
+        notOnDevice: { hint: 'This isn’t kept on this device. It shows up once you’re online.' },
         opType: { unknown: 'Change' },
         errors: {
           INVALID_TRANSITION:
@@ -775,6 +870,7 @@ export const resources = {
             'This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.',
           CLOCK_AHEAD:
             'This device’s clock is ahead. Turn on automatic date and time in settings, then try again.',
+          NOT_ON_DEVICE: 'Needs internet to open this.',
           IDEMPOTENCY_CONFLICT: 'This request clashed with an earlier one. Try again.',
           RATE_LIMITED: 'Too many requests. Wait a moment, then try again.',
           UNEXPECTED: 'Something went wrong. Try again.',
@@ -802,6 +898,7 @@ export const resources = {
           AUTH_TOKEN_MISSING: 'Sign in again to keep sending photos.',
           AUTH_TOKEN_INVALID:
             'This device’s session has ended. Sign in again to keep sending photos.',
+          APP_UPDATE_REQUIRED: 'Update the app to receive the latest data.',
         },
         rejection: {
           BAD_SIGNATURE: 'Failed the server check. Tell the store owner.',
@@ -810,7 +907,7 @@ export const resources = {
           CHAIN_GAP: 'Something was missing. Resending automatically.',
           CHAIN_HALTED: 'Waiting on an earlier change.',
           CLOCK_AHEAD:
-            'This phone’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
+            'This device’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
           DEVICE_REVOKED: 'This device is blocked. Enroll it again.',
           PERMISSION_DENIED: 'Whoever made it wasn’t allowed to. Ask someone who is to redo it.',
           RULE_VIOLATED:
@@ -868,11 +965,15 @@ export const resources = {
             rotate: 'Turn the phone on its side.',
             rotateNow: 'Turn the screen',
             withdrawn: 'Cancelled on the computer.',
+            videoDenied:
+              'The camera or microphone isn’t allowed. Allow them for this site in the browser, then try again.',
+            videoUnsupported: 'This browser can’t record video. Open the code in Chrome or Safari.',
           },
           newCode: 'Use another phone',
           photoOnPhone: 'Take the photo on the phone',
           signOnPhone: 'Ask the customer to sign on the phone',
           waitingSend: 'Waiting for the phone to send…',
+          videoOnPhone: 'Record the video on the phone',
         },
         video: {
           denied:
@@ -883,13 +984,19 @@ export const resources = {
           noMicrophone:
             'No microphone found. Plug in a microphone or a webcam that has one, then try again.',
         },
+        closeWindow: {
+          title: 'Close Bolusi?',
+          message: 'What you are filling in is not saved yet and will be lost.',
+          confirm: 'Close',
+          keep: 'Keep editing',
+        },
       },
       auth: {
         switcher: {
           title: 'Who’s using this?',
-          addUser: 'Add User',
-          reenroll: 'Re-enroll Device',
-          emptyUsers: 'No one is set up on this phone yet. Ask the store owner to add people.',
+          addUser: 'Add user',
+          reenroll: 'Re-enroll',
+          emptyUsers: 'No one can sign in on this phone yet. Ask the store owner for help.',
           idleLocked: 'Locked after a while unused. Your work is safe.',
           search: 'Search name',
           noMatches: 'No matching names',
@@ -902,14 +1009,16 @@ export const resources = {
           wrong: 'Wrong PIN.',
           attemptsLeft: '{count, plural, one {# try left.} other {# tries left.}}',
           wait: 'Too many wrong tries. Try again in {duration}.',
+          nextWait: 'One more wrong try and you wait {duration}.',
           lockedOut: 'Ask the store owner to unlock it.',
           forgot: 'Ask the store owner to make you a new PIN. Works offline.',
           setup: {
             title: 'Create a new PIN',
             repeat: 'Repeat the new PIN',
             mismatch: 'The PINs don’t match. Start again.',
+            weak: 'That PIN is too easy to guess. Choose other digits.',
             screenTitle: 'Create PIN',
-            hint: '6 digits. Avoid your birthday.',
+            hint: '6 digits. Avoid your birthday or 123456.',
             failed: 'The PIN couldn’t be saved. Try again.',
           },
           change: {
@@ -922,7 +1031,7 @@ export const resources = {
           reset: {
             noUsers: 'There’s no other staff on this phone yet.',
             done: 'New PIN is set',
-            denied: 'Only a main owner can make a new PIN for another main owner.',
+            denied: 'Only the main owner can make a new PIN for an owner.',
           },
           unlock: {
             confirm: 'They can sign in with their old PIN right away.',
@@ -970,6 +1079,13 @@ export const resources = {
           account: '{tenant} account',
           deviceNameField: 'Phone name',
           deviceNamePlaceholder: 'For example: Counter phone 1',
+          ownerField: 'Whose phone?',
+          ownerShared: 'Store',
+          ownerSelf: 'Mine',
+          ownerSharedHint: 'Everyone at the store can sign in.',
+          ownerSelfHint: 'Only you can sign in.',
+          ownerPersonHint:
+            'Only {name} can sign in, not even an owner. To change that, re-enroll this phone.',
           bind: 'Enroll in {store}',
           bindWithoutStore: 'Enroll',
           pickStoreFirst: 'Choose a store first.',
@@ -980,6 +1096,7 @@ export const resources = {
           success: 'All set',
           successStore: 'Enrolled in',
           successNext: 'Next, choose who’s using it.',
+          successNextPersonal: 'Next, sign in with the PIN.',
           finish: 'Continue',
           discardTitle: 'Cancel enrollment?',
           discardMessage: 'What you entered will be lost.',
@@ -1026,6 +1143,7 @@ export const resources = {
             cashier: 'Take in devices, set prices and hand devices back',
             technician: 'Work on repairs, including before and after photos',
             manager: 'Cashier and technician work, plus limited discounts and refunds',
+            staff: 'Notes only',
             storeOwner:
               'Everything in the store, including staff, discounts and cancelling repairs',
           },
@@ -1122,16 +1240,16 @@ export const resources = {
             back: 'Back',
             later: 'Later',
             laterHint: 'You can open it again in Settings > This computer.',
-            cameraTitle: 'Photos and signatures',
-            cameraWebcam: 'Customer phone photos are taken with this webcam.',
+            cameraTitle: 'Photos, videos and signatures',
+            cameraWebcam: 'Photos and the ownership video are taken with this webcam.',
             cameraPhone:
-              'This computer has no webcam, so photos are taken with a store phone. The first time you take a photo, scan the QR code that appears with the phone.',
+              'This computer has no webcam, so photos and videos are taken with a store phone. The first time, scan the QR code that appears with the phone.',
             signatureScreen: 'Customers sign right on this touch screen.',
             signaturePhone: 'Customers sign on the store phone, through the same QR code.',
             doneTitle: 'This computer is ready',
             donePrinter: 'Printer',
             donePaper: 'Paper',
-            donePhotos: 'Photos',
+            donePhotos: 'Photos & video',
             doneSignature: 'Signatures',
             noPrinter: 'Not chosen',
             viaWebcam: 'Webcam',
@@ -1143,6 +1261,26 @@ export const resources = {
             printerGone: 'Printer not found',
             printerReminderHint: 'Slips cannot be printed from this computer yet.',
           },
+          startup: {
+            label: 'Open when Windows starts',
+            caption: 'Bolusi opens as soon as the computer is switched on.',
+          },
+          language: { caption: 'Applies to everyone on this computer.' },
+          media: {
+            title: 'Camera and microphone',
+            caption: 'Used for photos and ownership videos on this computer.',
+            camera: 'Camera',
+            microphone: 'Microphone',
+            unnamedCamera: 'Camera {number}',
+            unnamedMicrophone: 'Microphone {number}',
+            level: 'Microphone level',
+            hint: 'Say something, the bar should move.',
+            micNone: 'No microphone found. Ownership videos need the customer’s voice.',
+            micDenied:
+              'The microphone isn’t allowed yet. Allow it in Windows Settings › Privacy › Microphone.',
+            micFailed: 'The microphone won’t start. Close other apps that use it.',
+          },
+          idleLocked: 'Locked after a while unused. Unsaved intakes are kept.',
         },
         limits: {
           title: 'Limits',
@@ -1155,6 +1293,7 @@ export const resources = {
           refundHint: 'Includes voiding payments and down payments',
           credit: 'Pay later',
           creditHint: 'What the customer still owes when they take the phone',
+          checkAmount: 'That is a lot for one repair. Check the amount.',
           save: 'Save',
           saved: '{role} limits saved.',
           missing: 'Fill in all three. Enter 0 to always need a store owner.',
@@ -1167,6 +1306,39 @@ export const resources = {
             lastOwner: 'There must always be one main owner.',
             rateLimited: 'Too many changes today. Try again tomorrow.',
             unexpected: 'The limits weren’t saved. Try again in a moment.',
+          },
+        },
+        setup: {
+          title: 'Set up this phone',
+          step: 'Step {step} of {total}',
+          permissionsTitle: 'Phone permissions',
+          camera: 'Camera',
+          cameraWhy: 'For photos of customers’ phones and scanning QR codes.',
+          notifications: 'Notifications',
+          notificationsWhy: 'Word when a repair needs checking.',
+          allow: 'Allow',
+          allowed: 'Allowed',
+          notAllowed: 'Not allowed',
+          openSettings: 'Open settings',
+          blockedHint: 'Permission was refused. Turn it on in the phone’s settings.',
+          paperTitle: 'Slip paper',
+          next: 'Next',
+          later: 'Later',
+          doneTitle: 'This phone is ready',
+          start: 'Start',
+          reopen: 'Setup guide',
+          reopenSummary: 'Phone permissions, slip paper and a test page',
+        },
+        rename: {
+          titlePhone: 'Rename this phone',
+          titlePc: 'Rename this computer',
+          hint: 'Use a name people in the store will recognise.',
+          problem: { nameMissing: 'Enter a name first.', nameTooLong: '64 characters at most.' },
+          failure: {
+            offline: 'Renaming needs internet. Connect this phone, then try again.',
+            denied: 'Only a store owner can rename a device.',
+            rateLimited: 'Too many tries. Try again later.',
+            unexpected: 'The name wasn’t saved. Try again in a moment.',
           },
         },
         roles: {
@@ -1254,6 +1426,8 @@ export const resources = {
             stockCorrectHint: 'Change parts already used',
             stockManage: 'Manage parts',
             stockManageHint: 'Add and edit parts',
+            stockBuy: 'Buy parts',
+            stockBuyHint: 'Order from suppliers and receive the parts',
             notes: 'Notes',
             notesHint: 'Write and archive store notes',
             syncProblems: 'Sync problems',
@@ -1297,12 +1471,13 @@ export const resources = {
           banner:
             '{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}',
           title: 'Refused by the server ({count})',
-          explain: 'Also undone on this phone. Redo them if they’re still needed.',
+          explain: 'These changes didn’t count. Each one says why.',
           opMeta: '{opType} · {time}',
           opMetaSubject: '{opType} · {subject} · {time}',
           technicalDetails: 'Technical details',
           noReason: 'The server sent no details.',
           more: 'Show {count} more',
+          handled: 'Mark as checked',
         },
         quarantine: {
           title: 'Changes on hold',
@@ -1329,9 +1504,18 @@ export const resources = {
           offline: 'Changes are saved on this computer and synced when it is online.',
           mediaFailed:
             '{count, plural, one {# photo couldn’t be sent. It’s safe on this computer.} other {# photos couldn’t be sent. They’re safe on this computer.}}',
-          rejectedExplain: 'Also undone on this computer. Redo them if they’re still needed.',
+          rejectedExplain: 'These changes didn’t count. Each one says why.',
           rejectedBanner:
             '{count, plural, one {# change was rejected by the server.} other {# changes were rejected by the server.}}',
+        },
+        updateNeeded: {
+          title: 'Update the app',
+          body: 'Another device runs a newer version. New data from other devices waits until this app is updated. Changes made here still sync.',
+          check: 'Check for updates',
+          checking: 'Checking for updates…',
+          none: 'No update for this phone yet. Try again later.',
+          failed: 'Couldn’t check for updates. Check the connection, then try again.',
+          lastArrived: 'New data last arrived {relative}',
         },
       },
       conflict: {
@@ -1359,10 +1543,10 @@ export const resources = {
           waitingForConnection: 'Waiting for connection',
         },
         action: {
-          takePhoto: 'Take Photo',
+          takePhoto: 'Take photo',
           retake: 'Retake',
-          usePhoto: 'Use This Photo',
-          retryUpload: 'Send Again',
+          usePhoto: 'Use this photo',
+          retryUpload: 'Send again',
         },
         permission: {
           camera: 'Allow the app to use the camera to take photos.',
@@ -1412,6 +1596,7 @@ export const resources = {
         refusal: {
           conflictNotFound: 'This conflict wasn’t found.',
           notYourPreference: 'Only the account’s owner can change its language.',
+          idTaken: 'This couldn’t be saved. Create it again.',
         },
       },
       push: {

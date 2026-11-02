@@ -66,6 +66,10 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   ladder is a step smaller: display 28, title 22, heading 17, body 15, small 14.
   The 14 floor is the same. Mouse-first controls are 32 to 40 px tall; tables,
   not cards, carry lists.
+- The PC window goes down to 1024 × 520 (a small laptop at 125% scaling) and
+  nothing is cut off there: tabs and filters wrap to a second row instead of
+  scrolling sideways out of a mouse's reach, and an open servisan sits beside
+  the table, which folds to number, customer and status, never over it.
 
 ## 4. Alignment and spacing
 
@@ -124,7 +128,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 
 Prefer a proper component over a hand-made approximation. Already built:
 `SearchField`, `SegmentedControl` (compact, bleed), `TextButton`, `Timeline`
-(history, "Riwayat"), `PhotoStrip`, `ChipRow` (choice chips that scroll sideways), `Sheet` (bottom sheet to show more, never a
+(history, "Riwayat"), `PhotoStrip`, `ChipRow` (choice chips that scroll sideways; an edge with more to swipe to fades), `Sheet` (bottom sheet to show more, never a
 form), `PhotoViewer` (pinch and double-tap zoom, pager, share), `ConfirmSheet`,
 `Chip`/`StatusChip`, `FactGrid`/`Fact`, `Banner`, `EmptyState`,
 `ReorderableList` (drag a handle to reorder, iOS style), `SwitchRow` (an on/off
@@ -154,7 +158,9 @@ setting).
 Every screen ships loading (skeleton for lists, not spinners), empty, error and
 offline or stale states, plus the success feedback after an action ("Servisan
 mulai dikerjakan."). A refused action shows a banner in the fixed slot, never
-only at the top of a scrolled page. Sync state is a quiet chip, not an alarm.
+only at the top of a scrolled page. Refused changes on the record you are looking
+at show the same strip at the top of the page (`AppShell` `pageBanner`), so it
+scrolls away instead of covering rows at a large font. Sync state is a quiet chip, not an alarm.
 
 ## 8. Indonesian copy
 
@@ -193,7 +199,9 @@ choice shows its whole text at every supported width and font size. The
 Android run showed "Tidak" for "Tidak dicek"; that is a defect, not a style.
 When text does not fit, change the layout (wrap, stack the label above its
 control, share the width equally), or shorten the copy so it still reads
-naturally. Never rely on `numberOfLines` to hide the overflow. The only
+naturally. Never rely on `numberOfLines` to hide the overflow. A chip
+that runs past a scrolling row's edge sits under that edge's fade, so it
+reads as "more", never as a cut label. The only
 ellipsis allowed is a long user-entered value in a list row (a customer
 name), whose full text is one tap away.
 
@@ -235,8 +243,18 @@ Motion explains what changed; it never decorates or makes anyone wait.
   their frames. Never animate width, height, colour or layout.
 - Reduce motion in the OS means no movement: things appear in place.
 - Sheets rise as the scrim dims; toasts rise in; pressed buttons shrink a
-  touch; a success disc lands with a small overshoot. A spinner is never
-  the logo.
+  touch; a success disc lands with a small overshoot and its tick draws in.
+  A spinner is never the logo.
+- Intake steps slide in from the side they come from. A new servisan number
+  lands like a stamp, on its first open only.
+- A money figure that changes while on screen (a balance after a QR payment,
+  a total after a price change) uses `RollingText`: a rise rolls in from
+  below, a drop from above. Never roll a figure the person is typing.
+- A row or card another device just changed glows once (`FreshGlow`): a soft
+  highlight fading out over a second, the one thing allowed past 220 ms because it
+  shows a change rather than moving anything. Only what is on screen when the change
+  arrives, or what it brings in (a new Kas row), glows; the person's own edits and a
+  catch-up burst (first sync, back online) stay calm.
 
 ## References
 

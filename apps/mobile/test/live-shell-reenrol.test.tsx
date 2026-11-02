@@ -55,7 +55,7 @@ import { sql } from 'kysely';
 
 import type { RootProps } from '../src/bootstrap/Root.js';
 import { createAppEnrollment, type EnrollmentPlatform } from '@bolusi/device/bootstrap/enrollment';
-import { createSyncClient } from '@bolusi/device/bootstrap/sync-client';
+import { createSyncClient, knowsOp, readScopeOf } from '@bolusi/device/bootstrap/sync-client';
 import type { NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 import { SecureStoreKeyStore } from '../src/ports/keystore.js';
 import type { LoginResult } from '@bolusi/device/models/enrollment/model';
@@ -148,10 +148,12 @@ function syncFor(server: FakeSyncServer, built: string[]): RootProps['createSync
     return createSyncClient({
       db: booted.db,
       deviceId: booted.deviceId,
+      readScope: readScopeOf(booted),
       transport: server,
       bundle: { refresh: () => Promise.resolve('unchanged') },
       applyPulledOp: (op) => booted.engine.applyPulledOp(op),
       refoldRefused: (op) => booted.engine.refoldRefused(op),
+      knowsOp: (op) => knowsOp(booted.registry.operations, op),
       crypto: noblePort,
       clock: { now: () => NOW },
       timer: virtualTimer(),

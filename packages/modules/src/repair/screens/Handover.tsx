@@ -8,8 +8,10 @@
  */
 import { formatMoney } from '@bolusi/i18n';
 import {
+  Button,
   Card,
   PhotoSlot,
+  RollingText,
   TextButton,
   TextInput,
   ToggleChip,
@@ -17,25 +19,27 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
+import { cancelFeeText } from '../labels.js';
 import type { MediaRef } from '@bolusi/schemas';
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
-import { MONEY_PERMISSION } from '../../money/constants.js';
 import { PaymentLines } from '../../money/screens/PaymentLines.js';
 import { QrisStep, useQrStepBack } from '../../money/screens/QrisStep.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { tn } from '../i18n.js';
 import {
-  balanceAfterDownPayment,
+  ticketBalance,
   capturedThumbnailRef,
   amountOwed,
   repairAbilities,
   staleStep,
   ticketStatus,
+  type HandoverDraft,
 } from '../flows.js';
 import {
   DownPaymentRows,
@@ -51,7 +55,8 @@ import {
 import { useDiscardConfirm } from './discard.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
-import { useHandoverPayment } from '../handover-payment.js';
+import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
+import { ta } from '../../approvals/i18n.js';
 import { usePaymentAccounts, useRepairQuery, useRepairRuntime, useTicketQris } from '../runtime.js';
 
 export interface HandoverProps {
@@ -61,6 +66,10 @@ export interface HandoverProps {
   readonly onCancel: () => void;
   /** Lets hardware back ask before dropping the photo and signature taken here. */
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
+  /** This user's handover of this ticket in progress, kept by the shell; read once at mount. */
+  readonly restoredDraft?: HandoverDraft | null | undefined;
+  /** Keeps the handover in progress (null once it is done or dropped), as an intake does. */
+  readonly onDraftChange?: ((draft: HandoverDraft | null) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -70,13 +79,17 @@ export function Handover({
   onDone,
   onCancel,
   onRegisterDiscardGuard,
+  restoredDraft,
+  onDraftChange,
   testID = 'repair.handover',
 }: HandoverProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [photo, setPhoto] = useState<MediaRef | null>(null);
-  const [signature, setSignature] = useState<MediaRef | null>(null);
-  const [note, setNote] = useState('');
+  // Read once: a draft is this ticket's only when the shell kept it for this ticket.
+  const [restored] = useState(() => (restoredDraft?.ticketId === ticketId ? restoredDraft : null));
+  const [photo, setPhoto] = useState<MediaRef | null>(restored?.photo ?? null);
+  const [signature, setSignature] = useState<MediaRef | null>(restored?.signature ?? null);
+  const [note, setNote] = useState(restored?.note ?? '');
   const [reloadNonce, setReloadNonce] = useState(0);
   const query = useRepairQuery(
     async (rt) => (await rt.query('getTicket', { ticketId })).rows[0],
@@ -89,17 +102,14 @@ export function Handover({
   // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
   // than take a signature for a handover that would be refused.
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  const canPayLater = runtime.hasPermission(MONEY_PERMISSION.extendCredit);
   const ticket = query.status === 'ready' ? query.data : undefined;
   const balance =
-    ticket === undefined
-      ? { kind: 'due' as const, amount: 0 }
-      : balanceAfterDownPayment(amountOwed(ticket), ticket.downPayment ?? 0);
+    ticket === undefined ? { kind: 'due' as const, amount: 0 } : ticketBalance(ticket);
   const due = balance.kind === 'due' ? balance.amount : 0;
   const qris = useTicketQris(ticketId, ticket?.ticketNumber ?? null);
-  const payment = useHandoverPayment(due, accounts, canPayLater, qris);
+  const payment = useHandoverPayment(ticketId, due, accounts, qris, restored?.payment);
   const { settled } = payment;
-  const checks = useHandoverChecks(ticket);
+  const checks = useHandoverChecks(ticket, restored?.ticked);
   const ownerNeeded =
     ticket !== undefined && freeHandoverNeedsOwner(ticket) && !can.warrantyException;
   const ready =
@@ -112,21 +122,66 @@ export function Handover({
   const stale =
     ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
 
+  const dirty =
+    stale === null &&
+    (photo !== null ||
+      signature !== null ||
+      note.trim() !== '' ||
+      payment.touched ||
+      checks.touched);
   const discard = useDiscardConfirm({
-    dirty:
-      stale === null &&
-      (photo !== null ||
-        signature !== null ||
-        note.trim() !== '' ||
-        payment.touched ||
-        checks.touched),
+    dirty,
     onRegisterDiscardGuard: useQrStepBack(
       onRegisterDiscardGuard,
       payment.qris.open !== null,
       payment.qris.close,
     ),
+    onDiscard: () => onDraftChange?.(null),
     testID,
   });
+
+  // Kept as it is filled in, so a lock, a font-size change or Android recreating the app brings
+  // the counter back to this handover with the signature and payment still there.
+  const draft: HandoverDraft = {
+    kind: 'handover',
+    ticketId,
+    photo,
+    signature,
+    note,
+    ticked: [...checks.ticked],
+    payment: {
+      ...payment.draft,
+      lines: payment.draft.lines === null ? null : [...payment.draft.lines],
+    },
+  };
+  // Published when what was entered changes, not on every render.
+  const draftKey = JSON.stringify(draft);
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
+  useEffect(() => {
+    onDraftChange?.(dirty ? latestDraft.current : null);
+  }, [dirty, draftKey, onDraftChange]);
+
+  // A kept handover can outlive its captures: one no saved record refers to is deleted a day after
+  // it was taken (06 §7). One that no longer loads is taken again rather than sent missing.
+  useEffect(() => {
+    if (restored === null) return;
+    let live = true;
+    const check = (ref: MediaRef | null, drop: () => void): void => {
+      if (ref === null) return;
+      void runtime
+        .loadThumbnail(capturedThumbnailRef(ref))
+        .catch(() => ({ kind: 'unavailable' }) as const)
+        .then((state) => {
+          if (live && state.kind !== 'ready') drop();
+        });
+    };
+    check(restored.photo, () => setPhoto(null));
+    check(restored.signature, () => setSignature(null));
+    return () => {
+      live = false;
+    };
+  }, [restored, runtime]);
 
   const capture = (
     take: () => Promise<{ readonly mediaRef: MediaRef } | null>,
@@ -151,7 +206,9 @@ export function Handover({
         }),
       )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result === undefined) return;
+        onDraftChange?.(null);
+        onDone();
       });
   };
 
@@ -174,7 +231,7 @@ export function Handover({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn('repair.action.handover')}
+      title={tn('repair.handover.title')}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
       primaryLabel={tn('repair.action.handover')}
@@ -186,7 +243,7 @@ export function Handover({
           : payment.qris.pending > 0
             ? 'repair.hint.handoverQris'
             : !settled
-              ? 'repair.hint.handoverPayment'
+              ? payLaterHintKey(payment)
               : checks.loaded && !checks.ready(note)
                 ? 'repair.hint.handoverChecks'
                 : 'repair.hint.handover',
@@ -217,12 +274,16 @@ export function Handover({
                 <Text style={[styles.totalLabel, repairStyles.rowText]}>
                   {tn(shown.outcome === 'cancelled' ? 'repair.cancel.fee' : 'repair.price.total')}
                 </Text>
-                <Text
+                <RollingText
+                  value={amountOwed(shown) + shown.reduced}
                   style={[repairStyles.heading, repairStyles.rowValue]}
                   testID={`${testID}.total`}
                 >
-                  {formatMoney(amountOwed(shown))}
-                </Text>
+                  {/* Before any reduction, which the rows below take off. */}
+                  {shown.outcome === 'cancelled'
+                    ? cancelFeeText(amountOwed(shown) + shown.reduced)
+                    : formatMoney(amountOwed(shown) + shown.reduced)}
+                </RollingText>
               </View>
               {shown.outcome === 'cancelled' ? (
                 <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>
@@ -231,6 +292,8 @@ export function Handover({
               ) : null}
               <DownPaymentRows
                 total={amountOwed(shown)}
+                reduced={shown.reduced}
+                refunds={shown.refunds}
                 downPayment={shown.downPayment}
                 // The DP and anything paid at this counter already (a QR): all of it is paid.
                 paidLabel="repair.price.paid"
@@ -260,13 +323,17 @@ export function Handover({
         <Section
           title={tn('repair.handover.payment')}
           action={
-            canPayLater ? (
+            payment.access.kind === 'none' ? undefined : (
               <TextButton
                 label={tn(payment.unpaid ? 'repair.handover.payNow' : 'repair.handover.payLater')}
-                onPress={payment.togglePayLater}
+                onPress={() => {
+                  // A refusal of the other way to settle no longer applies.
+                  runner.clearError();
+                  payment.togglePayLater();
+                }}
                 testID={`${testID}.payLater`}
               />
-            ) : undefined
+            )
           }
           testID={`${testID}.payment`}
         >
@@ -279,9 +346,20 @@ export function Handover({
                 multiline
                 testID={`${testID}.unpaidReason`}
               />
-              <Text style={repairStyles.muted} testID={`${testID}.debt`}>
-                {tn('repair.handover.payLaterNote', { amount: formatMoney(due) })}
-              </Text>
+              {payLaterLines(payment, due).map((line) => (
+                <Text key={line.id} style={repairStyles.muted} testID={`${testID}.${line.id}`}>
+                  {line.text}
+                </Text>
+              ))}
+              {payment.access.kind === 'ask' ? (
+                <Button
+                  label={ta('approvals.action.ask')}
+                  variant="secondary"
+                  disabled={payment.unpaidReason.trim() === '' || runner.busy}
+                  onPress={() => void runner.run(payment.askPayLater)}
+                  testID={`${testID}.askPayLater`}
+                />
+              ) : null}
             </View>
           ) : (
             <PaymentLines

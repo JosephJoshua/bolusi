@@ -45,8 +45,10 @@
  */
 import {
   AUTH_PERMISSION,
+  PLATFORM_PERMISSION,
   changePin as changePinFlow,
   firstPinUserOnThisDevice,
+  listSignInUsers,
   setFirstPin as setFirstPinFlow,
   clearPinLockoutFlow as clearLockoutFlow,
   createLockedOutEmitter,
@@ -56,6 +58,7 @@ import {
   DomainError,
   errorCodeOrUnexpected,
   listSwitcherUsers,
+  mayManageOwnerPin,
   resolveDisplayRoleKeys,
   readIdleLockSeconds,
   readPinAttempt,
@@ -117,6 +120,8 @@ export interface AppSessionSnapshot {
   readonly lockReason: LockReason | null;
   /** The ACTIVE user's retained work (SEC-AUTH-08), or null at the switcher/lock. */
   readonly workspace: UserWorkspace | null;
+  /** Drafts that belong to the device (an intake anyone here may carry on), or null when locked. */
+  readonly deviceDrafts: Readonly<Record<string, unknown>> | null;
   /**
    * Does the ACTIVE user hold `auth.pin_unlock` (02-permissions §5.4.6)? Gates the Settings "Unlock a
    * PIN" entry (task 186b). Recomputed from the enforcement point each snapshot, so a user switch (which
@@ -141,6 +146,16 @@ export interface AppSessionSnapshot {
    * others: the server decides every change.
    */
   readonly canSetLimits: boolean;
+  /**
+   * Does the ACTIVE user hold `platform.conflict_acknowledge` here? Gates the Settings row for the
+   * notifications about data that needs an owner's decision: nobody else can act on one.
+   */
+  readonly canDecideConflicts: boolean;
+  /**
+   * Does the ACTIVE user hold `auth.device_enroll` here? Gates renaming this device in Settings, a UX
+   * gate like the others: the server decides.
+   */
+  readonly canRenameDevice: boolean;
   /**
    * Is the ACTIVE user a tenant admin (tenant-wide `auth.role_manage`, the main owner)? Only they are
    * offered owner roles and other owners to manage; the server enforces the same rule.
@@ -234,6 +249,8 @@ export interface AppSessionController {
    * person who is actually signed in.
    */
   updateWorkspace(next: UserWorkspace): void;
+  /** Keep a draft that belongs to the device (null drops it); ignored while nobody is signed in. */
+  updateDeviceDraft(moduleId: string, draft: unknown): void;
   /**
    * Re-read the tenant's `idleLockSeconds` after a bundle refresh (§6.4) and hand it to
    * `SessionManager`. Wired to the sync client's `onBundleRefreshed` — without it a tenant tightening
@@ -282,7 +299,12 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     idleLockSeconds: await readIdleLockSeconds(db),
     // Each user's drafts also go to disk (sealed), so a half-entered servisan survives Android
     // recreating the activity or killing the app; only that user's next PIN unlock reads it back.
-    workStore: createWorkStore(db, parseUserWorkspace, () => deps.clock.now()),
+    workStore: createWorkStore(
+      db,
+      parseUserWorkspace,
+      () => deps.clock.now(),
+      (fn) => deps.app.db.transaction(() => fn()),
+    ),
     onWorkStoreError: reportWorkStoreError,
   });
   const lockedOut = createLockedOutEmitter(commands);
@@ -304,6 +326,34 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   // the tick would end the session and the mounted tree would never re-render, which is a lock that
   // is real in memory and invisible on screen.
   shell.subscribe(emit);
+
+  // The signed-in person's reads beyond the device (person-access.ts) last exactly as long as their
+  // session here: a lock, a switch or a sign-out ends them. If the server ends them first (expired,
+  // or the person left the store), the session locks, and their PIN opens it all again.
+  const person = deps.app.person;
+  shell.subscribe(() => {
+    const active = shell.snapshot().locked ? null : (manager.current?.userId ?? null);
+    if (person.userId() !== null && person.userId() !== active) void person.end();
+  });
+  person.subscribe(() => {
+    if (person.status() === 'ended' && person.userId() === manager.current?.userId) {
+      void person.end().then(() => shell.lockNow());
+    }
+  });
+  const beginPerson = async (userId: string, pin: string): Promise<void> => {
+    await person.begin({
+      userId,
+      pin,
+      mayRead: (read) => commands.enforcementPoint.hasPermission({ ...device, userId }, read),
+    });
+    // A lock or switch while the last person's store was closing found nobody to end.
+    if (
+      person.userId() === userId &&
+      (shell.snapshot().locked || manager.current?.userId !== userId)
+    ) {
+      await person.end();
+    }
+  };
 
   const loadRow = async (userId: string): Promise<void> => {
     rows.set(userId, await readPinAttempt(db, userId, device.deviceId));
@@ -371,10 +421,13 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         locked: shellState.locked,
         lockReason: shellState.lockReason,
         workspace: shellState.workspace,
+        deviceDrafts: shellState.deviceDrafts,
         canUnlock: actingUserHolds(AUTH_PERMISSION.pinUnlock),
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
         canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
         canSetLimits: actingUserHolds(AUTH_PERMISSION.limitManage),
+        canDecideConflicts: actingUserHolds(PLATFORM_PERMISSION.conflictAcknowledge),
+        canRenameDevice: actingUserHolds(AUTH_PERMISSION.deviceEnroll),
         tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };
     },
@@ -390,6 +443,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     recordActivity: () => shell.recordActivity(),
 
     updateWorkspace: (next) => shell.updateWorkspace(next),
+    updateDeviceDraft: (moduleId, draft) => shell.updateDeviceDraft(moduleId, draft),
 
     async refreshSettings(): Promise<void> {
       manager.setIdleLockSeconds(await readIdleLockSeconds(db));
@@ -398,7 +452,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     async refresh(): Promise<void> {
       try {
         const [directory, firstPinUserId] = await Promise.all([
-          listSwitcherUsers(db),
+          listSignInUsers(db),
           firstPinUserOnThisDevice(db),
         ]);
         // Someone who left the roster can never unlock again: drop their saved drafts. Best
@@ -471,6 +525,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
             throw new Error('unlock did not open a session (SessionManager.current stayed null)');
           }
           outcome = { kind: 'opened', session };
+          await beginPerson(userId, pin);
         } else {
           outcome = { kind: 'wrong', state: result.state, lockedOut: result.lockedOut };
         }
@@ -552,7 +607,18 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       ) {
         throw new DomainError('PERMISSION_DENIED');
       }
-      const directory = await listSwitcherUsers(db);
+      // An owner's PIN is the main owner's to manage (core `mayManageOwnerPin`, which the PIN
+      // commands and the server also apply): a store owner is not offered a peer owner at all.
+      const actorUserId = manager.current?.userId;
+      const directory = (
+        await Promise.all(
+          (await listSwitcherUsers(db)).map(async (user) =>
+            actorUserId !== undefined && (await mayManageOwnerPin(db, actorUserId, user.id))
+              ? [user]
+              : [],
+          ),
+        )
+      ).flat();
       return Promise.all(
         directory.map(async (user) => {
           const [roleKeys, attempt, verifier] = await Promise.all([

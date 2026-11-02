@@ -6,7 +6,8 @@
     "itemTaken": "Part taken",
     "itemPutBack": "Part put back",
     "categoryAdded": "Category added",
-    "categoryEdited": "Category changed"
+    "categoryEdited": "Category changed",
+    "stockReceived": "Parts received"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -15,7 +16,8 @@
     "moreThanTaken": "That is more than this repair took.",
     "wrongUse": "The repair details don’t match. Try again.",
     "categoryNotFound": "This category doesn’t exist.",
-    "categoryInvalid": "This category’s fields or name format aren’t right yet."
+    "categoryInvalid": "This category’s fields or name format aren’t right yet.",
+    "wrongSource": "The order details do not match."
   },
   "list": {
     "title": "Items",
@@ -106,7 +108,8 @@
   "movement": {
     "counted": "Corrected to {count}",
     "taken": "Taken for {use}",
-    "putBack": "Put back from {use}"
+    "putBack": "Put back from {use}",
+    "received": "Received on {source}"
   },
   "stepper": {
     "decrease": "Fewer",
@@ -133,7 +136,9 @@
     "searchHint": "Search parts",
     "picked": "Selected",
     "fitsDevice": "Fits {model}",
-    "otherParts": "Other parts"
+    "otherParts": "Other parts",
+    "overStock": "{extra} more than in stock.",
+    "searchMore": "Search to see more parts."
   },
   "done": {
     "added": "Item added.",
@@ -210,5 +215,23 @@
     "removeOption": "Remove choice {option}",
     "addToName": "Add {label} to the name",
     "noOptions": "No choices yet. New ones can also be typed when filling in an item."
+  },
+  "desk": {
+    "col": {
+      "name": "Item",
+      "category": "Category",
+      "fits": "Fits",
+      "stock": "Stock"
+    },
+    "filter": {
+      "category": "Category",
+      "clear": "Clear filter",
+      "reset": "Clear all filters",
+      "search": "Search",
+      "noMatches": "No matches",
+      "chosen": "{count} chosen"
+    },
+    "results": "{count} items",
+    "closePart": "Close item"
   }
 }

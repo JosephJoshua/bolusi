@@ -9,7 +9,7 @@
 //
 // Determinism (T-6): a FakeClock and a hand-driven tick. No real timers, no sleeps — the idle
 // transition is a function call, which is exactly why 14 kept the timer out of SessionManager.
-import type { ClockPort } from '@bolusi/core';
+import { DEVICE_WORK_KEY, type ClockPort } from '@bolusi/core';
 import { beforeEach, describe, expect, test } from 'vitest';
 
 import { emptyWorkspace, withDraft, type UserWorkspace } from '../state/user-workspaces.js';
@@ -56,16 +56,28 @@ class FakeSession implements SessionPort<UserWorkspace> {
 
   async manualLock() {
     if (this.current === null) return [];
-    this.emitted.push('session_ended(manual_lock)');
+    // Like 14's class: the identity clears on the call, then the append runs (and may fail).
     this.current = null;
+    await this.#append();
+    this.emitted.push('session_ended(manual_lock)');
     return [{}];
   }
 
   async checkIdle() {
     if (this.current === null || this.clock.now() < this.#deadline) return [];
-    this.emitted.push('session_ended(idle_lock)');
     this.current = null;
+    await this.#append();
+    this.emitted.push('session_ended(idle_lock)');
     return [{}];
+  }
+
+  /** Set to make the next `session_ended` append reject, as a full or failing op store would. */
+  failNextAppend = false;
+
+  async #append(): Promise<void> {
+    if (!this.failNextAppend) return;
+    this.failNextAppend = false;
+    throw new Error('append failed');
   }
 
   recordActivity() {
@@ -78,6 +90,14 @@ class FakeSession implements SessionPort<UserWorkspace> {
 
   work(userId: string) {
     return this.#work.get(userId);
+  }
+
+  async deviceWork() {
+    return this.current === null ? undefined : this.#work.get(DEVICE_WORK_KEY);
+  }
+
+  saveDeviceWork(work: UserWorkspace) {
+    if (this.current !== null) this.#work.set(DEVICE_WORK_KEY, work);
   }
 }
 
@@ -208,6 +228,31 @@ describe('SEC-AUTH-08 — a lock preserves work; an unlock restores exactly the 
   });
 });
 
+describe('a draft that belongs to the device (Joseph, 2026-10-31)', () => {
+  test('anyone who signs in here next carries on with it, and nobody sees it while locked', async () => {
+    await shell.unlock('user-a');
+    shell.updateDeviceDraft('repair', { customer: 'Yakobus' });
+    expect(shell.snapshot().deviceDrafts).toEqual({ repair: { customer: 'Yakobus' } });
+    // Not A's own work: it stays out of A's workspace.
+    expect(JSON.stringify(shell.snapshot().workspace)).not.toContain('Yakobus');
+
+    await shell.lockNow();
+    expect(shell.snapshot().deviceDrafts).toBeNull();
+
+    await shell.unlock('user-b');
+    expect(shell.snapshot().deviceDrafts).toEqual({ repair: { customer: 'Yakobus' } });
+    shell.updateDeviceDraft('repair', null);
+    await shell.lockNow();
+    await shell.unlock('user-a');
+    expect(shell.snapshot().deviceDrafts).toEqual({ repair: null });
+  });
+
+  test('nothing is kept for the device while nobody is signed in', () => {
+    shell.updateDeviceDraft('repair', { customer: 'Yakobus' });
+    expect(session.work(DEVICE_WORK_KEY)).toBeUndefined();
+  });
+});
+
 describe('manual lock behaves identically, with `manual_lock` (api/02-auth §6.4)', () => {
   test('manual lock ends the session, preserves work, and reports the right reason', async () => {
     const saved = await signInWithDraft('user-a', 'tukar layar Oppo');
@@ -222,6 +267,30 @@ describe('manual lock behaves identically, with `manual_lock` (api/02-auth §6.4
     expect(session.emitted).not.toContain('session_ended(idle_lock)');
 
     expect(await shell.unlock('user-a')).toEqual(saved);
+  });
+
+  test('a manual lock whose record fails still locks the screen and reports the failure', async () => {
+    await signInWithDraft('user-a', 'tukar layar Oppo');
+    session.failNextAppend = true;
+
+    await expect(shell.lockNow()).rejects.toThrow('append failed');
+    const snapshot = shell.snapshot();
+    expect(snapshot.locked).toBe(true);
+    expect(snapshot.lockReason).toBe('manual_lock');
+    expect(snapshot.userId).toBeNull();
+    expect(snapshot.workspace).toBeNull();
+  });
+
+  test('an idle lock whose record fails still locks the screen and reports the failure', async () => {
+    await signInWithDraft('user-a', 'tukar layar Oppo');
+    clock.advance(IDLE_SECONDS * 1000);
+    session.failNextAppend = true;
+
+    await expect(shell.tick()).rejects.toThrow('append failed');
+    const snapshot = shell.snapshot();
+    expect(snapshot.locked).toBe(true);
+    expect(snapshot.lockReason).toBe('idle_lock');
+    expect(snapshot.workspace).toBeNull();
   });
 
   test('manual lock at the switcher is a no-op — there is no session to end', async () => {

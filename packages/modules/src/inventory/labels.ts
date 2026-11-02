@@ -11,6 +11,8 @@ export function movementTitle(movement: MovementRow): string {
       return ti('inventory.movement.taken', { use: movement.useLabel ?? '' });
     case 'put_back':
       return ti('inventory.movement.putBack', { use: movement.useLabel ?? '' });
+    case 'received':
+      return ti('inventory.movement.received', { source: movement.useLabel ?? '' });
   }
 }
 

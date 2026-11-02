@@ -120,7 +120,7 @@ describe('the Kas tab', () => {
     await settle();
 
     await press(shown, 'shell-tabs.kas');
-    expect(await waitUntil(() => shown.query('money.kas.expected') !== null)).toBe(true);
+    expect(await waitUntil(() => shown.query('money.kas.drawer') !== null)).toBe(true);
     expect(homeShown(shown)).toBe(true);
 
     await press(shown, 'shell-tabs.repair');
@@ -133,7 +133,7 @@ describe('the Kas tab', () => {
     fire(shown.get('repair.intake.customer.name.field'), 'onChangeText', 'Yohanis Wenda');
     await settle();
     await press(shown, 'shell-tabs.kas');
-    await waitUntil(() => shown.query('money.kas.expected') !== null);
+    await waitUntil(() => shown.query('money.kas.drawer') !== null);
 
     fire(shown.all('ui.avatarButton').at(-1)!, 'onPress');
     await settle();

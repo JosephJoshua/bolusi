@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatPhone } from '../src/index.js';
+import { formatPhone, keepNumbersWhole } from '../src/index.js';
 
 describe('formatPhone', () => {
   it('groups Indonesian mobile numbers in fours', () => {
@@ -20,5 +20,19 @@ describe('formatPhone', () => {
     expect(formatPhone('+61 412 345 678')).toBe('+61 412 345 678');
     expect(formatPhone('0812')).toBe('0812');
     expect(formatPhone('')).toBe('');
+  });
+});
+
+describe('keepNumbersWhole', () => {
+  it('joins the digit groups of a number so it never wraps inside', () => {
+    expect(keepNumbersWhole('0812-3456-7890')).toBe('0812\u20113456\u20117890');
+    expect(keepNumbersWhole('0813 1111 2222')).toBe('0813\u00A01111\u00A02222');
+  });
+
+  it('still lets the words around and between numbers wrap', () => {
+    expect(keepNumbersWhole('0812-3456-7890 / 0813 1111 (istri)')).toBe(
+      '0812\u20113456\u20117890 / 0813\u00A01111 (istri)',
+    );
+    expect(keepNumbersWhole('Kantor - 0951')).toBe('Kantor - 0951');
   });
 });

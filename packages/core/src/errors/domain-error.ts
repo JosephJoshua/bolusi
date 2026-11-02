@@ -24,6 +24,7 @@ export const DOMAIN_ERROR_CODES = [
   'LAST_ADMIN_PROTECTED',
   'ROLE_IN_USE',
   'CLOCK_AHEAD',
+  'NOT_ON_DEVICE',
   'NETWORK',
 ] as const;
 

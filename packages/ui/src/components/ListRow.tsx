@@ -5,10 +5,12 @@
  * from its 64 dp default rather than cutting a word off.
  */
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
+import { FreshGlow } from './FreshGlow.js';
 
 export interface ListRowProps {
   /** Already-localized primary text. */
@@ -38,6 +40,8 @@ export interface ListRowProps {
   readonly emphasis?: boolean | undefined;
   /** A status under the text (a chip), so it never squeezes a long name the way a trailing chip does. */
   readonly below?: ReactNode;
+  /** The record the row shows: it glows once when another device changes it (`FreshGlow`). */
+  readonly freshId?: string | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -87,10 +91,12 @@ export function ListRow({
   checked,
   emphasis = false,
   below,
+  freshId,
   testID = 'ui.listRow',
 }: ListRowProps): React.JSX.Element {
   const content = (
     <>
+      {freshId === undefined ? null : <FreshGlow id={freshId} testID={`${testID}.fresh`} />}
       {leading === undefined ? null : (
         <View testID={`${testID}.leading`} style={styles.leading}>
           {leading}

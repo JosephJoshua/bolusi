@@ -128,6 +128,13 @@ async function registerAndSignIn(page: Page, name: string): Promise<void> {
   await expect(page.getByTestId('repair.desk.board.newIntake')).toBeVisible();
 }
 
+/** A new servisan and a handover offer the slip first; these runs print nothing. */
+async function skipPrint(page: Page): Promise<void> {
+  const print = page.getByTestId('repair.desk.print');
+  await print.getByRole('button', { name: 'Kembali' }).click();
+  await expect(print).toBeHidden();
+}
+
 let counter: Page;
 /** The PC without a webcam, and the store phone paired to it. */
 let pc: Page;
@@ -157,6 +164,7 @@ test('registers the PC, signs in and takes a servisan in that reaches the server
   await counter.getByTestId('repair.desk.intake.line.0.amount').fill('1250000');
   await counter.keyboard.press('Control+Enter');
   await expect(counter.getByTestId('repair.desk.ticket.customer')).toHaveText('Yakobus Mandowen');
+  await skipPrint(counter);
 
   // The change and every photo reach the server.
   await expect(counter.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
@@ -235,6 +243,7 @@ test('a PC without a webcam takes every intake photo on one paired phone, throug
   await pc.getByTestId('repair.desk.intake.line.0.amount').fill('150000');
   await pc.keyboard.press('Control+Enter');
   await expect(pc.getByTestId('repair.desk.ticket.customer')).toHaveText('Ruth Wanggai');
+  await skipPrint(pc);
   // The phone's photos are this PC's own: they upload with the servisan.
   await expect(pc.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
     timeout: 60_000,
@@ -295,9 +304,70 @@ test('the same phone takes the work photos, and the customer signs on it turned 
   await expect(pc.getByTestId('repair.desk.handover.signature').locator('img')).toBeVisible();
   await pc.getByTestId('repair.desk.handover').getByRole('button', { name: 'Serahkan HP' }).click();
   await expect(pc.getByTestId('repair.desk.handover')).toBeHidden();
+  await skipPrint(pc);
   await expect(pc.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
     timeout: 60_000,
   });
+});
+
+/**
+ * The phone window has no camera of its own (the PC was started without the fake webcam), so its
+ * browser is handed a drawn picture and a tone, as a phone's camera and microphone would give.
+ */
+async function cameraOn(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    navigator.mediaDevices.getUserMedia = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      const context = canvas.getContext('2d')!;
+      let frame = 0;
+      setInterval(() => {
+        frame += 1;
+        context.fillStyle = `hsl(${String((frame * 4) % 360)} 55% 45%)`;
+        context.fillRect(0, 0, 1280, 720);
+      }, 33);
+      const stream = canvas.captureStream(30);
+      const audio = new AudioContext();
+      const tone = audio.createOscillator();
+      const out = audio.createMediaStreamDestination();
+      tone.connect(out);
+      tone.start();
+      for (const track of out.stream.getAudioTracks()) stream.addTrack(track);
+      return Promise.resolve(stream);
+    };
+  });
+}
+
+test('the same phone records the ownership video for a PC without a webcam', async () => {
+  await phone.setViewportSize({ width: 390, height: 844 });
+  await cameraOn(phone);
+  await pc.keyboard.press('F2');
+  await pc.getByTestId('repair.desk.intake.repairTypes').getByText('Buka kunci / akun').click();
+  const section = pc.getByTestId('repair.desk.intake.video');
+  await section.getByTestId('repair.desk.intake.video.clip.record').click();
+  // Still paired: the step goes to the phone, with what the clip must say.
+  await expect(pc.getByTestId('desktop.handoff.onPhone')).toContainText('Rekam videonya di HP');
+  await expect(phone.locator('#clip-hint')).toContainText('bahwa HP ini miliknya');
+  await phone.locator('#rec-start').click();
+  await expect(phone.locator('#clock-text')).toContainText('/ 1:00');
+  await phone.waitForTimeout(1500);
+  await phone.screenshot({ path: test.info().outputPath('phone-video-recording.png') });
+  await phone.locator('#rec-stop').click();
+  await expect(phone.locator('#clip-send')).toBeVisible();
+  await expect(phone.locator('#rec-retake')).toBeVisible();
+  await phone.screenshot({ path: test.info().outputPath('phone-video-review.png') });
+  await phone.locator('#clip-send').click();
+  await expect(pc.getByTestId('desktop.handoff')).toBeHidden();
+  await expect(phone.locator('#waiting')).toBeVisible();
+  await expect(section.getByTestId('repair.desk.intake.video.clip.recorded')).toBeVisible();
+  // The clip from the phone is this PC's own now, and plays here.
+  await section.getByTestId('repair.desk.intake.video.clip.play').click();
+  const player = pc.getByTestId('desktop.videoPlayer');
+  await expect(player.getByTestId('desktop.videoPlayer.video')).toHaveAttribute('src', /^blob:/);
+  await pc.screenshot({ path: test.info().outputPath('pc-video-from-phone.png') });
+  await player.getByTestId('desktop.videoPlayer.close').click();
+  await expect(player).toBeHidden();
 });
 
 test('the owner adds a cashier with a first PIN, and changes their own PIN, on the PC alone', async () => {
@@ -329,4 +399,62 @@ test('the owner adds a cashier with a first PIN, and changes their own PIN, on t
   await counter.getByTestId('switcher.person').filter({ hasText: 'Maria Kambu' }).click();
   await counter.keyboard.type('135790');
   await expect(counter.getByTestId('desktop.shell')).toBeVisible();
+});
+
+/** Lock the counter and sign in with `pin` as the person shown with `name`, or as the owner. */
+async function signInAs(name: string | null, pin: string): Promise<void> {
+  await counter.getByTestId('desktop.person').click();
+  await counter.getByRole('menuitem', { name: 'Kunci layar' }).click();
+  await counter
+    .getByTestId('switcher.person')
+    .filter(name === null ? { hasNotText: 'Maria Kambu' } : { hasText: name })
+    .click();
+  await counter.keyboard.type(pin);
+  await expect(counter.getByTestId('desktop.shell')).toBeVisible();
+}
+
+test('the owner uses Belanja on the store PC, which keeps none of it once they leave', async () => {
+  const belanja = counter.getByRole('button', { name: 'Belanja', exact: true });
+  // The cashier may not buy: the PC shows no Belanja, and holds none of it.
+  await expect(counter.getByTestId('repair.desk.board.newIntake')).toBeVisible();
+  await expect(belanja).toHaveCount(0);
+
+  // The owner's PIN goes to the server, and what only they may read comes down for this sign-in.
+  await signInAs(null, '246802');
+  await belanja.click();
+  await expect(counter.getByTestId('purchasing.desk.table')).toBeVisible({ timeout: 15_000 });
+  await counter.getByTestId('purchasing.desk.openSuppliers').click();
+  await counter.getByTestId('purchasing.desk.suppliers.add').click();
+  await counter.getByTestId('purchasing.desk.supplierForm.name').fill('CV Sinar Jaya');
+  await counter
+    .getByTestId('purchasing.desk.supplierForm')
+    .getByRole('button', { name: /^Simpan/ })
+    .click();
+  await expect(counter.getByTestId('purchasing.desk.suppliers')).toContainText('CV Sinar Jaya');
+  await counter.keyboard.press('Escape');
+  await expect(counter.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
+    timeout: 60_000,
+  });
+
+  // The cashier again: no Belanja.
+  await signInAs('Maria Kambu', '135790');
+  await expect(belanja).toHaveCount(0);
+
+  // The owner again: it comes back from the server.
+  await signInAs(null, '246802');
+  await belanja.click();
+  await counter.getByTestId('purchasing.desk.openSuppliers').click();
+  await expect(counter.getByTestId('purchasing.desk.suppliers')).toContainText('CV Sinar Jaya', {
+    timeout: 15_000,
+  });
+  await counter.keyboard.press('Escape');
+
+  // With the server gone (this suite's last test), nothing of it is left on the PC to show.
+  server.kill('SIGTERM');
+  await signInAs(null, '246802');
+  await belanja.click();
+  await expect(counter.getByText('Perlu internet untuk membuka ini.')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(counter.getByTestId('purchasing.desk.new')).toBeDisabled();
 });

@@ -3,9 +3,9 @@
  * so a matching count is one tap, and the difference is said as it changes. Saving records the
  * count; takes another phone has not synced yet still come off once they arrive.
  */
-import { QuantityStepper, TextInput, color, space, type } from '@bolusi/ui';
+import { QuantityStepper, TextInput, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';

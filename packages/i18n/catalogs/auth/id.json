@@ -1,9 +1,9 @@
 {
   "switcher": {
     "title": "Siapa yang pakai?",
-    "addUser": "Tambah Pengguna",
-    "reenroll": "Daftarkan Ulang Perangkat",
-    "emptyUsers": "Belum ada pengguna di HP ini. Minta pemilik toko menambahkannya.",
+    "addUser": "Tambah pengguna",
+    "reenroll": "Daftarkan ulang",
+    "emptyUsers": "Belum ada yang bisa masuk di HP ini. Minta bantuan pemilik toko.",
     "idleLocked": "Terkunci karena lama tidak dipakai. Pekerjaanmu aman.",
     "search": "Cari nama",
     "noMatches": "Tidak ada nama yang cocok",
@@ -16,14 +16,16 @@
     "wrong": "PIN salah.",
     "attemptsLeft": "Sisa {count} kali coba.",
     "wait": "Terlalu sering salah. Coba lagi dalam {duration}.",
+    "nextWait": "Salah sekali lagi, harus tunggu {duration}.",
     "lockedOut": "Minta pemilik toko membuka kuncinya.",
     "forgot": "Minta pemilik toko membuatkan PIN baru. Bisa tanpa internet.",
     "setup": {
       "title": "Buat PIN baru",
       "repeat": "Ulangi PIN baru",
       "mismatch": "PIN tidak sama. Buat lagi dari awal.",
+      "weak": "PIN ini terlalu gampang ditebak. Pilih angka lain.",
       "screenTitle": "Buat PIN",
-      "hint": "6 angka. Jangan pakai tanggal lahir.",
+      "hint": "6 angka. Jangan pakai tanggal lahir atau 123456.",
       "failed": "PIN belum bisa dibuat. Coba lagi."
     },
     "change": {
@@ -36,7 +38,7 @@
     "reset": {
       "noUsers": "Belum ada karyawan lain di HP ini.",
       "done": "PIN baru sudah dibuat",
-      "denied": "Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain."
+      "denied": "Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik."
     },
     "unlock": {
       "confirm": "Bisa langsung masuk dengan PIN lamanya.",
@@ -84,6 +86,12 @@
     "account": "Akun {tenant}",
     "deviceNameField": "Nama HP",
     "deviceNamePlaceholder": "Contoh: HP Kasir 1",
+    "ownerField": "HP siapa?",
+    "ownerShared": "Toko",
+    "ownerSelf": "Saya",
+    "ownerSharedHint": "Semua karyawan toko bisa masuk.",
+    "ownerSelfHint": "Hanya kamu yang bisa masuk.",
+    "ownerPersonHint": "Hanya {name} yang bisa masuk, pemilik pun tidak bisa. Untuk mengubahnya, daftarkan ulang HP ini.",
     "bind": "Daftarkan ke {store}",
     "bindWithoutStore": "Daftarkan",
     "pickStoreFirst": "Pilih tokonya dulu.",
@@ -94,6 +102,7 @@
     "success": "Pendaftaran selesai",
     "successStore": "Terdaftar di",
     "successNext": "Berikutnya, pilih siapa yang pakai.",
+    "successNextPersonal": "Berikutnya, masuk pakai PIN.",
     "finish": "Lanjut",
     "discardTitle": "Batalkan pendaftaran?",
     "discardMessage": "Yang sudah kamu isi akan hilang.",
@@ -138,6 +147,7 @@
       "cashier": "Terima HP, atur harga, dan serahkan HP ke pelanggan",
       "technician": "Kerjakan servisan, termasuk foto sebelum dan sesudah",
       "manager": "Tugas kasir dan teknisi, plus diskon dan refund terbatas",
+      "staff": "Hanya menulis catatan",
       "storeOwner": "Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan"
     },
     "save": "Simpan",
@@ -227,15 +237,15 @@
       "back": "Kembali",
       "later": "Nanti saja",
       "laterHint": "Bisa dibuka lagi di Pengaturan > Komputer ini.",
-      "cameraTitle": "Foto dan tanda tangan",
-      "cameraWebcam": "Foto HP pelanggan diambil dengan webcam ini.",
-      "cameraPhone": "Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.",
+      "cameraTitle": "Foto, video dan tanda tangan",
+      "cameraWebcam": "Foto dan video kepemilikan diambil dengan webcam ini.",
+      "cameraPhone": "Komputer ini belum punya webcam, jadi foto dan video diambil lewat HP toko. Saat pertama kali, scan kode QR yang muncul dengan HP.",
       "signatureScreen": "Pelanggan tanda tangan langsung di layar sentuh ini.",
       "signaturePhone": "Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.",
-      "doneTitle": "Komputer siap dipakai",
+      "doneTitle": "Komputer ini siap",
       "donePrinter": "Printer",
       "donePaper": "Kertas",
-      "donePhotos": "Foto",
+      "donePhotos": "Foto & video",
       "doneSignature": "Tanda tangan",
       "noPrinter": "Belum dipilih",
       "viaWebcam": "Webcam",
@@ -246,7 +256,28 @@
       "printerReminder": "Printer belum dipilih",
       "printerGone": "Printer tidak ditemukan",
       "printerReminderHint": "Nota belum bisa dicetak dari komputer ini."
-    }
+    },
+    "startup": {
+      "label": "Buka saat Windows menyala",
+      "caption": "Bolusi langsung terbuka begitu komputer dinyalakan."
+    },
+    "language": {
+      "caption": "Berlaku untuk semua orang di komputer ini."
+    },
+    "media": {
+      "title": "Kamera dan mikrofon",
+      "caption": "Dipakai untuk foto dan video kepemilikan di komputer ini.",
+      "camera": "Kamera",
+      "microphone": "Mikrofon",
+      "unnamedCamera": "Kamera {number}",
+      "unnamedMicrophone": "Mikrofon {number}",
+      "level": "Suara mikrofon",
+      "hint": "Coba bicara, garisnya ikut bergerak.",
+      "micNone": "Mikrofon tidak ditemukan. Video kepemilikan butuh suara pelanggan.",
+      "micDenied": "Mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Mikrofon.",
+      "micFailed": "Mikrofon belum bisa menyala. Tutup aplikasi lain yang memakai mikrofon."
+    },
+    "idleLocked": "Terkunci karena lama tidak dipakai. Isian servisan baru tetap tersimpan."
   },
   "limits": {
     "title": "Batas wewenang",
@@ -259,6 +290,7 @@
     "refundHint": "Termasuk membatalkan pembayaran dan DP",
     "credit": "Bayar nanti",
     "creditHint": "Sisa tagihan saat HP dibawa pulang",
+    "checkAmount": "Besar sekali untuk satu servisan. Cek lagi jumlahnya.",
     "save": "Simpan",
     "saved": "Batas {role} tersimpan.",
     "missing": "Isi ketiga batas. Tulis 0 kalau harus pemilik toko.",
@@ -270,6 +302,42 @@
       "lastOwner": "Harus tetap ada satu pemilik utama.",
       "rateLimited": "Sudah terlalu banyak perubahan hari ini. Coba lagi besok.",
       "unexpected": "Batasnya belum tersimpan. Coba lagi sebentar lagi."
+    }
+  },
+  "setup": {
+    "title": "Siapkan HP ini",
+    "step": "Langkah {step} dari {total}",
+    "permissionsTitle": "Izin HP",
+    "camera": "Kamera",
+    "cameraWhy": "Untuk foto HP pelanggan dan scan kode QR.",
+    "notifications": "Notifikasi",
+    "notificationsWhy": "Kabar kalau ada servisan yang perlu dicek.",
+    "allow": "Izinkan",
+    "allowed": "Diizinkan",
+    "notAllowed": "Belum diizinkan",
+    "openSettings": "Buka pengaturan",
+    "blockedHint": "Izinnya ditolak. Nyalakan lewat pengaturan HP.",
+    "paperTitle": "Kertas nota",
+    "next": "Lanjut",
+    "later": "Nanti saja",
+    "doneTitle": "HP ini siap",
+    "start": "Mulai",
+    "reopen": "Panduan persiapan",
+    "reopenSummary": "Izin HP, kertas nota, dan halaman uji"
+  },
+  "rename": {
+    "titlePhone": "Ganti nama HP",
+    "titlePc": "Ganti nama komputer",
+    "hint": "Pakai nama yang mudah dikenali di toko.",
+    "problem": {
+      "nameMissing": "Isi namanya dulu.",
+      "nameTooLong": "Maksimal 64 karakter."
+    },
+    "failure": {
+      "offline": "Butuh internet untuk ganti nama. Sambungkan HP, lalu ulangi.",
+      "denied": "Hanya pemilik toko yang bisa ganti nama perangkat.",
+      "rateLimited": "Terlalu banyak percobaan. Coba lagi nanti.",
+      "unexpected": "Namanya belum tersimpan. Coba lagi sebentar lagi."
     }
   },
   "roles": {
@@ -362,6 +430,8 @@
       "stockCorrectHint": "Ubah part yang sudah terpakai",
       "stockManage": "Atur daftar part",
       "stockManageHint": "Tambah dan ubah part",
+      "stockBuy": "Belanja sparepart",
+      "stockBuyHint": "Pesan ke supplier dan terima barangnya",
       "notes": "Catatan",
       "notesHint": "Tulis dan arsipkan catatan toko",
       "syncProblems": "Masalah sinkron",

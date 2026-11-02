@@ -38,13 +38,17 @@ pnpm dev:mobile
 ```
 
 The DB uses a per-worktree Docker port. Use `pnpm db:url`, not an assumed port 5432.
-In another terminal, start the server with the reported URL and your configuration:
+That URL is the owner (a superuser) for migrations and CLIs. The server refuses to start
+as a superuser or BYPASSRLS role, because those skip row-level security; `pnpm db:app-url`
+sets a local password on `bolusi_app` (after `db:migrate`) and prints its URL.
+In another terminal, start the server with it and your configuration:
 
 ```sh
-DATABASE_URL="$(pnpm -s db:url)" pnpm dev:server
+DATABASE_URL="$(pnpm -s db:app-url)" pnpm dev:server
 ```
 
-Set `EXPO_ACCESS_TOKEN` in your local environment first. See
+Set `EXPO_ACCESS_TOKEN` and `MEDIA_STORAGE_DIR` (a private directory for photos) in your
+local environment first. See
 `apps/server/.env.example`, `src/config.ts` and `src/main.ts` for boot requirements.
 Use `pnpm --filter @bolusi/server provision-tenant --help` for enrollment setup.
 Do not paste provisioning secrets into chats or commit them.
@@ -85,6 +89,18 @@ To click through the screens in a browser without a server or device, run
 Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 `http://10.0.2.2:3000` on Android emulator; a phone needs a reachable LAN address).
 
+### Web app
+
+`apps/web` is the web app the server serves (React DOM on `packages/ui-web`). Its
+first page is the customer's repair status page at `/c/<code>`, with a page to
+type the code at `/`. The production build goes to `apps/web/dist`; set
+`WEB_DIR` to that folder and the server serves it next to the API.
+
+```sh
+pnpm --filter @bolusi/web dev     # localhost:5184, API calls proxied to BOLUSI_API_URL (default :3000)
+pnpm --filter @bolusi/web build
+```
+
 ### Counter PC app
 
 The Windows counter app (`apps/desktop`) is Electron with its own React DOM screens
@@ -123,22 +139,33 @@ PowerShell calling winspool); A4/A5 pages print without a dialog. The printer's
 Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a v4
 (XPS-only) driver does not pass RAW jobs. CI's `desktop-windows` job spools a real job
 to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
+The installer turns off Electron's run-as-Node, inspect and `NODE_OPTIONS` switches and only
+loads its own checked `app.asar` (`electronFuses` in `electron-builder.yml`); the CI build
+keeps inspect on, which Playwright needs.
 
 Photos and signatures: the webcam and the on-screen pad when the PC has them, otherwise
 a store phone, through the server (`apps/server/src/handoff`). The PC asks the server for
 a pairing and shows the phone page's address (`<BOLUSI_API_URL>/h/<key>`) as a QR; the
 phone opens it once in its own browser and stays paired, so every later photo and the
-signature appear on it by themselves (signatures on a landscape pad). Both need the
+signature appear on it by themselves (signatures on a landscape pad). The first browser to
+open the address gets a cookie for that pairing; any other browser with the same address gets
+410, so a photo of the QR is useless once the store phone has scanned it. Both need the
 internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
 a server restart, or 30 minutes without a step.
 
-Releasing: set the `BOLUSI_API_URL` repository variable to the production server once
-(the workflow refuses to build without it), bump `version` in `apps/desktop/package.json`,
+How every app updates itself, and the phone release paths, are in `app-updates.md`.
+
+Releasing: set the `BOLUSI_API_URL` repository variable to the production server's
+`https://` address once (the workflow refuses to build without one, and an installed app
+ignores a plain-HTTP address), bump `version` in `apps/desktop/package.json`,
 merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
 installer on Windows and publishes it with `latest.yml` to that GitHub Release.
-Installed apps check the latest release a minute after start and every 4 hours,
-download in the background and install on the next close (or "Pasang sekarang" in
-the sidebar). Updates only look at the repository's latest release, so keep other
+Installed apps check the latest release a minute after start and every 4 hours (30
+minutes after a failed check or download), download in the background and install on
+the next close, after 15 minutes with no keyboard or mouse input while no dialog is
+open and no print is running, or on "Pasang sekarang" in the title bar. The core closes
+its database before the installer starts, and an installer that never takes over
+reopens the app. A Windows shutdown skips the install until the next close. Updates only look at the repository's latest release, so keep other
 release kinds out of this repository or mark them pre-release. `pnpm --filter
 @bolusi/desktop dist` builds the installer locally (on Windows; Linux needs wine).
 
@@ -177,7 +204,11 @@ pnpm exec vitest run --project core test/sync/staleness.test.ts
 
 For schema changes, migrate a disposable DB and run `pnpm db:codegen:check`.
 Client type generation is `pnpm --filter @bolusi/db-client db:codegen`; inspect its diff.
-Automatic CI runs checks once plus a secret scan. Native Android/iOS builds are
+The phone screens also run in a browser over the demo runtime:
+`pnpm --filter @bolusi/mobile test:visual` exports the web bundle and taps through each flow
+(`apps/mobile/e2e-web/`). Run it after changing phone screens or the flows they show.
+
+Automatic CI runs checks once, the phone screens in a browser, plus a secret scan. Native Android/iOS builds are
 manually dispatched in GitHub Actions; use them for native changes and mobile
 verification. They do not establish physical-device performance.
 The native harness includes the canonicalization vectors on the app's Hermes

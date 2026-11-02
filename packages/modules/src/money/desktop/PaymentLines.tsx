@@ -15,8 +15,10 @@ import {
   digitsOf,
   digitsText,
   lineKind,
+  methodOffered,
   newPaymentLine,
-  offeredAccount,
+  NO_METHOD,
+  pickedAccount,
   paidByQr,
   paymentMethods,
   type PaymentEntry,
@@ -69,7 +71,10 @@ export function PaymentLines({
       ) : null}
       {lines.map((line, index) => {
         const id = `${testId}.line${String(index)}`;
-        const account = offeredAccount(line.account, accounts);
+        const account = pickedAccount(line.account, accounts);
+        // Nothing picked yet, or a method switched off since it was: no chip is on, and it asks.
+        const unpicked = account === NO_METHOD;
+        const offered = unpicked || methodOffered(account, accounts);
         const kind = lineKind(account, accounts);
         const amount = Number(line.amount === '' ? 0 : line.amount);
         const tendered = Number(line.tendered === '' ? 0 : line.tendered);
@@ -81,7 +86,7 @@ export function PaymentLines({
             className={index > 0 ? 'border-t border-border pt-4' : undefined}
             data-testid={id}
           >
-            {methods.length > 1 ? (
+            {methods.length > 1 || !offered ? (
               <div
                 className="mb-3 flex gap-2 overflow-x-auto"
                 role="group"
@@ -111,16 +116,26 @@ export function PaymentLines({
                 label={tm('money.pay.amount')}
                 prefix={tm('money.pay.currency')}
                 inputMode="numeric"
+                selectOnFocus
                 inputClassName="tabular text-right"
                 value={digitsText(line.amount)}
                 onChange={(event) => digits(line.key, 'amount')(event.target.value)}
                 data-testid={`${id}.amount`}
               />
-              {kind === 'cash' ? (
+              {unpicked ? (
+                <p className="self-end text-small text-text-muted" data-testid={`${id}.pick`}>
+                  {tm('money.pay.problem.pick')}
+                </p>
+              ) : !offered ? (
+                <p className="self-end text-small text-danger" data-testid={`${id}.methodGone`}>
+                  {tm('money.pay.problem.method')}
+                </p>
+              ) : kind === 'cash' ? (
                 <TextField
                   label={tm('money.pay.tendered')}
                   prefix={tm('money.pay.currency')}
                   inputMode="numeric"
+                  selectOnFocus
                   inputClassName="tabular text-right"
                   value={digitsText(line.tendered)}
                   onChange={(event) => digits(line.key, 'tendered')(event.target.value)}
@@ -158,7 +173,12 @@ export function PaymentLines({
               {lines.length > 1 ? (
                 <Button
                   label={tm('money.pay.remove')}
-                  aria-label={tm('money.pay.removeLabel', { method: labelOf(account) })}
+                  // Named by its method once there is one; never a method not picked yet.
+                  aria-label={
+                    unpicked
+                      ? tm('money.pay.removeUnpicked')
+                      : tm('money.pay.removeLabel', { method: labelOf(account) })
+                  }
                   variant="dangerText"
                   size="sm"
                   onClick={() => onChange(lines.filter((other) => other.key !== line.key))}
@@ -180,7 +200,12 @@ export function PaymentLines({
                   data-testid={`${id}.useQr`}
                 />
               ) : null}
-              {kind === 'cash' && line.tendered !== '' && tendered >= amount && amount > 0 ? (
+              {/* Handed over exactly: no change to give, so nothing to say. */}
+              {!unpicked &&
+              kind === 'cash' &&
+              line.tendered !== '' &&
+              tendered > amount &&
+              amount > 0 ? (
                 <p className="text-body text-text" data-testid={`${id}.change`}>
                   <span className="text-text-muted">{tm('money.pay.change')} </span>
                   <span className="tabular font-semibold">{formatMoney(tendered - amount)}</span>
@@ -198,9 +223,8 @@ export function PaymentLines({
             variant="text"
             size="sm"
             onClick={() => {
-              const used = new Set(lines.map((line) => line.account));
-              const next = methods.find((method) => !used.has(method.account))?.account;
-              onChange([...lines, newPaymentLine(newKey(), entry.remaining, next)]);
+              // The new line waits for its method too: nothing is guessed for the counter.
+              onChange([...lines, newPaymentLine(newKey(), entry.remaining)]);
             }}
             data-testid={`${testId}.add`}
           />

@@ -88,7 +88,9 @@ export interface ModulePermissionManifest {
   /** Query name → its slice. Checked identically to commands (04 §6). */
   readonly queries?: Readonly<Record<string, PermissionRequiringSurface>>;
   /** Op type → the permission its author must hold; `null` for types no command emits. */
-  readonly operations?: Readonly<Record<string, { readonly permission: string | null }>>;
+  readonly operations?: Readonly<
+    Record<string, { readonly permission: string | null; readonly read?: string | null }>
+  >;
 }
 
 /** A startup failure (§3.2). Thrown during assembly — never at runtime, never demoted to a warning. */
@@ -103,7 +105,7 @@ export class PermissionRegistryError extends Error {
 export interface PermissionReference {
   /** The declaring module's id. */
   readonly module: string;
-  readonly surface: 'command' | 'query' | 'operation';
+  readonly surface: 'command' | 'query' | 'operation' | 'operation-read';
   /** The command/query name (the manifest key). */
   readonly name: string;
   /** The permission id it requires. */
@@ -141,13 +143,22 @@ export function collectPermissionReferences(
       });
     }
     for (const [type, declaration] of Object.entries(module.operations ?? {})) {
-      if (declaration.permission === null) continue;
-      references.push({
-        module: module.id,
-        surface: 'operation',
-        name: type,
-        permission: declaration.permission,
-      });
+      if (declaration.permission !== null) {
+        references.push({
+          module: module.id,
+          surface: 'operation',
+          name: type,
+          permission: declaration.permission,
+        });
+      }
+      if (declaration.read !== undefined && declaration.read !== null) {
+        references.push({
+          module: module.id,
+          surface: 'operation-read',
+          name: type,
+          permission: declaration.read,
+        });
+      }
     }
   }
   return references;
@@ -266,7 +277,7 @@ export function assemblePermissionRegistry(
     if (!entries.has(reference.permission)) {
       // Op types are already module-prefixed; commands and queries are named within their module.
       const name =
-        reference.surface === 'operation'
+        reference.surface === 'operation' || reference.surface === 'operation-read'
           ? reference.name
           : `${reference.module}.${reference.name}`;
       throw new PermissionRegistryError(

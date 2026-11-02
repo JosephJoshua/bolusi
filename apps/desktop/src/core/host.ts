@@ -7,6 +7,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 import {
+  changedRemotely,
   createUuidV7Generator,
   DomainError,
   finishDeviceSetup,
@@ -21,13 +22,14 @@ import {
 } from '@bolusi/core';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
-import { readDeviceInfo } from '@bolusi/device/bootstrap/device-info';
+import { readDeviceInfo, renameDevice } from '@bolusi/device/bootstrap/device-info';
 import {
   createEnrollTransport,
   createLoginTransport,
 } from '@bolusi/device/bootstrap/enroll-transport';
 import { createAppEnrollment, type AppEnrollment } from '@bolusi/device/bootstrap/enrollment';
 import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
+import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
 import { bootWithLocalRecovery } from '@bolusi/device/bootstrap/recovery';
 import {
@@ -47,6 +49,7 @@ import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
 import {
   NO_SYNC_STATUS_READS,
+  markRejectionsHandled,
   readSyncStatusRows,
   type SyncStatusReads,
 } from '@bolusi/device/bootstrap/sync-status-reads';
@@ -67,7 +70,8 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import { moneyModule } from '@bolusi/modules';
+import { DEFAULT_LOCALE, setLocale, type Locale } from '@bolusi/i18n';
+import { approvalsModule, inventoryModule, moneyModule, purchasingModule } from '@bolusi/modules';
 import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
@@ -75,7 +79,7 @@ import {
   MEDIA_EXTENSION,
   VIDEO_MAX_SIZE_BYTES,
   isVideoMime,
-  type HandoffKind,
+  type HandoffAsk,
   type HandoffPageLabels,
   type MediaRef,
   type QrisChargeBody,
@@ -83,21 +87,24 @@ import {
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingSession, actingStaffAdmin } from './acting.js';
+import { actingDeviceAdmin, actingSession, actingStaffAdmin, readForActing } from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
   CoreVideoOutcome,
   HandoffEvent,
+  RepairChange,
   SessionView,
 } from './api.js';
 import { createHandoffClient } from './handoff.js';
 import { heldPermissions } from './permissions.js';
-import { initCoreI18n } from './i18n.js';
+import { initCoreI18n, loadDeviceLocale, saveDeviceLocale, selectableLocale } from './i18n.js';
 import { nodeRealtimeSocket } from './websocket.js';
 
 /** The repair runtime the core builds for whoever is signed in. */
 type RepairRuntime = ReturnType<typeof createSessionRepairRuntime>;
+type InventoryRuntime = NonNullable<RepairRuntime['inventory']>;
+type PurchasingRuntime = NonNullable<RepairRuntime['purchasing']>;
 
 import { nodeColumnAead, nodeCryptoPort } from './crypto.js';
 import { createDesktopMediaFiles, createDesktopPhonePhotoFiles } from './media-files.js';
@@ -127,8 +134,11 @@ export interface CoreHost {
   onState(listener: (state: CoreState) => void): () => void;
   /** Sync now (the PC woke up, or someone asked). */
   requestSync(): void;
-  /** Fires when a repair read may have changed (the live-query signal). */
-  onRepairChanged(listener: () => void): () => void;
+  /**
+   * Fires when a repair read may have changed (the live-query signal), naming the record when the
+   * change came from another device so the window can let it glow.
+   */
+  onRepairChanged(listener: (change: RepairChange | null) => void): () => void;
   /** Fires with what the paired phone did (the phone handoff). */
   onHandoff(listener: (event: HandoffEvent) => void): () => void;
   stop(): Promise<void>;
@@ -224,6 +234,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   let setupFor: string | null = null;
   let syncReads: SyncStatusReads = NO_SYNC_STATUS_READS;
   let bootError: string | null = null;
+  /** The language this PC shows; read from its database at boot. */
+  let locale: Locale = DEFAULT_LOCALE;
   let stopped = false;
   /** The owner's login, kept here so the control-session token never reaches the window. */
   let heldLogin: LoginResult | null = null;
@@ -240,7 +252,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   let generation = 0;
 
   const stateListeners = new Set<(state: CoreState) => void>();
-  const repairListeners = new Set<() => void>();
+  const repairListeners = new Set<(change: RepairChange | null) => void>();
   const handoffListeners = new Set<(event: HandoffEvent) => void>();
   // The phone handoff talks to the server with this PC's token, so it lives here; the window gets
   // ids and what the phone sent, and keeps that through `media.*` like its own capture.
@@ -260,6 +272,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     setupFor: null,
     session: null,
     sync: null,
+    statusSite: deps.apiBaseUrl,
+    locale: DEFAULT_LOCALE,
   };
 
   // Many changes land together (a pull applies ops one by one), so the window gets one state per
@@ -311,10 +325,12 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       locked: snapshot.locked,
       lockReason: snapshot.lockReason,
       workspace: snapshot.workspace,
+      deviceDrafts: snapshot.deviceDrafts,
       canUnlock: snapshot.canUnlock,
       canReset: snapshot.canReset,
       canManageStaff: snapshot.canManageStaff,
       canSetLimits: snapshot.canSetLimits,
+      canRenameDevice: snapshot.canRenameDevice,
       tenantAdmin: snapshot.tenantAdmin,
       permissions,
       colleaguePermissions,
@@ -335,7 +351,16 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       setupFor,
       session: sessionView(),
       sync: shell.sync,
+      statusSite: deps.apiBaseUrl,
+      locale,
     };
+  }
+
+  /** Who is signed in now, or null while nobody is or the screen is locked. */
+  function signedInUserId(): string | null {
+    const snapshot = session?.snapshot();
+    if (snapshot === undefined || snapshot.locked) return null;
+    return snapshot.session?.userId ?? null;
   }
 
   /** The repair runtime for the user signed in now, or null with nobody signed in. */
@@ -345,17 +370,31 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     return repair !== null && repair.userId === active.userId ? repair.runtime : null;
   }
 
+  /** Rebuild the repair runtime for whoever is signed in now. Run unawaited, so it never rejects. */
   async function bindRepair(): Promise<void> {
-    const active = session?.snapshot().session ?? null;
-    if (app === null || enrollment === null || active === null) {
-      repair = null;
-      return;
+    try {
+      const active = session?.snapshot().session ?? null;
+      if (app === null || enrollment === null || active === null) {
+        repair = null;
+        return;
+      }
+      if (repair?.userId === active.userId) return;
+      const booted = app;
+      const enroll = enrollment;
+      const identity = await readForActing(
+        () => session,
+        active.userId,
+        (userId) => readSessionIdentity(booted, userId),
+      );
+      // Dropped when someone else signed in or the PC was re-registered while the read ran; the
+      // change that did it has already asked for a fresh bind.
+      if (identity === null || app !== booted || enrollment !== enroll) return;
+      if (repair?.userId === active.userId) return;
+      repair = { userId: active.userId, identity, runtime: buildRepair(booted, enroll, identity) };
+      emit();
+    } catch (error) {
+      warn('repair runtime could not be built', error);
     }
-    if (repair?.userId === active.userId) return;
-    const identity = await readSessionIdentity(app, active.userId);
-    if (identity === null) return;
-    repair = { userId: active.userId, identity, runtime: buildRepair(app, enrollment, identity) };
-    emit();
   }
 
   function buildRepair(
@@ -386,6 +425,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         readBase64: (uri) => Promise.resolve(uri.slice(uri.indexOf(',') + 1)),
       },
       qris: qrisFor,
+      statusSite: deps.apiBaseUrl,
     });
   }
 
@@ -405,6 +445,18 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const port = repairFor(userId).money.qris;
     if (port === undefined) throw new QrisError('unavailable');
     return port;
+  }
+
+  function inventoryFor(userId: string): InventoryRuntime {
+    const inventory = repairFor(userId).inventory;
+    if (inventory === undefined) throw new Error('stock is not running on this PC');
+    return inventory;
+  }
+
+  function purchasingFor(userId: string): PurchasingRuntime {
+    const purchasing = repairFor(userId).purchasing;
+    if (purchasing === undefined) throw new Error('buying is not running on this PC');
+    return purchasing;
   }
 
   /** Who a photo or signature from the window is stamped with: the person signed in now. */
@@ -462,7 +514,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       do {
         readAgain = false;
         try {
-          syncReads = await readSyncStatusRows(booted.db.db, REPAIR_REJECTED_SUBJECTS);
+          syncReads = await readSyncStatusRows(
+            booted.db.db,
+            REPAIR_REJECTED_SUBJECTS,
+            signedInUserId(),
+          );
           emit();
         } catch (error) {
           warn('sync status read failed', error);
@@ -512,8 +568,9 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     session = controller;
     serviceCleanups.push(
       controller.subscribe(() => {
-        // A switch or a lock changes who the repair runtime is for.
+        // A switch or a lock changes who the repair runtime is for, and whose refusals are listed.
         void bindRepair();
+        void rereadSyncStatus();
         emit();
       }),
     );
@@ -683,6 +740,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       return;
     }
     app = booting;
+    locale = await loadDeviceLocale(booting.db.db);
     const enroll = createAppEnrollment(
       booting,
       {
@@ -700,8 +758,10 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     );
     enrollment = enroll;
     cleanups.push(
-      booting.invalidation.subscribe(() => {
-        for (const listener of repairListeners) listener();
+      booting.invalidation.subscribe((_tables, change) => {
+        const freshIds = changedRemotely(change);
+        const fresh: RepairChange | null = freshIds.length > 0 ? { freshIds } : null;
+        for (const listener of repairListeners) listener(fresh);
         void rereadSyncStatus();
       }),
     );
@@ -734,14 +794,16 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       const enroll = requireEnrollment();
       const booted = app;
       if (booted === null || booted.deviceId === null) {
-        await enroll.controller.enroll({ login: heldLogin, ...request });
+        // The counter PC is always shared by its store.
+        await enroll.controller.enroll({ login: heldLogin, ...request, personalUserId: null });
         return;
       }
       // Re-enrolling replaces this PC's registration (and carries its unsent work over), so
       // nothing may keep running under the old one meanwhile.
       stopServices();
       try {
-        await enroll.controller.enroll({ login: heldLogin, ...request });
+        // The counter PC is always shared by its store.
+        await enroll.controller.enroll({ login: heldLogin, ...request, personalUserId: null });
       } catch (error) {
         // Nothing was replaced: pick up where the PC was.
         if (!stopped) void startEnrolledServices(booted, enroll);
@@ -786,12 +848,19 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       sessionFor(userId).clearLockout(targetUserId),
     'session.resetPin': (userId: string, targetUserId: string, newPin: string) =>
       sessionFor(userId).resetPin(targetUserId, newPin),
-    'session.lock': () => requireSession().lockNow(),
+    // The screen locks even when `session_ended` cannot be written; the lost record is logged.
+    'session.lock': () =>
+      requireSession()
+        .lockNow()
+        .catch((error: unknown) => warn('manual lock was not recorded', error)),
     'session.recordActivity'() {
       session?.recordActivity();
     },
     'session.updateWorkspace'(next: UserWorkspace) {
       session?.updateWorkspace(next);
+    },
+    'session.updateDeviceDraft'(moduleId: string, draft: unknown) {
+      session?.updateDeviceDraft(moduleId, draft);
     },
 
     // ── Karyawan (online only; each change is a server call as the signed-in owner) ────────────
@@ -813,10 +882,52 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       staffFor(userId).onUpdateRole(roleId, change),
     'staff.deleteRole': (userId: string, roleId: string) => staffFor(userId).onDeleteRole(roleId),
 
+    // Online only, like Karyawan: the server takes the new name first, then this PC shows it.
+    async 'device.rename'(userId: string, name: string) {
+      actingDeviceAdmin(session, userId);
+      const booted = app;
+      if (booted === null) throw new Error('the core has not booted');
+      await renameDevice(booted, staffAdmin, { actingUserId: userId, name });
+      deviceInfo = await readDeviceInfo(booted, {
+        platform: PLATFORM,
+        appVersion: deps.appVersion,
+      });
+      emit();
+    },
+
+    // This PC's language, for everyone using it, as on the phone. It is also the person's own
+    // preference (a signed change that follows them), but that part must never hold up the switch.
+    async 'device.setLocale'(userId: string, next: string) {
+      actingSession(session, userId);
+      const chosen = selectableLocale(next);
+      const booted = app;
+      if (chosen === null || booted === null) throw new DomainError('VALIDATION_FAILED');
+      setLocale(chosen);
+      locale = chosen;
+      emit();
+      await saveDeviceLocale(booted.db.db, chosen).catch((error: unknown) =>
+        warn('the language was not saved for the next start', error),
+      );
+      const acting = repair;
+      if (enrollment !== null && acting !== null && acting.userId === userId) {
+        void createUserLocaleWriter(
+          enrollment.runtime,
+          acting.identity,
+        )(chosen).catch((error: unknown) => warn('per-user locale op failed', error));
+      }
+    },
+
     // ── Sync ────────────────────────────────────────────────────────────────────────────────────
     'sync.requestManual'() {
       sync?.requestManual();
       media?.requestManual();
+    },
+    // The person signed in has dealt with these refused changes of theirs.
+    async 'sync.markRejectedHandled'(opIds: readonly string[]) {
+      const userId = signedInUserId();
+      if (app === null || userId === null) return;
+      await markRejectionsHandled(app.db, userId, opIds, clock.now());
+      await rereadSyncStatus();
     },
 
     // ── Repair (every call names the user its screen was built for) ─────────────────────────────
@@ -840,6 +951,23 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       qrisOf(userId).createCharge(body),
     'money.qris.charge': (userId: string, id: string) => qrisOf(userId).charge(id),
     'money.qris.simulate': (userId: string, id: string) => qrisOf(userId).simulate(id),
+    // Approval requests on servisan (a discount or a cancel asked of an owner), for the same person.
+    'approvals.query': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).approvals.query)(knownName(approvalsModule.queries, name), input),
+    'approvals.run': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).approvals.run)(knownName(approvalsModule.commands, name), input),
+    // The parts list and each servisan's parts, for the same person.
+    'inventory.query': (userId: string, name: string, input: unknown) =>
+      untyped(inventoryFor(userId).query)(knownName(inventoryModule.queries, name), input),
+    'inventory.run': (userId: string, name: string, input: unknown) =>
+      untyped(inventoryFor(userId).run)(knownName(inventoryModule.commands, name), input),
+    // Orders to suppliers and their deliveries, for the same person.
+    'purchasing.query': (userId: string, name: string, input: unknown) =>
+      untyped(purchasingFor(userId).query)(knownName(purchasingModule.queries, name), input),
+    'purchasing.run': (userId: string, name: string, input: unknown) =>
+      untyped(purchasingFor(userId).run)(knownName(purchasingModule.commands, name), input),
+    'purchasing.storeName': (userId: string) =>
+      purchasingFor(userId).storeName?.() ?? Promise.resolve(null),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),
@@ -850,7 +978,6 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       photo: Parameters<RepairRuntime['loadModelPhoto']>[0],
     ) => repairFor(userId).loadModelPhoto(photo),
     'repair.print.storeName': (userId: string) => repairFor(userId).printing!.storeName(),
-    'repair.print.userName': (userId: string) => repairFor(userId).printing!.userName(),
     'repair.print.readPaper': (userId: string) => repairFor(userId).printing!.readPaper(),
     'repair.print.writePaper': (
       userId: string,
@@ -911,7 +1038,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
     // ── Phone handoff: a store phone takes the photo or signature for this PC ───────────────────
     'handoff.pair': (labels: HandoffPageLabels) => handoff.pair(labels),
-    'handoff.ask': (id: string, kind: HandoffKind, title: string) => handoff.ask(id, kind, title),
+    'handoff.ask': (id: string, ask: HandoffAsk) => handoff.ask(id, ask),
     'handoff.withdraw': (id: string, seq: number) => handoff.withdraw(id, seq),
     'handoff.unpair': (id: string) => handoff.unpair(id),
   } satisfies Handlers;

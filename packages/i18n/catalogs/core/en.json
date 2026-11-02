@@ -2,9 +2,9 @@
   "action": {
     "save": "Save",
     "cancel": "Cancel",
-    "retry": "Try Again",
+    "retry": "Try again",
     "delete": "Delete",
-    "confirm": "Yes, Continue",
+    "confirm": "Yes, continue",
     "back": "Back",
     "close": "Close",
     "edit": "Edit",
@@ -54,6 +54,9 @@
   "unauthorized": {
     "askOwner": "Ask your store owner for access."
   },
+  "notOnDevice": {
+    "hint": "This isn’t kept on this device. It shows up once you’re online."
+  },
   "opType": {
     "unknown": "Change"
   },
@@ -70,6 +73,7 @@
     "LAST_ADMIN_PROTECTED": "Not allowed. There must always be at least one active main owner.",
     "ROLE_IN_USE": "This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.",
     "CLOCK_AHEAD": "This device’s clock is ahead. Turn on automatic date and time in settings, then try again.",
+    "NOT_ON_DEVICE": "Needs internet to open this.",
     "IDEMPOTENCY_CONFLICT": "This request clashed with an earlier one. Try again.",
     "RATE_LIMITED": "Too many requests. Wait a moment, then try again.",
     "UNEXPECTED": "Something went wrong. Try again.",
@@ -89,14 +93,15 @@
     "STORAGE_ERROR": "The server couldn’t save the photo. The app will try again.",
     "LOCAL_CORRUPT": "This photo is damaged on this device and can’t be sent. Take a new photo.",
     "AUTH_TOKEN_MISSING": "Sign in again to keep sending photos.",
-    "AUTH_TOKEN_INVALID": "This device’s session has ended. Sign in again to keep sending photos."
+    "AUTH_TOKEN_INVALID": "This device’s session has ended. Sign in again to keep sending photos.",
+    "APP_UPDATE_REQUIRED": "Update the app to receive the latest data."
   },
   "rejection": {
     "BAD_SIGNATURE": "Failed the server check. Tell the store owner.",
     "CHAIN_BROKEN": "This device’s history is broken and sending stopped. Tell the store owner now.",
     "CHAIN_GAP": "Something was missing. Resending automatically.",
     "CHAIN_HALTED": "Waiting on an earlier change.",
-    "CLOCK_AHEAD": "This phone’s clock was ahead when this was made. Turn on automatic date and time, then redo it.",
+    "CLOCK_AHEAD": "This device’s clock was ahead when this was made. Turn on automatic date and time, then redo it.",
     "DEVICE_REVOKED": "This device is blocked. Enroll it again.",
     "PERMISSION_DENIED": "Whoever made it wasn’t allowed to. Ask someone who is to redo it.",
     "RULE_VIOLATED": "The record changed on another device. Check it and redo this if it’s still needed.",
@@ -158,12 +163,15 @@
       "waiting": "Phone connected. The next step will show up here.",
       "rotate": "Turn the phone on its side.",
       "rotateNow": "Turn the screen",
-      "withdrawn": "Cancelled on the computer."
+      "withdrawn": "Cancelled on the computer.",
+      "videoDenied": "The camera or microphone isn’t allowed. Allow them for this site in the browser, then try again.",
+      "videoUnsupported": "This browser can’t record video. Open the code in Chrome or Safari."
     },
     "newCode": "Use another phone",
     "photoOnPhone": "Take the photo on the phone",
     "signOnPhone": "Ask the customer to sign on the phone",
-    "waitingSend": "Waiting for the phone to send…"
+    "waitingSend": "Waiting for the phone to send…",
+    "videoOnPhone": "Record the video on the phone"
   },
   "video": {
     "denied": "The camera or microphone isn’t allowed. Allow them in Windows Settings › Privacy, then try again.",
@@ -171,5 +179,11 @@
     "loading": "Loading video…",
     "failed": "The video couldn’t play. Try again.",
     "noMicrophone": "No microphone found. Plug in a microphone or a webcam that has one, then try again."
+  },
+  "closeWindow": {
+    "title": "Close Bolusi?",
+    "message": "What you are filling in is not saved yet and will be lost.",
+    "confirm": "Close",
+    "keep": "Keep editing"
   }
 }

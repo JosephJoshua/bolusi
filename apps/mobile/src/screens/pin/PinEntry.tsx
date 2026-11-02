@@ -9,9 +9,18 @@
  * On a tablet held sideways the person stands on the left and the pad on the right: stacked, the
  * pad would run below a short landscape screen and need scrolling to reach 0.
  */
-import { Avatar, PinPad, color, space, type, useViewport, type PinPadState } from '@bolusi/ui';
+import {
+  Avatar,
+  PinPad,
+  color,
+  space,
+  type,
+  useViewport,
+  type PinPadState,
+  Text,
+} from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { initialsOf } from '@bolusi/device/models/switcher/model';
 import { roleLabel } from '../switcher/UserRow.js';

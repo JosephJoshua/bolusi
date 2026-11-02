@@ -144,6 +144,9 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   Servisan: before work starts and after work has started (a technician has
   started work on it at least once). Both start at Rp 0. The fee in force is
   filled in when cancelling and the owner may change it; the record keeps both.
+  The store's fee never goes above the agreed repair price (Joseph, 2026-11-01:
+  no customer pays more to cancel than to repair; with no price yet the store's
+  fee stands). Most stores charge nothing, so a zero fee reads "Tanpa biaya".
 - **Customer sees it:** the handover of a cancelled phone shows the fee owed
   ("Biaya pembatalan"), and the customer signs under it. The printed slip will
   show it too once printing lands.
@@ -164,6 +167,61 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   phone cannot be handed back while a change waits. Technicians keep proposing,
   since they find the extra fault once the phone is open.
 
+## Putting staff mistakes right (2026-10-29)
+
+From PC exploratory QA round 2. Corrections are their own recorded steps, never
+silent edits, and each one names who did it and what it was before.
+
+- **Intake's record while the phone is in the store:** the counter (repair
+  intake) can correct the customer's name and number, the phone (brand, model,
+  colour, IMEI), its lock, the complaint and the accessories, with an optional
+  reason. The history lists each change as before and after; the lock's code is
+  never shown, only that it changed. After pickup the signed slip is the record,
+  so nothing here can be changed.
+- **Customers are never renamed under other servisans:** a correction renames
+  the customer's record only when this servisan is the only one it names and it
+  was never handed over. Otherwise, or when the typed details match another
+  customer, the servisan moves to that customer (found, or made like at intake),
+  and other servisans keep their own. The history must name the customer it
+  moves to.
+- **Warranty claims keep their phone:** a claim's brand, model and IMEI cannot
+  change, and a handover with a claim on it cannot be taken back.
+- **Taking a handover back is an owner's decision** (the cancel permission; a
+  manager only within the cancel limit, against what the servisan charged): for
+  a phone marked as handed over by mistake that is still in the store, within a
+  day of the first handover. A reason is required. The handover photo and
+  signature stop counting and payments stay; a payment booked to the wrong
+  servisan is cancelled in Kas under its own rules. The warranty still counts
+  from the first handover, the servisan can no longer be cancelled (it can only
+  be handed over again), and its customer, brand, model and IMEI stay as on the
+  signed slip. The day is judged by the time the device signs the undo, so an
+  owner's device with its clock set back could undo later; managers stay bound
+  by their limit either way. Accepted: owners already hold the cash decisions.
+- **A mistyped cash move is voided by an owner** (adjust cash) with a reason,
+  until a later count of the drawer was settled. The void dates back to the move,
+  so a count taken after it reads as if the move never happened.
+- **Checks at entry:** phone numbers must be callable (stored one way, 0812…),
+  an IMEI must be 15 digits with a valid check digit, a retyped returning
+  customer is reused, and PINs that are easy to guess (111111, 123456, common
+  ones) are refused on every device. The server only sees PIN verifiers, so it
+  cannot check this itself.
+- **No payment method is picked for the counter** (2026-10-31): where the
+  store takes more than cash, a payment, a DP or a debt paid later starts
+  with no method, and it saves only once one is tapped. A store that takes
+  only cash gets cash. A method switched off since it was picked is picked
+  again, never booked to the drawer.
+- **Intake drafts belong to the device** (Joseph, 2026-10-31): anyone signed in
+  on that PC or phone can carry on with an unfinished intake. It shows who
+  started it, and the servisan is recorded under whoever saves it. Drafts never
+  sync.
+- **Blind cash count for staff** (Joseph, 2026-10-31): Kasir and Teknisi type
+  what they counted before they see "Seharusnya di laci" and the difference,
+  and may recount once before saving. Owners and managers see the expected
+  amount up front. Kas does not add up today's takings for them, and taking
+  out more than the drawer holds is not refused for them, since the refusal
+  would reveal the figure a try at a time; the next count shows the gap.
+  Riwayat still lists each amount.
+
 ## Printing repair slips (2026-10-26)
 
 Agreed with the owner before building printing.
@@ -180,9 +238,10 @@ Agreed with the owner before building printing.
   phone details. Every field is printed whole at its longest allowed length,
   wrapping rather than cutting. An ordinary slip fits one half form at the
   printer's default 6 lines per inch, a line down from the perforation; only a
-  longer one tightens to 8 lines per inch (only 1/6" and 1/8" mean the same on
-  9-pin and 24-pin Epsons) before spilling onto a second form. Spare lines go
-  above the signatures. Plain paper gets more spacing. A cancelled servisan's
+  longer one tightens to 8 lines per inch to stay on one form (owner,
+  2026-11-01; only 1/6" and 1/8" mean the same on 9-pin and 24-pin Epsons). One
+  too long even then goes back to 6 and is spread evenly over two forms. Spare
+  lines go above the signatures. Plain paper gets more spacing. A cancelled servisan's
   slip has no warranty terms.
 - **Two documents:** the intake receipt ("Tanda terima servisan") and the
   handover slip ("Nota servisan") for a pickup or a cancel, which is also the
@@ -222,6 +281,10 @@ Agreed with the owner after reviewing what the repair release still lacks.
   picks them at intake; the counter or a technician can change them until the phone
   goes home or the servisan is cancelled. A servisan keeps the warranty its types
   had when picked, so editing the list later never changes a promise already made.
+  The server checks a newly picked type against every version the owner's list has
+  had, so an intake taken offline before the owner edited the list still counts;
+  terms no version ever gave are refused. Intake photo angles and a cancel's
+  store fee are checked the same way.
   The warranty counts from pickup (owner decision) and is
   printed per type on the handover slip.
 - **Warranty claims:** a claim opens a new servisan linked to the old one, at Rp 0.
@@ -229,14 +292,16 @@ Agreed with the owner after reviewing what the repair release still lacks.
   counter starts it from the servisan that went home ("Klaim garansi"), with the same
   customer and phone. A claim always names the first servisan, never another claim,
   and has no repair types of its own, so its warranty is that servisan's and a claim
-  never extends it. A later price rise on a claim also needs an owner.
+  never extends it. A later price rise on a claim also needs an owner. The server
+  judges whether the warranty still runs by when it receives the claim, not the
+  phone's clock, so a free claim taken offline that syncs after the end needs an owner.
 - **Ownership video:** taken by the counter at intake when a chosen type needs it. It
   shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
   720p (about 2 Mbit/s: MP4, or WebM from a PC whose browser engine cannot record MP4); it uploads in the
   background like photos. It is taken only at intake (Joseph, 2026-10-28): the servisan
   only plays it back, and a type that needs one added later asks for nothing more. The
   handover's proof is its photo. A warranty claim needs none. A PC without a webcam
-  cannot take one yet (phone handoff for video is next).
+  records it on the paired store phone, like its photos.
 - **No separate QC step:** the technician's after photo stays, and the counter tests
   the phone with the customer at handover from a short checklist: the owner's
   "Cek saat serah terima" list (default: the customer tried the phone, the repaired
@@ -405,6 +470,26 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
   will be seen only by owners and whoever records purchases; a sell price per
   store waits for the shop POS.
 
+## Buying parts from suppliers (2026-10-31)
+
+Agreed with the owner on 2026-10-28; first part built 2026-10-31.
+
+- **Who buys:** owners, and anyone given "Belanja sparepart". One supplier list
+  for the business; orders belong to a store. On the phone it is "Belanja" in the
+  avatar menu, on the PC a sidebar page.
+- **An order:** a draft, then "Pesan" places it and it can be sent to the
+  supplier as WhatsApp text (copied on the PC when the supplier has no number).
+  Only a draft changes; a placed order is cancelled instead, and what already
+  came stays in stock.
+- **Receiving:** count what came per part, as many deliveries as it takes. Each
+  delivery adds stock at once as its own movement ("Diterima dari PO-…"). An
+  order's state (Dipesan, Diterima sebagian, Diterima, Diterima lebih) is worked
+  out from its deliveries, so two phones receiving offline never clash; more than
+  ordered is kept and flagged for a stock correction.
+- **Next:** buy prices at receiving with a moving average cost per store, seen
+  only on owners' own phones (permission-scoped sync); supplier bills and
+  payments; transfers between stores; supplier returns.
+
 ## Managers, limits, approvals and roles (2026-10-28)
 
 Agreed with the owner. This replaces the October 14-16 manager, limit and role
@@ -446,6 +531,57 @@ governance notes in "Decision" where they differ.
   their PIN. Role and limit changes are online only and reach phones with the
   next sync; the server judges each synced action by the current roles and
   limits and refuses one over them, which the owner sees.
+- **Approvals as built (first part):** a discount and a cancel. The counter's
+  "Batalkan" and a discount past someone's limit (counting the servisan's other
+  discounts) become "Minta persetujuan". The request shows on the servisan, and
+  approvers get a "Persetujuan (n)" queue on the board. Approving runs the
+  action as the approver, checked by the same rules and their own limit. A
+  waiting request of a kind blocks a second one on the same servisan, and any
+  change to the servisan (even one that leaves the total as it was) closes it.
+  Two approvers answering one request while offline cannot apply it twice: the
+  decision is named after the request, so the second is refused at sync.
+- **Approvals as built (second part):** Bayar nanti and DP fixes. At handover,
+  "Bayar nanti" beyond someone (or past their limit, shown up front) asks with
+  the reason typed; once approved, anyone at the counter may leave that
+  servisan's debt up to the approved amount, and a higher bill needs asking
+  again. The counter's "Ubah DP" asks too; a fix counts against the refund
+  limit by what its voids take off (the decrease through the same method, all
+  of it through another). Refunds beyond an overpayment and voids from Kas are
+  not requestable: no counter screen starts them.
+- **Ubah biaya on a cancelled servisan (2026-11-01):** a manager past their
+  limit asks too, on the phone and the PC. Before pickup it asks for the new fee
+  (cancel limit, counted from the store's fee with the discounts); once the
+  phone went home and was charged, the bill comes down like "Kurangi tagihan"
+  (refund limit). Either way the owner reads the fee the manager typed, with
+  how far the bill drops as a note, and their yes records exactly what the
+  manager would have.
+
+## Customers follow their repair online (2026-10-28)
+
+- Each servisan gets a 12-character link code (Crockford base32) made on the
+  device at intake, so it works offline. The code is the only credential: no
+  lookup by servisan number or phone number, and access logs mask it. It appears
+  on the page once the servisan has synced. The code is a hash of a random nonce
+  and the servisan's tenant, store and id, so a code copied off a slip cannot be
+  recorded on another store's servisan to break or hijack the link.
+- The page (`<site>/c/<code>`, served by our server from `apps/web`) shows the
+  status and its history, the phone model, Total, paid and Sisa, price changes
+  waiting for the customer's yes (read only; they answer the store on WhatsApp),
+  the warranty (its end date after pickup) and the store's name, address and
+  contact. No photos, customer details, notes or staff names.
+- The page closes 30 days after the longest warranty ends (or 30 days after
+  pickup when there is none). Lookups are rate limited per IP and never indexed.
+- Slips: dot-matrix strikes both sheets, so the QR is on every copy. It sits at
+  the right of the signatures with "Cek status servisan" and the address in
+  bold beside it (on narrow paper the signatures move above it), and every paper
+  size keeps the same number of forms. Intake and handover slips both carry it.
+- "Kirim link status" on WhatsApp is the counter's message for a phone in the
+  store when nothing else is due, the main way the link reaches the customer;
+  the ready and price-change messages carry the link too.
+- The link is under the server the device syncs with, which also serves the
+  page, so a new domain needs no app change.
+- `apps/web` is the start of the later back-office web app: customer pages need
+  no sign-in, staff screens join it with their own routes.
 
 ## Open product choices
 

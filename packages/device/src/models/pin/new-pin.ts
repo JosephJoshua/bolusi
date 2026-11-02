@@ -18,36 +18,51 @@
  * logged (this module has no I/O). It leaves as `matched.pin` for the caller to hand to the flow.
  */
 
+import { weakPin } from '@bolusi/core';
+
 /** PIN entry sub-state. A discriminated union so the screen's switch is exhaustive (no blank pad). */
 export type NewPinEntry =
-  /** Awaiting the new PIN. `afterMismatch` drives the one-shot "PINs don’t match" message. */
-  | { readonly kind: 'first'; readonly afterMismatch: boolean }
+  /**
+   * Awaiting the new PIN. `problem` drives the one-shot message about the last try: the repeat did
+   * not match, or the PIN was too easy to guess (`weakPin`).
+   */
+  | {
+      readonly kind: 'first';
+      readonly problem: NewPinProblem | null;
+      /** Easy PINs refused in a row, so each refusal clears the pad again (`newPinPadKey`). */
+      readonly refusals?: number;
+    }
   /** Awaiting the repeat of `first`. */
   | { readonly kind: 'repeat'; readonly first: string }
   /** The repeat equalled `first` — the caller may now submit `pin`. Terminal. */
   | { readonly kind: 'matched'; readonly pin: string };
 
+export type NewPinProblem = 'mismatch' | 'weak';
+
 /** A fresh entry: awaiting the first new PIN, no mismatch yet. */
-export const NEW_PIN_START: NewPinEntry = { kind: 'first', afterMismatch: false };
+export const NEW_PIN_START: NewPinEntry = { kind: 'first', problem: null };
 
 /**
  * Advance the sub-flow on a completed 6-digit `pin` (PinPad only fires `onComplete` at length 6, so
  * format is the pad's guarantee — this reducer decides only the match, never re-validates digits).
  *
- * `first`   → capture it, ask for the repeat.
- * `repeat`  → equal ⇒ `matched`; unequal ⇒ back to `first` with `afterMismatch` set (re-type both).
+ * `first`   → a PIN easy to guess (111111, 123456) is refused at once; otherwise capture it and ask
+ *             for the repeat. The flows refuse it again (`assertNewPin`), so no screen can skip this.
+ * `repeat`  → equal ⇒ `matched`; unequal ⇒ back to `first` with the mismatch named (re-type both).
  * `matched` → terminal; a stray late completion is ignored rather than re-opening a settled entry.
  */
 export function advanceNewPin(entry: NewPinEntry, pin: string): NewPinEntry {
   switch (entry.kind) {
     case 'first':
-      return { kind: 'repeat', first: pin };
+      return weakPin(pin)
+        ? { kind: 'first', problem: 'weak', refusals: (entry.refusals ?? 0) + 1 }
+        : { kind: 'repeat', first: pin };
     case 'repeat':
       // The ONLY producer of `matched`, and it is gated on equality. Break this and a mismatched
       // confirmation would submit — new-pin.test.ts exercises exactly the unequal case.
       return pin === entry.first
         ? { kind: 'matched', pin }
-        : { kind: 'first', afterMismatch: true };
+        : { kind: 'first', problem: 'mismatch' };
     case 'matched':
       return entry;
   }
@@ -69,12 +84,22 @@ export function newPinPromptKey(
  */
 export function newPinFeedbackKey(
   entry: NewPinEntry,
-): 'auth.pin.setup.mismatch' | 'auth.pin.setup.hint' | null {
+): 'auth.pin.setup.mismatch' | 'auth.pin.setup.weak' | 'auth.pin.setup.hint' | null {
   if (entry.kind !== 'first') return null;
-  return entry.afterMismatch ? 'auth.pin.setup.mismatch' : 'auth.pin.setup.hint';
+  return entry.problem === null ? 'auth.pin.setup.hint' : `auth.pin.setup.${entry.problem}`;
 }
 
-/** The pad's state for an entry: red after a mismatch, otherwise ready for digits. */
+/** The pad's state for an entry: red after a refused try, otherwise ready for digits. */
 export function newPinPadState(entry: NewPinEntry): 'entry' | 'error' {
-  return entry.kind === 'first' && entry.afterMismatch ? 'error' : 'entry';
+  return entry.kind === 'first' && entry.problem !== null ? 'error' : 'entry';
+}
+
+/**
+ * A key for the pad that changes with every step and every refusal, so the screen remounts the pad
+ * and its dots clear: a second easy PIN in a row must not leave six red dots that take no digits.
+ */
+export function newPinPadKey(entry: NewPinEntry): string {
+  return entry.kind === 'first'
+    ? `first-${String(entry.problem)}-${entry.refusals ?? 0}`
+    : entry.kind;
 }

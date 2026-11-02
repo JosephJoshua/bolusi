@@ -55,20 +55,24 @@ afterEach(async () => {
 });
 
 async function capture(id: string, userId = fixture.userId): Promise<void> {
-  await insertMediaItem(fixture.app.db.db, {
-    id,
-    tenantId: fixture.tenantId,
-    storeId: fixture.storeId,
-    userId,
-    deviceId: fixture.deviceId,
-    type: 'image',
-    mime: 'image/jpeg',
-    sizeBytes: 1024,
-    sha256: 'a'.repeat(64),
-    capturedAt: 1,
-    location: null,
-    localPath: `/tmp/${id}.jpg`,
-  });
+  await insertMediaItem(
+    fixture.app.db.db,
+    {
+      id,
+      tenantId: fixture.tenantId,
+      storeId: fixture.storeId,
+      userId,
+      deviceId: fixture.deviceId,
+      type: 'image',
+      mime: 'image/jpeg',
+      sizeBytes: 1024,
+      sha256: 'a'.repeat(64),
+      capturedAt: 1,
+      location: null,
+      localPath: `/tmp/${id}.jpg`,
+    },
+    (fn) => fixture.app.db.transaction(() => fn()),
+  );
 }
 
 async function attachedTo(id: string): Promise<string | null> {

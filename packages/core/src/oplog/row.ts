@@ -24,9 +24,11 @@ export async function insertOpLogRow<DB>(
   db: Kysely<DB>,
   { op, signedCoreJcs }: OpRow,
   bookkeeping: OpLogRowBookkeeping,
+  /** The device's log, or a person store's (least-privilege sync). */
+  table = 'operations',
 ): Promise<void> {
   await sql`
-    INSERT INTO operations (
+    INSERT INTO ${sql.table(table)} (
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
       schema_version, timestamp_ms, source, agent_initiated,
       agent_conversation_id, previous_hash, hash, signature, signed_core_jcs,

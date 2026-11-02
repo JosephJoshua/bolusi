@@ -42,7 +42,7 @@ import { Root, type RootProps } from '../src/bootstrap/Root.js';
 import type { AppEnrollment } from '@bolusi/device/bootstrap/enrollment';
 import type { AppStatePort, AppStatus } from '@bolusi/device/bootstrap/triggers';
 import { openBetterSqlite3Driver } from './better-sqlite3-driver.js';
-import { render, fire, type RenderResult } from '../../../packages/ui/test/render.js';
+import { render, fire, waitUntil, type RenderResult } from '../../../packages/ui/test/render.js';
 import { ensureNotesCatalog } from './notes-support.js';
 
 export { closeClientDb, buildPinVerifier, NOTES_PERMISSIONS };
@@ -376,6 +376,7 @@ export async function seedOwnerAndLockedTarget(
           ...NOTES_PERMISSIONS,
           'auth.pin_unlock',
           'auth.user_reset_pin',
+          'platform.conflict_acknowledge',
         ]),
         storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS),
       ],
@@ -563,6 +564,7 @@ export interface MountOptions {
   readonly pushRouter?: RootProps['pushRouter'];
   /** The notification permission seam; default undefined (never asks). */
   readonly notificationPermission?: RootProps['notificationPermission'];
+  readonly cameraPermission?: RootProps['cameraPermission'];
   /**
    * The enrollment factory (api/02-auth §4; task 92). Omitted by default, so the pre-enrolled tests use
    * the rejecting stub below (the device is already enrolled — the transports are never called). The
@@ -703,6 +705,7 @@ export async function mountRoot(
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
       notificationPermission={options.notificationPermission}
+      cameraPermission={options.cameraPermission}
     />
   );
   const screen = render(element);
@@ -792,24 +795,7 @@ export async function pinFailuresFor(fixture: Fixture, userId: string): Promise<
   return row?.consecutiveFailures ?? 0;
 }
 
-/**
- * Poll `predicate` on real timers inside `act`, up to `timeoutMs`. Returns whether it became true —
- * never throws, so a caller asserting the NEGATIVE case (a wrong PIN must NOT open a session) waits
- * the full budget and then asserts, rather than being handed a pass by a helper that gave up early.
- */
-export async function waitUntil(
-  predicate: () => boolean | Promise<boolean>,
-  timeoutMs = 5000,
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    if (await predicate()) return true;
-    if (Date.now() >= deadline) return false;
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-  }
-}
+export { waitUntil };
 
 /** A foreign-device `notes.note_created` op, scoped to this fixture's tenant + store. */
 export function pulledNote(fixture: Fixture): SignedOperation {

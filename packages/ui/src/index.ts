@@ -30,13 +30,26 @@ export type { ContrastPair } from './tokens.js';
 // ---- Motion (native driver, reduce-motion aware) ----------------------------------------------
 export {
   NATIVE_DRIVER,
+  easeEnter,
+  easeExit,
   useEntrance,
   usePop,
   usePressScale,
   useReducedMotion,
+  useReducedMotionAnswer,
   useSheetEntrance,
+  useStamp,
+  useWipe,
 } from './motion.js';
-export type { EntranceFrom, EntranceOptions } from './motion.js';
+export type { EntranceFrom, EntranceOptions, Wipe } from './motion.js';
+export { FRESH_MS, markFresh, useFresh } from './fresh.js';
+export { useChangeDirection } from './direction.js';
+export type { ChangeDirection } from './direction.js';
+export { StepTransition, useStepDirection } from './step-transition.js';
+export type { StepDirection, StepTransitionProps } from './step-transition.js';
+
+// ---- Brand ------------------------------------------------------------------------------------
+export { brandMarkWidth } from './components/BrandMark.js';
 
 // ---- Platform insets (system-window measurements, NOT design tokens — task 205) -----------------
 export { NAV_BAR_INSET } from './platform-insets.js';
@@ -44,6 +57,9 @@ export { NAV_BAR_INSET } from './platform-insets.js';
 // ---- Room on screen (phone, tablet) -------------------------------------------------------------
 export { ViewportProvider, breakpoint, useViewport, widthClassOf } from './viewport.js';
 export type { Viewport, WidthClass } from './viewport.js';
+
+// ---- Text that follows a live system font size change -----------------------------------------
+export { FontScaleProvider, Text } from './text.js';
 
 // ---- Component inventory (design-system §3) ----------------------------------------------------
 export * from './components/index.js';
@@ -60,6 +76,7 @@ export type {
 } from './components/Banner.js';
 export type { FreshnessCellProps } from './components/FreshnessCell.js';
 export type { ListProps, ListState } from './components/List.js';
+export type { BrandMarkPart, BrandMarkProps } from './components/BrandMark.js';
 export type { ButtonProps, ButtonVariant } from './components/Button.js';
 export type { CardProps } from './components/Card.js';
 export type { ChipProps, ChipTone } from './components/Chip.js';
@@ -70,6 +87,8 @@ export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
 export type { FactProps } from './components/Fact.js';
 export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
+export type { RollingTextProps } from './components/RollingText.js';
+export type { FreshGlowProps } from './components/FreshGlow.js';
 export type { ErrorStateProps } from './components/ErrorState.js';
 export type { IconName, IconProps } from './components/Icon.js';
 export type { ListRowProps } from './components/ListRow.js';
@@ -105,6 +124,7 @@ export type { ToggleChipProps } from './components/ToggleChip.js';
 export type { UnauthorizedStateProps } from './components/UnauthorizedState.js';
 export type { AppShellProps } from './shell/AppShell.js';
 export { useScrollLock, type ScrollLock } from './shell/scroll-lock.js';
+export { useRevealOnMount } from './shell/keyboard.js';
 export type { AvatarButtonProps } from './shell/AvatarButton.js';
 export type { SyncChipProps, SyncChipState } from './shell/SyncChip.js';
 export type { TabBarProps, TabBarTab } from './shell/TabBar.js';

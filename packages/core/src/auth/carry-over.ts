@@ -121,6 +121,7 @@ export async function carryOverUnsyncedChanges<DB>(
   runtime: CommandRuntime,
   params: { readonly deviceId: string; readonly ownerUserId: string },
 ): Promise<CarryOverResult> {
+  await rebindPendingVerifiers(deps.db, params.deviceId);
   const pending = await readCarryRows(deps.db, params.deviceId);
   if (pending.length === 0) {
     await dropRegistrationRecords(deps.db, params.deviceId);
@@ -255,6 +256,30 @@ async function transferSources<DB>(db: Kysely<DB>, where: RawBuilder<unknown>): 
       (operationFromSignedCoreJcs(row.signedCoreJcs, row).payload as { fromDeviceIds: string[] })
         .fromDeviceIds,
   );
+}
+
+/**
+ * PIN verifiers queued for upload under an earlier registration move to the new one. The server takes
+ * a verifier only at a position on the posting device's own log, and every queued row was made on
+ * this phone, so each one still naming an old device id is renamed to the new id, keeping its time
+ * and seq. The local verifier row it was written as moves with it, so the first-PIN keep rule in
+ * bundle-apply.ts still recognises it as this phone's. Safe to repeat.
+ */
+async function rebindPendingVerifiers<DB>(db: Kysely<DB>, deviceId: string): Promise<void> {
+  await sql`
+    UPDATE user_pin_verifiers SET as_of_device_id = ${deviceId}
+    WHERE as_of_device_id <> ${deviceId} AND EXISTS (
+      SELECT 1 FROM pending_pin_verifiers p
+      WHERE p.user_id = user_pin_verifiers.user_id
+        AND p.as_of_timestamp = user_pin_verifiers.as_of_timestamp
+        AND p.as_of_device_id = user_pin_verifiers.as_of_device_id
+        AND p.as_of_seq = user_pin_verifiers.as_of_seq
+    )
+  `.execute(db);
+  await sql`
+    UPDATE pending_pin_verifiers SET as_of_device_id = ${deviceId}
+    WHERE as_of_device_id <> ${deviceId}
+  `.execute(db);
 }
 
 /** The old registrations' own unsent records (see `REGISTRATION_OP_TYPES`). */

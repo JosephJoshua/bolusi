@@ -1,0 +1,154 @@
+{
+  "opType": {
+    "supplierAdded": "Supplier added",
+    "supplierEdited": "Supplier edited",
+    "orderDrafted": "Order drafted",
+    "orderEdited": "Order edited",
+    "orderPlaced": "Order placed",
+    "orderCancelled": "Order cancelled",
+    "orderReceived": "Order parts received"
+  },
+  "refusal": {
+    "alreadyRecorded": "This was already recorded.",
+    "supplierNotFound": "This supplier is not on the list.",
+    "orderNotFound": "This order is not in this store.",
+    "itemNotFound": "A part is not on the list.",
+    "notDraft": "This order was already placed, so it can no longer be changed.",
+    "notOrdered": "This order is not placed yet, or was cancelled.",
+    "alreadyCancelled": "This order was already cancelled.",
+    "notOnOrder": "A part is not on this order.",
+    "receiptMismatch": "The quantity does not match what was received.",
+    "nothingToCancel": "Everything on this order has arrived, so it can’t be cancelled.",
+    "numberNotThisDevice": "This order number wasn’t made on this device.",
+    "numberUsed": "This order number is already used.",
+    "partArchived": "A part on this order is archived. Remove it from the order first."
+  },
+  "stage": {
+    "draft": "Draft",
+    "ordered": "Ordered",
+    "partial": "Partly received",
+    "received": "Received",
+    "over": "Received extra",
+    "cancelled": "Cancelled"
+  },
+  "message": {
+    "greeting": "Hello {supplier}, we would like to order:",
+    "line": "{n}. {name}: {qty} pcs",
+    "note": "Note: {note}",
+    "thanks": "Thank you.",
+    "sendFailed": "WhatsApp isn’t installed on this device."
+  },
+  "action": {
+    "place": "Order",
+    "saveDraft": "Save draft",
+    "edit": "Edit",
+    "receive": "Receive parts",
+    "send": "Send to supplier",
+    "cancel": "Cancel order",
+    "deleteDraft": "Delete draft"
+  },
+  "list": {
+    "title": "Purchasing",
+    "open": "Open",
+    "done": "Done",
+    "new": "New order",
+    "emptyOpen": "No open orders yet.",
+    "emptyDone": "No finished orders yet.",
+    "parts": "Parts: {count}",
+    "progress": "{received} of {ordered} received"
+  },
+  "order": {
+    "lines": "Parts",
+    "receipts": "Received",
+    "created": "Created {date}",
+    "ordered": "Ordered {date}",
+    "overHint": "Some parts arrived beyond the order. Check them and correct the stock.",
+    "qty": "{qty} pcs",
+    "receivedOf": "{received} of {qty}",
+    "receiptLine": "{name} ({qty})"
+  },
+  "cancel": {
+    "title": "Cancel this order?",
+    "draftTitle": "Delete this draft?",
+    "message": "Parts already received stay in stock. The rest is no longer expected."
+  },
+  "discard": {
+    "title": "Discard this order?",
+    "message": "What you filled in will be lost.",
+    "confirm": "Discard",
+    "keep": "Keep editing"
+  },
+  "form": {
+    "newTitle": "New order",
+    "editTitle": "Edit draft",
+    "supplier": "Supplier",
+    "noSuppliers": "No suppliers yet. Add one first.",
+    "addPart": "Add part",
+    "noParts": "No parts yet.",
+    "remove": "Remove",
+    "qty": "Quantity",
+    "decrease": "Decrease",
+    "increase": "Increase",
+    "note": "Note for the supplier",
+    "pickFirst": "Pick a supplier and the parts first."
+  },
+  "pick": {
+    "title": "Pick a part",
+    "searchHint": "Search a part name or code",
+    "clear": "Clear search",
+    "scan": "Scan",
+    "empty": "No parts on the list yet.",
+    "noMatches": "No parts found.",
+    "onOrder": "On the order, tap to add 1",
+    "stock": "Stock {count}"
+  },
+  "receive": {
+    "title": "Receive parts",
+    "hint": "Enter how many arrived.",
+    "arrived": "Arrived",
+    "ordered": "Ordered {qty}",
+    "orderedSoFar": "Ordered {qty}, {received} arrived",
+    "over": "{extra} more than ordered.",
+    "note": "Note",
+    "nothing": "Enter how many parts arrived first.",
+    "save": "Save"
+  },
+  "supplier": {
+    "listTitle": "Suppliers",
+    "add": "Add supplier",
+    "editTitle": "Edit supplier",
+    "active": "Active",
+    "archived": "Archived",
+    "empty": "No suppliers yet.",
+    "noArchived": "No archived suppliers.",
+    "name": "Name",
+    "phone": "WhatsApp number",
+    "note": "Note",
+    "nameFirst": "Enter the supplier’s name first.",
+    "save": "Save",
+    "archive": "Archive",
+    "restore": "Make active again"
+  },
+  "done": {
+    "placed": "Order placed. Send it to the supplier on WhatsApp.",
+    "drafted": "Draft saved.",
+    "received": "Parts received. The stock went up.",
+    "cancelled": "Order cancelled.",
+    "supplierSaved": "Supplier saved."
+  },
+  "desk": {
+    "col": {
+      "order": "Order",
+      "supplier": "Supplier",
+      "parts": "Parts",
+      "stage": "Status"
+    },
+    "close": "Close order",
+    "copied": "Message copied. Paste it into the supplier’s chat.",
+    "copyFailed": "The message couldn’t be copied.",
+    "addPart": "Search for a part to add",
+    "noPartMatches": "No parts found.",
+    "emptyHint": "Orders to suppliers show up here.",
+    "suppliersHint": "Suppliers are shared by every store."
+  }
+}

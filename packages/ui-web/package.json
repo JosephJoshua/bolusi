@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
   "description": "Desktop and web design system: React DOM components on the shared tokens (Radix primitives, Tailwind)",
   "exports": {
     ".": {
@@ -20,6 +23,7 @@
     "react-dom": ">=19"
   },
   "dependencies": {
+    "@bolusi/schemas": "workspace:*",
     "@bolusi/ui": "workspace:*",
     "@radix-ui/react-dialog": "1.2.0",
     "@radix-ui/react-dropdown-menu": "2.1.25",

@@ -16,12 +16,16 @@ import {
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
+  cancelFeeChangedApplier,
+  handoverReversedApplier,
+  ticketDetailsCorrectedApplier,
   downPaymentChangedApplier,
   markedRepairedApplier,
   quoteChangedApplier,
   quoteChangeProposedApplier,
   quoteProposalDeclinedApplier,
   slipPrintedApplier,
+  statusLinkMadeApplier,
   storePrintSettingsChangedApplier,
   technicianAssignedApplier,
   ticketCancelledApplier,
@@ -64,6 +68,9 @@ import {
   customerDetailsCorrectedRule,
   customerRegisteredRule,
   deviceReturnedRule,
+  cancelFeeChangedRule,
+  handoverReversedRule,
+  ticketDetailsCorrectedRule,
   downPaymentCorrectedRule,
   downPaymentReceivedRule,
   intakeOptionsChangedRule,
@@ -73,6 +80,7 @@ import {
   quoteChangeProposedRule,
   quoteProposalDeclinedRule,
   slipPrintedRule,
+  statusLinkMadeRule,
   technicianAssignedRule,
   ticketCancelledRule,
   ticketClaimedRule,
@@ -83,6 +91,7 @@ import {
   workStartedRule,
 } from './rules.js';
 import type { RepairDatabase } from './schema.js';
+import { STATUS_CODE_PATTERN, STATUS_NONCE_PATTERN } from './status-link.js';
 
 const MAX_TEXT = 2000;
 const zName = z.string().trim().min(1).max(200);
@@ -300,6 +309,11 @@ export const intakeOptionsChangedPayloadV2 = intakeOptionsChangedPayload
   .strict();
 
 const emptyPayload = z.object({}).strict();
+/**
+ * `repair.ticket_claimed` v2 names whom the servisan is taken from (null: nobody held it), so a
+ * claim made offline never takes a servisan someone else took in the meantime.
+ */
+export const ticketClaimedPayload = z.object({ from: zUuid.nullable() }).strict();
 export const technicianAssignedPayload = z.object({ technicianId: zUuid }).strict();
 export const notePayload = z.object({ note: zLongText }).strict();
 /** A fee a customer can owe: integer IDR, never negative. */
@@ -377,6 +391,35 @@ export const deviceReturnedPayload = deviceReturnedPayloadV2
   .extend({ checklist: z.array(zHandoverCheck).max(MAX_OPTIONS + 50) })
   .strict();
 
+/** Why an owner took a handover back, said in their words. */
+/** What a cancelled servisan costs from now on, and why the owner changed it. */
+export const cancelFeeChangedPayload = z
+  .object({ fee: zFee, reason: z.string().trim().min(1).max(500) })
+  .strict();
+
+export const handoverReversedPayload = z
+  .object({ reason: z.string().trim().min(1).max(500) })
+  .strict();
+
+/**
+ * What intake wrote down, corrected while the phone is in the store: only the parts that changed.
+ * `customer` is the name and number the servisan names from now on. With `customerId` the
+ * servisan moves to that customer, whose record must read the same (intake picked the wrong
+ * person, or a shared record must not be renamed); without it the servisan's own customer, named
+ * by no other servisan, is renamed to it.
+ */
+export const ticketDetailsCorrectedPayload = z
+  .object({
+    customer: customerRegisteredPayload.optional(),
+    customerId: z.string().min(1).optional(),
+    device: zDevice.omit({ passcode: true }).strict().optional(),
+    passcode: z.string().max(200).nullable().optional(),
+    complaint: z.string().trim().min(1).max(MAX_TEXT).optional(),
+    peripherals: z.array(zRecordedOption).max(50).optional(),
+    reason: z.string().trim().max(500),
+  })
+  .strict();
+
 /** Money the customer paid up front: a positive amount when received. */
 export const downPaymentReceivedPayload = z.object({ amount: zFee.min(1) }).strict();
 
@@ -386,6 +429,17 @@ export const downPaymentCorrectedPayload = z
   .strict();
 
 export const slipPrintedPayload = z.object({ slip: z.enum(SLIP_KINDS) }).strict();
+
+/**
+ * The customer's status link (status-link.ts), made with the servisan at intake: the code and the
+ * nonce it was derived from, which the rule checks against each other.
+ */
+export const statusLinkMadePayload = z
+  .object({
+    code: z.string().regex(STATUS_CODE_PATTERN),
+    nonce: z.string().regex(STATUS_NONCE_PATTERN),
+  })
+  .strict();
 
 /** Longest terms a slip prints, all lines together. */
 export const MAX_TERMS = 2000;
@@ -417,6 +471,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: customerRegisteredApplier,
     rule: customerRegisteredRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_CUSTOMER_ENTITY,
   },
   [REPAIR_OP.customerDetailsCorrected]: {
@@ -426,6 +481,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: customerDetailsCorrectedApplier,
     rule: customerDetailsCorrectedRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_CUSTOMER_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
@@ -437,20 +493,26 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
       2: ticketOpenedPayloadV2,
       3: ticketOpenedPayloadV3,
     },
+    // Before v4 the rule skips the ownership-video check.
+    minPushVersion: 4,
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
     rule: ticketOpenedRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketClaimed]: {
-    schemaVersion: 1,
-    payload: emptyPayload,
+    // v1 takes the servisan from whoever holds it when it is judged.
+    schemaVersion: 2,
+    payload: ticketClaimedPayload,
+    payloadByVersion: { 1: emptyPayload },
     reversal: 'Reversed by repair.technician_assigned to someone else.',
     apply: ticketClaimedApplier,
     rule: ticketClaimedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
@@ -461,6 +523,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: technicianAssignedApplier,
     rule: technicianAssignedRule,
     permission: REPAIR_PERMISSION.assign,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
@@ -471,15 +534,19 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: workPhotosAddedApplier,
     rule: workPhotosAddedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.workStarted]: {
-    schemaVersion: 1,
+    // v2 is started only by whoever holds the servisan; v1 by anyone once someone does.
+    schemaVersion: 2,
     payload: emptyPayload,
+    payloadByVersion: { 1: emptyPayload },
     reversal: NO_UNDO,
     apply: workStartedApplier,
     rule: workStartedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -490,6 +557,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: workPausedApplier,
     rule: workPausedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -500,6 +568,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: markedRepairedApplier,
     rule: markedRepairedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -507,10 +576,13 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 2,
     payload: ticketCancelledPayload,
     payloadByVersion: { 1: ticketCancelledPayloadV1 },
+    // v1 names no fee, so it would skip the cancel-fee limit.
+    minPushVersion: 2,
     reversal: 'Not reversible in slice 1: open a new ticket if the customer changes their mind.',
     apply: ticketCancelledApplier,
     rule: ticketCancelledRule,
     permission: REPAIR_PERMISSION.cancel,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
@@ -521,16 +593,20 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: quoteChangeProposedApplier,
     rule: quoteChangeProposedRule,
     permission: REPAIR_PERMISSION.work,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteChanged]: {
     schemaVersion: 2,
     payload: quoteChangedPayload,
     payloadByVersion: { 1: quoteChangedPayloadV1 },
+    // v1 skips the customer-agreement check.
+    minPushVersion: 2,
     reversal: 'Reversed by a further repair.quote_changed line with the opposite amount.',
     apply: quoteChangedApplier,
     rule: quoteChangedRule,
     permission: REPAIR_PERMISSION.quoteChange,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteProposalDeclined]: {
@@ -540,6 +616,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: quoteProposalDeclinedApplier,
     rule: quoteProposalDeclinedRule,
     permission: REPAIR_PERMISSION.quoteChange,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketRepairTypesChanged]: {
@@ -550,6 +627,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     rule: ticketRepairTypesChangedRule,
     // The counter and the technician both set it; the rule checks for either.
     permission: REPAIR_PERMISSION.read,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.repairTypes, severity: 'minor' },
   },
@@ -557,12 +635,52 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 3,
     payload: deviceReturnedPayload,
     payloadByVersion: { 1: deviceReturnedPayloadV1, 2: deviceReturnedPayloadV2 },
-    reversal: 'Not reversible: the device physically left the store. Warranty opens a new ticket.',
+    // Before v3 the rule skips the handover checklist.
+    minPushVersion: 3,
+    reversal:
+      'Reversed by an owner with repair.handover_reversed when the phone never left (the wrong ' +
+      'servisan was handed over). Warranty opens a new ticket.',
     apply: deviceReturnedApplier,
     rule: deviceReturnedRule,
     permission: REPAIR_PERMISSION.handover,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
+  },
+  [REPAIR_OP.handoverReversed]: {
+    schemaVersion: 1,
+    payload: handoverReversedPayload,
+    reversal: 'Reversed by handing the phone over again (repair.device_returned).',
+    apply: handoverReversedApplier,
+    rule: handoverReversedRule,
+    // Undoing a handover is an owner's decision, like cancelling: the same switch in the role editor.
+    permission: REPAIR_PERMISSION.cancel,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
+  },
+  [REPAIR_OP.cancelFeeChanged]: {
+    schemaVersion: 1,
+    payload: cancelFeeChangedPayload,
+    reversal: 'Reversed by another repair.cancel_fee_changed with the earlier fee.',
+    apply: cancelFeeChangedApplier,
+    rule: cancelFeeChangedRule,
+    // Setting what a cancel costs is the canceller's call: the same switch in the role editor.
+    permission: REPAIR_PERMISSION.cancel,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
+  },
+  [REPAIR_OP.ticketDetailsCorrected]: {
+    schemaVersion: 1,
+    payload: ticketDetailsCorrectedPayload,
+    reversal: 'Reversed by another repair.ticket_details_corrected with the earlier details.',
+    apply: ticketDetailsCorrectedApplier,
+    rule: ticketDetailsCorrectedRule,
+    permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.details, severity: 'minor' },
   },
   [REPAIR_OP.intakeOptionsChanged]: {
     schemaVersion: 3,
@@ -572,6 +690,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: intakeOptionsChangedApplier,
     rule: intakeOptionsChangedRule,
     permission: REPAIR_PERMISSION.manageIntakeOptions,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_INTAKE_OPTIONS_ENTITY,
     // One list for the whole franchise, on every device, whichever store edited it. No conflict
     // key: the entity holds all five lists, so saving two different lists would read as a clash,
@@ -589,6 +708,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeIntakeOptionsChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.hideIntakeOptions,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   },
   [REPAIR_OP.storeCancelFeesChanged]: {
@@ -598,6 +718,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeCancelFeesChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.setCancelFees,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
   },
   [REPAIR_OP.downPaymentReceived]: {
@@ -607,6 +728,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: downPaymentChangedApplier,
     rule: downPaymentReceivedRule,
     permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.downPayment, severity: 'significant' },
   },
@@ -617,6 +739,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: downPaymentChangedApplier,
     rule: downPaymentCorrectedRule,
     permission: REPAIR_PERMISSION.correctDownPayment,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.downPayment, severity: 'significant' },
   },
@@ -627,6 +750,17 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: slipPrintedApplier,
     rule: slipPrintedRule,
     permission: REPAIR_PERMISSION.read,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+  },
+  [REPAIR_OP.statusLinkMade]: {
+    schemaVersion: 1,
+    payload: statusLinkMadePayload,
+    reversal: 'Not reversible: the link is printed on paper the customer keeps.',
+    apply: statusLinkMadeApplier,
+    rule: statusLinkMadeRule,
+    permission: REPAIR_PERMISSION.intake,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.storePrintSettingsChanged]: {
@@ -636,6 +770,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storePrintSettingsChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.setPrintSettings,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   },
   [REPAIR_OP.storeUncollectedDaysChanged]: {
@@ -645,6 +780,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeUncollectedDaysChangedApplier,
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.setUncollectedDays,
+    read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_UNCOLLECTED_ENTITY,
   },
 };

@@ -2,7 +2,7 @@
  * The six intake steps the wizard walks through (IntakeWizard.tsx): each edits its part of the one
  * draft through `update` and shows the problems the wizard hands it.
  */
-import { formatMoney, formatNumber, formatPhone, t } from '@bolusi/i18n';
+import { formatMoney, formatNumber, formatPhone, keepNumbersWhole, t } from '@bolusi/i18n';
 import {
   Button,
   Card,
@@ -18,9 +18,10 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { Keyboard, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Keyboard, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 import { modelCaption, useModelPicker } from '../model-picker.js';
@@ -90,8 +91,15 @@ export function CustomerStep({
   draft,
   update,
   nameError,
+  phoneError,
+  currentCustomerId,
   testID,
-}: StepProps & { readonly nameError: string | undefined }): React.JSX.Element {
+}: StepProps & {
+  readonly nameError: string | undefined;
+  readonly phoneError: string | undefined;
+  /** The customer a correction starts from, never offered as a match for itself. */
+  readonly currentCustomerId?: string | undefined;
+}): React.JSX.Element {
   const customer = draft.customer;
   const typed = customer.kind === 'new' ? [customer.name, customer.phone].join(' ').trim() : '';
   // Matched once the counter pauses typing, not on every key; a cleared name clears them at once.
@@ -105,12 +113,15 @@ export function CustomerStep({
     `customers:${searchText}`,
   );
 
+  const offered =
+    matches.status === 'ready' ? matches.data.filter((row) => row.id !== currentCustomerId) : [];
+
   if (customer.kind === 'existing') {
     return (
       <Card testID={`${testID}.picked`}>
         <Text style={repairStyles.heading}>{customer.name}</Text>
         {customer.phone === null ? null : (
-          <Text style={repairStyles.muted}>{formatPhone(customer.phone)}</Text>
+          <Text style={repairStyles.muted}>{keepNumbersWhole(formatPhone(customer.phone))}</Text>
         )}
         <View style={repairStyles.gap}>
           <Button
@@ -142,16 +153,19 @@ export function CustomerStep({
           value={customer.phone}
           onChangeText={(phone) => update({ customer: { ...customer, phone: phoneText(phone) } })}
           keyboardType="phone-pad"
+          errorMessage={phoneError}
           testID={`${testID}.phone`}
         />
       </View>
-      {matches.status === 'ready' && matches.data.length > 0 ? (
+      {offered.length > 0 ? (
         <Section title={tn('repair.customer.existing')} testID={`${testID}.matches`}>
-          {matches.data.map((row) => (
+          {offered.map((row) => (
             <ListRow
               key={row.id}
               primaryText={row.name}
-              secondaryText={row.phone === null ? undefined : formatPhone(row.phone)}
+              secondaryText={
+                row.phone === null ? undefined : keepNumbersWhole(formatPhone(row.phone))
+              }
               onPress={() =>
                 update({
                   customer: {
@@ -184,48 +198,65 @@ export function DeviceStep({
   options,
   brandError,
   modelError,
+  imeiError,
   lockError,
   testID,
 }: StepProps & {
   readonly brandError: string | undefined;
   readonly modelError: string | undefined;
+  readonly imeiError: string | undefined;
   readonly lockError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
   const set = (patch: Partial<IntakeDraft['device']>): void =>
     update({ device: { ...device, ...patch } });
   const { matched, suggestions, memory, colours, pick, tidyModel } = useModelPicker(device, set);
+  const claim = draft.claimOf !== null;
+  const fixedImei = draft.claimOf?.imei ?? '';
 
   return (
     <View>
-      <TextInput
-        label={tn('repair.device.model')}
-        placeholder={tn('repair.device.modelHint')}
-        value={device.model}
-        onChangeText={(value) => set({ model: value })}
-        onBlur={tidyModel}
-        errorMessage={modelError}
-        autoCorrect={false}
-        revealOnFocus="to-top"
-        testID={`${testID}.model`}
-      />
-      {suggestions.length > 0 ? (
-        <View style={styles.modelList} testID={`${testID}.models`}>
-          {suggestions.map((row) => (
-            <ListRow
-              key={row.key}
-              leading={<ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />}
-              primaryText={row.model}
-              secondaryText={modelCaption(row)}
-              onPress={() => {
-                pick(row);
-                Keyboard.dismiss();
-              }}
-              testID={`${testID}.model.${row.key}`}
-            />
-          ))}
-        </View>
-      ) : null}
+      {/* A claim is for the phone its servisan repaired: shown, never retyped. */}
+      {claim ? (
+        matched === null ? (
+          <Text style={styles.reviewStrong} testID={`${testID}.claimDevice`}>
+            {device.brand} {device.model}
+          </Text>
+        ) : null
+      ) : (
+        <>
+          <TextInput
+            label={tn('repair.device.model')}
+            placeholder={tn('repair.device.modelHint')}
+            value={device.model}
+            onChangeText={(value) => set({ model: value })}
+            onBlur={tidyModel}
+            errorMessage={modelError}
+            autoCorrect={false}
+            revealOnFocus="to-top"
+            testID={`${testID}.model`}
+          />
+          {suggestions.length > 0 ? (
+            <View style={styles.modelList} testID={`${testID}.models`}>
+              {suggestions.map((row) => (
+                <ListRow
+                  key={row.key}
+                  leading={
+                    <ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />
+                  }
+                  primaryText={row.model}
+                  secondaryText={modelCaption(row)}
+                  onPress={() => {
+                    pick(row);
+                    Keyboard.dismiss();
+                  }}
+                  testID={`${testID}.model.${row.key}`}
+                />
+              ))}
+            </View>
+          ) : null}
+        </>
+      )}
       {matched !== null ? (
         <View style={styles.modelMatch} testID={`${testID}.modelMatch`}>
           <ModelPhoto photo={matched.photo} large testID={`${testID}.modelMatch.photo`} />
@@ -246,35 +277,41 @@ export function DeviceStep({
           </View>
         </View>
       ) : null}
-      <View style={repairStyles.gap}>
-        <TextInput
-          label={tn('repair.device.brand')}
-          value={device.brand}
-          onChangeText={(value) => set({ brand: value })}
-          errorMessage={brandError}
-          autoCorrect={false}
-          testID={`${testID}.brand`}
-        />
-        {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
-        {matched !== null ? null : (
-          <View style={styles.suggestions}>
-            <ChipRow testID={`${testID}.brandChoices`}>
-              {options.brands.map((option) => {
-                const choice = optionLabel('brands', option);
-                return (
-                  <ToggleChip
-                    key={option.id}
-                    label={choice}
-                    selected={device.brand === choice}
-                    onToggle={() => set({ brand: choice })}
-                    testID={`${testID}.brandChoice.${choice}`}
-                  />
-                );
-              })}
-            </ChipRow>
-          </View>
-        )}
-      </View>
+      {claim ? (
+        <Text style={[repairStyles.muted, repairStyles.gap]} testID={`${testID}.claimDevice.note`}>
+          {tn('repair.warrantyClaim.sameDevice')}
+        </Text>
+      ) : (
+        <View style={repairStyles.gap}>
+          <TextInput
+            label={tn('repair.device.brand')}
+            value={device.brand}
+            onChangeText={(value) => set({ brand: value })}
+            errorMessage={brandError}
+            autoCorrect={false}
+            testID={`${testID}.brand`}
+          />
+          {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
+          {matched !== null ? null : (
+            <View style={styles.suggestions}>
+              <ChipRow testID={`${testID}.brandChoices`}>
+                {options.brands.map((option) => {
+                  const choice = optionLabel('brands', option);
+                  return (
+                    <ToggleChip
+                      key={option.id}
+                      label={choice}
+                      selected={device.brand === choice}
+                      onToggle={() => set({ brand: choice })}
+                      testID={`${testID}.brandChoice.${choice}`}
+                    />
+                  );
+                })}
+              </ChipRow>
+            </View>
+          )}
+        </View>
+      )}
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.device.colorField')}
@@ -300,13 +337,19 @@ export function DeviceStep({
         )}
       </View>
       <View style={repairStyles.gap}>
-        <TextInput
-          label={tn('repair.device.imeiField')}
-          value={device.imei}
-          onChangeText={(imei) => set({ imei })}
-          keyboardType="number-pad"
-          testID={`${testID}.imei`}
-        />
+        {/* A claim's phone keeps the IMEI its servisan wrote down: shown, never retyped. */}
+        {fixedImei === '' ? (
+          <TextInput
+            label={tn('repair.device.imeiField')}
+            value={device.imei}
+            onChangeText={(imei) => set({ imei: imei.replace(/[^\d\s-]/g, '') })}
+            keyboardType="number-pad"
+            errorMessage={imeiError}
+            testID={`${testID}.imei`}
+          />
+        ) : (
+          <Field label={tn('repair.device.imei')} value={fixedImei} testID={`${testID}.imei`} />
+        )}
       </View>
       <ScreenLockField
         kind={device.lockKind}
@@ -430,8 +473,6 @@ export function ConditionStep({
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
   const { width, fontScale } = useWindowDimensions();
   const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
-  const togglePeripheral = (item: string): void =>
-    update({ peripherals: toggled(draft.peripherals, item) });
   const toggleRepairType = (item: string): void =>
     update({ repairTypes: toggled(draft.repairTypes, item) });
   return (
@@ -505,21 +546,12 @@ export function ConditionStep({
           ))}
         </Section>
       )}
-      {options.accessories.length === 0 ? null : (
-        <Section title={tn('repair.condition.peripherals')}>
-          <ChipRow testID={`${testID}.peripherals`}>
-            {options.accessories.map((option) => (
-              <ToggleChip
-                key={option.id}
-                label={optionLabel('accessories', option)}
-                selected={draft.peripherals.includes(option.id)}
-                onToggle={() => togglePeripheral(option.id)}
-                testID={`${testID}.peripheral.${option.id}`}
-              />
-            ))}
-          </ChipRow>
-        </Section>
-      )}
+      <AccessoriesSection
+        draft={draft}
+        update={update}
+        accessories={options.accessories}
+        testID={testID}
+      />
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.condition.notes')}
@@ -530,6 +562,34 @@ export function ConditionStep({
         />
       </View>
     </View>
+  );
+}
+
+/** What was left with the phone, ticked from the store's list (intake and its correction). */
+export function AccessoriesSection({
+  draft,
+  update,
+  accessories,
+  testID,
+}: Pick<StepProps, 'update' | 'testID'> & {
+  readonly draft: Pick<IntakeDraft, 'peripherals'>;
+  readonly accessories: readonly IntakeOption[];
+}): React.JSX.Element | null {
+  if (accessories.length === 0) return null;
+  return (
+    <Section title={tn('repair.condition.peripherals')}>
+      <ChipRow testID={`${testID}.peripherals`}>
+        {accessories.map((option) => (
+          <ToggleChip
+            key={option.id}
+            label={optionLabel('accessories', option)}
+            selected={draft.peripherals.includes(option.id)}
+            onToggle={() => update({ peripherals: toggled(draft.peripherals, option.id) })}
+            testID={`${testID}.peripheral.${option.id}`}
+          />
+        ))}
+      </ChipRow>
+    </Section>
   );
 }
 
@@ -665,6 +725,7 @@ export function PriceStep({
                   if (acceptsRupiahText(text)) setLine(index, { amount: parseRupiah(text) ?? 0 });
                 }}
                 keyboardType="number-pad"
+                selectTextOnFocus
                 testID={`${testID}.amount.${index}`}
               />
             </View>
@@ -704,6 +765,7 @@ export function PriceStep({
             if (acceptsRupiahText(text)) update({ downPayment: text.replace(/\D/g, '') });
           }}
           keyboardType="number-pad"
+          selectTextOnFocus
           errorMessage={downPaymentError}
           testID={`${testID}.downPaymentInput`}
         />
@@ -725,6 +787,7 @@ export function PriceStep({
       <DownPaymentRows
         total={intakeTotal(draft.lines)}
         downPayment={intakeDownPayment(draft)}
+        typing
         testID={testID}
       />
       <Section title={tn('repair.ticket.readyBy')}>
@@ -782,7 +845,9 @@ export function ReviewStep({
             {draft.customer.name}
           </Text>
           {draft.customer.phone === null || draft.customer.phone === '' ? null : (
-            <Text style={repairStyles.muted}>{formatPhone(draft.customer.phone)}</Text>
+            <Text style={repairStyles.muted}>
+              {keepNumbersWhole(formatPhone(draft.customer.phone))}
+            </Text>
           )}
         </>,
       )}
@@ -805,7 +870,7 @@ export function ReviewStep({
             </Text>
           </View>
           {draft.device.imei === '' ? null : (
-            <Field label={tn('repair.device.imei')} value={draft.device.imei} />
+            <Field label={tn('repair.device.imei')} value={keepNumbersWhole(draft.device.imei)} />
           )}
           {/* Which lock was noted, not the code itself: the review is read out at the counter. */}
           {draft.device.lockKind === 'none' || draft.device.passcode === '' ? null : (

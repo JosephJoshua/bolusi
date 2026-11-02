@@ -11,6 +11,7 @@ import { sql } from 'kysely';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MediaDrainLoop, recoverInterruptedUploads } from '../../src/index.js';
+import { releaseRefusedOpMedia } from '../../src/media/repository.js';
 import {
   FakeClock,
   WIRE_CHUNK_SIZE,
@@ -241,6 +242,107 @@ describe('pause and stop (a background pass out of time, or handing the queue to
     await loop.settle();
     expect((await readStatus(h.db, 's-1')).uploadStatus).toBe('uploaded');
     expect((await readStatus(h.db, 's-2')).uploadStatus).toBe('pending');
+  });
+});
+
+describe('a refused op`s captures, released while a pass runs, never reach the server', () => {
+  // QA saw a refused change's photos upload in full right after the refusal: the pass had selected
+  // them before push released them.
+  it('skips an item released after the pass selected it', async () => {
+    await givenCapture(h, 'r-1', jpegBytes(50), {
+      capturedAt: 1_000,
+      attachedToOperationId: 'kept',
+    });
+    await givenCapture(h, 'r-2', jpegBytes(50), {
+      capturedAt: 2_000,
+      attachedToOperationId: 'gone',
+    });
+    const inits: string[] = [];
+    const init = h.server.init.bind(h.server);
+    h.server.init = async (mediaId, request) => {
+      inits.push(mediaId);
+      // The refusal lands while the first item is uploading.
+      if (mediaId === 'r-1') await releaseRefusedOpMedia(h.db, 'gone');
+      return init(mediaId, request);
+    };
+    const loop = loopFor(h);
+
+    loop.requestDrain('periodic');
+    await loop.settle();
+
+    expect(inits).toEqual(['r-1']);
+    expect((await readStatus(h.db, 'r-1')).uploadStatus).toBe('uploaded');
+    expect((await readStatus(h.db, 'r-2')).uploadStatus).toBe('pending');
+    expect(h.surface.events).toEqual([]);
+  });
+
+  it('does not complete an item released mid-upload, and records no failure for it', async () => {
+    await givenCapture(h, 'm-1', jpegBytes(50), { attachedToOperationId: 'gone' });
+    let completes = 0;
+    const putChunk = h.server.putChunk.bind(h.server);
+    h.server.putChunk = async (mediaId, index, bytes) => {
+      const response = await putChunk(mediaId, index, bytes);
+      await releaseRefusedOpMedia(h.db, 'gone');
+      return response;
+    };
+    const complete = h.server.complete.bind(h.server);
+    h.server.complete = async (mediaId) => {
+      completes += 1;
+      return complete(mediaId);
+    };
+    const loop = loopFor(h);
+
+    loop.requestDrain('periodic');
+    await loop.settle();
+
+    expect(completes).toBe(0);
+    expect((await readStatus(h.db, 'm-1')).uploadStatus).not.toBe('uploaded');
+    expect(h.surface.events).toEqual([]);
+    loop.requestDrain('periodic');
+    await loop.settle();
+    expect(completes).toBe(0);
+  });
+
+  it('sends no chunk of an item released while its upload was starting', async () => {
+    // QA: the refusal landed between init and the first chunk, and chunk 0 still went out.
+    await givenCapture(h, 's-1', jpegBytes(3 * WIRE_CHUNK_SIZE), { attachedToOperationId: 'gone' });
+    const status = h.server.status.bind(h.server);
+    h.server.status = async (mediaId) => {
+      const response = await status(mediaId);
+      await releaseRefusedOpMedia(h.db, 'gone');
+      return response;
+    };
+    const chunks: number[] = [];
+    const putChunk = h.server.putChunk.bind(h.server);
+    h.server.putChunk = async (mediaId, index, bytes) => {
+      chunks.push(index);
+      return putChunk(mediaId, index, bytes);
+    };
+    const loop = loopFor(h);
+
+    loop.requestDrain('periodic');
+    await loop.settle();
+
+    expect(chunks).toEqual([]);
+    expect(h.surface.events).toEqual([]);
+  });
+
+  it('stops sending chunks once a refusal releases the item mid-upload', async () => {
+    await givenCapture(h, 'c-1', jpegBytes(3 * WIRE_CHUNK_SIZE), { attachedToOperationId: 'gone' });
+    const chunks: number[] = [];
+    const putChunk = h.server.putChunk.bind(h.server);
+    h.server.putChunk = async (mediaId, index, bytes) => {
+      chunks.push(index);
+      const response = await putChunk(mediaId, index, bytes);
+      await releaseRefusedOpMedia(h.db, 'gone');
+      return response;
+    };
+    const loop = loopFor(h);
+
+    loop.requestDrain('periodic');
+    await loop.settle();
+
+    expect(chunks).toEqual([0]);
   });
 });
 

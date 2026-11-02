@@ -125,6 +125,17 @@ describe('the pin-verifier wire (api/02-auth §5.4)', () => {
     expect(result.applied).toBe(false);
   });
 
+  test('a 422 (the server refuses the verifier itself) is TERMINAL — returned, not thrown', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(422, { error: { code: 'VALIDATION_FAILED' } }));
+    const result = await port(doFetch as unknown as typeof fetch).upload(
+      'user-b',
+      'ref-9',
+      VERIFIER,
+      'owner-a',
+    );
+    expect(result).toStrictEqual({ userId: 'user-b', applied: false });
+  });
+
   test('a missing device token fails closed (throws) rather than POSTing anonymously', async () => {
     const doFetch = vi.fn(async () => jsonResponse(200, { userId: 'user-a', applied: true }));
     await expect(

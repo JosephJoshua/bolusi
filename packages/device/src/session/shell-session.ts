@@ -22,9 +22,14 @@
  * off. Preserving work is what keeps a short lock survivable, and therefore what keeps it real.
  */
 
-import type { ClockPort } from '@bolusi/core';
+import { DEVICE_WORK_KEY, type ClockPort } from '@bolusi/core';
 
-import { restoreWorkspace, type UserWorkspace } from '../state/user-workspaces.js';
+import {
+  emptyWorkspace,
+  restoreWorkspace,
+  withDraft,
+  type UserWorkspace,
+} from '../state/user-workspaces.js';
 
 import type { SessionPort } from './port.js';
 
@@ -44,6 +49,11 @@ export interface ShellSessionSnapshot {
   readonly lockReason: LockReason | null;
   /** The ACTIVE user's workspace. Null when nobody is signed in — never a stale one. */
   readonly workspace: UserWorkspace | null;
+  /**
+   * Drafts that belong to the device, by module id: an intake anyone signed in here may carry on
+   * with (Joseph, 2026-10-31). Null when nobody is signed in.
+   */
+  readonly deviceDrafts: Readonly<Record<string, unknown>> | null;
 }
 
 export class ShellSession {
@@ -51,6 +61,7 @@ export class ShellSession {
   #locked = false;
   #lockReason: LockReason | null = null;
   #workspace: UserWorkspace | null = null;
+  #deviceWork: UserWorkspace | null = null;
   #listeners = new Set<() => void>();
 
   constructor(deps: ShellSessionDeps) {
@@ -67,6 +78,7 @@ export class ShellSession {
       // is cached here. The gate already routes a null session to the switcher; this makes a
       // rendering bug incapable of leaking the previous user's screen behind it.
       workspace: userId === null ? null : this.#workspace,
+      deviceDrafts: userId === null || this.#deviceWork === null ? null : this.#deviceWork.drafts,
     };
   }
 
@@ -83,17 +95,30 @@ export class ShellSession {
    */
   async tick(): Promise<boolean> {
     if (this.#locked || this.#deps.session.current === null) return false;
-    const ops = await this.#deps.session.checkIdle();
+    let ops: readonly unknown[];
+    try {
+      ops = await this.#deps.session.checkIdle();
+    } catch (error: unknown) {
+      // The deadline passed and the session ended, but `session_ended` was not recorded. Fail
+      // closed: the screen locks anyway, and the caller (the idle ticker) reports the lost record.
+      if (this.#deps.session.current === null) this.#applyLock('idle_lock');
+      throw error;
+    }
     if (ops.length === 0) return false;
     this.#applyLock('idle_lock');
     return true;
   }
 
-  /** Manual lock (§6.4) — identical handling to idle, only the reason differs. */
+  /**
+   * Manual lock (§6.4) — identical handling to idle, only the reason differs. Fails closed: the
+   * session ends and the screen locks before `session_ended` is appended, so a failed append rejects
+   * (for the caller to report) with the lock already in place.
+   */
   async lockNow(): Promise<void> {
     if (this.#locked || this.#deps.session.current === null) return;
-    await this.#deps.session.manualLock();
+    const recording = this.#deps.session.manualLock();
     this.#applyLock('manual_lock');
+    await recording;
   }
 
   /**
@@ -104,6 +129,7 @@ export class ShellSession {
     const { work } = await this.#deps.session.switchTo(userId);
     const workspace = restoreWorkspace(userId, work);
     this.#workspace = workspace;
+    this.#deviceWork = restoreWorkspace(DEVICE_WORK_KEY, await this.#deps.session.deviceWork());
     this.#locked = false;
     this.#lockReason = null;
     this.#deps.session.recordActivity();
@@ -124,6 +150,18 @@ export class ShellSession {
     this.#emit();
   }
 
+  /**
+   * Keep a draft that belongs to the device (null drops it), for whoever signs in here next. Only
+   * while someone is signed in.
+   */
+  updateDeviceDraft(moduleId: string, draft: unknown): void {
+    if (this.#deps.session.current === null) return;
+    const next = withDraft(this.#deviceWork ?? emptyWorkspace(DEVICE_WORK_KEY), moduleId, draft);
+    this.#deviceWork = next;
+    this.#deps.session.saveDeviceWork(next);
+    this.#emit();
+  }
+
   /** Any interaction resets the idle deadline (§6.4). */
   recordActivity(): void {
     this.#deps.session.recordActivity();
@@ -135,6 +173,7 @@ export class ShellSession {
     // The active identity context is cleared; the WORK is not (§6.4 — "only the active-identity
     // context is cleared"). It already lives in 14's per-user map, keyed by userId.
     this.#workspace = null;
+    this.#deviceWork = null;
     this.#emit();
   }
 

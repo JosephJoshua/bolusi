@@ -2,18 +2,20 @@
 // changes, every photo, the condition at intake and the history. Steps that need input open a
 // dialog; the rest run in place. Live like the phone's ticket: a change synced in from another
 // device redraws it, and an open dialog says when that change means it can no longer finish.
-import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   Banner,
   Button,
   Chip,
   Fact,
   FactGrid,
+  FreshGlow,
   IconButton,
   Menu,
   PatternPad,
   PhotoTile,
   PhotoViewer,
+  RollingText,
   Section,
   StatePanel,
   Timeline,
@@ -35,10 +37,10 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { rejectedCount, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
-import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
 import { TicketVideoSection } from './video.js';
 import {
   MESSAGE_ACTION_KEY,
@@ -48,21 +50,29 @@ import {
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import {
+  discountsStanding,
   amountOwed,
   arrangeTicketActions,
   balanceAfterDownPayment,
+  balanceLabelKey,
   canSetRepairTypes,
+  canTakeParts,
+  canUseParts,
   claimIntakeDraft,
   CONTEXTUAL_ACTIONS,
+  FINAL_ACTIONS,
   downPaymentAction,
   downPaymentStale,
   paidLabelKey,
+  partUse,
   photoInSlot,
   repairTypesStale,
   photoThumbnailRef,
   repairAbilities,
   staleStep,
   ticketActions,
+  ticketMoneyActions,
+  ticketMoneyTarget,
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
@@ -72,18 +82,29 @@ import {
   type TicketAction,
   type StaleStep,
   type TicketStep,
+  repairedDoneKey,
 } from '../flows.js';
+import { useClearAskedNotice } from '../asked-notice.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
+import { ApprovalDialog, ApprovalSection } from '../../approvals/desktop/ApprovalViews.js';
+import { ta } from '../../approvals/i18n.js';
+import type { ApprovalRow } from '../../approvals/queries.js';
+import { describeRepairApproval } from '../approval-copy.js';
 import {
+  cancelFeeText,
   actionKey,
-  eventNote,
+  downPaymentTitleKey,
+  historyEntry,
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
+  paidRow,
   warrantyLine,
 } from '../labels.js';
 import {
+  readApprovals,
+  moneyRuntimeOf,
   useRepairQuery,
   useRepairRuntime,
   useStoreDisplayName,
@@ -92,16 +113,25 @@ import {
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
+import { tm } from '../../money/i18n.js';
+import { ReduceChargeDialog, RefundDialog } from '../../money/desktop/KasDialogs.js';
+import { MoneyRuntimeProvider } from '../../money/runtime.js';
+import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
+import { UsedPartsSection } from '../../inventory/desktop/UsedParts.js';
+import { InventoryRuntimeProvider } from '../../inventory/runtime.js';
 import { CatalogPhoto, DeviceSpecs, StatusChip, photoLabels, usePhotoState } from './parts.js';
 import {
   AssignDialog,
   CancelDialog,
+  CorrectDetailsDialog,
   DownPaymentDialog,
   HandoverDialog,
   PriceChangeDialog,
   PrintDialog,
   ProposalDialog,
   RepairTypesDialog,
+  UndoHandoverDialog,
+  ChangeCancelFeeDialog,
   WaitForPartsDialog,
   WorkPhotosDialog,
 } from './steps.js';
@@ -113,7 +143,6 @@ const DONE_KEY: Partial<Record<TicketAction | 'before' | 'after', RepairKey>> = 
   resume: 'repair.done.start',
   reopen: 'repair.done.start',
   before: 'repair.done.start',
-  after: 'repair.done.repaired',
   handover: 'repair.desk.done.handover',
 };
 
@@ -123,15 +152,21 @@ type Step =
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
   | { readonly kind: 'repairTypes' }
-  | { readonly kind: 'print' };
+  | { readonly kind: 'print' }
+  | { readonly kind: 'approval'; readonly requestId: string }
+  | { readonly kind: 'refund' }
+  | { readonly kind: 'reduce' };
 
 interface LoadedTicket {
   readonly ticket: TicketDetailRow | undefined;
   readonly statuses: EntitySyncStatuses;
+  readonly approvals: readonly ApprovalRow[];
 }
 
 export interface TicketPaneProps {
   readonly ticketId: string;
+  /** An intake opened it just now: the number lands like a stamp. */
+  readonly justOpened?: boolean | undefined;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
   readonly onClose: () => void;
@@ -141,11 +176,18 @@ export interface TicketPaneProps {
   readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   /** Opens a linked servisan: the one a claim is on, or a claim on this one. */
   readonly onOpenTicket?: ((ticketId: string) => void) | undefined;
+  /** Just opened by an intake: offers its slip at once, as the customer is still at the counter. */
+  readonly printFirst?: boolean | undefined;
+  /** The slip was offered, so coming back to this servisan later does not offer it again. */
+  readonly onPrintOffered?: (() => void) | undefined;
 }
 
 export function TicketPane({
   ticketId,
+  justOpened = false,
   now,
+  printFirst = false,
+  onPrintOffered,
   onClose,
   onOpenSyncStatus,
   onStartClaim,
@@ -153,18 +195,31 @@ export function TicketPane({
 }: TicketPaneProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  // Money back to the customer and a lowered bill are the ledger's dialogs, over repair's port.
+  const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
   const printing = runtime.printing;
   const [step, setStep] = useState<Step>({ kind: 'none' });
-  const [done, setDone] = useState<RepairKey | null>(null);
+  // What just happened, in words: a repair step's, or an approval's.
+  const [done, setDone] = useState<string | null>(null);
+  const say = (key: RepairKey | undefined): void => setDone(key === undefined ? null : tn(key));
   const [reloadNonce, setReloadNonce] = useState(0);
 
   const query = useRepairQuery<LoadedTicket>(
     async (rt) => {
       const page = await rt.query('getTicket', { ticketId });
-      return { ticket: page.rows[0], statuses: await rt.ticketSyncStatuses([ticketId]) };
+      return {
+        ticket: page.rows[0],
+        statuses: await rt.ticketSyncStatuses([ticketId]),
+        approvals: await readApprovals(rt, ticketId),
+      };
     },
     `desk.ticket:${ticketId}:${String(reloadNonce)}`,
+  );
+  useClearAskedNotice(
+    done,
+    () => setDone(null),
+    query.status === 'ready' ? query.data.approvals : undefined,
   );
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
   // An open step outlives a failed re-read: it keeps the last good ticket, so photos taken and
@@ -173,20 +228,42 @@ export function TicketPane({
   if (ticket !== undefined) lastTicket.current = ticket;
   const stepTicket = ticket ?? lastTicket.current;
   const statuses = query.status === 'ready' ? (query.data.statuses[ticketId] ?? []) : [];
-  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
+  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId, now());
   const stale: StaleStep | null =
-    step.kind === 'none' || step.kind === 'print' || ticket === undefined
+    step.kind === 'none' ||
+    step.kind === 'print' ||
+    step.kind === 'approval' ||
+    step.kind === 'refund' ||
+    step.kind === 'reduce' ||
+    ticket === undefined
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
         : step.kind === 'repairTypes'
           ? repairTypesStale(ticket, can)
-          : staleStep(step, ticket, can, runtime.userId);
+          : staleStep(step, ticket, can, runtime.userId, now());
 
+  // The slip the customer takes away is offered as soon as there is one: after the intake, and after
+  // the handover once the servisan reads as picked up (its slip prints what was handed over).
+  const [printNext, setPrintNext] = useState<'opened' | 'returned' | null>(
+    printFirst ? 'opened' : null,
+  );
+  useEffect(() => {
+    if (printNext === null || ticket === undefined || step.kind !== 'none') return;
+    if (printNext === 'returned' && ticket.location !== 'returned') return;
+    setPrintNext(null);
+    if (printNext === 'opened') onPrintOffered?.();
+    if (printing !== undefined) setStep({ kind: 'print' });
+  }, [printNext, ticket, step.kind, printing, onPrintOffered]);
   const closeStep = (): void => setStep({ kind: 'none' });
   const finishStep = (said: RepairKey | undefined): void => {
     closeStep();
-    setDone(said ?? null);
+    say(said);
+  };
+  // A request sent instead of the step: it waits on an owner, and says so.
+  const asked = (): void => {
+    closeStep();
+    setDone(ta('approvals.done.asked'));
   };
 
   const perform = (action: TicketAction, row: TicketDetailRow): void => {
@@ -206,14 +283,14 @@ export function TicketPane({
           void runner
             .run(() => runtime.run('startWork', { ticketId }))
             .then((result) => {
-              if (result !== undefined) setDone(DONE_KEY[action] ?? null);
+              if (result !== undefined) say(DONE_KEY[action]);
             });
         return;
       case 'claim':
         void runner
           .run(() => runtime.run('claimTicket', { ticketId }))
           .then((result) => {
-            if (result !== undefined) setDone(DONE_KEY.claim ?? null);
+            if (result !== undefined) say(DONE_KEY.claim);
           });
         return;
       case 'markRepaired':
@@ -222,6 +299,9 @@ export function TicketPane({
       case 'handover':
       case 'waitForParts':
       case 'cancel':
+      case 'undoHandover':
+      case 'changeCancelFee':
+      case 'correctDetails':
       case 'assign':
       case 'changePrice':
       case 'proposePrice':
@@ -232,21 +312,24 @@ export function TicketPane({
 
   const storeName = useStoreDisplayName();
   const uncollectedLimit = useUncollectedLimit();
-  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  const messageKind =
+    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
     ticket === undefined || onStartClaim === undefined
       ? null
       : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
-    const url = customerMessageUrl(kind, row, storeName);
+    const url = customerMessageUrl(kind, row, storeName, runtime.statusSite);
     if (url === null) return;
     setDone(null);
     window.open(url, '_blank', 'noopener');
   };
 
   const label = (action: TicketAction): string =>
-    tn(actionKey(action, ticket?.technicianId ?? null));
+    action === 'cancel' && !can.cancel
+      ? tn('repair.approval.askCancel')
+      : tn(actionKey(action, ticket?.technicianId ?? null));
 
   // The next step leads; a correction stays beside what it corrects (the price, the technician).
   const layout =
@@ -265,7 +348,9 @@ export function TicketPane({
                     ? 'repair.action.assignShort'
                     : 'repair.action.reassignShort',
                 )
-              : label(action)
+              : action === 'changeCancelFee'
+                ? tn('repair.cancelFee.short')
+                : label(action)
           }
           aria-label={label(action)}
           variant="text"
@@ -300,7 +385,7 @@ export function TicketPane({
     ) : done !== null ? (
       <Banner
         tone="success"
-        message={tn(done)}
+        message={done}
         onDismiss={() => setDone(null)}
         dismissLabel={t('core.action.close')}
       />
@@ -345,11 +430,15 @@ export function TicketPane({
         ? uncollectedDays(row, uncollectedLimit.data.days, now())
         : null;
     return (
-      <header className="flex flex-col gap-4 border-b border-border px-6 pb-4 pt-4">
+      <header className="relative isolate flex flex-col gap-4 border-b border-border px-6 pb-4 pt-4">
+        {/* The open servisan glows once when another device changes it. */}
+        <FreshGlow id={row.id} />
         <div className="flex items-start gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
-              className="tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted"
+              className={`tabular shrink-0 whitespace-nowrap text-small font-semibold text-text-muted${
+                justOpened ? ' animate-stamp' : ''
+              }`}
               data-testid="repair.desk.ticket.number"
             >
               {row.ticketNumber}
@@ -376,9 +465,15 @@ export function TicketPane({
           />
         </div>
         <div>
-          <h2 className="text-title font-bold text-text" data-testid="repair.desk.ticket.customer">
-            {row.customerName}
-          </h2>
+          <div className="flex items-baseline gap-2">
+            <h2
+              className="min-w-0 text-title font-bold text-text"
+              data-testid="repair.desk.ticket.customer"
+            >
+              {row.customerName}
+            </h2>
+            {contextual('correctDetails', row)}
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-body text-text-muted">
             {row.customerPhone === null ? null : <CopyablePhone phone={row.customerPhone} />}
             <span>
@@ -396,7 +491,8 @@ export function TicketPane({
         messageKind === null &&
         claimAction === null ? null : (
           // The next step leads; printing and the rarer moves ("Lainnya") wait quietly at the end.
-          <div className="flex items-center gap-2">
+          // A narrow pane wraps them rather than push the last one out of sight.
+          <div className="flex flex-wrap items-center gap-2">
             {layout.next === null ? null : (
               <Button
                 label={label(layout.next)}
@@ -494,6 +590,18 @@ export function TicketPane({
           </div>
         </div>
 
+        {query.status === 'ready' ? (
+          <ApprovalSection
+            rows={query.data.approvals}
+            describe={describeRepairApproval}
+            onOpen={(request) => {
+              setDone(null);
+              setStep({ kind: 'approval', requestId: request.id });
+            }}
+            testId="repair.desk.ticket.approvals"
+          />
+        ) : null}
+
         <FactGrid>
           {renderRepairTypes(row)}
           {renderClaimLinks(row)}
@@ -509,8 +617,14 @@ export function TicketPane({
               value={formatDateTime(row.estimatedReadyAt)}
             />
           )}
-          {row.outcome === 'cancelled' && row.cancelFee !== null ? (
-            <Fact label={tn('repair.cancel.fee')} value={formatMoney(row.cancelFee)} />
+          {row.outcome === 'cancelled' ? (
+            <Fact
+              // Once cut, the bill is what the customer pays, as the board's total says.
+              label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancel.fee')}
+              value={cancelFeeText((row.cancelFee ?? 0) - row.reduced)}
+              action={contextual('changeCancelFee', row)}
+              testId="repair.desk.ticket.cancelFeeFact"
+            />
           ) : null}
           {row.deviceImei === null ? null : (
             <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
@@ -525,44 +639,32 @@ export function TicketPane({
         )}
 
         {renderPrice(row)}
+        {renderParts(row)}
         <TicketPhotos ticket={row} />
         <TicketVideoSection ticket={row} runner={runner} testId="repair.desk.ticket.video" />
         {renderCondition(row)}
         <DeviceSpecs brand={row.deviceBrand} model={row.deviceModel} repairs={can.work} />
 
         <Section title={tn('repair.ticket.history')} testId="repair.desk.ticket.history">
-          <Timeline
-            entries={[...row.events].reverse().map((event) => {
-              const note = eventNote(event.detail);
-              return {
-                key: event.id,
-                // A change saved before the customer agreed reads as waiting, not as changed.
-                title:
-                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
-                    ? tn('repair.price.waitingEvent')
-                    : translateOpType(event.kind),
-                meta: [formatDateTime(event.at), event.actorName]
-                  .filter((part) => part !== null)
-                  .join(' · '),
-                ...(note === null ? {} : { detail: note }),
-              };
-            })}
-          />
+          <Timeline entries={[...row.events].reverse().map(historyEntry)} />
         </Section>
 
-        {actions.includes('cancel') ? (
-          <div className="border-t border-border pt-6">
-            {/* Kept apart at the end: it is final for the repair, so it never reads as the next step. */}
-            <Button
-              label={tn('repair.action.cancel')}
-              variant="dangerText"
-              className="-ml-2"
-              onClick={() => perform('cancel', row)}
-              disabled={runner.busy}
-              data-testid="repair.desk.ticket.action.cancel"
-            />
-          </div>
-        ) : null}
+        {[...FINAL_ACTIONS]
+          .filter((action) => actions.includes(action))
+          .map((action) => (
+            <div key={action} className="border-t border-border pt-6">
+              {/* Kept apart at the end: final for the repair, or taking a handover back, so it
+                  never reads as the next step. */}
+              <Button
+                label={label(action)}
+                variant="dangerText"
+                className="-ml-2"
+                onClick={() => perform(action, row)}
+                disabled={runner.busy}
+                data-testid={`repair.desk.ticket.action.${action}`}
+              />
+            </div>
+          ))}
       </>
     );
   }
@@ -571,6 +673,7 @@ export function TicketPane({
     const pending = row.quoteLines.filter((line) => line.status === 'proposed');
     const deciding = actions.includes('decidePrice');
     const cancelled = row.outcome === 'cancelled';
+    const moneyActions = ticketMoneyActions(row, runtime.hasPermission);
     return (
       <Section
         title={tn('repair.ticket.price')}
@@ -633,7 +736,7 @@ export function TicketPane({
             className={`tabular ${cancelled ? 'text-small text-text-muted line-through' : 'text-title font-bold text-text'}`}
             data-testid="repair.desk.ticket.total"
           >
-            {formatMoney(row.quoteTotal)}
+            <RollingText value={row.quoteTotal}>{formatMoney(row.quoteTotal)}</RollingText>
           </p>
         </div>
         {cancelled ? (
@@ -646,7 +749,7 @@ export function TicketPane({
                 className="tabular text-title font-bold text-text"
                 data-testid="repair.desk.ticket.cancelFee"
               >
-                {formatMoney(row.cancelFee ?? 0)}
+                {cancelFeeText(row.cancelFee ?? 0)}
               </p>
             </div>
             <p className="text-small text-text-muted">{tn('repair.price.notCharged')}</p>
@@ -654,15 +757,48 @@ export function TicketPane({
         ) : null}
         <DownPaymentLines
           total={amountOwed(row)}
+          reduced={row.reduced}
           downPayment={row.downPayment}
           paidLabel={paidLabelKey(row)}
+          returned={row.location === 'returned'}
           action={downPaymentAction(row, can)}
+          correctLabel={tn(downPaymentTitleKey('correct', can.correctDownPayment))}
           disabled={runner.busy}
           onAction={(mode) => {
             setDone(null);
             setStep({ kind: 'downPayment', mode });
           }}
         />
+        {moneyActions.refund || moneyActions.reduce ? (
+          <div className="-ml-2 flex flex-wrap gap-2">
+            {moneyActions.refund ? (
+              <Button
+                label={tm('money.refund.title')}
+                variant="text"
+                size="sm"
+                onClick={() => {
+                  setDone(null);
+                  setStep({ kind: 'refund' });
+                }}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.refund"
+              />
+            ) : null}
+            {moneyActions.reduce ? (
+              <Button
+                label={tm('money.reduce.action')}
+                variant="text"
+                size="sm"
+                onClick={() => {
+                  setDone(null);
+                  setStep({ kind: 'reduce' });
+                }}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.reduce"
+              />
+            ) : null}
+          </div>
+        ) : null}
         {!deciding || pending.length === 0 ? null : (
           <p className="flex items-center gap-1 text-small font-semibold text-warning">
             <TriangleAlert size={14} aria-hidden />
@@ -821,18 +957,59 @@ export function TicketPane({
     ));
   }
 
+  /** The parts taken for it: the store's own record, never on the bill. */
+  function renderParts(row: TicketDetailRow): React.JSX.Element | null {
+    const inventory = runtime.inventory;
+    if (inventory === undefined || !inventory.hasPermission(INVENTORY_PERMISSION.read)) return null;
+    return (
+      <InventoryRuntimeProvider runtime={inventory}>
+        <UsedPartsSection
+          use={partUse(row)}
+          device={{ brand: row.deviceBrand, model: row.deviceModel }}
+          editable={canUseParts(row, runtime.userId, inventory.hasPermission)}
+          takeable={canTakeParts(row, runtime.userId, inventory.hasPermission)}
+          flagUnreturned={row.outcome === 'cancelled'}
+          onDone={setDone}
+          testId="repair.desk.ticket.parts"
+        />
+      </InventoryRuntimeProvider>
+    );
+  }
+
   function renderStep(row: TicketDetailRow): React.JSX.Element | null {
     const common = { ticketId, stale, onClose: closeStep };
     switch (step.kind) {
       case 'none':
         return null;
+      case 'approval': {
+        const request =
+          query.status === 'ready'
+            ? query.data.approvals.find((candidate) => candidate.id === step.requestId)
+            : undefined;
+        if (request === undefined) return null;
+        return (
+          <ApprovalDialog
+            port={runtime.approvals}
+            request={request}
+            description={describeRepairApproval(request)}
+            onClose={closeStep}
+            onDone={(notice) => {
+              closeStep();
+              setDone(notice);
+            }}
+            testId="repair.desk.approval"
+          />
+        );
+      }
       case 'before':
       case 'after':
         return (
           <WorkPhotosDialog
             {...common}
             stage={step.kind}
-            onDone={() => finishStep(DONE_KEY[step.kind])}
+            onDone={() =>
+              finishStep(step.kind === 'after' ? repairedDoneKey(row) : DONE_KEY[step.kind])
+            }
           />
         );
       case 'waitForParts':
@@ -842,8 +1019,36 @@ export function TicketPane({
           <CancelDialog
             {...common}
             workStarted={row.workStarted}
+            price={row.quoteTotal}
             claimOf={row.claimOfTicketId}
+            downPayment={row.downPayment ?? 0}
+            discounted={discountsStanding(row.quoteLines)}
             onDone={() => finishStep(undefined)}
+            onAsked={asked}
+          />
+        );
+      case 'undoHandover':
+        return (
+          <UndoHandoverDialog {...common} onDone={() => finishStep('repair.done.handoverUndone')} />
+        );
+      case 'changeCancelFee':
+        return (
+          <ChangeCancelFeeDialog
+            {...common}
+            ticket={row}
+            onAsked={asked}
+            current={(row.cancelFee ?? 0) - row.reduced}
+            paid={row.downPayment ?? 0}
+            onDone={() => finishStep('repair.done.cancelFeeChanged')}
+          />
+        );
+      case 'correctDetails':
+        return (
+          <CorrectDetailsDialog
+            stale={stale}
+            onClose={closeStep}
+            ticket={row}
+            onDone={() => finishStep('repair.done.corrected')}
           />
         );
       case 'assign':
@@ -855,16 +1060,30 @@ export function TicketPane({
           />
         );
       case 'changePrice':
-        return <PriceChangeDialog {...common} mode="change" onDone={() => finishStep(undefined)} />;
+        return (
+          <PriceChangeDialog
+            {...common}
+            mode="change"
+            discounted={discountsStanding(row.quoteLines)}
+            onDone={() => finishStep(undefined)}
+            onAsked={asked}
+          />
+        );
       case 'proposePrice':
         return (
-          <PriceChangeDialog {...common} mode="propose" onDone={() => finishStep(undefined)} />
+          <PriceChangeDialog
+            {...common}
+            mode="propose"
+            discounted={discountsStanding(row.quoteLines)}
+            onDone={() => finishStep(undefined)}
+          />
         );
       case 'proposal':
         return (
           <ProposalDialog
             {...common}
             line={row.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+            total={row.quoteTotal}
             onDone={() => finishStep(undefined)}
           />
         );
@@ -876,6 +1095,7 @@ export function TicketPane({
             current={row.downPayment}
             total={amountOwed(row)}
             onDone={() => finishStep('repair.done.downPayment')}
+            onAsked={asked}
           />
         );
       case 'repairTypes':
@@ -886,6 +1106,25 @@ export function TicketPane({
             onDone={() => finishStep('repair.done.repairTypes')}
           />
         );
+      case 'refund':
+      case 'reduce': {
+        const props = {
+          target: ticketMoneyTarget(row),
+          onClose: closeStep,
+          onDone: () =>
+            finishStep(step.kind === 'refund' ? 'repair.done.refund' : 'repair.done.reduce'),
+          onAsked: asked,
+        };
+        return (
+          <MoneyRuntimeProvider runtime={money}>
+            {step.kind === 'refund' ? (
+              <RefundDialog {...props} />
+            ) : (
+              <ReduceChargeDialog {...props} />
+            )}
+          </MoneyRuntimeProvider>
+        );
+      }
       case 'print':
         if (printing === undefined) return null;
         return (
@@ -902,10 +1141,10 @@ export function TicketPane({
             {...common}
             ticket={row}
             customerName={row.customerName}
-            cancelled={row.outcome === 'cancelled'}
-            amount={amountOwed(row)}
-            downPayment={row.downPayment}
-            onDone={() => finishStep(DONE_KEY.handover)}
+            onDone={() => {
+              finishStep(DONE_KEY.handover);
+              setPrintNext('returned');
+            }}
           />
         );
     }
@@ -1167,21 +1406,31 @@ function lineCaption(line: QuoteLineRow): string {
  */
 function DownPaymentLines({
   total,
+  reduced,
   downPayment,
   paidLabel,
+  returned,
   action,
+  correctLabel,
   disabled,
   onAction,
 }: {
+  /** What is owed, already less `reduced`. */
   readonly total: number;
+  /** What an owner took off the bill, shown above what was paid. */
+  readonly reduced: number;
   readonly downPayment: number | null;
   readonly paidLabel: RepairKey;
+  /** The phone went home: what is left to give back is still owed. */
+  readonly returned: boolean;
   readonly action: 'record' | 'correct' | null;
+  /** "Ubah DP", or for the counter, asking an owner to. */
+  readonly correctLabel: string;
   readonly disabled: boolean;
   readonly onAction: (mode: 'record' | 'correct') => void;
 }): React.JSX.Element | null {
-  if (downPayment === null || downPayment === 0) {
-    return action === 'record' ? (
+  const record =
+    action === 'record' ? (
       <Button
         label={tn('repair.downPayment.recordTitle')}
         icon={Plus}
@@ -1193,34 +1442,64 @@ function DownPaymentLines({
         data-testid="repair.desk.ticket.downPayment.record"
       />
     ) : null;
-  }
-  const balance = balanceAfterDownPayment(total, downPayment);
+  const paid = downPayment ?? 0;
+  if (paid === 0 && reduced === 0) return record;
+  const balance = balanceAfterDownPayment(total, paid);
+  const paidText = paidRow(paid, paidLabel);
   return (
-    <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
-      <div className="flex items-center justify-between gap-4 text-body text-text-muted">
-        <dt className="flex items-center gap-2">
-          {tn(paidLabel)}
-          {action === 'correct' ? (
-            <Tooltip label={tn('repair.downPayment.correctTitle')}>
-              <Button
-                label={tn('repair.downPayment.change')}
-                aria-label={tn('repair.downPayment.correctTitle')}
-                variant="text"
-                size="sm"
-                className="-my-1"
-                onClick={() => onAction('correct')}
-                disabled={disabled}
-                data-testid="repair.desk.ticket.downPayment.correct"
-              />
-            </Tooltip>
-          ) : null}
-        </dt>
-        <dd className="tabular">{formatMoney(-downPayment)}</dd>
-      </div>
-      <div className="flex justify-between gap-4 text-body font-semibold text-text">
-        <dt>{tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}</dt>
-        <dd className="tabular">{formatMoney(balance.amount)}</dd>
-      </div>
-    </dl>
+    <>
+      <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
+        {reduced === 0 ? null : (
+          <div className="flex items-center justify-between gap-4 text-body text-text-muted">
+            <dt>{tn('repair.price.reduced')}</dt>
+            <dd className="tabular" data-testid="repair.desk.ticket.reduced">
+              {formatMoney(-reduced)}
+            </dd>
+          </div>
+        )}
+        {reduced === 0 ? null : (
+          // What the bill is after the cut, so a fee that was cut never reads as what is billed.
+          <div className="flex items-center justify-between gap-4 text-body font-semibold text-text">
+            <dt>{tn('repair.price.billed')}</dt>
+            <dd className="tabular" data-testid="repair.desk.ticket.billed">
+              {formatMoney(total)}
+            </dd>
+          </div>
+        )}
+        {paid === 0 ? null : (
+          <div className="flex items-center justify-between gap-4 text-body text-text-muted">
+            <dt className="flex items-center gap-2">
+              {paidText.label}
+              {action === 'correct' ? (
+                <Tooltip label={correctLabel}>
+                  <Button
+                    label={tn('repair.downPayment.change')}
+                    aria-label={correctLabel}
+                    variant="text"
+                    size="sm"
+                    className="-my-1"
+                    onClick={() => onAction('correct')}
+                    disabled={disabled}
+                    data-testid="repair.desk.ticket.downPayment.correct"
+                  />
+                </Tooltip>
+              ) : null}
+            </dt>
+            <dd className="tabular" data-testid="repair.desk.ticket.paid">
+              <RollingText value={paid}>{paidText.amount}</RollingText>
+            </dd>
+          </div>
+        )}
+        <div className="flex justify-between gap-4 text-body font-semibold text-text">
+          <dt>{tn(balanceLabelKey(balance.kind, returned))}</dt>
+          <dd className="tabular">
+            <RollingText value={balance.kind === 'due' ? balance.amount : -balance.amount}>
+              {formatMoney(balance.amount)}
+            </RollingText>
+          </dd>
+        </div>
+      </dl>
+      {paid === 0 ? record : null}
+    </>
   );
 }

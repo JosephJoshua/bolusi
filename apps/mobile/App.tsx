@@ -18,13 +18,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
-import {
-  Platform,
-  StatusBar as RNStatusBar,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Linking, Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
@@ -32,6 +26,7 @@ import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { KasHome } from './src/screens/money/KasHome.js';
 import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
 import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
+import { PurchasingRoute } from './src/screens/purchasing/PurchasingRoute.js';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
@@ -53,6 +48,7 @@ import {
   afterLogin,
   canSubmitConfirm,
   canSubmitCredentials,
+  chosenPersonalUserId,
   chosenStoreId,
   classifyFailure,
   initialEnrollmentState,
@@ -70,7 +66,10 @@ import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
 import { pinView } from '@bolusi/device/models/pin/model';
+import { RenameDeviceScreen } from './src/screens/settings/RenameDeviceScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
+import { DeviceSetupRoute } from './src/screens/setup/DeviceSetupRoute.js';
+import type { PermissionPort } from './src/push/permission.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
 import { roleLabel } from './src/screens/switcher/UserRow.js';
 import {
@@ -80,6 +79,7 @@ import {
   type SwitcherUser,
 } from '@bolusi/device/models/switcher/model';
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
+import type { UpdateCheckResult } from './src/bootstrap/app-updates.js';
 import {
   firstSyncPercent,
   syncChipState,
@@ -94,7 +94,11 @@ import type { VideoSurface } from './src/media/VideoHost.js';
 import { VideoScreen } from './src/media/VideoScreen.js';
 import type { ScanSurface } from './src/media/ScanHost.js';
 import { ScanScreen } from './src/media/ScanScreen.js';
-import type { DeviceInfo, MutablePushCategory } from '@bolusi/device/models/settings/model';
+import {
+  MUTABLE_PUSH_CATEGORIES,
+  type DeviceInfo,
+  type MutablePushCategory,
+} from '@bolusi/device/models/settings/model';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
@@ -104,14 +108,19 @@ import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
   REPAIR_PERMISSION,
+  keptIntakeDraft,
   parseIntakeDraft,
-  type IntakeDraft,
+  parseRepairDraft,
+  startedByOther,
+  type RepairDraft,
 } from '@bolusi/modules/repair';
 import { moneyRuntimeOf, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
 import { MONEY_PERMISSION } from '@bolusi/modules/money';
 import { tm, type MoneyRuntime } from '@bolusi/modules/money/screens';
 import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
 import { ti } from '@bolusi/modules/inventory/screens';
+import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
+import { tp } from '@bolusi/modules/purchasing/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -143,6 +152,10 @@ export interface AppProps {
    * do nothing to that photo or restart something the user did not ask for.
    */
   readonly onRetryMedia: () => void;
+  /** The signed-in person has dealt with these refused changes of theirs. */
+  readonly onMarkRejectedHandled?: (opIds: readonly string[]) => void;
+  /** "Cek pembaruan" when another device runs a newer app; absent where updates are off. */
+  readonly onCheckForUpdate?: (() => Promise<UpdateCheckResult>) | undefined;
   /**
    * §5's Error retry on the User Switcher — re-run the directory read (`AppSessionController.refresh`).
    *
@@ -210,6 +223,12 @@ export interface AppProps {
    * for anyone else — so this seam cannot be used to smuggle one user's work into another's slot.
    */
   readonly onWorkspaceChange?: ((next: UserWorkspace) => void) | undefined;
+  /**
+   * Drafts that belong to the device, by module id: an unfinished intake anyone signed in here may
+   * carry on with (Joseph, 2026-10-31). Null when nobody is signed in; absent without a session.
+   */
+  readonly deviceDrafts?: Readonly<Record<string, unknown>> | null;
+  readonly onDeviceDraftChange?: ((moduleId: string, draft: unknown) => void) | undefined;
   readonly onSelectLocale: (locale: Locale) => void;
   /**
    * Change the signed-in user's PIN (api/02-auth §6.6; task 186a), driven by the session controller.
@@ -227,6 +246,8 @@ export interface AppProps {
    * so it re-derives on a user switch. Core still enforces the permission, so this is a UX gate.
    */
   readonly canUnlock: boolean;
+  /** May the signed-in person decide conflicts (`platform.conflict_acknowledge`)? Absent: no. */
+  readonly canDecideConflicts?: boolean | undefined;
   /**
    * The device directory as owner-unlock targets (task 186b), each with a caller-derived `lockedOut`
    * flag. Loaded on demand when the Unlock screen opens (the effect below), so the owner sees the
@@ -258,6 +279,11 @@ export interface AppProps {
    * who may not add staff here, and on a build with no server wire; then the row is absent too.
    */
   readonly staff?: StaffControls | undefined;
+  /**
+   * Rename this phone (Settings › device), for someone who may register devices here. Online only;
+   * REJECTS with a `StaffAdminError`. Absent for everyone else, and then the action is absent too.
+   */
+  readonly onRenameDevice?: ((name: string) => Promise<void>) | undefined;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -279,6 +305,13 @@ export interface AppProps {
    * `true` is "Nyalakan" (the OS prompt follows), `false` is "Nanti saja". Null when not asking.
    */
   readonly onAnswerNotifications?: ((allow: boolean) => void) | null | undefined;
+  /** This phone's first-run setup waits for the signed-in person: it opens on their first unlock. */
+  readonly setupPending?: boolean | undefined;
+  /** The setup was finished or put off, so it does not open by itself again. */
+  readonly onSetupDone?: (() => void) | undefined;
+  /** The permissions the setup asks up front, with their reason; absent where none are bound. */
+  readonly cameraPermission?: PermissionPort | undefined;
+  readonly notificationPermission?: PermissionPort | undefined;
 }
 
 export default function App(props: AppProps): React.JSX.Element {
@@ -310,7 +343,6 @@ export default function App(props: AppProps): React.JSX.Element {
     userId: '',
     tab: 'repair',
   });
-  const { fontScale } = useWindowDimensions();
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
    * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
@@ -395,6 +427,8 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const [shownRoute, setShownRoute] = useState<ShellRoute>(route);
   const [syncReturn, setSyncReturn] = useState<ShellRoute>('home');
+  // The setup ends where it was opened from: Settings when reopened there, else the home surface.
+  const [setupReturn, setSetupReturn] = useState<ShellRoute>('home');
   if (routeOwner !== sessionUserId) {
     const restored = workspace?.route ?? 'home';
     setRouteOwner(sessionUserId);
@@ -468,22 +502,66 @@ export default function App(props: AppProps): React.JSX.Element {
     [publishWorkspace],
   );
 
-  /** The repair intake in progress, retained across a lock exactly like a notes draft. */
-  const restoredIntakeDraft = useMemo<IntakeDraft | null>(
-    () => (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
-    [workspace],
+  /**
+   * The repair draft to restore. A handover in progress is this person's own, retained in their
+   * workspace like a notes draft. An unfinished intake belongs to the device: whoever signs in may
+   * carry on with it, and it names who started it. One an older version kept in the workspace still
+   * comes back, and moves to the device on its next change.
+   */
+  const deviceIntake = useMemo(
+    () =>
+      sessionUserId === null ? null : parseIntakeDraft(props.deviceDrafts?.[REPAIR_MODULE_ID]),
+    [sessionUserId, props.deviceDrafts],
   );
+  const restoredRepairDraft = useMemo<RepairDraft | null>(() => {
+    const own = workspace === null ? null : parseRepairDraft(workspace.drafts[REPAIR_MODULE_ID]);
+    return own?.kind === 'handover' ? own : (deviceIntake ?? own);
+  }, [workspace, deviceIntake]);
+  const intakeStartedBy =
+    sessionUserId === null ? null : startedByOther(deviceIntake, sessionUserId);
 
-  const publishIntakeDraft = useCallback(
-    (draft: IntakeDraft | null): void => {
+  const sessionName = (props.users ?? []).find((user) => user.id === sessionUserId)?.name ?? '';
+  const sessionNameRef = useRef(sessionName);
+  sessionNameRef.current = sessionName;
+  const deviceIntakeRef = useRef<unknown>(props.deviceDrafts?.[REPAIR_MODULE_ID] ?? null);
+  deviceIntakeRef.current = props.deviceDrafts?.[REPAIR_MODULE_ID] ?? null;
+  // A null clears the slot of whatever this person last kept: the intake's on the device, a
+  // handover's here. Never a colleague's: an empty handover a colleague opens must not drop the
+  // intake waiting on the device.
+  const lastRepairKind = useRef<{ userId: string | null; kind: RepairDraft['kind'] | null }>({
+    userId: sessionUserId,
+    kind: null,
+  });
+  if (lastRepairKind.current.userId !== sessionUserId) {
+    lastRepairKind.current = { userId: sessionUserId, kind: null };
+  }
+  const onDeviceDraftChange = props.onDeviceDraftChange;
+
+  const publishRepairDraft = useCallback(
+    (draft: RepairDraft | null): void => {
+      const userId = userIdRef.current;
+      const kind = draft?.kind ?? lastRepairKind.current.kind;
+      if (draft !== null) lastRepairKind.current = { userId, kind: draft.kind };
+      if (kind === 'intake' && userId !== null && onDeviceDraftChange !== undefined) {
+        const kept =
+          draft === null || draft.kind !== 'intake'
+            ? null
+            : keptIntakeDraft(draft, { userId, name: sessionNameRef.current });
+        // Structural, for the same reason as `publishNotesDraft`: an equal re-publish is a no-op.
+        if (JSON.stringify(deviceIntakeRef.current) !== JSON.stringify(kept)) {
+          deviceIntakeRef.current = kept;
+          onDeviceDraftChange(REPAIR_MODULE_ID, kept);
+        }
+      }
       publishWorkspace((base) => {
         const current = base.drafts[REPAIR_MODULE_ID] ?? null;
-        // Structural, for the same reason as `publishNotesDraft`: an equal re-publish is a no-op.
-        if (JSON.stringify(current) === JSON.stringify(draft)) return base;
-        return withDraft(base, REPAIR_MODULE_ID, draft);
+        // The intake no longer lives here; a handover does.
+        const mine = kind === 'intake' && onDeviceDraftChange !== undefined ? null : draft;
+        if (JSON.stringify(current) === JSON.stringify(mine)) return base;
+        return withDraft(base, REPAIR_MODULE_ID, mine);
       });
     },
-    [publishWorkspace],
+    [publishWorkspace, onDeviceDraftChange],
   );
 
   // Record where this user is, continuously (never on a lock signal — by then the shell no longer
@@ -551,6 +629,21 @@ export default function App(props: AppProps): React.JSX.Element {
   // screen shows a spurious failure over a real success. The stable wrapper keeps each submit single-shot.
   const clearLockout = useLatestCallback(props.onClearLockout);
   const resetPin = useLatestCallback(props.onResetPin);
+
+  /**
+   * The new-phone setup opens for the owner who registered the phone, on their unlock (after the
+   * route they left is restored above). Leaving it any way, "Mulai", "Nanti saja" or back, ends it.
+   */
+  const setupPending = props.setupPending === true;
+  useEffect(() => {
+    if (setupPending && sessionUserId !== null) setRoute('deviceSetup');
+  }, [setupPending, sessionUserId]);
+  const onSetupDone = useLatestCallback(() => props.onSetupDone?.());
+  const lastRoute = useRef(route);
+  useEffect(() => {
+    if (lastRoute.current === 'deviceSetup' && route !== 'deviceSetup') onSetupDone();
+    lastRoute.current = route;
+  }, [route, onSetupDone]);
 
   const zone = resolveZone({
     device: props.device,
@@ -740,10 +833,11 @@ export default function App(props: AppProps): React.JSX.Element {
     const storeId = chosenStoreId(enrollment);
     if (login === null || storeId === null) return;
     const deviceName = enrollment.deviceName.trim();
+    const personalUserId = chosenPersonalUserId(enrollment);
     enrollRequestRef.current = true;
     setEnrollment((s) => ({ ...s, busy: true, failure: null }));
     props.enrollment
-      .enroll({ login, storeId, deviceName })
+      .enroll({ login, storeId, deviceName, personalUserId })
       // The done step names the store from `selectedStoreId`, so it is set to what was bound.
       .then(() =>
         setEnrollment((s) => ({ ...s, busy: false, step: 'done', selectedStoreId: storeId })),
@@ -939,7 +1033,7 @@ export default function App(props: AppProps): React.JSX.Element {
     capture !== null ? (
       <CaptureScreen
         // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
-        // catalog's own name for this action ("Ambil Foto") — no new key, no hardcoded string.
+        // catalog's own name for this action ("Ambil foto") — no new key, no hardcoded string.
         title={capture.title ?? t('media.action.takePhoto')}
         state={capture.state}
         preview={capture.preview}
@@ -998,12 +1092,6 @@ export default function App(props: AppProps): React.JSX.Element {
       {/* Dark icons: the app is light-only (app.config.ts), even when the phone is in dark mode. */}
       <StatusBar style="dark" />
       <View
-        // A new system font size remounts the screens. Re-measuring in place does not hold on
-        // Android: the next React commit brings back its own text nodes, measured at the old size,
-        // so text drew at the new size inside old boxes (QA runs on PR #45). Fresh nodes measure
-        // at the new size. MainActivity tells JS the new scale (withActivityConfigChanges.ts).
-        // Work in progress survives: drafts live in the workspace above.
-        key={`font-${fontScale}`}
         style={styles.zone}
         // Hidden from touch and screen readers while the overlay covers it, but still mounted.
         pointerEvents={modal === null ? 'auto' : 'none'}
@@ -1182,6 +1270,8 @@ export default function App(props: AppProps): React.JSX.Element {
                   // there is no per-item retry to call and pretending otherwise would be a control
                   // that looks more precise than the engine underneath it.
                   onRetryMedia={props.onRetryMedia}
+                  onMarkRejectedHandled={props.onMarkRejectedHandled}
+                  onCheckForUpdate={props.onCheckForUpdate}
                   onOpenSwitcher={() => leaveSyncStatusThen(() => setSwitching(true))}
                   onReenroll={() => leaveSyncStatusThen(() => setReenrolling(true))}
                 />
@@ -1206,11 +1296,22 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenNotificationSettings={(category: MutablePushCategory) =>
                     openNotificationSettings(channelId(category))
                   }
+                  // Data that needs an owner's decision is for whoever can decide it.
+                  notificationCategories={MUTABLE_PUSH_CATEGORIES.filter(
+                    (category) => category !== 'conflict' || props.canDecideConflicts === true,
+                  )}
                   device={props.deviceInfo}
                   currentUser={currentUser}
                   onBack={() => setRoute('home')}
                   onOpenSwitcher={() => setSwitching(true)}
                   onOpenChangePin={() => setRoute('changePin')}
+                  onRenameDevice={
+                    props.onRenameDevice === undefined ? undefined : () => setRoute('renameDevice')
+                  }
+                  onOpenSetup={() => {
+                    setSetupReturn('settings');
+                    setRoute('deviceSetup');
+                  }}
                   // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
                   // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
                   onOpenStaffPins={
@@ -1351,6 +1452,47 @@ export default function App(props: AppProps): React.JSX.Element {
                   syncChip={routeSyncChip}
                   onClose={closeParts}
                   onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (
+              shellZone.route === 'purchasing' &&
+              props.repair?.purchasing !== undefined &&
+              props.repair.inventory !== undefined
+            ) {
+              return (
+                <PurchasingRoute
+                  runtime={props.repair.purchasing}
+                  inventory={props.repair.inventory}
+                  syncChip={routeSyncChip}
+                  onClose={closeParts}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'deviceSetup') {
+              return (
+                <DeviceSetupRoute
+                  repair={props.repair}
+                  syncChip={routeSyncChip}
+                  camera={props.cameraPermission}
+                  notifications={props.notificationPermission}
+                  onOpenSystemSettings={() => void Linking.openSettings()}
+                  onOpenSetting={setRoute}
+                  onDone={() => {
+                    setRoute(setupReturn);
+                    setSetupReturn('home');
+                  }}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'renameDevice' && props.onRenameDevice !== undefined) {
+              return (
+                <RenameDeviceScreen
+                  current={props.deviceInfo.deviceName}
+                  onRename={props.onRenameDevice}
+                  onClose={() => setRoute('settings')}
                 />
               );
             }
@@ -1501,8 +1643,9 @@ export default function App(props: AppProps): React.JSX.Element {
                     // The clock itself, not this render's reading: an intake can sit open for hours.
                     now={props.clock ?? systemClock.now}
                     onRegisterSurfaceNav={registerRepairNav}
-                    restoredDraft={restoredIntakeDraft}
-                    onDraftChange={publishIntakeDraft}
+                    restoredDraft={restoredRepairDraft}
+                    intakeStartedBy={intakeStartedBy}
+                    onDraftChange={publishRepairDraft}
                     onOpenSyncStatus={openSyncStatus}
                     syncChip={homeSyncChip}
                     avatar={homeAvatar}
@@ -1597,7 +1740,10 @@ export default function App(props: AppProps): React.JSX.Element {
               primaryText={t('core.account.switchUser')}
               onPress={() => {
                 setAccountMenu(false);
-                leaveHome(() => setSwitching(true));
+                // An intake carries on for whoever signs in next, so handing the phone over asks
+                // nothing; anything else asks before it is dropped.
+                if (surfaceNavRef.current?.keepsWorkOnSwitch === true) setSwitching(true);
+                else leaveHome(() => setSwitching(true));
               }}
               testID="account-menu-switch-user"
             />
@@ -1610,6 +1756,17 @@ export default function App(props: AppProps): React.JSX.Element {
                   leaveHome(() => setRoute('parts'));
                 }}
                 testID="shell-open-parts"
+              />
+            ) : null}
+            {props.repair?.purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true ? (
+              <ListRow
+                leading={<Icon name="buy" size={size.iconInline} color={color.text} />}
+                primaryText={tp('purchasing.list.title')}
+                onPress={() => {
+                  setAccountMenu(false);
+                  leaveHome(() => setRoute('purchasing'));
+                }}
+                testID="shell-open-purchasing"
               />
             ) : null}
             <ListRow
@@ -1626,6 +1783,7 @@ export default function App(props: AppProps): React.JSX.Element {
       ) : null}
       {props.onAnswerNotifications != null &&
       zone.kind === 'shell' &&
+      zone.route !== 'deviceSetup' &&
       !accountMenu &&
       modal === null ? (
         // On the work screen, after unlock, with the reason before the OS asks (never at boot).
@@ -1699,7 +1857,8 @@ const HIDDEN = { display: 'none' } as const;
 
 /**
  * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
- * hardware back asks the surface first: the repair/notes home, and the owner's repair settings.
+ * hardware back asks the surface first: the repair/notes home, the owner's repair settings, and the
+ * new-phone setup's steps.
  */
 const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
@@ -1713,7 +1872,9 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'printSettings',
   'printPaper',
   'parts',
+  'purchasing',
   'paymentMethods',
+  'deviceSetup',
 ]);
 
 /**

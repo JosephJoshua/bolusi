@@ -1,9 +1,9 @@
-// Taking photos and signatures on a store phone instead of this PC. The first time, the counter
-// shows a QR the phone scans with its camera; after that the phone stays paired, and every photo
-// or signature the counter asks for appears on it by itself until the pairing ends. Both go
+// Taking photos, signatures and video on a store phone instead of this PC. The first time, the
+// counter shows a QR the phone scans with its camera; after that the phone stays paired, and every
+// photo, signature or clip the counter asks for appears on it by itself until the pairing ends. Both go
 // through the server (the offline core talks to it), so the PC and the phone need the internet.
-import { t } from '@bolusi/i18n';
-import type { HandoffKind, HandoffPageLabels } from '@bolusi/schemas';
+import { t, type TranslationKey } from '@bolusi/i18n';
+import type { HandoffAsk, HandoffKind, HandoffPageLabels, VideoMime } from '@bolusi/schemas';
 import { Banner, Button, Dialog, QrCode, Spinner, type DrawnSignature } from '@bolusi/ui-web';
 import { RefreshCw, Smartphone } from 'lucide-react';
 
@@ -18,7 +18,7 @@ export interface HandoffBridge {
   /** A new QR for a phone to pair with; any earlier pairing ends. */
   pair(labels: HandoffPageLabels): Promise<HandoffOpened>;
   /** Puts one step in front of the paired phone; null when the pairing has ended. */
-  ask(id: string, kind: HandoffKind, title: string): Promise<number | null>;
+  ask(id: string, ask: HandoffAsk): Promise<number | null>;
   /** The counter backed out of that step. */
   withdraw(id: string, seq: number): Promise<void>;
   unpair(id: string): Promise<void>;
@@ -44,8 +44,8 @@ export function windowHandoff(): HandoffBridge | undefined {
         ok: false,
         problem: 'failed',
       }),
-    ask: (id, kind, title) =>
-      withClient((client) => client.call<number | null>('handoff.ask', id, kind, title), null),
+    ask: (id, ask) =>
+      withClient((client) => client.call<number | null>('handoff.ask', id, ask), null),
     withdraw: (id, seq) =>
       withClient((client) => client.call<void>('handoff.withdraw', id, seq), undefined),
     unpair: (id) => withClient((client) => client.call<void>('handoff.unpair', id), undefined),
@@ -77,7 +77,8 @@ export type PhoneLink =
 
 export type HandoffResult =
   | { readonly kind: 'photo'; readonly bytes: Uint8Array<ArrayBuffer> }
-  | { readonly kind: 'signature'; readonly signature: DrawnSignature };
+  | { readonly kind: 'signature'; readonly signature: DrawnSignature }
+  | { readonly kind: 'video'; readonly bytes: Uint8Array<ArrayBuffer>; readonly mime: VideoMime };
 
 export function pageLabels(): HandoffPageLabels {
   return {
@@ -96,6 +97,14 @@ export function pageLabels(): HandoffPageLabels {
     withdrawn: t('core.handoff.page.withdrawn'),
     expired: t('core.handoff.page.expired'),
     unreadable: t('core.handoff.page.unreadable'),
+    videoStart: t('media.video.start'),
+    videoStop: t('media.video.stop'),
+    videoRetake: t('media.video.retake'),
+    videoDenied: t('core.handoff.page.videoDenied'),
+    videoFailed: t('core.camera.failed'),
+    retry: t('core.action.retry'),
+    videoUnsupported: t('core.handoff.page.videoUnsupported'),
+    videoTooLarge: t('media.video.tooLarge'),
   };
 }
 
@@ -107,8 +116,7 @@ export function pageLabels(): HandoffPageLabels {
 export class PhoneLinkStore {
   private link: PhoneLink = { state: 'none' };
   private step: {
-    readonly kind: HandoffKind;
-    readonly title: string;
+    readonly ask: HandoffAsk;
     seq: number | null;
     readonly resolve: (result: HandoffResult | null) => void;
   } | null = null;
@@ -129,11 +137,11 @@ export class PhoneLinkStore {
     return this.link.state === 'ready' && this.link.paired;
   }
 
-  /** Asks the phone for one photo or signature, pairing first when there is no phone yet. */
-  take(kind: HandoffKind, title: string): Promise<HandoffResult | null> {
+  /** Asks the phone for one photo, signature or clip, pairing first when there is no phone yet. */
+  take(ask: HandoffAsk): Promise<HandoffResult | null> {
     this.withdraw();
     return new Promise((resolve) => {
-      this.step = { kind, title, seq: null, resolve };
+      this.step = { ask, seq: null, resolve };
       void this.ensureLink().then(() => this.askPhone());
     });
   }
@@ -192,7 +200,7 @@ export class PhoneLinkStore {
     if (step === null || step.seq !== null || link.state !== 'ready') return;
     let seq: number | null;
     try {
-      seq = await this.handoff.ask(link.id, step.kind, step.title);
+      seq = await this.handoff.ask(link.id, step.ask);
     } catch {
       // The server is out of reach: say so; "try again" pairs afresh.
       if (this.step === step) this.set({ state: 'problem', problem: 'offline' });
@@ -213,7 +221,7 @@ export class PhoneLinkStore {
   private onEvent(event: HandoffEvent): void {
     const link = this.link;
     if (link.state !== 'ready' || event.id !== link.id) return;
-    if (event.type !== 'photo' && event.type !== 'signature') {
+    if (event.type !== 'photo' && event.type !== 'signature' && event.type !== 'video') {
       if (event.type === 'paired') {
         this.set({ ...link, paired: true });
         return;
@@ -224,21 +232,32 @@ export class PhoneLinkStore {
       return;
     }
     const step = this.step;
-    if (step === null || step.seq !== event.seq || step.kind !== event.type) return;
+    if (step === null || step.seq !== event.seq || step.ask.kind !== event.type) return;
     this.step = null;
-    step.resolve(
-      event.type === 'photo'
-        ? { kind: 'photo', bytes: new Uint8Array(event.bytes) }
-        : {
-            kind: 'signature',
-            signature: {
-              strokes: event.strokes.map((stroke) => stroke.map(({ x, y }) => ({ x, y }))),
-              pad: event.pad,
-            },
-          },
-    );
+    if (event.type === 'signature') {
+      step.resolve({
+        kind: 'signature',
+        signature: {
+          strokes: event.strokes.map((stroke) => stroke.map(({ x, y }) => ({ x, y }))),
+          pad: event.pad,
+        },
+      });
+    } else {
+      const bytes = new Uint8Array(event.bytes);
+      step.resolve(
+        event.type === 'photo'
+          ? { kind: 'photo', bytes }
+          : { kind: 'video', bytes, mime: event.mime },
+      );
+    }
   }
 }
+
+const ON_PHONE: Readonly<Record<HandoffKind, TranslationKey>> = {
+  photo: 'core.handoff.photoOnPhone',
+  signature: 'core.handoff.signOnPhone',
+  video: 'core.handoff.videoOnPhone',
+};
 
 export function PhoneHandoffDialog({
   open,
@@ -297,9 +316,7 @@ export function PhoneHandoffDialog({
         {paired ? (
           <div className="flex flex-col items-center gap-3" data-testid="desktop.handoff.onPhone">
             <Smartphone size={40} aria-hidden className="text-primary" />
-            <p className="text-heading font-semibold text-text">
-              {t(kind === 'photo' ? 'core.handoff.photoOnPhone' : 'core.handoff.signOnPhone')}
-            </p>
+            <p className="text-heading font-semibold text-text">{t(ON_PHONE[kind])}</p>
             <p
               role="status"
               className="flex items-center gap-2 text-body text-text-muted"

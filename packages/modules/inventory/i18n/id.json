@@ -6,7 +6,8 @@
     "itemTaken": "Sparepart diambil",
     "itemPutBack": "Sparepart dikembalikan",
     "categoryAdded": "Kategori ditambahkan",
-    "categoryEdited": "Kategori diubah"
+    "categoryEdited": "Kategori diubah",
+    "stockReceived": "Barang diterima"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
@@ -15,7 +16,8 @@
     "moreThanTaken": "Jumlahnya lebih dari yang diambil untuk servisan ini.",
     "wrongUse": "Data servisannya tidak cocok. Coba lagi.",
     "categoryNotFound": "Kategori ini tidak ada.",
-    "categoryInvalid": "Isian atau format nama kategori ini belum benar."
+    "categoryInvalid": "Isian atau format nama kategori ini belum benar.",
+    "wrongSource": "Data pesanannya tidak sesuai."
   },
   "list": {
     "title": "Barang",
@@ -106,7 +108,8 @@
   "movement": {
     "counted": "Dikoreksi jadi {count}",
     "taken": "Diambil untuk {use}",
-    "putBack": "Dikembalikan dari {use}"
+    "putBack": "Dikembalikan dari {use}",
+    "received": "Diterima dari {source}"
   },
   "stepper": {
     "decrease": "Kurangi",
@@ -133,7 +136,9 @@
     "searchHint": "Cari sparepart",
     "picked": "Dipilih",
     "fitsDevice": "Cocok untuk {model}",
-    "otherParts": "Sparepart lain"
+    "otherParts": "Sparepart lain",
+    "overStock": "Lebih {extra} dari stok.",
+    "searchMore": "Cari untuk lihat sparepart lain."
   },
   "done": {
     "added": "Barang ditambahkan.",
@@ -210,5 +215,23 @@
     "removeOption": "Hapus pilihan {option}",
     "addToName": "Tambahkan {label} ke nama",
     "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang."
+  },
+  "desk": {
+    "col": {
+      "name": "Barang",
+      "category": "Kategori",
+      "fits": "Cocok untuk",
+      "stock": "Stok"
+    },
+    "filter": {
+      "category": "Kategori",
+      "clear": "Hapus filter",
+      "reset": "Hapus semua filter",
+      "search": "Cari",
+      "noMatches": "Tidak ada yang cocok",
+      "chosen": "{count} dipilih"
+    },
+    "results": "{count} barang",
+    "closePart": "Tutup barang"
   }
 }

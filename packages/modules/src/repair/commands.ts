@@ -56,16 +56,19 @@ import {
   intakeOptionSettingsQuery,
   nextTicketCounterQuery,
   printSettingsQuery,
+  countTicketsQuery,
+  searchCustomersQuery,
   standardCancelFee,
   uncollectedDaysQuery,
   type CancelFees,
   type PrintSettings,
   type TicketDetailRow,
 } from './queries.js';
-import { CASH_ACCOUNT } from '../money/constants.js';
+import { CASH_ACCOUNT, HANDOVER_REFUND_REASON } from '../money/constants.js';
 import {
   chargeOp,
   paymentOp,
+  reduceChargeOp,
   refundOp,
   voidOp,
   zPaymentInput,
@@ -73,20 +76,46 @@ import {
 } from '../money/commands.js';
 import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
+import { refundSplit } from '../money/rules.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
 import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
+import { STATUS_NONCE_BYTES, statusCodeFor, statusNonceFrom } from './status-link.js';
 import { formatTicketNumber } from './ticket-number.js';
+import {
+  imeiInvalid,
+  normalizeImei,
+  normalizePhone,
+  phoneInvalid,
+  sameCustomer,
+} from './contact.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
 
+/** A new servisan's status link: a fresh nonce and the code it gives where the servisan lives. */
+function statusLinkFor(ctx: CommandContext, ticketId: string): { code: string; nonce: string } {
+  const nonce = statusNonceFrom(ctx.randomBytes(STATUS_NONCE_BYTES));
+  const owner = { tenantId: ctx.tenantId, storeId: ctx.storeId ?? '', ticketId };
+  return { code: statusCodeFor(owner, nonce, ctx.sha256), nonce };
+}
+
 const zText = (max: number) => z.string().trim().max(max);
 const zRequiredText = (max: number) => z.string().trim().min(1).max(max);
+/** A customer's number, stored one way (`normalizePhone`); one that can't be dialled is refused. */
 const zPhone = z
   .string()
   .trim()
   .max(40)
   .nullable()
-  .transform((phone) => (phone === null || phone === '' ? null : phone));
+  .refine((phone) => phone === null || !phoneInvalid(phone), { message: 'not a phone number' })
+  .transform((phone) => (phone === null ? null : normalizePhone(phone)));
+/** 15 digits with a valid check digit, or nothing. */
+const zImei = z
+  .string()
+  .trim()
+  .max(40)
+  .nullable()
+  .refine((imei) => imei === null || !imeiInvalid(imei), { message: 'not an IMEI' })
+  .transform((imei) => (imei === null ? null : normalizeImei(imei)));
 const zAmountInput = z.number().int().min(-MAX_LINE_AMOUNT).max(MAX_LINE_AMOUNT);
 
 const zLineInput = z
@@ -129,6 +158,16 @@ async function ticketMoney(ctx: CommandContext, ticketId: string): Promise<Docum
 }
 
 // ── customers ──────────────────────────────────────────────────────────────────────────────────
+
+/** A customer of this store with this name and number, found by the number. */
+async function findSameCustomer(
+  ctx: CommandContext,
+  customer: { readonly name: string; readonly phone: string | null },
+): Promise<{ readonly id: string; readonly name: string; readonly phone: string | null } | null> {
+  if (customer.phone === null) return null;
+  const found = await ctx.query(searchCustomersQuery, { text: customer.phone, limit: 20 });
+  return found.rows.find((row) => sameCustomer(row, customer)) ?? null;
+}
 
 export const registerCustomerInput = z
   .object({ name: zRequiredText(200), phone: zPhone.default(null) })
@@ -207,7 +246,7 @@ export const openTicketInput = z
       brand: zRequiredText(100),
       model: zRequiredText(100),
       color: zText(200).default(''),
-      imei: zPhone.default(null),
+      imei: zImei.default(null),
       passcode: z
         .string()
         .max(200)
@@ -280,15 +319,19 @@ export async function openTicketHandler(
     customerId = (await ctx.query(getCustomerQuery, { customerId: input.customer.customerId }))
       .rows[0]!.id;
   } else {
-    customerId = ctx.newId();
-    ops.push(
-      ctx.op({
-        type: REPAIR_OP.customerRegistered,
-        entityType: REPAIR_CUSTOMER_ENTITY,
-        entityId: customerId,
-        payload: { name: input.customer.name, phone: input.customer.phone },
-      }),
-    );
+    // Retyping a returning customer (the "Pakai" card ignored) must not make them twice.
+    const known = (await findSameCustomer(ctx, input.customer))?.id ?? null;
+    customerId = known ?? ctx.newId();
+    if (known === null) {
+      ops.push(
+        ctx.op({
+          type: REPAIR_OP.customerRegistered,
+          entityType: REPAIR_CUSTOMER_ENTITY,
+          entityId: customerId,
+          payload: { name: input.customer.name, phone: input.customer.phone },
+        }),
+      );
+    }
   }
 
   // "Samsung" + "A15" is the catalog's Galaxy A15: store it the catalog's way, whichever screen or
@@ -322,6 +365,7 @@ export async function openTicketHandler(
       photos: input.photos,
       ownershipVideo: input.ownershipVideo,
     }),
+    ticketOp(ctx, ticketId, REPAIR_OP.statusLinkMade, statusLinkFor(ctx, ticketId)),
   );
   if (input.downPayment > 0) {
     const total = input.quoteLines.reduce((sum, line) => sum + line.amount, 0);
@@ -397,13 +441,21 @@ const ticketNoteInput = z
 export const claimTicketInput = ticketIdInput;
 export type TicketIdInput = z.input<typeof ticketIdInput>;
 
+/** Take the servisan from whoever holds it as this device knows it (nobody, or them by name). */
+function claimOp(
+  ctx: CommandContext,
+  ticket: { id: string; technicianId: string | null },
+): OpDraft {
+  return ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, { from: ticket.technicianId });
+}
+
 export async function claimTicketHandler(
   input: z.output<typeof ticketIdInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {})],
+    ops: [claimOp(ctx, ticket)],
     result: { ticketId: ticket.id },
   };
 }
@@ -448,8 +500,8 @@ function workPhotosOp(
 }
 
 /**
- * Start (or resume, or reopen) work. Starting an unassigned ticket claims it in the same command,
- * so a technician picking a device off the shelf needs one tap. The first start needs at least one
+ * Start (or resume, or reopen) work. Starting a servisan nobody holds, or someone else does, takes it
+ * in the same command, so a technician picking a device off the shelf needs one tap. The first start needs at least one
  * `before` photo; a resume keeps the ones already taken and may add more.
  */
 export async function startWorkHandler(
@@ -458,7 +510,8 @@ export async function startWorkHandler(
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   const ops: OpDraft[] = [];
-  if (ticket.technicianId === null) ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {}));
+  // Starting takes the servisan too: off the shelf, or over from whoever holds it.
+  if (ticket.technicianId !== ctx.userId) ops.push(claimOp(ctx, ticket));
   ops.push(...workPhotosOp(ctx, ticket.id, 'before', input.beforePhotos));
   ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.workStarted, {}));
   return { ops, result: { ticketId: ticket.id } };
@@ -541,6 +594,54 @@ export async function cancelTicketHandler(
     ],
     result: { ticketId: ticket.id },
   };
+}
+
+export const changeCancelFeeInput = z
+  .object({ ticketId: z.string().min(1), fee: zFeeInput, reason: zRequiredText(500) })
+  .strict();
+export type ChangeCancelFeeInput = z.input<typeof changeCancelFeeInput>;
+
+/**
+ * An owner changes what a cancelled servisan costs (when: `cancelFeeChangedRule`). `fee` is what the
+ * customer is billed in the end. Before a charge it is simply the fee. Once charged (it went home),
+ * the bill follows it in the same step: a lower bill is taken off the charge (as "Kurangi tagihan"
+ * does, so the fee stays what was charged), and a higher one raises the fee and charges the
+ * difference. A customer who paid on a phone that had not heard of the cancel owes nothing more
+ * once the bill is what they paid.
+ */
+export async function changeCancelFeeHandler(
+  input: z.output<typeof changeCancelFeeInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  const money = await ticketMoney(ctx, ticket.id);
+  const document = ticketDocument(ticket.id, ticket.ticketNumber);
+  const feeOp = (fee: number) =>
+    ticketOp(ctx, ticket.id, REPAIR_OP.cancelFeeChanged, { fee, reason: input.reason });
+  const charge = (amount: number) =>
+    chargeOp(
+      ctx,
+      document,
+      amount,
+      ticketCharge({ ...ticket, outcome: 'cancelled', cancelFee: input.fee })!.account,
+    );
+  if (money.charged === 0) {
+    // Nothing charged yet: pickup charges the fee, unless the phone went home already.
+    const ops = [feeOp(input.fee)];
+    if (ticket.location === 'returned' && input.fee > 0) ops.push(charge(input.fee));
+    return { ops, result: { ticketId: ticket.id } };
+  }
+  const billed = money.charged - money.reduced;
+  if (input.fee === billed) {
+    throw REPAIR_REFUSALS.refuse('nothingChanged', {
+      details: { field: 'fee', issue: 'the bill is already this' },
+    });
+  }
+  const ops =
+    input.fee < billed
+      ? [reduceChargeOp(ctx, document, billed - input.fee, input.reason)]
+      : [feeOp(input.fee + money.reduced), charge(input.fee - billed)];
+  return { ops, result: { ticketId: ticket.id } };
 }
 
 export const setCancelFeesInput = z
@@ -750,8 +851,6 @@ export const returnDeviceInput = z
       .nullable()
       .default(null)
       .transform((reason) => (reason === null || reason === '' ? null : reason)),
-    /** Shown in the history next to money handed back (a cancelled servisan's DP less its fee). */
-    refundReason: zText(200).default(''),
     /** What the counter went through with the customer (`handoverChecklist`), ticked or not. */
     checklist: z
       .array(zHandoverCheck)
@@ -762,38 +861,26 @@ export const returnDeviceInput = z
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
 /**
- * Money handed back at the counter, through the accounts the customer paid with: the drawer
- * first, then each account in the order it was paid. Never more than went in through each one.
+ * Money handed back at the counter, through the accounts that overpaid as the money rule reads
+ * them (`refundSplit`), as the handover screens show it (`TicketDetailRow.refunds`). The bill is
+ * what the servisan is charged once this handover's charge is recorded; `extra` are the payments
+ * taken now.
  */
 export function refundsFor(
   money: DocumentMoney,
   credit: number,
+  bill: number,
   extra: readonly { account: string; amount: number }[] = [],
 ): { account: string; amount: number }[] {
-  const paidIn = new Map<string, number>();
-  const add = (account: string, amount: number) =>
-    paidIn.set(account, (paidIn.get(account) ?? 0) + amount);
-  paidIn.set(CASH_ACCOUNT, 0);
-  for (const entry of money.entries) {
-    if (entry.account === null) continue;
-    if (entry.kind === 'payment_received' && entry.voidedAt === null)
-      add(entry.account, entry.amount);
-    if (entry.kind === 'refund_paid') add(entry.account, -entry.amount);
-  }
-  for (const payment of extra) add(payment.account, payment.amount);
-  const refunds: { account: string; amount: number }[] = [];
-  let left = credit;
-  for (const [account, paid] of paidIn) {
-    if (left <= 0) break;
-    const amount = Math.min(left, paid);
-    if (amount <= 0) continue;
-    refunds.push({ account, amount });
-    left -= amount;
-  }
-  return refunds;
+  return refundSplit(
+    [
+      ...money.entries,
+      ...extra.map((payment) => ({ ...payment, kind: 'payment_received', voidedBy: null })),
+    ],
+    credit,
+    bill,
+  );
 }
-
-const HANDOVER_REFUND_REASON = 'Returned at handover';
 
 /**
  * Hand the device back, with a photo and the customer's signature (when: `deviceReturnedRule`).
@@ -823,9 +910,11 @@ export async function returnDeviceHandler(
     const paidNow = input.payments.reduce((sum, payment) => sum + payment.amount, 0);
     balance = money.balance + toCharge - paidNow;
     if (balance < 0) {
-      const reason = input.refundReason === '' ? HANDOVER_REFUND_REASON : input.refundReason;
-      for (const refund of refundsFor(money, -balance, input.payments)) {
-        ops.push(refundOp(ctx, document, { ...refund, reason, reference: null }));
+      const bill = money.charged + toCharge - money.reduced;
+      for (const refund of refundsFor(money, -balance, bill, input.payments)) {
+        ops.push(
+          refundOp(ctx, document, { ...refund, reason: HANDOVER_REFUND_REASON, reference: null }),
+        );
       }
     }
   }
@@ -839,6 +928,174 @@ export async function returnDeviceHandler(
       checklist: input.checklist,
     }),
   );
+  return { ops, result: { ticketId: ticket.id } };
+}
+
+export const undoHandoverInput = z
+  .object({ ticketId: z.string().min(1), reason: zRequiredText(500) })
+  .strict();
+export type UndoHandoverInput = z.input<typeof undoHandoverInput>;
+
+/**
+ * An owner takes back a handover recorded by mistake (the wrong servisan, the phone still on the
+ * shelf). The phone is in the store again and can be handed over properly; the payments stay on
+ * this servisan, and one booked here by mistake is cancelled in Kas, under its own rules.
+ */
+export async function undoHandoverHandler(
+  input: z.output<typeof undoHandoverInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.handoverReversed, { reason: input.reason })],
+    result: { ticketId: ticket.id },
+  };
+}
+
+export const correctTicketDetailsInput = z
+  .object({
+    ticketId: z.string().min(1),
+    // Typed details, or a customer picked from the store's list (intake's "Pakai").
+    customer: z
+      .union([
+        z.object({ name: zRequiredText(200), phone: zPhone }).strict(),
+        z.object({ customerId: z.string().min(1) }).strict(),
+      ])
+      .optional(),
+    device: z
+      .object({
+        brand: zRequiredText(100),
+        model: zRequiredText(100),
+        color: zText(200),
+        imei: zImei,
+      })
+      .strict()
+      .optional(),
+    passcode: z
+      .string()
+      .max(200)
+      .nullable()
+      .optional()
+      .transform((value) => (value === '' ? null : value)),
+    complaint: zRequiredText(2000).optional(),
+    peripherals: z.array(zRecordedOption).max(50).optional(),
+    reason: zText(500).default(''),
+  })
+  .strict();
+export type CorrectTicketDetailsInput = z.input<typeof correctTicketDetailsInput>;
+
+/**
+ * The counter corrects what intake wrote down while the phone is in the store: the customer's
+ * name or number, the phone itself, its lock, the complaint, what was left with it. Only what
+ * differs is sent, and the servisan's history lists each change with what it was before.
+ */
+export async function correctTicketDetailsHandler(
+  input: z.output<typeof correctTicketDetailsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  const changes: Record<string, unknown> = {};
+  const ops: OpDraft[] = [];
+  // A picked customer moves the servisan to them, whatever their details say.
+  if (
+    input.customer !== undefined &&
+    'customerId' in input.customer &&
+    input.customer.customerId !== ticket.customerId
+  ) {
+    // Throws ENTITY_NOT_FOUND for a customer not visible in this store.
+    const picked = (await ctx.query(getCustomerQuery, { customerId: input.customer.customerId }))
+      .rows[0]!;
+    changes['customer'] = { name: picked.name, phone: picked.phone };
+    changes['customerId'] = picked.id;
+  }
+  const customer =
+    input.customer !== undefined && 'name' in input.customer ? input.customer : undefined;
+  const customerChanged =
+    customer !== undefined &&
+    (customer.name !== ticket.customerName || customer.phone !== ticket.customerPhone);
+  // The customer's own record is corrected only when this servisan is all it names: another
+  // servisan of theirs would be renamed too, and intake may have picked the wrong person. Then the
+  // servisan moves to the customer the details name, found or made like at intake.
+  if (customerChanged) {
+    const known = await findSameCustomer(ctx, customer);
+    if (known !== null && known.id !== ticket.customerId) {
+      // Moved to the customer the details name, the history says them as their record reads.
+      changes['customer'] = { name: known.name, phone: known.phone };
+      changes['customerId'] = known.id;
+    } else {
+      changes['customer'] = customer;
+      // Spelled the way this record already is: renamed in place. Otherwise a shared record moves
+      // this servisan to a new customer, made like at intake.
+      const shared =
+        known === null &&
+        (await ctx.query(countTicketsQuery, { filter: { customerId: ticket.customerId } })).rows[0]!
+          .count > 1;
+      if (shared) {
+        const customerId = ctx.newId();
+        changes['customerId'] = customerId;
+        ops.push(
+          ctx.op({
+            type: REPAIR_OP.customerRegistered,
+            entityType: REPAIR_CUSTOMER_ENTITY,
+            entityId: customerId,
+            payload: { name: customer.name, phone: customer.phone },
+          }),
+        );
+      }
+    }
+  }
+  if (input.device !== undefined) {
+    const catalog = (
+      await ctx.query(findDeviceModelQuery, {
+        brand: input.device.brand,
+        model: input.device.model,
+      })
+    ).rows[0];
+    const device =
+      catalog === undefined
+        ? input.device
+        : { ...input.device, brand: catalog.brand, model: catalog.model };
+    if (
+      device.brand !== ticket.deviceBrand ||
+      device.model !== ticket.deviceModel ||
+      device.color !== ticket.deviceColor ||
+      device.imei !== ticket.deviceImei
+    ) {
+      changes['device'] = device;
+    }
+  }
+  if (input.passcode !== undefined && input.passcode !== ticket.devicePasscode) {
+    changes['passcode'] = input.passcode;
+  }
+  if (input.complaint !== undefined && input.complaint !== ticket.complaint) {
+    changes['complaint'] = input.complaint;
+  }
+  if (
+    input.peripherals !== undefined &&
+    JSON.stringify(input.peripherals) !== JSON.stringify(ticket.peripherals)
+  ) {
+    changes['peripherals'] = input.peripherals;
+  }
+  if (Object.keys(changes).length === 0) throw nothingChanged('device');
+  ops.push(
+    ticketOp(ctx, ticket.id, REPAIR_OP.ticketDetailsCorrected, {
+      ...changes,
+      reason: input.reason,
+    }),
+  );
+  // Without a move the servisan's entry renames its customer itself (its applier), so its history
+  // cannot say one thing and do another. The customer's own entry after it says the same, so the
+  // devices' customer search picks up the new name and number.
+  if (customerChanged && changes['customerId'] === undefined) {
+    ops.push(
+      ctx.op({
+        type: REPAIR_OP.customerDetailsCorrected,
+        entityType: REPAIR_CUSTOMER_ENTITY,
+        entityId: ticket.customerId,
+        payload: { name: customer.name, phone: customer.phone },
+      }),
+    );
+  }
   return { ops, result: { ticketId: ticket.id } };
 }
 
@@ -882,6 +1139,22 @@ export async function recordDownPaymentHandler(
   };
 }
 
+/**
+ * The payment a down payment fix records its new one in place of: the largest live one through the
+ * same account (`correctDownPaymentHandler`, and what an approval of the fix counts).
+ */
+export function replacedPayment<
+  Entry extends { readonly account: string | null; readonly amount: number },
+>(live: readonly Entry[], account: string): Entry | undefined {
+  return live
+    .filter((entry) => entry.account === account)
+    .reduce<Entry | undefined>(
+      (largest, entry) =>
+        largest === undefined || entry.amount > largest.amount ? entry : largest,
+      undefined,
+    );
+}
+
 export const correctDownPaymentInput = z
   .object({
     ticketId: z.string().min(1),
@@ -897,9 +1170,10 @@ export const correctDownPaymentInput = z
 export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
 
 /**
- * An owner corrects a down payment, with a reason: the payments taken so far are voided and, when
- * the amount is not 0, one payment of the right amount is recorded through the method the owner
- * picks (the first payment's, unless said otherwise).
+ * An owner corrects a down payment, with a reason. Raising it keeps the payments taken so far and
+ * records only the difference through the method picked, so cash already in the drawer stays
+ * there. Lowering it voids the payments taken so far and, when the amount is not 0, records one
+ * payment of the right amount through the method picked (the first payment's, unless said).
  */
 export async function correctDownPaymentHandler(
   input: z.output<typeof correctDownPaymentInput>,
@@ -919,21 +1193,27 @@ export async function correctDownPaymentHandler(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
   );
   const ops: OpDraft[] = [];
+  const first = live[0];
+  const method =
+    input.account === undefined
+      ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
+      : { account: input.account, reference: input.reference };
+  const recorded = ticket.downPayment ?? 0;
+  if (input.amount > recorded) {
+    // The customer paid more: what was taken stays where it is.
+    ops.push(
+      paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
+        ...method,
+        amount: input.amount - recorded,
+        tendered: null,
+      }),
+    );
+    return { ops, result: { ticketId: ticket.id } };
+  }
   if (input.amount > 0) {
-    const first = live[0];
-    const method =
-      input.account === undefined
-        ? { account: first?.account ?? CASH_ACCOUNT, reference: first?.reference ?? null }
-        : { account: input.account, reference: input.reference };
     // Recorded first, in place of the largest payment through the same account, so a limited
     // role's refund limit counts only what the DP went down by there.
-    const replaced = live
-      .filter((entry) => entry.account === method.account)
-      .reduce<(typeof live)[number] | undefined>(
-        (largest, entry) =>
-          largest === undefined || entry.amount > largest.amount ? entry : largest,
-        undefined,
-      );
+    const replaced = replacedPayment(live, method.account);
     ops.push(
       paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
         ...method,

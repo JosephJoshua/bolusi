@@ -10,11 +10,12 @@ import {
   dayStart,
   differenceToSettle,
   drawerMoves,
-  moneyInByMethod,
+  moneyIn,
   nameBalances,
+  seesExpected,
   splitOpenBalances,
   type DrawerMove,
-  type MethodTotal,
+  type MoneyIn,
   type NamedBalance,
   type OpenBalances,
 } from './kas.js';
@@ -35,7 +36,7 @@ export interface KasDay {
   readonly accounts: readonly PaymentAccountRow[];
   /** The day's records have loaded (and this person may read them). */
   readonly entriesReady: boolean;
-  readonly methods: readonly MethodTotal[];
+  readonly moneyIn: MoneyIn;
   readonly moves: readonly DrawerMove[];
   readonly open: OpenBalances<NamedBalance>;
   /** The latest count's difference an owner still has to settle. */
@@ -49,6 +50,8 @@ export interface KasDay {
     readonly count: boolean;
     readonly move: boolean;
     readonly settle: boolean;
+    /** Sees what should be in the drawer; otherwise counts blind (`seesExpected`). */
+    readonly seeExpected: boolean;
     readonly receive: boolean;
   };
 }
@@ -102,7 +105,7 @@ export function useKasDay(now: () => number): KasDay {
     drawer,
     accounts: readyOr(accounts) ?? [],
     entriesReady: entries.status === 'ready',
-    methods: moneyInByMethod(todayEntries),
+    moneyIn: moneyIn(todayEntries),
     moves: drawerMoves(todayEntries),
     open: splitOpenBalances(readyOr(balances) ?? []),
     difference: drawer === null ? null : differenceToSettle(drawer.counts),
@@ -113,6 +116,8 @@ export function useKasDay(now: () => number): KasDay {
       count: can(MONEY_PERMISSION.countCash),
       move: can(MONEY_PERMISSION.moveCash),
       settle: can(MONEY_PERMISSION.adjustCash),
+      // Who counts blind does not see the drawer's figure here either, or the count would copy it.
+      seeExpected: seesExpected(can, (permission) => runtime.limitOf(permission)),
       receive: can(MONEY_PERMISSION.receive),
     },
   };

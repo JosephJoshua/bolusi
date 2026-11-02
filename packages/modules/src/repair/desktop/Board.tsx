@@ -30,7 +30,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { statusesFor, useTick, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import {
   amountOwed,
+  BOARD_EMPTY_KEY,
+  boardFilter,
+  boardViewLabel,
   boardViews,
+  countsPickup,
+  pointsToPickup,
   UNCOLLECTED_REFRESH_MS,
   defaultBoardView,
   flagsUncollected,
@@ -44,9 +49,9 @@ import {
   type TicketStatus,
 } from '../flows.js';
 import type { TicketSummaryRow } from '../queries.js';
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import { statusLabel } from '../labels.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { readApprovals, useRepairQuery, useRepairRuntime } from '../runtime.js';
 import {
   NO_FACETS,
   RECEIVED_PRESETS,
@@ -65,28 +70,25 @@ import {
   type TicketFacets,
 } from '../table.js';
 
-import { QueryPanel } from '../../screen-kit/desktop/index.js';
+import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
 import { StatusChip } from './parts.js';
 import { TicketPane } from './TicketPane.js';
 
 /** Search is ranked, so its best matches are the ones worth filtering and paging. */
 const SEARCH_LIMIT = 100;
 
-const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
-  active: 'repair.board.view.active',
-  mine: 'repair.board.view.mine',
-  unassigned: 'repair.board.view.unassigned',
-  pickup: 'repair.board.view.pickup',
-  uncollected: 'repair.board.view.uncollected',
-  returned: 'repair.board.view.returned',
-  cancelled: 'repair.board.view.cancelled',
-};
-
 export interface RepairBoardPageProps {
   /** The repair open beside the table, owned by the app so a new intake can open its ticket. */
   readonly selectedTicketId: string | null;
   readonly onSelectTicket: (ticketId: string | null) => void;
+  /** The servisan an intake opened just now: its number is stamped in when its pane shows. */
+  readonly justOpenedTicketId?: string | null | undefined;
+  /** The servisan an intake just opened, whose slip the pane offers at once. */
+  readonly openedTicketId?: string | null | undefined;
+  readonly onOpenedShown?: (() => void) | undefined;
   readonly onNewIntake: () => void;
+  /** An unsaved intake or warranty claim this person left: "Servisan baru" says it carries on with it. */
+  readonly waitingDraft?: 'intake' | 'claim' | null | undefined;
   /** Starts a warranty claim's intake from the open servisan. */
   readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   readonly onOpenSyncStatus?: (() => void) | undefined;
@@ -133,12 +135,11 @@ interface LoadedBoard {
   /** The store's not-collected limit in days, and the time the rows were read against it. */
   readonly uncollectedLimit: number;
   readonly readAt: number;
-}
-
-/** Whether a key press was meant for a field rather than for the page. */
-function typingInField(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+  /** Servisan waiting on this user's approval, and those with any waiting request they see. */
+  readonly approvalIds: readonly string[];
+  readonly approvalWaiting: ReadonlySet<string>;
+  /** Phones waiting for pickup, for the tab and an empty active queue; null when not counted. */
+  readonly pickup: number | null;
 }
 
 /** The filter options matching typed text, best first, with the app's typo-tolerant search. */
@@ -153,7 +154,11 @@ function fuzzyOptions(options: readonly FilterOption[], text: string): FilterOpt
 export function RepairBoardPage({
   selectedTicketId,
   onSelectTicket,
+  justOpenedTicketId = null,
+  openedTicketId = null,
+  onOpenedShown,
   onNewIntake,
+  waitingDraft = null,
   onStartClaim,
   onOpenSyncStatus,
   filters,
@@ -195,6 +200,11 @@ export function RepairBoardPage({
       let total: number;
       const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
       const readAt = clock();
+      const requests = await readApprovals(rt);
+      const approvalIds = [
+        ...new Set(requests.filter((row) => row.canDecide).map((row) => row.targetId)),
+      ];
+      const approvalWaiting = new Set(requests.map((row) => row.targetId));
       if (searching) {
         // Search ranks across every ticket; the filters, sort and pages then apply to its matches.
         const found = (await rt.query('searchTickets', { text: text.trim(), limit: SEARCH_LIMIT }))
@@ -205,12 +215,17 @@ export function RepairBoardPage({
         );
         total = kept.length;
         rows = kept.slice((page - 1) * pageSize, page * pageSize);
+      } else if (view === 'approvals' && approvalIds.length === 0) {
+        // Every request answered: nothing to list, and the view goes.
+        rows = [];
+        total = 0;
       } else {
         const filter = tableFilter(
           view,
           rt.userId,
           uncollectedBefore(uncollectedLimit, readAt),
           facets,
+          approvalIds,
         );
         const [list, count] = await Promise.all([
           rt.query('listTickets', {
@@ -229,7 +244,23 @@ export function RepairBoardPage({
         total = count.rows[0]?.count ?? 0;
       }
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
-      return { scope, rows, total, statuses, uncollectedLimit, readAt };
+      // The tabs are hidden while searching, so the count waits until the search is cleared.
+      const pickup =
+        !searching && countsPickup(can)
+          ? ((await rt.query('countTickets', { filter: boardFilter('pickup', rt.userId, 0) }))
+              .rows[0]?.count ?? 0)
+          : null;
+      return {
+        scope,
+        pickup,
+        rows,
+        total,
+        statuses,
+        uncollectedLimit,
+        readAt,
+        approvalIds,
+        approvalWaiting,
+      };
     },
     `desk.board:${scope}:${String(reloadNonce)}:${String(hour)}`,
   );
@@ -243,6 +274,12 @@ export function RepairBoardPage({
   useEffect(() => {
     if (!stale && loaded !== null && page > pageCount)
       onFiltersChange({ ...state, page: pageCount });
+  });
+  const waitingApprovals = loaded?.approvalIds.length ?? 0;
+  // Every request answered: the approvals view goes, and the board returns to its usual queue.
+  useEffect(() => {
+    if (!stale && loaded !== null && view === 'approvals' && waitingApprovals === 0)
+      onFiltersChange({ ...state, view: defaultFilters(can).view, page: 1 });
   });
 
   const options = useRepairQuery(
@@ -261,8 +298,7 @@ export function RepairBoardPage({
       // Page shortcuts are off while a dialog or menu is up; it owns the keyboard, Escape included.
       // Listening in the capture phase sees the key before the dialog closes itself on it.
       // (A filter's popover is a dialog too; a tooltip is not, so hovering never mutes the keys.)
-      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') !== null)
-        return;
+      if (overlayOpen()) return;
       if (event.key === 'F2' && can.intake) {
         event.preventDefault();
         onNewIntake();
@@ -296,6 +332,7 @@ export function RepairBoardPage({
           flagsUncollected(can) && loaded !== null
             ? (row) => uncollectedDays(row, loaded.uncollectedLimit, loaded.readAt)
             : () => null,
+        approvalWaiting: (row) => loaded?.approvalWaiting.has(row.id) === true,
       }),
     [loaded, showCancel, searching, can],
   );
@@ -322,8 +359,21 @@ export function RepairBoardPage({
     ) : (
       <StatePanel
         icon={ClipboardList}
-        title={t('core.status.empty')}
-        hint={tn('repair.board.emptyHint')}
+        title={tn(BOARD_EMPTY_KEY[view])}
+        {...(pointsToPickup(view, searching, loaded?.pickup ?? null)
+          ? {
+              // Nothing being worked on, but customers are due: the way to them, not a dead end.
+              action: (
+                <Button
+                  label={tn('repair.board.pickupWaiting', { count: loaded?.pickup ?? 0 })}
+                  onClick={() => update({ view: 'pickup', facets: facetsFor('pickup', facets) })}
+                  data-testid="repair.desk.board.toPickup"
+                />
+              ),
+            }
+          : view === 'active'
+            ? { hint: tn('repair.board.emptyHint') }
+            : {})}
       />
     );
 
@@ -336,7 +386,10 @@ export function RepairBoardPage({
   const statusOptions = statusChoices(searching ? 'search' : view);
   const now = clock();
   const toolbar = (
-    <div className="flex h-12 items-center gap-2 px-6" data-testid="repair.desk.board.filters">
+    <div
+      className="@container flex h-12 items-center gap-2 px-6"
+      data-testid="repair.desk.board.filters"
+    >
       {/* One row that scrolls sideways when the pane leaves it little room, never a second row.
           The right edge fades, so a filter running under it reads as more to scroll to. */}
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [scrollbar-width:none]">
@@ -407,6 +460,7 @@ export function RepairBoardPage({
           icon={TriangleAlert}
           pressed={facets.priceWaiting}
           onChange={(priceWaiting) => setFacets({ priceWaiting })}
+          collapse
           testId="repair.desk.filter.priceWaiting"
         />
         {filtered ? (
@@ -449,8 +503,15 @@ export function RepairBoardPage({
         actions={
           can.intake ? (
             <Button
-              label={tn('repair.action.newIntake')}
-              variant="primary"
+              label={tn(
+                waitingDraft === 'claim'
+                  ? 'repair.action.resumeClaim'
+                  : waitingDraft === 'intake'
+                    ? 'repair.action.resumeIntake'
+                    : 'repair.action.newIntake',
+              )}
+              // One filled button on screen: an open servisan has its own next step.
+              variant={selectedTicketId === null ? 'primary' : 'secondary'}
               icon={Plus}
               shortcut="F2"
               onClick={onNewIntake}
@@ -474,20 +535,28 @@ export function RepairBoardPage({
           label={t('core.action.search')}
           clearLabel={tn('repair.board.clearSearch')}
           shortcut="/"
+          // Straight from typing to the first result: it opens, and the arrows go on from there.
+          onPick={() => {
+            const first = loaded?.rows[0];
+            if (first === undefined || stale) return;
+            onSelectTicket(first.id);
+            tableRef.current?.focus();
+          }}
           className="w-full max-w-[520px]"
           testId="repair.desk.board.search"
         />
       </PageHeader>
 
-      {/* The servisan opens beside the table when both fit (the table's fixed columns need about
-          680 px, next to a 400 px pane); on a narrower screen it slides over the table's right
-          side instead. */}
+      {/* The servisan opens beside the table when both fit: a 400 px pane next to a table folded
+          down to number, customer and status (about 530 px), which a 1024 px window with the
+          sidebar down to icons holds. Narrower than that (the sidebar opened wide on a small
+          screen), it covers the whole board rather than half of it, so no column is cut. */}
       <div className="flex min-h-0 flex-1 flex-col @container">
         <div
           className={
             selectedTicketId === null
               ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
-              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1080px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
+              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[960px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
           }
         >
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -504,7 +573,13 @@ export function RepairBoardPage({
                 </p>
               ) : (
                 <Tabs
-                  items={boardViews(can).map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
+                  items={boardViews(can, waitingApprovals).map((value) => {
+                    const label = boardViewLabel(value, {
+                      approvals: waitingApprovals,
+                      pickup: loaded?.pickup ?? null,
+                    });
+                    return { value, label: tn(label.key, { count: label.count }) };
+                  })}
                   value={view}
                   onChange={(next) =>
                     update({
@@ -581,17 +656,20 @@ export function RepairBoardPage({
           {selectedTicketId === null ? null : (
             <div
               ref={paneRef}
-              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1080px]:static @[1080px]:w-auto @[1080px]:shadow-none"
+              className="absolute inset-0 z-10 flex animate-pane-in flex-col @[960px]:static"
             >
               <TicketPane
                 // A fresh pane per ticket: nothing said about the last one carries over.
                 key={selectedTicketId}
                 ticketId={selectedTicketId}
+                justOpened={selectedTicketId === justOpenedTicketId}
                 now={clock}
                 onClose={closePane}
                 onOpenSyncStatus={onOpenSyncStatus}
                 onStartClaim={onStartClaim}
                 onOpenTicket={onSelectTicket}
+                printFirst={openedTicketId === selectedTicketId}
+                onPrintOffered={onOpenedShown}
               />
             </div>
           )}
@@ -624,9 +702,12 @@ function boardColumns({
   showCancel,
   searching,
   waited,
+  approvalWaiting,
 }: {
   readonly statuses: EntitySyncStatuses;
   readonly searching: boolean;
+  /** A request on it waits on an owner's answer (one this user asked, or may give). */
+  readonly approvalWaiting: (row: TicketSummaryRow) => boolean;
   /** Days a finished phone has waited past the store's limit; null when it is not flagged. */
   readonly waited: (row: TicketSummaryRow) => number | null;
   /** The owners' cancelled view: who cancelled and why, and the fee charged. */
@@ -724,8 +805,9 @@ function boardColumns({
           row.cancelStandardFee !== null &&
           row.cancelFee !== row.cancelStandardFee;
         const days = waited(row);
-        const warning =
-          row.pendingProposals > 0
+        const warning = approvalWaiting(row)
+          ? tn('repair.board.approvalWaiting')
+          : row.pendingProposals > 0
             ? tn('repair.board.priceChangeWaiting')
             : feeChanged
               ? tn('repair.board.feeChanged')
@@ -762,7 +844,8 @@ function boardColumns({
       // A cancelled servisan costs the customer its fee, never the repair price.
       accessorFn: amountOwed,
       header: tn('repair.price.total'),
-      meta: { track: '116px', align: 'end' },
+      // The last to give way: beside an open servisan, whose pane shows the price, on a small screen.
+      meta: { track: '116px', align: 'end', fold: 4 },
       cell: ({ getValue }) => (
         <span className="tabular text-body font-semibold text-text">
           {formatMoney(getValue() as number)}

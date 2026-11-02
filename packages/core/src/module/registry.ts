@@ -38,6 +38,7 @@ import {
 import { ProjectionRegistry } from '../projection/registry.js';
 import type {
   ModuleProjectionManifest,
+  OperationConcerns,
   ProjectionApplier,
   ProjectionDb,
 } from '../projection/manifest.js';
@@ -105,6 +106,11 @@ export interface OperationRegistry {
    * type no command emits, or `undefined` when no module declares the type.
    */
   permissionFor(type: string): string | null | undefined;
+  /**
+   * The permission needed to see an op type's ops (`OperationDeclaration.read`), `null` when every
+   * device of its scope receives them, or `undefined` when no module declares the type.
+   */
+  readPermissionFor(type: string): string | null | undefined;
   /** The declared entity type for an op type (`OperationDeclaration.entityType`), or `undefined`. */
   entityTypeFor(type: string): string | undefined;
   /**
@@ -193,6 +199,7 @@ export function registerModules<DB>(
   const scopes = new Map<string, OperationScope>();
   const conflicts = new Map<string, ConflictDeclaration>();
   const opPermissions = new Map<string, string | null>();
+  const readPermissions = new Map<string, string | null>();
   const entityTypes = new Map<string, string>();
   const rules = new Map<string, OpRule<DB>>();
   for (const module of modules) {
@@ -200,6 +207,7 @@ export function registerModules<DB>(
       schemaVersions.set(type, declaration.schemaVersion);
       if (declaration.rule !== null) rules.set(type, declaration.rule);
       opPermissions.set(type, declaration.permission);
+      readPermissions.set(type, declaration.read);
       entityTypes.set(type, declaration.entityType);
       // Default here, once, rather than at each reader: an absent `scope` means 'store' (01 §6),
       // and a reader that had to remember that is how the two answers drift apart.
@@ -226,6 +234,7 @@ export function registerModules<DB>(
     scopeFor: (type) => (schemaVersions.has(type) ? (scopes.get(type) ?? 'store') : undefined),
     conflictFor: (type) => conflicts.get(type),
     permissionFor: (type) => opPermissions.get(type),
+    readPermissionFor: (type) => readPermissions.get(type),
     entityTypeFor: (type) => entityTypes.get(type),
     types: () => [...schemaVersions.keys()].sort(),
     get size() {
@@ -251,10 +260,12 @@ export function registerModules<DB>(
 /** The projection-facing slice (04 §4) task 08's engine consumes: id, tables, type → applier. */
 function toProjectionManifest<DB>(module: AnyModuleDefinition<DB>): ModuleProjectionManifest<DB> {
   const appliers: Record<string, ProjectionApplier<DB>> = {};
+  const concerns: Record<string, OperationConcerns> = {};
   for (const [type, declaration] of Object.entries(module.operations)) {
     appliers[type] = declaration.apply;
+    if (declaration.concerns !== undefined) concerns[type] = declaration.concerns;
   }
-  return { id: module.id, tables: module.projections.tables, appliers };
+  return { id: module.id, tables: module.projections.tables, appliers, concerns };
 }
 
 /**

@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@import '@bolusi/ui-web/theme.css';
+
+/* Classes used by the shared components live outside this folder. */
+@source '../../../packages/ui-web/src';
+
+/* The customer's pages are read on a phone (or a tablet) at arm's length, so text is a step larger
+ * than the counter PC's ladder at every width, and body text stays at 16 px so iOS never zooms into
+ * a field. Back-office screens that join later keep the desktop ladder. */
+.customer-type {
+  --b-text-display: 28px;
+  --b-text-display-line: 36px;
+  --b-text-title: 22px;
+  --b-text-title-line: 30px;
+  --b-text-heading: 18px;
+  --b-text-heading-line: 26px;
+  --b-text-body: 16px;
+  --b-text-body-line: 24px;
+}

@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -32,6 +35,8 @@ jobs:
       DATABASE_URL: postgres://bolusi:bolusi@localhost:5432/bolusi_dev
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -42,6 +47,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm i18n:check
       - run: pnpm test
+      # The web app the server serves (the customer's status page): it must build for production.
+      - run: pnpm --filter @bolusi/web build
       # The counter PC app in a real Electron window (keyboard handling, layout at common sizes).
       - run: xvfb-run -a pnpm --filter @bolusi/desktop e2e
       - name: Verify database types
@@ -59,6 +66,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -76,7 +85,9 @@ jobs:
           "BOLUSI_TEST_PRINTER=Bolusi Test" >> $env:GITHUB_ENV
           "BOLUSI_TEST_PRINT_FILE=$out" >> $env:GITHUB_ENV
       - run: pnpm --filter @bolusi/desktop exec vitest run test/raw-print.windows.test.ts
-      - run: pnpm --filter @bolusi/desktop dist
+      # As released, except Playwright needs the inspect switch (`--inspect=0`) to drive the app.
+      - run: pnpm --filter @bolusi/desktop run build
+      - run: pnpm --filter @bolusi/desktop exec electron-builder --win --publish never '--config.electronFuses.enableNodeCliInspectArguments=true'
       - name: Install it silently, as an update would
         shell: pwsh
         run: |
@@ -92,12 +103,42 @@ jobs:
           path: apps/desktop/release/Bolusi-Setup-*.exe
           retention-days: 7
 
+  # The phone screens in a browser over the demo runtime: each flow tapped through end to end.
+  mobile-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @bolusi/mobile exec playwright install --with-deps --only-shell chromium
+      - run: pnpm --filter @bolusi/mobile test:visual
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-web-results
+          path: |
+            apps/mobile/e2e-web/test-results
+            apps/mobile/e2e-web/artifacts
+          retention-days: 7
+
   secrets:
     runs-on: ubuntu-latest
+    # gitleaks comments on the PR when it finds a secret.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

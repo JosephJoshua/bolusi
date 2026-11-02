@@ -20,6 +20,8 @@ import {
   assignTechnicianInput,
   cancelTicketHandler,
   cancelTicketInput,
+  changeCancelFeeHandler,
+  changeCancelFeeInput,
   changeIntakeOptionsHandler,
   changeIntakeOptionsInput,
   hideIntakeOptionsHandler,
@@ -30,6 +32,10 @@ import {
   claimTicketInput,
   correctCustomerDetailsHandler,
   correctCustomerDetailsInput,
+  correctTicketDetailsHandler,
+  correctTicketDetailsInput,
+  undoHandoverHandler,
+  undoHandoverInput,
   correctDownPaymentHandler,
   correctDownPaymentInput,
   declineProposalHandler,
@@ -241,6 +247,11 @@ export const repairModuleManifest = {
       input: cancelTicketInput,
       handler: cancelTicketHandler,
     },
+    changeCancelFee: {
+      permission: REPAIR_PERMISSION.cancel,
+      input: changeCancelFeeInput,
+      handler: changeCancelFeeHandler,
+    },
     proposeQuoteChange: {
       permission: REPAIR_PERMISSION.work,
       input: proposeQuoteChangeInput,
@@ -265,6 +276,16 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.handover,
       input: returnDeviceInput,
       handler: returnDeviceHandler,
+    },
+    undoHandover: {
+      permission: REPAIR_PERMISSION.cancel,
+      input: undoHandoverInput,
+      handler: undoHandoverHandler,
+    },
+    correctTicketDetails: {
+      permission: REPAIR_PERMISSION.intake,
+      input: correctTicketDetailsInput,
+      handler: correctTicketDetailsHandler,
     },
     changeIntakeOptions: {
       permission: REPAIR_PERMISSION.manageIntakeOptions,

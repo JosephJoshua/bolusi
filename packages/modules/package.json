@@ -33,6 +33,10 @@
       "types": "./dist/repair/print.d.ts",
       "default": "./dist/repair/print.js"
     },
+    "./repair/customer-page": {
+      "types": "./dist/repair/customer-page.d.ts",
+      "default": "./dist/repair/customer-page.js"
+    },
     "./repair/demo": {
       "types": "./dist/repair/demo.d.ts",
       "default": "./dist/repair/demo.js"
@@ -49,6 +53,22 @@
       "types": "./dist/inventory/screens/index.d.ts",
       "default": "./dist/inventory/screens/index.js"
     },
+    "./inventory/desktop": {
+      "types": "./dist/inventory/desktop/index.d.ts",
+      "default": "./dist/inventory/desktop/index.js"
+    },
+    "./purchasing": {
+      "types": "./dist/purchasing/index.d.ts",
+      "default": "./dist/purchasing/index.js"
+    },
+    "./purchasing/screens": {
+      "types": "./dist/purchasing/screens/index.d.ts",
+      "default": "./dist/purchasing/screens/index.js"
+    },
+    "./purchasing/desktop": {
+      "types": "./dist/purchasing/desktop/index.d.ts",
+      "default": "./dist/purchasing/desktop/index.js"
+    },
     "./money": {
       "types": "./dist/money/index.d.ts",
       "default": "./dist/money/index.js"
@@ -61,6 +81,18 @@
       "types": "./dist/money/desktop/index.d.ts",
       "default": "./dist/money/desktop/index.js"
     },
+    "./approvals": {
+      "types": "./dist/approvals/index.d.ts",
+      "default": "./dist/approvals/index.js"
+    },
+    "./approvals/screens": {
+      "types": "./dist/approvals/screens/index.d.ts",
+      "default": "./dist/approvals/screens/index.js"
+    },
+    "./approvals/desktop": {
+      "types": "./dist/approvals/desktop/index.d.ts",
+      "default": "./dist/approvals/desktop/index.js"
+    },
     "./screen-kit": {
       "types": "./dist/screen-kit/index.d.ts",
       "default": "./dist/screen-kit/index.js"
@@ -71,20 +103,27 @@
     "./repair/i18n/en.json": "./repair/i18n/en.json",
     "./inventory/i18n/id.json": "./inventory/i18n/id.json",
     "./inventory/i18n/en.json": "./inventory/i18n/en.json",
+    "./purchasing/i18n/id.json": "./purchasing/i18n/id.json",
+    "./purchasing/i18n/en.json": "./purchasing/i18n/en.json",
     "./money/i18n/id.json": "./money/i18n/id.json",
-    "./money/i18n/en.json": "./money/i18n/en.json"
+    "./money/i18n/en.json": "./money/i18n/en.json",
+    "./approvals/i18n/id.json": "./approvals/i18n/id.json",
+    "./approvals/i18n/en.json": "./approvals/i18n/en.json"
   },
   "files": [
     "dist",
     "notes/i18n",
     "repair/i18n",
     "inventory/i18n",
-    "money/i18n"
+    "purchasing/i18n",
+    "money/i18n",
+    "approvals/i18n"
   ],
   "dependencies": {
     "@bolusi/core": "workspace:*",
     "@bolusi/schemas": "workspace:*",
     "@bolusi/i18n": "workspace:*",
+    "uqr": "0.1.3",
     "zod": "catalog:"
   },
   "peerDependencies": {

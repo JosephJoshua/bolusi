@@ -266,6 +266,7 @@ export interface SyncHarness {
     deviceId?: string;
     pushBatchSize?: number;
     onPushed?: SyncLoopOptions<ClientDatabase>['onPushed'];
+    knowsOp?: SyncLoopOptions<ClientDatabase>['knowsOp'];
   }): Promise<SyncLoop<ClientDatabase>>;
   bundleRefreshes(): number;
   failBundle(times: number): void;
@@ -334,6 +335,7 @@ export async function openSyncHarness(): Promise<SyncHarness> {
         deviceId: options.deviceId ?? '00000000-0000-4000-8000-000000000001',
         applyPulledOp: (op) => engine.applyPulledOp(op),
         refoldRefused: (op) => engine.refoldRefused(op),
+        ...(options.knowsOp === undefined ? {} : { knowsOp: options.knowsOp }),
         bundle: {
           refresh: async () => {
             bundleCalls += 1;

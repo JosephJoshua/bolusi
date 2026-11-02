@@ -16,6 +16,8 @@ import type { DetectConflictsResult, SurfacedConflict } from '../sync/conflict-d
  */
 export type RegistryResolution =
   | { readonly kind: 'unknown' }
+  /** A foldable version below the type's `minPushVersion`: no longer accepted in a new push. */
+  | { readonly kind: 'retired'; readonly minPushVersion: number }
   | { readonly kind: 'known'; readonly validate: (payload: unknown) => boolean };
 
 export interface OpRegistry {
@@ -143,6 +145,8 @@ export interface DeviceRecord {
   readonly storeId: string | null;
   readonly kind: 'member' | 'system';
   readonly status: 'active' | 'revoked';
+  /** The one person a personal device is set up for (migration 0031); null on a shared device. */
+  readonly personalUserId: string | null;
   readonly publicKey: Uint8Array;
   readonly lastSeq: number;
   readonly lastHash: string | null;

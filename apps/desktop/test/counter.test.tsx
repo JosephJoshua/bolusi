@@ -3,6 +3,9 @@ import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import idApprovalsCatalog from '@bolusi/modules/approvals/i18n/id.json';
+import enApprovalsCatalog from '@bolusi/modules/approvals/i18n/en.json';
+import { registerApprovalsCatalog } from '@bolusi/modules/approvals/desktop';
 import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
@@ -66,6 +69,7 @@ beforeEach(() => {
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
+  registerApprovalsCatalog({ id: idApprovalsCatalog, en: enApprovalsCatalog });
 });
 afterEach(() => {
   cleanup();
@@ -83,6 +87,10 @@ function renderApp(): void {
 
 const RETAKE = 'Foto ulang';
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
+/** Where the store takes more than cash, the counter picks each payment's method itself. */
+function pick(line: string, method = 'Tunai'): void {
+  fireEvent.click(within(byTestId(`${line}.methods`)).getByRole('button', { name: method }));
+}
 /** An element's text without spaces: amounts print "Rp" and the figure apart. */
 const text = (id: string): string => byTestId(id).textContent!.replace(/\s/g, '');
 
@@ -132,6 +140,31 @@ describe('counter app over demo data', () => {
     );
     expect(screen.getByText('Yohanis Wenda')).toBeTruthy();
     expect(screen.queryByText('Benny Kambu')).toBeNull();
+  });
+
+  it('goes from the search straight to the first result with Enter or the down arrow', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    const search = byTestId('repair.desk.board.search');
+    fireEvent.change(search, { target: { value: 'yohanes' } });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.board.results').textContent).toMatch(/ditemukan/),
+    );
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.ticket.customer').textContent).toBe('Yohanis Wenda'),
+    );
+    // The table has the keyboard now, so the arrows go on through the rows.
+    expect(document.activeElement?.getAttribute('role')).not.toBe('searchbox');
+    expect(byTestId('repair.desk.board.table').contains(document.activeElement)).toBe(true);
+  });
+
+  it('keeps one filled button: "Servisan baru" steps back while a servisan is open', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    expect(byTestId('repair.desk.board.newIntake').className).toContain('bg-primary');
+    await openTicket('Yohanis Wenda');
+    expect(byTestId('repair.desk.board.newIntake').className).not.toContain('bg-primary');
   });
 
   it('keeps the queue the counter was on after a trip to the intake page', async () => {
@@ -213,6 +246,10 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.phone').textContent).toContain('0813-4455-6677');
     expect(byTestId('repair.desk.ticket.total').textContent).toContain('1.250.000');
     expect(byTestId('repair.desk.ticket.balance').textContent).toContain('750.000');
+    // The customer is still at the counter: their slip is offered at once, and only once.
+    const print = await screen.findByTestId('repair.desk.print');
+    fireEvent.click(within(print).getByRole('button', { name: 'Kembali' }));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.print')).toBeNull());
     expect(byTestId('repair.desk.ticket.passcode').textContent).toContain('Pola');
     expect(byTestId('repair.desk.ticket.passcode').textContent).not.toContain('1-5-9-6');
     fireEvent.click(screen.getByRole('button', { name: 'Tampilkan' }));
@@ -248,22 +285,243 @@ describe('counter app over demo data', () => {
     await waitFor(() => expect(screen.queryByTestId('repair.desk.ticket.customer')).toBeNull());
   });
 
-  it('offers cancelling a servisan to owners only', async () => {
+  it('keeps a warranty claim being taken in, as any intake, across another section and a switch away', async () => {
     renderApp();
-    await openTicket('Benny Kambu');
-    expect(screen.queryByTestId('repair.desk.ticket.action.cancel')).toBeNull();
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    fireEvent.change(byTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Layar bergaris lagi' },
+    });
+    const reopened = async (): Promise<void> => {
+      expect((await screen.findByTestId('repair.desk.intake.claim')).textContent).toContain(
+        'Dari K7Q-0005',
+      );
+      expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe(
+        'Layar bergaris lagi',
+      );
+    };
 
+    fireEvent.click(byTestId('nav.settings'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.intake')).toBeNull());
+    fireEvent.click(byTestId('nav.repair'));
+    fireEvent.keyDown(window, { key: 'F2' });
+    await reopened();
+
+    // Someone else and back: the page is gone, as after a lock, and the claim comes back.
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
-    await openTicket('Benny Kambu');
-    expect(byTestId('repair.desk.ticket.action.cancel')).toBeTruthy();
+    await screen.findByTestId('repair.desk.board');
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Siti Rahayu' }));
+    await reopened();
   });
 
-  it('shows a manager their discount limit, and the refusal in words above it', async () => {
+  it('asks before a warranty claim takes the place of an unsaved intake', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    fireEvent.keyDown(window, { key: 'F2' });
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Mati total' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    const ask = await screen.findByTestId('desktop.claimReplacesIntake');
+    expect(ask.textContent).toContain('Isian yang belum disimpan akan dibuang.');
+    fireEvent.click(within(ask).getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByTestId('desktop.claimReplacesIntake')).toBeNull());
+    expect(screen.queryByTestId('repair.desk.intake')).toBeNull();
+    // The intake that waits is untouched.
+    fireEvent.keyDown(window, { key: 'F2' });
+    await waitFor(() =>
+      expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe(
+        'Mati total',
+      ),
+    );
+    fireEvent.click(byTestId('nav.repair'));
+
+    // Back on the board, the servisan is still the one open.
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.action.warrantyClaim'));
+    fireEvent.click(
+      within(await screen.findByTestId('desktop.claimReplacesIntake')).getByRole('button', {
+        name: 'Mulai klaim',
+      }),
+    );
+    await screen.findByTestId('repair.desk.intake.claim');
+  });
+
+  it('says on the board that an unsaved intake or claim waits behind Servisan baru', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    expect(byTestId('repair.desk.board.newIntake').textContent).toContain('Servisan baru');
+    fireEvent.keyDown(window, { key: 'F2' });
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Mati total' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    await waitFor(() =>
+      expect(byTestId('repair.desk.board.newIntake').textContent).toContain(
+        'Lanjutkan servisan baru',
+      ),
+    );
+
+    // A claim taking that intake's place is named as the claim.
+    fireEvent.change(byTestId('repair.desk.board.search'), { target: { value: 'K7Q-0005' } });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    fireEvent.click(
+      within(await screen.findByTestId('desktop.claimReplacesIntake')).getByRole('button', {
+        name: 'Mulai klaim',
+      }),
+    );
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Layar bergaris lagi' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    await waitFor(() =>
+      expect(byTestId('repair.desk.board.newIntake').textContent).toContain(
+        'Lanjutkan klaim garansi',
+      ),
+    );
+  });
+
+  it('keeps a warranty claim only once something is typed in it', async () => {
+    renderApp();
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    // Nothing typed: leaving asks nothing, and a new intake starts blank.
+    fireEvent.click(byTestId('repair.desk.intake.back'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.intake')).toBeNull());
+    fireEvent.keyDown(window, { key: 'F2' });
+    await screen.findByTestId('repair.desk.intake');
+    expect(screen.queryByTestId('repair.desk.intake.claim')).toBeNull();
+    expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('reopens a claim already started on the same servisan without asking', async () => {
+    renderApp();
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    fireEvent.change(byTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Layar bergaris lagi' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    expect(screen.queryByTestId('desktop.claimReplacesIntake')).toBeNull();
+    expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe(
+      'Layar bergaris lagi',
+    );
+  });
+
+  it('has the counter ask an owner to cancel a servisan', async () => {
+    renderApp();
+    await openTicket('Benny Kambu');
+    fireEvent.click(byTestId('repair.desk.ticket.action.cancel'));
+    const dialog = await screen.findByTestId('repair.desk.cancel');
+    expect(within(dialog).getByRole('heading').textContent).toBe('Pembatalan servisan');
+    expect(byTestId('repair.desk.cancel.asks').textContent).toBe('Perlu persetujuan pemilik toko.');
+    fireEvent.change(byTestId('repair.desk.cancel.reason'), {
+      target: { value: 'Pelanggan tidak jadi' },
+    });
+    fireEvent.click(byTestId('repair.desk.cancel.submit'));
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
+    expect(byTestId('repair.desk.ticket.approvals').textContent).toContain('Menunggu');
+  });
+
+  it('leads an owner’s board with what waits on them, and approves it from the servisan', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    // The demo's counter asked for a discount on Yohanis Wenda's servisan.
+    expect((await screen.findByTestId('repair.desk.board.views.approvals')).textContent).toBe(
+      'Persetujuan (1)',
+    );
+    await showView('approvals');
+    // Only the servisan waiting on them is listed.
+    await waitFor(() => expect(screen.queryByText('Benny Kambu')).toBeNull());
+    await openTicket('Yohanis Wenda');
+    const section = byTestId('repair.desk.ticket.approvals');
+    expect(section.textContent).toContain('Diskon');
+    fireEvent.click(within(section).getByRole('button', { name: 'Putuskan' }));
+    const dialog = await screen.findByTestId('repair.desk.approval');
+    expect(within(dialog).getByTestId('repair.desk.approval.amount').textContent).toBe(
+      '−Rp 25.000',
+    );
+    fireEvent.click(within(dialog).getByTestId('repair.desk.approval.approve'));
+    await screen.findByText('Disetujui dan sudah dicatat.');
+    // Approved, it waits on the customer like any price change; nothing waits on the owner now.
+    expect(byTestId('repair.desk.ticket.price').textContent).toContain('Diskon pelanggan tetap');
+    await waitFor(() =>
+      expect(screen.queryByTestId('repair.desk.board.views.approvals')).toBeNull(),
+    );
+  });
+
+  it('corrects a mistyped number after saving, and the history says what it was', async () => {
+    renderApp();
+    await openTicket('Yohanis Wenda');
+    fireEvent.click(byTestId('repair.desk.ticket.action.correctDetails'));
+    const dialog = await screen.findByTestId('repair.desk.correct');
+    const phone = within(dialog).getByLabelText('No. HP') as HTMLInputElement;
+    const before = phone.value;
+    fireEvent.change(phone, { target: { value: '0812' } });
+    fireEvent.click(byTestId('repair.desk.correct.submit'));
+    // A number that cannot be called is caught, as at intake.
+    await within(dialog).findByText(/nomor HP/i);
+    fireEvent.change(phone, { target: { value: '0813-1111-2222' } });
+    fireEvent.change(byTestId('repair.desk.correct.reason'), { target: { value: 'Salah ketik' } });
+    fireEvent.click(byTestId('repair.desk.correct.submit'));
+    await screen.findByText('Data servisan disimpan.');
+    expect(screen.queryByTestId('repair.desk.correct')).toBeNull();
+    const history = byTestId('repair.desk.ticket.history');
+    expect(history.textContent).toContain('Data servisan diubah');
+    expect(history.textContent).toContain(`No. HP: ${before} → 0813-1111-2222`);
+    expect(history.textContent).toContain('Salah ketik');
+  });
+
+  it('lets an owner take back a handover recorded on the wrong servisan', async () => {
+    renderApp();
+    await showView('returned');
+    await openTicket('Yulianus Wenda');
+    // The counter cannot; the owner can, and a reason is required.
+    expect(screen.queryByTestId('repair.desk.ticket.action.undoHandover')).toBeNull();
+    expect(screen.queryByTestId('repair.desk.ticket.action.correctDetails')).toBeNull();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    await showView('returned');
+    await openTicket('Yulianus Wenda');
+    fireEvent.click(byTestId('repair.desk.ticket.action.undoHandover'));
+    await screen.findByTestId('repair.desk.undoHandover');
+    expect((byTestId('repair.desk.undoHandover.submit') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(byTestId('repair.desk.undoHandover.reason'), {
+      target: { value: 'Salah servisan, HP masih di rak' },
+    });
+    fireEvent.click(byTestId('repair.desk.undoHandover.submit'));
+    await screen.findByText('Penyerahan dibatalkan. HP tercatat ada di toko.');
+    expect(byTestId('repair.desk.ticket.action.handover')).toBeTruthy();
+    expect(byTestId('repair.desk.ticket.history').textContent).toContain('Penyerahan dibatalkan');
+  });
+
+  it('shows a manager their discount limit, and asks an owner for more', async () => {
     renderApp();
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Maria Kogoya' }));
-    await openTicket('Yohanis Wenda');
+    await openTicket('Benny Kambu');
     fireEvent.click(byTestId('repair.desk.ticket.action.changePrice'));
     const dialog = await screen.findByTestId('repair.desk.price.change');
     fireEvent.click(within(dialog).getByTestId('repair.desk.price.change.kind.discount'));
@@ -277,9 +535,49 @@ describe('counter app over demo data', () => {
     fireEvent.change(byTestId('repair.desk.price.change.reason'), {
       target: { value: 'Pelanggan tetap' },
     });
-    fireEvent.click(byTestId('repair.desk.price.change.agreed'));
-    // The rule's own copy, not a generic failure.
-    await within(dialog).findByText('Melebihi batasmu. Minta pemilik toko.');
+    // Beyond the limit the customer's answer waits: an owner decides first.
+    expect(byTestId('repair.desk.price.change.asks').textContent).toBe(
+      'Melebihi batasmu, jadi perlu persetujuan.',
+    );
+    expect(screen.queryByTestId('repair.desk.price.change.agreed')).toBeNull();
+    fireEvent.click(byTestId('repair.desk.price.change.submit'));
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
+  });
+
+  it('shows a manager how far below the store fee they may cancel', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Maria Kogoya' }));
+    await openTicket('Benny Kambu');
+    fireEvent.click(byTestId('repair.desk.ticket.action.cancel'));
+    await screen.findByTestId('repair.desk.cancel');
+    expect(screen.queryByTestId('repair.desk.cancel.limit')).toBeNull();
+    fireEvent.click(await screen.findByTestId('repair.desk.cancel.changeFee'));
+    expect(byTestId('repair.desk.cancel.limit').textContent).toBe(
+      'Kamu bisa memotong biaya sampai Rp 50.000.',
+    );
+  });
+
+  it('starts a warranty claim on the phone of its servisan, without asking for another', async () => {
+    renderApp();
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake');
+    expect(screen.queryByTestId('repair.desk.intake.model')).toBeNull();
+    expect(screen.queryByTestId('repair.desk.intake.brand')).toBeNull();
+    const shown =
+      screen.queryByTestId('repair.desk.intake.modelMatch') ??
+      byTestId('repair.desk.intake.claimDevice');
+    expect(shown.textContent).toContain('Redmi Note 12');
+    expect(byTestId('repair.desk.intake.claimDevice.note').textContent).toBe(
+      'Klaim hanya untuk HP ini.',
+    );
+    // Its IMEI is fixed too: shown, not a field to type another phone's into.
+    const imei = byTestId('repair.desk.intake.imei');
+    expect(imei.tagName).not.toBe('INPUT');
+    expect(imei.querySelector('input')).toBeNull();
+    expect(imei.textContent).toContain('356789104455660');
   });
 
   it('suggests catalog models as the model is typed and fills in the brand', async () => {
@@ -299,6 +597,28 @@ describe('counter app over demo data', () => {
       'Samsung Galaxy A55',
     );
     expect(screen.queryByTestId('repair.desk.intake.models')).toBeNull();
+  });
+
+  it('keeps a typed model on Enter when the suggestions are other models', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    fireEvent.keyDown(window, { key: 'F2' });
+    const model = await screen.findByTestId('repair.desk.intake.model');
+    // Not in the catalog: the near misses are offered, none is taken by Enter.
+    fireEvent.change(model, { target: { value: 'Galaxy A53' } });
+    const list = await screen.findByTestId('repair.desk.intake.models');
+    expect(list.textContent).toContain('Galaxy A5');
+    expect(list.textContent).not.toContain('Galaxy A53');
+    fireEvent.keyDown(model, { key: 'Enter' });
+    expect(screen.queryByTestId('repair.desk.intake.models')).toBeNull();
+    expect(model).toHaveProperty('value', 'Galaxy A53');
+    // Chosen with the arrows, a suggestion is taken.
+    fireEvent.change(model, { target: { value: 'Galaxy A53 ' } });
+    await screen.findByTestId('repair.desk.intake.models');
+    fireEvent.keyDown(model, { key: 'ArrowDown' });
+    fireEvent.keyDown(model, { key: 'Enter' });
+    expect(model).not.toHaveProperty('value', 'Galaxy A53 ');
+    expect((model as HTMLInputElement).value).toMatch(/^Galaxy A5[456]$/);
   });
 
   it('records a down payment at the counter, and only an owner changes one', async () => {
@@ -328,7 +648,14 @@ describe('counter app over demo data', () => {
     await waitFor(() =>
       expect(byTestId('repair.desk.ticket.balance').textContent).toContain('30.000'),
     );
-    expect(screen.queryByTestId('repair.desk.ticket.downPayment.correct')).toBeNull();
+    // The counter cannot change it, only ask an owner to.
+    fireEvent.click(byTestId('repair.desk.ticket.downPayment.correct'));
+    await screen.findByText('Minta ubah DP');
+    expect(byTestId('repair.desk.downPayment.correct.submit').textContent).toBe(
+      'Minta persetujuan',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Kembali' }));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.downPayment.correct')).toBeNull());
 
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
@@ -350,6 +677,41 @@ describe('counter app over demo data', () => {
     );
   });
 
+  it('tells a manager a DP change goes to an owner as soon as the amount is typed', async () => {
+    renderApp();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Maria Kogoya' }));
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.downPayment.correct'));
+    await screen.findByTestId('repair.desk.downPayment.correct');
+    expect(screen.queryByTestId('repair.desk.downPayment.correct.asks')).toBeNull();
+    // Rp 40.000 off is above her Rp 30.000; no reason typed yet.
+    fireEvent.change(byTestId('repair.desk.downPayment.correct.amount'), {
+      target: { value: '60000' },
+    });
+    await screen.findByTestId('repair.desk.downPayment.correct.asks');
+    expect(byTestId('repair.desk.downPayment.correct.submit').textContent).toBe(
+      'Minta persetujuan',
+    );
+    expect(byTestId('repair.desk.downPayment.correct.submit')).toHaveProperty('disabled', true);
+  });
+
+  it('says what goes back, and through what, when a cancelled servisan’s DP was above its fee', async () => {
+    renderApp();
+    await showView('pickup');
+    await openTicket('Daniel Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
+    await screen.findByTestId('repair.desk.handover');
+    await waitFor(() =>
+      expect(byTestId('repair.desk.handover.refund.cash').textContent).toContain('20.000'),
+    );
+    // The DP came in partly by QRIS, so part of the 50.000 goes back through it.
+    const handover = byTestId('repair.desk.handover').textContent;
+    expect(handover).toContain('Kembalikan tunai');
+    expect(handover).toMatch(/Kembalikan lewat QRIS BCA\s*Rp 30\.000/);
+  });
+
   it('hands a phone back only once the rest is paid, with the change shown', async () => {
     renderApp();
     await showView('pickup');
@@ -357,10 +719,16 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
     await screen.findByTestId('repair.desk.handover');
     expect(byTestId('repair.desk.handover.balance').textContent).toContain('15.000');
-    // The rest is filled in as cash; a counter without the owner's say cannot leave it unpaid.
+    // The rest is filled in as cash; a counter leaves it unpaid only once an owner approves.
     expect(byTestId('repair.desk.handover.pay.line0.amount')).toHaveProperty('value', '15.000');
-    expect(screen.queryByTestId('repair.desk.handover.payLater')).toBeNull();
+    fireEvent.click(byTestId('repair.desk.handover.payLater'));
+    expect(byTestId('repair.desk.handover.asks').textContent).toBe(
+      'Perlu persetujuan pemilik toko.',
+    );
+    expect(byTestId('repair.desk.handover.askPayLater')).toHaveProperty('disabled', true);
+    fireEvent.click(byTestId('repair.desk.handover.payLater'));
     await captureHandover();
+    pick('repair.desk.handover.pay.line0');
     fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
       target: { value: '10000' },
     });
@@ -375,6 +743,12 @@ describe('counter app over demo data', () => {
     );
     fireEvent.click(byTestId('repair.desk.handover.submit'));
     await waitFor(() => expect(screen.queryByTestId('repair.desk.handover')).toBeNull());
+    // Then the bill the customer takes home is offered, as it stands after the handover.
+    await waitFor(() =>
+      expect(byTestId('repair.desk.print.about').textContent).toContain(
+        'Tagihan sekaligus bukti HP sudah diambil.',
+      ),
+    );
   });
 
   it('takes the rest by QRIS: the same QR again after closing, then paid and handed back', async () => {
@@ -422,6 +796,7 @@ describe('counter app over demo data', () => {
     await openTicket('Ester Mandowen');
     fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
     const checks = within(await screen.findByTestId('repair.desk.handover.checks'));
+    pick('repair.desk.handover.pay.line0');
     expect(checks.getAllByRole('button').map((line) => line.textContent)).toEqual([
       'Sudah dicoba pelanggan',
       'Bagian yang diperbaiki berfungsi',
@@ -461,6 +836,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.ticket.action.handover'));
     await screen.findByTestId('repair.desk.handover');
     await captureHandover();
+    pick('repair.desk.handover.pay.line0');
     fireEvent.change(byTestId('repair.desk.handover.pay.line0.amount'), {
       target: { value: '5000' },
     });
@@ -658,5 +1034,58 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.intake.back'));
     await screen.findByTestId('repair.desk.board');
     expect(byTestId('repair.desk.filter.status').textContent).toContain('Tunggu sparepart');
+  });
+});
+
+describe('money after pickup on the servisan', () => {
+  async function switchTo(name: string): Promise<void> {
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name }));
+    await screen.findByTestId('repair.desk.board');
+  }
+
+  it('lets an owner give part of a paid bill back, and the bill shows it came off', async () => {
+    renderApp();
+    await screen.findByTestId('repair.desk.board');
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    // The counter gives back only an overpayment; this bill was paid exactly.
+    expect(screen.queryByTestId('repair.desk.ticket.refund')).toBeNull();
+
+    await switchTo('Andi Pratama');
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    expect(screen.queryByTestId('repair.desk.ticket.reduce')).toBeNull();
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    await screen.findByTestId('money.desk.refund');
+    expect(text('money.desk.refund.paid')).toBe('Rp625.000');
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '50000' } });
+    expect(byTestId('money.desk.refund.lowersBill').textContent).toContain('50.000');
+    fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Garansi kaca' } });
+    fireEvent.click(byTestId('money.desk.refund.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.refund')).toBeNull());
+    await waitFor(() => expect(text('repair.desk.ticket.reduced')).toBe('−Rp50.000'));
+    expect(byTestId('repair.desk.ticket.balance').textContent).toContain('Sisa bayar');
+    expect(text('repair.desk.ticket.balance')).toContain('SisabayarRp0');
+  });
+  // Android QA round B: beyond the limit the manager was only told "Melebihi batasmu".
+  it('lets a manager ask an owner to give back beyond their limit', async () => {
+    renderApp();
+    await screen.findByTestId('repair.desk.board');
+    await switchTo('Maria Kogoya');
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    await screen.findByTestId('money.desk.refund');
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '40000' } });
+    expect(text('money.desk.refund.limit')).toBe('Melebihibatasmu,jadiperlupersetujuan.');
+    expect(byTestId('money.desk.refund.lowersBill').textContent).toContain('40.000');
+    fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Garansi kaca' } });
+    expect(byTestId('money.desk.refund.submit').textContent).toBe('Minta persetujuan');
+    fireEvent.click(byTestId('money.desk.refund.submit'));
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
+    // Nothing came off yet: the owner decides first.
+    expect(screen.queryByTestId('repair.desk.ticket.reduced')).toBeNull();
+    expect(byTestId('repair.desk.ticket.approvals').textContent).toContain('Kembalikan uang');
   });
 });

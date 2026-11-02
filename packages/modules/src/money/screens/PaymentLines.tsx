@@ -18,8 +18,9 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
@@ -27,8 +28,10 @@ import {
   digitsOf,
   digitsText,
   lineKind,
+  methodOffered,
   newPaymentLine,
-  offeredAccount,
+  NO_METHOD,
+  pickedAccount,
   paidByQr,
   paymentMethods,
   type PaymentEntry,
@@ -83,7 +86,10 @@ export function PaymentLines({
       ) : null}
       {lines.map((line, index) => {
         const id = `${testID}.line${String(index)}`;
-        const account = offeredAccount(line.account, accounts);
+        const account = pickedAccount(line.account, accounts);
+        // Nothing picked yet, or a method switched off since it was: no chip is on, and it asks.
+        const unpicked = account === NO_METHOD;
+        const offered = unpicked || methodOffered(account, accounts);
         const kind = lineKind(account, accounts);
         const problem = entry.problems[line.key];
         const amount = Number(line.amount === '' ? 0 : line.amount);
@@ -92,7 +98,7 @@ export function PaymentLines({
         const byQr = connected && paidByQr(line, qris.qrAccounts);
         return (
           <View key={line.key} style={[styles.line, index > 0 && styles.nextLine]} testID={id}>
-            {methods.length > 1 ? (
+            {methods.length > 1 || !offered ? (
               <ChipRow testID={`${id}.methods`}>
                 {methods.map((method) => (
                   <ToggleChip
@@ -118,21 +124,32 @@ export function PaymentLines({
               value={digitsText(line.amount)}
               onChangeText={digits(line.key, 'amount')}
               keyboardType="number-pad"
+              selectTextOnFocus
               testID={`${id}.amount`}
             />
-            {kind === 'cash' ? (
+            {unpicked ? (
+              <Text style={styles.qrNote} testID={`${id}.pick`}>
+                {tm('money.pay.problem.pick')}
+              </Text>
+            ) : !offered ? (
+              <Text style={styles.problem} testID={`${id}.methodGone`}>
+                {tm('money.pay.problem.method')}
+              </Text>
+            ) : kind === 'cash' ? (
               <View style={styles.field}>
                 <TextInput
                   label={tm('money.pay.tendered')}
                   value={digitsText(line.tendered)}
                   onChangeText={digits(line.key, 'tendered')}
                   keyboardType="number-pad"
+                  selectTextOnFocus
                   errorMessage={
                     problem === 'tendered' ? tm('money.pay.problem.tendered') : undefined
                   }
                   testID={`${id}.tendered`}
                 />
-                {line.tendered !== '' && tendered >= amount && amount > 0 ? (
+                {/* Handed over exactly: no change to give, so nothing to say. */}
+                {line.tendered !== '' && tendered > amount && amount > 0 ? (
                   <View style={styles.changeRow}>
                     <Text style={styles.changeLabel}>{tm('money.pay.change')}</Text>
                     <Text style={styles.changeValue} testID={`${id}.change`}>
@@ -183,9 +200,12 @@ export function PaymentLines({
               <View style={styles.lineAction}>
                 <TextButton
                   label={tm('money.pay.remove')}
-                  accessibilityLabel={tm('money.pay.removeLabel', {
-                    method: labelOf(account),
-                  })}
+                  // Named by its method once there is one; never a method not picked yet.
+                  accessibilityLabel={
+                    unpicked
+                      ? tm('money.pay.removeUnpicked')
+                      : tm('money.pay.removeLabel', { method: labelOf(account) })
+                  }
                   tone="danger"
                   onPress={() => onChange(lines.filter((other) => other.key !== line.key))}
                   testID={`${id}.remove`}
@@ -213,9 +233,8 @@ export function PaymentLines({
             label={tm('money.pay.addMethod')}
             icon="add"
             onPress={() => {
-              const used = new Set(lines.map((line) => line.account));
-              const next = methods.find((method) => !used.has(method.account))?.account;
-              onChange([...lines, newPaymentLine(newKey(), entry.remaining, next)]);
+              // The new line waits for its method too: nothing is guessed for the counter.
+              onChange([...lines, newPaymentLine(newKey(), entry.remaining)]);
             }}
             testID={`${testID}.add`}
           />
@@ -251,6 +270,7 @@ const styles = StyleSheet.create({
   remaining: { marginTop: -space.md },
   remainingText: { ...type.bodySm, color: color.textMuted },
   overpaid: { ...type.bodySm, color: color.danger, marginTop: -space.md },
+  problem: { ...type.bodySm, color: color.danger },
   // The text, not the hit box, lines up with the fields above.
   add: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: -space.md },
 });

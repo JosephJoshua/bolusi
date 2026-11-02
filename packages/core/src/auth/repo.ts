@@ -68,6 +68,17 @@ export const DEVICE_ID_META_KEY = 'deviceId';
  */
 export const FIRST_PIN_USER_META_KEY = 'auth.firstPinUserId';
 
+/**
+ * `meta_kv` key naming the person whose own device this is (permission-scoped sync), absent on a
+ * device the store shares. Only they sign in here. Written by `applyBundle` alone, from the bundle.
+ */
+export const PERSONAL_USER_META_KEY = 'auth.personalUserId';
+
+/** Whose own device this is, or null for a shared one. */
+export async function readPersonalUserId<DB>(db: Kysely<DB>): Promise<string | null> {
+  return readMeta(db, PERSONAL_USER_META_KEY);
+}
+
 export { STORE_ID_META_KEY };
 
 /**
@@ -486,6 +497,17 @@ export async function listSwitcherUsers<DB>(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Who may sign in on this device, as the switcher lists them: the active roster, or on someone's own
+ * device (`PERSONAL_USER_META_KEY`) only that person. Names elsewhere still come from the full roster.
+ */
+export async function listSignInUsers<DB>(
+  db: Kysely<DB>,
+): Promise<{ id: string; name: string; photoMediaId: string | null }[]> {
+  const [roster, personal] = await Promise.all([listSwitcherUsers(db), readPersonalUserId(db)]);
+  return personal === null ? roster : roster.filter((user) => user.id === personal);
+}
+
 /** Resolve ANY user's display name from the directory — including a deactivated one (for history). */
 export async function resolveUserName<DB>(db: Kysely<DB>, userId: string): Promise<string | null> {
   const rows = await sql<{ name: string }>`
@@ -513,8 +535,10 @@ function permissionBreadth(value: string | readonly unknown[]): number {
  * ALL returned — the owner ruling's "parallel at the top rank ⇒ list all"; two distinct roles of
  * equal breadth are genuinely co-equal, which a hardcoded key ranking could not express.
  *
- * `DISTINCT`: a store_owner holding grants in three stores is one role, shown once. Returns `[]` when
- * the user holds no grant, so the card renders no role line rather than an empty label.
+ * `DISTINCT`: a store_owner holding grants in three stores is one role, shown once. Only roles held
+ * here count (this store or tenant-wide): the bundle also carries owner-role grants at other stores.
+ * Returns `[]` when the user holds no grant, so the card renders no role line rather than an empty
+ * label.
  */
 export async function resolveDisplayRoleKeys<DB>(
   db: Kysely<DB>,
@@ -525,6 +549,8 @@ export async function resolveDisplayRoleKeys<DB>(
     FROM user_roles_directory urd
     JOIN roles_directory rd ON rd.id = urd.role_id
     WHERE urd.user_id = ${userId}
+      AND (urd.store_id IS NULL
+        OR urd.store_id = COALESCE((SELECT value FROM meta_kv WHERE key = ${STORE_ID_META_KEY}), urd.store_id))
   `.execute(db);
   if (rows.rows.length === 0) return [];
   const ranked = rows.rows.map((r) => ({

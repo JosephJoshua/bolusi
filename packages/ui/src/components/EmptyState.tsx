@@ -6,7 +6,8 @@
  * render "nothing here" when the truth is "you are not allowed to see this". `UnauthorizedState`
  * is the one that must never be reachable from here.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, size, space, type } from '../tokens.js';
 import { Button } from './Button.js';
@@ -28,6 +29,11 @@ export interface EmptyStateProps {
    */
   readonly createLabel?: string | undefined;
   readonly onCreate?: (() => void) | undefined;
+  /**
+   * `secondary` when the screen's primary action sits elsewhere (a bottom bar), so the empty state
+   * points somewhere without competing with it: one primary per screen.
+   */
+  readonly ctaVariant?: 'primary' | 'secondary' | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -43,6 +49,7 @@ export function EmptyState({
   hint,
   createLabel,
   onCreate,
+  ctaVariant = 'primary',
   testID = 'ui.emptyState',
 }: EmptyStateProps): React.JSX.Element {
   return (
@@ -62,7 +69,7 @@ export function EmptyState({
             testID={`${testID}.cta`}
             label={createLabel}
             onPress={onCreate}
-            variant="primary"
+            variant={ctaVariant}
           />
         </View>
       )}

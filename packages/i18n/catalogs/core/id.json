@@ -2,9 +2,9 @@
   "action": {
     "save": "Simpan",
     "cancel": "Batal",
-    "retry": "Coba Lagi",
+    "retry": "Coba lagi",
     "delete": "Hapus",
-    "confirm": "Ya, Lanjutkan",
+    "confirm": "Ya, lanjutkan",
     "back": "Kembali",
     "close": "Tutup",
     "edit": "Ubah",
@@ -54,6 +54,9 @@
   "unauthorized": {
     "askOwner": "Minta pemilik toko untuk memberi akses."
   },
+  "notOnDevice": {
+    "hint": "Data ini tidak disimpan di perangkat ini. Akan muncul begitu tersambung."
+  },
   "opType": {
     "unknown": "Perubahan"
   },
@@ -70,6 +73,7 @@
     "LAST_ADMIN_PROTECTED": "Tidak bisa. Harus selalu ada minimal satu pemilik utama yang aktif.",
     "ROLE_IN_USE": "Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.",
     "CLOCK_AHEAD": "Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.",
+    "NOT_ON_DEVICE": "Perlu internet untuk membuka ini.",
     "IDEMPOTENCY_CONFLICT": "Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.",
     "RATE_LIMITED": "Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.",
     "UNEXPECTED": "Terjadi kesalahan. Coba lagi.",
@@ -89,14 +93,15 @@
     "STORAGE_ERROR": "Server gagal menyimpan foto. Aplikasi akan mencoba lagi.",
     "LOCAL_CORRUPT": "Foto ini rusak di perangkat dan tidak bisa dikirim. Ambil foto baru.",
     "AUTH_TOKEN_MISSING": "Masuk lagi untuk melanjutkan pengiriman foto.",
-    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto."
+    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.",
+    "APP_UPDATE_REQUIRED": "Perbarui aplikasi dulu agar data terbaru bisa masuk."
   },
   "rejection": {
     "BAD_SIGNATURE": "Gagal diverifikasi server. Kabari pemilik toko.",
     "CHAIN_BROKEN": "Riwayat di perangkat ini rusak, pengiriman berhenti. Segera kabari pemilik toko.",
     "CHAIN_GAP": "Ada yang tertinggal. Dikirim ulang otomatis.",
     "CHAIN_HALTED": "Menunggu perubahan sebelumnya beres.",
-    "CLOCK_AHEAD": "Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.",
+    "CLOCK_AHEAD": "Jam perangkat ini terlalu cepat saat perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.",
     "DEVICE_REVOKED": "Perangkat ini sudah diblokir. Daftarkan ulang.",
     "PERMISSION_DENIED": "Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.",
     "RULE_VIOLATED": "Datanya sudah berubah di perangkat lain. Cek lagi, lalu ulangi kalau masih perlu.",
@@ -158,12 +163,15 @@
       "waiting": "HP sudah tersambung. Langkah berikutnya muncul di sini.",
       "rotate": "Putar HP ke posisi mendatar.",
       "rotateNow": "Putar layar",
-      "withdrawn": "Dibatalkan di komputer."
+      "withdrawn": "Dibatalkan di komputer.",
+      "videoDenied": "Kamera atau mikrofon belum diizinkan. Izinkan untuk situs ini di browser, lalu coba lagi.",
+      "videoUnsupported": "Browser ini belum bisa merekam video. Buka kodenya di Chrome atau Safari."
     },
     "newCode": "Ganti HP",
     "photoOnPhone": "Ambil fotonya di HP",
     "signOnPhone": "Minta pelanggan tanda tangan di HP",
-    "waitingSend": "Menunggu kiriman dari HP…"
+    "waitingSend": "Menunggu kiriman dari HP…",
+    "videoOnPhone": "Rekam videonya di HP"
   },
   "video": {
     "denied": "Kamera atau mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi, lalu coba lagi.",
@@ -171,5 +179,11 @@
     "loading": "Memuat video…",
     "failed": "Videonya belum bisa diputar. Coba lagi.",
     "noMicrophone": "Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi."
+  },
+  "closeWindow": {
+    "title": "Tutup Bolusi?",
+    "message": "Yang sedang diisi belum tersimpan dan akan hilang.",
+    "confirm": "Tutup",
+    "keep": "Lanjut isi"
   }
 }

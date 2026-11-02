@@ -4,7 +4,7 @@
 //
 // Built from what the ticket recorded, in the current language. The phone's unlock code is never
 // printed: the slip leaves the store and the code is stored encrypted for a reason.
-import { formatDate, formatDateTime, formatMoney } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatPhone } from '@bolusi/i18n';
 import type {
   PrintAmountRow,
   PrintBlock,
@@ -12,30 +12,40 @@ import type {
   PrintField,
   PrintHeader,
   PrintImage,
+  PrintLink,
 } from '@bolusi/core';
+import { encode } from 'uqr';
 
 import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 
 import type { SlipKind } from './constants.js';
-import { balanceAfterDownPayment, photoInSlot, photoThumbnailRef, ticketStatus } from './flows.js';
+import {
+  amountOwed,
+  balanceAfterDownPayment,
+  photoInSlot,
+  photoThumbnailRef,
+  ticketStatus,
+} from './flows.js';
 import { tn } from './i18n.js';
 import {
   CHECK_STATE_KEY,
   PRICE_KIND_KEY,
   optionLabel,
+  refundLabel,
   repairTypeLabel,
   statusLabel,
   warrantyTerms,
 } from './labels.js';
-import type { PrintSettings, QuoteLineRow, TicketDetailRow } from './queries.js';
+import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketRefund } from './queries.js';
+import { statusAddress, statusQrText } from './status-link.js';
 
 /** What a slip needs besides the ticket. */
 export interface SlipContext {
   readonly header: PrintHeader;
   /** The store's terms for this slip, one per line; null prints the app's default terms. */
   readonly terms: string | null;
-  readonly printedAt: number;
-  readonly printedByName: string | null;
+  /** The customer's status page, printed beside the signatures; null leaves it off. */
+  readonly link: PrintLink | null;
 }
 
 export interface HandoverSlipContext extends SlipContext {
@@ -62,6 +72,13 @@ function deviceName(ticket: TicketDetailRow): string {
   return color === '' ? name : `${name} (${color})`;
 }
 
+/** Nothing on a first print; the first reprint is just "Cetak ulang", later ones are numbered. */
+function reprintLabel(earlierPrints: number): string[] {
+  if (earlierPrints === 0) return [];
+  if (earlierPrints === 1) return [tn('repair.slip.reprintFirst')];
+  return [tn('repair.slip.reprint', { count: earlierPrints })];
+}
+
 function common(
   ticket: TicketDetailRow,
   ctx: SlipContext,
@@ -71,27 +88,16 @@ function common(
   meta: readonly string[],
   parts: Pick<PrintDocument, 'blocks' | 'aside' | 'closing'>,
 ): PrintDocument {
-  const printed =
-    ctx.printedByName === null
-      ? tn('repair.slip.printed', { date: formatDateTime(ctx.printedAt) })
-      : tn('repair.slip.printedBy', {
-          date: formatDateTime(ctx.printedAt),
-          name: ctx.printedByName,
-        });
   return {
     jobName,
     header: ctx.header,
     title,
     reference: ticket.ticketNumber,
-    // The print log counts earlier prints, so this one is the next.
-    meta:
-      ticket.slipPrints[slip] > 0
-        ? [...meta, tn('repair.slip.reprint', { count: ticket.slipPrints[slip] + 1 })]
-        : meta,
+    // The print log counts earlier prints, so it is also which reprint this one is.
+    meta: [...meta, ...reprintLabel(ticket.slipPrints[slip])],
     ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
-    plyNote: tn('repair.slip.plyNote'),
-    footer: printed,
+    link: ctx.link,
   };
 }
 
@@ -100,7 +106,7 @@ function customerFields(ticket: TicketDetailRow): PrintField[] {
     { label: tn('repair.slip.field.customer'), value: ticket.customerName },
   ];
   if (ticket.customerPhone !== null && ticket.customerPhone !== '') {
-    fields.push({ label: tn('repair.slip.field.phone'), value: ticket.customerPhone });
+    fields.push({ label: tn('repair.slip.field.phone'), value: formatPhone(ticket.customerPhone) });
   }
   fields.push({ label: tn('repair.slip.field.device'), value: deviceName(ticket) });
   if (ticket.deviceImei !== null && ticket.deviceImei !== '') {
@@ -156,14 +162,39 @@ function totals(
   total: number,
   paidSoFar: number | null,
   paidLabel: string,
+  reduced = 0,
+  /** False when the total is no longer what the customer owes, so a balance would be wrong. */
+  withBalance = true,
+  /** What goes back through each method, when more was paid (`TicketDetailRow.refunds`). */
+  refunds: readonly TicketRefund[] = [],
 ): PrintAmountRow[] {
   const paid = paidSoFar ?? 0;
   const rows: PrintAmountRow[] = [
-    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 },
+    {
+      label: totalLabel,
+      amount: formatMoney(total),
+      strong: (paid === 0 && reduced === 0) || !withBalance,
+    },
   ];
-  if (paid > 0) {
-    const balance = balanceAfterDownPayment(total, paid);
-    rows.push({ label: paidLabel, amount: formatMoney(-paid) });
+  if (!withBalance) {
+    if (paid > 0) rows.push({ label: paidLabel, amount: formatMoney(-paid) });
+    return rows;
+  }
+  // What an owner took off once charged, so the rest adds up to what the customer owes.
+  if (reduced > 0) rows.push({ label: tn('repair.price.reduced'), amount: formatMoney(-reduced) });
+  if (paid > 0 || reduced > 0) {
+    const balance = balanceAfterDownPayment(total - reduced, paid);
+    if (paid > 0) rows.push({ label: paidLabel, amount: formatMoney(-paid) });
+    if (balance.kind === 'refund' && refunds.length > 0) {
+      for (const refund of refunds) {
+        rows.push({
+          label: refundLabel(refund, 'slip'),
+          amount: formatMoney(refund.amount),
+          strong: true,
+        });
+      }
+      return rows;
+    }
     rows.push({
       label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
       amount: formatMoney(balance.amount),
@@ -221,6 +252,9 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   // The price the customer left with; later changes belong on the handover slip.
   const lines = ticket.quoteLines.filter((line) => line.status === 'intake');
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
+  // What was paid counts against the estimate only while the estimate is still the bill: once the
+  // price changed or the servisan was cancelled, the balance belongs on the handover slip.
+  const estimateStands = ticket.outcome !== 'cancelled' && amountOwed(ticket) === total;
   const blocks: PrintBlock[] = [
     { kind: 'fields', fields },
     { kind: 'heading', text: tn('repair.slip.section.complaint') },
@@ -246,6 +280,8 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
         ticket.downPayment,
         // Reprinted after pickup, what was paid is more than the DP.
         tn(ticket.location === 'returned' ? 'repair.slip.paid' : 'repair.slip.downPayment'),
+        0,
+        estimateStands,
       ),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
@@ -301,6 +337,9 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
           ticket.cancelFee ?? 0,
           ticket.downPayment,
           tn('repair.slip.paid'),
+          ticket.reduced,
+          true,
+          ticket.refunds,
         ),
       }
     : {
@@ -314,6 +353,9 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
           ticket.quoteTotal,
           ticket.downPayment,
           tn('repair.slip.paid'),
+          ticket.reduced,
+          true,
+          ticket.refunds,
         ),
       };
   const aside: PrintBlock[] = [
@@ -377,6 +419,21 @@ export function storeHeader(
   };
 }
 
+/**
+ * The customer's status page as a slip prints it: a QR code and the address to type. Null for a
+ * servisan without a link (taken in before links), or a device that does not know its site.
+ */
+export function slipLink(ticket: TicketDetailRow, site: string | null): PrintLink | null {
+  if (ticket.statusCode === null || site === null) return null;
+  // M recovers 15% of the code: room for a smudge on a carbon copy.
+  const { data } = encode(statusQrText(site, ticket.statusCode), { ecc: 'M', border: 0 });
+  return {
+    modules: data,
+    title: tn('repair.slip.link'),
+    address: statusAddress(site, ticket.statusCode),
+  };
+}
+
 /** Everything besides the ticket that goes on a slip, as the platform resolved it. */
 export interface SlipSources {
   readonly settings: PrintSettings;
@@ -385,8 +442,8 @@ export interface SlipSources {
   /** The logo and signature (`logoRef`, `slipSignature`), loaded; null leaves one out. */
   readonly logo: PrintImage | null;
   readonly signature: PrintImage | null;
-  readonly printedAt: number;
-  readonly printedByName: string | null;
+  /** The site that serves the customer's status page (`RepairRuntime.statusSite`). */
+  readonly statusSite: string | null;
 }
 
 /** A slip with this store's header and terms: what every platform prints. */
@@ -399,8 +456,7 @@ export function slipDocument(
   const ctx: SlipContext = {
     header: storeHeader(settings, sources.storeName, sources.logo),
     terms: slip === 'intake' ? settings.intakeTerms : settings.handoverTerms,
-    printedAt: sources.printedAt,
-    printedByName: sources.printedByName,
+    link: slipLink(ticket, sources.statusSite),
   };
   return slip === 'intake'
     ? intakeSlip(ticket, ctx)
@@ -434,7 +490,5 @@ export function testPageDocument(
     aside: [],
     closing: [],
     copies: [],
-    plyNote: null,
-    footer: null,
   };
 }

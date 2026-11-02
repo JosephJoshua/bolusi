@@ -7,7 +7,8 @@
  * Images are passed in, since the platform owns image rendering (as in PhotoSlot).
  */
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { color, radius, size, space, type } from '../tokens.js';
 

@@ -1,13 +1,20 @@
 // Boot entry (08 §5.1 `pnpm dev`). Reads config once (security-guide §10), builds the app with
-// the production per-IP key source (node-server's getConnInfo — a real socket address, not the
-// testable X-Forwarded-For fallback), and serves via @hono/node-server.
+// the production per-IP key source (node-server's getConnInfo — a real socket address, read past
+// X-Forwarded-For only when that address is a configured trusted proxy), and serves via
+// @hono/node-server.
+import { resolve } from 'node:path';
+
+import { assertRowSecurityRole } from '@bolusi/db-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
 import { createApp } from './app.js';
+import { gitHubReleaseSource } from './app-updates/releases.js';
 import { loadConfig } from './config.js';
 import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
+import { requireMediaStorageDir } from './media/config.js';
+import { clientIpBehindProxies } from './middleware/client-ip.js';
 import { serverCryptoPort } from './oplog/index.js';
 import { pushPortFromConfig } from './push/expo-transport.js';
 import { qrisFromConfig } from './qris/config.js';
@@ -15,6 +22,11 @@ import { serveWithRealtime } from './realtime/serve.js';
 import { systemKeyStoreFromConfig } from './sync/system-key-store.js';
 
 const config = loadConfig();
+requireMediaStorageDir();
+
+// Tenant isolation is RLS, and a superuser or BYPASSRLS login skips it even under FORCE. Refuse to
+// listen on such a DATABASE_URL (10-db §6.3: the server connects as bolusi_app).
+await assertRowSecurityRole();
 
 // PUSH DELIVERY (task 134; api/04-push §7, 08 §8). This is the ONE production injection point for
 // the push sender: build the real `ExpoPushSender` from `EXPO_ACCESS_TOKEN` and inject it, so a
@@ -39,7 +51,9 @@ const qris = qrisFromConfig(config);
 function productionClientIp(c: Context<AppEnv>): string {
   try {
     const address = getConnInfo(c).remote.address;
-    if (address !== undefined && address !== '') return address;
+    if (address !== undefined && address !== '') {
+      return clientIpBehindProxies(address, c.req.header('x-forwarded-for'), config.trustedProxies);
+    }
   } catch {
     /* getConnInfo needs the node-server binding — fall back to the header source. */
   }
@@ -48,8 +62,13 @@ function productionClientIp(c: Context<AppEnv>): string {
 
 const app = createApp({
   clientIp: productionClientIp,
+  secureCookies: config.secureCookies,
   pushPort,
+  ...(config.webDir === undefined ? {} : { webDir: resolve(config.webDir) }),
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
+  ...(config.appUpdatesRepo === undefined
+    ? {}
+    : { appUpdates: gitHubReleaseSource({ repo: config.appUpdatesRepo }) }),
   ...(qris === undefined ? {} : { qris }),
 });
 

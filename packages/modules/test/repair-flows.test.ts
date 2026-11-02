@@ -1,11 +1,20 @@
 // The decisions behind the repair phone screens: which actions a ticket offers, and how an intake
 // draft becomes an `openTicket` input. Both are checked against the real runtime, so a button the
 // screens show never leads to a refusal the commands would give.
-import { afterEach, describe, expect, test } from 'vitest';
+import { initI18n } from '@bolusi/i18n';
+import { afterEach, beforeAll, describe, expect, test } from 'vitest';
+
+import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
+import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
+import { registerRepairCatalog, tn } from '../src/repair/i18n.js';
 
 import {
   arrangeTicketActions,
+  asksApproval,
+  payLaterAccess,
   balanceAfterDownPayment,
+  balanceLabelKey,
+  discountsStanding,
   downPaymentAction,
   downPaymentEntry,
   printableSlips,
@@ -16,7 +25,9 @@ import {
   intakeDirty,
   intakeTotal,
   nextMissingPhoto,
+  keptIntakeDraft,
   parseIntakeDraft,
+  startedByOther,
   acceptsRupiahText,
   parseRupiah,
   phoneText,
@@ -31,8 +42,10 @@ import {
   type RepairAbilities,
   type TicketAction,
 } from '../src/repair/flows.js';
+import { NO_METHOD } from '../src/money/payment-entry.js';
 import type { PaymentAccountRow } from '../src/money/queries.js';
-import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
+import { downPaymentChangeLine } from '../src/repair/labels.js';
+import { HANDOVER_UNDO_WINDOW_MS, INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
 import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
@@ -161,8 +174,23 @@ async function perform(
         (await paidHandover(harness, ticketId, {}, [13, 14])) as never,
         userId,
       );
-    case 'cancel':
-      return harness.run('cancelTicket', { ticketId, reason: 'no parts', fee: 10_000 }, userId);
+    case 'cancel': {
+      const input = { ticketId, reason: 'no parts', fee: 10_000 };
+      // The counter cannot cancel: the same step asks an owner to (an approval request).
+      return userId === harness.cashierId
+        ? harness.approvals(
+            'requestApproval',
+            { kind: 'repair.cancel', input, reason: 'no parts' },
+            userId,
+          )
+        : harness.run('cancelTicket', input, userId);
+    }
+    case 'correctDetails':
+      return harness.run('correctTicketDetails', { ticketId, complaint: 'Layar bergaris' }, userId);
+    case 'undoHandover':
+      return harness.run('undoHandover', { ticketId, reason: 'Salah servisan' }, userId);
+    case 'changeCancelFee':
+      return harness.run('changeCancelFee', { ticketId, fee: 7_000, reason: 'Biaya cek' }, userId);
   }
 }
 
@@ -183,7 +211,7 @@ describe('ticket actions', () => {
       for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
-        for (const action of ticketActions(row, abilitiesOf(h, userId), userId)) {
+        for (const action of ticketActions(row, abilitiesOf(h, userId), userId, h.now())) {
           const ticketId = await ticketIn(h, state);
           await expect(
             perform(h, action, ticketId, userId),
@@ -220,6 +248,8 @@ describe('ticket actions', () => {
       'changePrice',
       'proposePrice',
       'handover',
+      'correctDetails',
+      'undoHandover',
       'cancel',
     ];
     // start, resume and reopen are one command under three names; one of them offered covers all.
@@ -231,7 +261,7 @@ describe('ticket actions', () => {
       for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
-        const offered = ticketActions(row, abilitiesOf(h, userId), userId);
+        const offered = ticketActions(row, abilitiesOf(h, userId), userId, h.now());
         for (const action of all) {
           if (offered.some((o) => sameCommand(o, action))) continue;
           const ticketId = await ticketIn(h, state);
@@ -262,6 +292,8 @@ describe('ticket actions', () => {
       location: 'in_store' as const,
       technicianId: null,
       pendingProposals: 0,
+      returnedAt: null,
+      reduced: 0,
       ...ticket,
     });
 
@@ -272,20 +304,46 @@ describe('ticket actions', () => {
       'proposePrice',
     ]);
     // Unassigned, the counter's next step is picking a technician; once assigned, pricing leads.
-    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice']);
+    expect(ticketActions(row(), cashier, h.cashierId)).toEqual([
+      'assign',
+      'changePrice',
+      'correctDetails',
+      'cancel',
+    ]);
     expect(ticketActions(row({ technicianId: h.technicianId }), cashier, h.cashierId)).toEqual([
       'changePrice',
       'assign',
+      'correctDetails',
+      'cancel',
     ]);
-    // Only owners cancel: counter staff kept customers' cash by cancelling. A repaired phone the
-    // customer won't pay for or collect can still be cancelled until it is handed back.
+    // Only owners cancel: counter staff kept customers' cash by cancelling, so the counter's
+    // "cancel" asks an owner (an approval request). A repaired phone the customer won't pay for or
+    // collect can still be cancelled until it is handed back.
     const storeOwner = abilitiesOf(h, h.storeOwnerId);
     for (const outcome of ['received', 'in_repair', 'waiting_for_parts', 'repaired'] as const) {
-      expect(ticketActions(row({ outcome }), cashier, h.cashierId)).not.toContain('cancel');
+      expect(ticketActions(row({ outcome }), cashier, h.cashierId)).toContain('cancel');
+      expect(cashier.cancel).toBe(false);
       expect(ticketActions(row({ outcome }), storeOwner, h.storeOwnerId)).toContain('cancel');
     }
+    // After pickup an owner can only take a mistaken handover back; nobody corrects intake's record.
     expect(
-      ticketActions(row({ outcome: 'repaired', location: 'returned' }), storeOwner, h.storeOwnerId),
+      ticketActions(
+        row({ outcome: 'repaired', location: 'returned', returnedAt: Date.now() }),
+        storeOwner,
+        h.storeOwnerId,
+      ),
+    ).toEqual(['undoHandover']);
+    // Only within a day of the first handover; once taken back it is never cancelled.
+    const dayAgo = Date.now() - HANDOVER_UNDO_WINDOW_MS - 1;
+    expect(
+      ticketActions(
+        row({ outcome: 'repaired', location: 'returned', returnedAt: dayAgo }),
+        storeOwner,
+        h.storeOwnerId,
+      ),
+    ).toEqual([]);
+    expect(
+      ticketActions(row({ outcome: 'repaired', returnedAt: dayAgo }), storeOwner, h.storeOwnerId),
     ).not.toContain('cancel');
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
@@ -311,6 +369,8 @@ describe('ticket actions', () => {
         location: 'in_store' as const,
         technicianId: null,
         pendingProposals: 0,
+        returnedAt: null,
+        reduced: 0,
         ...ticket,
       };
       return arrangeTicketActions(ticketActions(row, can, userId), row, userId);
@@ -400,6 +460,15 @@ describe('down payment and slips', () => {
     expect(balanceAfterDownPayment(50_000, 100_000)).toEqual({ kind: 'refund', amount: 50_000 });
     expect(balanceAfterDownPayment(50_000, 50_000)).toEqual({ kind: 'due', amount: 0 });
   });
+
+  test('money to give back on a phone that went home reads as still owed', () => {
+    initI18n({ locale: 'id' });
+    registerRepairCatalog({ id: idCatalog, en: enCatalog });
+    // What a handover gave back is already off what was paid, so whatever is left is owed.
+    expect(tn(balanceLabelKey('refund', true))).toBe('Lebih bayar');
+    expect(tn(balanceLabelKey('refund', false))).toBe('Kembalikan');
+    expect(tn(balanceLabelKey('due', true))).toBe('Sisa bayar');
+  });
 });
 
 describe('an open step after the ticket changed elsewhere', () => {
@@ -424,6 +493,7 @@ describe('an open step after the ticket changed elsewhere', () => {
     technicianId: null,
     pendingProposals: 0,
     quoteLines: [],
+    returnedAt: null,
     ...ticket,
   });
 
@@ -747,9 +817,10 @@ describe('intake draft', () => {
       kind: 'due',
       amount: 500_000,
     });
-    // Recorded once: after that only an owner may change it, and the counter sees no action.
-    expect(downPaymentAction(ticket, abilitiesOf(h, h.cashierId))).toBeNull();
+    // Recorded once: after that only an owner changes it, and the counter asks one to.
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.cashierId))).toBe('correct');
     expect(downPaymentAction(ticket, abilitiesOf(h, h.ownerId))).toBe('correct');
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.technicianId))).toBeNull();
   });
 
   test('a DP through EDC needs its approval code, and goes through that account', async () => {
@@ -785,7 +856,49 @@ describe('intake draft', () => {
     expect(money.entries).toMatchObject([{ account: edc, reference: '004512' }]);
   });
 
-  test('a draft saved before DP methods restores with the drawer', () => {
+  test('a DP waits for its method where the store takes more than cash, and is cash where not', async () => {
+    h = await openRepairHarness(4110);
+    await h.money('saveAccount', { kind: 'transfer', name: 'BCA' }, h.storeOwnerId);
+    const accounts = (await h.moneyQuery('paymentAccounts', {}, h.cashierId))
+      .rows as PaymentAccountRow[];
+    const draft = { ...complete(h), downPayment: '100.000' };
+    expect(draft.downPaymentAccount).toBe(NO_METHOD);
+    expect(stepProblems(draft, 'price', OPTIONS, accounts)).toEqual(['downPaymentMethod']);
+    expect(stepProblems(draft, 'review', OPTIONS, accounts)).toEqual(['downPaymentMethod']);
+    expect(stepProblems({ ...draft, downPayment: '' }, 'price', OPTIONS, accounts)).toEqual([]);
+    expect(stepProblems(draft, 'price', OPTIONS, [])).toEqual([]);
+    expect(toOpenTicketInput(draft, OPTIONS, 0, [])).toMatchObject({ downPaymentAccount: 'cash' });
+    const cash = { ...draft, downPaymentAccount: 'cash' };
+    expect(stepProblems(cash, 'review', OPTIONS, accounts)).toEqual([]);
+  });
+
+  test('a DP step says when its method is still to pick', () => {
+    const base = { mode: 'record' as const, reason: '', current: null, total: 100_000 };
+    expect(downPaymentEntry({ ...base, typed: 50_000, methodMissing: true }).gap).toBe('method');
+    expect(
+      downPaymentEntry({
+        ...base,
+        mode: 'correct',
+        current: 50_000,
+        typed: 60_000,
+        reason: 'Salah',
+        methodMissing: true,
+      }).gap,
+    ).toBe('method');
+    // Removing a DP takes no method.
+    expect(
+      downPaymentEntry({
+        ...base,
+        mode: 'correct',
+        current: 50_000,
+        typed: 0,
+        reason: 'Batal',
+        methodMissing: true,
+      }).gap,
+    ).toBeNull();
+  });
+
+  test('a draft saved before DP methods restores with no method picked', () => {
     const old: Record<string, unknown> = { ...emptyIntakeDraft() };
     delete old['downPaymentAccount'];
     delete old['downPaymentReference'];
@@ -914,5 +1027,99 @@ describe('downPaymentEntry', () => {
       aboveTotal: false,
       gap: null,
     });
+  });
+});
+
+describe('downPaymentChangeLine', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerRepairCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  test('a correction says whether it adds the difference or replaces what was taken', () => {
+    expect(downPaymentChangeLine(200_000, 500_000, 'QRIS')).toBe(
+      'Tambahannya Rp 300.000 dicatat lewat QRIS. DP Rp 200.000 tetap seperti tercatat.',
+    );
+    expect(downPaymentChangeLine(200_000, 150_000, 'QRIS')).toBe(
+      'DP Rp 200.000 dibatalkan, lalu Rp 150.000 dicatat lewat QRIS.',
+    );
+    expect(downPaymentChangeLine(200_000, 0, 'QRIS')).toBeNull();
+    expect(downPaymentChangeLine(200_000, null, 'QRIS')).toBeNull();
+  });
+});
+
+describe('asking an owner instead', () => {
+  test('asks when the user may not do it, or when it goes past their limit on this servisan', () => {
+    expect(asksApproval(false, 0, 1)).toBe(true);
+    expect(asksApproval(true, null, 1_000_000)).toBe(false);
+    expect(asksApproval(true, 50_000, 50_000)).toBe(false);
+    // A limit is per servisan: the discounts already standing on it count with the new one.
+    const standing = discountsStanding([
+      { amount: -15_000, status: 'applied' },
+      { amount: -10_000, status: 'declined' },
+      { amount: 200_000, status: 'intake' },
+    ]);
+    expect(standing).toBe(15_000);
+    expect(asksApproval(true, 50_000, standing + 40_000)).toBe(true);
+  });
+
+  test('Bayar nanti: their own within the limit, an owner’s approval covering what is due, or asking', () => {
+    const row = (status: string, amount: number, extra: Record<string, unknown> = {}) =>
+      ({ status, amount, decidedByName: 'Bu Maria', note: null, ...extra }) as never;
+    const base = { holds: false, limit: null, canAsk: true, due: 100_000, requests: [] };
+    expect(payLaterAccess({ ...base, holds: true })).toEqual({ kind: 'own' });
+    expect(payLaterAccess({ ...base, holds: true, limit: 100_000 })).toEqual({ kind: 'own' });
+    expect(payLaterAccess({ ...base, holds: true, limit: 99_999 })).toMatchObject({
+      kind: 'ask',
+      because: 'repair.approval.overLimit',
+    });
+    expect(payLaterAccess({ ...base, requests: [row('approved', 100_000)] })).toEqual({
+      kind: 'permitted',
+      by: 'Bu Maria',
+    });
+    // Approved for less than is due now (the price went up): asked again.
+    expect(payLaterAccess({ ...base, requests: [row('approved', 90_000)] }).kind).toBe('ask');
+    expect(payLaterAccess({ ...base, requests: [row('waiting', 100_000)] })).toEqual({
+      kind: 'waiting',
+    });
+    const no = row('rejected', 100_000, { note: 'Telepon dulu' });
+    expect(payLaterAccess({ ...base, requests: [no] })).toEqual({
+      kind: 'ask',
+      because: 'repair.approval.needsApproval',
+      rejected: no,
+    });
+    expect(payLaterAccess({ ...base, canAsk: false })).toEqual({ kind: 'none' });
+  });
+
+  test('offers the approvals queue only while something waits on this user', () => {
+    const can = { intake: true, cancel: false } as Parameters<typeof boardViews>[0];
+    expect(boardViews(can)).not.toContain('approvals');
+    expect(boardViews(can, 2)[0]).toBe('approvals');
+    expect(boardFilter('approvals', 'u1', 0, ['t-1', 't-2'])).toEqual({ ids: ['t-1', 't-2'] });
+  });
+});
+
+describe('an intake that belongs to the device', () => {
+  const andi = { userId: 'u-andi', name: 'Andi' };
+  test('names who started it the first time it is kept, and keeps that name after', () => {
+    const kept = keptIntakeDraft(emptyIntakeDraft(), andi);
+    expect(kept.startedBy).toEqual(andi);
+    expect(keptIntakeDraft(kept, { userId: 'u-budi', name: 'Budi' }).startedBy).toEqual(andi);
+    // A name not yet known waits for the next change rather than recording a blank one.
+    expect(
+      keptIntakeDraft(emptyIntakeDraft(), { userId: 'u-andi', name: '' }).startedBy,
+    ).toBeNull();
+  });
+  test('says who started it only to someone else', () => {
+    const kept = keptIntakeDraft(emptyIntakeDraft(), andi);
+    expect(startedByOther(kept, 'u-budi')).toBe('Andi');
+    expect(startedByOther(kept, 'u-andi')).toBeNull();
+    expect(startedByOther(emptyIntakeDraft(), 'u-budi')).toBeNull();
+    expect(startedByOther(null, 'u-budi')).toBeNull();
+  });
+  test('a draft kept before it named its starter still reads', () => {
+    const old: Record<string, unknown> = { ...keptIntakeDraft(emptyIntakeDraft(), andi) };
+    delete old['startedBy'];
+    expect(parseIntakeDraft(old)?.startedBy).toBeNull();
   });
 });

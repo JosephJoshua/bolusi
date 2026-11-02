@@ -9,7 +9,8 @@
  * The code is rendered verbatim and is NOT localized — it is an identifier (07-i18n §4.2: `code` is
  * the contract, `message` is developer-facing and never rendered).
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '../text.js';
+import { StyleSheet, View } from 'react-native';
 
 import { color, size, space, type } from '../tokens.js';
 import { Button } from './Button.js';
@@ -36,6 +37,8 @@ const styles = StyleSheet.create({
   cta: { marginTop: space.xl, alignSelf: 'stretch' },
 });
 
+const NOT_ON_DEVICE = 'NOT_ON_DEVICE';
+
 export function ErrorState({
   title,
   hint,
@@ -44,9 +47,16 @@ export function ErrorState({
   onRetry,
   testID = 'ui.errorState',
 }: ErrorStateProps): React.JSX.Element {
+  // Data this device does not hold and has not pulled for this person yet (core `NOT_ON_DEVICE`)
+  // is not a failure: it shows as offline, and there is no code worth reading out to support.
+  const notHere = errorCode === NOT_ON_DEVICE;
   return (
     <View testID={testID} style={styles.root}>
-      <Icon name="error" size={size.iconState} color={color.danger} />
+      <Icon
+        name={notHere ? 'syncOffline' : 'error'}
+        size={size.iconState}
+        color={notHere ? color.textMuted : color.danger}
+      />
       <Text testID={`${testID}.title`} style={styles.title}>
         {title}
       </Text>
@@ -55,7 +65,7 @@ export function ErrorState({
           {hint}
         </Text>
       )}
-      {errorCode === undefined ? null : (
+      {errorCode === undefined || notHere ? null : (
         <Text testID={`${testID}.code`} style={styles.code}>
           {errorCode}
         </Text>

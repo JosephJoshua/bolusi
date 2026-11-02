@@ -23,9 +23,10 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useEffect, useMemo, useReducer, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useLatestCallback } from '../../hooks/useLatestCallback.js';
 import type { SurfaceNav } from '../../navigation/surface.js';

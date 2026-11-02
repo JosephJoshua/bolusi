@@ -3,9 +3,9 @@
  * flagged as not collected, so the counter calls the customer. The store owner sets it here; until
  * then it is two months. Leaving with an unsaved change asks first.
  */
-import { ConfirmSheet, TextInput } from '@bolusi/ui';
+import { ConfirmSheet, TextInput, Text } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 

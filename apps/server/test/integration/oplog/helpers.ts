@@ -25,7 +25,7 @@ import { permissionRegistry } from '../../../src/identity/permissions.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { isFoldableSchemaVersion } from '../../../src/oplog/schema-version.js';
 import type { OpRegistry, OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { ProjectionRegistry, type CryptoPort } from '@bolusi/core';
+import { OWNER_POWER_PERMISSIONS, ProjectionRegistry, type CryptoPort } from '@bolusi/core';
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
 import { mulberry32, uuidV7, type ChainWorld } from '@bolusi/test-support';
@@ -374,6 +374,77 @@ export async function grantAllPermissions(
     roleName: 'test_all_permissions',
     permissionIds: permissionRegistry.ids(),
   });
+}
+
+/**
+ * A staff role holding every permission except the owner powers, granted to no one, as provisioning
+ * seeds the preset staff roles. Shared devices are sent what staff roles may read
+ * (sync/read-set.ts), so a tenant with only an owner role would be sent nothing scoped.
+ */
+export async function seedStaffRole(db: Kysely<DB>, tenantId: string): Promise<void> {
+  const roleId = `${tenantId.slice(0, 24)}5aff00000000`;
+  await db
+    .insertInto('roles')
+    .values({
+      id: roleId,
+      tenantId,
+      name: 'test_staff',
+      scopeType: 'store',
+      isSystemDefault: false,
+      createdAt: 1_726_000_000_000n,
+    })
+    .onConflict((oc) => oc.column('id').doNothing())
+    .execute();
+  for (const permissionId of permissionRegistry.ids()) {
+    if (OWNER_POWER_PERMISSIONS.includes(permissionId)) continue;
+    const [moduleName, action] = permissionId.split('.');
+    await db
+      .insertInto('permissions')
+      .values({
+        id: permissionId,
+        module: moduleName ?? permissionId,
+        action: action ?? permissionId,
+        scope: 'tenant',
+        description: permissionId,
+      })
+      .onConflict((oc) => oc.column('id').doNothing())
+      .execute();
+    await db
+      .insertInto('rolePermissions')
+      .values({ roleId, permissionId, tenantId })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+  }
+}
+
+/**
+ * A staff person working at `storeId` who holds the staff role there (seedStaffRole first). A shared
+ * store device is synced what its store's active staff may read, so a store whose devices should
+ * receive staff-level data needs someone working there, as a real one does. Idempotent per store.
+ */
+export async function seedStaffMember(
+  db: Kysely<DB>,
+  tenantId: string,
+  storeId: string,
+): Promise<string> {
+  const userId = `${storeId.slice(0, 24)}57aff0000000`;
+  const roleId = `${tenantId.slice(0, 24)}5aff00000000`;
+  await db
+    .insertInto('users')
+    .values({ id: userId, tenantId, name: 'staff', createdAt: 1_726_000_000_000n })
+    .onConflict((oc) => oc.column('id').doNothing())
+    .execute();
+  await db
+    .insertInto('userStores')
+    .values({ userId, storeId, tenantId })
+    .onConflict((oc) => oc.doNothing())
+    .execute();
+  await db
+    .insertInto('userRoles')
+    .values({ tenantId, userId, roleId, storeId })
+    .onConflict((oc) => oc.doNothing())
+    .execute();
+  return userId;
 }
 
 /**

@@ -23,17 +23,20 @@ export {
 // D14 (10-db-schema §6.4) — the auth-entry cross-tenant lookups. These are the ONLY exported
 // paths that read across tenants; each is a fixed, keyed, definer-gated lookup (never a raw
 // handle, never an arbitrary query). Token verification and login need them because they resolve
-// the tenant FROM an opaque credential before the tenant is known (api/02-auth §4.2/§8).
+// the tenant FROM an opaque credential before the tenant is known (api/02-auth §4.2/§8); the
+// customer's status page does for the same reason (its link code is its credential).
 export {
   findDeviceByTokenHash,
   findControlSessionByTokenHash,
   findLoginCredential,
+  findStatusLink,
   type DeviceAuthRecord,
+  type StatusLinkRecord,
   type ControlSessionAuthRecord,
   type LoginCredentialRecord,
 } from './auth-entry.js';
 
-// Task 204, approach 1 — the three lookups' SQL, shared as UNEXECUTED query builders so
+// Task 204, approach 1 — the lookups' SQL, shared as UNEXECUTED query builders so
 // `@bolusi/harness` can run the same statement against its own PGlite handle instead of keeping a
 // line-for-line copy whose aliases drift silently. Deliberately NOT functions that accept a
 // `Kysely` handle: threading an external executor into this package's authz path would be a §6
@@ -45,6 +48,7 @@ export {
   controlSessionByTokenHashQuery,
   loginCredentialQuery,
   mapControlSessionRow,
+  statusLinkQuery,
 } from './auth-lookup-queries.js';
 
 // Task 47 — the SERVER projection watermark store (10-db §8, 04 §4.3), moved here from
@@ -83,6 +87,10 @@ export {
   type PhoneModelPhoto,
   type PhoneModelRecord,
 } from './phone-catalog.js';
+
+// The server's boot check: refuse to serve when DATABASE_URL is a superuser or BYPASSRLS role,
+// which would skip every RLS policy. It runs one fixed catalog query and returns nothing.
+export { assertRowSecurityRole } from './connection-role.js';
 
 // Task 49 — the SERVER projection engine factory (10-db §3 step 6, 04 §4). Same D7 weighing as
 // the watermark store: it CONSUMES a `forTenant` handle rather than producing one, and returns a

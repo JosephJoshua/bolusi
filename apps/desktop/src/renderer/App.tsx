@@ -8,12 +8,8 @@ import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { tapTarget, type SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { resolveZone } from '@bolusi/device/navigation/zone';
-import {
-  emptyWorkspace,
-  withDraft,
-  type UserWorkspace,
-} from '@bolusi/device/state/user-workspaces';
-import { t, translateRoleKey } from '@bolusi/i18n';
+import { withDraft, type UserWorkspace } from '@bolusi/device/state/user-workspaces';
+import { getLocale, setLocale, t, translateRoleKey } from '@bolusi/i18n';
 import { REPAIR_MODULE_ID, parseIntakeDraft } from '@bolusi/modules/repair';
 import { RepairRuntimeProvider, type IntakeDraft } from '@bolusi/modules/repair/desktop';
 import { Spinner, StatePanel } from '@bolusi/ui-web';
@@ -27,7 +23,8 @@ import { EnrolScreen } from './auth/EnrolScreen.js';
 import { AuthLayout } from './auth/AuthLayout.js';
 import { FirstPinScreen, PinScreen, type PinSubmitResult } from './auth/PinScreen.js';
 import { SwitcherScreen } from './auth/SwitcherScreen.js';
-import { createCaptureDialogs } from './capture-dialogs.js';
+import { createCaptureDialogs, type CaptureDialogs } from './capture-dialogs.js';
+import { CloseGuard } from './close-guard.js';
 import { windowHandoff } from './phone-handoff.js';
 import type { PcCapture } from './capture.js';
 import { createCoreRepairRuntime } from './core-runtime.js';
@@ -41,31 +38,40 @@ import {
   type DemoPerson,
 } from './demo.js';
 import { SyncStatusButton } from './SyncStatus.js';
+import { useReportBusy } from './updates.js';
 import { useCore } from './use-core.js';
 
 /** How often typing and clicking count as "still here" for the idle lock. */
 const ACTIVITY_EVERY_MS = 5_000;
+/**
+ * How long a photo or signature being waited for (the customer signing on the paired phone) keeps
+ * the idle lock away without a click: a hand-off takes minutes, a PC left open must still lock.
+ */
+const CAPTURE_KEEPS_AWAKE_MS = 15 * 60_000;
 
 export function App(): React.JSX.Element {
   // The webcam, signature and phone dialogs, once for the window; leaving the counter backs out.
   const [dialogs] = useState(() => createCaptureDialogs(windowHandoff()));
+  useReportBusy();
   return (
     <>
-      <Gate capture={dialogs.capture} />
+      <Gate dialogs={dialogs} />
       <dialogs.Host />
+      <CloseGuard />
     </>
   );
 }
 
-function Gate({ capture }: { readonly capture: PcCapture }): React.JSX.Element {
+function Gate({ dialogs }: { readonly dialogs: CaptureDialogs }): React.JSX.Element {
   const core = useCore();
+  const capture = dialogs.capture;
   if (core.mode === 'demo') return <DemoApp capture={capture} />;
   if (core.mode === 'connecting') return <BootScreen failed={false} />;
   if (core.mode === 'unavailable') return <BootScreen failed />;
   const { state } = core;
   if (state === null || state.phase === 'booting') return <BootScreen failed={false} />;
   if (state.phase === 'failed') return <BootScreen failed />;
-  return <LiveApp client={core.client} state={state} capture={capture} />;
+  return <LiveApp client={core.client} state={state} dialogs={dialogs} />;
 }
 
 function BootScreen({ failed }: { readonly failed: boolean }): React.JSX.Element {
@@ -96,12 +102,13 @@ function roleOf(user: SwitcherUser | undefined): string {
 function LiveApp({
   client,
   state,
-  capture,
+  dialogs,
 }: {
   readonly client: Client;
   readonly state: CoreState;
-  readonly capture: PcCapture;
+  readonly dialogs: CaptureDialogs;
 }): React.JSX.Element {
+  const capture = dialogs.capture;
   const session = state.session;
   const active = session?.active ?? null;
   const [pinFor, setPinFor] = useState<string | null>(null);
@@ -141,11 +148,23 @@ function LiveApp({
     };
     window.addEventListener('pointerdown', onActivity, true);
     window.addEventListener('keydown', onActivity, true);
+    // Waiting on the customer to sign or a photo from the phone is being here too, for a while.
+    const waiting = window.setInterval(() => {
+      const since = dialogs.waitingSince();
+      if (since !== null && Date.now() - since < CAPTURE_KEEPS_AWAKE_MS) onActivity();
+    }, ACTIVITY_EVERY_MS);
     return () => {
       window.removeEventListener('pointerdown', onActivity, true);
       window.removeEventListener('keydown', onActivity, true);
+      window.clearInterval(waiting);
     };
-  }, [client]);
+  }, [client, dialogs]);
+
+  // Locked or switched: whatever was being captured is backed out of, not left over the lock.
+  const inShell = zone.kind === 'shell';
+  useEffect(() => {
+    if (!inShell) dialogs.cancel();
+  }, [inShell, dialogs]);
 
   const storeName = state.deviceInfo?.storeName ?? null;
   const users = session?.users ?? null;
@@ -300,6 +319,9 @@ function LiveCounter({
   readonly onReenrol: () => void;
 }): React.JSX.Element {
   const storeName = state.deviceInfo?.storeName ?? '';
+  // Locking or switching away closes an open capture: nothing of this person's stays on screen,
+  // and a phone still recording for it is told the computer stopped waiting instead of "sent".
+  useEffect(() => () => capture.backOut(), [capture]);
   // A new runtime when the person's grants change, so every screen re-derives what it offers.
   const grants = JSON.stringify({
     permissions: session.permissions,
@@ -317,8 +339,9 @@ function LiveCounter({
         userId,
         storeName,
         capture,
+        statusSite: state.statusSite,
       }),
-    [client, grants, userId, storeName, capture],
+    [client, grants, userId, storeName, capture, state.statusSite],
   );
 
   const settings = useSettingsAccess(client, state, session, userId);
@@ -329,25 +352,38 @@ function LiveCounter({
   );
   const [syncOpen, setSyncOpen] = useState(false);
 
-  // The intake in progress lives in this person's workspace in the core, so it survives a lock, a
-  // switch to a colleague and a restart, and only this person's PIN brings it back.
+  // The intake in progress belongs to this PC (Joseph, 2026-10-31): it survives a lock, a switch
+  // to a colleague and a restart, and whoever signs in next may carry on with it. One kept in this
+  // person's own workspace by an older version still comes back, and moves to the PC on its next
+  // change.
   const workspace = session.workspace?.ownerUserId === userId ? session.workspace : null;
+  const deviceDraft = session.deviceDrafts?.[REPAIR_MODULE_ID];
   const restoredDraft = useMemo<IntakeDraft | null>(
-    () => (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
-    [workspace],
+    () =>
+      parseIntakeDraft(deviceDraft) ??
+      (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
+    [deviceDraft, workspace],
   );
-  // The core's copy arrives a moment after each write; the next write builds on the last one sent.
-  const sent = useRef<UserWorkspace | null>(workspace);
+  // The core's copy arrives a moment after each write; a write repeating the last one is skipped.
+  const sent = useRef<string>(JSON.stringify(deviceDraft ?? null));
+  const legacy = useRef<UserWorkspace | null>(
+    workspace !== null && workspace.drafts[REPAIR_MODULE_ID] !== undefined ? workspace : null,
+  );
   const onDraftChange = useCallback(
     (draft: IntakeDraft | null) => {
-      const base = sent.current ?? emptyWorkspace(userId);
-      const held = base.drafts[REPAIR_MODULE_ID] ?? null;
-      if (JSON.stringify(held) === JSON.stringify(draft)) return;
-      const next = withDraft(base, REPAIR_MODULE_ID, draft);
-      sent.current = next;
-      client.call('session.updateWorkspace', next).catch(() => undefined);
+      const held = legacy.current;
+      if (held !== null) {
+        legacy.current = null;
+        client
+          .call('session.updateWorkspace', withDraft(held, REPAIR_MODULE_ID, null))
+          .catch(() => undefined);
+      }
+      const json = JSON.stringify(draft);
+      if (json === sent.current) return;
+      sent.current = json;
+      client.call('session.updateDeviceDraft', REPAIR_MODULE_ID, draft).catch(() => undefined);
     },
-    [client, userId],
+    [client],
   );
 
   return (
@@ -372,6 +408,9 @@ function LiveCounter({
               open={syncOpen}
               onOpenChange={setSyncOpen}
               onSyncNow={() => void client.call('sync.requestManual').catch(() => undefined)}
+              onMarkRejectedHandled={(opIds) =>
+                void client.call('sync.markRejectedHandled', opIds).catch(() => undefined)
+              }
               onReenrol={onReenrol}
             />
           )
@@ -398,7 +437,15 @@ function useSettingsAccess(
   session: SessionView,
   userId: string,
 ): SettingsAccess {
-  const { canUnlock, canReset, canManageStaff, canSetLimits, tenantAdmin, pinRows } = session;
+  const {
+    canUnlock,
+    canReset,
+    canManageStaff,
+    canSetLimits,
+    canRenameDevice,
+    tenantAdmin,
+    pinRows,
+  } = session;
   // Colleagues whose PIN is locked here, from the same lockout machine as the PIN pad.
   const lockedCount = Object.entries(pinRows).filter(
     ([id, row]) => id !== userId && derivePinAuthState(row) === 'locked_out',
@@ -438,6 +485,8 @@ function useSettingsAccess(
           : undefined,
       staff,
       device,
+      renameDevice: canRenameDevice ? (name) => call<void>('device.rename', name) : undefined,
+      chooseLocale: (locale) => call<void>('device.setLocale', locale),
     };
   }, [
     client,
@@ -446,6 +495,7 @@ function useSettingsAccess(
     canReset,
     canManageStaff,
     canSetLimits,
+    canRenameDevice,
     tenantAdmin,
     lockedCount,
     device,
@@ -459,13 +509,21 @@ function demoNameOf(userId: string): string | null {
 /** The seeded demo (the dev server in a browser, and the demo build): four people, no core. */
 function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Element {
   const [person, setPerson] = useState<DemoPerson>(DEMO_PEOPLE[0]!);
-  // Each person's intake waits for them, as the core's workspaces do.
-  const [drafts, setDrafts] = useState<Readonly<Record<string, IntakeDraft | null>>>({});
+  // One intake for the whole PC, as the core keeps it: whoever is here may carry on with it.
+  const [draft, setDraft] = useState<IntakeDraft | null>(null);
   const runtime = useMemo(() => demoRuntimeFor(person, capture), [person, capture]);
-  const settings = useMemo((): SettingsAccess => ({ staff: demoStaffFor(person) }), [person]);
-  const onDraftChange = useCallback(
-    (draft: IntakeDraft | null) => setDrafts((all) => ({ ...all, [person.userId]: draft })),
-    [person.userId],
+  // The demo has no core to keep the language: it switches the window, until the next load.
+  const [, setDemoLocale] = useState(getLocale);
+  const settings = useMemo(
+    (): SettingsAccess => ({
+      staff: demoStaffFor(person),
+      chooseLocale: (next) => {
+        setLocale(next);
+        setDemoLocale(next);
+        return Promise.resolve();
+      },
+    }),
+    [person],
   );
   return (
     <RepairRuntimeProvider runtime={runtime}>
@@ -488,8 +546,8 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
           label: other.name,
           onSelect: () => setPerson(other),
         }))}
-        restoredDraft={drafts[person.userId] ?? null}
-        onDraftChange={onDraftChange}
+        restoredDraft={draft}
+        onDraftChange={setDraft}
         settings={settings}
       />
     </RepairRuntimeProvider>

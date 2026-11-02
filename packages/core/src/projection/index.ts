@@ -4,6 +4,7 @@
 // an injected `ProjectionDb` (Kysely) + store ports (08 §3.2).
 export type {
   ModuleProjectionManifest,
+  OperationConcerns,
   ProjectionApplier,
   ProjectionColumnType,
   ProjectionDb,
@@ -16,6 +17,7 @@ export { ProjectionRegistry, ProjectionRegistryError, type EntityTableRef } from
 
 export {
   cursorOf,
+  DEVICE_OP_TABLE,
   hasNewerEntityOp,
   highestContiguousSeq,
   readEntitiesOps,
@@ -47,7 +49,12 @@ export {
   type HashFn,
 } from './oracle.js';
 
-export { createSqlWatermarkStore, type WatermarkState, type WatermarkStore } from './watermarks.js';
+export {
+  createMemoryWatermarkStore,
+  createSqlWatermarkStore,
+  type WatermarkState,
+  type WatermarkStore,
+} from './watermarks.js';
 
 export {
   createSqlRebuildStore,
@@ -64,7 +71,9 @@ export {
 export {
   InvalidationBus,
   OP_SYNC_STATUS_TABLE,
+  changedRemotely,
   type EntityChange,
+  type EntityRef,
   type InvalidationListener,
   type TableInvalidationListener,
   type TransactionBoundaries,
@@ -73,7 +82,9 @@ export {
 export { ProjectionStats, type ProjectionStatsSnapshot } from './stats.js';
 
 export {
+  createPersonProjectionEngine,
   createProjectionEngine,
+  PERSON_OP_TABLE,
   ProjectionEngine,
   type ApplyMode,
   type ApplyOutcome,

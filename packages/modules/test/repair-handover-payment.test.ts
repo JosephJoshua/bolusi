@@ -2,17 +2,40 @@
 // rest (in one or more methods), a cancelled servisan's DP less its fee goes back, and only an
 // owner lets a phone go unpaid, which leaves a debt. The books stay balanced throughout.
 import { sql } from 'kysely';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
+import { formatMoney, initI18n } from '@bolusi/i18n';
+import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
+import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
+import { registerRepairCatalog } from '../src/repair/i18n.js';
 
-import { downPaymentAction, paidLabelKey, repairAbilities } from '../src/repair/flows.js';
+import enMoney from '../money/i18n/en.json' with { type: 'json' };
+import idMoney from '../money/i18n/id.json' with { type: 'json' };
+import { registerMoneyCatalog } from '../src/money/i18n.js';
+import type { DocumentMoney } from '../src/money/queries.js';
+import { refundMethods } from '../src/money/refund.js';
+import {
+  amountOwed,
+  downPaymentAction,
+  paidLabelKey,
+  repairAbilities,
+  ticketBalance,
+  ticketMoneyActions,
+} from '../src/repair/flows.js';
+import { handoverSlip } from '../src/repair/print.js';
+import type { TicketDetailRow } from '../src/repair/queries.js';
 import {
   accessoriesBack,
   openRepairHarness,
   intake,
   type RepairHarness,
 } from './support/repair-harness.js';
+
+beforeAll(() => {
+  initI18n({ locale: 'id' });
+  registerRepairCatalog({ id: idCatalog, en: enCatalog });
+});
 
 let h: RepairHarness | null = null;
 afterEach(async () => {
@@ -77,7 +100,14 @@ async function ledger(harness: RepairHarness, ticketId: string) {
     balance: number;
     charged: number;
     paid: number;
-    entries: { kind: string; account: string | null; amount: number; tendered: number | null }[];
+    entries: {
+      kind: string;
+      account: string | null;
+      amount: number;
+      tendered: number | null;
+      reason: string | null;
+      voidedAt: number | null;
+    }[];
   };
 }
 
@@ -174,6 +204,62 @@ describe('a repaired phone', () => {
   });
 });
 
+describe('an overpaid handover', () => {
+  test('gives the overpayment back through the transfer that made it, not from the drawer', async () => {
+    h = await openRepairHarness(7103);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BRI toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const transfer = `account:${accountId}`;
+    const ticketId = await repaired(h, { downPayment: 200_000 });
+    // The whole bill again by a transfer nobody can see yet: the cash DP must stay in the drawer.
+    await h.run(
+      'returnDevice',
+      handover(h, ticketId, { payments: [{ account: transfer, amount: TOTAL }] }),
+      h.cashierId,
+    );
+    const money = await ledger(h, ticketId);
+    expect(money.balance).toBe(0);
+    expect(money.entries.at(-1)).toMatchObject({
+      kind: 'refund_paid',
+      account: transfer,
+      amount: 200_000,
+    });
+    await expectBalancedBooks(h);
+  });
+
+  test('a DP split across methods comes back from what was left of each', async () => {
+    h = await openRepairHarness(7104);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const qris = `account:${accountId}`;
+    const ticketId = await openTicket(h, { downPayment: 100_000 });
+    await h.money(
+      'receivePayments',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        payments: [{ account: qris, amount: 100_000 }],
+      },
+      h.cashierId,
+    );
+    await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 50_000 }, h.storeOwnerId);
+    await h.run('returnDevice', handover(h, ticketId), h.cashierId);
+    const money = await ledger(h, ticketId);
+    expect(money.balance).toBe(0);
+    // The cash DP came first and paid the fee: 50.000 cash and the whole QRIS go back.
+    expect(money.entries.filter((e) => e.kind === 'refund_paid')).toMatchObject([
+      { account: 'cash', amount: 50_000 },
+      { account: qris, amount: 100_000 },
+    ]);
+    await expectBalancedBooks(h);
+  });
+});
+
 describe('a cancelled phone', () => {
   test('goes back with the DP less the fee returned in cash', async () => {
     h = await openRepairHarness(7201);
@@ -187,6 +273,8 @@ describe('a cancelled phone', () => {
       ['charge_recorded', 'cancel_fee_revenue', 50_000],
       ['refund_paid', 'cash', 150_000],
     ]);
+    // Saved as a code, not in the words of this device's language: each reader sees their own.
+    expect(money.entries.at(-1)?.reason).toBe('handover_refund');
     await expectBalancedBooks(h);
   });
 
@@ -286,6 +374,76 @@ describe('Bayar nanti', () => {
   });
 });
 
+describe('the bill the screens, the slip and the ledger agree on', () => {
+  async function detail(harness: RepairHarness, ticketId: string): Promise<TicketDetailRow> {
+    return (await harness.query('getTicket', { ticketId }, harness.cashierId))
+      .rows[0] as TicketDetailRow;
+  }
+
+  test('an owner’s reduction on a debt comes off what the servisan and its slip say is left', async () => {
+    h = await openRepairHarness(7601);
+    const ticketId = await repaired(h, { downPayment: 100_000 });
+    await h.run('returnDevice', handover(h, ticketId, { unpaidReason: 'Bayar Jumat' }), h.ownerId);
+    await h.money(
+      'reduceCharge',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        amount: 20_000,
+        reason: 'Pelanggan tetap',
+      },
+      h.storeOwnerId,
+    );
+    const row = await detail(h, ticketId);
+    const owed = (await ledger(h, ticketId)).balance;
+    expect(owed).toBe(TOTAL - 100_000 - 20_000);
+    expect(amountOwed(row)).toBe(TOTAL - 20_000);
+    expect(ticketBalance(row)).toEqual({ kind: 'due', amount: owed });
+    const slip = handoverSlip(row, {
+      header: { name: 'Toko', lines: [], logo: null },
+      terms: null,
+      link: null,
+      handedOverByName: null,
+      signature: null,
+    });
+    const totals = slip.aside!.flatMap((block) => (block.kind === 'amounts' ? block.totals : []));
+    expect(totals.at(-1)?.amount).toBe(formatMoney(owed));
+  });
+
+  test('what goes back through each method is shown before the handover books it', async () => {
+    h = await openRepairHarness(7602);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const qris = `account:${accountId}`;
+    const ticketId = await openTicket(h, { downPayment: 100_000 });
+    await h.money(
+      'receivePayments',
+      {
+        document: { kind: 'repair.ticket', id: ticketId, label: 'x' },
+        payments: [{ account: qris, amount: 100_000 }],
+      },
+      h.cashierId,
+    );
+    await h.run('cancelTicket', { ticketId, reason: 'Batal', fee: 50_000 }, h.storeOwnerId);
+    const before = await detail(h, ticketId);
+    expect(ticketBalance(before)).toEqual({ kind: 'refund', amount: 150_000 });
+    expect(before.refunds).toEqual([
+      { account: 'cash', name: null, amount: 50_000 },
+      { account: qris, name: 'QRIS toko', amount: 100_000 },
+    ]);
+
+    await h.run('returnDevice', handover(h, ticketId), h.cashierId);
+    const booked = (await ledger(h, ticketId)).entries.filter((e) => e.kind === 'refund_paid');
+    expect(booked.map(({ account, amount }) => ({ account, amount }))).toEqual(
+      before.refunds.map(({ account, amount }) => ({ account, amount })),
+    );
+    // Once handed back, nothing is left to give back.
+    expect((await detail(h, ticketId)).refunds).toEqual([]);
+  });
+});
+
 describe('a bill paid twice', () => {
   test('keeps both payments, and the owner sees what is owed back', async () => {
     h = await openRepairHarness(7501);
@@ -367,6 +525,31 @@ describe('the DP once the phone went home', () => {
     await expectBalancedBooks(h);
   });
 
+  test('raising a DP through another method keeps the cash and records only the difference', async () => {
+    h = await openRepairHarness(7404);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const ticketId = await openTicket(h, { downPayment: 200_000 });
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 500_000, reason: 'Tambah lewat QRIS', account: `account:${accountId}` },
+      h.storeOwnerId,
+    );
+    const money = await ledger(h, ticketId);
+    expect(money.paid).toBe(500_000);
+    const live = money.entries.filter(
+      (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
+    );
+    expect(live.map((entry) => [entry.account, entry.amount])).toEqual([
+      ['cash', 200_000],
+      [`account:${accountId}`, 300_000],
+    ]);
+    await expectBalancedBooks(h);
+  });
+
   test('a DP partly given back is not re-recorded by a correction', async () => {
     h = await openRepairHarness(7402);
     const ticketId = await openTicket(h, { downPayment: 200_000 });
@@ -381,5 +564,133 @@ describe('the DP once the phone went home', () => {
       'INVALID_TRANSITION',
       'repair.refusal.downPaymentRefunded',
     );
+  });
+});
+
+/** The ledger's figures for a servisan, as the refund step reads them. */
+async function documentMoney(harness: RepairHarness, ticketId: string): Promise<DocumentMoney> {
+  return (await ledger(harness, ticketId)) as unknown as DocumentMoney;
+}
+
+describe('money after the phone went home', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idMoney, en: enMoney });
+  });
+  async function ticket(harness: RepairHarness, ticketId: string) {
+    return (await harness.query('getTicket', { ticketId }, harness.cashierId))
+      .rows[0] as TicketDetailRow;
+  }
+  const document = (ticketId: string) => ({ kind: 'repair.ticket', id: ticketId, label: 'x' });
+  const may = (harness: RepairHarness, userId: string) => (permission: string) =>
+    harness.hasPermission(userId, permission);
+
+  test('the counter gives back an overpayment, and the servisan reads paid in full again', async () => {
+    h = await openRepairHarness(7601);
+    const ticketId = await repaired(h);
+    await h.run(
+      'returnDevice',
+      handover(h, ticketId, { payments: [{ account: 'cash', amount: TOTAL }] }),
+      h.cashierId,
+    );
+    await h.money(
+      'receivePayments',
+      { document: document(ticketId), payments: [{ account: 'cash', amount: 100_000 }] },
+      h.cashierId,
+    );
+    const overpaid = await ticket(h, ticketId);
+    expect(amountOwed(overpaid) - (overpaid.downPayment ?? 0)).toBe(-100_000);
+    expect(ticketMoneyActions(overpaid, may(h, h.cashierId))).toEqual({
+      refund: true,
+      reduce: false,
+    });
+    const methods = refundMethods(await documentMoney(h, ticketId), [], false);
+    expect(methods).toMatchObject([{ account: 'cash', limit: 100_000 }]);
+
+    // Beyond the overpayment is the owner's to give back.
+    await expectRefused(
+      h.money(
+        'refund',
+        { document: document(ticketId), account: 'cash', amount: 150_000, reason: 'lebih' },
+        h.cashierId,
+      ),
+      'PERMISSION_DENIED',
+    );
+    await h.money(
+      'refund',
+      { document: document(ticketId), account: 'cash', amount: 100_000, reason: 'Bayar dua kali' },
+      h.cashierId,
+    );
+    const settled = await ticket(h, ticketId);
+    expect(settled).toMatchObject({ downPayment: TOTAL, reduced: 0 });
+    expect(ticketMoneyActions(settled, may(h, h.cashierId))).toEqual({
+      refund: false,
+      reduce: false,
+    });
+    expect((await h.moneyQuery('openBalances', {}, h.storeOwnerId)).rows).toEqual([]);
+    await expectBalancedBooks(h);
+  });
+
+  test('an owner gives back part of a paid bill, which lowers the bill by as much', async () => {
+    h = await openRepairHarness(7602);
+    const ticketId = await repaired(h);
+    await h.run(
+      'returnDevice',
+      handover(h, ticketId, { payments: [{ account: 'cash', amount: TOTAL }] }),
+      h.cashierId,
+    );
+    const paid = await ticket(h, ticketId);
+    expect(ticketMoneyActions(paid, may(h, h.ownerId))).toEqual({ refund: true, reduce: false });
+    // Money goes back through the counter's command, which an owner without it cannot run.
+    const without = (permission: string) =>
+      permission !== 'money.receive' && h!.hasPermission(h!.ownerId, permission);
+    expect(ticketMoneyActions(paid, without)).toEqual({ refund: false, reduce: false });
+    expect(refundMethods(await documentMoney(h, ticketId), [], true)).toMatchObject([
+      { account: 'cash', limit: TOTAL },
+    ]);
+
+    await h.money(
+      'refund',
+      { document: document(ticketId), account: 'cash', amount: 50_000, reason: 'Garansi kaca' },
+      h.ownerId,
+    );
+    const after = await ticket(h, ticketId);
+    expect(after).toMatchObject({ downPayment: TOTAL - 50_000, reduced: 50_000 });
+    expect(amountOwed(after)).toBe(TOTAL - 50_000);
+    expect((await h.moneyQuery('openBalances', {}, h.storeOwnerId)).rows).toEqual([]);
+    await expectBalancedBooks(h);
+  });
+
+  test('an owner lowers a debt, and what is owed comes down on the servisan and in Kas', async () => {
+    h = await openRepairHarness(7603);
+    const ticketId = await repaired(h);
+    await h.run('returnDevice', handover(h, ticketId, { unpaidReason: 'Bayar Jumat' }), h.ownerId);
+    const owing = await ticket(h, ticketId);
+    expect(ticketMoneyActions(owing, may(h, h.ownerId))).toEqual({ refund: false, reduce: true });
+    expect(ticketMoneyActions(owing, may(h, h.cashierId))).toEqual({
+      refund: false,
+      reduce: false,
+    });
+
+    await expectRefused(
+      h.money(
+        'reduceCharge',
+        { document: document(ticketId), amount: 100_000, reason: 'Diskon' },
+        h.cashierId,
+      ),
+      'PERMISSION_DENIED',
+    );
+    await h.money(
+      'reduceCharge',
+      { document: document(ticketId), amount: 100_000, reason: 'Pelanggan lama' },
+      h.ownerId,
+    );
+    const lowered = await ticket(h, ticketId);
+    expect(lowered.reduced).toBe(100_000);
+    expect(amountOwed(lowered)).toBe(TOTAL - 100_000);
+    expect((await h.moneyQuery('openBalances', {}, h.storeOwnerId)).rows).toMatchObject([
+      { documentId: ticketId, balance: TOTAL - 100_000 },
+    ]);
+    await expectBalancedBooks(h);
   });
 });

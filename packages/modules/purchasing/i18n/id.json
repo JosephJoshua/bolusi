@@ -1,0 +1,154 @@
+{
+  "opType": {
+    "supplierAdded": "Supplier ditambahkan",
+    "supplierEdited": "Supplier diubah",
+    "orderDrafted": "Draf pesanan dibuat",
+    "orderEdited": "Pesanan diubah",
+    "orderPlaced": "Pesanan dipesan",
+    "orderCancelled": "Pesanan dibatalkan",
+    "orderReceived": "Barang pesanan diterima"
+  },
+  "refusal": {
+    "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
+    "supplierNotFound": "Supplier ini tidak ada di daftar.",
+    "orderNotFound": "Pesanan ini tidak ada di toko ini.",
+    "itemNotFound": "Ada barang yang tidak ada di daftar.",
+    "notDraft": "Pesanan ini sudah dipesan, jadi tidak bisa diubah lagi.",
+    "notOrdered": "Pesanan ini belum dipesan atau sudah dibatalkan.",
+    "alreadyCancelled": "Pesanan ini sudah dibatalkan.",
+    "notOnOrder": "Ada barang yang tidak ada di pesanan ini.",
+    "receiptMismatch": "Jumlah barangnya tidak sesuai dengan yang diterima.",
+    "nothingToCancel": "Semua barang pesanan ini sudah datang, jadi tidak bisa dibatalkan.",
+    "numberNotThisDevice": "Nomor pesanan ini bukan dari HP ini.",
+    "numberUsed": "Nomor pesanan ini sudah dipakai.",
+    "partArchived": "Ada barang di pesanan ini yang sudah diarsipkan. Hapus dulu dari pesanannya."
+  },
+  "stage": {
+    "draft": "Draf",
+    "ordered": "Dipesan",
+    "partial": "Diterima sebagian",
+    "received": "Diterima",
+    "over": "Diterima lebih",
+    "cancelled": "Dibatalkan"
+  },
+  "message": {
+    "greeting": "Halo {supplier}, kami mau pesan:",
+    "line": "{n}. {name}: {qty} pcs",
+    "note": "Catatan: {note}",
+    "thanks": "Terima kasih.",
+    "sendFailed": "WhatsApp belum terpasang di perangkat ini."
+  },
+  "action": {
+    "place": "Pesan",
+    "saveDraft": "Simpan draf",
+    "edit": "Ubah",
+    "receive": "Terima barang",
+    "send": "Kirim ke supplier",
+    "cancel": "Batalkan pesanan",
+    "deleteDraft": "Hapus draf"
+  },
+  "list": {
+    "title": "Belanja",
+    "open": "Berjalan",
+    "done": "Selesai",
+    "new": "Pesanan baru",
+    "emptyOpen": "Belum ada pesanan yang berjalan.",
+    "emptyDone": "Belum ada pesanan yang selesai.",
+    "parts": "{count} barang",
+    "progress": "{received} dari {ordered} diterima"
+  },
+  "order": {
+    "lines": "Barang",
+    "receipts": "Riwayat terima",
+    "created": "Dibuat {date}",
+    "ordered": "Dipesan {date}",
+    "overHint": "Ada barang yang diterima lebih dari pesanan. Cek lalu koreksi stoknya.",
+    "qty": "{qty} pcs",
+    "receivedOf": "{received} dari {qty}",
+    "receiptLine": "{name} ({qty})"
+  },
+  "cancel": {
+    "title": "Batalkan pesanan ini?",
+    "draftTitle": "Hapus draf ini?",
+    "message": "Barang yang sudah diterima tetap di stok. Sisanya tidak ditunggu lagi."
+  },
+  "discard": {
+    "title": "Buang pesanan ini?",
+    "message": "Isian pesanan ini akan hilang.",
+    "confirm": "Buang",
+    "keep": "Lanjut isi"
+  },
+  "form": {
+    "newTitle": "Pesanan baru",
+    "editTitle": "Ubah draf",
+    "supplier": "Supplier",
+    "noSuppliers": "Belum ada supplier. Tambah dulu.",
+    "addPart": "Tambah barang",
+    "noParts": "Belum ada barang.",
+    "remove": "Hapus",
+    "qty": "Jumlah",
+    "decrease": "Kurangi",
+    "increase": "Tambah",
+    "note": "Catatan untuk supplier",
+    "pickFirst": "Pilih supplier dan barangnya dulu."
+  },
+  "pick": {
+    "title": "Pilih barang",
+    "searchHint": "Cari nama atau kode barang",
+    "clear": "Hapus pencarian",
+    "scan": "Pindai",
+    "empty": "Belum ada barang di daftar.",
+    "noMatches": "Barang tidak ditemukan.",
+    "onOrder": "Sudah di pesanan, tap untuk tambah 1",
+    "stock": "Stok {count}"
+  },
+  "receive": {
+    "title": "Terima barang",
+    "hint": "Isi jumlah yang datang.",
+    "arrived": "Datang",
+    "ordered": "Dipesan {qty}",
+    "orderedSoFar": "Dipesan {qty}, sudah datang {received}",
+    "over": "Lebih {extra} dari pesanan.",
+    "note": "Catatan",
+    "nothing": "Isi jumlah barang yang datang dulu.",
+    "save": "Simpan"
+  },
+  "supplier": {
+    "listTitle": "Supplier",
+    "add": "Tambah supplier",
+    "editTitle": "Ubah supplier",
+    "active": "Aktif",
+    "archived": "Diarsipkan",
+    "empty": "Belum ada supplier.",
+    "noArchived": "Tidak ada supplier yang diarsipkan.",
+    "name": "Nama",
+    "phone": "Nomor WhatsApp",
+    "note": "Catatan",
+    "nameFirst": "Isi nama supplier dulu.",
+    "save": "Simpan",
+    "archive": "Arsipkan",
+    "restore": "Aktifkan lagi"
+  },
+  "done": {
+    "placed": "Pesanan dipesan. Kirim ke supplier lewat WhatsApp.",
+    "drafted": "Draf disimpan.",
+    "received": "Barang diterima. Stok sudah bertambah.",
+    "cancelled": "Pesanan dibatalkan.",
+    "supplierSaved": "Supplier disimpan."
+  },
+  "desk": {
+    "col": {
+      "order": "Pesanan",
+      "supplier": "Supplier",
+      "parts": "Barang",
+      "stage": "Status"
+    },
+    "close": "Tutup pesanan",
+    "copied": "Pesan disalin. Tempel di chat supplier.",
+    "copyFailed": "Pesan tidak bisa disalin.",
+    "addPart": "Cari barang untuk ditambah",
+    "noPartMatches": "Barang tidak ditemukan.",
+    "emptyHint": "Pesanan ke supplier muncul di sini.",
+    "suppliersHint": "Supplier dipakai di semua toko."
+  }
+}

@@ -19,11 +19,13 @@ import {
   type ModuleRegistry,
   type OperationDeclaration,
   type ProjectionRegistry,
+  type ReadScopeRegistry,
 } from '@bolusi/core';
 import { ALL_MODULES } from '@bolusi/modules';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
+import type { UpdateSource } from './app-updates/releases.js';
 import type { QrisConfig } from './qris/service.js';
 import { HandoffRelay } from './handoff/relay.js';
 import { createDbVerifyToken } from './auth/verify-token.js';
@@ -170,6 +172,10 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       if (!isFoldableSchemaVersion(currentVersion, schemaVersion)) {
         return { kind: 'known', validate: () => false };
       }
+      // A version the type's rule no longer fully judges is refused in a new push. Only push
+      // ingestion asks: stored history still folds at every version.
+      const minPushVersion = declaration.minPushVersion ?? 1;
+      if (schemaVersion < minPushVersion) return { kind: 'retired', minPushVersion };
 
       // THE PAYLOAD GATE (task 127; 05 §8, 04 §3). The version is foldable, so validate the payload
       // against the schema THAT VERSION declared — `payloadSchemaFor` returns `payload` for the
@@ -252,6 +258,9 @@ export interface ServerDeps {
   readonly accessLogSink: AccessLogSink;
   readonly bodyCaps: (path: string) => BodyCaps;
   readonly clientIp: (c: Context<AppEnv>) => string;
+  /** Mark cookies Secure. From config in production (main.ts); off for tests and the plain-http
+   *  harness, whose browsers would otherwise drop them. */
+  readonly secureCookies: boolean;
   /** Ed25519 verify + SHA-256 over JCS bytes for the push pipeline (05 §3; task 16 sync push). */
   readonly serverCrypto: CryptoPort;
   /** Fresh ids for `device_anomalies` rows the push pipeline writes (05 §3). */
@@ -259,6 +268,9 @@ export interface ServerDeps {
   /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Derived from
    *  SERVER_MODULES — `platform.*` + `auth.*` + `notes.*` (25), all registered. */
   readonly opRegistry: OpRegistry;
+  /** Which permission each op type is read with, for permission-scoped pulls (sync/read-set.ts).
+   *  Derived from the SAME SERVER_MODULES list. */
+  readonly readScope: ReadScopeRegistry;
   /** Op type → projection applier (04 §4) for the push pipeline's apply step (10-db §3 step 6).
    *  Derived from the SAME SERVER_MODULES list as `opRegistry` — the `platform` appliers
    *  (`conflicts` + `user_prefs`) and the `auth` appliers (`auth_sessions` + `pin_lockout_events` +
@@ -306,6 +318,10 @@ export interface ServerDeps {
   readonly phoneCatalog: PhoneCatalogReader;
   /** The counter PC ↔ store phone handoff (handoff/relay.ts); in memory, like the realtime hub. */
   readonly handoffRelay: HandoffRelay;
+  /** The web app's build, served at the site root (web.ts); absent ⇒ the API only. */
+  readonly webDir?: string;
+  /** Where phones' over-the-air updates come from (app-updates/releases.ts); absent ⇒ none. */
+  readonly appUpdates?: UpdateSource;
   /** Integrated QRIS through Xendit (qris/service.ts). Absent ⇒ its routes answer 503; it also
    *  needs `systemKeyStore`, since a confirmed payment is a record the server signs. */
   readonly qris?: QrisConfig;
@@ -421,9 +437,11 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     accessLogSink: overrides.accessLogSink ?? consoleAccessLogSink,
     bodyCaps: overrides.bodyCaps ?? defaultBodyCaps,
     clientIp: overrides.clientIp ?? defaultClientIp,
+    secureCookies: overrides.secureCookies ?? false,
     serverCrypto,
     newOpLogId,
     opRegistry: overrides.opRegistry ?? serverOpRegistry,
+    readScope: overrides.readScope ?? serverModuleRegistry.operations,
     projections: overrides.projections ?? serverModuleRegistry.projections,
     pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
     tenantPushQueue: overrides.tenantPushQueue ?? createTenantQueue(),
@@ -441,8 +459,10 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     },
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
+    ...(overrides.appUpdates === undefined ? {} : { appUpdates: overrides.appUpdates }),
     ...(overrides.qris === undefined ? {} : { qris: overrides.qris }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
+    ...(overrides.webDir !== undefined ? { webDir: overrides.webDir } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };
 }

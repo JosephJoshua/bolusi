@@ -53,6 +53,12 @@ export class FakeCore {
       if (method === 'repair.run') {
         return this.demo.run(args[1] as never, args[2] as never) as Promise<T>;
       }
+      if (method === 'approvals.query') {
+        return this.demo.approvals.query(args[1] as never, args[2] as never) as Promise<T>;
+      }
+      if (method === 'approvals.run') {
+        return this.demo.approvals.run(args[1] as never, args[2] as never) as Promise<T>;
+      }
       if (method === 'repair.technicians') return this.demo.technicians() as Promise<T>;
       if (method === 'money.query') {
         return this.demo.money.query(args[1] as never, args[2] as never) as Promise<T>;
@@ -111,10 +117,12 @@ export function session(over: Partial<SessionView> = {}): SessionView {
     locked: false,
     lockReason: null,
     workspace: null,
+    deviceDrafts: null,
     canUnlock: true,
     canReset: true,
     canManageStaff: true,
     canSetLimits: true,
+    canRenameDevice: true,
     tenantAdmin: true,
     permissions: [],
     colleaguePermissions: {},
@@ -139,6 +147,8 @@ export function ready(over: Partial<CoreState> = {}): CoreState {
     setupFor: null,
     session: session(),
     sync: null,
+    statusSite: 'https://bolusi.example',
+    locale: 'id',
     ...over,
   };
 }

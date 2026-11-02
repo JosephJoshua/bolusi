@@ -4,23 +4,20 @@
  * carry, most used first, so a filter never offers something that finds nothing. The phones a
  * part fits are left to search, which already matches them typo and all.
  */
-import { ChoiceChips, SegmentedControl, color, space, type } from '@bolusi/ui';
+import { ChoiceChips, SegmentedControl, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
-import { INVENTORY_PERMISSION, TAG_FACET } from '../constants.js';
-import { ti, type InventoryKey } from '../i18n.js';
-import { NO_CATEGORY, type CategoryRow, type FacetValueRow, type PartFilter } from '../queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
-import { NO_FILTER, type ListFilter } from './PartList.js';
-
-const STOCK_KEY: Readonly<Record<PartFilter, InventoryKey>> = {
-  active: 'inventory.filter.active',
-  outOfStock: 'inventory.filter.outOfStock',
-  belowZero: 'inventory.filter.belowZero',
-  archived: 'inventory.filter.archived',
-};
+import { ti } from '../i18n.js';
+import {
+  NO_FILTER,
+  STOCK_VIEW_KEY,
+  stockViews,
+  useFilterChoices,
+  type ListFilter,
+} from '../list-filter.js';
+import { useInventoryRuntime } from '../runtime.js';
 
 export interface FilterStepProps {
   readonly chrome: ScreenChrome;
@@ -28,11 +25,6 @@ export interface FilterStepProps {
   readonly onApply: (filter: ListFilter) => void;
   readonly onCancel: () => void;
   readonly testID?: string | undefined;
-}
-
-interface Choices {
-  readonly category: CategoryRow | null;
-  readonly facets: readonly FacetValueRow[];
 }
 
 export function FilterStep({
@@ -43,35 +35,9 @@ export function FilterStep({
   testID = 'inventory.filterStep',
 }: FilterStepProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
-  // Stock below zero and archived items are the owner's to sort out, as on the list.
-  const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const [draft, setDraft] = useState<ListFilter>(filter);
-  const categoryId =
-    filter.categoryId === null || filter.categoryId === NO_CATEGORY ? null : filter.categoryId;
-
-  const choices = useInventoryQuery<Choices>(
-    async (rt) => ({
-      category:
-        categoryId === null
-          ? null
-          : ((await rt.query('listCategories', { includeArchived: true })).rows.find(
-              (row) => row.id === categoryId,
-            ) ?? null),
-      facets: (await rt.query('facetValues', { categoryId })).rows,
-    }),
-    `itemFilter:${categoryId ?? ''}`,
-  );
-  const loaded = choices.status === 'ready' ? choices.data : { category: null, facets: [] };
-  const inUse = (facet: string): string[] =>
-    loaded.facets.filter((row) => row.facet === facet).map((row) => row.value);
-  // Fields with nothing in use offer nothing to filter by; phones go through search.
-  const fields = (loaded.category?.fields ?? []).filter(
-    (field) => field.kind !== 'phones' && inUse(field.id).length > 0,
-  );
-  const tags = inUse(TAG_FACET);
-  const stocks: readonly PartFilter[] = canManage
-    ? ['active', 'outOfStock', 'belowZero', 'archived']
-    : ['active', 'outOfStock'];
+  const { fields, tags } = useFilterChoices(filter.categoryId);
+  const stocks = stockViews(runtime.hasPermission);
 
   return (
     <FlowScreen
@@ -95,7 +61,7 @@ export function FilterStep({
         <View>
           <Text style={styles.label}>{ti('inventory.filterStep.stock')}</Text>
           <SegmentedControl
-            options={stocks.map((value) => ({ value, label: ti(STOCK_KEY[value]) }))}
+            options={stocks.map((value) => ({ value, label: ti(STOCK_VIEW_KEY[value]) }))}
             value={draft.stock}
             onChange={(stock) => setDraft((current) => ({ ...current, stock }))}
             size="compact"
@@ -103,11 +69,11 @@ export function FilterStep({
             testID={`${testID}.stock`}
           />
         </View>
-        {fields.map((field) => (
+        {fields.map(({ field, values: inUse }) => (
           <ChoiceChips
             key={field.id}
             label={field.label}
-            options={inUse(field.id)}
+            options={inUse}
             value={draft.values[field.id] ?? []}
             onChange={(values) =>
               setDraft((current) => ({

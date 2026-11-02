@@ -368,3 +368,20 @@ export const itemPutBackApplier: Applier = async (db, op) => {
     note: null,
   });
 };
+
+export const stockReceivedApplier: Applier = async (db, op) => {
+  const payload = payloadOf<{
+    itemId: string;
+    qty: number;
+    source: { kind: string; id: string; label: string };
+  }>(op);
+  // The source is filed where a use is: one movement names what it was for or where it came from.
+  await insertMovement(db, op, {
+    itemId: payload.itemId,
+    kind: 'received',
+    qty: payload.qty,
+    counted: null,
+    use: payload.source,
+    note: null,
+  });
+};

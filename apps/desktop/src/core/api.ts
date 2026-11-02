@@ -7,7 +7,7 @@ import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
 import type { DeviceStatus } from '@bolusi/device/navigation/zone';
 import type { LockReason } from '@bolusi/device/session/shell-session';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import type { MediaRef, VideoMime, VideoRef } from '@bolusi/schemas';
+import type { Locale, MediaRef, VideoMime, VideoRef } from '@bolusi/schemas';
 
 /** The PIN session as the window renders it. */
 export interface SessionView {
@@ -19,11 +19,15 @@ export interface SessionView {
   readonly locked: boolean;
   readonly lockReason: LockReason | null;
   readonly workspace: UserWorkspace | null;
+  /** Drafts that belong to this PC (an intake anyone here may carry on), null while locked. */
+  readonly deviceDrafts: Readonly<Record<string, unknown>> | null;
   readonly canUnlock: boolean;
   readonly canReset: boolean;
   readonly canManageStaff: boolean;
   /** May set limited roles' amounts at this store (`auth.limit_manage`). */
   readonly canSetLimits: boolean;
+  /** May rename this PC (`auth.device_enroll` at its store). */
+  readonly canRenameDevice: boolean;
   readonly tenantAdmin: boolean;
   /**
    * Every module's permissions the signed-in person holds (repair's, money's, ...), for showing
@@ -48,6 +52,16 @@ export interface CoreState {
   readonly session: SessionView | null;
   /** Null until the core has booted. */
   readonly sync: SyncStatusInput | null;
+  /** The server this PC syncs with, which serves customers' status pages. */
+  readonly statusSite: string;
+  /** The language this PC shows, from its settings; the window follows it. */
+  readonly locale: Locale;
+}
+
+/** The `repairChanged` payload: the record another device just changed, or null. */
+export interface RepairChange {
+  /** What a colleague just changed on another device: the record and the ones it concerns. */
+  readonly freshIds: readonly string[];
 }
 
 /** Events the core pushes to the window. */
@@ -95,4 +109,11 @@ export type HandoffEvent =
       readonly seq: number;
       readonly strokes: readonly (readonly { readonly x: number; readonly y: number }[])[];
       readonly pad: { readonly width: number; readonly height: number };
+    }
+  | {
+      readonly id: string;
+      readonly type: 'video';
+      readonly seq: number;
+      readonly bytes: Uint8Array;
+      readonly mime: VideoMime;
     };

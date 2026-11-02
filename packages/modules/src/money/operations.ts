@@ -5,10 +5,15 @@
 // tenant-scoped, so every store's devices know them. Payloads are strict; money is integer IDR.
 import { z } from 'zod';
 
-import type { OperationDeclaration } from '@bolusi/core';
+import type { OperationConcerns, OperationDeclaration } from '@bolusi/core';
 import { zMoneyIdr, zUuid } from '@bolusi/schemas';
 
-import { accountSavedApplier, entryRecordedApplier, paymentVoidedApplier } from './applier.js';
+import {
+  accountSavedApplier,
+  cashMoveVoidedApplier,
+  entryRecordedApplier,
+  paymentVoidedApplier,
+} from './applier.js';
 import {
   CASH_MOVE_KINDS,
   MAX_ACCOUNT_NAME,
@@ -22,7 +27,7 @@ import {
   PAYMENT_ACCOUNT_KINDS,
   REVENUE_ACCOUNTS,
 } from './constants.js';
-import { zDocument, type MoneyDocumentSources } from './documents.js';
+import { zDocument, type MoneyDocument, type MoneyDocumentSources } from './documents.js';
 import { accountSavedRule, centralAccountSavedRule, createMoneyRules } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
 
@@ -116,7 +121,17 @@ export function createMoneyOperations(
   sources: MoneyDocumentSources,
 ): Record<string, OperationDeclaration<MoneyDatabase>> {
   const rules = createMoneyRules(sources);
-  const entry = { entityType: MONEY_ENTRY_ENTITY, apply: entryRecordedApplier } as const;
+  // Money taken or given back for a document changes how that document looks: a servisan's row
+  // shows what is still owed.
+  const concerns: OperationConcerns = (op) => {
+    // Cash moves and counts are for no document.
+    const { document } = op.payload as { readonly document?: MoneyDocument };
+    const source = document === undefined ? undefined : sources[document.kind];
+    return document === undefined || source === undefined
+      ? []
+      : [{ entityType: source.entityType, entityId: document.id }];
+  };
+  const entry = { entityType: MONEY_ENTRY_ENTITY, apply: entryRecordedApplier, concerns } as const;
   return {
     [MONEY_OP.accountSaved]: {
       schemaVersion: 1,
@@ -125,6 +140,7 @@ export function createMoneyOperations(
       apply: accountSavedApplier,
       rule: accountSavedRule,
       permission: MONEY_PERMISSION.manageAccounts,
+      read: MONEY_PERMISSION.read,
       entityType: MONEY_ACCOUNT_ENTITY,
     },
     [MONEY_OP.centralAccountSaved]: {
@@ -134,6 +150,7 @@ export function createMoneyOperations(
       apply: accountSavedApplier,
       rule: centralAccountSavedRule,
       permission: MONEY_PERMISSION.manageCentralAccounts,
+      read: MONEY_PERMISSION.read,
       entityType: MONEY_ACCOUNT_ENTITY,
       scope: 'tenant',
     },
@@ -144,6 +161,7 @@ export function createMoneyOperations(
       reversal: 'Lowered only by an owner with money.charge_reduced.',
       rule: rules.chargeRecordedRule,
       permission: MONEY_PERMISSION.receive,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.chargeReduced]: {
       ...entry,
@@ -153,6 +171,7 @@ export function createMoneyOperations(
         'Not reversible: what the customer owes was lowered. Charging again is a new charge.',
       rule: rules.chargeReducedRule,
       permission: MONEY_PERMISSION.refund,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.paymentReceived]: {
       ...entry,
@@ -162,6 +181,7 @@ export function createMoneyOperations(
         'Cancelled by an owner with money.payment_voided, or given back with money.refund_paid.',
       rule: rules.paymentReceivedRule,
       permission: MONEY_PERMISSION.receive,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.paymentVoided]: {
       schemaVersion: 1,
@@ -170,6 +190,18 @@ export function createMoneyOperations(
       apply: paymentVoidedApplier,
       rule: rules.paymentVoidedRule,
       permission: MONEY_PERMISSION.voidPayment,
+      read: MONEY_PERMISSION.read,
+      entityType: MONEY_ENTRY_ENTITY,
+    },
+    [MONEY_OP.cashMoveVoided]: {
+      schemaVersion: 1,
+      payload: paymentVoidedPayload,
+      reversal: 'Not reversible: record the cash move again if it was real.',
+      apply: cashMoveVoidedApplier,
+      rule: rules.cashMoveVoidedRule,
+      // Changing what the drawer should hold is settling the book, the owner's call.
+      permission: MONEY_PERMISSION.adjustCash,
+      read: MONEY_PERMISSION.read,
       entityType: MONEY_ENTRY_ENTITY,
     },
     [MONEY_OP.refundPaid]: {
@@ -179,6 +211,7 @@ export function createMoneyOperations(
       reversal: NOT_REVERSIBLE,
       rule: rules.refundPaidRule,
       permission: MONEY_PERMISSION.receive,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.cashMoved]: {
       ...entry,
@@ -187,6 +220,7 @@ export function createMoneyOperations(
       reversal: NOT_REVERSIBLE,
       rule: rules.cashMovedRule,
       permission: MONEY_PERMISSION.moveCash,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.cashCounted]: {
       ...entry,
@@ -195,6 +229,7 @@ export function createMoneyOperations(
       reversal: 'Not reversible: the drawer was counted. Count again for a new figure.',
       rule: rules.cashCountedRule,
       permission: MONEY_PERMISSION.countCash,
+      read: MONEY_PERMISSION.read,
     },
     [MONEY_OP.cashAdjusted]: {
       ...entry,
@@ -203,6 +238,7 @@ export function createMoneyOperations(
       reversal: 'Reversed by an opposite money.cash_adjusted.',
       rule: rules.cashAdjustedRule,
       permission: MONEY_PERMISSION.adjustCash,
+      read: MONEY_PERMISSION.read,
     },
   };
 }

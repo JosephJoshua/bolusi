@@ -7,8 +7,14 @@
  */
 import type { CommandIdentity } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
-import type { QrisPort } from '@bolusi/modules/money';
-import { REPAIR_TICKET_ENTITY, catalogModelSearch, tn } from '@bolusi/modules/repair';
+import { MONEY_ENTRY_ENTITY, type QrisPort } from '@bolusi/modules/money';
+import {
+  REPAIR_DOCUMENT_KIND,
+  REPAIR_PERMISSION,
+  REPAIR_TICKET_ENTITY,
+  catalogModelSearch,
+  tn,
+} from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { PhotoCapture } from '@bolusi/modules/screen-kit';
 import type { Kysely } from 'kysely';
@@ -17,6 +23,7 @@ import type { MediaClient } from '../media/client.js';
 import type { GalleryPort } from '../media/import.js';
 import { createPhotoSharer, type SharePlatform } from '../media/share.js';
 import { createInventoryRuntime } from '../models/inventory/runtime-adapter.js';
+import { createPurchasingRuntime } from '../models/purchasing/runtime-adapter.js';
 import { createRepairRuntime, type RepairMediaSeams } from '../models/repair/runtime-adapter.js';
 
 import type { Bootstrapped } from './bootstrap.js';
@@ -84,6 +91,8 @@ export function createSessionRepairRuntime(deps: {
   readonly scanCode?: (() => Promise<string | null>) | undefined;
   /** QRIS through Xendit for a user (`qris-transport.ts`); absent ⇒ QRIS is only taken by hand. */
   readonly qris?: ((userId: string) => QrisPort) | undefined;
+  /** The server this device syncs with, which serves customers' status pages. */
+  readonly statusSite?: string | null;
 }): RepairRuntime {
   const { app, identity } = deps;
   const printing =
@@ -91,7 +100,6 @@ export function createSessionRepairRuntime(deps: {
       ? undefined
       : createRepairPrinting({
           db: app.db.db,
-          userId: identity.userId,
           loadThumbnail: deps.media.loadThumbnail,
           platform: deps.print,
         });
@@ -110,6 +118,19 @@ export function createSessionRepairRuntime(deps: {
     searchModels: (text, limit) => catalogModelSearch(repair!)(text, limit),
     scanCode: deps.scanCode,
   });
+  // Orders to suppliers ("Belanja"), signed with the name the slips print.
+  const purchasing = createPurchasingRuntime({
+    runtime,
+    invalidation: app.invalidation,
+    identity,
+    // The slips' business name needs repair's read; a buyer without it signs with the store's.
+    storeName: async () =>
+      (runtime.commands.enforcementPoint.hasPermission(identity, REPAIR_PERMISSION.read)
+        ? (await repair!.query('printSettings', {})).rows[0]?.name
+        : null) ??
+      (await printing?.storeName()) ??
+      null,
+  });
   repair = createRepairRuntime({
     runtime,
     db: app.db.db,
@@ -118,7 +139,9 @@ export function createSessionRepairRuntime(deps: {
     media: deps.media,
     printing,
     inventory,
+    purchasing,
     qris: deps.qris?.(identity.userId),
+    statusSite: deps.statusSite ?? null,
   });
   return repair;
 }
@@ -143,4 +166,35 @@ export const REPAIR_REJECTED_SUBJECTS: RejectedSubjectReaders = {
     }
     return subjects;
   },
+  // A refused charge or payment on a servisan: the entry is gone, but its op names the servisan.
+  [MONEY_ENTRY_ENTITY]: async (db: Kysely<ClientDatabase>, ids: readonly string[]) => {
+    const rows = await db
+      .selectFrom('operations')
+      .select(['entityId', 'signedCoreJcs'])
+      .where('entityType', '=', MONEY_ENTRY_ENTITY)
+      .where('entityId', 'in', ids)
+      .execute();
+    const subjects = new Map<string, string>();
+    for (const row of rows) {
+      const number = repairDocumentNumber(row.signedCoreJcs);
+      if (number !== null) {
+        subjects.set(row.entityId, tn('repair.ticket.numbered', { number }));
+      }
+    }
+    return subjects;
+  },
 };
+
+/** The servisan number a money entry's signed op names, if it is for a servisan. */
+function repairDocumentNumber(signedCoreJcs: string): string | null {
+  try {
+    const { payload } = JSON.parse(signedCoreJcs) as { readonly payload?: unknown };
+    const document = (payload as { readonly document?: unknown } | null)?.document as
+      { readonly kind?: unknown; readonly label?: unknown } | null | undefined;
+    return document?.kind === REPAIR_DOCUMENT_KIND && typeof document.label === 'string'
+      ? document.label
+      : null;
+  } catch {
+    return null;
+  }
+}

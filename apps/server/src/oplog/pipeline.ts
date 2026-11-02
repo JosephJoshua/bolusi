@@ -35,7 +35,9 @@
 import { base64ToBytes, isAheadOfServer } from '@bolusi/core';
 import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
+import { sql } from 'kysely';
 
+import { isUniqueViolation } from '../db-errors.js';
 import type { SurfacedConflict } from '../sync/conflict-detection.js';
 
 import { recordAnomaly, type AnomalyKind } from './anomalies.js';
@@ -72,6 +74,7 @@ async function loadDevice(db: TenantDb, deviceId: string): Promise<DeviceRecord 
       'lastSeq',
       'lastHash',
       'lastSyncAt',
+      'personalUserId',
     ])
     .where('id', '=', deviceId)
     .executeTakeFirst();
@@ -87,6 +90,7 @@ async function loadDevice(db: TenantDb, deviceId: string): Promise<DeviceRecord 
     lastSeq: Number(row.lastSeq),
     lastHash: row.lastHash,
     lastSyncAt: row.lastSyncAt === null ? null : Number(row.lastSyncAt),
+    personalUserId: row.personalUserId,
   };
 }
 
@@ -103,6 +107,16 @@ function storable(text: string): string {
   return text.replaceAll('\u0000', '').slice(0, 500);
 }
 
+/** The refusal for an op whose fold hit a unique key that is already taken (see the apply step). */
+export const ID_TAKEN_REFUSAL = 'platform.refusal.idTaken';
+
+/** An applier hit a unique violation on the batch's fast path; the batch is re-run op by op. */
+class ApplyUniqueViolation extends Error {
+  constructor(cause: unknown) {
+    super('a projection applier hit a unique violation', { cause });
+  }
+}
+
 export async function processPushBatch(
   deps: OplogPipelineDeps,
   identity: PushIdentity,
@@ -113,7 +127,9 @@ export async function processPushBatch(
   /** Devices that had ≥1 anomaly row written in this (committed) batch — the `device`-alert set. */
   const anomalyDevicesOut = new Set<string>();
 
-  const result = await deps.forTenant(identity.tenantId, async (db) => {
+  // `careful` wraps each accepted op's insert and fold in a savepoint (the apply step below). The
+  // fast path runs without one; only a batch whose fold hit a unique violation is re-run carefully.
+  const pushInTenant = async (db: TenantDb, careful: boolean): Promise<ProcessPushResult> => {
     // Take the per-tenant counter lock FIRST — the serialisation point for every push in this
     // tenant (10-db §3, server-seq.ts). It MUST precede the chain-head read below, because the
     // head that feeds `classifyChain` is `devices.last_seq/last_hash`: read it BEFORE the lock and
@@ -219,7 +235,7 @@ export async function processPushBatch(
       reject(op, code, reason);
     };
     const authors = createAuthorLookup(db, identity.tenantId);
-    const scopeLookup = createScopeLookup(db);
+    const scopeLookup = createScopeLookup(db, identity.tenantId);
     const anomaly = async (
       op: SignedOperation,
       kind: AnomalyKind,
@@ -320,7 +336,7 @@ export async function processPushBatch(
       // 5. scope (05 §9): tenant/store/user membership + per-type rules.
       const scope = await checkScope(scopeLookup, op, device, deps.registry);
       if (scope !== null) {
-        await anomaly(op, 'SCOPE_VIOLATION', scope.reason);
+        if (scope.tamper !== false) await anomaly(op, 'SCOPE_VIOLATION', scope.reason);
         await refuse(op, 'SCOPE_VIOLATION', scope.reason);
         continue;
       }
@@ -342,7 +358,16 @@ export async function processPushBatch(
 
       // 8. the op type's rules, against the server's records as of this op (earlier ops of the
       // batch are already folded). No anomaly: two people changing one ticket offline is not tamper.
-      const rules = await checkRules(db, op, device, deps.registry, authors);
+      // A rule that turns on time judges by the server's clock, not the author's (warranty claims).
+      const rules = await checkRules(
+        db,
+        op,
+        device,
+        deps.registry,
+        authors,
+        deps.crypto,
+        deps.now(),
+      );
       if (rules !== null) {
         await refuse(op, 'RULE_VIOLATED', rules.reason);
         continue;
@@ -352,6 +377,7 @@ export async function processPushBatch(
       const receivedAt = deps.now();
       const clockSkewFlagged = isClockSkewed(op.timestamp, receivedAt, device.lastSyncAt);
       const serverSeq = nextServerSeq;
+      if (careful) await sql`SAVEPOINT push_op`.execute(db);
 
       // `operations.id` is a GLOBAL uuid PK (10-db §5). The dedupe read above is RLS-scoped, so an
       // op id an RLS-hidden row in ANOTHER tenant already holds passed it as new, and the INSERT then
@@ -368,11 +394,10 @@ export async function processPushBatch(
         clockSkewFlagged,
       });
       if (!inserted) {
+        if (careful) await sql`RELEASE SAVEPOINT push_op`.execute(db);
         results.push({ id: op.id, status: 'duplicate' });
         continue;
       }
-      nextServerSeq += 1;
-      verdicts.accepted.add(op.id);
 
       // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models (task 139).
       // The applier runs arbitrary module SQL, so a unique/FK/check violation it raises is NOT a dedupe
@@ -380,12 +405,36 @@ export async function processPushBatch(
       // correctly-chained op from the append-only log (05 §1) while telling the client `synced`
       // (api/01 §3), desyncing the chain head into a permanent CHAIN_BROKEN brick (05 §8). So an
       // applier throw propagates out of `forTenant`, rolling back the whole batch atomically (10-db
-      // §3) and surfacing loudly (500 — there is NO 05 §8 rejection code for a schema-valid-but-
-      // unfoldable op, and minting one is out of scope, CLAUDE.md §6). The op is already in the log
-      // with its serverSeq, so the engine reads it as PRESENT: the PULL-shaped path, because server
-      // projections track server-seq, not an own-device local seq (10-db §8). An unregistered type
-      // folds as a no-op (engine.ts).
-      await projectionEngine.applyPulledOp(op);
+      // §3) and surfacing loudly (500). The op is already in the log with its serverSeq, so the
+      // engine reads it as PRESENT: the PULL-shaped path, because server projections track
+      // server-seq, not an own-device local seq (10-db §8). An unregistered type folds as a no-op.
+      //
+      // One exception: a UNIQUE violation. Projection tables key on global, client-minted entity
+      // ids, so an id another tenant already holds (RLS-hidden, so it passed the rules) trips their
+      // PK here. As a 500 it would wedge the device's chain behind this op forever and tell the
+      // pusher the id exists elsewhere. So the batch is re-run with a savepoint per op, and such an
+      // op is rolled back and refused (RULE_VIOLATED, spending its chain slot) like any rule. It is
+      // still logged loudly, since a same-tenant clash means a rule missed a duplicate.
+      try {
+        await projectionEngine.applyPulledOp(op);
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+        if (!careful) throw new ApplyUniqueViolation(err);
+        await sql`ROLLBACK TO SAVEPOINT push_op`.execute(db);
+        await sql`RELEASE SAVEPOINT push_op`.execute(db);
+        console.error('[push] refused an op whose fold hit a taken unique key', {
+          tenantId: identity.tenantId,
+          deviceId: device.id,
+          opId: op.id,
+          type: op.type,
+          constraint: (err as { constraint?: string }).constraint,
+        });
+        await refuse(op, 'RULE_VIOLATED', ID_TAKEN_REFUSAL);
+        continue;
+      }
+      if (careful) await sql`RELEASE SAVEPOINT push_op`.execute(db);
+      nextServerSeq += 1;
+      verdicts.accepted.add(op.id);
 
       if (clockSkewFlagged) {
         await anomaly(
@@ -442,7 +491,16 @@ export async function processPushBatch(
     surfacedOut.push(...surfaced);
     for (const id of anomalyDevices) anomalyDevicesOut.add(id);
     return { results };
-  });
+  };
+
+  let result: ProcessPushResult;
+  try {
+    result = await deps.forTenant(identity.tenantId, (db) => pushInTenant(db, false));
+  } catch (err) {
+    // The whole first attempt rolled back, and nothing it collected was handed out.
+    if (!(err instanceof ApplyUniqueViolation)) throw err;
+    result = await deps.forTenant(identity.tenantId, (db) => pushInTenant(db, true));
+  }
 
   // ── THE POST-COMMIT HOOK (03 §7) ────────────────────────────────────────────────────────────
   //

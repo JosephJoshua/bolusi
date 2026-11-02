@@ -18,9 +18,10 @@ import {
   color,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import {
@@ -31,6 +32,7 @@ import {
 } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { ti, type InventoryKey } from '../i18n.js';
+import { itemFacts } from '../item-facts.js';
 import { movementTitle, signedQty, stockText } from '../labels.js';
 import { itemDetails, type ItemDetailRow, type ItemRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
@@ -149,7 +151,7 @@ export function PartDetail({
 
   function renderPart(row: ItemDetailRow): React.JSX.Element {
     const below = row.onHand < 0;
-    const facts = factsOf(row);
+    const facts = itemFacts(row);
     return (
       <View testID={`${testID}.content`}>
         <Card testID={`${testID}.summary`}>
@@ -238,32 +240,6 @@ export function PartDetail({
       </View>
     );
   }
-}
-
-interface PartFact {
-  readonly key: string;
-  readonly label: string;
-  readonly value: string;
-  readonly wide: boolean;
-}
-
-/** What the item is, as filled in: its category and that category's fields, codes, phones, tags. */
-function factsOf(row: ItemDetailRow): PartFact[] {
-  const facts: PartFact[] = [];
-  const add = (key: string, label: string, value: string | null, wide = false): void => {
-    if (value !== null && value !== '') facts.push({ key, label, value, wide });
-  };
-  add('category', ti('inventory.detail.category'), row.category?.name ?? null);
-  for (const field of row.category?.fields ?? []) {
-    if (field.kind !== 'phones') {
-      add(`field.${field.id}`, field.label, (row.values[field.id] ?? []).join(', '));
-    }
-  }
-  add('code', ti('inventory.detail.code'), row.code);
-  add('barcode', ti('inventory.detail.barcode'), row.barcode);
-  add('fits', ti('inventory.detail.fits'), row.fits, true);
-  add('tags', ti('inventory.detail.tags'), row.tags.join(', '), true);
-  return facts;
 }
 
 const styles = StyleSheet.create({

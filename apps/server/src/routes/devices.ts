@@ -1,4 +1,4 @@
-// Devices sub-router (api/02-auth §4.3 enroll, §5.2 bundle, §7 list/revoke/me). Bearer-guarded by
+// Devices sub-router (api/02-auth §4.3 enroll, §5.2 bundle, §7 list/revoke/me, rename). Bearer-guarded by
 // the app chain; the per-endpoint auth matrix (§4.5) is enforced here.
 import type { TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
@@ -15,11 +15,12 @@ import { appendAudit } from '../identity/audit.js';
 import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { buildBundle, bundleEtag } from '../identity/bundle.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
+import { personalDeviceChoices } from '../identity/personal-devices.js';
 import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import { purgeExpiredIdempotency, runIdempotent } from '../identity/idempotency.js';
 import { revokeDevice } from '../identity/revocation.js';
-import { EnrollReq, type EnrollRes } from '@bolusi/schemas';
+import { EnrollReq, RenameDeviceReq, type EnrollRes } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant } from '../tenant.js';
 import { tenantIdFromContext } from '../tenant.js';
@@ -161,36 +162,6 @@ export function createDevicesRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = control.tenantId;
 
-          // §9: 20 enrollments / tenant / day.
-          enforce(
-            deps.identityRateStore.hit(
-              `enroll:${tenantId}`,
-              IDENTITY_LIMITS.enrollPerTenantDay.limit,
-              IDENTITY_LIMITS.enrollPerTenantDay.windowMs,
-              t,
-            ),
-          );
-
-          // A REPLACEMENT enrolment also revokes, so it must also pay the revoke budget (§9:
-          // 20/tenant/hour) — the SAME counter `POST /v1/devices/:id/revoke` charges.
-          //
-          // Found by the QA sweep of this surface. The two limits are independent keys in one store,
-          // so charging only `enroll:` let a caller exhaust the hourly revoke budget on the standalone
-          // endpoint and then keep revoking through here on the untouched daily enrol budget — 40
-          // revocations an hour against a documented cap of 20. The limit exists to bound how fast a
-          // control session can tear down a store's fleet; a second door into the same action has to
-          // charge the same meter or the cap is decorative.
-          if (body.replacesDeviceId !== undefined) {
-            enforce(
-              deps.identityRateStore.hit(
-                `revoke:${tenantId}`,
-                IDENTITY_LIMITS.revokePerTenantHour.limit,
-                IDENTITY_LIMITS.revokePerTenantHour.windowMs,
-                t,
-              ),
-            );
-          }
-
           const rawBody = JSON.stringify(body);
           const requestHash = sha256Hex(rawBody);
 
@@ -224,6 +195,16 @@ export function createDevicesRouter(deps: ServerDeps) {
                   storeId: body.storeId,
                   permissionId: PERM.deviceEnroll,
                 });
+                // §9: 20 enrollments / tenant / day. Charged only once the caller is authorised, so a
+                // session that may not enrol cannot burn the tenant's budget with refused calls.
+                enforce(
+                  deps.identityRateStore.hit(
+                    `enroll:${tenantId}`,
+                    IDENTITY_LIMITS.enrollPerTenantDay.limit,
+                    IDENTITY_LIMITS.enrollPerTenantDay.windowMs,
+                    t,
+                  ),
+                );
 
                 // §4.3 / D27 — this enrolment REPLACES an existing registration (task 168). Revoke
                 // the old row HERE, inside the same transaction that registers the new one, so there
@@ -252,6 +233,23 @@ export function createDevicesRouter(deps: ServerDeps) {
                     storeId: replaced.storeId,
                     permissionId: PERM.deviceRevoke,
                   });
+                  // A REPLACEMENT enrolment also revokes, so it must also pay the revoke budget (§9:
+                  // 20/tenant/hour) — the SAME counter `POST /v1/devices/:id/revoke` charges.
+                  //
+                  // Found by the QA sweep of this surface. The two limits are independent keys in one
+                  // store, so charging only `enroll:` let a caller exhaust the hourly revoke budget on
+                  // the standalone endpoint and then keep revoking through here on the untouched daily
+                  // enrol budget — 40 revocations an hour against a documented cap of 20. The limit
+                  // exists to bound how fast a control session can tear down a store's fleet; a second
+                  // door into the same action has to charge the same meter or the cap is decorative.
+                  enforce(
+                    deps.identityRateStore.hit(
+                      `revoke:${tenantId}`,
+                      IDENTITY_LIMITS.revokePerTenantHour.limit,
+                      IDENTITY_LIMITS.revokePerTenantHour.windowMs,
+                      t,
+                    ),
+                  );
                   const outcome = await revokeDevice(db, {
                     tenantId,
                     deviceId: body.replacesDeviceId,
@@ -260,6 +258,27 @@ export function createDevicesRouter(deps: ServerDeps) {
                   });
                   if (outcome.kind === 'not_found') throw new ApiError('NOT_FOUND');
                   replacedNewly = outcome.newlyRevoked;
+                }
+
+                // Someone's own phone: only a person the store offers for it (identity/personal-devices).
+                if (body.personalUserId !== undefined) {
+                  const choices = await personalDeviceChoices(
+                    db,
+                    tenantId,
+                    body.storeId,
+                    control.userId,
+                  );
+                  if (!choices.some((choice) => choice.id === body.personalUserId)) {
+                    throw new ApiError('VALIDATION_FAILED', {
+                      issues: [
+                        {
+                          path: ['personalUserId'],
+                          code: 'custom',
+                          message: 'not someone this store can set a personal device up for',
+                        },
+                      ],
+                    });
+                  }
                 }
 
                 // deviceId unused.
@@ -293,6 +312,7 @@ export function createDevicesRouter(deps: ServerDeps) {
                       tokenHash: sha256Hex(deviceToken),
                       enrolledAt: BigInt(t),
                       enrolledBy: control.userId,
+                      personalUserId: body.personalUserId ?? null,
                       status: 'active',
                     })
                     .execute();
@@ -317,6 +337,7 @@ export function createDevicesRouter(deps: ServerDeps) {
                     storeId: body.storeId,
                     deviceName: body.deviceName,
                     platform: body.platform,
+                    personalUserId: body.personalUserId ?? null,
                   },
                   at: t,
                 });
@@ -326,7 +347,12 @@ export function createDevicesRouter(deps: ServerDeps) {
                   .select(['id', 'name'])
                   .where('id', '=', tenantId)
                   .executeTakeFirstOrThrow();
-                const bundle = await buildBundle(db, tenantId, body.storeId);
+                const bundle = await buildBundle(
+                  db,
+                  tenantId,
+                  body.storeId,
+                  body.personalUserId ?? null,
+                );
                 const etag = bundleEtag(bundle);
                 const res: EnrollRes = {
                   deviceId: body.deviceId,
@@ -371,7 +397,17 @@ export function createDevicesRouter(deps: ServerDeps) {
           );
           return withTenant(c, async (db) => {
             await touchLastSeen(db, device.deviceId, t);
-            const bundle = await buildBundle(db, device.tenantId, device.storeId as string);
+            const personal = await db
+              .selectFrom('devices')
+              .select('personalUserId')
+              .where('id', '=', device.deviceId)
+              .executeTakeFirst();
+            const bundle = await buildBundle(
+              db,
+              device.tenantId,
+              device.storeId as string,
+              personal?.personalUserId ?? null,
+            );
             const etag = bundleEtag(bundle);
             if (c.req.header('If-None-Match') === etag) {
               c.header('ETag', etag);
@@ -409,6 +445,50 @@ export function createDevicesRouter(deps: ServerDeps) {
         }),
       )
 
+      // ---- PATCH /v1/devices/me: rename this device, as someone signed in on it who may register
+      // devices at its store. Online only; the device writes the new name locally once this answers.
+      .patch('/me', zJson(RenameDeviceReq), (c) =>
+        withIdentityErrors(c, async () => {
+          const device = requireDevice(c);
+          if (device.storeId === null) throw new ApiError('PERMISSION_DENIED');
+          const storeId = device.storeId;
+          const { deviceName } = c.req.valid('json');
+          const t = deps.now();
+          return withTenant(c, async (db) => {
+            const acting = await resolveActingUser(c, db);
+            await requirePermission(db, {
+              userId: acting.userId,
+              tenantId: acting.tenantId,
+              storeId,
+              permissionId: PERM.deviceEnroll,
+            });
+            await touchLastSeen(db, device.deviceId, t);
+            const before = await db
+              .selectFrom('devices')
+              .select('name')
+              .where('id', '=', device.deviceId)
+              .executeTakeFirstOrThrow();
+            if (before.name !== deviceName) {
+              await db
+                .updateTable('devices')
+                .set({ name: deviceName })
+                .where('id', '=', device.deviceId)
+                .execute();
+              await appendAudit(db, acting.tenantId, {
+                actorUserId: acting.userId,
+                action: 'device.renamed',
+                entityType: 'device',
+                entityId: device.deviceId,
+                before: { deviceName: before.name },
+                after: { deviceName },
+                at: t,
+              });
+            }
+            return c.json({ deviceId: device.deviceId, deviceName });
+          });
+        }),
+      )
+
       // ---- POST /v1/devices/:deviceId/revoke (§7.1): device+X-Acting-User or control session ----
       .post('/:deviceId/revoke', (c) =>
         withIdentityErrors(c, async () => {
@@ -416,15 +496,6 @@ export function createDevicesRouter(deps: ServerDeps) {
           if (!LOWERCASE_UUID.test(deviceId)) throw new ApiError('NOT_FOUND');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforce(
-            deps.identityRateStore.hit(
-              `revoke:${tenantId}`,
-              IDENTITY_LIMITS.revokePerTenantHour.limit,
-              IDENTITY_LIMITS.revokePerTenantHour.windowMs,
-              t,
-            ),
-          );
-
           const outcome = await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -439,6 +510,16 @@ export function createDevicesRouter(deps: ServerDeps) {
               storeId: target.storeId,
               permissionId: PERM.deviceRevoke,
             });
+            // §9: 20 revocations / tenant / hour, charged only after authorisation: a stolen device
+            // sending refused revokes must not spend the budget the owner needs to revoke it.
+            enforce(
+              deps.identityRateStore.hit(
+                `revoke:${tenantId}`,
+                IDENTITY_LIMITS.revokePerTenantHour.limit,
+                IDENTITY_LIMITS.revokePerTenantHour.windowMs,
+                t,
+              ),
+            );
             return revokeDevice(db, { tenantId, deviceId, revokedBy: acting.userId, now: t });
           });
 

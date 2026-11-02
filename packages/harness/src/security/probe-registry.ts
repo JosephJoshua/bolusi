@@ -195,7 +195,7 @@ const PHONE_PAGE: EndpointProbes = {
   unauthenticated: {
     kind: 'absent',
     reason:
-      'bearer-exempt by design: the store phone has no device token, so the unguessable key is its only credential',
+      'bearer-exempt by design: the store phone has no device token; the unguessable key opens the page once, then only that browser (its HttpOnly phone cookie) may use the pairing',
   },
   unauthenticatedRequest: unauthLeg('GET', () => `/h/${'A'.repeat(32)}`),
 };
@@ -352,6 +352,18 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unassignedStore: { kind: 'absent', reason: 'same — no store parameter exists on this route' },
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('GET', () => '/v1/devices/me'),
+  },
+  'PATCH /v1/devices/me': {
+    crossTenant: {
+      kind: 'absent',
+      reason: 'renames the bearer device itself; no client-supplied device or store id exists',
+    },
+    unassignedStore: {
+      kind: 'absent',
+      reason: 'same — the store is the bearer device’s, checked against the acting user’s grants',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('PATCH', () => '/v1/devices/me'),
   },
   'POST /v1/devices/:deviceId/revoke': {
     crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
@@ -628,6 +640,33 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticatedRequest: unauthLeg('POST', () => '/v1/sync/pull'),
   },
 
+  // Least-privilege sync: a person proves their PIN to the server on a device of their own tenant.
+  // A person of another tenant, or of a store this device does not serve, answers exactly like a
+  // wrong PIN (apps/server/test/integration/sync/person-session.test.ts).
+  'POST /v1/sync/person-session': {
+    crossTenant: {
+      kind: 'dedicated',
+      assertion:
+        'person-session: a person who does not work at the device’s store, in any tenant, answers AUTH_INVALID_CREDENTIALS like a wrong PIN',
+    },
+    unassignedStore: {
+      kind: 'dedicated',
+      assertion: 'same leg — store membership is checked first',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', () => '/v1/sync/person-session'),
+  },
+  'DELETE /v1/sync/person-session': {
+    crossTenant: {
+      kind: 'dedicated',
+      assertion:
+        'person-session: ending a session matches the token AND the bearer device, so another tenant’s token ends nothing',
+    },
+    unassignedStore: { kind: 'dedicated', assertion: 'same leg — bound to the bearer device' },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('DELETE', () => '/v1/sync/person-session'),
+  },
+
   // ── media (the §2.2 documented exception 1) ───────────────────────────────────────────────────
   //
   // HISTORY (all resolved — kept so the shape is legible, not a live to-do):
@@ -718,11 +757,42 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   ),
   'POST /v1/handoff/:id/withdraw': handoffProbes('POST', '/withdraw', JSON.stringify({ seq: 1 })),
   'GET /v1/handoff/:id/events': handoffProbes('GET', '/events?after=0'),
+  'GET /v1/handoff/:id/clip/:seq': handoffProbes('GET', '/clip/1'),
   'DELETE /v1/handoff/:id': handoffProbes('DELETE', ''),
   'GET /h/:key': PHONE_PAGE,
   'GET /h/:key/next': PHONE_PAGE,
   'POST /h/:key/send': PHONE_PAGE,
 
+  // ── customer status page ──────────────────────────────────────────────────────────────────────
+  'GET /v1/public/status/:code': {
+    crossTenant: {
+      kind: 'absent',
+      reason:
+        'no tenant-scoped id: the random link code names one servisan in one tenant, and only its customer view comes back (apps/server public-status.test.ts)',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the code carries no store scope' },
+    unauthenticated: {
+      kind: 'absent',
+      reason:
+        'bearer-exempt by design: the customer has no account, so the link code printed on their slip is the credential',
+    },
+    unauthenticatedRequest: unauthLeg('GET', () => '/v1/public/status/0000000000'),
+  },
+  // ── app updates ───────────────────────────────────────────────────────────────────────────────
+  'GET /updates/manifest': {
+    crossTenant: {
+      kind: 'absent',
+      reason:
+        'no tenant data: every phone of a build gets the same signed manifest from the public release repo (docs/app-updates.md)',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the answer carries no store scope' },
+    unauthenticated: {
+      kind: 'absent',
+      reason:
+        'bearer-exempt by design: expo-updates sends no credentials, and phones trust the update by its signature, not the channel',
+    },
+    unauthenticatedRequest: unauthLeg('GET', () => '/updates/manifest'),
+  },
   // ── QRIS through Xendit ───────────────────────────────────────────────────────────────────────
   'GET /v1/money/qris/accounts': {
     crossTenant: { kind: 'denied', verdict: ACTING_USER_INVALID, rule: RULE_CROSS_TENANT },

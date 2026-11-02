@@ -11,7 +11,8 @@
  * tree would fight that.
  */
 import { useEffect } from 'react';
-import { Animated, Pressable, StyleSheet, Text } from 'react-native';
+import { Text } from '../text.js';
+import { Animated, Pressable, StyleSheet } from 'react-native';
 
 import { useEntrance } from '../motion.js';
 import { border, color, radius, size, space, touch, type } from '../tokens.js';

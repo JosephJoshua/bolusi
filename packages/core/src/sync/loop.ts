@@ -39,13 +39,19 @@ import {
   type SyncTransportPort,
   type TimerPort,
 } from './ports.js';
-import { runPullPhase, type PulledBatch } from './pull.js';
+import {
+  AppUpdateRequiredError,
+  runPullPhase,
+  type PulledBatch,
+  type PullReadScope,
+} from './pull.js';
 import { runPushPhase, type PushSettled } from './push.js';
 import {
   pendingMediaCount,
   pendingOperationCount,
   readSyncState,
   writeSyncState,
+  type SyncStatePatch,
 } from './state.js';
 
 /** The api/01-sync §5 trigger set. Platform wiring (NetInfo, debounce, interval, …) is task 24. */
@@ -108,6 +114,10 @@ export interface SyncLoopOptions<DB> {
   readonly timer: TimerPort;
   readonly deviceId: string;
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
+  /** Passed to the pull phase: can this build fold the op (see `PullPhaseDeps.knowsOp`)? */
+  readonly knowsOp?: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
+  /** Passed to the pull phase: follow the server's read set (see `PullPhaseDeps.readScope`). */
+  readonly readScope?: PullReadScope;
   /** `ProjectionEngine.refoldRefused`: the push phase takes a refused op back out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly pushBatchSize?: number;
@@ -140,6 +150,11 @@ export class SyncLoop<DB> {
   /** In-memory (03 §10: "`failureCount` is in-memory"). A restart retries at once — deliberate. */
   private failureCount = 0;
   private rerun = false;
+  /**
+   * A person pressed "Kirim sekarang" while a cycle ran. If that cycle fails, the press still gets
+   * its own attempt at once, as it would have in backoff, instead of waiting out the backoff.
+   */
+  private manualRerun = false;
   private cancelBackoff: CancelTimer | null = null;
   private cycle: Promise<void> = Promise.resolve();
   private hydrated = false;
@@ -205,6 +220,7 @@ export class SyncLoop<DB> {
       // 03 §10: "any trigger arrives → (no transition), rerun flag set". Coalescing: N triggers
       // during one cycle produce ONE follow-up, because a flag is not a counter.
       this.rerun = true;
+      if (reason === 'manual') this.manualRerun = true;
       return;
     }
 
@@ -238,6 +254,7 @@ export class SyncLoop<DB> {
     this.stopped = true;
     this.pause();
     this.rerun = false;
+    this.manualRerun = false;
     this.clearBackoffTimer();
   }
 
@@ -256,6 +273,15 @@ export class SyncLoop<DB> {
     this.loopState = runTransition(SYNC_LOOP_MACHINE, this.loopState, event).to;
   }
 
+  /**
+   * Write sync state in its own transaction. A bare write on the one connection runs at once, and
+   * if a command's transaction is open it lands inside it and is lost when that command rolls back.
+   * Never call this from inside a transaction: the queue does not nest.
+   */
+  private persist(patch: SyncStatePatch): Promise<void> {
+    return this.options.transaction(() => writeSyncState(this.options.db, patch));
+  }
+
   private clearBackoffTimer(): void {
     this.cancelBackoff?.();
     this.cancelBackoff = null;
@@ -263,6 +289,7 @@ export class SyncLoop<DB> {
 
   private async runCycle(): Promise<void> {
     this.rerun = false;
+    this.manualRerun = false;
     this.stats = { ...this.stats, cycles: this.stats.cycles + 1 };
 
     try {
@@ -283,14 +310,14 @@ export class SyncLoop<DB> {
           refoldRefused: this.options.refoldRefused,
           onChainBroken: async () => {
             this.pushHalted = true;
-            await writeSyncState(this.options.db, { pushHalted: true });
+            await this.persist({ pushHalted: true });
           },
           ...(this.options.pushBatchSize === undefined
             ? {}
             : { batchSize: this.options.pushBatchSize }),
         });
         this.stats = { ...this.stats, pushed: this.stats.pushed + push.synced };
-        await writeSyncState(this.options.db, { lastPushAt: this.options.clock.now() });
+        await this.persist({ lastPushAt: this.options.clock.now() });
       }
       this.transition('push_drained');
 
@@ -303,6 +330,8 @@ export class SyncLoop<DB> {
         crypto: this.options.crypto,
         clock: this.options.clock,
         applyPulledOp: this.options.applyPulledOp,
+        ...(this.options.knowsOp === undefined ? {} : { knowsOp: this.options.knowsOp }),
+        ...(this.options.readScope === undefined ? {} : { readScope: this.options.readScope }),
         ...(this.options.pullLimit === undefined ? {} : { limit: this.options.pullLimit }),
         ...(this.options.onPullBatch === undefined
           ? {}
@@ -332,19 +361,7 @@ export class SyncLoop<DB> {
       // therefore looks staler than it is while the bundle endpoint is down. That is the SAFE
       // direction: a false "your data may be old" costs a banner, a false "you are current" costs
       // a wrong business decision (03 §8 exists to prevent exactly the latter).
-      //
-      // At most once per BUNDLE_REFRESH_INTERVAL_MS, unless a person asked for it.
-      const refreshStartedAt = this.options.clock.now();
-      if (
-        this.bundleWanted ||
-        this.bundleRefreshedAt === null ||
-        refreshStartedAt - this.bundleRefreshedAt >= BUNDLE_REFRESH_INTERVAL_MS
-      ) {
-        await this.options.bundle.refresh();
-        this.bundleWanted = false;
-        this.bundleRefreshedAt = refreshStartedAt;
-        this.stats = { ...this.stats, bundleRefreshes: this.stats.bundleRefreshes + 1 };
-      }
+      await this.refreshBundleIfDue();
 
       // ── drain complete (03 §10: `pulling → idle`) ───────────────────────────────────────
       this.transition('pull_drained');
@@ -352,7 +369,7 @@ export class SyncLoop<DB> {
       this.tokenRejectedSince = null;
       this.tokenRejectedCount = 0;
       const now = this.options.clock.now();
-      await writeSyncState(this.options.db, {
+      await this.persist({
         lastSuccessfulSyncAt: now,
         lastSyncError: null,
         backoffUntil: null,
@@ -383,7 +400,29 @@ export class SyncLoop<DB> {
     }
   }
 
+  /** The bundle refresh, at most once per BUNDLE_REFRESH_INTERVAL_MS unless a person asked for it. */
+  private async refreshBundleIfDue(): Promise<void> {
+    const refreshStartedAt = this.options.clock.now();
+    if (
+      this.bundleWanted ||
+      this.bundleRefreshedAt === null ||
+      refreshStartedAt - this.bundleRefreshedAt >= BUNDLE_REFRESH_INTERVAL_MS
+    ) {
+      await this.options.bundle.refresh();
+      this.bundleWanted = false;
+      this.bundleRefreshedAt = refreshStartedAt;
+      this.stats = { ...this.stats, bundleRefreshes: this.stats.bundleRefreshes + 1 };
+    }
+  }
+
   private async handleCycleFailure(error: unknown): Promise<void> {
+    if (error instanceof AppUpdateRequiredError && !this.stopped) {
+      // The pull can wait days for an app update, but staff, roles and PIN verifiers cannot: a
+      // dismissed employee's PIN must stop working here too. A failed refresh just waits for the
+      // next cycle.
+      await this.refreshBundleIfDue().catch(() => undefined);
+    }
+
     if (isDeviceRevoked(error)) {
       // 03 §10 "any → idle on 401 DEVICE_REVOKED": all sync stops, no further automatic cycles
       // until re-enrollment. Terminal for this enrollment by design — there is no un-revoke (03 §5).
@@ -397,7 +436,7 @@ export class SyncLoop<DB> {
       const now = this.options.clock.now();
       this.tokenRejectedSince ??= now;
       this.tokenRejectedCount += 1;
-      await writeSyncState(this.options.db, {
+      await this.persist({
         tokenRejectedSince: this.tokenRejectedSince,
         tokenRejectedCount: this.tokenRejectedCount,
       });
@@ -422,11 +461,19 @@ export class SyncLoop<DB> {
     this.failureCount += 1;
     const delay = syncBackoffDelayMs(this.failureCount);
     const until = this.options.clock.now() + delay;
-    await writeSyncState(this.options.db, {
+    await this.persist({
       lastSyncError: errorCode(error),
       backoffUntil: until,
     });
     this.clearBackoffTimer();
+    if (this.manualRerun && !this.syncDisabled) {
+      // The press came after this cycle started, so it was not answered by it: one attempt now,
+      // as a press in backoff gets (EARLY_EXIT_REASONS). Its failure backs off as usual.
+      this.manualRerun = false;
+      this.transition('trigger');
+      this.cycle = this.runCycle();
+      return;
+    }
     this.cancelBackoff = this.options.timer.schedule(delay, () => {
       this.cancelBackoff = null;
       if (this.syncDisabled || this.stopped) return;
@@ -447,7 +494,7 @@ export class SyncLoop<DB> {
     this.syncDisabled = true;
     this.rerun = false;
     this.clearBackoffTimer();
-    await writeSyncState(this.options.db, {
+    await this.persist({
       syncDisabled: true,
       syncDisabledReason: reason,
       lastSyncError: errorCode,
@@ -501,5 +548,6 @@ function isTokenRejected(error: unknown): boolean {
 /** The label-catalog code for `lastSyncError` (01 §5.2: "last failure, label-catalog code"). */
 function errorCode(error: unknown): string {
   if (error instanceof SyncTransportError && error.code !== null) return error.code;
+  if (error instanceof AppUpdateRequiredError) return error.code;
   return 'NETWORK';
 }

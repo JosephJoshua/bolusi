@@ -5,9 +5,18 @@
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
 
-import { ConfirmSheet, StepHeader, color, space, type } from '@bolusi/ui';
+import {
+  ConfirmSheet,
+  StepHeader,
+  StepTransition,
+  Text,
+  color,
+  space,
+  type,
+  useStepDirection,
+} from '@bolusi/ui';
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import {
   useActionRunner,
@@ -16,7 +25,7 @@ import {
   type VideoMediaRef,
 } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import { INTAKE_STEP_KEY, optionLabel } from '../labels.js';
 import {
   INTAKE_STEPS,
@@ -29,6 +38,7 @@ import {
   stepProblems,
   toOpenTicketInput,
   type IntakeDraft,
+  INTAKE_PROBLEM_KEY,
   type IntakeProblem,
 } from '../flows.js';
 import {
@@ -50,21 +60,6 @@ import {
   ReviewStep,
 } from './IntakeSteps.js';
 
-const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
-  customerName: 'repair.problem.customerName',
-  deviceBrand: 'repair.problem.deviceBrand',
-  deviceModel: 'repair.problem.deviceModel',
-  screenLock: 'repair.problem.screenLock',
-  complaint: 'repair.problem.complaint',
-  photos: 'repair.problem.photos',
-  ownershipVideo: 'repair.problem.ownershipVideo',
-  quoteLines: 'repair.problem.quoteLines',
-  incompleteLine: 'repair.problem.incompleteLine',
-  negativeTotal: 'repair.problem.negativeTotal',
-  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
-  downPaymentReference: 'repair.problem.downPaymentReference',
-};
-
 /** Problems said on their own field rather than in the step's list. */
 const FIELD_PROBLEMS: ReadonlySet<IntakeProblem> = new Set([
   'incompleteLine',
@@ -77,6 +72,8 @@ export interface IntakeWizardProps {
   /** Read when the ticket is opened, so a wizard left open for hours still dates it correctly. */
   readonly now: () => number;
   readonly restoredDraft?: IntakeDraft | null | undefined;
+  /** The colleague who started this intake, when it was not the person carrying on with it. */
+  readonly startedBy?: string | null | undefined;
   readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   /** Hardware back moves one step back; at the first step it is the surface's leave (with confirm). */
@@ -90,6 +87,7 @@ export function IntakeWizard({
   chrome,
   now,
   restoredDraft,
+  startedBy = null,
   onDraftChange,
   onRegisterDiscardGuard,
   onRegisterStepBack,
@@ -172,6 +170,7 @@ export function IntakeWizard({
 
   const stepIndex = Math.min(draft.step, INTAKE_STEPS.length - 1);
   const step = INTAKE_STEPS[stepIndex]!;
+  const stepFrom = useStepDirection(stepIndex);
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
@@ -304,7 +303,7 @@ export function IntakeWizard({
 
   const back = (): void => (stepIndex === 0 ? requestLeave(onCancel) : goTo(stepIndex - 1));
   const problemText = (problem: IntakeProblem): string | undefined =>
-    showProblems && problems.includes(problem) ? tn(PROBLEM_KEY[problem]) : undefined;
+    showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
 
   return (
     <FlowScreen
@@ -357,32 +356,39 @@ export function IntakeWizard({
         title={tn(INTAKE_STEP_KEY[step])}
         testID={`${testID}.header`}
       />
-      <View style={styles.body} testID={`${testID}.step.${step}`}>
-        {photosExpired && step === 'photos' ? (
-          <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.photosExpired`}>
-            {tn('repair.photo.expired')}
-          </Text>
-        ) : null}
-        {videoExpired && step === 'photos' && draft.ownershipVideo === null ? (
-          <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.videoExpired`}>
-            {tn('repair.video.expired')}
-          </Text>
-        ) : null}
-        {draft.claimOf !== null && (step === 'customer' || step === 'review') ? (
-          // Said where the intake starts and again before it opens, not on every step.
-          <View style={[repairStyles.gap, styles.check]} testID={`${testID}.claim`}>
-            <Text style={repairStyles.caption}>
-              {tn('repair.warrantyClaim.intakeNote', { number: draft.claimOf.ticketNumber })}
+      <StepTransition from={stepFrom}>
+        <View style={styles.body} testID={`${testID}.step.${step}`}>
+          {startedBy === null ? null : (
+            <Text style={[repairStyles.caption, styles.check]} testID={`${testID}.startedBy`}>
+              {tn('repair.intake.startedBy', { name: startedBy })}
             </Text>
-            {claimWarrantyEnded(draft.claimOf, now()) ? (
-              <Text style={repairStyles.warning} testID={`${testID}.claim.ended`}>
-                {tn('repair.warrantyClaim.ended')}
+          )}
+          {photosExpired && step === 'photos' ? (
+            <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.photosExpired`}>
+              {tn('repair.photo.expired')}
+            </Text>
+          ) : null}
+          {videoExpired && step === 'photos' && draft.ownershipVideo === null ? (
+            <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.videoExpired`}>
+              {tn('repair.video.expired')}
+            </Text>
+          ) : null}
+          {draft.claimOf !== null && (step === 'customer' || step === 'review') ? (
+            // Said where the intake starts and again before it opens, not on every step.
+            <View style={[repairStyles.gap, styles.check]} testID={`${testID}.claim`}>
+              <Text style={repairStyles.caption}>
+                {tn('repair.warrantyClaim.intakeNote', { number: draft.claimOf.ticketNumber })}
               </Text>
-            ) : null}
-          </View>
-        ) : null}
-        {settings.status === 'loading' ? null : renderStep()}
-      </View>
+              {claimWarrantyEnded(draft.claimOf, now()) ? (
+                <Text style={repairStyles.warning} testID={`${testID}.claim.ended`}>
+                  {tn('repair.warrantyClaim.ended')}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {settings.status === 'loading' ? null : renderStep()}
+        </View>
+      </StepTransition>
       {showProblems && (step === 'photos' || step === 'price' || step === 'review') ? (
         <View style={repairStyles.gap}>
           {/* A line's own problem shows on its field, so only step-wide ones are listed here. */}
@@ -390,7 +396,7 @@ export function IntakeWizard({
             .filter((problem) => !FIELD_PROBLEMS.has(problem))
             .map((problem) => (
               <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
-                {tn(PROBLEM_KEY[problem])}
+                {tn(INTAKE_PROBLEM_KEY[problem])}
               </Text>
             ))}
         </View>
@@ -407,6 +413,7 @@ export function IntakeWizard({
             update={update}
             options={options}
             nameError={problemText('customerName')}
+            phoneError={problemText('customerPhone')}
             testID={`${testID}.customer`}
           />
         );
@@ -418,6 +425,7 @@ export function IntakeWizard({
             options={options}
             brandError={problemText('deviceBrand')}
             modelError={problemText('deviceModel')}
+            imeiError={problemText('deviceImei')}
             lockError={problemText('screenLock')}
             testID={`${testID}.device`}
           />
@@ -456,7 +464,7 @@ export function IntakeWizard({
             // Wrong as soon as it is typed, not merely unfinished, so it shows straight away.
             downPaymentError={
               problems.includes('downPaymentAboveTotal')
-                ? tn(PROBLEM_KEY.downPaymentAboveTotal)
+                ? tn(INTAKE_PROBLEM_KEY.downPaymentAboveTotal)
                 : undefined
             }
             testID={`${testID}.price`}

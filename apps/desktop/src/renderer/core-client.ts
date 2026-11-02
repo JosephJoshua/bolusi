@@ -9,9 +9,11 @@ import {
   type DomainErrorDetails,
   type StaffAdminFailure,
 } from '@bolusi/core';
+import { getLocale, setLocale } from '@bolusi/i18n';
 import { QRIS_FAILURES, QrisError, type QrisFailure } from '@bolusi/modules/money';
 
-import { CORE_EVENTS, type CoreState } from '../core/api.js';
+import { CORE_EVENTS, type CoreState, type RepairChange } from '../core/api.js';
+import { markFresh } from '@bolusi/ui-web';
 import { CORE_PORT_MESSAGE, type CorePortMode, type DesktopBridge } from '../main/bridge.js';
 import { connect, RemoteError, type Channel, type Client, type WireError } from '../main/rpc.js';
 
@@ -85,6 +87,14 @@ export function latestCoreState(): CoreState | null {
 }
 
 /**
+ * The window speaks the PC's language, which the core holds. It switches before the state that
+ * carries it renders, so every word on that render is already in the new language.
+ */
+export function followLocale(state: CoreState | null): void {
+  if (state !== null && state.locale !== getLocale()) setLocale(state.locale);
+}
+
+/**
  * Connect to the core, once per page load (a reload gets a fresh port from main). Outside the
  * desktop app (the dev server in a browser) there is no bridge, and the window runs the seeded demo.
  */
@@ -109,6 +119,10 @@ function requestPort(): Promise<CoreConnection> {
         const client = connect(portChannel(port), reviveCoreError);
         client.on(CORE_EVENTS.state, (state) => {
           latest = state as CoreState;
+        });
+        // What a colleague just changed on another device glows once wherever it shows.
+        client.on(CORE_EVENTS.repairChanged, (change) => {
+          for (const id of (change as RepairChange | null)?.freshIds ?? []) markFresh(id);
         });
         resolve({ mode: 'live', client });
       } else {

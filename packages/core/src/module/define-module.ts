@@ -13,6 +13,7 @@
 // scope: `module/registry.ts` + `authz/registry.ts` (02 §3.2 rules 1–4).
 import type { PermissionDeclaration } from '../authz/registry.js';
 import type {
+  OperationConcerns,
   ProjectionApplier,
   ProjectionDb,
   ProjectionTableManifest,
@@ -117,10 +118,22 @@ export interface OperationDeclaration<DB> {
    * would remain a blanket bypass of the unknown-key rule for every type past v1.
    */
   readonly payloadByVersion?: Readonly<Record<number, InputParser<unknown>>>;
+  /**
+   * The oldest version the server accepts in a NEW push; default 1. Set it when the rule only
+   * judges newer versions, so an older one would skip a check. History already stored still folds
+   * at every version in `1..schemaVersion`; devices always sign the current version.
+   */
+  readonly minPushVersion?: number;
   /** MANDATORY prose: how this op is reversed (04 §3, 05 §7). */
   readonly reversal: string;
   /** The fold step (04 §4.1). */
   readonly apply: ProjectionApplier<DB>;
+  /**
+   * Other records an op of this type changes the look of, besides its own: the servisan a payment
+   * is for. Optional. When the op arrives from another device, screens mark these as changed by a
+   * colleague too, so the servisan's row glows when its DP is paid elsewhere. Never used to fold.
+   */
+  readonly concerns?: OperationConcerns;
   /** Optional collision declaration (01 §8.1). Absent ⇒ this type never produces a Conflict. */
   readonly conflict?: ConflictDeclaration;
   /** Envelope scope (01 §6; 05 §2.1). Default `'store'`. */
@@ -136,6 +149,17 @@ export interface OperationDeclaration<DB> {
    * (session, denial audit, lockout, enrollment) and ops the server builds itself.
    */
   readonly permission: string | null;
+  /**
+   * The permission a person must hold to SEE ops of this type. The server sends a device only the
+   * ops its people may read (permission-scoped sync, owner decision 2026-10-31): an owner's own
+   * phone gets what that owner may read, a shared store device what the store's staff may read.
+   * Hiding a screen is not enough, since a device's data can be read off the device.
+   *
+   * Required, like `permission`, so every type states its answer. `null` when every device of the
+   * op's scope needs it whoever uses it (sign-in, PIN and device records). A record whose fields
+   * have different readers is written as separate op types, one per reader.
+   */
+  readonly read: string | null;
   /**
    * The kind of record every op of this type is about (`repair_ticket`, `note`, …). Fixed per type:
    * the projection engine re-folds a record by its entity type and id, so an op claiming another
@@ -349,6 +373,15 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
         `op type ${type} declares schemaVersion ${JSON.stringify(schemaVersion)} — must be an integer >= 1 (04 §3; the runtime resolves an op's schemaVersion from this declaration)`,
       );
     }
+    const { minPushVersion } = declaration;
+    if (
+      minPushVersion !== undefined &&
+      (!Number.isInteger(minPushVersion) || minPushVersion < 1 || minPushVersion > schemaVersion)
+    ) {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares minPushVersion ${JSON.stringify(minPushVersion)}; it must be an integer in 1..${schemaVersion}, or the server would accept no new push of the type`,
+      );
+    }
 
     // `reversal` (04 §3, MANDATORY).
     const { reversal } = declaration;
@@ -368,6 +401,13 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
     if (permission !== null && (typeof permission !== 'string' || permission.length === 0)) {
       throw new ModuleDefinitionError(
         `op type ${type} declares no permission — state the permission its author must hold, or null for a type no command emits`,
+      );
+    }
+
+    const { read } = declaration;
+    if (read !== null && (typeof read !== 'string' || read.length === 0)) {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares no read permission — state the permission a person needs to see its ops, or null when every device of its scope needs them`,
       );
     }
 

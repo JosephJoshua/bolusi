@@ -480,6 +480,7 @@ describe('the ENROLLMENT leg registers the push token for the just-enrolled owne
         login: enrollLoginResult(),
         storeId: ENROLL_STORE_ID,
         deviceName: 'Kasir 1',
+        personalUserId: null,
       });
       for (let i = 0; i < 12; i += 1) await Promise.resolve();
     });

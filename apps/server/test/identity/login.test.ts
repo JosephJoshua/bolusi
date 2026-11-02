@@ -112,7 +112,10 @@ test('login lists only the stores the user may enroll a phone into, so a non-own
   });
 
   const owner = await login(h, 'ocep', PASSWORD);
-  expect(owner.body['stores']).toEqual([{ id: storeId, name: 'S' }]);
+  // The cashier has no PIN, so only the owner is offered as whose own phone it is.
+  expect(owner.body['stores']).toEqual([
+    { id: storeId, name: 'S', people: [{ id: p.ownerUserId, name: expect.any(String) }] },
+  ]);
   const cashier = await login(h, 'kasir', PASSWORD);
   expect(cashier.status).toBe(200);
   expect(cashier.body['stores']).toEqual([]);
@@ -163,4 +166,26 @@ test('§9 login limits: 6th failure for one identifier within 15 min → 429 (lo
   } finally {
     await fresh.close();
   }
+});
+
+test('§9 lockout holds under concurrency: of many wrong passwords in flight at once, at most 5 are evaluated', async () => {
+  await ownerTenant();
+  // Each attempt reserves its failure slot before any await, so a burst cannot all pass a check
+  // made before the first failure was counted.
+  const results = await Promise.all(
+    Array.from({ length: 25 }, (_, i) => login(h, 'ocep', `wrong-password-${i}`)),
+  );
+  expect(results.filter((r) => r.status === 401)).toHaveLength(5);
+  expect(results.filter((r) => r.status === 429)).toHaveLength(20);
+});
+
+test('§9 a successful login gives its reserved failure slot back', async () => {
+  await ownerTenant();
+  for (let i = 0; i < 4; i += 1) {
+    expect((await login(h, 'ocep', 'wrong-password-attempt')).status).toBe(401);
+  }
+  expect((await login(h, 'ocep', PASSWORD)).status).toBe(200);
+  // Still 4 failures on the meter: one more wrong guess is evaluated, the next is locked.
+  expect((await login(h, 'ocep', 'wrong-password-attempt')).status).toBe(401);
+  expect((await login(h, 'ocep', 'wrong-password-attempt')).status).toBe(429);
 });

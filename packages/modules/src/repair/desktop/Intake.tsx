@@ -9,6 +9,7 @@ import {
   Banner,
   CaptureTile,
   ConfirmDialog,
+  Fact,
   IconButton,
   Kbd,
   PageHeader,
@@ -21,11 +22,12 @@ import {
   ToggleChip,
   Tooltip,
   controlClass,
+  useSelectOnFocus,
 } from '@bolusi/ui-web';
 import { ArrowLeft, Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { useActionRunner, type VideoMediaRef } from '../../screen-kit/index.js';
+import { useActionRunner, useCapture, type VideoMediaRef } from '../../screen-kit/index.js';
 import { PATTERN_MIN_DOTS, SCREEN_LOCK_KINDS } from '../screen-lock.js';
 import type { DeviceModelRow } from '../device-models.js';
 import { modelCaption, useModelPicker, type ModelPicker } from '../model-picker.js';
@@ -49,6 +51,7 @@ import {
   intakeDownPayment,
   parseRupiah,
   type IntakeDraft,
+  INTAKE_PROBLEM_KEY,
   type IntakeProblem,
   type IntakeStep,
   type PriceKind,
@@ -61,7 +64,7 @@ import {
   type IntakeOptionLists,
 } from '../intake-options.js';
 import { REPAIR_PERMISSION } from '../constants.js';
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import {
   CHECK_STATE_KEY,
   INTAKE_STEP_KEY,
@@ -95,26 +98,13 @@ const SECTIONS = [
 ] as const satisfies readonly IntakeStep[];
 type Section = (typeof SECTIONS)[number];
 
-const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
-  customerName: 'repair.problem.customerName',
-  deviceBrand: 'repair.problem.deviceBrand',
-  deviceModel: 'repair.problem.deviceModel',
-  complaint: 'repair.problem.complaint',
-  photos: 'repair.problem.photos',
-  ownershipVideo: 'repair.problem.ownershipVideo',
-  quoteLines: 'repair.problem.quoteLines',
-  incompleteLine: 'repair.problem.incompleteLine',
-  negativeTotal: 'repair.problem.negativeTotal',
-  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
-  downPaymentReference: 'repair.problem.downPaymentReference',
-  screenLock: 'repair.problem.screenLock',
-};
-
 /** Where the cursor goes for each problem, so "what is missing" is one keystroke from fixed. */
 const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   customerName: 'repair.desk.intake.name',
+  customerPhone: 'repair.desk.intake.phone',
   deviceBrand: 'repair.desk.intake.brand',
   deviceModel: 'repair.desk.intake.model',
+  deviceImei: 'repair.desk.intake.imei',
   complaint: 'repair.desk.intake.complaint',
   photos: 'repair.desk.intake.photos',
   ownershipVideo: 'repair.desk.intake.video',
@@ -122,6 +112,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   incompleteLine: 'repair.desk.intake.lines',
   negativeTotal: 'repair.desk.intake.lines',
   downPaymentAboveTotal: 'repair.desk.intake.downPayment',
+  downPaymentMethod: 'repair.desk.intake.downPaymentMethod.methods',
   downPaymentReference: 'repair.desk.intake.downPaymentMethod.reference',
   screenLock: 'repair.desk.intake.lock.kind',
 };
@@ -136,6 +127,13 @@ export interface IntakePageProps {
   /** Read when the ticket is opened, so a page left open for hours still dates it correctly. */
   readonly now: () => number;
   readonly restoredDraft?: IntakeDraft | null | undefined;
+  /**
+   * `restoredDraft` is a new warranty claim filled in from its servisan, not something the person
+   * typed: it is kept, and leaving asks, only once they change something.
+   */
+  readonly prefilled?: boolean | undefined;
+  /** The colleague who started this intake, when it was not the person carrying on with it. */
+  readonly startedBy?: string | null | undefined;
   readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
   readonly onOpened: (ticketId: string) => void;
   readonly onCancel: () => void;
@@ -147,13 +145,18 @@ const SAVE_KEYS = 'Ctrl+Enter';
 export function IntakePage({
   now,
   restoredDraft,
+  prefilled = false,
+  startedBy = null,
   onDraftChange,
   onOpened,
   onCancel,
 }: IntakePageProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
+  // "Simpan servisan" does not spin under the camera or the video player.
+  const media = useCapture(runner);
   const [draft, setDraft] = useState<IntakeDraft>(() => restoredDraft ?? emptyIntakeDraft());
+  const [startedAs] = useState(draft);
   const [showProblems, setShowProblems] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [photosExpired, setPhotosExpired] = useState(false);
@@ -175,7 +178,8 @@ export function IntakePage({
   );
   const update = (patch: Partial<IntakeDraft>): void =>
     setDraft((current) => ({ ...current, ...patch }));
-  const dirty = intakeDirty(draft);
+  // A claim filled in from its servisan is not yet anything the person typed.
+  const dirty = intakeDirty(draft) && (!prefilled || draft !== startedAs);
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
@@ -188,7 +192,7 @@ export function IntakePage({
   ) as Readonly<Record<Section, IntakeProblem[]>>;
   const problems = SECTIONS.flatMap((section) => problemsBy[section]);
   const problemText = (problem: IntakeProblem): string | undefined =>
-    showProblems && problems.includes(problem) ? tn(PROBLEM_KEY[problem]) : undefined;
+    showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
 
   // Write-through retention: every change, never on unmount (an unmount is what a lock looks like).
   useEffect(() => {
@@ -277,8 +281,8 @@ export function IntakePage({
   }, []);
 
   const takePhoto = (angle: IntakeOption): void => {
-    void runner
-      .run(() => runtime.capturePhoto({ title: optionLabel('photoAngles', angle) }))
+    void media
+      .capture(() => runtime.capturePhoto({ title: optionLabel('photoAngles', angle) }))
       .then((captured) => {
         if (captured === undefined || captured === null) return;
         setDraft((current) => ({
@@ -295,7 +299,7 @@ export function IntakePage({
       ? undefined
       : (): void => {
           const record = video.record!;
-          void runner.run(record).then((captured) => {
+          void media.capture(record).then((captured) => {
             if (captured === undefined || captured === null) return;
             setDraft((current) => ({ ...current, ownershipVideo: captured.videoRef }));
           });
@@ -303,12 +307,12 @@ export function IntakePage({
   const playVideo =
     video.play === undefined
       ? undefined
-      : (ref: VideoMediaRef): void => void runner.run(() => video.play!(ref));
+      : (ref: VideoMediaRef): void => void media.capture(() => video.play!(ref));
 
   /** Every angle still missing, one after another; backing out of one stops there. */
   const takeMissing = (): void => {
     const missing = options.photoAngles.filter((angle) => draft.photos[angle.id] === undefined);
-    void runner.run(async () => {
+    void media.capture(async () => {
       for (const angle of missing) {
         const captured = await runtime.capturePhoto({ title: optionLabel('photoAngles', angle) });
         if (captured === null) return;
@@ -345,7 +349,17 @@ export function IntakePage({
             />
           ) : undefined
         }
-      />
+      >
+        {startedBy === null ? null : (
+          <p
+            className="truncate text-body text-text-muted"
+            title={tn('repair.intake.startedBy', { name: startedBy })}
+            data-testid="repair.desk.intake.startedBy"
+          >
+            {tn('repair.intake.startedBy', { name: startedBy })}
+          </p>
+        )}
+      </PageHeader>
       {settings.status === 'loading' ? (
         // The store's lists decide the checks and photo angles: wait for them rather than let the
         // form change under the person typing.
@@ -381,6 +395,7 @@ export function IntakePage({
                   draft={draft}
                   update={update}
                   nameError={problemText('customerName')}
+                  phoneError={problemText('customerPhone')}
                 />
               </IntakeSection>
               <IntakeSection n={2} section="device" complete={problemsBy.device.length === 0}>
@@ -390,6 +405,7 @@ export function IntakePage({
                   options={options}
                   brandError={problemText('deviceBrand')}
                   modelError={problemText('deviceModel')}
+                  imeiError={problemText('deviceImei')}
                   lockError={problemText('screenLock')}
                 />
               </IntakeSection>
@@ -469,7 +485,7 @@ export function IntakePage({
               showProblems={showProblems}
               onJump={focusProblem}
               onSave={save}
-              busy={runner.busy}
+              busy={media.busy}
               error={<ActionError errorCode={runner.errorCode} onDismiss={runner.clearError} />}
             />
           </div>
@@ -546,14 +562,19 @@ function IntakeSection({
  * A new customer by name and phone, with existing customers whose name or phone fuzzily match
  * offered as the counter types, so a returning customer is picked instead of entered twice.
  */
-function CustomerFields({
+export function CustomerFields({
   draft,
   update,
   nameError,
+  phoneError,
+  currentCustomerId,
 }: {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
   readonly nameError: string | undefined;
+  readonly phoneError: string | undefined;
+  /** The customer a correction starts from, never offered as a match for itself. */
+  readonly currentCustomerId?: string | undefined;
 }): React.JSX.Element {
   const customer = draft.customer;
   const searchText =
@@ -565,6 +586,9 @@ function CustomerFields({
         : (await rt.query('searchCustomers', { text: searchText, limit: 5 })).rows,
     `desk.customers:${searchText}`,
   );
+
+  const offered =
+    matches.status === 'ready' ? matches.data.filter((row) => row.id !== currentCustomerId) : [];
 
   if (customer.kind === 'existing') {
     return (
@@ -610,16 +634,17 @@ function CustomerFields({
           }
           inputMode="tel"
           autoComplete="off"
+          error={phoneError}
           data-testid="repair.desk.intake.phone"
         />
       </div>
-      {matches.status === 'ready' && matches.data.length > 0 ? (
+      {offered.length > 0 ? (
         <div data-testid="repair.desk.intake.matches">
           <p className="mb-1 text-small font-semibold text-text-muted">
             {tn('repair.customer.existing')}
           </p>
           <ul className="divide-y divide-border rounded-sm border border-border">
-            {matches.data.map((row) => (
+            {offered.map((row) => (
               <li key={row.id} className="flex items-center gap-4 px-4 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-body font-semibold text-text">{row.name}</p>
@@ -654,12 +679,13 @@ function CustomerFields({
 
 // ── device ──────────────────────────────────────────────────────────────────────────────────
 
-function DeviceFields({
+export function DeviceFields({
   draft,
   update,
   options,
   brandError,
   modelError,
+  imeiError,
   lockError,
 }: {
   readonly draft: IntakeDraft;
@@ -667,6 +693,7 @@ function DeviceFields({
   readonly options: IntakeOptionLists;
   readonly brandError: string | undefined;
   readonly modelError: string | undefined;
+  readonly imeiError: string | undefined;
   readonly lockError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
@@ -674,47 +701,59 @@ function DeviceFields({
     update({ device: { ...device, ...patch } });
   const picker = useModelPicker(device, set);
   const { matched, colours, memory } = picker;
+  const claim = draft.claimOf !== null;
+  const fixedImei = draft.claimOf?.imei ?? '';
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
-        <ModelField
-          value={device.model}
-          onChange={(model) => set({ model })}
-          picker={picker}
-          error={modelError}
-        />
-        <div className="flex flex-col gap-2">
-          <TextField
-            label={tn('repair.device.brand')}
-            value={device.brand}
-            onChange={(event) => set({ brand: event.target.value })}
-            error={brandError}
-            autoComplete="off"
-            data-testid="repair.desk.intake.brand"
+      {/* A claim is for the phone its servisan repaired: shown, never retyped. */}
+      {!claim ? (
+        <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+          <ModelField
+            value={device.model}
+            onChange={(model) => set({ model })}
+            picker={picker}
+            error={modelError}
           />
-          {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
-          {matched !== null ? null : (
-            <div
-              className="flex flex-wrap gap-2"
-              aria-label={tn('repair.options.list.brands')}
-              role="group"
-            >
-              {options.brands.map((option) => {
-                const brand = optionLabel('brands', option);
-                return (
-                  <ToggleChip
-                    key={option.id}
-                    label={brand}
-                    selected={device.brand === brand}
-                    onToggle={() => set({ brand })}
-                    skipTab
-                  />
-                );
-              })}
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <TextField
+              label={tn('repair.device.brand')}
+              value={device.brand}
+              onChange={(event) => set({ brand: event.target.value })}
+              error={brandError}
+              autoComplete="off"
+              data-testid="repair.desk.intake.brand"
+            />
+            {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
+            {matched !== null ? null : (
+              <div
+                className="flex flex-wrap gap-2"
+                aria-label={tn('repair.options.list.brands')}
+                role="group"
+              >
+                {options.brands.map((option) => {
+                  const brand = optionLabel('brands', option);
+                  return (
+                    <ToggleChip
+                      key={option.id}
+                      label={brand}
+                      selected={device.brand === brand}
+                      onToggle={() => set({ brand })}
+                      skipTab
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : matched === null ? (
+        <p
+          className="text-body font-semibold text-text"
+          data-testid="repair.desk.intake.claimDevice"
+        >
+          {device.brand} {device.model}
+        </p>
+      ) : null}
       {matched === null ? null : (
         <div
           className="flex items-center gap-4 rounded-sm bg-surface-alt px-4 py-3"
@@ -736,6 +775,11 @@ function DeviceFields({
           </div>
         </div>
       )}
+      {claim ? (
+        <p className="text-small text-text-muted" data-testid="repair.desk.intake.claimDevice.note">
+          {tn('repair.warrantyClaim.sameDevice')}
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
         <div className="flex flex-col gap-2">
           <TextField
@@ -763,15 +807,27 @@ function DeviceFields({
             </div>
           )}
         </div>
-        <TextField
-          label={tn('repair.device.imeiField')}
-          value={device.imei}
-          onChange={(event) => set({ imei: event.target.value })}
-          inputMode="numeric"
-          autoComplete="off"
-          inputClassName="tabular"
-          data-testid="repair.desk.intake.imei"
-        />
+        {/* A claim's phone keeps the IMEI its servisan wrote down: shown, never retyped. */}
+        {fixedImei === '' ? (
+          <TextField
+            label={tn('repair.device.imeiField')}
+            value={device.imei}
+            onChange={(event) => set({ imei: event.target.value.replace(/[^\d\s-]/g, '') })}
+            inputMode="numeric"
+            error={imeiError}
+            autoComplete="off"
+            inputClassName="tabular"
+            data-testid="repair.desk.intake.imei"
+          />
+        ) : (
+          <dl>
+            <Fact
+              label={tn('repair.device.imei')}
+              value={<span className="tabular">{fixedImei}</span>}
+              testId="repair.desk.intake.imei"
+            />
+          </dl>
+        )}
       </div>
       <ScreenLockFields
         kind={device.lockKind}
@@ -784,9 +840,23 @@ function DeviceFields({
 }
 
 /**
+ * Whether a suggestion only completes what was typed ("a55" → Galaxy A55), so Enter may take it.
+ * A different model the fuzzy search found ("Galaxy A54" → Galaxy A55) never does.
+ */
+function completesTyped(row: DeviceModelRow, typed: string): boolean {
+  const plain = (text: string): string => text.toLowerCase().replace(/\s+/g, '');
+  const text = plain(typed);
+  return (
+    text !== '' &&
+    (plain(row.model).includes(text) || plain(`${row.brand}${row.model}`).includes(text))
+  );
+}
+
+/**
  * The model, typed the way the customer says it. As it is typed, models from the phone catalog and
  * from earlier intakes are offered with their picture; arrow keys and Enter pick one, Escape closes
- * the list. Nothing has to match: a model nobody has heard of is kept as typed.
+ * the list. Nothing has to match: a model nobody has heard of is kept as typed, so Enter takes a
+ * suggestion only when the arrows chose it or it completes what was typed (`completesTyped`).
  */
 function ModelField({
   value,
@@ -801,8 +871,10 @@ function ModelField({
 }): React.JSX.Element {
   // Opens once something is typed: a model already filled in (a claim, a kept draft) needs no list.
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
+  // -1 until the arrows choose a row; until then the first row that completes the text leads.
+  const [chosen, setChosen] = useState(-1);
   const rows = open ? picker.suggestions : [];
+  const active = chosen === -1 ? rows.findIndex((row) => completesTyped(row, value)) : chosen;
   const listId = 'repair.desk.intake.models';
   const choose = (row: DeviceModelRow): void => {
     picker.pick(row);
@@ -817,7 +889,7 @@ function ModelField({
         onChange={(event) => {
           onChange(event.target.value);
           setOpen(true);
-          setActive(0);
+          setChosen(-1);
         }}
         onBlur={() => {
           setOpen(false);
@@ -828,10 +900,18 @@ function ModelField({
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
             const step = event.key === 'ArrowDown' ? 1 : -1;
-            setActive((current) => (current + step + rows.length) % rows.length);
+            setChosen(
+              active === -1 && step === -1
+                ? rows.length - 1
+                : (active + step + rows.length) % rows.length,
+            );
           } else if (event.key === 'Enter' && !event.ctrlKey) {
             event.preventDefault();
-            choose(rows[active] ?? rows[0]!);
+            const row = rows[active];
+            if (row === undefined) {
+              setOpen(false);
+              picker.tidyModel();
+            } else choose(row);
           } else if (event.key === 'Escape') {
             // Closes the list only, not the page around it.
             event.preventDefault();
@@ -843,7 +923,7 @@ function ModelField({
         aria-expanded={rows.length > 0}
         aria-controls={listId}
         aria-autocomplete="list"
-        aria-activedescendant={rows.length > 0 ? `${listId}.${String(active)}` : undefined}
+        aria-activedescendant={active === -1 ? undefined : `${listId}.${String(active)}`}
         error={error}
         autoComplete="off"
         data-testid="repair.desk.intake.model"
@@ -865,7 +945,7 @@ function ModelField({
               // Keeps the focus in the field, so picking does not count as leaving it.
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(row)}
-              onMouseEnter={() => setActive(index)}
+              onMouseEnter={() => setChosen(index)}
               className={`flex cursor-pointer items-center gap-3 rounded-xs px-2 py-1 ${index === active ? 'bg-surface-alt' : ''}`}
             >
               <ModelPhoto photo={row.photo} />
@@ -994,8 +1074,6 @@ function ConditionFields({
   readonly options: IntakeOptionLists;
   readonly complaintError: string | undefined;
 }): React.JSX.Element {
-  const togglePeripheral = (item: string): void =>
-    update({ peripherals: toggled(draft.peripherals, item) });
   return (
     <div className="flex flex-col gap-6">
       <TextArea
@@ -1068,23 +1146,7 @@ function ConditionFields({
           </div>
         </div>
       )}
-      {options.accessories.length === 0 ? null : (
-        <div>
-          <p className="mb-2 text-small font-semibold text-text">
-            {tn('repair.condition.peripherals')}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {options.accessories.map((option) => (
-              <ToggleChip
-                key={option.id}
-                label={optionLabel('accessories', option)}
-                selected={draft.peripherals.includes(option.id)}
-                onToggle={() => togglePeripheral(option.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      <AccessoryChips draft={draft} update={update} accessories={options.accessories} />
       <TextArea
         label={tn('repair.condition.notes')}
         value={draft.intakeNotes}
@@ -1092,6 +1154,36 @@ function ConditionFields({
         rows={2}
         data-testid="repair.desk.intake.notes"
       />
+    </div>
+  );
+}
+
+/** What was left with the phone, ticked from the store's list (intake and its correction). */
+export function AccessoryChips({
+  draft,
+  update,
+  accessories,
+}: {
+  readonly draft: Pick<IntakeDraft, 'peripherals'>;
+  readonly update: (patch: Partial<IntakeDraft>) => void;
+  readonly accessories: readonly IntakeOption[];
+}): React.JSX.Element | null {
+  if (accessories.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-small font-semibold text-text">
+        {tn('repair.condition.peripherals')}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {accessories.map((option) => (
+          <ToggleChip
+            key={option.id}
+            label={optionLabel('accessories', option)}
+            selected={draft.peripherals.includes(option.id)}
+            onToggle={() => update({ peripherals: toggled(draft.peripherals, option.id) })}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1200,6 +1292,7 @@ function PriceFields({
   const setLine = (index: number, patch: Partial<QuoteLineDraft>): void =>
     update({ lines: lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) });
   const addLine = (): void => update({ lines: [...lines, EMPTY_LINE] });
+  const selectAmount = useSelectOnFocus({});
   return (
     <div className="flex flex-col gap-6">
       <div data-testid="repair.desk.intake.lines" tabIndex={-1} className="focus:outline-none">
@@ -1233,6 +1326,7 @@ function PriceFields({
                 <input
                   aria-label={tn('repair.price.amount')}
                   inputMode="numeric"
+                  {...selectAmount}
                   value={rupiahText(line.amount)}
                   onChange={(event) => {
                     if (acceptsRupiahText(event.target.value))

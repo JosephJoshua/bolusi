@@ -25,6 +25,7 @@ import {
 import { createApp, serveWithRealtime } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { FakeClock } from '@bolusi/test-support';
+import { OWNER_POWER_PERMISSIONS } from '@bolusi/core';
 
 import type { DeviceIdentity } from './device.js';
 import type { FetchLike } from './fault-fetch.js';
@@ -374,6 +375,28 @@ export class HarnessServer {
               SELECT ${identity.tenantId}, ${identity.userId}, md5(${identity.tenantId} || ':harness-all')::uuid, NULL
               WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = ${identity.userId}
                                 AND role_id = md5(${identity.tenantId} || ':harness-all')::uuid)`.execute(
+      this.db,
+    );
+    // A staff role with every permission but the owner powers, held by one staff person at the
+    // store: a shared device is sent what its store's active staff may read (least-privilege sync).
+    await sql`INSERT INTO roles (id, tenant_id, name, scope_type, created_at)
+              VALUES (md5(${identity.tenantId} || ':harness-staff')::uuid, ${identity.tenantId}, ${'harness_staff'}, ${'store'}, ${CREATED_AT})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO role_permissions (role_id, permission_id, tenant_id)
+              SELECT md5(${identity.tenantId} || ':harness-staff')::uuid, id, ${identity.tenantId} FROM permissions
+              WHERE id NOT IN (${sql.join(OWNER_POWER_PERMISSIONS)})
+              ON CONFLICT DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO users (id, tenant_id, name, created_at)
+              VALUES (md5(${identity.storeId} || ':harness-staff-user')::uuid, ${identity.tenantId}, ${'staff'}, ${CREATED_AT})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO user_stores (user_id, store_id, tenant_id)
+              VALUES (md5(${identity.storeId} || ':harness-staff-user')::uuid, ${identity.storeId}, ${identity.tenantId})
+              ON CONFLICT DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO user_roles (tenant_id, user_id, role_id, store_id)
+              SELECT ${identity.tenantId}, md5(${identity.storeId} || ':harness-staff-user')::uuid,
+                     md5(${identity.tenantId} || ':harness-staff')::uuid, ${identity.storeId}
+              WHERE NOT EXISTS (SELECT 1 FROM user_roles
+                                WHERE user_id = md5(${identity.storeId} || ':harness-staff-user')::uuid)`.execute(
       this.db,
     );
     await sql`INSERT INTO devices (id, tenant_id, store_id, kind, signing_key_public, status, revoked_at, enrolled_at, last_seq, last_hash, last_sync_at)

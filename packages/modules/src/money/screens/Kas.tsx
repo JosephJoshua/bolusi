@@ -7,26 +7,32 @@
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
 import {
   AppShell,
+  Banner,
   Button,
+  FreshGlow,
   Icon,
   LoadingState,
+  RollingText,
   border,
   color,
   radius,
   space,
   touch,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
 import { tm } from '../i18n.js';
-import { accountLabel, differenceText, type NamedBalance } from '../kas.js';
+import { accountLabel, dayStart, differenceText, type NamedBalance } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
 import type { CashCountRow } from '../queries.js';
 import { useMoneyRuntime } from '../runtime.js';
+import { useAskedAbout, useVoidRequests } from '../void-ask.js';
+import { approvalKindKey, ta } from '../../approvals/i18n.js';
 
 export interface KasBoardProps {
   readonly chrome: ScreenChrome;
@@ -35,8 +41,13 @@ export interface KasBoardProps {
   readonly onMove: () => void;
   readonly onSettle: (count: CashCountRow) => void;
   readonly onReceive: (balance: NamedBalance) => void;
+  /** Give back what a customer paid beyond their bill. */
+  readonly onRefund: (balance: NamedBalance) => void;
   /** The day's records; absent for someone who cannot read the store's money. */
   readonly onHistory?: (() => void) | undefined;
+  /** Said at the top once something was asked of an owner from here; pressing it clears it. */
+  readonly notice?: string | null | undefined;
+  readonly onClearNotice?: (() => void) | undefined;
   /** A tablet beside another pane shows no header of its own; absent on a phone. */
   readonly testID?: string | undefined;
 }
@@ -48,7 +59,10 @@ export function KasBoard({
   onMove,
   onSettle,
   onReceive,
+  onRefund,
   onHistory,
+  notice,
+  onClearNotice,
   testID = 'money.kas',
 }: KasBoardProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
@@ -57,7 +71,7 @@ export function KasBoard({
     drawer: drawerData,
     accounts: accountRows,
     entriesReady,
-    methods,
+    moneyIn,
     moves,
     open,
     difference,
@@ -65,6 +79,11 @@ export function KasBoard({
     may,
   } = useKasDay(now);
   const { count: mayCount, settle: maySettle, receive: mayReceive, read: mayRead } = may;
+  // What this person asked an owner for from Kas and was turned down today: told here, not only
+  // in Riwayat.
+  const since = dayStart(now());
+  const turnedDown = useVoidRequests().turnedDown.filter((row) => (row.decidedAt ?? 0) >= since);
+  const about = useAskedAbout(turnedDown);
 
   return (
     <AppShell
@@ -77,21 +96,47 @@ export function KasBoard({
           <Button label={tm('money.kas.count')} onPress={onCount} testID={`${testID}.count`} />
         ) : undefined
       }
+      banner={
+        notice === null || notice === undefined ? undefined : (
+          <Banner
+            variant="info"
+            message={notice}
+            onPress={onClearNotice}
+            testID={`${testID}.notice`}
+          />
+        )
+      }
       testID={testID}
     >
       {drawer.status === 'loading' ? (
         <LoadingState variant="spinner" />
       ) : drawerData === null ? null : (
         <View style={styles.drawer} testID={`${testID}.drawer`}>
-          <Text style={styles.label}>{tm('money.kas.expected')}</Text>
-          <Text style={styles.expected} testID={`${testID}.expected`}>
-            {formatMoney(drawerData.expected)}
-          </Text>
+          {may.seeExpected ? (
+            <>
+              <Text style={styles.label}>{tm('money.kas.expected')}</Text>
+              <RollingText
+                value={drawerData.expected}
+                style={styles.expected}
+                testID={`${testID}.expected`}
+              >
+                {formatMoney(drawerData.expected)}
+              </RollingText>
+            </>
+          ) : (
+            <Text style={styles.label}>{tm('money.kas.drawer')}</Text>
+          )}
           <Text style={styles.muted} testID={`${testID}.lastCount`}>
             {counted === null
               ? tm('money.kas.notCounted')
               : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
           </Text>
+          {/* A blind count hides what the drawer should hold; until it is counted, say why. */}
+          {may.seeExpected || counted !== null ? null : (
+            <Text style={styles.muted} testID={`${testID}.blindHint`}>
+              {tm('money.kas.blindHint')}
+            </Text>
+          )}
           {may.move || (onHistory !== undefined && mayRead) ? (
             <View style={styles.drawerAction}>
               {may.move ? (
@@ -117,6 +162,23 @@ export function KasBoard({
         </View>
       )}
 
+      {turnedDown.length === 0 ? null : (
+        <Section title={tm('money.kas.turnedDown')} testID={`${testID}.turnedDown`}>
+          {turnedDown.map((row) => (
+            <Row
+              key={row.id}
+              label={ta(approvalKindKey(row.kind))}
+              detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
+                .filter(Boolean)
+                .join(' · ')}
+              value={formatMoney(row.amount)}
+              onPress={onHistory}
+              testID={`${testID}.turnedDown.${row.id}`}
+            />
+          ))}
+        </Section>
+      )}
+
       {difference === null ? null : (
         <Section title={tm('money.kas.difference')} testID={`${testID}.differences`}>
           <Row
@@ -134,13 +196,14 @@ export function KasBoard({
         </Section>
       )}
 
-      {entriesReady ? (
+      {/* Today's takings add up to what should be in the drawer: not for a blind count. */}
+      {entriesReady && may.seeExpected ? (
         <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
-          {methods.length === 0 ? (
+          {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
             <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
           ) : (
             <>
-              {methods.map((method) => (
+              {moneyIn.methods.map((method) => (
                 <Row
                   key={method.account}
                   label={accountLabel(method.account, accountRows)}
@@ -148,9 +211,16 @@ export function KasBoard({
                   testID={`${testID}.in.${method.account}`}
                 />
               ))}
+              {moneyIn.refunded === 0 ? null : (
+                <Row
+                  label={tm('money.kas.refunded')}
+                  value={formatMoney(-moneyIn.refunded)}
+                  testID={`${testID}.in.refunded`}
+                />
+              )}
               <Row
                 label={tm('money.kas.total')}
-                value={formatMoney(methods.reduce((sum, method) => sum + method.amount, 0))}
+                value={formatMoney(moneyIn.total)}
                 strong
                 testID={`${testID}.in.total`}
               />
@@ -166,7 +236,7 @@ export function KasBoard({
               key={entry.id}
               label={tm(label)}
               detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
-              value={`${delta < 0 ? '−' : '+'}${formatMoney(Math.abs(delta))}`}
+              value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
               testID={`${testID}.moves.${entry.id}`}
             />
           ))}
@@ -202,6 +272,7 @@ export function KasBoard({
               label={row.customer ?? row.documentLabel}
               detail={row.customer === null ? undefined : row.documentLabel}
               value={formatMoney(-row.balance)}
+              onPress={mayReceive ? () => onRefund(row) : undefined}
               testID={`${testID}.owedBack.${row.documentId}`}
             />
           ))}
@@ -219,6 +290,7 @@ export function Row({
   tone = 'text',
   strong = false,
   onPress,
+  freshId,
   testID,
 }: {
   readonly label: string;
@@ -228,10 +300,13 @@ export function Row({
   readonly tone?: 'text' | 'danger' | 'struck' | undefined;
   readonly strong?: boolean | undefined;
   readonly onPress?: (() => void) | undefined;
+  /** The record the row shows: it glows once when another device changes it. */
+  readonly freshId?: string | undefined;
   readonly testID: string;
 }): React.JSX.Element {
   const body: ReactNode = (
     <>
+      {freshId === undefined ? null : <FreshGlow id={freshId} />}
       <View style={styles.rowText}>
         <Text style={strong ? styles.rowLabelStrong : styles.rowLabel}>{label}</Text>
         {detail === undefined || detail === '' ? null : (

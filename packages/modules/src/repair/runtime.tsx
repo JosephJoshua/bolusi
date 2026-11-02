@@ -8,9 +8,13 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
+import type { ApprovalsPort } from '../approvals/runtime.js';
+import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import type { ApprovalRow } from '../approvals/queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
+import type { PurchasingRuntime } from '../purchasing/runtime.js';
 import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
-import { CASH_ACCOUNT } from '../money/constants.js';
+import { NO_METHOD } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { HandoverQris } from './handover-payment.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
@@ -44,8 +48,11 @@ export interface SlipOutput {
   readonly paper: PaperSettings;
 }
 
-/** Why a print did not go out: no printer picked yet, the picked one is gone, or it refused the job. */
-export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed';
+/**
+ * Why a print did not go out: no printer picked yet, the picked one is gone, it refused the job, or
+ * the phone's print dialog or PDF never got ready (the system's print call hung).
+ */
+export type PrinterProblemReason = 'noPrinter' | 'printerMissing' | 'failed' | 'stuck';
 
 /** Thrown by `RepairPrinting.output` when the job did not reach the printer. */
 export class PrinterProblem extends Error {
@@ -87,8 +94,6 @@ export interface DecodedImage {
 export interface RepairPrinting {
   /** The store's name as enrolled, printed when the owner has not set another. */
   storeName(): Promise<string>;
-  /** Who is signed in, printed as who printed the slip. */
-  userName(): Promise<string | null>;
   /** The paper this device last printed on; null before the first print. */
   readPaper(): Promise<PaperSettings | null>;
   writePaper(paper: PaperSettings): Promise<void>;
@@ -118,6 +123,8 @@ export interface RepairTechnician {
 export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSource {
   /** The money ledger: payment methods, a servisan's payments, and taking money at handover. */
   readonly money: MoneyPort;
+  /** Approval requests: asking an owner for a discount or a cancel, and answering them. */
+  readonly approvals: ApprovalsPort;
   /** Op sync statuses per ticket id (design-system §3.5); an absent ticket is all-synced. */
   ticketSyncStatuses(ticketIds: readonly string[]): Promise<EntitySyncStatuses>;
   /** Active colleagues who hold `repair.work` in this store, by name. */
@@ -130,6 +137,12 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
    * null when it cannot be had now (offline, not on the server): the screen shows no picture.
    */
   readonly loadModelPhoto: (photo: DeviceModelPhoto) => Promise<string | null>;
+  /**
+   * The site that serves customers' status pages: the server this device syncs with, which serves
+   * the web app too. Slips print the link under it and the counter sends it on WhatsApp; null where
+   * there is no server (a demo), and no link is offered.
+   */
+  readonly statusSite: string | null;
   /**
    * Hand one photo to the platform to save or send (the share sheet on a phone, a download on the
    * web). Absent ⇒ this build cannot, and the photo viewer shows no share button.
@@ -147,6 +160,15 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
   readonly printing?: RepairPrinting | undefined;
   /** The parts a servisan draws on. Absent ⇒ this build has no stock, and no parts section shows. */
   readonly inventory?: InventoryRuntime | undefined;
+  /** Orders to suppliers ("Belanja"). Absent ⇒ this build does no purchasing. */
+  readonly purchasing?: PurchasingRuntime | undefined;
+  /** The app's client diagnostics log (`@bolusi/device` `consoleDiagnostics`), for what fails quietly. */
+  readonly diagnostics: RepairDiagnostics;
+}
+
+/** Where a failure that the screen carries on past is written down. */
+export interface RepairDiagnostics {
+  warn(message: string, meta?: Record<string, unknown>): void;
 }
 
 const RepairRuntimeContext = createRuntimeContext<RepairRuntime>('repair');
@@ -289,8 +311,8 @@ export interface PaymentMethodChoice {
 }
 
 /**
- * The method a down payment step records through: cash for a new DP; for a correction, the one the
- * DP came in by, until the owner picks another.
+ * The method a down payment step records through: none for a new DP until it is picked (cash where
+ * that is all the store takes); for a correction, the one the DP came in by, until another is picked.
  */
 export function useDownPaymentMethod(
   ticketId: string,
@@ -310,7 +332,7 @@ export function useDownPaymentMethod(
       : { account: first.account, reference: first.reference ?? '' };
   }, `downPaymentMethod:${ticketId}:${mode}`);
   const fallback = original.status === 'ready' ? original.data : null;
-  return [picked ?? fallback ?? { account: CASH_ACCOUNT, reference: '' }, setPicked];
+  return [picked ?? fallback ?? { account: NO_METHOD, reference: '' }, setPicked];
 }
 
 /** A model photo's uri once loaded; null while loading or when there is none to show. */
@@ -348,6 +370,7 @@ export function moneyRuntimeOf(
 ): MoneyRuntime {
   return {
     ...repair.money,
+    approvals: repair.approvals,
     subscribe: repair.subscribe,
     nameOf,
     customersOf: (documents) => servisanCustomers(repair, documents),
@@ -377,4 +400,17 @@ export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
     // The key is the photo's identity; a new object for the same photo must not reload it.
   }, [key]);
   return loaded !== null && loaded.key === key ? loaded.uri : null;
+}
+
+/**
+ * The approval requests a screen shows: a servisan's (`targetId`), or the ones waiting on this
+ * user. None for someone without approvals, so their board and servisan still read.
+ */
+export async function readApprovals(
+  runtime: RepairRuntime,
+  targetId?: string,
+): Promise<readonly ApprovalRow[]> {
+  if (!runtime.approvals.hasPermission(APPROVAL_PERMISSION.use)) return [];
+  const input = targetId === undefined ? {} : { targetId };
+  return (await runtime.approvals.query('approvalRequests', input)).rows;
 }

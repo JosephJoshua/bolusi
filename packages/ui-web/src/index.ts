@@ -6,12 +6,22 @@ export { Banner, type BannerTone } from './components/Banner.js';
 export { BrandMark } from './components/BrandMark.js';
 export {
   Button,
+  ButtonLink,
+  type ButtonLinkProps,
   type ButtonProps,
   type ButtonSize,
   type ButtonVariant,
 } from './components/Button.js';
 export { CameraDialog, CameraPreview, type CameraLabels } from './components/Camera.js';
-export type { WebcamState } from './components/webcam.js';
+export {
+  findMediaInput,
+  WebcamChoiceProvider,
+  type MediaInputChoice,
+  type WebcamChoices,
+  type WebcamState,
+} from './components/webcam.js';
+export { useMediaInputs, type MediaInputs } from './components/media-inputs.js';
+export { MicrophoneMeter, type MicrophoneMeterLabels } from './components/MicrophoneMeter.js';
 export {
   VideoPlayerDialog,
   VideoRecorderDialog,
@@ -36,6 +46,7 @@ export {
   TextArea,
   TextField,
   controlClass,
+  useSelectOnFocus,
   type SecretFieldProps,
   type TextAreaProps,
   type TextFieldProps,
@@ -55,6 +66,10 @@ export { IconButton, type IconButtonProps } from './components/IconButton.js';
 export { Kbd } from './components/Kbd.js';
 export { Card, Fact, FactGrid, Section } from './components/Layout.js';
 export { Menu, type MenuItem } from './components/Menu.js';
+export { FreshGlow } from './components/FreshGlow.js';
+/** Fed by the app with what another device changed; read by `FreshGlow`. */
+export { markFresh } from '@bolusi/ui/fresh';
+export { RollingText } from './components/RollingText.js';
 export {
   CaptureTile,
   PhotoTile,

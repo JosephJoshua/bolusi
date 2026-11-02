@@ -7,10 +7,10 @@
     "waitingForConnection": "Menunggu koneksi"
   },
   "action": {
-    "takePhoto": "Ambil Foto",
-    "retake": "Foto Ulang",
-    "usePhoto": "Pakai Foto Ini",
-    "retryUpload": "Kirim Ulang"
+    "takePhoto": "Ambil foto",
+    "retake": "Foto ulang",
+    "usePhoto": "Pakai foto ini",
+    "retryUpload": "Kirim ulang"
   },
   "permission": {
     "camera": "Izinkan aplikasi memakai kamera untuk ambil foto.",
@@ -43,6 +43,6 @@
     "refusedBody": "Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.",
     "unavailableTitle": "Video belum ada di HP ini",
     "unavailableBody": "Videonya belum tersinkron dari HP yang merekam. Coba lagi nanti.",
-    "tooLarge": "Videonya terlalu besar. Rekam ulang lebih singkat."
+    "tooLarge": "Videonya terlalu besar. Rekam lebih singkat."
   }
 }

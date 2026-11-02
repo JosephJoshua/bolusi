@@ -21,7 +21,12 @@ import {
 } from '@bolusi/schemas';
 import { opRowOf } from '@bolusi/test-support';
 
-import { insertOpLogRow, runPushPhase } from '../../src/index.js';
+import {
+  insertOpLogRow,
+  pendingMediaCount,
+  runPushPhase,
+  selectDrainable,
+} from '../../src/index.js';
 import {
   makeDevice,
   makeSignedNoteOp,
@@ -203,7 +208,8 @@ describe('every rejection code in 05 §8 is surfaced — the closed set, never a
     // The DENOMINATOR is the exported registry, not a hand-typed list: a code added to 05 §8 and
     // to `REJECTION_CODES` lands in this test automatically. A hardcoded list here would be the
     // exact "guard that silently checks less than it claims" failure (T-14).
-    const codes = [...REJECTION_CODES].filter((c) => c !== 'CHAIN_GAP'); // GAP is not a rejection (03 §3)
+    // GAP is not a rejection (03 §3); HALTED is an op the server never examined, which stays local.
+    const codes = [...REJECTION_CODES].filter((c) => c !== 'CHAIN_GAP' && c !== 'CHAIN_HALTED');
     const ops: SignedOperation[] = [];
     for (let i = 0; i < codes.length; i += 1) ops.push(await seedLocalOp(i + 1));
 
@@ -311,6 +317,39 @@ describe('a refused op is rolled out of this device`s projection', () => {
     expect(await noteBody(noteId)).toBe('awal');
   });
 
+  it('an op the server never examined (CHAIN_HALTED) stays local and stays in the record', async () => {
+    // The server answers CHAIN_HALTED for the rest of a batch after a CHAIN_BROKEN and records no
+    // verdict for them. Marking them rejected rolled them out of the record, and re-enrolment
+    // carries over `local` ops only, so the user's later changes were lost for good.
+    const brokenId = uuidV7(prngFor(8300), clockAt);
+    const broken = await appendLocal(1, brokenId, 'notes.note_created', {
+      title: 'Rusak',
+      body: 'putus',
+      mediaRef: null,
+    });
+    const laterId = uuidV7(prngFor(8301), clockAt);
+    const later = await appendLocal(2, laterId, 'notes.note_created', {
+      title: 'Stok LCD',
+      body: 'sesudah',
+      mediaRef: null,
+    });
+
+    harness.transport.scriptPush({
+      results: [
+        { id: broken.id, status: 'rejected', code: 'CHAIN_BROKEN', reason: 'mismatch' },
+        { id: later.id, status: 'rejected', code: 'CHAIN_HALTED', reason: 'earlier op broke' },
+      ],
+      serverTime: clockAt,
+    });
+    const result = await runPushPhase(deps());
+
+    expect(result.halted).toBe(true);
+    expect(result.rejected).toBe(1);
+    expect(await statusOf(later.id)).toEqual({ status: 'local', code: null });
+    expect(await noteBody(laterId)).toBe('sesudah');
+    expect(harness.surface.ofKind('op_rejected').map((e) => e.opId)).toEqual([broken.id]);
+  });
+
   it('a refused create removes the record entirely', async () => {
     const noteId = uuidV7(prngFor(8200), clockAt);
     const created = await appendLocal(1, noteId, 'notes.note_created', {
@@ -326,6 +365,61 @@ describe('a refused op is rolled out of this device`s projection', () => {
     await runPushPhase(deps());
 
     expect(await noteBody(noteId)).toBeUndefined();
+  });
+
+  it('a refused op`s captures leave the upload queue; an accepted op`s stay', async () => {
+    // QA saw pendingMediaCount climb after a refusal: the photos of a change the server refused
+    // stayed queued and retried for an op the server will never hold.
+    let seed = 8400;
+    const capture = async (opId: string, status: string): Promise<string> => {
+      const id = uuidV7(prngFor((seed += 1)), clockAt);
+      await sql`
+        INSERT INTO media_items (
+          id, tenant_id, store_id, captured_by_user_id, device_id, type, mime_type, byte_size,
+          sha256, captured_at, attached_to_operation_id, upload_status
+        ) VALUES (
+          ${id}, ${tenantId}, ${storeId}, ${userId}, ${device.id}, 'image', 'image/jpeg', ${100},
+          ${'a'.repeat(64)}, ${clockAt}, ${opId}, ${status}
+        )
+      `.execute(harness.db);
+      return id;
+    };
+    const kept = await appendLocal(1, uuidV7(prngFor(8401), clockAt), 'notes.note_created', {
+      title: 'Diterima',
+      body: 'ok',
+      mediaRef: null,
+    });
+    const refused = await appendLocal(2, uuidV7(prngFor(8402), clockAt), 'notes.note_created', {
+      title: 'Ditolak',
+      body: 'x',
+      mediaRef: null,
+    });
+    const keptPhoto = await capture(kept.id, 'pending');
+    const pending = await capture(refused.id, 'pending');
+    const failed = await capture(refused.id, 'failed');
+    const uploaded = await capture(refused.id, 'uploaded');
+    expect(await pendingMediaCount(harness.db)).toBe(3);
+
+    harness.transport.scriptPush({
+      results: [
+        { id: kept.id, status: 'accepted', serverSeq: 1 },
+        { id: refused.id, status: 'rejected', code: 'RULE_VIOLATED', reason: 'x' },
+      ],
+      serverTime: clockAt,
+    });
+    await runPushPhase(deps());
+
+    expect(await pendingMediaCount(harness.db)).toBe(1);
+    expect((await selectDrainable(harness.db, clockAt)).map((item) => item.id)).toEqual([
+      keptPhoto,
+    ]);
+    const attached = await sql<{ id: string; opId: string | null }>`
+      SELECT id, attached_to_operation_id AS "opId" FROM media_items
+    `.execute(harness.db);
+    const opOf = new Map(attached.rows.map((row) => [row.id, row.opId]));
+    expect([opOf.get(pending), opOf.get(failed)]).toEqual([null, null]);
+    // What already reached the server keeps its link.
+    expect(opOf.get(uploaded)).toBe(refused.id);
   });
 
   it('CHAIN_GAP is not a refusal: the record keeps the op', async () => {
@@ -410,12 +504,34 @@ describe('CHAIN_BROKEN halts push (03 §3 / §10)', () => {
     expect(result.halted).toBe(true);
     expect((await statusOf(a.id)).status).toBe('synced'); // ops before the break still landed
     expect((await statusOf(b.id)).code).toBe('CHAIN_BROKEN');
-    expect((await statusOf(c.id)).code).toBe('CHAIN_HALTED');
-    // The remainder is marked `rejected` but must NOT set the flag a second time (03 §3) — the
-    // triggering CHAIN_BROKEN already did. Counting the calls is the only way to see the
-    // difference between "set once" and "set twice with the same value".
+    // The remainder was never examined: it stays `local` and must NOT set the flag a second time
+    // (03 §3) — the triggering CHAIN_BROKEN already did. Counting the calls is the only way to see
+    // the difference between "set once" and "set twice with the same value".
+    expect(await statusOf(c.id)).toEqual({ status: 'local', code: null });
     expect(chainBrokenCalls).toBe(1);
     expect(harness.surface.ofKind('push_halted')).toHaveLength(1);
+  });
+
+  it('CHAIN_HALTED halts push even when the CHAIN_BROKEN op could not be marked here', async () => {
+    // The broken op's result marks nothing on this device (it is already marked, or gone), so only
+    // the CHAIN_HALTED answers say the chain is broken. Without halting, every cycle re-sent them.
+    const a = await seedLocalOp(1);
+    const b = await seedLocalOp(2);
+    harness.transport.scriptPush({
+      results: [
+        { id: a.id, status: 'rejected', code: 'CHAIN_HALTED', reason: 'earlier op broke' },
+        { id: b.id, status: 'rejected', code: 'CHAIN_HALTED', reason: 'earlier op broke' },
+      ],
+      serverTime: clockAt,
+    });
+
+    const result = await runPushPhase(deps());
+
+    expect(result.halted).toBe(true);
+    expect(chainBrokenCalls).toBe(1);
+    expect(await statusOf(a.id)).toEqual({ status: 'local', code: null });
+    expect(await statusOf(b.id)).toEqual({ status: 'local', code: null });
+    expect(harness.transport.pushes).toHaveLength(1);
   });
 });
 

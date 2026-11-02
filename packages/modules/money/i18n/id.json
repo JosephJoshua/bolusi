@@ -9,13 +9,14 @@
     "refundPaid": "Uang dikembalikan",
     "cashMoved": "Kas keluar/masuk",
     "cashCounted": "Tutup kas",
-    "cashAdjusted": "Selisih kas diselesaikan"
+    "cashAdjusted": "Selisih kas diselesaikan",
+    "cashMoveVoided": "Catatan kas dibatalkan"
   },
   "refusal": {
     "alreadyRecorded": "Catatan ini sudah ada.",
     "documentNotFound": "Tagihan ini tidak ada di toko ini.",
     "notChargeable": "Belum bisa ditagih. Servisan belum selesai.",
-    "chargeMismatch": "Jumlah tagihan tidak sama dengan harga yang disepakati.",
+    "chargeMismatch": "Servisan ini sudah diubah di perangkat lain, jadi tagihannya tidak dicatat.",
     "aboveCharged": "Potongan lebih besar dari tagihan.",
     "accountNotUsable": "Metode pembayaran ini tidak tersedia di toko ini.",
     "referenceRequired": "Isi kode approval dari struk EDC.",
@@ -29,10 +30,14 @@
     "notThisStore": "Ini milik toko lain.",
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",
+    "countRequired": "Selisih kas hanya diselesaikan dari hitungan kas.",
     "countSettled": "Selisih hitungan kas ini sudah diselesaikan.",
     "countSuperseded": "Sudah ada hitungan kas yang lebih baru. Selesaikan selisih yang terbaru.",
     "differenceChanged": "Selisihnya sudah berubah. Periksa lagi sebelum menyelesaikan.",
-    "overLimit": "Melebihi batasmu. Minta pemilik toko."
+    "overLimit": "Melebihi batasmu. Minta pemilik toko.",
+    "moveAboveDrawer": "Uang di laci tidak cukup.",
+    "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
+    "laterCountSettled": "Selisih hitungan kas sesudahnya sudah diselesaikan, jadi catatan ini tidak bisa dibatalkan lagi."
   },
   "method": {
     "cash": "Tunai"
@@ -45,18 +50,24 @@
     "reference": "No. referensi (opsional)",
     "addMethod": "Tambah metode lain",
     "remove": "Hapus metode ini",
+    "removeUnpicked": "Hapus pembayaran ini",
     "removeLabel": "Hapus pembayaran {method}",
     "remaining": "Kurang {amount}",
     "overpaid": "Lebih {amount}. Kurangi jumlahnya dulu.",
     "problem": {
+      "pick": "Pilih cara bayarnya dulu.",
+      "method": "Metode ini sudah tidak tersedia. Pilih metode lain.",
       "tendered": "Uang diterima kurang dari jumlahnya."
     },
     "method": "Metode pembayaran",
     "currency": "Rp"
   },
   "kas": {
+    "turnedDown": "Tidak disetujui pemilik",
     "title": "Kas",
     "expected": "Seharusnya di laci",
+    "drawer": "Laci kas",
+    "blindHint": "Hitung uang di laci saat tutup kas.",
     "notCounted": "Belum tutup kas hari ini",
     "counted": "Sudah tutup kas pukul {time}",
     "count": "Tutup kas",
@@ -64,6 +75,7 @@
     "waitingOwner": "Menunggu pemilik",
     "inToday": "Masuk hari ini",
     "nothingIn": "Belum ada uang masuk hari ini.",
+    "refunded": "Dikembalikan ke pelanggan",
     "total": "Total",
     "movesToday": "Keluar/masuk laci hari ini",
     "owed": "Belum lunas",
@@ -89,6 +101,9 @@
     "counted": "Uang di laci",
     "difference": "Selisih",
     "note": "Catatan (opsional)",
+    "check": "Cek hitungan",
+    "recount": "Hitung ulang",
+    "recountHint": "Ada selisih. Hitung sekali lagi kalau ragu, atau simpan.",
     "save": "Simpan hitungan",
     "hint": "Hitung uang di laci, lalu isi jumlahnya."
   },
@@ -99,14 +114,15 @@
     "save": "Simpan",
     "hintAmount": "Isi jumlahnya.",
     "hintReason": "Isi keterangannya.",
-    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya."
+    "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya.",
+    "aboveDrawer": "Di laci cuma ada {amount}. Kurangi jumlahnya dulu."
   },
   "settle": {
-    "title": "Selesaikan selisih",
+    "title": "Selisih kas",
     "countedBy": "Dihitung {name}, {time}",
     "reason": "Alasan",
     "save": "Selesaikan selisih",
-    "hint": "Isi alasannya.",
+    "hint": "Tulis alasannya dulu.",
     "closed": "Selisih ini sudah diselesaikan atau ada hitungan yang lebih baru."
   },
   "receive": {
@@ -129,22 +145,37 @@
     "today": "Hari ini",
     "previousDay": "Sebelumnya",
     "nextDay": "Berikutnya",
-    "none": "Belum ada catatan di hari ini.",
+    "none": "Belum ada catatan hari ini.",
+    "noneDay": "Tidak ada catatan di hari itu.",
     "voided": "Dibatalkan: {reason}",
+    "handoverRefund": "Sisa DP saat HP diambil",
     "more": "Muat lagi",
     "void": "Batalkan",
     "col": {
       "time": "Waktu",
       "record": "Catatan"
     },
-    "voidLabel": "Batalkan pembayaran {amount} pukul {time}"
+    "voidLabel": "Batalkan pembayaran {amount} pukul {time}",
+    "voidCashLabel": "Batalkan catatan kas {amount} pukul {time}"
   },
   "void": {
-    "title": "Batalkan pembayaran",
+    "title": "Pembatalan pembayaran",
     "save": "Batalkan pembayaran",
-    "hint": "Isi alasannya.",
+    "hint": "Tulis alasannya dulu.",
     "explain": "Catatannya tetap ada dan ditandai batal. Sisa tagihan pelanggan naik lagi sebesar jumlah ini.",
-    "reason": "Alasan"
+    "reason": "Alasan",
+    "limit": "Batas pembatalanmu {amount} per servisan.",
+    "waiting": "Menunggu persetujuan",
+    "rejected": "{name} menolak membatalkan pembayaran {amount}.",
+    "rejectedNote": "{name} menolak membatalkan pembayaran {amount}: {note}",
+    "cashTitle": "Pembatalan catatan kas",
+    "cashSave": "Batalkan catatan",
+    "cashExplain": "Catatannya tetap ada dan ditandai batal. Uang di laci dihitung seperti catatan ini tidak pernah ada, juga di hitungan kas sesudahnya.",
+    "withEarlier": "Bersama pengurangan sebelumnya di servisan ini, totalnya {amount}."
+  },
+  "ask": {
+    "needsApproval": "Perlu persetujuan pemilik toko.",
+    "overLimit": "Melebihi batasmu, jadi perlu persetujuan."
   },
   "kind": {
     "qris": "QRIS",
@@ -227,5 +258,49 @@
     "cancel": "Batal",
     "unresolved": "QR {amount} tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar.",
     "unresolvedMany": "{count} QR tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
+  },
+  "refund": {
+    "limit": "Batas pengembalianmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
+    "title": "Kembalikan uang",
+    "action": "Kembalikan",
+    "credit": "Lebih bayar",
+    "paid": "Sudah dibayar",
+    "method": "Kembalikan lewat",
+    "amount": "Jumlah",
+    "reason": "Alasan",
+    "reference": "No. referensi (opsional)",
+    "save": "Kembalikan {amount}",
+    "saveEmpty": "Kembalikan",
+    "tooMuch": "Paling banyak {amount} lewat metode ini.",
+    "lowersBill": "Tagihan juga turun {amount}.",
+    "nothing": "Belum ada pembayaran yang bisa dikembalikan.",
+    "hint": {
+      "method": "Pilih metodenya dulu.",
+      "amount": "Isi jumlahnya dulu.",
+      "reason": "Tulis alasannya dulu."
+    },
+    "rejected": "{name} menolak mengembalikan {amount}.",
+    "rejectedNote": "{name} menolak mengembalikan {amount}: {note}"
+  },
+  "reduce": {
+    "limit": "Batas potonganmu {amount}.",
+    "overLimit": "Melebihi batasmu. Paling banyak {amount}.",
+    "title": "Kurangi tagihan",
+    "action": "Kurangi tagihan",
+    "owed": "Sisa bayar",
+    "amount": "Potongan",
+    "after": "Sisa jadi",
+    "becomesCredit": "Jadi lebih bayar {amount}. Kembalikan ke pelanggan.",
+    "reason": "Alasan",
+    "save": "Kurangi {amount}",
+    "saveEmpty": "Kurangi",
+    "tooMuch": "Paling banyak {amount}.",
+    "hint": {
+      "amount": "Isi potongannya dulu.",
+      "reason": "Tulis alasannya dulu."
+    },
+    "rejected": "{name} menolak memotong tagihan {amount}.",
+    "rejectedNote": "{name} menolak memotong tagihan {amount}: {note}"
   }
 }

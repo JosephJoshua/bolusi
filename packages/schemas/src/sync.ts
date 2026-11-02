@@ -51,12 +51,51 @@ export type PushResponse = z.infer<typeof zPushResponse>;
  * `devicesDirectoryVersion` 0 = no directory held. `limit` defaults to the
  * endpoint default when absent (api/00 §10).
  */
+/** Bounds for read sets on the wire: far above the read permissions any build declares. */
+export const MAX_READ_SET = 256;
+const MAX_READ_PERMISSION_LENGTH = 128;
+
 export const zPullRequest = z.strictObject({
   cursor: z.number().int().min(0),
   limit: z.number().int().min(1).max(MAX_PULL_LIMIT).default(MAX_PULL_LIMIT),
   devicesDirectoryVersion: z.number().int().min(0),
+  /**
+   * A catch-up pull (permission-scoped sync): only the ops read with these permissions, from
+   * `cursor` up to `through`. A device asks for it when its read set grew, for the older ops it was
+   * not sent before. The server still limits it to the device's current read set.
+   */
+  backfill: z
+    .strictObject({
+      reads: z.array(z.string().min(1).max(MAX_READ_PERMISSION_LENGTH)).min(1).max(MAX_READ_SET),
+      through: z.number().int().min(0),
+    })
+    .optional(),
+  /**
+   * A person pull (least-privilege sync): what the person signed in may read beyond what this
+   * device holds, for their session only. Sent with the `X-Person-Session` token the server issued
+   * after checking their PIN; the response's `readSet` is that extra, never the device's own.
+   */
+  person: z.literal(true).optional(),
 });
 export type PullRequest = z.infer<typeof zPullRequest>;
+
+/** Header carrying a person session token (`bps_…`) on a person pull. */
+export const PERSON_SESSION_HEADER = 'X-Person-Session';
+
+/** `POST /v1/sync/person-session`: the person's PIN, checked by the server itself. */
+export const zPersonSessionRequest = z.strictObject({
+  userId: z.string().uuid(),
+  pin: z.string().regex(/^[0-9]{6}$/),
+});
+export type PersonSessionRequest = z.infer<typeof zPersonSessionRequest>;
+
+export const zPersonSessionResponse = z.object({
+  token: z.string().min(1),
+  expiresAt: z.number().int(),
+  /** What the person may read here beyond the device; empty means nothing to fetch. */
+  readSet: z.array(z.string().min(1).max(MAX_READ_PERMISSION_LENGTH)).max(MAX_READ_SET),
+});
+export type PersonSessionResponse = z.infer<typeof zPersonSessionResponse>;
 
 export const DEVICE_KINDS = ['member', 'system'] as const;
 export const zDeviceKind = z.enum(DEVICE_KINDS);
@@ -95,5 +134,11 @@ export const zPullResponse = z.object({
   serverTime: zMsEpoch,
   devices: z.array(zDeviceInfo).optional(),
   devicesDirectoryVersion: z.number().int().min(0).optional(),
+  /**
+   * The read permissions this page was filtered by, sorted (permission-scoped sync). The device
+   * compares it with the set it holds: it drops ops it may no longer read and catches up on ops it
+   * newly may. Absent from a server that does not scope pulls.
+   */
+  readSet: z.array(z.string().min(1).max(MAX_READ_PERMISSION_LENGTH)).max(MAX_READ_SET).optional(),
 });
 export type PullResponse = z.infer<typeof zPullResponse>;

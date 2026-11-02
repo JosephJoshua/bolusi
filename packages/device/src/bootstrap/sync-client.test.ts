@@ -38,7 +38,12 @@ import { fakeBackgroundPlatform } from './_background-platform.test.js';
 import { SYNC_BACKGROUND_TASK } from './background-sync.js';
 import { createBackgroundHost, type BackgroundBinding } from './background-task.js';
 import type { Bootstrapped } from './bootstrap.js';
-import { createSyncClient, createSyncClientForApp, type SyncClientDeps } from './sync-client.js';
+import {
+  createSyncClient,
+  createSyncClientForApp,
+  knowsOp,
+  type SyncClientDeps,
+} from './sync-client.js';
 import { APPEND_DEBOUNCE_MS } from './triggers.js';
 
 const KEY = 'a'.repeat(64);
@@ -193,6 +198,11 @@ async function build(options: BuildOptions = {}) {
     db,
     deviceId: DEVICE_ID,
     transport,
+    readScope: {
+      registry: { types: () => [], readPermissionFor: () => undefined },
+      refold: () => Promise.resolve(),
+      catchUpWatermarks: () => Promise.resolve(),
+    },
     bundle: {
       refresh: () => {
         bundleCalls += 1;
@@ -205,6 +215,7 @@ async function build(options: BuildOptions = {}) {
       return Promise.resolve();
     },
     refoldRefused: () => Promise.resolve(),
+    knowsOp: () => true,
     crypto: noblePort,
     clock: { now: () => T },
     timer,
@@ -254,6 +265,16 @@ function historyPages(): PullResponse[] {
     { ops: ops.slice(2), nextCursor: 4, hasMore: false, serverTime: T },
   ];
 }
+
+/** A booted app's least-privilege parts, for fakes that hold everything and sign in nobody. */
+const NO_PERSON = {
+  deviceReads: { heldTypes: () => [] },
+  person: {
+    bindTransport: () => undefined,
+    sync: () => Promise.resolve(),
+    refuse: () => Promise.resolve(),
+  },
+};
 
 describe('the sync client constructs, starts, and drives a REAL cycle (task 89 acceptance)', () => {
   test('an enrolled boot syncs: lastSuccessfulSyncAt becomes a REAL timestamp, banner de-escalates (T-19)', async () => {
@@ -366,6 +387,54 @@ describe('falsification — each wiring broken makes the cycle FAIL LOUDLY (§2.
   });
 });
 
+describe('"Kirim sekarang" answers the press (round 2 QA, F11)', () => {
+  test('sending shows at once, and a hung attempt that times out says it failed', async () => {
+    const { client, transport } = await build({ online: true });
+    await client.start();
+    await client.settle();
+
+    // The server stops answering: the pull hangs until the request deadline gives up.
+    let giveUp: (error: Error) => void = () => undefined;
+    transport.pull = (request) => {
+      transport.pulls.push(request);
+      return new Promise((_, reject) => {
+        giveUp = reject;
+      });
+    };
+    const seen: { state: string; busy: boolean; error: string | null }[] = [];
+    client.subscribe(() => seen.push({ state: client.state(), ...client.manualSync() }));
+    const pulled = transport.pulls.length;
+    client.requestManual();
+    // Told before any answer comes back: the screens show it is sending.
+    expect(seen.at(-1)).toEqual({ state: 'pushing', busy: true, error: null });
+
+    await vi.waitFor(() => expect(transport.pulls.length).toBe(pulled + 1));
+    expect(client.state()).not.toBe('idle');
+    giveUp(new SyncTransportError('no answer within 60000 ms', { code: null, status: null }));
+    await vi.waitFor(() => expect(client.manualSync().busy).toBe(false));
+    // No longer "sending": backed off, with a failure line for the press.
+    expect(client.state()).toBe('backoff');
+    expect(client.manualSync()).toEqual({ busy: false, error: 'NETWORK' });
+    expect(seen.at(-1)).toEqual({ state: 'backoff', busy: false, error: 'NETWORK' });
+    client.stop();
+  });
+
+  test('a press that gets through clears the failure line', async () => {
+    const { client, transport } = await build({ online: true, pullRejects: true });
+    await client.start();
+    client.requestManual();
+    await client.settle();
+    await vi.waitFor(() => expect(client.manualSync().error).toBe('INTERNAL'));
+
+    transport.pullRejects = false;
+    client.requestManual();
+    expect(client.manualSync()).toEqual({ busy: true, error: null });
+    await vi.waitFor(() => expect(client.manualSync()).toEqual({ busy: false, error: null }));
+    expect(client.state()).toBe('idle');
+    client.stop();
+  });
+});
+
 describe('a retry after a failed cycle', () => {
   test('tells the screens when it ends, though no trigger asked for it', async () => {
     const timer = new FakeTimer();
@@ -417,6 +486,7 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
       db,
       engine: { applyPulledOp: () => Promise.resolve(), refoldRefused: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
+      ...NO_PERSON,
     } as unknown as Bootstrapped;
     return createSyncClientForApp(app, {
       baseUrl: 'https://example.invalid',
@@ -473,6 +543,7 @@ describe('a push that settles ops tells the open screens', () => {
       engine: { applyPulledOp: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
       invalidation,
+      ...NO_PERSON,
     } as unknown as Bootstrapped;
     const reply = (body: unknown) =>
       new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
@@ -513,6 +584,7 @@ describe('work waiting for the next online contact', () => {
       engine: { applyPulledOp: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
       invalidation: new InvalidationBus(),
+      ...NO_PERSON,
     } as unknown as Bootstrapped;
     const reply = (body: unknown) =>
       new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
@@ -545,6 +617,52 @@ describe('work waiting for the next online contact', () => {
     await client.settle();
 
     expect(calls).toEqual(['checked']);
+    client.stop();
+  });
+});
+
+describe("a signed-in person's store follows the device's sync", () => {
+  test('after each cycle settles, the person store is pulled too', async () => {
+    let personSyncs = 0;
+    const app = {
+      db,
+      engine: { applyPulledOp: () => Promise.resolve() },
+      syncState: await readSyncState(db.db),
+      invalidation: new InvalidationBus(),
+      ...NO_PERSON,
+      person: {
+        ...NO_PERSON.person,
+        sync: () => {
+          personSyncs += 1;
+          return Promise.resolve();
+        },
+      },
+    } as unknown as Bootstrapped;
+    const client = createSyncClientForApp(app, {
+      baseUrl: 'https://example.invalid',
+      deviceId: DEVICE_ID,
+      loadDeviceToken: () => Promise.resolve('bdt_test'),
+      crypto: noblePort,
+      clock: clockT,
+      appState: activeAppState,
+      netInfo: fakeNetInfo(true).port,
+      timer: new RecordingTimer(),
+      fetchImpl: (input) =>
+        Promise.resolve(
+          String(input).endsWith('/v1/sync/pull')
+            ? new Response(
+                JSON.stringify({ ops: [], nextCursor: 0, hasMore: false, serverTime: T }),
+                {
+                  headers: { 'content-type': 'application/json' },
+                },
+              )
+            : new Response(null, { status: 304 }),
+        ),
+    });
+    expect(personSyncs).toBe(0);
+    await client.start();
+    client.requestManual();
+    await vi.waitFor(() => expect(personSyncs).toBeGreaterThan(0));
     client.stop();
   });
 });
@@ -690,5 +808,21 @@ describe('trigger (d): the OS background task drives the started client', () => 
     expect(client.backgroundRegistration()).toEqual({ kind: 'restricted' });
     expect(platform.registered).toHaveLength(0);
     client.stop();
+  });
+});
+
+describe('knowsOp: can this build fold a pulled op?', () => {
+  const operations = {
+    schemaVersionFor: (type: string) => (type === 'repair.ticket_opened' ? 4 : undefined),
+  };
+
+  test('folds any version up to the one it declares', () => {
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 1 })).toBe(true);
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 4 })).toBe(true);
+  });
+
+  test('a newer version or an unknown type comes from a newer app', () => {
+    expect(knowsOp(operations, { type: 'repair.ticket_opened', schemaVersion: 5 })).toBe(false);
+    expect(knowsOp(operations, { type: 'stock.item_received', schemaVersion: 1 })).toBe(false);
   });
 });

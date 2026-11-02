@@ -5,7 +5,7 @@ import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -54,6 +54,7 @@ function fakeUpdates(state: UpdateState = { kind: 'none' }): UpdatesBridge & {
     state: () => Promise.resolve(state),
     onChange: () => () => undefined,
     install: vi.fn<UpdatesBridge['install']>(() => Promise.resolve()),
+    busy: vi.fn<UpdatesBridge['busy']>(),
   };
 }
 
@@ -167,14 +168,64 @@ describe('printing on the counter PC', () => {
     expect(printers.printRaw).not.toHaveBeenCalled();
   });
 
+  it('prints on a size the store types, as ESC/P on tractor-feed paper', async () => {
+    const printers = fakePrinters({ chosen: 'EPSON LX-310' });
+    setBridge(printers);
+    renderApp();
+    await openSettings();
+    fireEvent.click(await screen.findByTestId('repair.desk.printing.paper.custom'));
+    const width = await screen.findByTestId('repair.desk.printing.size.width');
+    // Out of range: nothing changes, and the range says why.
+    fireEvent.change(width, { target: { value: '30' } });
+    fireEvent.blur(width);
+    await waitFor(() =>
+      expect(byTestId('repair.desk.printing.size.range').className).toContain('text-danger'),
+    );
+    // A good size saves as it is typed, without leaving the field.
+    fireEvent.change(width, { target: { value: '216' } });
+    // It starts from the paper it had: the store's half forms, tractor-feed.
+    expect(byTestId('repair.desk.printing.size.continuous').getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    await waitFor(async () =>
+      expect((await printers.settings()).paper).toMatchObject({
+        preset: 'custom',
+        widthMm: 216,
+        continuous: true,
+      }),
+    );
+    await openPrintFor('Ester Mandowen');
+    expect(byTestId('repair.desk.print.paper').textContent).toContain('216 × 140 mm');
+    fireEvent.click(byTestId('repair.desk.print.submit'));
+    await waitFor(() => expect(printers.printRaw).toHaveBeenCalledTimes(1));
+  });
+
   it('says to pick a printer first instead of printing nowhere', async () => {
     setBridge(fakePrinters());
     renderApp();
     await screen.findByText('Yohanis Wenda');
     await openPrintFor('Ester Mandowen');
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'Pilih printernya dulu di Pengaturan.',
+    expect((await screen.findByRole('alert')).textContent).toBe('Pilih printernya dulu.');
+    expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(true);
+    // Picked right in the dialog, and kept for this computer, as in Settings.
+    fireEvent.click(
+      within(byTestId('repair.desk.print.printers')).getByRole('radio', { name: /EPSON LX-310/ }),
     );
+    await waitFor(() =>
+      expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(false),
+    );
+    expect(screen.queryByTestId('repair.desk.print.printers')).toBeNull();
+  });
+
+  it('says to install a printer when this PC has none, instead of asking to pick one', async () => {
+    setBridge(fakePrinters({ installed: [] }));
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    await openPrintFor('Ester Mandowen');
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Belum ada printer di komputer ini. Pasang printernya di Windows dulu, lalu cari lagi.',
+    );
+    expect(screen.queryByTestId('repair.desk.print.printers')).toBeNull();
     expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(true);
   });
 

@@ -256,6 +256,12 @@ describe('putting parts back', () => {
       'repair.refusal.partsNotInWork',
     );
     expect(await out(h, s, lcd)).toBe(1);
+    // Its work stopped: no part comes off the shelf for it any more, not even an owner's.
+    await expectRefused(
+      h.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, h.ownerId),
+      'INVALID_TRANSITION',
+      'repair.refusal.partsNotInWork',
+    );
     await h.runInventory('putBackPart', { itemId: lcd, qty: 1, use: s.use }, h.ownerId);
     expect(await onHand(h, lcd)).toBe(2);
   });

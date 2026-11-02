@@ -74,7 +74,12 @@ import { noblePort } from '@bolusi/test-support';
 import * as SecureStore from 'expo-secure-store';
 
 import type { RootProps } from '../src/bootstrap/Root.js';
-import { createSyncClient, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import {
+  createSyncClient,
+  knowsOp,
+  readScopeOf,
+  type SyncClient,
+} from '@bolusi/device/bootstrap/sync-client';
 import { APPEND_DEBOUNCE_MS, type NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 import {
   bootFixture,
@@ -174,11 +179,13 @@ function syncHarness(): Harness {
       built = createSyncClient({
         db: booted.db,
         deviceId: booted.deviceId,
+        readScope: readScopeOf(booted),
         transport,
         // 304 — the steady state; the bundle is not what this file measures.
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
         refoldRefused: (op) => booted.engine.refoldRefused(op),
+        knowsOp: (op) => knowsOp(booted.registry.operations, op),
         crypto: noblePort,
         clock: { now: () => SERVER_TIME },
         timer,

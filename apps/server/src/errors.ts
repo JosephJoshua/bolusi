@@ -41,6 +41,7 @@ const CODE_STATUS: Record<HttpErrorCode, ContentfulStatusCode> = {
   QRIS_KEY_REFUSED: 422,
   QRIS_AMOUNT_REFUSED: 422,
   CHANGE_REFUSED: 409,
+  PERSON_SESSION_INVALID: 401,
 };
 
 /** Static English developer messages (api/00 §6). Not localized, not user-facing. */
@@ -70,6 +71,7 @@ const CODE_MESSAGE: Record<HttpErrorCode, string> = {
   QRIS_KEY_REFUSED: 'Xendit refused this key',
   QRIS_AMOUNT_REFUSED: 'Xendit refused this amount',
   CHANGE_REFUSED: 'The records do not allow this change',
+  PERSON_SESSION_INVALID: 'Person session missing, ended, or not for this device',
 };
 
 export type ErrorDetails = Record<string, unknown>;

@@ -17,13 +17,15 @@ import {
   MONEY_OP,
   MONEY_PERMISSION,
   PAYMENT_ACCOUNT_KINDS,
+  movesOut,
   type CashMoveKind,
   type RevenueAccount,
 } from './constants.js';
 import { zDocument, type MoneyDocument } from './documents.js';
 import { zAccountRef, zAmount, zReason } from './operations.js';
-import { documentMoneyQuery } from './queries.js';
+import { documentMoneyQuery, drawerForMoveQuery } from './queries.js';
 import { MONEY_REFUSALS } from './rules.js';
+import { seesExpected } from './kas.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
 
@@ -64,6 +66,16 @@ export function chargeOp(
   account: RevenueAccount,
 ): OpDraft {
   return entryOp(ctx, MONEY_OP.chargeRecorded, { document, amount, account });
+}
+
+/** An owner takes `amount` off what a customer was charged for a document, saying why. */
+export function reduceChargeOp(
+  ctx: CommandContext,
+  document: MoneyDocument,
+  amount: number,
+  reason: string,
+): OpDraft {
+  return entryOp(ctx, MONEY_OP.chargeReduced, { document, amount, reason });
 }
 
 export function paymentOp(ctx: CommandContext, document: MoneyDocument, payment: PaymentDraft) {
@@ -189,6 +201,20 @@ export function voidPaymentHandler(
   };
 }
 
+export const voidCashMoveInput = voidPaymentInput;
+export type VoidCashMoveInput = z.input<typeof voidCashMoveInput>;
+
+/** An owner cancels a cash move typed wrong; the drawer reads as if it was never recorded. */
+export function voidCashMoveHandler(
+  input: z.output<typeof voidCashMoveInput>,
+  ctx: CommandContext,
+): CommandHandlerResult<null> {
+  return {
+    ops: [entryOp(ctx, MONEY_OP.cashMoveVoided, { reason: input.reason }, input.entryId)],
+    result: null,
+  };
+}
+
 export const refundInput = z
   .object({
     document: zDocument,
@@ -212,21 +238,17 @@ export async function refundHandler(
   const { kind, id } = input.document;
   const money = (await ctx.query(documentMoneyQuery, { kind, id })).rows[0]!;
   const credit = Math.max(0, -money.balance);
+  // What came in and still counts, less what already went back: on a debt nothing was paid.
+  const paid = Math.max(0, money.paid);
+  if (input.amount > paid) {
+    throw MONEY_REFUSALS.refuse('refundAbovePaid', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'amount', issue: `at most ${paid}` },
+    });
+  }
   const ops: OpDraft[] = [];
   if (input.amount > credit && ctx.colleagueHasPermission(ctx.userId, MONEY_PERMISSION.refund)) {
-    if (input.amount > credit + money.charged - money.reduced) {
-      throw MONEY_REFUSALS.refuse('refundAbovePaid', {
-        code: 'VALIDATION_FAILED',
-        details: { field: 'amount', issue: `at most ${credit + money.charged - money.reduced}` },
-      });
-    }
-    ops.push(
-      entryOp(ctx, MONEY_OP.chargeReduced, {
-        document: input.document,
-        amount: input.amount - credit,
-        reason: input.reason,
-      }),
-    );
+    ops.push(reduceChargeOp(ctx, input.document, input.amount - credit, input.reason));
   }
   ops.push(
     refundOp(ctx, input.document, {
@@ -264,11 +286,27 @@ export const moveCashInput = z
   .strict();
 export type MoveCashInput = z.input<typeof moveCashInput>;
 
-export function moveCashHandler(
+/**
+ * Cash out of or into the drawer. Nobody who sees the drawer takes out more than the book says is
+ * in it: the server records cash as it really moved (an offline device's moves may cross), so it
+ * is stopped here. Someone counting blind is not checked (`cashMoveCheck`).
+ */
+export async function moveCashHandler(
   input: z.output<typeof moveCashInput>,
   ctx: CommandContext,
-): CommandHandlerResult<{ entryId: string }> {
+): Promise<CommandHandlerResult<{ entryId: string }>> {
   const kind: CashMoveKind = input.kind;
+  // Not for someone counting blind: the refusal would give the drawer away a try at a time.
+  const blind = !seesExpected((permission) => ctx.colleagueHasPermission(ctx.userId, permission));
+  if (movesOut(kind) && !blind) {
+    const drawer = (await ctx.query(drawerForMoveQuery, { counts: 0 })).rows[0]!.expected;
+    if (input.amount > drawer) {
+      throw MONEY_REFUSALS.refuse('moveAboveDrawer', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'amount', issue: `at most ${Math.max(0, drawer)}` },
+      });
+    }
+  }
   const op = entryOp(ctx, MONEY_OP.cashMoved, {
     kind,
     amount: input.amount,
@@ -302,7 +340,7 @@ export const adjustCashInput = z
       .min(-MAX_AMOUNT)
       .max(MAX_AMOUNT)
       .refine((n) => n !== 0),
-    countId: zUuid.nullable().default(null),
+    countId: zUuid,
     reason: zReason,
   })
   .strict();

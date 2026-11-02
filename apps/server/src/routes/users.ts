@@ -1,16 +1,20 @@
 // Users sub-router (api/02-auth §5.4). Bearer-guarded; the §4.5 matrix + the §5.4 anti-escalation
 // rules are enforced here against the server directory.
-import { compareCanonicalOrder, OWNER_POWER_PERMISSIONS } from '@bolusi/core';
+import { compareCanonicalOrder, isAheadOfServer } from '@bolusi/core';
 import { buildPinVerifierRow, type TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
+import { endPersonSessionsOf } from '../auth/person-sessions.js';
 import {
   countActiveTenantAdmins,
   hasPermission,
+  holdsOwnerPowers,
   isTenantAdmin,
+  mayManageOwnerPin,
   requirePermission,
   requirePermissionInStores,
+  rolesConferOwnerPowers,
 } from '../auth/permissions.js';
 import { TENANT_ADMIN_PERMISSION } from '../identity/permissions.js';
 import { isUniqueViolation } from '../db-errors.js';
@@ -35,7 +39,10 @@ import { uuidv7 } from '../uuidv7.js';
 
 const LOWERCASE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** §9 quota: 100 user-management mutations / tenant / day (create + patch + status + pin-verifier). */
+/**
+ * §9 quota: 100 user-management mutations / tenant / day (create + patch + status + pin-verifier).
+ * Charged only after the caller's permission checks pass, so refused calls cannot spend the budget.
+ */
 function enforceUsersQuota(deps: ServerDeps, tenantId: string, now: number): void {
   enforce(
     deps.identityRateStore.hit(
@@ -52,6 +59,31 @@ function isNewer(candidate: CanonicalRef, stored: CanonicalRef): boolean {
   return compareCanonicalOrder(candidate, stored) > 0;
 }
 
+/**
+ * Refuse a verifier `asOf` (§5.3) the caller could not honestly hold. The greatest-`asOf` merge
+ * trusts it, so a far-future one would beat every later reset and pin the verifier for good. It may
+ * not be further ahead of the server clock than an op may (core sync/clock-guard.ts), and when a
+ * device posts it, it must be a position on that device's own log — the PIN op that gave the
+ * verifier its `asOf` was appended there (core auth/pin-flows.ts).
+ */
+function assertPlausibleAsOf(
+  asOf: CanonicalRef,
+  now: number,
+  path: readonly string[],
+  deviceId: string | undefined,
+): void {
+  const issue = (field: string, message: string) =>
+    new ApiError('VALIDATION_FAILED', {
+      issues: [{ path: [...path, 'asOf', field], code: 'custom', message }],
+    });
+  if (isAheadOfServer(asOf.timestamp, now)) {
+    throw issue('timestamp', 'asOf.timestamp is ahead of the server clock');
+  }
+  if (deviceId !== undefined && asOf.deviceId !== deviceId) {
+    throw issue('deviceId', 'asOf.deviceId must be the posting device');
+  }
+}
+
 async function targetStoreIds(db: TenantDb, userId: string): Promise<string[]> {
   const rows = await db
     .selectFrom('userStores')
@@ -59,42 +91,6 @@ async function targetStoreIds(db: TenantDb, userId: string): Promise<string[]> {
     .where('userId', '=', userId)
     .execute();
   return rows.map((r) => r.storeId);
-}
-
-/**
- * Owner powers (owner decision 2026-10-27): only a tenant admin, the main owner, may make someone an
- * owner, or rename, re-role, deactivate or reactivate an owner. An owner role is one that is
- * tenant-wide or holds power over other accounts (core `OWNER_POWER_PERMISSIONS`, which the device
- * uses to decide what to offer). A store owner manages the cashiers and technicians of their own
- * store, never a peer owner, so two store owners cannot remove each other.
- */
-export async function rolesConferOwnerPowers(
-  db: TenantDb,
-  roles: readonly { readonly id: string; readonly scopeType: string }[],
-): Promise<boolean> {
-  if (roles.some((r) => r.scopeType === 'tenant')) return true;
-  if (roles.length === 0) return false;
-  const row = await db
-    .selectFrom('rolePermissions')
-    .select('roleId')
-    .where(
-      'roleId',
-      'in',
-      roles.map((r) => r.id),
-    )
-    .where('permissionId', 'in', OWNER_POWER_PERMISSIONS)
-    .executeTakeFirst();
-  return row !== undefined;
-}
-
-async function holdsOwnerPowers(db: TenantDb, userId: string): Promise<boolean> {
-  const roles = await db
-    .selectFrom('userRoles')
-    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
-    .select(['roles.id', 'roles.scopeType'])
-    .where('userRoles.userId', '=', userId)
-    .execute();
-  return rolesConferOwnerPowers(db, roles);
 }
 
 /** Throw the owner-powers restriction unless the acting user is a tenant admin. */
@@ -145,16 +141,55 @@ async function writeRoleGrants(
       await db
         .insertInto('userRoles')
         .values({ tenantId, userId, roleId: role.id, storeId: null })
+        .onConflict((oc) => oc.doNothing())
         .execute();
     } else {
       for (const storeId of storeIds) {
         await db
           .insertInto('userRoles')
           .values({ tenantId, userId, roleId: role.id, storeId })
+          // A grant left at a store the person is moved back to is the same grant: keep it.
+          .onConflict((oc) => oc.doNothing())
           .execute();
       }
     }
   }
+}
+
+/**
+ * Follow a store move with the user's store-role grants: a grant at a store they left is dropped
+ * (the evaluator reads grants, not memberships, so a kept grant would keep its powers there), and the
+ * store roles they hold are granted in each store they joined, as creation grants them in every store.
+ * Grants at kept stores and tenant-wide grants are untouched.
+ */
+async function moveStoreGrants(
+  db: TenantDb,
+  tenantId: string,
+  userId: string,
+  fromStoreIds: readonly string[],
+  toStoreIds: readonly string[],
+): Promise<void> {
+  const grants = await db
+    .selectFrom('userRoles')
+    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
+    .select(['roles.id', 'roles.scopeType', 'userRoles.storeId'])
+    .where('userRoles.userId', '=', userId)
+    .where('userRoles.storeId', 'is not', null)
+    .execute();
+  const target = new Set(toStoreIds);
+  const removed = [...new Set(grants.map((g) => g.storeId as string))].filter(
+    (s) => !target.has(s),
+  );
+  if (removed.length > 0) {
+    await db
+      .deleteFrom('userRoles')
+      .where('userId', '=', userId)
+      .where('storeId', 'in', removed)
+      .execute();
+  }
+  const added = [...target].filter((s) => !fromStoreIds.includes(s));
+  const storeRoles = [...new Map(grants.map((g) => [g.id, g])).values()];
+  await writeRoleGrants(db, tenantId, userId, storeRoles, added);
 }
 
 export function createUsersRouter(deps: ServerDeps) {
@@ -168,8 +203,6 @@ export function createUsersRouter(deps: ServerDeps) {
           const body = c.req.valid('json');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           const userId = await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
 
@@ -197,6 +230,10 @@ export function createUsersRouter(deps: ServerDeps) {
             if (await rolesConferOwnerPowers(db, roles)) {
               await requireTenantAdmin(db, acting, TENANT_ADMIN_PERMISSION);
             }
+            if (body.pinVerifier !== null) {
+              assertPlausibleAsOf(body.pinVerifier.asOf, t, ['pinVerifier'], undefined);
+            }
+            enforceUsersQuota(deps, tenantId, t);
 
             const newUserId = uuidv7(t);
             const passwordVerifier =
@@ -268,8 +305,6 @@ export function createUsersRouter(deps: ServerDeps) {
           const body = c.req.valid('json');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -296,6 +331,7 @@ export function createUsersRouter(deps: ServerDeps) {
             if (roles !== null && (await rolesConferOwnerPowers(db, roles))) {
               await requireTenantAdmin(db, acting, TENANT_ADMIN_PERMISSION);
             }
+            enforceUsersQuota(deps, tenantId, t);
 
             const patch: { name?: string; photoMediaId?: string | null } = {};
             if (body.name !== undefined) patch.name = body.name;
@@ -319,6 +355,9 @@ export function createUsersRouter(deps: ServerDeps) {
                   .insertInto('userStores')
                   .values({ userId: targetUserId, storeId, tenantId })
                   .execute();
+              }
+              if (roles === null) {
+                await moveStoreGrants(db, tenantId, targetUserId, currentStores, body.storeIds);
               }
             }
             if (roles !== null) {
@@ -368,8 +407,6 @@ export function createUsersRouter(deps: ServerDeps) {
           if (!LOWERCASE_UUID.test(targetUserId)) throw new ApiError('NOT_FOUND');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -387,6 +424,7 @@ export function createUsersRouter(deps: ServerDeps) {
             if (targetUserId !== acting.userId && (await holdsOwnerPowers(db, targetUserId))) {
               await requireTenantAdmin(db, acting, PERM.userDeactivate);
             }
+            enforceUsersQuota(deps, tenantId, t);
 
             // LAST_ADMIN_PROTECTED (§5.4.4): deactivating the sole active tenant admin → 409. Server
             // endpoint check only — no projection guard, no Conflict record.
@@ -425,8 +463,6 @@ export function createUsersRouter(deps: ServerDeps) {
           if (!LOWERCASE_UUID.test(targetUserId)) throw new ApiError('NOT_FOUND');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
@@ -443,6 +479,7 @@ export function createUsersRouter(deps: ServerDeps) {
             if (targetUserId !== acting.userId && (await holdsOwnerPowers(db, targetUserId))) {
               await requireTenantAdmin(db, acting, PERM.userDeactivate);
             }
+            enforceUsersQuota(deps, tenantId, t);
             await db
               .updateTable('users')
               .set({ status: 'active' })
@@ -472,10 +509,9 @@ export function createUsersRouter(deps: ServerDeps) {
           const body = c.req.valid('json');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          enforceUsersQuota(deps, tenantId, t);
-
           // pin-verifier is device-token only (§4.5: control session "—").
-          if (c.get('device') === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
+          const device = c.get('device');
+          if (device === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
 
           const applied = await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
@@ -488,8 +524,8 @@ export function createUsersRouter(deps: ServerDeps) {
 
             // Own change → auth.pin_change, the same permission its pushed op declares (so a
             // deactivated user cannot set one either); reset of another user → auth.user_reset_pin
-            // (+ the main_owner-target rule, §6.6, enforced here as defense-in-depth in addition to
-            // the op-push validation task 07 owns).
+            // (+ the owner-target rule, enforced here as defense-in-depth in addition to the op-push
+            // validation in oplog/steps/scope.ts).
             if (targetUserId === acting.userId) {
               await requirePermission(db, {
                 userId: acting.userId,
@@ -521,19 +557,20 @@ export function createUsersRouter(deps: ServerDeps) {
                   });
                 }
               }
-              if (await holdsMainOwner(db, targetUserId)) {
-                if (!(await holdsMainOwner(db, acting.userId)))
-                  // Privileged-target restriction (§6.6) — the online endpoint mirror of the
-                  // op-push rule task 07 owns (that path audits via device_anomalies). Declared
-                  // here so the endpoint denial also lands in the FR-1045 trail (§7).
-                  throw new PermissionDeniedError({
-                    actorUserId: acting.userId,
-                    permissionId: PERM.userResetPin,
-                    scopeStoreId: acting.deviceStoreId,
-                    reason: 'restriction_violated',
-                  });
+              // Owner powers: an owner's PIN is the main owner's to reset (§6.6, widened from
+              // main_owner targets 2026-10-28). The online mirror of the op-push rule (that path
+              // audits via device_anomalies); declared here so the denial lands in the FR-1045 trail.
+              if (!(await mayManageOwnerPin(db, tenantId, acting.userId, targetUserId))) {
+                throw new PermissionDeniedError({
+                  actorUserId: acting.userId,
+                  permissionId: PERM.userResetPin,
+                  scopeStoreId: acting.deviceStoreId,
+                  reason: 'restriction_violated',
+                });
               }
             }
+            assertPlausibleAsOf(body.verifier.asOf, t, ['verifier'], device.deviceId);
+            enforceUsersQuota(deps, tenantId, t);
 
             // Greatest-asOf merge (§5.3): a stale POST is a no-op (idempotent convergence).
             const stored = await db
@@ -551,6 +588,13 @@ export function createUsersRouter(deps: ServerDeps) {
             }
 
             await writeVerifier(db, tenantId, targetUserId, body.verifier);
+            // A new PIN ends the person sessions the old one opened, except the one of the person
+            // changing their own PIN here, who just proved it.
+            await endPersonSessionsOf(db, {
+              userId: targetUserId,
+              now: t,
+              ...(acting.userId === targetUserId ? { keepDeviceId: device.deviceId } : {}),
+            });
             await appendAudit(db, tenantId, {
               actorUserId: acting.userId,
               action: 'pin_verifier.replaced',
@@ -594,16 +638,4 @@ async function writeVerifier(
       }),
     )
     .execute();
-}
-
-/** Whether `userId` holds a role named `main_owner`. */
-async function holdsMainOwner(db: TenantDb, userId: string): Promise<boolean> {
-  const row = await db
-    .selectFrom('userRoles')
-    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
-    .where('userRoles.userId', '=', userId)
-    .where('roles.name', '=', 'main_owner')
-    .select('userRoles.userId')
-    .executeTakeFirst();
-  return row !== undefined;
 }

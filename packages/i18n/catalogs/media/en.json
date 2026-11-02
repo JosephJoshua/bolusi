@@ -7,10 +7,10 @@
     "waitingForConnection": "Waiting for connection"
   },
   "action": {
-    "takePhoto": "Take Photo",
+    "takePhoto": "Take photo",
     "retake": "Retake",
-    "usePhoto": "Use This Photo",
-    "retryUpload": "Send Again"
+    "usePhoto": "Use this photo",
+    "retryUpload": "Send again"
   },
   "permission": {
     "camera": "Allow the app to use the camera to take photos.",

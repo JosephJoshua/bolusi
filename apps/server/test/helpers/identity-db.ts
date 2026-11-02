@@ -81,6 +81,14 @@ export async function makeIdentityDb(): Promise<IdentityDb> {
       }>`SELECT * FROM auth_find_login_credential(${loginIdentifier})`.execute(db);
       return rows[0];
     },
+    async findStatusLink(code) {
+      const { rows } = await sql<{
+        tenantId: string;
+        storeId: string;
+        ticketId: string;
+      }>`SELECT * FROM public_find_status_link(${code})`.execute(db);
+      return rows.length === 1 ? rows[0] : undefined;
+    },
   };
 
   return { db, forTenant, authDirectory, provenance, close };

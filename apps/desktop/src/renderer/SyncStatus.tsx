@@ -1,9 +1,16 @@
 // Whether this PC's work has reached the server: a quiet line in the title bar, and a panel with the detail and "Sinkronkan sekarang". The phone's sync status rules decide every word
 // (shared model); only the layout is the PC's.
-import { formatRelative, t, translateOpType, translateRejection } from '@bolusi/i18n';
+import {
+  formatRelative,
+  t,
+  translateErrorCode,
+  translateOpType,
+  translateRejection,
+} from '@bolusi/i18n';
 import {
   firstSyncPercent,
   manualSync,
+  manualSyncErrorShown,
   mediaQueue,
   reassuranceMessage,
   relativeLabel,
@@ -23,7 +30,8 @@ import {
   RefreshCw,
   type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useTick } from '@bolusi/modules/screen-kit';
+import { useMemo, useState } from 'react';
 
 import { BAR_CONTROL } from './TitleBar.js';
 
@@ -50,12 +58,27 @@ const TONE: Readonly<Record<SyncTitleState, string | undefined>> = {
 /** How many refused changes the panel lists; the rest wait behind "Tampilkan lainnya". */
 const REJECTED_SHOWN = 20;
 
+/** How often "Terakhir terhubung …" and the staleness are read again without a new snapshot. */
+export const SYNC_AGE_REFRESH_MS = 30_000;
+
+/**
+ * The snapshot with its `now` moved on by the time since it arrived. A server that hangs sends no
+ * new snapshot, and "baru saja" must still turn into "5 menit lalu". The core's clock stays the
+ * reference; only the time passed is read here.
+ */
+function useAgedInput(input: SyncStatusInput): SyncStatusInput {
+  useTick(SYNC_AGE_REFRESH_MS);
+  const arrivedAt = useMemo(() => ({ input, at: Date.now() }), [input]);
+  return { ...input, now: input.now + Math.max(0, Date.now() - arrivedAt.at) };
+}
+
 export function SyncStatusButton({
-  input,
+  input: snapshot,
   open,
   onOpenChange: setOpen,
   onSyncNow,
   onReenrol,
+  onMarkRejectedHandled,
 }: {
   readonly input: SyncStatusInput;
   /** The panel; the app holds it, since a refused change on a servisan opens it too. */
@@ -64,7 +87,10 @@ export function SyncStatusButton({
   readonly onSyncNow: () => void;
   /** Opens registration again, for when the server no longer knows this PC. */
   readonly onReenrol: () => void;
+  /** The person has dealt with the refused changes listed; they stop asking for attention. */
+  readonly onMarkRejectedHandled: (opIds: readonly string[]) => void;
 }): React.JSX.Element {
+  const input = useAgedInput(snapshot);
   const state = syncTitleState(input);
   const Icon = ICON[state];
   const title = t(SYNC_TITLE_KEY[state]);
@@ -93,6 +119,7 @@ export function SyncStatusButton({
         input={input}
         onClose={() => setOpen(false)}
         onSyncNow={onSyncNow}
+        onMarkRejectedHandled={onMarkRejectedHandled}
         onReenrol={() => {
           setOpen(false);
           onReenrol();
@@ -108,15 +135,18 @@ function SyncStatusDialog({
   onClose,
   onSyncNow,
   onReenrol,
+  onMarkRejectedHandled,
 }: {
   readonly open: boolean;
   readonly input: SyncStatusInput;
   readonly onClose: () => void;
   readonly onSyncNow: () => void;
   readonly onReenrol: () => void;
+  readonly onMarkRejectedHandled: (opIds: readonly string[]) => void;
 }): React.JSX.Element {
   const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
   const manual = manualSync(input);
+  const manualError = manualSyncErrorShown(input);
   const waitingPhotos = mediaQueue(input).length;
   const failedPhotos = input.media.filter((row) => row.uploadStatus === 'failed').length;
   return (
@@ -168,6 +198,12 @@ function SyncStatusDialog({
         <p className="text-small text-text-muted">
           {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
         </p>
+        {/* The answer to "Kirim sekarang" when it did not get through; the loop keeps retrying. */}
+        {manualError === null ? null : (
+          <div data-testid="desktop.sync.manualError">
+            <Banner tone="warning" message={translateErrorCode(manualError)} />
+          </div>
+        )}
         {input.firstSync === null ? null : (
           <Banner
             tone="info"
@@ -180,6 +216,9 @@ function SyncStatusDialog({
         {failedPhotos === 0 ? null : (
           <Banner tone="warning" message={t('sync.pc.mediaFailed', { count: failedPhotos })} />
         )}
+        {syncProblems(input).some((problem) => problem.kind === 'appUpdateNeeded') ? (
+          <Banner tone="warning" message={t('sync.updateNeeded.body')} />
+        ) : null}
         {input.quarantined.length === 0 ? null : (
           <Banner tone="warning" message={t('sync.quarantine.body')} />
         )}
@@ -220,6 +259,13 @@ function SyncStatusDialog({
                 onClick={() => setRejectedShown((shown) => shown + REJECTED_SHOWN)}
               />
             ) : null}
+            <Button
+              label={t('sync.rejected.handled')}
+              variant="secondary"
+              className="self-start"
+              onClick={() => onMarkRejectedHandled(input.rejected.map((row) => row.opId))}
+              data-testid="desktop.sync.rejected.handled"
+            />
           </section>
         )}
       </div>

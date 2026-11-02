@@ -13,6 +13,7 @@ import {
   itemPutBackApplier,
   itemTakenApplier,
   stockCountedApplier,
+  stockReceivedApplier,
 } from './applier.js';
 import { MAX_FIELD_VALUE, zCategoryShape, zFieldValues } from './categories.js';
 import {
@@ -26,6 +27,7 @@ import {
   MAX_ITEM_TAGS,
   MAX_MOVEMENT_QTY,
   PART_USE_KINDS,
+  STOCK_SOURCE_KINDS,
 } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import {
@@ -36,8 +38,11 @@ import {
   itemPutBackRule,
   itemTakenRule,
   stockCountedRule,
+  stockReceivedRule,
 } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
+import type { StockSourceTargets } from './stock-source.js';
+import { zOptionalPayloadText } from '../shared/optional-text.js';
 
 export const MAX_PART_NAME = 200;
 export const MAX_PART_CODE = 60;
@@ -45,7 +50,6 @@ export const MAX_BARCODE = 120;
 export const MAX_NOTE = 500;
 
 const zName = z.string().trim().min(1).max(MAX_PART_NAME);
-const zOptional = (max: number) => z.string().trim().min(1).max(max).nullable();
 
 /** A phone model a part fits: the catalog's brand and model, or a model typed with no brand.
  * Limits match the catalog's (repair/device-models.ts), so any catalog model can be picked. */
@@ -58,8 +62,8 @@ export const partDetailsPayload = z
     name: zName,
     /** True when the name is the category's format filled in; a format change renames it. */
     nameAuto: z.boolean(),
-    code: zOptional(MAX_PART_CODE),
-    barcode: zOptional(MAX_BARCODE),
+    code: zOptionalPayloadText(MAX_PART_CODE),
+    barcode: zOptionalPayloadText(MAX_BARCODE),
     categoryId: zUuidV7.nullable(),
     values: zFieldValues,
     tags: z.array(z.string().trim().min(1).max(MAX_FIELD_VALUE)).max(MAX_ITEM_TAGS),
@@ -86,7 +90,7 @@ export const stockCountedPayload = z
     /** What the counting device showed, kept so the history can say how far off the record was.
      * Stock itself is the latest count plus what moved after it (queries.ts). */
     expected: z.number().int().min(-MAX_COUNTED_QTY).max(MAX_COUNTED_QTY),
-    note: zOptional(MAX_NOTE),
+    note: zOptionalPayloadText(MAX_NOTE),
   })
   .strict();
 
@@ -98,9 +102,22 @@ export const itemTakenPayload = z.object({ itemId: zUuidV7, qty: zQty, use: zPar
 
 export const itemPutBackPayload = itemTakenPayload;
 
-/** The op declarations. Rules that check a part's use need the use targets the composition wires. */
+export const zStockSource = z
+  .object({ kind: z.enum(STOCK_SOURCE_KINDS), id: zUuidV7, label: z.string().min(1).max(60) })
+  .strict();
+
+/** Parts that arrived, and the receipt (or later, transfer) that brought them. */
+export const stockReceivedPayload = z
+  .object({ itemId: zUuidV7, qty: zQty, source: zStockSource })
+  .strict();
+
+/**
+ * The op declarations. Rules that check a part's use, or where received parts came from, need the
+ * targets the composition wires.
+ */
 export function inventoryOperations(
   targets: PartUseTargets,
+  sources: StockSourceTargets,
 ): Readonly<Record<string, OperationDeclaration<InventoryDatabase>>> {
   return {
     [INVENTORY_OP.categoryAdded]: {
@@ -111,6 +128,7 @@ export function inventoryOperations(
       apply: categoryAddedApplier,
       rule: categoryAddedRule,
       permission: INVENTORY_PERMISSION.manageCategories,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_CATEGORY_ENTITY,
     },
     [INVENTORY_OP.categoryEdited]: {
@@ -121,6 +139,7 @@ export function inventoryOperations(
       apply: categoryEditedApplier,
       rule: categoryEditedRule,
       permission: INVENTORY_PERMISSION.manageCategories,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_CATEGORY_ENTITY,
       conflict: { key: 'inventory_category.details', severity: 'minor' },
     },
@@ -132,6 +151,7 @@ export function inventoryOperations(
       apply: itemAddedApplier,
       rule: itemAddedRule,
       permission: INVENTORY_PERMISSION.manageItems,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_ITEM_ENTITY,
     },
     [INVENTORY_OP.itemEdited]: {
@@ -142,6 +162,7 @@ export function inventoryOperations(
       apply: itemEditedApplier,
       rule: itemEditedRule,
       permission: INVENTORY_PERMISSION.manageItems,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_ITEM_ENTITY,
       conflict: { key: 'inventory_item.details', severity: 'minor' },
     },
@@ -152,6 +173,7 @@ export function inventoryOperations(
       apply: stockCountedApplier,
       rule: stockCountedRule,
       permission: INVENTORY_PERMISSION.count,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
     [INVENTORY_OP.itemTaken]: {
@@ -161,6 +183,7 @@ export function inventoryOperations(
       apply: itemTakenApplier,
       rule: itemTakenRule(targets),
       permission: INVENTORY_PERMISSION.useParts,
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
     [INVENTORY_OP.itemPutBack]: {
@@ -170,6 +193,18 @@ export function inventoryOperations(
       apply: itemPutBackApplier,
       rule: itemPutBackRule(targets),
       permission: INVENTORY_PERMISSION.useParts,
+      read: INVENTORY_PERMISSION.read,
+      entityType: INVENTORY_MOVEMENT_ENTITY,
+    },
+    [INVENTORY_OP.stockReceived]: {
+      schemaVersion: 1,
+      payload: stockReceivedPayload,
+      reversal: 'Corrected by a count, or later by a return to the supplier.',
+      apply: stockReceivedApplier,
+      rule: stockReceivedRule(sources),
+      permission: INVENTORY_PERMISSION.receive,
+      // Staff see stock arrive; what it cost travels apart, to owners only.
+      read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
   };

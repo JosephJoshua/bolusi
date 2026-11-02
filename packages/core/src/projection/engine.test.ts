@@ -13,6 +13,7 @@ import {
 } from '../index.js';
 import {
   countRows,
+  deliverAppended,
   deliverPulled,
   insertOpRow,
   openProjectionHarness,
@@ -20,7 +21,7 @@ import {
   type ProjectionHarness,
 } from '../../test/projection/db.js';
 import { notesModule } from '../../test/projection/notes-fixture.js';
-import type { EntityChange } from './invalidation.js';
+import { changedRemotely, type EntityChange } from './invalidation.js';
 
 let harness: ProjectionHarness;
 
@@ -324,6 +325,22 @@ describe('live-query invalidation (§7)', () => {
     expect(untouchedFires).toBe(0);
   });
 
+  test("this device's own change is not marked as another device's", async () => {
+    const changes: (EntityChange | undefined)[] = [];
+    harness.engine.invalidation.subscribe((_tables, change) => changes.push(change));
+    const create = noteOp({
+      id: 'own',
+      entityId: 'n8',
+      type: 'notes.note_created',
+      timestamp: 1000,
+      deviceId: 'd1',
+      seq: 1,
+      payload: { title: 'T', body: 'b0' },
+    });
+    await deliverAppended(harness, [create]);
+    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n8' }]);
+  });
+
   test('each applied op names the entity it changed; a rebuild batch names none', async () => {
     const changes: (EntityChange | undefined)[] = [];
     harness.engine.invalidation.subscribe((_tables, change) => changes.push(change));
@@ -337,11 +354,55 @@ describe('live-query invalidation (§7)', () => {
       payload: { title: 'T', body: 'b0' },
     });
     await deliverPulled(harness, [{ op: create, arrivalSeq: null }]);
-    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n7' }]);
+    // Pulled: another device made it, so a screen may mark it.
+    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n7', remote: true }]);
 
     await harness.engine.rebuild('notes');
     expect(changes.length).toBeGreaterThan(1);
     expect(changes.slice(1).every((change) => change === undefined)).toBe(true);
+  });
+});
+
+describe('records an op concerns', () => {
+  const concerning: ModuleProjectionManifest<ClientDatabase> = {
+    ...notesModule,
+    concerns: {
+      'notes.note_created': () => [{ entityType: 'folder', entityId: 'f1' }],
+    },
+  };
+  const create = noteOp({
+    id: 'c',
+    entityId: 'n9',
+    type: 'notes.note_created',
+    timestamp: 1000,
+    deviceId: 'd1',
+    seq: 1,
+    payload: { title: 'T', body: 'b0' },
+  });
+
+  test('a pulled op names the other records it concerns, for screens to mark too', async () => {
+    harness = await recordingHarness(concerning);
+    const changes: (EntityChange | undefined)[] = [];
+    harness.engine.invalidation.subscribe((_tables, change) => changes.push(change));
+    await deliverPulled(harness, [{ op: create, arrivalSeq: null }]);
+    expect(changes).toEqual([
+      {
+        entityType: create.entityType,
+        entityId: 'n9',
+        remote: true,
+        concerns: [{ entityType: 'folder', entityId: 'f1' }],
+      },
+    ]);
+    expect(changedRemotely(changes[0])).toEqual(['n9', 'f1']);
+  });
+
+  test("this device's own op names none, so nothing of its own glows", async () => {
+    harness = await recordingHarness(concerning);
+    const changes: (EntityChange | undefined)[] = [];
+    harness.engine.invalidation.subscribe((_tables, change) => changes.push(change));
+    await deliverAppended(harness, [create]);
+    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n9' }]);
+    expect(changedRemotely(changes[0])).toEqual([]);
   });
 });
 

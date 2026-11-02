@@ -20,6 +20,7 @@ import {
   deleteVerifier,
   DEVICE_ID_META_KEY,
   FIRST_PIN_USER_META_KEY,
+  PERSONAL_USER_META_KEY,
   readMeta,
   IDLE_LOCK_SECONDS_META_KEY,
   readVerifier,
@@ -81,6 +82,15 @@ export async function applyBundle<DB>(db: Kysely<DB>, bundle: DeviceBundle): Pro
     String(clampIdleLockSeconds(bundle.settings.idleLockSeconds)),
   );
 
+  // Whose own device this is: the switcher offers only them, and nobody else's PIN is kept here.
+  if (bundle.personalUserId === undefined || bundle.personalUserId === null) {
+    if ((await readMeta(db, PERSONAL_USER_META_KEY)) !== null) {
+      await deleteMeta(db, PERSONAL_USER_META_KEY);
+    }
+  } else {
+    await writeMeta(db, PERSONAL_USER_META_KEY, bundle.personalUserId);
+  }
+
   await replaceUsersDirectory(
     db,
     bundle.users.map((u) => ({
@@ -127,7 +137,11 @@ async function applyVerifiers<DB>(db: Kysely<DB>, bundle: DeviceBundle): Promise
   const keep = new Set<string>();
   const thisDevice = await readMeta(db, DEVICE_ID_META_KEY);
   const firstPinUser = await readMeta(db, FIRST_PIN_USER_META_KEY);
+  const personal = bundle.personalUserId ?? null;
   for (const user of bundle.users) {
+    // On someone's own device nobody else signs in, so nobody else's PIN stays: not even one an
+    // owner just made here for a colleague in Settings.
+    if (personal !== null && user.id !== personal) continue;
     if (user.pinVerifier === null) {
       if (user.status === 'active' && thisDevice !== null) {
         const local = await readVerifier(db, user.id);

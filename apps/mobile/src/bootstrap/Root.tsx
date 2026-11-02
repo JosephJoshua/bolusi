@@ -48,16 +48,20 @@ import { systemClock } from '@bolusi/device/ports/clock';
 import { startLocationWatcher } from '../ports/location.js';
 import { useLatestCallback } from '../hooks/useLatestCallback.js';
 import type { Locale } from '@bolusi/i18n';
+import { markFresh } from '@bolusi/ui/fresh';
 
 import type { Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
 import type { AppEnrollment, EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
 import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
+import type { UpdateCheckResult } from './app-updates.js';
 import { createNotificationChannels } from './notifications.js';
+import { BrandIntro } from './BrandIntro.js';
 import {
   answerNotificationAsk,
   shouldAskForNotifications,
   type NotificationPermissionPort,
+  type PermissionPort,
 } from '../push/permission.js';
 import {
   registerPushTokenOnAppStart,
@@ -74,10 +78,12 @@ import { REPAIR_REJECTED_SUBJECTS } from '@bolusi/device/bootstrap/repair';
 import type { AppRuntime } from '@bolusi/device/bootstrap/runtime';
 import type { AppSessionController as AppSession } from '@bolusi/device/bootstrap/session';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
+import { renameDevice } from '@bolusi/device/bootstrap/device-info';
 import { createStaffControls } from '@bolusi/device/bootstrap/staff';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import {
   NO_SYNC_STATUS_READS,
+  markRejectionsHandled,
   readSyncStatusRows,
   type SyncStatusReads,
 } from '@bolusi/device/bootstrap/sync-status-reads';
@@ -91,7 +97,10 @@ import { createIdleTicker } from '@bolusi/device/session/idle-ticker';
 import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { MediaClient } from '@bolusi/device/media/client';
 import {
+  changedRemotely,
+  finishDeviceSetup,
   readDeviceId,
+  readDeviceSetupFor,
   readSyncState,
   type CommandIdentity,
   type PinVerifierUploadPort,
@@ -100,12 +109,16 @@ import {
 } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
-import type {
-  PhotoCapture,
-  SignatureCapture,
-  VideoCapture,
-  VideoPlayback,
+import {
+  useTick,
+  type PhotoCapture,
+  type SignatureCapture,
+  type VideoCapture,
+  type VideoPlayback,
 } from '@bolusi/modules/screen-kit';
+
+/** How often the sync line's age is read again without anything else moving. */
+const SYNC_AGE_REFRESH_MS = 30_000;
 
 /**
  * The fallback enrollment controller when none is injected (Node-driven Root with no `createEnrollment`).
@@ -124,6 +137,8 @@ const UNWIRED_ENROLLMENT: EnrollmentController = {
 };
 
 export interface RootProps {
+  /** Fetch and restart into a newer app update; `undefined` where updates are off (src/bootstrap/app-updates.ts). */
+  readonly checkForUpdate?: (() => Promise<UpdateCheckResult>) | undefined;
   /** §1.2's plain local storage. Injected so the root is drivable from Node. */
   readonly localeStore: LocaleStorePort;
   /**
@@ -304,6 +319,21 @@ export interface RootProps {
    * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
    */
   readonly notificationPermission?: NotificationPermissionPort | undefined;
+  /** Hides the native splash once the opening cover is drawn over it (index.ts). */
+  readonly hideSplash?: (() => void) | undefined;
+  /** The camera permission, asked up front by the new-phone setup. `undefined` ⇒ not asked there. */
+  readonly cameraPermission?: PermissionPort | undefined;
+}
+
+/** The longest the data layer waits for the opening hop to start (BrandIntro `onPlaying`). */
+const INTRO_WAIT_MS = 600;
+
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 export function Root({
@@ -326,6 +356,9 @@ export function Root({
   scanPlatform,
   videoPlatform,
   notificationPermission,
+  hideSplash,
+  checkForUpdate,
+  cameraPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
   // function that changes the language the catalog resolves in is `@bolusi/i18n`'s `setLocale`,
@@ -336,8 +369,12 @@ export function Root({
   // The name is the guard that remains: with the two spellings distinct, a future import of the real
   // applier cannot be masked, and a reader can see which of the two things a call site does.
   const [locale, setLocaleState] = useState<Locale | null>(null);
+  const [firstScreenShown, setFirstScreenShown] = useState(false);
+  const introPlaying = useRef(deferred()).current;
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  /** The owner this phone's first-run setup waits for (core device-setup.ts), or null. */
+  const [setupFor, setSetupFor] = useState<string | null>(null);
   const [enrollment, setEnrollment] = useState<AppEnrollment | null>(null);
   const [sync, setSync] = useState<SyncClient | null>(null);
   /**
@@ -402,6 +439,9 @@ export function Root({
   // Read as `syncTick` since task 130: the §8.4 derived reads need the same "something moved" signal
   // the render already keys off, and a counter nobody reads cannot be a dependency.
   const [syncTick, bump] = useReducer((n: number) => n + 1, 0);
+  // The render reads the clock (`systemClock.now()` below), so it is read again on this beat:
+  // "Terakhir terhubung baru saja" and the staleness must age while a hung server sends nothing.
+  useTick(SYNC_AGE_REFRESH_MS);
   // The sync client lives OUTSIDE the effect's re-run cycle: it is constructed at most once (at boot
   // if enrolled, or on enroll success), and only stopped on unmount. Holding it in a ref rather than
   // reconstructing it per render is what lets `onEnrolled` start the loop WITHOUT the boot effect
@@ -624,7 +664,11 @@ export function Root({
       }
       try {
         const info = await readDeviceInfoStable(booted);
-        if (!disposed) setDeviceInfo(info);
+        const waitsFor = await readDeviceSetupFor(booted.db.db);
+        if (!disposed) {
+          setDeviceInfo(info);
+          setSetupFor(waitsFor);
+        }
       } catch (error) {
         consoleDiagnostics.warn('enrolled-services start failed after session open', {
           via,
@@ -684,6 +728,15 @@ export function Root({
       // a success — and the app boots half-enrolled, throwing AEAD errors deep in the UI. That is the
       // `KNOWN GAP SINCE D22` in recovery.ts, filed as task 160 (a decrypt-probe at boot). Do not read
       // this no-catch as covering the restore case: it covers only a DB that fails to open at all.
+      // The opening hop first: loading holds the JS thread, and the hop must already be running on
+      // the UI thread by then (BrandIntro `onPlaying`). Never more than a moment's wait, and only
+      // where there is a native splash to hand over from (not on web or in tests).
+      if (hideSplash !== undefined) {
+        await Promise.race([
+          introPlaying.promise,
+          new Promise((done) => setTimeout(done, INTRO_WAIT_MS)),
+        ]);
+      }
       const booting = await boot();
 
       // Wire the enrollment caller over the booted app. `onEnrolled` fires AFTER `runEnrollment`
@@ -804,7 +857,9 @@ export function Root({
   const [notificationAsk, setNotificationAsk] = useState(false);
   const enrolled = app !== null && app.deviceId !== null;
   useEffect(() => {
-    if (notificationPermission === undefined || !enrolled || !unlocked) return;
+    // The new-phone setup asks with its own reasons; the sheet waits until it is over.
+    const inSetup = setupFor !== null && setupFor === sessionUserId;
+    if (notificationPermission === undefined || !enrolled || !unlocked || inSetup) return;
     let live = true;
     void shouldAskForNotifications(notificationPermission).then((ask) => {
       if (live && ask) setNotificationAsk(true);
@@ -812,7 +867,20 @@ export function Root({
     return () => {
       live = false;
     };
-  }, [notificationPermission, enrolled, unlocked]);
+  }, [notificationPermission, enrolled, unlocked, setupFor, sessionUserId]);
+  const finishSetup = useCallback(() => {
+    // The setup showed the notification row with its reason, so the sheet does not ask again after.
+    void (notificationPermission?.writeAsked() ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => setSetupFor(null));
+    if (app !== null) {
+      void finishDeviceSetup(app.db.db).catch((error: unknown) =>
+        consoleDiagnostics.warn('device setup could not be marked done', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  }, [app, notificationPermission]);
   const answerNotifications = useCallback(
     (allow: boolean) => {
       setNotificationAsk(false);
@@ -836,6 +904,10 @@ export function Root({
    */
   const handleWorkspaceChange = useCallback((next: UserWorkspace): void => {
     sessionRef.current?.updateWorkspace(next);
+  }, []);
+  /** A draft that belongs to the device (an unfinished intake), stable for the same reason. */
+  const handleDeviceDraftChange = useCallback((moduleId: string, draft: unknown): void => {
+    sessionRef.current?.updateDeviceDraft(moduleId, draft);
   }, []);
 
   /**
@@ -1041,11 +1113,13 @@ export function Root({
    * `bump()` (the loop/session tick) covers the rest — a push that flips `local` → `synced`/`rejected`
    * runs inside the loop, whose subscribers already re-render this component.
    */
+  // Only the person signed in is asked about their own refused changes; while locked, nobody.
+  const rejectedFor = unlocked ? sessionUserId : null;
   useEffect(() => {
     if (app === null) return;
     let cancelled = false;
     const reread = (): void => {
-      void readSyncStatusRows(app.db.db, REPAIR_REJECTED_SUBJECTS)
+      void readSyncStatusRows(app.db.db, REPAIR_REJECTED_SUBJECTS, rejectedFor)
         .then((rows) => {
           if (!cancelled) setSyncReads(rows);
         })
@@ -1065,14 +1139,40 @@ export function Root({
     };
     // `syncTick` is the loop/session bump: a pushed batch changes `syncStatus` without writing a
     // projection table, so the invalidation bus alone would leave the counters one push behind.
-  }, [app, syncTick]);
+  }, [app, syncTick, rejectedFor]);
+
+  // What a colleague just changed on another device glows once wherever it shows (ui `FreshGlow`).
+  useEffect(() => {
+    if (app === null) return;
+    return app.invalidation.subscribe((_tables, change) => {
+      for (const id of changedRemotely(change)) markFresh(id);
+    });
+  }, [app]);
 
   // Render nothing until the locale is resolved AND the data layer is up. One frame of the wrong
   // language on the enrollment screen is the first thing this shop would see every morning
   // (07-i18n §1.2) — and a frame of the shell over a database that is not open is the other thing
   // worth never showing. `deviceInfo` resolves in the same boot pass (from the same booted app), so
   // gating on it here costs no extra wait and keeps the Settings screen from rendering blanks.
-  if (locale === null || app === null || deviceInfo === null) return null;
+  // The opening cover stays over everything until then, in the same place in the tree either way, so
+  // its animation carries on from the splash instead of restarting when the app appears.
+  // The cover leaves once the first screen is laid out under it, not merely rendered: on a cheap
+  // phone mounting that screen holds the UI thread, and a fade started then would be skipped.
+  const opening = (content: React.JSX.Element | null): React.JSX.Element => (
+    <View style={FILL}>
+      {content === null ? null : (
+        <View style={FILL} onLayout={() => setFirstScreenShown(true)}>
+          {content}
+        </View>
+      )}
+      <BrandIntro
+        ready={content !== null && firstScreenShown}
+        onCovered={hideSplash}
+        onPlaying={introPlaying.resolve}
+      />
+    </View>
+  );
+  if (locale === null || app === null || deviceInfo === null) return opening(null);
 
   const shell = resolveShellInputs(app, sync, systemClock.now(), syncReads);
   const openSession = sessionSnapshot?.session ?? null;
@@ -1094,7 +1194,7 @@ export function Root({
       ? (notes.repair ?? undefined)
       : undefined;
 
-  return (
+  return opening(
     /**
      * THE ACTIVITY RESET (api/02-auth §6.4 — "any interaction resets the idle deadline"), as RN's
      * gesture-responder CAPTURE phase.
@@ -1140,6 +1240,17 @@ export function Root({
         // Optional chaining, not a fallback: a device with no media pipeline (never enrolled) has
         // nothing to drain, and there is no media queue on its Sync Status screen to press.
         onRetryMedia={() => media?.requestManual()}
+        onMarkRejectedHandled={(opIds) => {
+          if (app === null || rejectedFor === null) return;
+          void markRejectionsHandled(app.db, rejectedFor, opIds, Date.now())
+            .then(bump)
+            .catch((error: unknown) => {
+              consoleDiagnostics.warn('marking refused changes handled failed', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
+        }}
+        onCheckForUpdate={checkForUpdate}
         // §5's Error retry on the switcher — the read that failed, run again. `void`, because the
         // controller reports through its subscription (which re-renders this component), never
         // through this promise; the shell's retry button is not a place to await a directory read.
@@ -1160,6 +1271,9 @@ export function Root({
         // ignored. Optional chaining because an unenrolled device has no controller to retain into.
         workspace={sessionSnapshot?.workspace ?? null}
         onWorkspaceChange={handleWorkspaceChange}
+        // An unfinished intake belongs to the phone: whoever signs in may carry on with it.
+        deviceDrafts={sessionSnapshot?.deviceDrafts ?? null}
+        onDeviceDraftChange={handleDeviceDraftChange}
         // The PIN pad's one egress (task 24's PinPad contract), and — since task 133 — the UNLOCK
         // path too: the controller runs the REAL `verifyPin` and, on success, `ShellSession.unlock`,
         // which restores this user's retained workspace and clears the lock. The subscription above
@@ -1201,6 +1315,7 @@ export function Root({
         // REJECTS with its DomainError for the screen's mapper. `session === null` is unreachable (Unlock
         // is a session-gated shell route); the null arms are defensive, not live paths.
         canUnlock={sessionSnapshot?.canUnlock ?? false}
+        canDecideConflicts={sessionSnapshot?.canDecideConflicts ?? false}
         listPinTargets={() => session?.listPinTargets() ?? Promise.resolve([])}
         onClearLockout={(targetUserId) =>
           session === null
@@ -1231,6 +1346,18 @@ export function Root({
                   await client.settle();
                 },
               })
+        }
+        // Settings › rename this phone, for someone who may register devices here: the server takes
+        // the name first, then this phone's Settings reads it back.
+        onRenameDevice={
+          staffAdmin === undefined ||
+          sessionUserId === null ||
+          sessionSnapshot?.canRenameDevice !== true
+            ? undefined
+            : async (name) => {
+                await renameDevice(app, staffAdmin, { actingUserId: sessionUserId, name });
+                setDeviceInfo(await readDeviceInfoStable(app));
+              }
         }
         onResetPin={(targetUserId, newPin) =>
           session === null
@@ -1265,8 +1392,12 @@ export function Root({
         // route. `App` applies it via `setRoute`; the gate still decides what actually shows.
         pushRoute={pushRoute}
         onAnswerNotifications={notificationAsk ? answerNotifications : null}
+        setupPending={setupFor !== null && setupFor === sessionUserId}
+        onSetupDone={finishSetup}
+        cameraPermission={cameraPermission}
+        notificationPermission={notificationPermission}
       />
-    </View>
+    </View>,
   );
 }
 

@@ -7,6 +7,7 @@ import {
   FactGrid,
   Icon,
   LoadingState,
+  RollingText,
   color,
   radius,
   size,
@@ -14,10 +15,11 @@ import {
   type,
   useViewport,
   type IconName,
+  Text,
 } from '@bolusi/ui';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 import {
@@ -29,9 +31,11 @@ import {
 } from '../../screen-kit/screens/views.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
+import { SPEC_FACT_KEY, paidRow, refundLabel, staleStepMessage, statusLabel } from '../labels.js';
+import type { TicketRefund } from '../queries.js';
 import {
   balanceAfterDownPayment,
+  balanceLabelKey,
   statusTone,
   type StaleStep,
   type TicketStatus,
@@ -249,45 +253,107 @@ export function Field({
 export { Fact, FactGrid };
 
 /**
- * Under a total: the down payment taken off it, then what the customer still pays, or what the
- * store gives back when the down payment was more. Nothing when no down payment was taken. `action`
- * sits beside the down payment, the one thing it changes.
+ * Under a total: what an owner took off it, the down payment taken off it, then what the customer
+ * still pays, or what the store gives back when they paid more, through each method it goes back
+ * by when `refunds` says. Nothing when neither was taken. `total` is what is owed, already less
+ * `reduced`. `action` sits beside the down payment, the one thing it changes.
  */
 export function DownPaymentRows({
   total,
+  reduced = 0,
   downPayment,
+  refunds = [],
   paidLabel = 'repair.price.downPayment',
+  returned = false,
   action,
+  typing = false,
   testID,
 }: {
   readonly total: number;
+  /** What an owner took off the bill (`TicketSummaryRow.reduced`), shown above what was paid. */
+  readonly reduced?: number;
   readonly downPayment: number | null;
+  /** What goes back through each method (`TicketDetailRow.refunds`). */
+  readonly refunds?: readonly TicketRefund[];
   /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
   readonly paidLabel?: RepairKey;
+  /** The phone went home: what is left to give back is still owed. */
+  readonly returned?: boolean;
   readonly action?: ReactNode;
+  /** The figures follow a DP being typed just above, so they change without rolling. */
+  readonly typing?: boolean;
   readonly testID: string;
 }): React.JSX.Element | null {
-  if (downPayment === null || downPayment === 0) return null;
-  const balance = balanceAfterDownPayment(total, downPayment);
+  const paid = downPayment ?? 0;
+  if (paid === 0 && reduced === 0) return null;
+  const balance = balanceAfterDownPayment(total, paid);
+  const split = balance.kind === 'refund' ? refunds : [];
+  const paidText = paidRow(paid, paidLabel);
   return (
     <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
-      <View style={[repairStyles.row, styles.paidRow]}>
-        <View style={styles.paidLabel}>
-          <Text style={styles.paidText}>{tn(paidLabel)}</Text>
-          {action}
+      {reduced === 0 ? null : (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={[styles.paidText, repairStyles.rowText]}>{tn('repair.price.reduced')}</Text>
+          <Text style={[styles.paidText, styles.amount]} testID={`${testID}.reduced`}>
+            {formatMoney(-reduced)}
+          </Text>
         </View>
-        <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
-          {formatMoney(-downPayment)}
-        </Text>
-      </View>
-      <View style={[repairStyles.row, styles.paidRow]}>
-        <Text style={styles.balanceLabel}>
-          {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
-        </Text>
-        <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
-          {formatMoney(balance.amount)}
-        </Text>
-      </View>
+      )}
+      {reduced === 0 ? null : (
+        // What the bill is after the cut, so a fee that was cut never reads as what is billed.
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={[styles.billedText, repairStyles.rowText]}>{tn('repair.price.billed')}</Text>
+          <Text style={[styles.billedText, styles.amount]} testID={`${testID}.billed`}>
+            {formatMoney(total)}
+          </Text>
+        </View>
+      )}
+      {paid === 0 ? null : (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <View style={styles.paidLabel}>
+            <Text style={styles.paidText}>{paidText.label}</Text>
+            {action}
+          </View>
+          <RollingText
+            value={paid}
+            still={typing}
+            style={[styles.paidText, styles.amount]}
+            testID={`${testID}.downPayment`}
+          >
+            {paidText.amount}
+          </RollingText>
+        </View>
+      )}
+      {split.length === 0 ? (
+        <View style={[repairStyles.row, styles.paidRow]}>
+          <Text style={[styles.balanceLabel, repairStyles.rowText]}>
+            {tn(balanceLabelKey(balance.kind, returned))}
+          </Text>
+          <RollingText
+            value={balance.kind === 'due' ? balance.amount : -balance.amount}
+            still={typing}
+            style={[styles.balanceValue, styles.amount]}
+            testID={`${testID}.balance`}
+          >
+            {formatMoney(balance.amount)}
+          </RollingText>
+        </View>
+      ) : (
+        split.map((refund) => (
+          <View
+            key={refund.account}
+            style={[repairStyles.row, styles.paidRow]}
+            testID={`${testID}.refund.${refund.account}`}
+          >
+            <Text style={[styles.balanceLabel, repairStyles.rowText]}>
+              {refundLabel(refund, 'screen')}
+            </Text>
+            <Text style={[styles.balanceValue, styles.amount, repairStyles.rowValue]}>
+              {formatMoney(refund.amount)}
+            </Text>
+          </View>
+        ))
+      )}
     </View>
   );
 }
@@ -327,6 +393,7 @@ const styles = StyleSheet.create({
   paidRow: { marginTop: space.sm, minHeight: space['2xl'] },
   paidLabel: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: space.md },
   paidText: { ...type.bodySm, color: color.text },
+  billedText: { ...type.bodySm, fontWeight: '600', color: color.text },
   balanceLabel: { ...type.bodyBold, color: color.text },
   balanceValue: { ...type.heading, color: color.text },
   amount: { fontVariant: ['tabular-nums'] },

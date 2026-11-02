@@ -29,7 +29,7 @@
 //
 // WHY A DENIAL IS AN ERROR AND NEVER AN EMPTY RESULT. 02 §4 / FR-1036: an empty result leaks "the
 // store exists and is quiet". Every denial path here throws.
-import type { Location, OpSource } from '@bolusi/schemas';
+import { containsUnstorableText, type Location, type OpSource } from '@bolusi/schemas';
 
 import {
   DenialEmitter,
@@ -380,6 +380,8 @@ export class CommandRuntime {
       {
         identity: this.#identityFor(userId),
         newId: this.#idSource,
+        randomBytes: (length) => this.#crypto.randomBytes(length),
+        sha256: (data) => this.#crypto.sha256(data),
         resolveSchemaVersion: (type) => this.#resolveSchemaVersion(type),
         resolveScope: (type) => this.#resolveScope(type),
         requirePermission: (identity, permissionId, tgt, surface) =>
@@ -546,6 +548,16 @@ export class CommandRuntime {
     // emitting it would be an op nobody authorizes, so that is a defect, not a fast path.
     const opPermissions = new Set<string>();
     for (const draft of handlerResult.ops) {
+      // The server refuses an op holding U+0000 or an unpaired surrogate (Postgres cannot store
+      // either), so the phone must not sign one: refused here as invalid input, before anything is
+      // appended.
+      if (containsUnstorableText(draft)) {
+        throw new DomainError(
+          'VALIDATION_FAILED',
+          { command: command.name, issue: 'contains text that cannot be stored' },
+          `${command.name} emitted ${draft.type} holding a NUL character or an unpaired surrogate`,
+        );
+      }
       // The record kind is part of the type's contract too: the server refuses a mismatch, so the
       // runtime must never write one.
       const entityType = this.#operations.entityTypeFor(draft.type);

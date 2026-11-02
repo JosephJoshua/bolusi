@@ -45,6 +45,7 @@ export const INVENTORY_OP = {
   stockCounted: 'inventory.stock_counted',
   itemTaken: 'inventory.item_taken',
   itemPutBack: 'inventory.item_put_back',
+  stockReceived: 'inventory.stock_received',
 } as const;
 
 export const INVENTORY_PERMISSION = {
@@ -59,10 +60,12 @@ export const INVENTORY_PERMISSION = {
   useParts: 'inventory.use_parts',
   /** Take or put back parts on a servisan that is no longer being worked on (owners). */
   correctUse: 'inventory.correct_use',
+  /** Add parts that arrived from a supplier to the store's stock (with "Belanja sparepart"). */
+  receive: 'inventory.receive',
 } as const;
 
 /** What a movement was. */
-export const MOVEMENT_KINDS = ['counted', 'taken', 'put_back'] as const;
+export const MOVEMENT_KINDS = ['counted', 'taken', 'put_back', 'received'] as const;
 export type MovementKind = (typeof MOVEMENT_KINDS)[number];
 
 /**
@@ -71,6 +74,13 @@ export type MovementKind = (typeof MOVEMENT_KINDS)[number];
  */
 export const PART_USE_KINDS = ['repair_ticket'] as const;
 export type PartUseKind = (typeof PART_USE_KINDS)[number];
+
+/**
+ * Where received parts came from. Each kind is checked by the module that owns it
+ * (stock-source.ts), as part uses are: a purchase receipt by purchasing.
+ */
+export const STOCK_SOURCE_KINDS = ['purchase_receipt'] as const;
+export type StockSourceKind = (typeof STOCK_SOURCE_KINDS)[number];
 
 /** The most of one part a single movement may carry, either way. Catches a mistyped extra zero. */
 export const MAX_MOVEMENT_QTY = 10_000;

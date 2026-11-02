@@ -6,28 +6,42 @@ import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import idApprovalsCatalog from '@bolusi/modules/approvals/i18n/id.json';
+import enApprovalsCatalog from '@bolusi/modules/approvals/i18n/en.json';
+import { registerApprovalsCatalog } from '@bolusi/modules/approvals/desktop';
 import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { forgetShownQrs } from '@bolusi/modules/money';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
 
 beforeEach(() => {
+  // The demo's payments are a few hours old, so "today" must not have just begun: run at noon.
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+  vi.setSystemTime(noon);
   window.localStorage.clear();
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
   registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
+  registerApprovalsCatalog({ id: idApprovalsCatalog, en: enApprovalsCatalog });
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   // Each test opens fresh demo data: QRs shown in one are not the next one's.
   forgetShownQrs();
 });
 
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
+/** Where the store takes more than cash, the counter picks each payment's method itself. */
+function pick(line: string, method = 'Tunai'): void {
+  fireEvent.click(within(byTestId(`${line}.methods`)).getByRole('button', { name: method }));
+}
 /** An element's text without spaces: amounts print "Rp" and the figure apart. */
 const text = (id: string): string => byTestId(id).textContent!.replace(/\s/g, '');
 
@@ -70,24 +84,59 @@ describe('Kas on the PC', () => {
     expect(screen.queryByRole('button', { name: 'Kas' })).toBeNull();
   });
 
-  it('counts the drawer, showing the difference before it is saved', async () => {
+  it('the counter counts blind, checks it, may count once more, then saves', async () => {
     await openKas();
-    const expected = byTestId('money.desk.kas.expected').textContent!;
+    // What should be in the drawer is not shown to the counter, here or in the count.
+    expect(screen.queryByTestId('money.desk.kas.expected')).toBeNull();
+    // Nor today's takings, which add up to it.
+    expect(screen.queryByTestId('money.desk.kas.in')).toBeNull();
+    // QA round E: until the drawer is counted, a drawer with no figure says the count is theirs to
+    // make, so it does not look broken. (The demo's own count may fall on today or yesterday.)
+    expect(screen.queryByTestId('money.desk.kas.blindHint')?.textContent ?? null).toBe(
+      byTestId('money.desk.kas.lastCount').textContent === 'Belum tutup kas hari ini'
+        ? 'Hitung uang di laci saat tutup kas.'
+        : null,
+    );
     fireEvent.click(byTestId('money.desk.kas.count'));
     await screen.findByTestId('money.desk.count');
     expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', true);
+    expect(screen.queryByTestId('money.desk.count.expected')).toBeNull();
+    fireEvent.change(byTestId('money.desk.count.counted'), { target: { value: '1000000' } });
+    expect(screen.queryByTestId('money.desk.count.difference')).toBeNull();
+    expect(byTestId('money.desk.count.submit').textContent).toBe('Cek hitungan');
+    fireEvent.click(byTestId('money.desk.count.submit'));
+    // Checked: the drawer's figure and the difference show, and it may be counted once more.
+    expect(byTestId('money.desk.count.expected')).toBeTruthy();
+    expect(text('money.desk.count.difference')).toMatch(/^(Kurang|Lebih)Rp/);
+    expect(text('money.desk.count.countedValue')).toContain('Rp1.000.000');
+    fireEvent.click(byTestId('money.desk.count.recount'));
+    expect(screen.queryByTestId('money.desk.count.expected')).toBeNull();
+    fireEvent.change(byTestId('money.desk.count.counted'), { target: { value: '1000000' } });
+    fireEvent.click(byTestId('money.desk.count.submit'));
+    expect(screen.queryByTestId('money.desk.count.recount')).toBeNull();
+    expect(byTestId('money.desk.count.submit').textContent).toBe('Simpan hitungan');
+    fireEvent.click(byTestId('money.desk.count.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.count')).toBeNull());
+    expect(byTestId('money.desk.kas.lastCount').textContent).toMatch(/^Sudah tutup kas pukul/);
+    expect(screen.queryByTestId('money.desk.kas.blindHint')).toBeNull();
+    // The counter cannot settle it: an owner does.
+    expect(byTestId('money.desk.kas.differences').textContent).toContain('Menunggu pemilik');
+    expect(screen.queryByTestId('money.desk.kas.settle')).toBeNull();
+  });
+
+  it('an owner sees what should be in the drawer up front, and the difference as they type', async () => {
+    await openKas('Andi Pratama');
+    const expected = byTestId('money.desk.kas.expected').textContent!;
+    expect(screen.queryByTestId('money.desk.kas.blindHint')).toBeNull();
+    fireEvent.click(byTestId('money.desk.kas.count'));
+    await screen.findByTestId('money.desk.count');
     expect(byTestId('money.desk.count.expected').textContent).toBe(expected);
     const drawer = Number(expected.replace(/\D/g, ''));
     fireEvent.change(byTestId('money.desk.count.counted'), {
       target: { value: String(drawer - 5_000) },
     });
     expect(text('money.desk.count.difference')).toBe('KurangRp5.000');
-    fireEvent.click(byTestId('money.desk.count.submit'));
-    await waitFor(() => expect(screen.queryByTestId('money.desk.count')).toBeNull());
-    expect(byTestId('money.desk.kas.lastCount').textContent).toMatch(/^Sudah tutup kas pukul/);
-    // The counter cannot settle it: an owner does.
-    expect(byTestId('money.desk.kas.differences').textContent).toContain('Menunggu pemilik');
-    expect(screen.queryByTestId('money.desk.kas.settle')).toBeNull();
+    expect(byTestId('money.desk.count.submit').textContent).toBe('Simpan hitungan');
   });
 
   it('lets an owner settle a counted difference with a reason', async () => {
@@ -118,7 +167,7 @@ describe('Kas on the PC', () => {
     const move = within(byTestId('money.desk.kas.moves'))
       .getByText(/Beli lakban/)
       .closest('[data-testid^="money.desk.kas.moves."]')!;
-    expect(move.textContent!.replace(/\s/g, '')).toMatch(/^Biayatoko.*Belilakban−Rp25\.000$/);
+    expect(move.textContent!.replace(/\s/g, '')).toMatch(/^Biayatoko.*Belilakban\u2212Rp25\.000$/);
   });
 
   it('takes a debt paid later, then an owner cancels it in Riwayat and the debt is back', async () => {
@@ -138,6 +187,13 @@ describe('Kas on the PC', () => {
     fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
       target: { value: '200000' },
     });
+    // The store takes more than cash, so nothing is picked for the counter (round 2 QA, A11).
+    expect(byTestId('money.desk.receive.pay.line0.pick').textContent).toBe(
+      'Pilih cara bayarnya dulu.',
+    );
+    expect(byTestId('money.desk.receive.submit')).toHaveProperty('disabled', true);
+    pick('money.desk.receive.pay.line0');
+    expect(screen.queryByTestId('money.desk.receive.pay.line0.pick')).toBeNull();
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
@@ -155,11 +211,16 @@ describe('Kas on the PC', () => {
     fireEvent.click(voidButton!);
     await screen.findByTestId('money.desk.void');
     expect(text('money.desk.void.amount')).toBe('Rp200.000');
+    // An owner has no limit to show.
+    expect(screen.queryByTestId('money.desk.void.limit')).toBeNull();
     fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
     fireEvent.click(byTestId('money.desk.void.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.void')).toBeNull());
     // The record stays, with whose and which method it was and why it was cancelled.
-    await waitFor(() => expect(table.textContent).toContain('Dibatalkan: Salah metode'));
+    await waitFor(() => expect(table.textContent).toContain('Pembayaran dibatalkan'));
+    expect(table.textContent).toContain('Salah metode');
+    // ...and who took it.
+    expect(table.textContent).toContain('Andi Pratama');
     expect(table.textContent).toContain('Yulianus Wenda · K7Q-0004 · Tunai');
     expect(
       within(table).queryByRole('button', { name: /^Batalkan pembayaran Rp\s?200\.000/ }),
@@ -168,6 +229,62 @@ describe('Kas on the PC', () => {
     fireEvent.mouseDown(byTestId('money.desk.kas.tabs.today'), { button: 0 });
     fireEvent.click(byTestId('money.desk.kas.tabs.today'));
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp450.000'));
+  });
+
+  it('offers lowering a debt to owners only', async () => {
+    await openKas();
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    expect(screen.queryByTestId('money.desk.receive.reduce')).toBeNull();
+  });
+
+  it('lets an owner lower a debt past what is left, then give back what is owed back', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '200000' },
+    });
+    pick('money.desk.receive.pay.line0');
+    fireEvent.click(byTestId('money.desk.receive.submit'));
+    await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
+
+    // Lowered over the payment it was about to take, which waits underneath if left.
+    fireEvent.click(byTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.click(byTestId('money.desk.receive.reduce'));
+    await screen.findByTestId('money.desk.reduce');
+    // The whole debt is filled in; the bill comes down at most by what was charged.
+    expect(byTestId('money.desk.reduce.amount')).toHaveProperty('value', '250.000');
+    expect(text('money.desk.reduce.after')).toBe('Rp0');
+    fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '500000' } });
+    expect(text('money.desk.reduce')).toContain('PalingbanyakRp450.000');
+    expect(screen.queryByTestId('money.desk.reduce.hint')).toBeNull();
+    expect(byTestId('money.desk.reduce.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '300000' } });
+    expect(byTestId('money.desk.reduce.becomesCredit').textContent).toContain('50.000');
+    fireEvent.change(byTestId('money.desk.reduce.reason'), { target: { value: 'Pelanggan lama' } });
+    fireEvent.click(byTestId('money.desk.reduce.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.reduce')).toBeNull());
+    expect(screen.queryByTestId('money.desk.receive')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+    expect(text('money.desk.kas.owedBack.t-9.value')).toBe('Rp50.000');
+
+    // It goes back through how it came in, the overpayment filled in.
+    const drawer = Number(text('money.desk.kas.expected').replace(/\D/g, ''));
+    fireEvent.click(byTestId('money.desk.kas.owedBack.t-9.refund'));
+    await screen.findByTestId('money.desk.refund');
+    expect(text('money.desk.refund.credit')).toBe('Rp50.000');
+    expect(text('money.desk.refund.paid')).toBe('Rp200.000');
+    expect(byTestId('money.desk.refund.amount')).toHaveProperty('value', '50.000');
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '250000' } });
+    expect(byTestId('money.desk.refund.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '50000' } });
+    fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Kelebihan' } });
+    fireEvent.click(byTestId('money.desk.refund.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.refund')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owedBack')).toBeNull());
+    expect(Number(text('money.desk.kas.expected').replace(/\D/g, ''))).toBe(drawer - 50_000);
   });
 
   it('takes a whole debt by QRIS, recorded by the server, and the step just closes', async () => {
@@ -185,6 +302,25 @@ describe('Kas on the PC', () => {
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
     await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+  });
+
+  // QA round B: a line with no method yet was named after Tunai to a screen reader.
+  it('names a payment line to remove by its method, and an unpicked one by none', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '100000' },
+    });
+    pick('money.desk.receive.pay.line0');
+    fireEvent.click(byTestId('money.desk.receive.pay.add'));
+    expect(byTestId('money.desk.receive.pay.line0.remove').getAttribute('aria-label')).toBe(
+      'Hapus pembayaran Tunai',
+    );
+    const second = screen
+      .getAllByTestId(/^money\.desk\.receive\.pay\.line\d+\.remove$/)
+      .find((button) => button !== byTestId('money.desk.receive.pay.line0.remove'))!;
+    expect(second.getAttribute('aria-label')).toBe('Hapus pembayaran ini');
   });
 
   it('takes part of a debt by QRIS and the rest in cash, taking a sum below what QRIS takes by hand', async () => {
@@ -216,23 +352,62 @@ describe('Kas on the PC', () => {
     await waitFor(() => expect(text('money.desk.receive.owed')).toBe('Rp350.000'));
     fireEvent.click(byTestId('money.desk.receive.pay.add'));
     expect(byTestId('money.desk.receive.pay.line0.amount')).toHaveProperty('value', '350.000');
+    pick('money.desk.receive.pay.line0');
     fireEvent.click(byTestId('money.desk.receive.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.receive')).toBeNull());
     await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
   });
 
-  it('offers cancelling a payment to owners only', async () => {
+  async function openVoid(): Promise<void> {
+    fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });
+    fireEvent.click(byTestId('money.desk.kas.tabs.history'));
+    const table = await screen.findByTestId('money.desk.history.table');
+    const [voidButton] = await within(table).findAllByRole('button', {
+      name: /^Batalkan pembayaran/,
+    });
+    fireEvent.click(voidButton!);
+    await screen.findByTestId('money.desk.void');
+  }
+
+  it('shows a manager their cancel limit, and asks an owner beyond it', async () => {
+    await openKas('Maria Kogoya');
+    await openVoid();
+    expect(byTestId('money.desk.void.limit').textContent).toBe(
+      'Batas pembatalanmu Rp 30.000 per servisan.',
+    );
+    // Every payment today is beyond it: said up front, and the cancel goes to an owner.
+    expect((await screen.findByTestId('money.desk.void.asks')).textContent).toBe(
+      'Melebihi batasmu, jadi perlu persetujuan.',
+    );
+    expect(byTestId('money.desk.void.submit').textContent).toBe('Minta persetujuan');
+    fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
+    fireEvent.click(byTestId('money.desk.void.submit'));
+    await screen.findByText('Permintaan dibuat. Pemilik toko akan memutuskan.');
+    expect(screen.queryByTestId('money.desk.void')).toBeNull();
+    // The payment now says it waits, in place of its cancel button.
+    const table = byTestId('money.desk.history.table');
+    expect(await within(table).findByText('Menunggu persetujuan')).toBeTruthy();
+  });
+
+  it('lets the counter ask an owner to cancel a payment, and only that', async () => {
+    await openKas();
+    await openVoid();
+    expect(screen.queryByTestId('money.desk.void.limit')).toBeNull();
+    expect(byTestId('money.desk.void.asks').textContent).toBe('Perlu persetujuan pemilik toko.');
+    expect(byTestId('money.desk.void.submit').textContent).toBe('Minta persetujuan');
+  });
+
+  it('moves between days in Riwayat', async () => {
     await openKas();
     fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });
     fireEvent.click(byTestId('money.desk.kas.tabs.history'));
     const table = await screen.findByTestId('money.desk.history.table');
-    // Today's payments are listed, without a cancel for the counter.
     await within(table).findAllByText('Pembayaran diterima');
-    expect(screen.queryByRole('button', { name: /^Batalkan/ })).toBeNull();
     fireEvent.click(byTestId('money.desk.history.previous'));
     await waitFor(() =>
       expect(byTestId('money.desk.history.day').textContent).not.toBe('Hari ini'),
     );
+
     fireEvent.click(byTestId('money.desk.history.today'));
     expect(byTestId('money.desk.history.day').textContent).toBe('Hari ini');
     expect(byTestId('money.desk.history.next')).toHaveProperty('disabled', true);
@@ -308,7 +483,7 @@ describe('payment methods in PC Settings', () => {
     expect(byTestId('money.desk.methodForm.qris.connected').textContent).not.toContain('mode uji');
     // Other kinds have nothing to connect.
     fireEvent.click(
-      within(byTestId('money.desk.methodForm')).getByRole('button', { name: 'Batal' }),
+      within(byTestId('money.desk.methodForm')).getByRole('button', { name: 'Kembali' }),
     );
     await waitFor(() => expect(screen.queryByTestId('money.desk.methodForm')).toBeNull());
     fireEvent.click(byTestId('money.desk.methods.row.01920000-0000-7000-8000-00000000a002.open'));

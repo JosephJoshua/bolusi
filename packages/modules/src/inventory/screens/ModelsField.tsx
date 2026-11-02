@@ -3,18 +3,13 @@
  * letters, tap the model. A phone the catalog does not know can still be added as typed. Picked
  * models list above the search, each with a way to take it off.
  */
-import { ListRow, SearchField, TextButton, color, space, type } from '@bolusi/ui';
-import { StyleSheet, Text, View } from 'react-native';
+import { ListRow, SearchField, TextButton, color, space, type, Text } from '@bolusi/ui';
+import { StyleSheet, View } from 'react-native';
 import { useState } from 'react';
 
-import { useSettledValue } from '../../screen-kit/index.js';
-import { compactModel } from '../../shared/model-key.js';
-import { MAX_PART_FITS } from '../constants.js';
 import { ti } from '../i18n.js';
+import { fitKey, fitLabel, useModelOptions } from '../model-options.js';
 import type { ItemFitRow } from '../queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
-
-const SUGGESTIONS = 5;
 
 export interface ModelsFieldProps {
   /** Already-localized; a category's phones field brings its own ("HP"). */
@@ -24,42 +19,15 @@ export interface ModelsFieldProps {
   readonly testID: string;
 }
 
-const keyOf = (fit: ItemFitRow): string => compactModel(fit.brand, fit.model);
-
-/** "Samsung Galaxy A14", or the model alone when it was typed without a brand. */
-export function fitLabel(fit: ItemFitRow): string {
-  return `${fit.brand} ${fit.model}`.trim();
-}
-
 export function ModelsField({
   label = ti('inventory.form.fits'),
   value,
   onChange,
   testID,
 }: ModelsFieldProps): React.JSX.Element {
-  const runtime = useInventoryRuntime();
   const [text, setText] = useState('');
   const typed = text.trim();
-  const settled = useSettledValue(typed);
-  const searchText = typed === '' ? '' : settled;
-  const found = useInventoryQuery(
-    async (rt) =>
-      searchText === '' || rt.searchModels === undefined
-        ? []
-        : rt.searchModels(searchText, SUGGESTIONS + value.length),
-    `fitModels:${searchText}`,
-  );
-  const picked = new Set(value.map(keyOf));
-  const suggestions = (found.status === 'ready' ? found.data : [])
-    .filter((option) => !picked.has(keyOf(option)))
-    .slice(0, SUGGESTIONS);
-  // A model the catalog has no exact spelling for can still be added just as typed.
-  const typedKey = compactModel(typed);
-  const offerTyped =
-    typed !== '' &&
-    !picked.has(typedKey) &&
-    !suggestions.some((option) => [keyOf(option), compactModel(option.model)].includes(typedKey));
-  const full = value.length >= MAX_PART_FITS;
+  const { suggestions, offerTyped, hasCatalog, full } = useModelOptions(text, value);
 
   const add = (fit: ItemFitRow): void => {
     onChange([...value, { brand: fit.brand, model: fit.model }]);
@@ -71,7 +39,7 @@ export function ModelsField({
       <Text style={styles.label}>{label}</Text>
       {value.map((fit, i) => (
         <ListRow
-          key={keyOf(fit)}
+          key={fitKey(fit)}
           primaryText={fitLabel(fit)}
           trailing={
             <TextButton
@@ -108,9 +76,7 @@ export function ModelsField({
       {offerTyped && !full ? (
         <ListRow
           primaryText={ti('inventory.form.addTyped', { model: typed })}
-          secondaryText={
-            runtime.searchModels === undefined ? undefined : ti('inventory.form.notInCatalog')
-          }
+          secondaryText={hasCatalog ? ti('inventory.form.notInCatalog') : undefined}
           onPress={() => add({ brand: '', model: typed })}
           testID={`${testID}.typed`}
         />

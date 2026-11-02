@@ -74,7 +74,12 @@ import { View } from 'react-native';
 import type { CameraCapturePort, CameraShot } from '@bolusi/device/media/capture';
 import type { CapturePlatform } from '../src/media/CaptureHost.js';
 import type { MediaClient, MediaStartReport } from '@bolusi/device/media/client';
-import { createSyncClient, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
+import {
+  createSyncClient,
+  knowsOp,
+  readScopeOf,
+  type SyncClient,
+} from '@bolusi/device/bootstrap/sync-client';
 import type { NetInfoPort } from '@bolusi/device/bootstrap/triggers';
 import type { RootProps } from '../src/bootstrap/Root.js';
 import {
@@ -335,10 +340,12 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
       client = createSyncClient({
         db: booted.db,
         deviceId: booted.deviceId,
+        readScope: readScopeOf(booted),
         transport: new RejectingTransport(),
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
         refoldRefused: (op) => booted.engine.refoldRefused(op),
+        knowsOp: (op) => knowsOp(booted.registry.operations, op),
         crypto: noblePort,
         clock: { now: () => SERVER_TIME },
         timer,
@@ -389,6 +396,11 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
     fireOn(screen, `sync-rejected-${opId}`);
     await settle();
     expect(screen.query(`sync-rejected-detail-${opId}`)).toBeNull();
+
+    // Once dealt with, the person marks it checked and it stops asking for attention.
+    fireOn(screen, 'sync-rejected-handled');
+    const gone = await waitUntil(() => screen.query('sync-rejected-section') === null);
+    expect(gone, 'the refusal still asks for attention after it was marked checked').toBe(true);
   });
 });
 
@@ -468,10 +480,12 @@ describe('quarantined ops (api/01-sync §4.2) — a held-out pull batch reaches 
       client = createSyncClient({
         db: booted.db,
         deviceId: booted.deviceId,
+        readScope: readScopeOf(booted),
         transport: new QuarantiningTransport(),
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
         refoldRefused: (op) => booted.engine.refoldRefused(op),
+        knowsOp: (op) => knowsOp(booted.registry.operations, op),
         crypto: noblePort,
         clock: { now: () => SERVER_TIME },
         timer,

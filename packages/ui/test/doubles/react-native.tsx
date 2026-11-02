@@ -72,9 +72,12 @@ export const TextInput = hostComponent('TextInput');
 export const ActivityIndicator = hostComponent('ActivityIndicator');
 /** Every `scrollTo` a ScrollView was asked for, newest last. */
 export const scrollCalls: { y: number }[] = [];
+/** Every sideways `scrollTo` (a ChipRow bringing a chip into sight), newest last. */
+export const scrollXCalls: { x: number }[] = [];
 export const ScrollView = React.forwardRef<unknown, AnyProps>(function ScrollView(props, ref) {
   React.useImperativeHandle(ref, () => ({
-    scrollTo: (to: { y: number }) => scrollCalls.push({ y: to.y }),
+    scrollTo: (to: { x?: number; y?: number }) =>
+      to.x === undefined ? scrollCalls.push({ y: to.y ?? 0 }) : scrollXCalls.push({ x: to.x }),
   }));
   return React.createElement('ScrollView', props);
 });
@@ -220,18 +223,24 @@ class AnimatedValue {
   setValue(next: number): void {
     this.value = next;
   }
-  /** A live, linear mapping of this value; clamps when asked, like the real one. */
+  /** A live, piecewise-linear mapping of this value; clamps when asked, like the real one. */
   interpolate(config: {
     inputRange: number[];
-    outputRange: number[];
+    outputRange: (number | string)[];
     extrapolate?: 'clamp' | 'extend';
-  }): { readonly value: number } {
-    const [i0 = 0, i1 = 1] = config.inputRange;
-    const [o0 = 0, o1 = 1] = config.outputRange;
+  }): { readonly value: number | string } {
     const read = (): number => this.value;
+    const { inputRange: input, outputRange: output } = config;
     return {
-      get value(): number {
-        let t = (read() - i0) / (i1 - i0);
+      get value(): number | string {
+        const at = read();
+        let seg = 0;
+        while (seg < input.length - 2 && at > input[seg + 1]!) seg += 1;
+        const [i0, i1] = [input[seg]!, input[seg + 1]!];
+        const [o0, o1] = [output[seg]!, output[seg + 1]!];
+        // Strings ("12deg") only land on their stops; nothing reads between them.
+        if (typeof o0 === 'string' || typeof o1 === 'string') return at <= i0 ? o0 : o1;
+        let t = (at - i0) / (i1 - i0);
         if (config.extrapolate === 'clamp') t = Math.min(1, Math.max(0, t));
         return o0 + t * (o1 - o0);
       },
@@ -247,6 +256,8 @@ const finished = (target: AnimatedValue, toValue: number) => ({
 });
 export const Animated = {
   View: hostComponent('Animated.View'),
+  // A plain `Text` host, so the "text lives inside <Text>" rule still holds for it.
+  Text: hostComponent('Text'),
   Value: AnimatedValue,
   spring: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),
   timing: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),
@@ -264,6 +275,11 @@ export const Animated = {
     },
     stop: (): void => {},
   }),
+  /** A loop never ends on its own; here it lands one pass and stops. */
+  loop: (animation: { start: (done?: () => void) => void }) => ({
+    start: (): void => animation.start(),
+    stop: (): void => {},
+  }),
   delay: (): { start: (done?: () => void) => void; stop: () => void } => ({
     start: (done) => done?.(),
     stop: () => {},
@@ -278,6 +294,7 @@ export const Easing = {
   out: () => curve,
   in: () => curve,
   inOut: () => curve,
+  sin: curve,
 };
 
 /** The system "reduce motion" switch, off until a test flips it with `__setReduceMotion`. */

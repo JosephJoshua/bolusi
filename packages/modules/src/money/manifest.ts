@@ -25,15 +25,18 @@ import {
   saveCentralAccountInput,
   voidPaymentHandler,
   voidPaymentInput,
+  voidCashMoveHandler,
+  voidCashMoveInput,
 } from './commands.js';
 import { MONEY_MODULE_ID, MONEY_PERMISSION, MONEY_TABLE } from './constants.js';
 import type { MoneyDocumentSources } from './documents.js';
 import { createMoneyOperations } from './operations.js';
 import {
   cashDrawerQuery,
+  createVoidCountQuery,
   documentMoneyQuery,
   moneyEntriesQuery,
-  openBalancesQuery,
+  createOpenBalancesQuery,
   paymentAccountsQuery,
 } from './queries.js';
 import { MONEY_REFUSALS } from './rules.js';
@@ -162,6 +165,11 @@ function moneyManifest(sources: MoneyDocumentSources) {
         input: adjustCashInput,
         handler: adjustCashHandler,
       },
+      voidCashMove: {
+        permission: MONEY_PERMISSION.adjustCash,
+        input: voidCashMoveInput,
+        handler: voidCashMoveHandler,
+      },
     },
 
     queries: {
@@ -169,7 +177,8 @@ function moneyManifest(sources: MoneyDocumentSources) {
       documentMoney: documentMoneyQuery,
       cashDrawer: cashDrawerQuery,
       moneyEntries: moneyEntriesQuery,
-      openBalances: openBalancesQuery,
+      openBalances: createOpenBalancesQuery(sources),
+      voidCount: createVoidCountQuery(sources),
     },
   } as const satisfies ModuleManifest<MoneyDatabase>;
 }

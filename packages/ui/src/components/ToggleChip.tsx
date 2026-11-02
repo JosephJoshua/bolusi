@@ -1,9 +1,12 @@
 /**
  * ToggleChip — an on/off choice among many that can be picked together (what came in with the
  * device: SIM tray, case, charger). A selected chip shows a check icon as well as the fill, so it
- * reads without colour (§6.3), and announces itself as `checked`.
+ * reads without colour (§6.3), and announces itself as `checked`. The check takes the room the
+ * unselected chip pads its label with, so toggling never changes its width and a row of chips
+ * stays put.
  */
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Text } from '../text.js';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
@@ -16,19 +19,26 @@ export interface ToggleChipProps {
   readonly testID?: string | undefined;
 }
 
+// What the check adds beside the label, split over both sides while it is hidden.
+const CHECK_ROOM = (size.iconChip + space.xs) / 2;
+
 const styles = StyleSheet.create({
   chip: {
     // Sized to its label: in a column it would otherwise stretch into something that reads as a field.
     alignSelf: 'flex-start',
+    // In a wrapped list (the handover checks) a label wider than the screen at a large font
+    // wraps inside the chip instead of running off the edge. A sideways ChipRow never squeezes it.
+    flexShrink: 1,
     minHeight: touch.min,
-    paddingHorizontal: space.md,
+    // Room above and below a label that took a second line.
+    paddingVertical: space.xs,
     borderRadius: radius.full,
     borderWidth: border.hairline,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs,
   },
-  label: { ...type.bodySm },
+  label: { ...type.bodySm, flexShrink: 1 },
 });
 
 export function ToggleChip({
@@ -47,6 +57,7 @@ export function ToggleChip({
       style={[
         styles.chip,
         {
+          paddingHorizontal: selected ? space.md : space.md + CHECK_ROOM,
           backgroundColor: selected ? color.infoBg : color.surface,
           borderColor: selected ? color.primary : color.border,
         },

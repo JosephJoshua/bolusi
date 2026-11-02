@@ -13,10 +13,11 @@ import {
   radius,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { StorageBand } from '@bolusi/core';
 import { useEffect, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { storageBanner } from './CaptureScreen.js';
 

@@ -7,17 +7,29 @@ import enCatalog from '../money/i18n/en.json' with { type: 'json' };
 import idCatalog from '../money/i18n/id.json' with { type: 'json' };
 import { registerMoneyCatalog } from '../src/money/i18n.js';
 import { methodStores, methodSummary } from '../src/money/methods.js';
-import { shiftDay } from '../src/money/day-records.js';
+import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
+import { MONEY_PERMISSION } from '../src/money/constants.js';
+import { turnedDownLines } from '../src/money/void-ask.js';
+import { refundLimitText } from '../src/money/refund.js';
+import type { ApprovalRow } from '../src/approvals/queries.js';
 
 import {
+  cashMoveCheck,
   countToday,
   dayStart,
-  moneyInByMethod,
+  moneyIn,
   differenceToSettle,
   drawerMoves,
+  cashCountView,
   historyLine,
+  inHistory,
+  NEW_CASH_COUNT,
+  RECOUNT_CASH,
+  seesExpected,
   settleState,
   splitOpenBalances,
+  voidAbilities,
+  voidKind,
   voidable,
 } from '../src/money/kas.js';
 import type {
@@ -41,6 +53,7 @@ function entry(overrides: Partial<MoneyEntryRow>): MoneyEntryRow {
     documentId: 'd',
     documentLabel: 'B7B-0001',
     createdBy: 'u',
+    createdByName: null,
     createdAt: 0,
     voidedBy: null,
     voidedAt: null,
@@ -64,29 +77,39 @@ function count(overrides: Partial<CashCountRow>): CashCountRow {
 }
 
 describe('money in by method', () => {
-  test('payments that still count, less refunds, the drawer first', () => {
-    const totals = moneyInByMethod([
-      entry({ account: 'account:qris', amount: 300_000 }),
-      entry({ account: 'cash', amount: 100_000 }),
-      entry({ account: 'cash', amount: 50_000 }),
-      entry({ kind: 'refund_paid', account: 'cash', amount: 20_000 }),
-      entry({ account: 'account:edc', amount: 900_000, voidedAt: 5 }),
-      entry({ kind: 'charge_recorded', account: null, amount: 750_000 }),
-      entry({ kind: 'cash_moved', subKind: 'expense', account: null, amount: 10_000 }),
-    ]);
-    expect(totals).toEqual([
-      { account: 'cash', amount: 130_000 },
-      { account: 'account:qris', amount: 300_000 },
-    ]);
+  test('payments that still count by method, the drawer first, and what went back on its own', () => {
+    expect(
+      moneyIn([
+        entry({ account: 'account:qris', amount: 300_000 }),
+        entry({ account: 'cash', amount: 100_000 }),
+        entry({ account: 'cash', amount: 50_000 }),
+        entry({ kind: 'refund_paid', account: 'cash', amount: 20_000 }),
+        entry({ account: 'account:edc', amount: 900_000, voidedAt: 5 }),
+        entry({ kind: 'charge_recorded', account: null, amount: 750_000 }),
+        entry({ kind: 'cash_moved', subKind: 'expense', account: null, amount: 10_000 }),
+      ]),
+    ).toEqual({
+      methods: [
+        { account: 'cash', amount: 150_000 },
+        { account: 'account:qris', amount: 300_000 },
+      ],
+      refunded: 20_000,
+      total: 430_000,
+    });
   });
 
-  test('a method whose money all went back is left out', () => {
+  // Round 2 QA, F14: a refund today of an earlier day's QRIS payment read "QRIS -Rp 150.000".
+  test('a refund of an earlier payment is not a negative money in for its method', () => {
     expect(
-      moneyInByMethod([
+      moneyIn([
         entry({ account: 'cash', amount: 50_000 }),
-        entry({ kind: 'refund_paid', account: 'cash', amount: 50_000 }),
+        entry({ kind: 'refund_paid', account: 'account:qris', amount: 150_000 }),
       ]),
-    ).toEqual([]);
+    ).toEqual({
+      methods: [{ account: 'cash', amount: 50_000 }],
+      refunded: 150_000,
+      total: -100_000,
+    });
   });
 });
 
@@ -133,6 +156,21 @@ test('open balances split into what customers owe and what the store owes back',
   const { owed, owedBack } = splitOpenBalances([row('a', 250_000), row('b', -100_000)]);
   expect(owed.map((r) => r.documentId)).toEqual(['a']);
   expect(owedBack.map((r) => r.documentId)).toEqual(['b']);
+});
+
+test('nobody takes more cash out of the drawer than the book says is in it', () => {
+  const move = (kind: 'withdrawal' | 'float', amount: number, drawer: number | null) =>
+    cashMoveCheck({ kind, account: null, amount, reason: 'Setor', accounts: [], drawer });
+  expect(move('withdrawal', 700_000, 700_000).missing).toBeNull();
+  expect(move('withdrawal', 900_000, 700_000)).toMatchObject({
+    missing: 'money.move.aboveDrawer',
+    missingValues: { amount: formatMoney(700_000) },
+  });
+  // A drawer the book already has short reads as empty, never as a minus amount.
+  expect(move('withdrawal', 1, -5_000).missingValues).toEqual({ amount: formatMoney(0) });
+  // Change money put in is never limited, and nothing is judged before the drawer has loaded.
+  expect(move('float', 900_000, 0).missing).toBeNull();
+  expect(move('withdrawal', 900_000, null).missing).toBeNull();
 });
 
 test("the drawer's moves include an owner's correction, signed as it changed the drawer", () => {
@@ -188,13 +226,50 @@ describe('history', () => {
     );
     expect(expense.label).toBe('money.moveKind.expense');
     expect(expense.details).toEqual(['Bensin']);
-    expect(expense.amount).toBe(`−${formatMoney(25_000)}`);
+    // One minus sign everywhere: the one formatMoney writes (round 2 QA, F14).
+    expect(expense.amount).toBe('\u2212Rp 25.000');
+    expect(expense.amount).toBe(formatMoney(-25_000));
     const refund = historyLine(entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }), []);
-    expect(refund.amount).toBe(`−${formatMoney(20_000)}`);
+    expect(refund.amount).toBe('\u2212Rp 20.000');
     expect(refund.details).toContain('Batal');
+    // A handover refund is saved as a code, and older ones in fixed English: both read localized.
+    for (const reason of ['handover_refund', 'Returned at handover']) {
+      const handover = historyLine(entry({ kind: 'refund_paid', amount: 1, reason }), []);
+      expect(handover.details).toContain('Sisa DP saat HP diambil');
+      expect(handover.details).not.toContain(reason);
+    }
     const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
     expect(short.label).toBe('money.kas.adjusted');
-    expect(short.amount).toBe(`−${formatMoney(5_000)}`);
+    expect(short.amount).toBe('\u2212Rp 5.000');
+  });
+
+  test('each record says who recorded it, last', () => {
+    const line = historyLine(
+      entry({ account: 'account:q', createdByName: 'Dewi' }),
+      [qris],
+      'Yakobus',
+    );
+    expect(line.details).toEqual(['Yakobus', 'B7B-0001', 'QRIS BCA', 'Dewi']);
+  });
+
+  test('the bill recorded at handover is not money that moved, so Riwayat leaves it out', () => {
+    expect(inHistory(entry({ kind: 'charge_recorded' }))).toBe(false);
+    for (const kind of [
+      'charge_reduced',
+      'payment_received',
+      'refund_paid',
+      'cash_moved',
+      'cash_counted',
+      'cash_adjusted',
+    ] as const) {
+      expect(inHistory(entry({ kind }))).toBe(true);
+    }
+  });
+
+  test('an empty day says today may still get some, a past day that it had none', () => {
+    const today = dayStart(Date.now());
+    expect(historyEmptyKey(today, today)).toBe('money.history.none');
+    expect(historyEmptyKey(shiftDay(today, -1), today)).toBe('money.history.noneDay');
   });
 
   test('a cancelled payment keeps its customer, servisan and method, and says why', () => {
@@ -203,12 +278,9 @@ describe('history', () => {
       [qris],
       'Yulianus Wenda',
     );
-    expect(line.details).toEqual([
-      'Yulianus Wenda',
-      'B7B-0001',
-      'QRIS BCA',
-      'Dibatalkan: Salah metode',
-    ]);
+    expect(line.details).toEqual(['Yulianus Wenda', 'B7B-0001', 'QRIS BCA', 'Salah metode']);
+    // Its title says it was cancelled, so the reason stands alone.
+    expect(line.label).toBe('money.opType.paymentVoided');
   });
 
   test('the day before and after start at local midnight', () => {
@@ -217,13 +289,37 @@ describe('history', () => {
     expect(shiftDay(day, 1)).toBe(new Date(2026, 9, 29).getTime());
   });
 
-  test('only a payment still standing can be cancelled', () => {
-    expect(voidable(entry({}))).toBe(true);
+  test('a payment or a cash move still standing can be cancelled, each by whoever may', () => {
+    const owner = { payments: true, askPayments: false, cashMoves: true };
+    expect(voidable(entry({}), owner)).toBe(true);
     const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
-    expect(voidable(voided)).toBe(false);
+    expect(voidable(voided, owner)).toBe(false);
     expect(historyLine(voided, []).voided).toBe(true);
-    expect(voidable(entry({ kind: 'refund_paid' }))).toBe(false);
-    expect(voidable(entry({ kind: 'charge_recorded' }))).toBe(false);
+    expect(voidable(entry({ kind: 'refund_paid' }), owner)).toBe(false);
+    expect(voidable(entry({ kind: 'charge_recorded' }), owner)).toBe(false);
+    expect(voidable(entry({ kind: 'cash_counted' }), owner)).toBe(false);
+    const move = entry({ kind: 'cash_moved', subKind: 'float' });
+    expect(voidable(move, owner)).toBe(true);
+    // A manager may cancel a payment within limits, but settling the drawer is the owner's.
+    expect(voidable(move, { payments: true, askPayments: true, cashMoves: false })).toBe(false);
+    expect(voidKind(move).command).toBe('voidCashMove');
+  });
+
+  test('a void limit of 0 cancels no payment, the same as not holding it', () => {
+    const holds = (id: string) => id === MONEY_PERMISSION.voidPayment;
+    expect(voidAbilities(holds, () => 100_000)).toEqual({
+      payments: true,
+      askPayments: false,
+      cashMoves: false,
+    });
+    expect(voidAbilities(holds, () => 0).payments).toBe(false);
+    expect(voidAbilities(holds).payments).toBe(true);
+    // Still offered to ask an owner instead, as the void step allows.
+    const zero = voidAbilities(holds, () => 0, true);
+    expect(zero.askPayments).toBe(true);
+    expect(voidable(entry({ documentId: 'doc-1' }), zero)).toBe(true);
+    expect(voidable(entry({ documentId: null }), zero)).toBe(false);
+    expect(voidKind(entry({})).command).toBe('voidPayment');
   });
 });
 
@@ -261,5 +357,130 @@ describe('payment methods', () => {
       'QRIS · Bolusi Sorong · Tidak dipakai',
     );
     expect(methodSummary(method({ central: false, kind: 'edc' }), stores)).toBe('EDC');
+  });
+});
+
+describe('the blind count', () => {
+  test('owners and managers see the drawer up front; the counter and technicians count blind', () => {
+    const holding = (ids: string[]) => (id: string) => ids.includes(id);
+    expect(seesExpected(holding(['money.adjust_cash']))).toBe(true);
+    expect(seesExpected(holding(['money.void_payment']))).toBe(true);
+    // A void limit of 0 cancels nothing, so it is not oversight of the drawer.
+    expect(seesExpected(holding(['money.void_payment']), () => 0)).toBe(false);
+    expect(seesExpected(holding(['money.count_cash', 'money.move_cash']))).toBe(false);
+  });
+
+  test('seen up front, the difference shows as it is typed and it saves', () => {
+    const view = cashCountView({ ...NEW_CASH_COUNT, counted: '95000' }, 100_000, false);
+    expect(view).toMatchObject({ expected: 100_000, difference: -5_000, next: 'save' });
+    expect(view.mayRecount).toBe(false);
+  });
+
+  test('blind, nothing shows until it is checked, then a count that is off may be redone once', () => {
+    const typed = { ...NEW_CASH_COUNT, counted: '95000' };
+    expect(cashCountView(typed, 100_000, true)).toMatchObject({
+      expected: null,
+      difference: null,
+      next: 'check',
+      locked: false,
+    });
+    const checked = cashCountView({ ...typed, checked: true }, 100_000, true);
+    expect(checked).toMatchObject({ expected: 100_000, difference: -5_000, next: 'save' });
+    expect(checked).toMatchObject({ locked: true, mayRecount: true });
+    expect(cashCountView(RECOUNT_CASH, 100_000, true)).toMatchObject({
+      expected: null,
+      next: 'check',
+    });
+    expect(
+      cashCountView({ ...RECOUNT_CASH, counted: '95000', checked: true }, 100_000, true).mayRecount,
+    ).toBe(false);
+    // Right the first time: nothing to redo.
+    expect(
+      cashCountView({ ...typed, counted: '100000', checked: true }, 100_000, true).mayRecount,
+    ).toBe(false);
+  });
+
+  test('someone who counts blind is never stopped at the drawer, which would give its figure away', () => {
+    const move = {
+      kind: 'withdrawal' as const,
+      account: null,
+      amount: 900_000,
+      reason: 'x',
+      accounts: [],
+      drawer: 700_000,
+    };
+    expect(cashMoveCheck(move).missingValues).toEqual({ amount: formatMoney(700_000) });
+    // The same answer just above and just below the drawer: nothing to learn it from.
+    expect(cashMoveCheck({ ...move, blind: true }).missing).toBeNull();
+    expect(cashMoveCheck({ ...move, amount: 700_000, blind: true }).missing).toBeNull();
+    expect(cashMoveCheck({ ...move, blind: true }).missingValues).toBeUndefined();
+  });
+});
+
+describe('cancels an owner turned down', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const rejected = (over: Partial<ApprovalRow>): ApprovalRow =>
+    ({
+      id: 'r1',
+      kind: 'money.voidPayment',
+      input: { entryId: 'e1' },
+      amount: 80_000,
+      status: 'rejected',
+      decidedByName: 'Yohana Pemilik',
+      decidedAt: 1_000,
+      note: null,
+      ...over,
+    }) as ApprovalRow;
+
+  test('says who said no and why, for those answered since the day began', () => {
+    const rows = [
+      rejected({}),
+      rejected({ id: 'r2', note: 'Uangnya ada', amount: 25_000 }),
+      rejected({ id: 'r3', decidedAt: 10 }),
+      rejected({ id: 'r4', kind: 'money.refund', amount: 40_000 }),
+      rejected({ id: 'r5', kind: 'money.reduceCharge', amount: 50_000, note: 'Harga pas' }),
+    ];
+    const asks = {
+      waiting: new Set<string>(),
+      rejected: new Map(rows.slice(0, 3).map((row, i) => [`e${i + 1}`, row])),
+      turnedDown: rows,
+    };
+    expect(turnedDownLines(asks, 500)).toEqual([
+      {
+        id: 'r1',
+        text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(80_000)}.`,
+      },
+      {
+        id: 'r2',
+        text: `Yohana Pemilik menolak membatalkan pembayaran ${formatMoney(25_000)}: Uangnya ada`,
+      },
+      { id: 'r4', text: `Yohana Pemilik menolak mengembalikan ${formatMoney(40_000)}.` },
+      {
+        id: 'r5',
+        text: `Yohana Pemilik menolak memotong tagihan ${formatMoney(50_000)}: Harga pas`,
+      },
+    ]);
+  });
+});
+
+describe('a manager’s refund limit, as the step says it', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const form = { limit: 30_000, overLimit: false, asking: false, credit: 100_000 };
+  test('is not said while only the overpayment goes back, which no limit holds', () => {
+    expect(refundLimitText({ ...form, digits: '100000' })).toBeNull();
+    expect(refundLimitText({ ...form, digits: '120000' })).toBe(
+      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+    );
+    expect(refundLimitText({ ...form, credit: 0, digits: '' })).toBe(
+      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+    );
   });
 });

@@ -17,6 +17,7 @@ import {
   Icon,
   ListRow,
   SyncChip,
+  TextButton,
   border,
   color,
   radius,
@@ -25,9 +26,10 @@ import {
   type,
   type IconName,
   type SyncChipState,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 import { initialsOf } from '@bolusi/device/models/switcher/model';
@@ -64,6 +66,8 @@ export interface SettingsScreenProps {
    * not the app's — the row deep-links, it does not toggle a mute flag.
    */
   readonly onOpenNotificationSettings: (category: MutablePushCategory) => void;
+  /** The notification rows this person has a use for; every category when absent. */
+  readonly notificationCategories?: readonly MutablePushCategory[] | undefined;
   readonly device: DeviceInfo;
   readonly currentUser: {
     readonly id: string;
@@ -74,6 +78,10 @@ export interface SettingsScreenProps {
   readonly onOpenSwitcher: () => void;
   /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
   readonly onOpenChangePin: () => void;
+  /** Rename this phone, for someone who may register devices here; absent for everyone else. */
+  readonly onRenameDevice?: (() => void) | undefined;
+  /** Open this phone's setup guide again (permissions, paper); absent where there is none. */
+  readonly onOpenSetup?: (() => void) | undefined;
   /**
    * Open the owner's staff PIN screen (unlock / reset) — present ONLY when the acting user may do
    * either, so the row is absent for everyone else rather than shown-and-denied. Core still enforces.
@@ -107,11 +115,14 @@ export function SettingsScreen({
   locale,
   onSelectLocale,
   onOpenNotificationSettings,
+  notificationCategories,
   device,
   currentUser,
   onBack,
   onOpenSwitcher,
   onOpenChangePin,
+  onRenameDevice,
+  onOpenSetup,
   onOpenStaffPins,
   lockedStaffCount = 0,
   onOpenStaff,
@@ -257,7 +268,7 @@ export function SettingsScreen({
       </View>
 
       <Section title={t('core.settings.notifications')} testID="settings-section-notifications">
-        {MUTABLE_PUSH_CATEGORIES.map((category) => (
+        {(notificationCategories ?? MUTABLE_PUSH_CATEGORIES).map((category) => (
           // A row that OPENS the OS notification settings, not a mute switch (api/04-push §5; D18 §1):
           // Android forbids changing a channel's importance after creation and iOS has no channels,
           // so muting is the user's, in the phone's own settings.
@@ -272,12 +283,39 @@ export function SettingsScreen({
         ))}
       </Section>
 
-      <Section title={t('core.settings.device')} rows={false} testID="settings-section-device">
+      <Section
+        title={t('core.settings.device')}
+        rows={false}
+        above={
+          onOpenSetup === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="phoneDevice" />}
+              primaryText={t('auth.setup.reopen')}
+              secondaryText={t('auth.setup.reopenSummary')}
+              onPress={onOpenSetup}
+              testID="settings-setup"
+            />
+          )
+        }
+        testID="settings-section-device"
+      >
         <View style={styles.facts} testID="settings-device-info">
           <FactGrid>
             <Fact
               label={t('core.settings.deviceName')}
               value={device.deviceName}
+              // With the action, the name takes the row, so "Ubah" sits at the end of its label.
+              wide={onRenameDevice !== undefined}
+              action={
+                onRenameDevice === undefined ? undefined : (
+                  <TextButton
+                    label={t('core.action.edit')}
+                    accessibilityLabel={t('auth.rename.titlePhone')}
+                    onPress={onRenameDevice}
+                    testID="settings-device-rename"
+                  />
+                )
+              }
               testID="settings-device-name"
             />
             <Fact
@@ -315,12 +353,15 @@ function Section({
   title,
   children,
   rows = true,
+  above,
   testID,
 }: {
   readonly title: string;
   readonly children: ReactNode;
   /** False for content that is not a list of rows (the device facts). */
   readonly rows?: boolean;
+  /** Rows above content that is not rows (the setup guide over the device facts). */
+  readonly above?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element {
   return (
@@ -328,6 +369,7 @@ function Section({
       <Text style={styles.sectionTitle} accessibilityRole="header" testID={testID}>
         {title}
       </Text>
+      {above === undefined || above === null ? null : <View style={styles.rows}>{above}</View>}
       <View style={rows ? styles.rows : styles.plain}>{children}</View>
     </View>
   );

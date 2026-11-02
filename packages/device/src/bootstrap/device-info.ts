@@ -13,8 +13,9 @@
 //     pull refresh (task 109), so a store/tenant RENAME reaches the device without re-enrollment. This
 //     file only READS them back (via core's STORE_NAME_META_KEY/TENANT_NAME_META_KEY).
 //   deviceName: what the owner typed in the wizard — the owner-typed genesis value, NOT on the bundle.
-//     The enrollment caller (enrollment.ts) persists it to meta_kv at enroll (`persistEnrolledNames`);
-//     this reads it back. ONE writer for deviceName (here), one for the two names (core) — never two
+//     The enrollment caller (enrollment.ts) persists it to meta_kv at enroll (`persistEnrolledNames`),
+//     and an owner's rename in Settings rewrites it once the server took it (`renameDevice`); this
+//     reads it back. ONE writer for deviceName (here), one for the two names (core) — never two
 //     writers of one key that could disagree (§2.8).
 //   platform / appVersion: process facts, not DB values — supplied by the one native-binding site
 //     (index.ts). appVersion is `''` in v0 (expo-constants unpinned — decisions/2026-07-20-appversion-source).
@@ -22,6 +23,7 @@ import type { DevicePlatform } from '@bolusi/schemas';
 import {
   readDeviceId,
   readMeta,
+  type StaffAdminPort,
   STORE_NAME_META_KEY,
   TENANT_NAME_META_KEY,
   writeMeta,
@@ -60,6 +62,20 @@ export interface EnrolledNames {
  */
 export async function persistEnrolledNames(app: Bootstrapped, names: EnrolledNames): Promise<void> {
   await writeMeta(app.db.db, DEVICE_NAME_META_KEY, names.deviceName);
+}
+
+/**
+ * Rename this device: the server first (online only, as the signed-in owner), then the local name
+ * Settings reads. REJECTS with the port's `StaffAdminError`, leaving the local name as it was.
+ */
+export async function renameDevice(
+  app: Bootstrapped,
+  port: Pick<StaffAdminPort, 'renameDevice'>,
+  input: { readonly actingUserId: string; readonly name: string },
+): Promise<void> {
+  const name = input.name.trim();
+  await port.renameDevice({ actingUserId: input.actingUserId, name });
+  await writeMeta(app.db.db, DEVICE_NAME_META_KEY, name);
 }
 
 /**

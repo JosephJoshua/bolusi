@@ -4,7 +4,8 @@
  * field for a count of 40 that nobody wants to tap out. The label sits above, as on every field.
  */
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput as RNTextInput, View } from 'react-native';
+import { Text, NativeTextInput as RNTextInput } from '../text.js';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
@@ -41,7 +42,8 @@ const styles = StyleSheet.create({
   input: {
     ...type.heading,
     minWidth: size.stepperValue,
-    height: touch.min,
+    // Grows with a large font instead of clipping the number.
+    minHeight: touch.min,
     paddingHorizontal: space.md,
     borderRadius: radius.md,
     backgroundColor: color.surfaceAlt,

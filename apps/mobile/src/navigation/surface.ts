@@ -33,4 +33,9 @@ export interface SurfaceNav {
    * half-written draft with no confirm.
    */
   readonly requestLeave: (proceed: () => void) => void;
+  /**
+   * Switching user loses nothing here: the open work is kept for whoever signs in next (an
+   * unfinished intake belongs to the device). The switch then skips the discard gate.
+   */
+  readonly keepsWorkOnSwitch?: boolean;
 }

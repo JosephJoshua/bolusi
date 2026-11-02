@@ -9,9 +9,11 @@
 // placed here before it ships).
 import { AUTH_PERMISSION, PLATFORM_PERMISSION } from '@bolusi/core';
 
+import { APPROVAL_PERMISSION } from './approvals/constants.js';
 import { INVENTORY_PERMISSION } from './inventory/constants.js';
 import { MONEY_PERMISSION } from './money/constants.js';
 import { NOTES_PERMISSION } from './notes/constants.js';
+import { PURCHASING_PERMISSION } from './purchasing/constants.js';
 import { REPAIR_PERMISSION } from './repair/constants.js';
 
 const R = REPAIR_PERMISSION;
@@ -79,6 +81,12 @@ export const ROLE_ABILITY_GROUPS = [
       { id: 'stockCount', permissionIds: [I.count], requires: ['stockView'] },
       { id: 'stockCorrect', permissionIds: [I.correctUse], requires: ['stockView'] },
       { id: 'stockManage', permissionIds: [I.manageItems], requires: ['stockView'] },
+      // "Belanja sparepart": suppliers, orders and receiving what arrives into stock.
+      {
+        id: 'stockBuy',
+        permissionIds: [PURCHASING_PERMISSION.buy, I.receive],
+        requires: ['stockView'],
+      },
     ],
   },
   {
@@ -119,6 +127,7 @@ export const PRESET_ROLE_ABILITIES = {
   ],
   technician: ['repairView', 'repairWork', 'stockView', 'stockUse'],
   // The counter's and the technician's work, plus the owners' daily decisions within limits.
+  // Settling a drawer shortage (adjust cash, which has no limit) stays with the owners.
   manager: [
     'repairView',
     'repairIntake',
@@ -139,7 +148,6 @@ export const PRESET_ROLE_ABILITIES = {
     'moneyRefund',
     'moneyVoid',
     'moneyCredit',
-    'moneyAdjust',
   ],
   staff: ['notes'],
 } as const satisfies Record<string, readonly RoleAbilityId[]>;
@@ -157,10 +165,14 @@ export const LIMITED_ABILITIES = [
   'moneyCredit',
 ] as const satisfies readonly RoleAbilityId[];
 
-/** Held by every role: each person's own PIN and language. */
+/**
+ * Held by every role: each person's own PIN and language, and approval requests (what someone may
+ * ask for and decide is the decision's own permission).
+ */
 export const ROLE_BASE_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.pinChange,
   PLATFORM_PERMISSION.setLocale,
+  APPROVAL_PERMISSION.use,
 ];
 
 /**

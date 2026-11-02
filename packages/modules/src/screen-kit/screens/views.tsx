@@ -14,9 +14,10 @@ import {
   size,
   space,
   type,
+  Text,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { QueryState } from '../live.js';
 
@@ -57,6 +58,16 @@ export function QueryView<TData>({
     case 'error':
       if (query.code === 'ENTITY_NOT_FOUND') {
         return <EmptyState title={t('core.errors.ENTITY_NOT_FOUND')} testID={`${testID}.empty`} />;
+      }
+      // Not kept on this device and not pulled for this person yet: it fills in once online.
+      if (query.code === 'NOT_ON_DEVICE') {
+        return (
+          <EmptyState
+            title={t('core.errors.NOT_ON_DEVICE')}
+            hint={t('core.notOnDevice.hint')}
+            testID={`${testID}.notOnDevice`}
+          />
+        );
       }
       return (
         <ErrorState

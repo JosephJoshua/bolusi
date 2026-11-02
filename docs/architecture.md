@@ -71,6 +71,11 @@ behind adapters. Node tests do not establish native performance or correctness.
   can change without rewriting signed facts.
 - Apply operations transactionally and make replay idempotent. Interrupted rebuilds
   and reordered sync must preserve resulting business state.
+- Folding sorts ops by each phone's clock, but the server judged them as they arrived,
+  so an applier must reach what the server judged in either order: a final state
+  (a cancel) is not undone by an earlier-judged op folded after it, and a change
+  folded before the record it changes exists is not lost (repair replays it from
+  the ticket's history entries when the ticket is opened).
 - A projection version bump rebuilds on the device in the background, re-folding one
   entity at a time from the op log. Appliers write only their own entity's rows, so
   screens and commands keep working while it runs.
@@ -84,9 +89,18 @@ behind adapters. Node tests do not establish native performance or correctness.
   runs both before saving; the server runs both again against its own records and
   refuses what fails. The device then re-folds the record without the refused
   change and lists it under sync problems.
+- A stock movement that names another module's record is checked through a target
+  registry wired in `packages/modules/src/index.ts`, never by inventory reading that
+  module's tables: `PartUseTargets` for a part taken for a servisan,
+  `StockSourceTargets` for stock received from a purchase order.
 - A change stamped more than 10 minutes ahead of the server clock is refused, so
   a wrong clock cannot win last-writer-wins. A device whose last sync found its
   clock that far ahead saves nothing until the clock is fixed.
+- Old and new app versions share one tenant. A pulled change this build cannot fold
+  (an unknown type, or a newer `schemaVersion`) stops the pull before its batch with
+  `APP_UPDATE_REQUIRED`; the device keeps working and pushing, sync status asks for an
+  update, and the updated app resumes from the same cursor. The server keeps every older
+  version, so release the server before the apps that emit a new type or version.
 - Pending, rejected, and conflicting offline work stays visible and recoverable.
 - A phone whose token the server refuses (401 `AUTH_TOKEN_INVALID`) 3 times over
   10+ minutes stops syncing (`device_unrecognised`) but keeps working; the sync
@@ -120,6 +134,47 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- Every op type also declares `read`: the permission a person needs to see its ops.
+  Sync follows least privilege, the same rule for every person and role. A device is
+  sent only the ops its read set covers (`sync/read-scope.ts`): a shared store device
+  gets what its store's active non-owner staff may read (its owners' reads while it has
+  no staff yet), and a phone set up as one
+  person's own (`devices.personal_user_id`, chosen at setup) gets what that person may
+  read, and only they sign in on it. The server takes a personal phone's ops only as
+  that person (its genesis and re-enrolment record aside), so a deactivated person's
+  phone writes nothing more. When the set shrinks, the device drops those pulled ops
+  and re-folds; when it grows, it catches up on the older ones. `null` is for records
+  every device needs (sign-in, PIN, device).
+- Someone who may read more than the device holds (an owner on the counter PC) gets
+  the rest only while signed in: the server checks their PIN (`POST
+/v1/sync/person-session`, a `bps_` token bound to device and person), and their
+  extra (their reads minus the device's) is pulled with `person: true` into an
+  in-memory store (core `sync/person-store.ts`, device `person-access.ts`). It is the
+  same pull, verification and appliers, folding into SQLite temp tables that shadow
+  the device's own, so module queries read it unchanged; it is dropped on sign-out,
+  switch, idle lock and close. Their own changes of types the device does not hold
+  stay in its log as chain links and lose their text once sent (`sync/device-reads.ts`).
+  The extra is worked out when the PIN goes to the server: after a new device's first
+  pull, and after any PIN change made on the device has been sent. Until they leave, the
+  PIN stays in memory on a device that holds all they read, so if it comes to hold less
+  (the store's first staff person is added) their extra opens without asking again. A query whose data is still coming down waits for that pull;
+  one whose data is not here throws `NOT_ON_DEVICE` ("Perlu internet"), never an empty list. Limits, accepted for now: the extra is pulled
+  again at every sign-in (nothing stays between sessions); a person granted more while
+  signed in sees it from their next sign-in; and the server's PIN check guards against
+  a modified app, not a rooted device, which holds every person's argon2 PIN verifier
+  for offline sign-in, so a 6-digit PIN can be cracked off it. A new PIN ends the
+  person's other sessions. Queries declare nothing for this: the query runtime checks
+  every statement a handler runs against the read of each table it touches
+  (`core/src/query/reads-here.ts`), so a new module's queries are covered as written;
+  a table named inside raw SQL is refused, so build subqueries with Kysely. A
+  handler that shows optional data to some readers only (refunds on a servisan) asks
+  `qctx.hasPermission` before selecting it, as for any gated field. Each projection table must be read with one permission, so a record with
+  fields for different readers is split into separate op types and tables, one per
+  reader (part costs live apart from stock moves; `projectionTableReads` throws otherwise).
+- When a type's rule judges only newer versions, set `minPushVersion` on the type. The
+  server refuses a new push below it as `SCHEMA_INVALID`; stored ops still fold at every version.
+  Signed ops can't be upgraded, so raise a floor only once the app that signs the newer
+  version has reached every device and old queues have synced.
 - A change that lowers what a customer owes (a price, a down payment, a fee) needs
   an owner-only permission, checked in the type's `permission` or its `rule` with
   `holdsPermission` (repair's `requireDiscountPermission`), so the server refuses it too.
@@ -132,6 +187,13 @@ fails a build, a boot or a test rather than waiting for review:
 - Screens read through `useLiveQuery` (`screen-kit/live.ts`). The platform adapter
   subscribes the module runtime to the module's tables, so a pulled change re-runs
   every open read.
+- What another device just changed glows once where it shows. The engine flags pulled
+  changes `remote` on the invalidation bus, each app feeds them to `markFresh`
+  (`@bolusi/ui/fresh`), and shared parts glow by record id: every PC `DataTable` row on
+  its own, phone `ListRow` and `Card` (and both apps' cards) with `freshId`, anything
+  else with `FreshGlow`. Pass the id the module's ops name as `entityId`. An op that
+  changes how another record looks (a payment on a servisan) declares `concerns`, and
+  that record glows too.
 - Counter PC screens live in `src/<module>/desktop/`. The PC's stylesheet picks up their
   classes from that folder, and the PC window is told every module's permissions
   (`apps/desktop/src/core/permissions.ts`), so a new module needs no PC wiring for either.
@@ -152,8 +214,10 @@ customers registers a document source (`money/documents.ts`) in
 
 The server judges each pushed op alone, not a command's ops as a group, so each
 money rule is safe on its own: a charge equals the document's price, a refund by
-the counter returns at most the overpayment through the account it came in by,
-and lowering a bill, voiding a payment or settling a cash difference are owners'.
+the counter returns at most the overpayment through the account it came in by
+(payments cover the bill in the order they came in, `overpaidByAccount`), nobody
+refunds more than was paid, and lowering a bill, voiding a payment or settling a
+cash difference are owners'. Settling a cash difference always names its count.
 A cash count records what was counted; the difference is computed against the
 book at the count's time, so late-synced cash shows up correctly. Stock and
 purchasing post through the same module (reserved accounts in `constants.ts`).
@@ -235,6 +299,16 @@ carry a `test:` reference.
 DB; `MEDIA_STORAGE_DIR` needs durable, backed-up production storage.
 `EXPO_ACCESS_TOKEN` is required by the production push transport at boot. Tests
 inject their transport and need no production push credentials.
+
+`PUBLIC_URL` is the origin clients reach the server at. Cookies are marked `Secure`
+unless it is a plain-http origin, so leave it unset or https in production and set it
+to `http://<lan-ip>:3000` only for a local server phones reach over plain HTTP.
+
+`TRUSTED_PROXY_CIDRS` lists the reverse proxies in front of the server (addresses or
+CIDR ranges, comma-separated). Unset, `X-Forwarded-For` is ignored and per-IP login
+limits key by the socket address, which behind a proxy is the proxy's, so all
+clients share one bucket. Set it to the proxy's address in production; a request from
+it is keyed by the rightmost forwarded address that is not a trusted proxy.
 
 `SYSTEM_KEY_DIR` enables server conflict detection. It contains one mode-0600
 `system-device-<tenantId>.key` per tenant: a base64 Ed25519 private key created by

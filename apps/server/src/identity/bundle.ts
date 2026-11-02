@@ -9,7 +9,7 @@
 //   - VERIFIER MINIMIZATION (§5.1, security-guide §5.2): only this store's ACTIVE users carry a
 //     verifier; deactivated users appear with pinVerifier: null; a user unassigned from the store
 //     disappears entirely.
-import { canonicalizeJcs, NO_LIMIT_AMOUNTS, type JsonValue } from '@bolusi/core';
+import { canonicalizeJcs, isOwnerRoleOf, NO_LIMIT_AMOUNTS, type JsonValue } from '@bolusi/core';
 import type { TenantDb } from '@bolusi/db-server';
 
 import { sha256Hex } from '../crypto/index.js';
@@ -33,7 +33,8 @@ function readIdleLock(configuration: unknown): number {
   return IDLE_LOCK_DEFAULT;
 }
 
-function toVerifier(row: {
+/** A stored `user_pin_verifiers` row as the verifier devices and the server check a PIN with. */
+export function toVerifier(row: {
   salt: string;
   params: unknown;
   hash: string;
@@ -58,7 +59,9 @@ function toVerifier(row: {
 }
 
 /**
- * Build the bundle for a device at `(tenantId, storeId)`, inside the caller's forTenant tx. Arrays
+ * Build the bundle for a device at `(tenantId, storeId)`, inside the caller's forTenant tx. A
+ * personal device (`personalUserId`) still lists the store's people, whose names and roles its
+ * screens show, but only its person carries a PIN verifier: nobody else can sign in on it. Arrays
  * are sorted deterministically so the RFC 8785 etag is stable across identical directory states
  * (JCS canonicalizes object keys but not array element order).
  */
@@ -66,6 +69,7 @@ export async function buildBundle(
   db: TenantDb,
   tenantId: string,
   storeId: string,
+  personalUserId: string | null = null,
 ): Promise<DeviceBundle> {
   const tenant = await db
     .selectFrom('tenants')
@@ -102,14 +106,13 @@ export async function buildBundle(
           .execute()
       : [];
 
-  // Grants filtered to this store + tenant-wide (§5.2) — the store-2-only grant is excluded here.
-  const grants =
+  // Every grant of this store's people; filtered below once the roles are known.
+  const allGrants =
     userIds.length > 0
       ? await db
           .selectFrom('userRoles')
           .select(['userId', 'roleId', 'storeId'])
           .where('userId', 'in', userIds)
-          .where((eb) => eb.or([eb('storeId', '=', storeId), eb('storeId', 'is', null)]))
           .execute()
       : [];
 
@@ -146,6 +149,17 @@ export async function buildBundle(
     permsByRole.set(rp.roleId, list);
   }
 
+  // Grants at this store + tenant-wide (§5.2), plus owner-role grants at other stores: an owner's PIN
+  // is the main owner's to manage wherever they are an owner, and the server judges that across
+  // every store (auth/permissions `holdsOwnerPowers`), so the device must see it too. The evaluator
+  // reads a grant at another store as granting nothing here.
+  const ownerRoleIds = new Set(
+    roles.filter((r) => isOwnerRoleOf(r.scopeType, permsByRole.get(r.id) ?? [])).map((r) => r.id),
+  );
+  const grants = allGrants.filter(
+    (g) => g.storeId === storeId || g.storeId === null || ownerRoleIds.has(g.roleId),
+  );
+
   const bundleUsers = users
     .map((u) => {
       const verifierRow = verifierByUser.get(u.id);
@@ -163,9 +177,14 @@ export async function buildBundle(
               `${b.roleId}${b.storeId ?? NIL_UUID}`,
             ),
           ),
-        // Verifier minimization: only ACTIVE users of this store carry a verifier.
+        // Verifier minimization: only ACTIVE users of this store carry a verifier, and on a
+        // personal device only its person.
         pinVerifier:
-          status === 'active' && verifierRow !== undefined ? toVerifier(verifierRow) : null,
+          status === 'active' &&
+          verifierRow !== undefined &&
+          (personalUserId === null || personalUserId === u.id)
+            ? toVerifier(verifierRow)
+            : null,
       };
     })
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -175,6 +194,9 @@ export async function buildBundle(
     store: { id: store.id, name: store.name },
     stores: stores.map((row) => ({ id: row.id, name: row.name })),
     settings: { idleLockSeconds: readIdleLock(tenant.configuration) },
+    // Only on a personal device: an older app parses the bundle strictly and knows no such key, and
+    // a shared device's bundle (and so its etag) stays as it was.
+    ...(personalUserId === null ? {} : { personalUserId }),
     users: bundleUsers,
     rolesSnapshot: roles
       .map((r) => ({

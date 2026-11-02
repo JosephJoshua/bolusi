@@ -13,11 +13,14 @@ import { mainPortChannel } from '../main/main-port.js';
 import { connect, serve } from '../main/rpc.js';
 
 import { createCoreHost, type CoreHost } from './host.js';
+import { logUnhandledRejections } from './unhandled.js';
 
 interface ParentMessage {
   readonly data: unknown;
   readonly ports: MessagePortMain[];
 }
+
+logUnhandledRejections(process);
 
 const parent = process.parentPort;
 let host: CoreHost | null = null;
@@ -30,7 +33,9 @@ function serveWindow(core: CoreHost, port: MessagePortMain): void {
   // A window that connects late (a reload) gets the state as it is now, then every change.
   server.emit(CORE_EVENTS.state, core.state());
   const stopState = core.onState((state) => server.emit(CORE_EVENTS.state, state));
-  const stopRepair = core.onRepairChanged(() => server.emit(CORE_EVENTS.repairChanged, null));
+  const stopRepair = core.onRepairChanged((change) =>
+    server.emit(CORE_EVENTS.repairChanged, change),
+  );
   const stopHandoff = core.onHandoff((event) => server.emit(CORE_EVENTS.handoff, event));
   port.on('close', () => {
     stopState();

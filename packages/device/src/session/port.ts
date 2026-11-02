@@ -48,7 +48,10 @@ export interface SessionPort<TWork> {
     readonly ops: readonly unknown[];
   }>;
 
-  /** Manual lock (§6.4): `reason: 'manual_lock'`, `source: 'ui'`. */
+  /**
+   * Manual lock (§6.4): `reason: 'manual_lock'`, `source: 'ui'`. Clears `current` synchronously, on
+   * the call, so a rejected append loses only the record and never the lock.
+   */
   manualLock(): Promise<readonly unknown[]>;
 
   /**
@@ -66,6 +69,12 @@ export interface SessionPort<TWork> {
 
   /** This user's retained work, or undefined. NEVER another user's — the key is the userId. */
   work(userId: string): TWork | undefined;
+
+  /** The device's own work, which anyone signed in here may carry on with; none while locked. */
+  deviceWork(): Promise<TWork | undefined>;
+
+  /** Keep the device's own work; ignored while nobody is signed in. */
+  saveDeviceWork(work: TWork): void;
 }
 
 /**

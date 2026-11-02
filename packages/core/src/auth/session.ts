@@ -17,7 +17,7 @@ import type { ClockPort, IdSource } from '../runtime/ports.js';
 import { clampIdleLockSeconds } from './constants.js';
 import { AUTH_ENTITY, AUTH_OP } from './operations.js';
 import type { LockedOutEmitter } from './pin-verify.js';
-import type { WorkStore } from './work-store.js';
+import { DEVICE_WORK_KEY, type WorkStore } from './work-store.js';
 
 /** The permission-memo invalidation seam (02-permissions §6) — `PermissionEvaluator` satisfies it. */
 export interface PermissionMemo {
@@ -192,6 +192,21 @@ export class SessionManager<TWork = unknown> {
     while (this.#writing !== null) await this.#writing;
   }
 
+  /**
+   * The device's own work (`DEVICE_WORK_KEY`): what anyone signed in here may carry on with. Only
+   * while someone is signed in, so a locked device hands it to nobody.
+   */
+  async deviceWork(): Promise<TWork | undefined> {
+    if (this.#current === null) return undefined;
+    return this.#retainedWork(DEVICE_WORK_KEY);
+  }
+
+  /** Keep the device's own work; ignored while nobody is signed in. */
+  saveDeviceWork(work: TWork): void {
+    if (this.#current === null) return;
+    this.saveWork(DEVICE_WORK_KEY, work);
+  }
+
   /** The retained work for `userId`, or undefined. NEVER another user's — the key is the userId. */
   work(userId: string): TWork | undefined {
     return this.#workByUser.get(userId);
@@ -234,7 +249,12 @@ export class SessionManager<TWork = unknown> {
   ): Promise<readonly AppendedOp[]> {
     const current = this.#current;
     if (current === null) return [];
-    const ops = await this.#runtime.emitRuntimeOp({
+    // Fail closed: the identity is cleared BEFORE the op is appended (and synchronously, so a caller
+    // sees it the moment this is called). A failed append then loses the audit record, never the
+    // lock: an open session left behind a failed write would hand the till to the next person.
+    // Only the active-identity context is cleared; #workByUser is retained (SEC-AUTH-08).
+    this.#current = null;
+    return this.#runtime.emitRuntimeOp({
       type: AUTH_OP.sessionEnded,
       entityType: AUTH_ENTITY.authSession,
       entityId: current.sessionId,
@@ -242,9 +262,6 @@ export class SessionManager<TWork = unknown> {
       userId: current.userId,
       source,
     });
-    // Only the active-identity context is cleared; #workByUser is retained (SEC-AUTH-08).
-    this.#current = null;
-    return ops;
   }
 }
 

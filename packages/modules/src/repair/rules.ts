@@ -11,10 +11,13 @@
 import { sql, type Kysely } from 'kysely';
 import type { z } from 'zod';
 
-import { carriedRegistrations, defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
+import { defineRefusals, type DomainError, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
+import { approvedPermit } from '../approvals/permits.js';
 import {
+  REPAIR_APPROVAL_KIND,
+  HANDOVER_UNDO_WINDOW_MS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
@@ -31,14 +34,28 @@ import {
   handoverProblem,
   intakeListProblems,
   needsOwnershipVideo,
+  DEFAULT_INTAKE_OPTIONS,
   recordedOption,
+  storeIntakeOptions,
   warrantyUntil,
+  type IntakeOption,
+  type IntakeOptionList,
+  type IntakeOptionSettings,
   type RecordedRepairType,
 } from './intake-options.js';
+import { sameModelAnySpelling } from './device-models.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
-import { NO_CANCEL_FEES, standardCancelFee } from './queries.js';
+import {
+  cancelDrop,
+  NO_CANCEL_FEES,
+  readIntakeOptionSettings,
+  standardCancelFee,
+  type CancelFees,
+} from './queries.js';
 import type {
+  cancelFeeChangedPayload,
   deviceReturnedPayload,
+  ticketClaimedPayload,
   downPaymentCorrectedPayload,
   downPaymentReceivedPayload,
   intakeOptionsChangedPayload,
@@ -46,12 +63,15 @@ import type {
   quoteChangeProposedPayload,
   quoteProposalDeclinedPayload,
   slipPrintedPayload,
+  statusLinkMadePayload,
   technicianAssignedPayload,
+  ticketDetailsCorrectedPayload,
   ticketOpenedPayload,
   workPhotosAddedPayload,
 } from './operations.js';
 import type { RepairDatabase } from './schema.js';
-import { deviceCode, ticketCounter } from './ticket-number.js';
+import { statusCodeFor } from './status-link.js';
+import { requireDeviceNumber } from '../shared/device-number.js';
 
 type Rule = OpRule<RepairDatabase>;
 type Db = Parameters<Rule>[1]['db'];
@@ -99,6 +119,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'warrantyEnded',
   'claimChargeOwnerOnly',
   'claimOtherPhone',
+  'claimOtherImei',
   'partsNotInWork',
   'partsNotYours',
   'notPaid',
@@ -107,8 +128,23 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'overLimit',
   'handoverAccessories',
   'handoverNoteNeeded',
+  'statusLinkMismatch',
   'ownershipVideoNeeded',
   'freeHandoverOwnerOnly',
+  'notReturned',
+  'notCancelled',
+  'feeBelowCharged',
+  'takenElsewhere',
+  'handoverHasClaim',
+  'claimSamePhone',
+  'nothingChanged',
+  'undoTooLate',
+  'handedOverBefore',
+  'customerShared',
+  'customerMismatch',
+  'cancelFeeChanged',
+  'repairTypeTerms',
+  'intakePhotoMissing',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -139,17 +175,21 @@ async function requireDiscountPermission(
   await requireWithinLimit(op, ctx, REPAIR_PERMISSION.discount, earlier + drop);
 }
 
-/** What the discounts still standing on the op's ticket take off, besides line `exceptLineId`. */
-async function discountsStanding(db: Db, op: SignedOperation, exceptLineId: string) {
-  const row = await db
+/**
+ * What the discounts still standing on the op's ticket take off, besides line `exceptLineId`: the
+ * price drops already on the servisan, which its limit counts together with a new one (a discount,
+ * or a cancel fee below the store's).
+ */
+async function discountsStanding(db: Db, op: TicketRef, exceptLineId?: string) {
+  let query = db
     .selectFrom('repairQuoteLines')
     .select(sql<number>`coalesce(sum(-amount), 0)`.as('drop'))
     .where('ticketId', '=', op.entityId)
     .where('storeId', '=', storeOf(op))
     .where('amount', '<', 0)
-    .where('status', '!=', 'declined')
-    .where('id', '!=', exceptLineId)
-    .executeTakeFirst();
+    .where('status', '!=', 'declined');
+  if (exceptLineId !== undefined) query = query.where('id', '!=', exceptLineId);
+  const row = await query.executeTakeFirst();
   return Number(row?.drop ?? 0);
 }
 
@@ -256,8 +296,11 @@ export interface TicketState {
   readonly location: DeviceLocation;
   readonly technicianId: string | null;
   readonly quoteTotal: number;
+  readonly cancelFee: number | null;
   /** The servisan this one is a warranty claim on; null for an ordinary one. */
   readonly claimOfTicketId: string | null;
+  /** When it was first handed over; kept when a handover is taken back. */
+  readonly returnedAt: number | null;
 }
 
 export function invalidTransition(
@@ -352,7 +395,7 @@ function alreadyRecorded(field: string, id: string): DomainError {
   });
 }
 
-async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | undefined> {
+async function findTicket(db: Db, op: TicketRef): Promise<TicketState | undefined> {
   const row = await db
     .selectFrom('repairTickets')
     .select([
@@ -362,7 +405,9 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
       'location',
       'technicianId',
       'quoteTotal',
+      'cancelFee',
       'claimOfTicketId',
+      'returnedAt',
     ])
     .where('id', '=', op.entityId)
     .where('tenantId', '=', op.tenantId)
@@ -376,20 +421,25 @@ async function findTicket(db: Db, op: SignedOperation): Promise<TicketState | un
     location: row.location as DeviceLocation,
     technicianId: row.technicianId,
     quoteTotal: Number(row.quoteTotal),
+    cancelFee: row.cancelFee === null ? null : Number(row.cancelFee),
     claimOfTicketId: row.claimOfTicketId,
+    returnedAt: row.returnedAt === null ? null : Number(row.returnedAt),
   };
 }
 
-async function loadTicket(db: Db, op: SignedOperation): Promise<TicketState> {
+async function loadTicket(db: Db, op: TicketRef): Promise<TicketState> {
   const ticket = await findTicket(db, op);
   if (ticket === undefined) throw notFound(REPAIR_TICKET_ENTITY, op.entityId);
   return ticket;
 }
 
 /** Repair ops are store-scoped, so a null store never matches a row. */
-function storeOf(op: SignedOperation): string {
+function storeOf(op: { readonly storeId: string | null }): string {
   return op.storeId ?? '';
 }
+
+/** A servisan as rules find it: the op's, or the one an approval request is about. */
+type TicketRef = Pick<SignedOperation, 'tenantId' | 'storeId' | 'entityId'>;
 
 async function customerExists(db: Db, op: SignedOperation, customerId: string): Promise<boolean> {
   const row = await db
@@ -478,7 +528,7 @@ async function hasWorkPhoto(db: Db, op: SignedOperation, stage: WorkPhotoStage, 
 }
 
 /** When work on the ticket was last (re)started, or 0 if never. */
-async function lastStartedAt(db: Db, op: SignedOperation): Promise<number> {
+async function lastStartedAt(db: Db, op: TicketRef): Promise<number> {
   const row = await db
     .selectFrom('repairTicketEvents')
     .select((eb) => eb.fn.max('at').as('at'))
@@ -500,27 +550,6 @@ async function pendingProposals(db: Db, op: SignedOperation): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
-/**
- * Whether this device already opened a ticket with this number. Bound to the device through the op
- * log, which both sides keep with the same columns: two devices may share a 3-letter code
- * (ticket-number.ts), and that rare collision must not refuse an honest ticket.
- */
-async function deviceUsedNumber(
-  db: Db,
-  op: SignedOperation,
-  ticketNumber: string,
-  devices: readonly string[],
-) {
-  const { rows } = await sql<{ one: number }>`
-    SELECT 1 AS one FROM repair_tickets t
-    JOIN operations o ON o.entity_id = t.id AND o.type = ${op.type}
-    WHERE t.store_id = ${storeOf(op)} AND t.ticket_number = ${ticketNumber}
-      AND o.device_id IN (${sql.join(devices)})
-    LIMIT 1
-  `.execute(db);
-  return rows.length > 0;
-}
-
 // ── the rules, one per op type ──────────────────────────────────────────────────────────────────
 
 type Payload<S extends z.ZodType> = z.output<S>;
@@ -531,11 +560,167 @@ export const customerRegisteredRule: Rule = async (op, { db }) => {
   }
 };
 
+/**
+ * A customer's details are corrected while one of their servisans is still in the store, like the
+ * servisan's own details: once everything went home, the slips they signed are the record.
+ */
 export const customerDetailsCorrectedRule: Rule = async (op, { db }) => {
   if (!(await customerExists(db, op, op.entityId))) {
     throw notFound(REPAIR_CUSTOMER_ENTITY, op.entityId);
   }
+  await requireRenamable(db, op, op.entityId);
 };
+
+/**
+ * A customer's own record is renamed only while it names one servisan, still in the store, and
+ * never handed over: a rename would otherwise rewrite who a signed slip or a debt belongs to. A
+ * servisan opened elsewhere while offline counts too, once it syncs.
+ */
+async function requireRenamable(db: Db, op: SignedOperation, customerId: string): Promise<void> {
+  const tickets = await db
+    .selectFrom('repairTickets')
+    .select(['location', 'returnedAt'])
+    .where('customerId', '=', customerId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .execute();
+  if (tickets.length > 1) {
+    throw refuse('customerShared', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: customerId },
+      message: 'the customer has more than one servisan',
+    });
+  }
+  if (tickets.some((ticket) => ticket.location === 'returned' || ticket.returnedAt !== null)) {
+    throw refuse('returned', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: REPAIR_CUSTOMER_ENTITY, entityId: op.entityId },
+      message: 'a servisan of this customer was handed over',
+    });
+  }
+}
+
+/**
+ * Every payload of `type` the log holds for `entityId`, oldest first. Both sides keep each op's
+ * signed text, so a rule can see what a setting was before its last change: a device that was
+ * offline acted on one of those, and refusing it would lose work done in good faith.
+ */
+async function pastPayloads<T>(db: Db, type: string, entityId: string): Promise<T[]> {
+  const { rows } = await sql<{ signedCoreJcs: string }>`
+    SELECT signed_core_jcs AS "signedCoreJcs" FROM operations
+    WHERE type = ${type} AND entity_id = ${entityId}
+    ORDER BY timestamp_ms, device_id, seq
+  `.execute(db);
+  return rows.map((row) => (JSON.parse(row.signedCoreJcs) as { payload: T }).payload);
+}
+
+/**
+ * Every version one franchise intake list has had: the built-in one, each one the owner saved, and
+ * the one these records hold now.
+ */
+async function listVersions(
+  db: Db,
+  op: SignedOperation,
+  list: IntakeOptionList,
+  current: readonly IntakeOption[],
+): Promise<(readonly IntakeOption[])[]> {
+  const saved = await pastPayloads<{ list: string; items: IntakeOption[] }>(
+    db,
+    REPAIR_OP.intakeOptionsChanged,
+    op.tenantId,
+  );
+  return [
+    DEFAULT_INTAKE_OPTIONS[list],
+    ...saved.filter((payload) => payload.list === list).map((payload) => payload.items),
+    current,
+  ];
+}
+
+/**
+ * Whether a repair type newly put on a servisan carries terms the owner gave it: some version of
+ * the franchise list had it under that name with at least as much warranty, and no more need for
+ * the ownership video, than recorded. Any version counts, since the counter may have picked it
+ * offline before the owner changed the list; terms no version ever gave (more warranty days, or
+ * no video for a type that always needed one) were not the owner's.
+ */
+function hasListTerms(
+  type: RecordedRepairType,
+  versions: readonly (readonly IntakeOption[])[],
+): boolean {
+  return versions.some((offered) => {
+    const option = offered.find((item) => item.id === type.item);
+    return (
+      option !== undefined &&
+      option.label === type.label &&
+      type.warrantyDays <= (option.warrantyDays ?? 0) &&
+      (type.needsVideo || option.needsVideo !== true)
+    );
+  });
+}
+
+/**
+ * The repair types an op records take their terms from the owner's list, never from the device that
+ * signed it: one already on the servisan (`kept`) keeps exactly the terms it was given, so a promise
+ * already made never changes, and a new one has terms some version of the list gave it.
+ */
+function requireRepairTypeTerms(
+  types: readonly RecordedRepairType[],
+  versions: readonly (readonly IntakeOption[])[],
+  kept: readonly RecordedRepairType[] = [],
+): void {
+  for (const type of types) {
+    const recorded = kept.find((other) => other.item === type.item);
+    const ok =
+      recorded === undefined
+        ? hasListTerms(type, versions)
+        : type.warrantyDays === recorded.warrantyDays && type.needsVideo === recorded.needsVideo;
+    if (!ok) {
+      throw refuse('repairTypeTerms', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'repairTypes', issue: `${type.item} does not carry the list's terms` },
+      });
+    }
+  }
+}
+
+/**
+ * An intake has a photo for every angle the store asked for in some version of its lists (the
+ * franchise's angles, less what the store hid then), so one taken offline before the owner added
+ * an angle still counts: the phone is in the store and its ticket must not be lost.
+ */
+async function requireIntakePhotos(
+  db: Db,
+  op: SignedOperation,
+  settings: IntakeOptionSettings,
+  slots: readonly string[],
+): Promise<void> {
+  const taken = new Set(slots);
+  const angles = await listVersions(db, op, 'photoAngles', settings.lists.photoAngles);
+  const hidden = await pastPayloads<{ list: string; hidden: string[] }>(
+    db,
+    REPAIR_OP.storeIntakeOptionsChanged,
+    storeOf(op),
+  );
+  const hiddenVersions = [
+    [],
+    ...hidden.filter((payload) => payload.list === 'photoAngles').map((payload) => payload.hidden),
+    settings.hidden.photoAngles,
+  ];
+  const covered = angles.some((photoAngles) =>
+    hiddenVersions.some((hiddenAngles) =>
+      storeIntakeOptions({
+        lists: { ...settings.lists, photoAngles },
+        hidden: { ...settings.hidden, photoAngles: hiddenAngles },
+      }).photoAngles.every((angle) => taken.has(angle.id)),
+    ),
+  );
+  if (!covered) {
+    throw refuse('intakePhotoMissing', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'photos', issue: 'a photo angle the store asks for is missing' },
+    });
+  }
+}
 
 /**
  * The repair types of an open servisan, set after the diagnosis: by the counter, who took it in, or
@@ -553,16 +738,27 @@ export const ticketRepairTypesChangedRule: Rule = async (op, { db, holdsPermissi
     });
   }
   if (
-    (await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) ||
-    (await holdsPermission(op.userId, REPAIR_PERMISSION.work))
+    !(await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) &&
+    !(await holdsPermission(op.userId, REPAIR_PERMISSION.work))
   ) {
-    return;
+    throw refuse('repairTypesNotYours', {
+      code: 'PERMISSION_DENIED',
+      details: { permissionId: REPAIR_PERMISSION.work },
+      message: `user ${op.userId} neither takes in nor works on phones`,
+    });
   }
-  throw refuse('repairTypesNotYours', {
-    code: 'PERMISSION_DENIED',
-    details: { permissionId: REPAIR_PERMISSION.work },
-    message: `user ${op.userId} neither takes in nor works on phones`,
-  });
+  const { repairTypes } = payloadOf<{ repairTypes: RecordedRepairType[] }>(op);
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('repairTypesJson')
+    .where('id', '=', ticket.id)
+    .executeTakeFirstOrThrow();
+  const { lists } = await readIntakeOptionSettings(db, op.tenantId, storeOf(op));
+  requireRepairTypeTerms(
+    repairTypes,
+    await listVersions(db, op, 'repairTypes', lists.repairTypes),
+    JSON.parse(row.repairTypesJson) as RecordedRepairType[],
+  );
 };
 
 /** The servisan a claim names, as far as the claim rule needs it. */
@@ -574,16 +770,22 @@ export interface ClaimedServisan {
   readonly claimOfTicketId: string | null;
   readonly customerId: string;
   readonly deviceImei: string | null;
+  readonly deviceBrand: string;
+  readonly deviceModel: string;
 }
 
 /** What a new claim brings: who and which phone, what it picks, and what it costs. */
 export interface ClaimRequest {
   readonly customerId: string;
   readonly imei: string | null;
+  readonly brand: string;
+  readonly model: string;
   readonly repairTypes: readonly unknown[];
   readonly total: number;
   /** When it was signed. */
   readonly at: number;
+  /** When the server received it; absent on a device, which goes by `at`. */
+  readonly receivedAt?: number | undefined;
 }
 
 /**
@@ -608,23 +810,35 @@ export function claimProblem(
   if (claim.repairTypes.length > 0) return { reason: 'claimWithTypes', owner: false };
   // The warranty covers that customer's phone, not another one brought in under its number.
   const imei = (value: string | null): string => (value ?? '').trim();
+  if (claim.customerId !== original.customerId) return { reason: 'claimOtherPhone', owner: false };
   if (
-    claim.customerId !== original.customerId ||
-    (imei(claim.imei) !== '' &&
-      imei(original.deviceImei) !== '' &&
-      imei(claim.imei) !== imei(original.deviceImei))
+    imei(claim.imei) !== '' &&
+    imei(original.deviceImei) !== '' &&
+    imei(claim.imei) !== imei(original.deviceImei)
+  ) {
+    return { reason: 'claimOtherImei', owner: false };
+  }
+  // Nor another model: a phone with no IMEI written down is still the brand and model it was.
+  if (
+    !sameModelAnySpelling(
+      { brand: original.deviceBrand, model: original.deviceModel },
+      { brand: claim.brand, model: claim.model },
+    )
   ) {
     return { reason: 'claimOtherPhone', owner: false };
   }
   if (claim.total > 0) return { reason: 'claimChargeOwnerOnly', owner: true };
   const until = warrantyUntil(original.repairTypes, original.returnedAt);
   // Signed between pickup and the warranty's end: a phone clock set back before pickup proves
-  // nothing about when the claim was made.
+  // nothing about when the claim was made. The server also holds the end to when it received the
+  // claim, so a phone set back cannot open a free claim after the warranty ended; a claim taken
+  // offline that reaches it late is then an owner's call too.
+  const latest = Math.max(claim.at, claim.receivedAt ?? claim.at);
   const covered =
     until !== null &&
     original.returnedAt !== null &&
     claim.at >= original.returnedAt &&
-    claim.at <= until;
+    latest <= until;
   return covered ? null : { reason: 'warrantyEnded', owner: true };
 }
 
@@ -632,8 +846,8 @@ async function requireClaimable(
   db: Db,
   op: SignedOperation,
   claimOf: string,
-  claim: Omit<ClaimRequest, 'at'>,
-  holdsPermission: Parameters<Rule>[1]['holdsPermission'],
+  claim: Omit<ClaimRequest, 'at' | 'receivedAt'>,
+  { holdsPermission, receivedAt }: Pick<Parameters<Rule>[1], 'holdsPermission' | 'receivedAt'>,
 ): Promise<void> {
   const original = await db
     .selectFrom('repairTickets')
@@ -645,6 +859,8 @@ async function requireClaimable(
       'claimOfTicketId',
       'customerId',
       'deviceImei',
+      'deviceBrand',
+      'deviceModel',
     ])
     .where('id', '=', claimOf)
     .where('tenantId', '=', op.tenantId)
@@ -657,7 +873,7 @@ async function requireClaimable(
       returnedAt: original.returnedAt === null ? null : Number(original.returnedAt),
       repairTypes: JSON.parse(original.repairTypesJson) as RecordedRepairType[],
     },
-    { ...claim, at: op.timestamp },
+    { ...claim, at: op.timestamp, receivedAt },
   );
   if (problem === null) return;
   if (!problem.owner) {
@@ -681,7 +897,7 @@ async function requireClaimable(
  * but never another device's to reuse.
  */
 export const ticketOpenedRule: Rule = async (op, ctx) => {
-  const { db, holdsPermission } = ctx;
+  const { db } = ctx;
   const payload = payloadOf<Payload<typeof ticketOpenedPayload>>(op);
   if (await idTaken(db, 'repairTickets', op.entityId)) {
     throw alreadyRecorded('ticketId', op.entityId);
@@ -697,6 +913,23 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
   );
   const total = payload.quoteLines.reduce((sum, line) => sum + line.amount, 0);
   checkTotal(0, total);
+  // From v2 a ticket names its photo angles and from v3 its repair types, each as some version of
+  // the store's lists asked (v1 had the six fixed angles and no types).
+  if (op.schemaVersion >= 2) {
+    const settings = await readIntakeOptionSettings(db, op.tenantId, storeOf(op));
+    await requireIntakePhotos(
+      db,
+      op,
+      settings,
+      payload.photos.map((photo) => photo.slot),
+    );
+    if (op.schemaVersion >= 3 && payload.repairTypes.length > 0) {
+      requireRepairTypeTerms(
+        payload.repairTypes,
+        await listVersions(db, op, 'repairTypes', settings.lists.repairTypes),
+      );
+    }
+  }
   // From v4 the customer's ownership video comes with the intake that needs one.
   if (
     op.schemaVersion >= 4 &&
@@ -715,10 +948,12 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
       {
         customerId: payload.customerId,
         imei: payload.device.imei,
+        brand: payload.device.brand,
+        model: payload.device.model,
         repairTypes: payload.repairTypes,
         total,
       },
-      holdsPermission,
+      ctx,
     );
   }
   for (const line of payload.quoteLines) {
@@ -726,31 +961,44 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
       throw alreadyRecorded('quoteLines', line.lineId);
     }
   }
-  const number = payload.ticketNumber;
   // A re-enrolled phone carries over tickets its earlier registration numbered offline.
-  const devices = await carriedRegistrations(db, op.deviceId);
-  const minted = devices.some((device) => number.startsWith(`${deviceCode(device)}-`));
-  if (!minted || ticketCounter(number) === null) {
-    throw refuse('numberNotThisDevice', {
-      code: 'VALIDATION_FAILED',
-      details: { field: 'ticketNumber', issue: 'not minted by this device' },
-      message: `ticket number ${number} does not belong to device ${op.deviceId}`,
-    });
-  }
-  if (await deviceUsedNumber(db, op, number, devices)) {
-    throw refuse('numberUsed', {
-      code: 'VALIDATION_FAILED',
-      details: { field: 'ticketNumber', issue: 'already used' },
-      message: `ticket number ${number} is already used by this device`,
-    });
-  }
+  const number = payload.ticketNumber;
+  await requireDeviceNumber(db, op, {
+    number,
+    prefix: '',
+    table: 'repair_tickets',
+    column: 'ticket_number',
+    notThisDevice: () =>
+      refuse('numberNotThisDevice', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'ticketNumber', issue: 'not minted by this device' },
+        message: `ticket number ${number} does not belong to device ${op.deviceId}`,
+      }),
+    used: () =>
+      refuse('numberUsed', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'ticketNumber', issue: 'already used' },
+        message: `ticket number ${number} is already used by this device`,
+      }),
+  });
 };
 
+/**
+ * Take a servisan. v2 takes it only from whom it names (nobody, or the technician the person saw):
+ * when someone else took it in the meantime, on another device, the claim is refused and that
+ * person keeps it. v1 takes it from whoever holds it.
+ */
 export const ticketClaimedRule: Rule = async (op, { db }) => {
   const ticket = await loadTicket(db, op);
   requireOpen(ticket, op.type);
   if (ticket.technicianId === op.userId) {
     throw invalidTransition(ticket, op.type, 'alreadyYours', 'already yours');
+  }
+  if (op.schemaVersion >= 2) {
+    const { from } = payloadOf<Payload<typeof ticketClaimedPayload>>(op);
+    if (ticket.technicianId !== from) {
+      throw invalidTransition(ticket, op.type, 'takenElsewhere', 'someone else took it meanwhile');
+    }
   }
 };
 
@@ -788,6 +1036,10 @@ export const workStartedRule: Rule = async (op, { db }) => {
   if (ticket.technicianId === null) {
     throw invalidTransition(ticket, op.type, 'noTechnician', 'nobody has taken the ticket');
   }
+  // v2: the work is whoever holds it; someone else takes it over first (startWork does).
+  if (op.schemaVersion >= 2 && ticket.technicianId !== op.userId) {
+    throw invalidTransition(ticket, op.type, 'takenElsewhere', 'someone else holds it');
+  }
   if (!(await hasWorkPhoto(db, op, 'before'))) {
     throw missingPhotos('before', `ticket ${ticket.ticketNumber} has no before photo yet`);
   }
@@ -812,28 +1064,140 @@ export const markedRepairedRule: Rule = async (op, { db }) => {
 
 /**
  * Cancel an open ticket. A fee below the store's standard fee is a price drop: an owner's to give,
- * and a limited role's (a manager's) within its store's limit. The standard fee is the store's as
- * these records have it, not the payload's, which the device writing it could set to anything.
+ * and a limited role's (a manager's) within its store's limit, together with the servisan's
+ * discounts. The standard fee is the store's as these records have it, not the payload's, which the
+ * device writing it could set to anything.
  */
 export const ticketCancelledRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
   requireOpen(ticket, op.type);
-  // v1, from before fees, charged nothing and named no fee.
-  const fee = payloadOf<{ fee?: number }>(op).fee;
-  if (fee === undefined) return;
-  const fees = await ctx.db
+  // A handover taken back was charged and paid for: it goes home again, it is not cancelled.
+  if (ticket.returnedAt !== null) {
+    throw invalidTransition(ticket, op.type, 'handedOverBefore', 'it was handed over before');
+  }
+  // v1, from before fees, names no fee and charges nothing (the applier records no fee): a drop
+  // of the whole standard fee, which an older phone must not get past the limit with.
+  const { fee: named, standardFee } = payloadOf<{ fee?: number; standardFee?: number }>(op);
+  const fee = named ?? 0;
+  const standard = await standardFeeOf(ctx.db, op, ticket);
+  // The record keeps both fees, and the owners' cancel list flags a fee below the store's, so the
+  // store's fee recorded must be one the store has had: a device offline may have known an older
+  // one, or not yet known that work started. A fee the store never had was forged. Whatever it
+  // names, a limited role's drop is measured from the store's fee now.
+  const versions = [
+    NO_CANCEL_FEES,
+    ...(await pastPayloads<CancelFees>(ctx.db, REPAIR_OP.storeCancelFeesChanged, storeOf(op))),
+  ];
+  // Capped at the repair price as it stands here, or not at all: a phone from before the cap.
+  const known = versions.some((version) =>
+    [false, true].some((workStarted) =>
+      [0, ticket.quoteTotal].some(
+        (quoteTotal) =>
+          standardCancelFee(
+            { workStarted, claimOfTicketId: ticket.claimOfTicketId, quoteTotal },
+            version,
+          ) === standardFee,
+      ),
+    ),
+  );
+  if (named !== undefined && standardFee !== standard && !known) {
+    throw refuse('cancelFeeChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'standardFee', issue: `the store never had a fee of ${standardFee}` },
+      message: `ticket ${ticket.ticketNumber}: the store's cancellation fee is ${standard}`,
+    });
+  }
+  const counted = cancelDrop(standard, fee, await discountsStanding(ctx.db, op));
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, counted);
+};
+
+/** The store's cancellation fee for this ticket as these records have it now. */
+async function standardFeeOf(db: Db, ref: TicketRef, ticket: TicketState): Promise<number> {
+  const fees = await db
     .selectFrom('repairStoreCancelFees')
     .select(['beforeWork', 'afterWork'])
-    .where('storeId', '=', storeOf(op))
+    .where('storeId', '=', storeOf(ref))
     .executeTakeFirst();
-  const standard = standardCancelFee(
-    { workStarted: (await lastStartedAt(ctx.db, op)) > 0, claimOfTicketId: ticket.claimOfTicketId },
+  return standardCancelFee(
+    {
+      workStarted: (await lastStartedAt(db, ref)) > 0,
+      claimOfTicketId: ticket.claimOfTicketId,
+      quoteTotal: ticket.quoteTotal,
+    },
     fees === undefined
       ? NO_CANCEL_FEES
       : { beforeWork: Number(fees.beforeWork), afterWork: Number(fees.afterWork) },
   );
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, standard - fee);
-};
+}
+
+/**
+ * What an approval request about a servisan depends on (approvals/kinds.ts): where it is, how it
+ * stands and its price. Null when this store has no such servisan.
+ */
+export async function ticketApprovalBasis(db: Db, ref: TicketRef): Promise<string | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined) return null;
+  // Lines are only ever added, so a price that comes back to the same total still moves the basis.
+  const lines = await db
+    .selectFrom('repairQuoteLines')
+    .select(sql<number>`count(*)`.as('count'))
+    .where('ticketId', '=', ref.entityId)
+    .where('storeId', '=', storeOf(ref))
+    .executeTakeFirst();
+  return [ticket.outcome, ticket.location, ticket.quoteTotal, Number(lines?.count ?? 0)].join('|');
+}
+
+/** What the discounts standing on a servisan take off (all but declined ones). */
+export async function ticketDiscounts(db: Db, ref: TicketRef): Promise<number> {
+  return discountsStanding(db, ref);
+}
+
+/** The fee a cancel of this open servisan is held to now, or null when it cannot be cancelled. */
+export async function cancelStandardFee(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined || ticket.location === 'returned' || ticket.outcome === 'cancelled') {
+    return null;
+  }
+  return standardFeeOf(db, ref, ticket);
+}
+
+/**
+ * The store's fee a change to a cancelled servisan's fee counts from (`cancelFeeChangedRule`), or
+ * null when there is no fee to change: not cancelled, or already charged, when a lower bill is a
+ * cut off the charge instead (money's own, with its own limit).
+ */
+export async function cancelledFeeStandard(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined || ticket.outcome !== 'cancelled') return null;
+  const charged = await documentTotal(
+    db as unknown as Kysely<never>,
+    storeOf(ref),
+    { kind: REPAIR_DOCUMENT_KIND, id: ref.entityId },
+    'charge_recorded',
+  );
+  return charged > 0 ? null : standardFeeOf(db, ref, ticket);
+}
+
+/**
+ * What a cancelled servisan bills now, once it is charged (the charge less what was taken off it):
+ * what Ubah biaya lowers then. Null while nothing is charged or when it is not cancelled.
+ */
+export async function cancelledFeeBilled(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (ticket === undefined || ticket.outcome !== 'cancelled') return null;
+  const money = db as unknown as Kysely<never>;
+  const document = { kind: REPAIR_DOCUMENT_KIND, id: ref.entityId };
+  const charged = await documentTotal(money, storeOf(ref), document, 'charge_recorded');
+  if (charged === 0) return null;
+  return charged - (await documentTotal(money, storeOf(ref), document, 'charge_reduced'));
+}
+
+/** What a fee change is asked against: the servisan, and the fee it has now. */
+export async function cancelFeeApprovalBasis(db: Db, ref: TicketRef): Promise<string | null> {
+  const basis = await ticketApprovalBasis(db, ref);
+  const ticket = await findTicket(db, ref);
+  return basis === null || ticket === undefined ? null : `${basis}|${ticket.cancelFee ?? ''}`;
+}
 
 /** A technician's suggestion; one the cashier could never apply would only block handover. */
 export const quoteChangeProposedRule: Rule = async (op, ctx) => {
@@ -850,16 +1214,18 @@ export const quoteChangeProposedRule: Rule = async (op, ctx) => {
 /**
  * A price change by the cashier: a new line, or applying a technician's open proposal. Applying a
  * proposal is the customer agreeing to it; a new line waits exactly when the customer has not
- * agreed yet (v2; a v1 line has no `waitsForCustomer` and counted at once).
+ * agreed yet. A v1 line has no `waitsForCustomer` and counts at once, so it needs the customer's
+ * yes too (synced v1 history replays through the applier, which no rule judges).
  */
 export const quoteChangedRule: Rule = async (op, ctx) => {
   const { db, holdsPermission } = ctx;
   const line = payloadOf<Payload<typeof quoteChangedPayload>>(op);
   checkLineSign(line.kind, line.amount);
   await requireDiscountPermission(op, ctx, [line.amount], line.lineId);
+  const waits = op.schemaVersion >= 2 && line.waitsForCustomer;
   const agreementMismatch = line.fromProposal
     ? !line.customerAgreed
-    : op.schemaVersion >= 2 && line.waitsForCustomer !== !line.customerAgreed;
+    : waits !== !line.customerAgreed;
   if (agreementMismatch) {
     throw refuse('customerAgreementMismatch', {
       code: 'VALIDATION_FAILED',
@@ -930,6 +1296,145 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
   if (op.schemaVersion >= 3) await requireHandoverChecks(db, op);
 };
 
+/**
+ * What a cancelled servisan costs, changed afterwards (owner decision), before or after pickup. A
+ * fee below the store's counts against a limited role's (a manager's) cancel limit, as at cancel.
+ */
+export const cancelFeeChangedRule: Rule = async (op, ctx) => {
+  const ticket = await loadTicket(ctx.db, op);
+  if (ticket.outcome !== 'cancelled') {
+    throw invalidTransition(ticket, op.type, 'notCancelled', 'the servisan is not cancelled');
+  }
+  const { fee } = payloadOf<Payload<typeof cancelFeeChangedPayload>>(op);
+  if (fee === (ticket.cancelFee ?? 0)) {
+    throw refuse('nothingChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'fee', issue: 'the fee is already this' },
+    });
+  }
+  const standard = await standardFeeOf(ctx.db, op, ticket);
+  const counted = cancelDrop(standard, fee, await discountsStanding(ctx.db, op));
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, counted);
+  // Once charged, the fee is what was charged: a lower bill is a cut off the charge (money's
+  // charge_reduced, judged by its own limit), never a lower fee, so fee and ledger never part.
+  const charged = await documentTotal(
+    ctx.db as unknown as Kysely<never>,
+    storeOf(op),
+    { kind: REPAIR_DOCUMENT_KIND, id: op.entityId },
+    'charge_recorded',
+  );
+  if (fee < charged) {
+    throw invalidTransition(ticket, op.type, 'feeBelowCharged', 'the fee is already charged');
+  }
+};
+
+/**
+ * Taking a handover back (owner decision): only one that happened, and not once a warranty claim
+ * was opened on it, since that claim already counts from this pickup.
+ */
+export const handoverReversedRule: Rule = async (op, ctx) => {
+  const { db } = ctx;
+  const ticket = await loadTicket(db, op);
+  if (ticket.location !== 'returned') {
+    throw invalidTransition(ticket, op.type, 'notReturned', 'the phone has not been handed over');
+  }
+  // Counted from the first handover, so taking it back again and again never stretches it. The
+  // server holds it to when it received the undo too, so a phone clock set back cannot stretch it.
+  const at = Math.max(op.timestamp, ctx.receivedAt ?? op.timestamp);
+  if (ticket.returnedAt === null || at - ticket.returnedAt > HANDOVER_UNDO_WINDOW_MS) {
+    throw invalidTransition(ticket, op.type, 'undoTooLate', 'the handover was too long ago');
+  }
+  // What went home is at stake: a limited role (a manager) only within its cancel limit.
+  const owed = ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.cancel, owed);
+  const claim = await db
+    .selectFrom('repairTickets')
+    .select('id')
+    .where('claimOfTicketId', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  if (claim !== undefined) {
+    throw invalidTransition(ticket, op.type, 'handoverHasClaim', 'a warranty claim names it');
+  }
+};
+
+/**
+ * Intake's record is corrected only while the phone is in the store: after pickup the slip the
+ * customer signed is the record. A claim is for the phone its servisan repaired, so its brand,
+ * model and IMEI stay as they are. A correction says what changed; moving the servisan to another
+ * customer is a correction too, and like the rest it ends at pickup.
+ */
+export const ticketDetailsCorrectedRule: Rule = async (op, { db }) => {
+  const ticket = await loadTicket(db, op);
+  if (ticket.location === 'returned') {
+    throw invalidTransition(ticket, op.type, 'returned', 'the device has already been returned');
+  }
+  const payload = payloadOf<Payload<typeof ticketDetailsCorrectedPayload>>(op);
+  if (Object.keys(payload).every((field) => field === 'reason')) {
+    throw refuse('nothingChanged', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'device', issue: 'nothing to correct' },
+    });
+  }
+  // After a handover (since taken back) the slip the customer signed names them and that phone.
+  const handedOver = ticket.returnedAt !== null;
+  if (handedOver && (payload.customer !== undefined || payload.customerId !== undefined)) {
+    throw invalidTransition(ticket, op.type, 'handedOverBefore', 'it was handed over before');
+  }
+  if (payload.customerId !== undefined) {
+    // The history's "now" must be the customer the servisan moves to.
+    const target = await db
+      .selectFrom('repairCustomers')
+      .select(['name', 'phone'])
+      .where('id', '=', payload.customerId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirst();
+    if (target === undefined) throw notFound(REPAIR_CUSTOMER_ENTITY, payload.customerId);
+    if (
+      payload.customer === undefined ||
+      payload.customer.name !== target.name ||
+      payload.customer.phone !== target.phone
+    ) {
+      throw refuse('customerMismatch', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'customer', issue: 'not the customer it moves to' },
+      });
+    }
+  } else if (payload.customer !== undefined) {
+    // Without a move the servisan's customer is renamed in place, under the same rule as a rename.
+    const row = await db
+      .selectFrom('repairTickets')
+      .select('customerId')
+      .where('id', '=', op.entityId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirstOrThrow();
+    await requireRenamable(db, op, row.customerId);
+  }
+  const lockedPhone = ticket.claimOfTicketId !== null || handedOver;
+  if (lockedPhone && payload.device !== undefined) {
+    const row = await db
+      .selectFrom('repairTickets')
+      .select(['deviceBrand', 'deviceModel', 'deviceImei'])
+      .where('id', '=', op.entityId)
+      .where('tenantId', '=', op.tenantId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirstOrThrow();
+    if (
+      row.deviceBrand !== payload.device.brand ||
+      row.deviceModel !== payload.device.model ||
+      row.deviceImei !== payload.device.imei
+    ) {
+      throw refuse(handedOver ? 'handedOverBefore' : 'claimSamePhone', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'device', issue: 'the phone is the one on the signed slip' },
+      });
+    }
+  }
+};
+
 function ownershipVideoNeeded(): DomainError {
   return refuse('ownershipVideoNeeded', {
     code: 'VALIDATION_FAILED',
@@ -964,16 +1469,9 @@ async function requireHandoverChecks(db: Db, op: SignedOperation): Promise<void>
  * leaves a balance, so this is refused too.
  */
 async function requirePaid(op: SignedOperation, ctx: Parameters<Rule>[1]): Promise<void> {
-  const { db } = ctx;
   const unpaidReason =
     payloadOf<Partial<Payload<typeof deviceReturnedPayload>>>(op).unpaidReason ?? null;
-  const lookup = { tenantId: op.tenantId, storeId: op.storeId ?? '', documentId: op.entityId };
-  const ledger = db as unknown as Kysely<never>;
-  const expected = await repairMoneyDocument.charge(ledger, lookup);
-  const document = { kind: REPAIR_DOCUMENT_KIND, id: op.entityId };
-  const charged = await documentTotal(ledger, lookup.storeId, document, 'charge_recorded');
-  const owed = (expected?.amount ?? 0) > charged;
-  const balance = await documentBalance(ledger, lookup.storeId, document);
+  const { owed, balance } = await ticketLedger(ctx.db, op);
   if (!owed && balance <= 0) return;
   if (unpaidReason === null) {
     throw refuse('notPaid', {
@@ -981,7 +1479,15 @@ async function requirePaid(op: SignedOperation, ctx: Parameters<Rule>[1]): Promi
       details: { field: 'payments', issue: 'the servisan is not paid in full' },
     });
   }
-  if (!(await ctx.holdsPermission(op.userId, MONEY_PERMISSION.extendCredit))) {
+  // An owner's approved "Bayar nanti" lets anyone at the counter leave a debt up to its amount.
+  const permit = await approvedPermit(ctx.db as unknown as Kysely<never>, {
+    tenantId: op.tenantId,
+    storeId: storeOf(op),
+    kind: REPAIR_APPROVAL_KIND.payLater,
+    targetId: op.entityId,
+  });
+  const permitted = permit !== null && permit >= balance;
+  if (!permitted && !(await ctx.holdsPermission(op.userId, MONEY_PERMISSION.extendCredit))) {
     throw refuse('unpaidOwnerOnly', {
       code: 'PERMISSION_DENIED',
       details: { permissionId: MONEY_PERMISSION.extendCredit },
@@ -994,8 +1500,42 @@ async function requirePaid(op: SignedOperation, ctx: Parameters<Rule>[1]): Promi
       details: { field: 'charge', issue: 'the servisan is not charged' },
     });
   }
+  if (permitted) return;
   // A limited role (a manager) lets a phone go only for a debt within its store's limit.
   await requireWithinLimit(op, ctx, MONEY_PERMISSION.extendCredit, balance);
+}
+
+/** Whether the servisan is charged less than it costs, and what is left to pay on what it is. */
+async function ticketLedger(db: Db, ref: TicketRef) {
+  const lookup = { tenantId: ref.tenantId, storeId: storeOf(ref), documentId: ref.entityId };
+  const ledger = db as unknown as Kysely<never>;
+  const expected = await repairMoneyDocument.charge(ledger, lookup);
+  const document = { kind: REPAIR_DOCUMENT_KIND, id: ref.entityId };
+  const charged = await documentTotal(ledger, lookup.storeId, document, 'charge_recorded');
+  const balance = await documentBalance(ledger, lookup.storeId, document);
+  return {
+    expected: expected?.amount ?? 0,
+    charged,
+    owed: (expected?.amount ?? 0) > charged,
+    balance,
+  };
+}
+
+/**
+ * What the customer would owe if the phone left now unpaid: its price or fee, less what they paid.
+ * Null unless it is ready to collect (repaired or cancelled, still in the store).
+ */
+export async function handoverDebt(db: Db, ref: TicketRef): Promise<number | null> {
+  const ticket = await findTicket(db, ref);
+  if (
+    ticket === undefined ||
+    ticket.location !== 'in_store' ||
+    (ticket.outcome !== 'repaired' && ticket.outcome !== 'cancelled')
+  ) {
+    return null;
+  }
+  const { expected, charged, balance } = await ticketLedger(db, ref);
+  return Math.max(0, Math.max(0, expected - charged) + balance);
 }
 
 /** One franchise list, written to the tenant's single options record and meeting the list rules. */
@@ -1046,7 +1586,9 @@ export const downPaymentReceivedRule: Rule = async (op, { db }) => {
 
 /**
  * An owner's correction, at any time, of a ticket in this store (older devices; newer ones void
- * and re-record the payment in the ledger). Lowering it is within a limited role's limit only.
+ * and re-record the payment in the ledger, which the refund limit counts). Lowering it is an
+ * owner's alone: nothing counts it with the servisan's other price drops, and no phone that knows
+ * limited roles (managers) writes it, so no limit covers it.
  */
 export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
   const ticket = await loadTicket(ctx.db, op);
@@ -1056,8 +1598,9 @@ export const downPaymentCorrectedRule: Rule = async (op, ctx) => {
     .select('downPayment')
     .where('id', '=', ticket.id)
     .executeTakeFirst();
-  const recorded = Number(row?.downPayment ?? 0);
-  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, recorded - amount);
+  const drop = Number(row?.downPayment ?? 0) - amount;
+  const judged = drop > 0 ? Number.MAX_SAFE_INTEGER : drop;
+  await requireWithinLimit(op, ctx, REPAIR_PERMISSION.correctDownPayment, judged);
 };
 
 /**
@@ -1073,5 +1616,33 @@ export const slipPrintedRule: Rule = async (op, { db }) => {
     ticket.outcome === 'cancelled';
   if (slip === 'handover' && !ready) {
     throw invalidTransition(ticket, op.type, 'notFinished', 'not ready to hand over');
+  }
+};
+
+/**
+ * One status link per servisan, made with it: a second would leave a printed link dead. Its code
+ * must be the one its nonce gives this servisan, so a code copied off another store's slip is
+ * refused.
+ */
+export const statusLinkMadeRule: Rule = async (op, { db, sha256 }) => {
+  const { code, nonce } = payloadOf<z.infer<typeof statusLinkMadePayload>>(op);
+  const owner = { tenantId: op.tenantId, storeId: storeOf(op), ticketId: op.entityId };
+  if (code !== statusCodeFor(owner, nonce, sha256)) {
+    throw refuse('statusLinkMismatch', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'code', issue: 'does not match its nonce' },
+      message: `status link of ${op.entityId} does not match its nonce`,
+    });
+  }
+  await loadTicket(db, op);
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('statusCode')
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  if ((row?.statusCode ?? null) !== null) {
+    throw alreadyRecorded('statusLink', op.entityId);
   }
 };

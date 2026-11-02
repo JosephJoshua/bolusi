@@ -304,6 +304,7 @@ const EXPECTED_SERVER_OPS = {
   'repair.quote_change_proposed': 1,
   // The counter's screen protector and the technician's battery once the customer agreed.
   'repair.quote_changed': 2,
+  'repair.status_link_made': 1,
   'repair.ticket_claimed': 1,
   'repair.ticket_opened': 1,
   'repair.ticket_repair_types_changed': 1,
@@ -360,7 +361,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     const clip = await video(counter);
     const opened = await act(counter, 'repair')('openTicket', {
       customer: { name: 'Yakobus Mandowen', phone: '0813-4455-6677' },
-      device: { brand: 'Samsung', model: 'Galaxy A54', color: 'Hitam', imei: '356789104455667' },
+      device: { brand: 'Samsung', model: 'Galaxy A54', color: 'Hitam', imei: '356789104455660' },
       complaint: 'Layar bergaris, baterai cepat habis',
       checklist: [{ item: 'screen', label: null, state: 'issue', note: 'garis hijau' }],
       peripherals: [{ item: 'charger', label: null }],
@@ -469,6 +470,7 @@ describe('one servisan from intake to handover, offline in between', () => {
       outcome: 'repaired',
       quoteTotal: total,
       pendingProposals: 0,
+      reduced: 0,
       // Paid so far: the DP and the rest at pickup.
       downPayment: total,
     });
@@ -663,4 +665,26 @@ describe('one servisan from intake to handover, offline in between', () => {
     `.execute(running.server.db);
     expect(books.rows[0]!.net).toBe('0');
   }, 300_000);
+
+  test("the PC's language stays after a power cut and follows its person to the server", async () => {
+    const pc = await openDevice('PC Bahasa');
+    await signIn(pc, owner, lane.pin);
+    expect((await pc.state()).locale).toBe('id');
+    await pc.call('device.setLocale', owner, 'en');
+    expect((await pc.state()).locale).toBe('en');
+    // A language with no catalog yet is refused.
+    await expect(pc.call('device.setLocale', owner, 'zh')).rejects.toThrow();
+
+    const restarted = await powerCut(pc);
+    expect((await restarted.state()).locale).toBe('en');
+    await restarted.setOnline(true);
+    await signIn(restarted, owner, lane.pin);
+    await settle(restarted);
+    const { rows } = await sql<{ locale: string }>`
+      SELECT payload->>'locale' AS locale FROM operations
+      WHERE tenant_id = ${lane.tenantId} AND type = 'platform.user_locale_changed'
+        AND entity_id = ${owner}
+    `.execute(running.server.db);
+    expect(rows).toEqual([{ locale: 'en' }]);
+  }, 120_000);
 });

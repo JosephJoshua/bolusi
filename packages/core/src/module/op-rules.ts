@@ -38,11 +38,22 @@ export interface OpRuleContext<DB> {
    */
   holdsPermission(userId: string, permissionId: string): Promise<boolean>;
   /**
+   * SHA-256 from the judging side's crypto port, for a value an op must have derived by hash (a
+   * customer's status link code) rather than chosen.
+   */
+  sha256(data: Uint8Array): Uint8Array;
+  /**
    * Whether `userId` holds `permissionId` in the op's store AND may use it for `amount` rupiah:
    * within the limit their store set for a limited role (authz/limits.ts), or with no limit. The
    * same directory as `holdsPermission`.
    */
   withinLimit(userId: string, permissionId: string, amount: number): Promise<boolean>;
+  /**
+   * When the server received the op (ms epoch, server clock); absent on a device, which judges by
+   * the op's own timestamp. A rule whose verdict turns on time and must not trust the author's
+   * clock (a phone set back to open a free warranty claim) judges by this when present.
+   */
+  readonly receivedAt?: number;
 }
 
 /** Throws a `DomainError` when `op` must not be recorded against the current records. */

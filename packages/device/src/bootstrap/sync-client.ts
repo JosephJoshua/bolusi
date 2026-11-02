@@ -24,10 +24,13 @@
 // every connectivity change. `syncState()` is RE-READ from `sync_state` after each cycle, so the
 // banner clears from the real column (T-19), never a `?? Date.now()`.
 import {
+  clearHeldText,
+  drainPendingVerifiers,
   OP_SYNC_STATUS_TABLE,
   readSyncState,
   SyncLoop,
   type PulledBatch,
+  type PullReadScope,
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
@@ -47,6 +50,7 @@ import type { FirstSyncProgress } from '../models/sync-status/model.js';
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
 import { createPhoneCatalogRefresher } from './phone-catalog.js';
+import { createFetchPinVerifierUpload } from './pin-verifier-transport.js';
 import {
   createRealtimeController,
   type RealtimeHandle,
@@ -59,7 +63,8 @@ import type {
 } from './background-task.js';
 import { registerSyncTask } from './background-sync.js';
 import { readOldestOpAt } from './sync-status-reads.js';
-import { createFetchSyncTransport } from './transport.js';
+import { knowsOp } from './known-op.js';
+import { createFetchPersonTransport, createFetchSyncTransport } from './transport.js';
 import {
   createSyncTriggers,
   type AppStatePort,
@@ -83,6 +88,10 @@ export interface SyncClientDeps {
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   /** `ProjectionEngine.refoldRefused` — the push phase takes a refused op out of its record. */
   readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
+  /** Can this build fold the op? One from a newer app pauses the pull until this app updates. */
+  readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
+  /** Follow the server's read set: drop what this device may no longer read, catch up on the new. */
+  readonly readScope: PullReadScope;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -96,6 +105,8 @@ export interface SyncClientDeps {
   readonly pullLimit?: number;
   /** After a push changed ops' sync status (see `SyncLoopOptions.onPushed`). */
   readonly onPushed?: () => void;
+  /** After each cycle settles, through or backed off (the person store follows the device's). */
+  readonly onCycleSettled?: () => void;
   /**
    * Task 105: given the loop's trigger, build the realtime controller (task 20). Its `start`/`stop`
    * RIDE the loop's — started after `hydrate()` (a trigger before hydrate throws), stopped on teardown —
@@ -133,6 +144,12 @@ export interface SyncClient {
   startForBackgroundPass(): Promise<void>;
   /** (e) pull-to-refresh. */
   requestManual(): void;
+  /**
+   * What became of the last "Kirim sekarang": still sending, or the bare error code its attempt
+   * failed with (null once it got through), so the screen answers the press instead of waiting for
+   * the next automatic try to say anything.
+   */
+  manualSync(): ManualSyncStatus;
   /** (d) one background-task pass. */
   requestBackground(): void;
   /** Stop the running cycle at its next committed pull batch, for a background pass out of time. */
@@ -160,6 +177,15 @@ export interface SyncClient {
   settle(): Promise<void>;
 }
 
+/** The last manual sync's outcome, as `SyncStatusInput.manualSyncBusy` / `manualSyncError`. */
+export interface ManualSyncStatus {
+  readonly busy: boolean;
+  readonly error: string | null;
+}
+
+/** The code a failed manual sync shows when the loop recorded none (a bundle refresh, say). */
+const MANUAL_SYNC_FALLBACK_ERROR = 'NETWORK';
+
 class SyncClientImpl implements SyncClient {
   private readonly loop: SyncLoop<ClientDatabase>;
   private readonly triggers: SyncTriggers;
@@ -175,6 +201,9 @@ class SyncClientImpl implements SyncClient {
   private background: BackgroundRegistration | null = null;
   private lease: BackgroundLease | null = null;
   private stopped = false;
+  private manual: ManualSyncStatus = { busy: false, error: null };
+  /** Counts presses, so only the latest one's outcome is shown. */
+  private manualPresses = 0;
 
   constructor(private readonly deps: SyncClientDeps) {
     this.currentSyncState = deps.initialSyncState;
@@ -203,6 +232,8 @@ class SyncClientImpl implements SyncClient {
       timer: deps.timer,
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
+      knowsOp: deps.knowsOp,
+      readScope: deps.readScope,
       refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
@@ -278,7 +309,15 @@ class SyncClientImpl implements SyncClient {
   }
 
   requestManual(): void {
+    this.manualPresses += 1;
+    const press = this.manualPresses;
+    this.manual = { busy: true, error: null };
     this.triggers.requestManual();
+    void this.afterManual(press);
+  }
+
+  manualSync(): ManualSyncStatus {
+    return this.manual;
   }
 
   requestBackground(): void {
@@ -343,7 +382,26 @@ class SyncClientImpl implements SyncClient {
 
   private request(reason: SyncTriggerReason): void {
     this.loop.requestSync(reason);
+    // Say at once that a cycle is running: a hung server answers nothing for up to a minute.
+    this.notify();
     void this.afterCycle();
+  }
+
+  /**
+   * Once the press's attempt (and a retry it asked for) has settled: through unless the loop backed
+   * off, in which case the error it recorded.
+   */
+  private async afterManual(press: number): Promise<void> {
+    await this.loop.settle().catch(() => undefined);
+    const state = await readSyncState(this.deps.db.db).catch(() => this.currentSyncState);
+    if (press !== this.manualPresses) return;
+    const failed = this.loop.state === 'backoff' && !state.syncDisabled;
+    this.manual = {
+      busy: false,
+      error: failed ? (state.lastSyncError ?? MANUAL_SYNC_FALLBACK_ERROR) : null,
+    };
+    this.currentSyncState = state;
+    this.notify();
   }
 
   /**
@@ -398,6 +456,7 @@ class SyncClientImpl implements SyncClient {
     this.currentSyncState = await readSyncState(this.deps.db.db).catch(() => this.currentSyncState);
     if (this.currentSyncState.lastSuccessfulSyncAt !== null) this.firstSyncProgress = null;
     this.notify();
+    this.deps.onCycleSettled?.();
   }
 }
 
@@ -437,6 +496,26 @@ export interface SyncClientForAppConfig {
 }
 
 /**
+ * How a booted app follows its read set (permission-scoped sync): which permission reads each op
+ * type, and how to rebuild a record or move the watermarks after a drop. The registry is read
+ * lazily, like `knowsOp`: it is looked up when a pull needs it.
+ */
+export function readScopeOf(
+  app: Pick<Bootstrapped, 'registry' | 'engine' | 'deviceReads' | 'person'>,
+): PullReadScope {
+  return {
+    deviceReads: app.deviceReads,
+    beforeGrow: (added) => app.person.beforeDeviceGrows(added),
+    registry: {
+      types: () => app.registry.operations.types(),
+      readPermissionFor: (type) => app.registry.operations.readPermissionFor(type),
+    },
+    refold: (record) => app.engine.refoldEntityOf(record),
+    catchUpWatermarks: () => app.engine.catchUpPulledWatermarks(),
+  };
+}
+
+/**
  * Build the real sync client over a booted app. This is the platform-facing assembly: the fetch
  * transport (api/01-sync §3/§4) and the bundle producer (api/02-auth §5.2) are built here from the
  * one connection + the token reader; the loop's projection seam is the boot's own engine.
@@ -459,6 +538,20 @@ export function createSyncClientForApp(
       ? {}
       : { onBundleRefreshed: config.onBundleRefreshed }),
     ...(config.onBundleChecked === undefined ? {} : { onBundleChecked: config.onBundleChecked }),
+  });
+  // A signed-in person's reads beyond the device go over the same server and device token.
+  const deviceLeg = {
+    baseUrl: config.baseUrl,
+    deviceToken: config.loadDeviceToken,
+    ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
+  };
+  const uploadPin = createFetchPinVerifierUpload(deviceLeg);
+  app.person.bindTransport({
+    ...createFetchPersonTransport(deviceLeg),
+    // The same queue the bundle check sends: a send twice is one change on the server.
+    sendPendingPins: async () => {
+      await drainPendingVerifiers(app.db.db, uploadPin);
+    },
   });
   const phoneCatalog = createPhoneCatalogRefresher({
     baseUrl: config.baseUrl,
@@ -484,7 +577,13 @@ export function createSyncClientForApp(
     transport,
     bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
-    refoldRefused: (op) => app.engine.refoldRefused(op),
+    knowsOp: (op) => knowsOp(app.registry.operations, op),
+    readScope: readScopeOf(app),
+    // A refused change never happened, on disk or in the signed-in person's store.
+    refoldRefused: async (op) => {
+      await app.engine.refoldRefused(op);
+      await app.person.refuse(op);
+    },
     crypto: config.crypto,
     clock: config.clock,
     timer: config.timer ?? systemTimer,
@@ -493,7 +592,14 @@ export function createSyncClientForApp(
     initialSyncState: app.syncState,
     // Pushed ops changed status without a projection write: say so on the bus the screens read, so
     // a ticket's "waiting to sync" chip or rejected banner updates as the push lands.
-    onPushed: () => app.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE])),
+    // Own changes of types the device does not hold keep only their chain links once sent.
+    onPushed: () => {
+      app.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE]));
+      void clearHeldText(app.db.db, app.deviceReads.heldTypes()).catch(() => undefined);
+    },
+    // The person's store follows the device's after every cycle: a poke, the connection coming
+    // back (which is also when a PIN checked offline goes to the server) and the periodic one.
+    onCycleSettled: () => void app.person.sync(),
     ...(config.background === undefined ? {} : { background: config.background }),
     // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
     // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT
@@ -511,3 +617,4 @@ export function createSyncClientForApp(
       }),
   });
 }
+export { knowsOp } from './known-op.js';

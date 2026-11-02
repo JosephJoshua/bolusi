@@ -27,8 +27,23 @@ export interface PaymentLine {
   readonly manual?: boolean | undefined;
 }
 
-/** `qr`: still to be paid by the customer scanning its QR. */
-export type PaymentLineProblem = 'amount' | 'reference' | 'tendered' | 'qr';
+/**
+ * `pick`: no method picked yet. `method`: the store switched the line's method off since it was
+ * picked. `qr`: still to be paid by the customer scanning its QR.
+ */
+export type PaymentLineProblem = 'amount' | 'pick' | 'method' | 'reference' | 'tendered' | 'qr';
+
+/**
+ * No method picked yet. Where the store takes more than cash nothing is picked for the counter, so
+ * money that came in by transfer is never booked to the drawer for want of a tap; where cash is all
+ * it takes, cash it is.
+ */
+export const NO_METHOD = '';
+
+/** The method a line or a DP names, with "none picked" read as cash where cash is all there is. */
+export function pickedAccount(account: string, accounts: readonly PaymentAccountRow[]): string {
+  return account === NO_METHOD && accounts.length === 0 ? CASH_ACCOUNT : account;
+}
 
 export interface PaymentEntry {
   /** The payments to record, once every line is complete; empty while one is not. */
@@ -110,9 +125,17 @@ export function paymentEntry(
       continue;
     }
     paid += amount;
-    // A method switched off while the line was open counts as the drawer, as its chips show.
-    const account = offeredAccount(line.account, accounts);
-    if (account === line.account && paidByQr(line, qrAccounts)) {
+    const account = pickedAccount(line.account, accounts);
+    if (account === NO_METHOD) {
+      problems[line.key] = 'pick';
+      continue;
+    }
+    // A method switched off while the line was open is picked again, never booked to the drawer.
+    if (!methodOffered(account, accounts)) {
+      problems[line.key] = 'method';
+      continue;
+    }
+    if (paidByQr(line, qrAccounts)) {
       problems[line.key] = 'qr';
       continue;
     }
@@ -147,11 +170,11 @@ export function paymentEntry(
   };
 }
 
-/** A new line for what is still due: the drawer, unless the counter picks another method. */
+/** A new line for what is still due, with no method until the counter picks one. */
 export function newPaymentLine(
   key: string,
   remaining: number,
-  account: string = CASH_ACCOUNT,
+  account: string = NO_METHOD,
 ): PaymentLine {
   return {
     key,
@@ -162,12 +185,24 @@ export function newPaymentLine(
   };
 }
 
+/** Whether the store still offers a method picked earlier: the drawer always. */
+export function methodOffered(account: string, accounts: readonly PaymentAccountRow[]): boolean {
+  return account === CASH_ACCOUNT || accounts.some((row) => `account:${row.id}` === account);
+}
+
 /**
  * The method a payment goes through, as offered here: the one picked while the store still offers
- * it, the drawer otherwise (an account switched off since a draft picked it).
+ * it. None (`NO_METHOD`) when nothing is picked yet, or the account picked was switched off since,
+ * so the counter picks again; where the store takes only cash, cash.
  */
 export function offeredAccount(account: string, accounts: readonly PaymentAccountRow[]): string {
-  return accounts.some((row) => `account:${row.id}` === account) ? account : CASH_ACCOUNT;
+  if (accounts.length === 0) return CASH_ACCOUNT;
+  return methodOffered(account, accounts) ? account : NO_METHOD;
+}
+
+/** Whether a single payment (a DP) still needs its method picked. */
+export function methodMissing(account: string, accounts: readonly PaymentAccountRow[]): boolean {
+  return offeredAccount(account, accounts) === NO_METHOD;
 }
 
 /** Whether a single payment (a DP) still needs the reference its method asks for (an EDC code). */

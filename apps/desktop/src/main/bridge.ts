@@ -47,6 +47,8 @@ export interface UpdatesBridge {
   onChange(listener: (state: UpdateState) => void): () => void;
   /** Restart into the downloaded version. */
   install(): Promise<void>;
+  /** A dialog is open on the counter, so a quiet-time update must wait. */
+  busy(busy: boolean): void;
 }
 
 /** The window around the page, as far as the title bar needs it. */
@@ -57,10 +59,37 @@ export interface WindowBridge {
   onFullscreenChange(listener: (fullscreen: boolean) => void): () => void;
 }
 
+/** Whether the app opens by itself when someone signs in to Windows. */
+export interface StartupBridge {
+  /** Null where the system has no such setting (a build run from source, not on Windows). */
+  get(): Promise<boolean | null>;
+  set(open: boolean): Promise<void>;
+}
+
+/** A camera or microphone as Chromium lists it; the label finds it again under a new id. */
+export interface MediaInputChoice {
+  readonly deviceId: string;
+  readonly label: string;
+}
+
+export interface MediaChoices {
+  /** Null: the first one Windows lists. */
+  readonly camera: MediaInputChoice | null;
+  readonly microphone: MediaInputChoice | null;
+}
+
+/** The camera and microphone this PC's photos and videos use. */
+export interface MediaBridge {
+  choices(): Promise<MediaChoices>;
+  choose(kind: 'camera' | 'microphone', choice: MediaInputChoice | null): Promise<void>;
+}
+
 export interface DesktopBridge {
   readonly printers: PrintersBridge;
+  readonly media: MediaBridge;
   readonly updates: UpdatesBridge;
   readonly window: WindowBridge;
+  readonly startup: StartupBridge;
   readonly core: CoreBridge;
 }
 

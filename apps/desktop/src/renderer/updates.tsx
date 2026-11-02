@@ -1,5 +1,6 @@
-// A downloaded update, offered in the title bar: it installs by itself when the app closes, or now
-// if the counter has a quiet moment. Nothing shows while there is nothing to install.
+// A downloaded update, offered in the title bar: it installs by itself when the app closes or the
+// counter has been quiet for a while, or now if someone chooses to. Nothing shows while there is
+// nothing to install.
 import { t } from '@bolusi/i18n';
 import { Menu } from '@bolusi/ui-web';
 import { CircleArrowUp, RotateCw } from 'lucide-react';
@@ -89,4 +90,32 @@ export function useAppVersion(updates: UpdatesBridge | undefined = updatesBridge
     };
   }, [updates]);
   return version;
+}
+
+/** What counts as someone in the middle of something: any open dialog (camera, phone, print, confirm). */
+const OPEN_DIALOG = '[role="dialog"], [role="alertdialog"]';
+
+/**
+ * Tells the main process whenever a dialog opens or closes, so a quiet-time update never restarts
+ * the app under a phone handoff or a print. Dialogs mount in portals straight under `body`, so
+ * watching its children is enough and costs nothing while the counter is idle.
+ */
+export function useReportBusy(updates: UpdatesBridge | undefined = updatesBridge()): void {
+  useEffect(() => {
+    if (updates === undefined) return;
+    let busy = false;
+    const report = (): void => {
+      const now = document.querySelector(OPEN_DIALOG) !== null;
+      if (now === busy) return;
+      busy = now;
+      updates.busy(now);
+    };
+    const observer = new MutationObserver(report);
+    observer.observe(document.body, { childList: true });
+    report();
+    return () => {
+      observer.disconnect();
+      if (busy) updates.busy(false);
+    };
+  }, [updates]);
 }
