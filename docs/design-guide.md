@@ -37,6 +37,11 @@ competing hierarchy, not missing decoration.
   this person takes next for where it stands, at most one real alternative
   ("Tunggu sparepart" while working), and the rarer moves under "Lainnya".
   A row of every status change is CRUD thinking (`arrangeTicketActions`).
+  Corrections to a finished record (money back on a settled bill, a part taken
+  after pickup) also wait under "Lainnya".
+- Status data leads with "Tandai sudah dicek" when changes were refused and with
+  "Kirim sekarang" only when work waits; otherwise sending is a quiet link (`syncLead`).
+  Refusal codes are for support, behind "Lihat detail untuk laporan".
 - **Destructive actions** are danger `TextButton`s placed apart at the end
   ("Batalkan servisan"), then confirmed in `ConfirmSheet`. They are never a
   solid red block that looks like the next step.
@@ -156,8 +161,9 @@ setting).
 ## 7. States are part of the design
 
 Every screen ships loading (skeleton for lists, not spinners), empty, error and
-offline or stale states, plus the success feedback after an action ("Servisan
-mulai dikerjakan."). A refused action shows a banner in the fixed slot, never
+offline or stale states. A new device still on its first sync shows loading rows,
+never "Belum ada …" (`List` and `DataTable` read `setDataArriving`). Every
+action shows its success feedback ("Servisan mulai dikerjakan."). A refused action shows a banner in the fixed slot, never
 only at the top of a scrolled page. Refused changes on the record you are looking
 at show the same strip at the top of the page (`AppShell` `pageBanner`), so it
 scrolls away instead of covering rows at a large font. Sync state is a quiet chip, not an alarm.
