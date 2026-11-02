@@ -263,7 +263,7 @@ describe('video player', () => {
       .mockResolvedValueOnce({ kind: 'ready', url: 'blob:arrived' });
     void dialogs.capture.play({ title: 'Video kepemilikan' }, load);
     expect((await screen.findByTestId('desktop.videoPlayer.problem')).textContent).toContain(
-      'belum terkirim',
+      'belum tersinkron',
     );
     fireEvent.click(screen.getByTestId('desktop.videoPlayer.retry'));
     expect(await screen.findByTestId('desktop.videoPlayer.video')).not.toBeNull();
