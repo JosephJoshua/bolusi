@@ -602,6 +602,8 @@ export function TicketDetail({
       ? { next: null, alternative: null, more: [] }
       : arrangeTicketActions(actions, ticket, runtime.userId);
   const primary = layout.next ?? undefined;
+  // Cancelling the servisan or taking its handover back: at the end of the page and in "Lainnya".
+  const finals = [...FINAL_ACTIONS].filter((action) => actions.includes(action));
   const messageKind =
     ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
   const claimAction =
@@ -697,6 +699,19 @@ export function TicketDetail({
                   item.onPress();
                 }}
                 testID={`${testID}.action.${item.key}`}
+              />
+            ))}
+            {/* Cancelling and taking a handover back are looked for here too; they also stay at
+                the end of the page, apart from the next step. */}
+            {finals.map((action) => (
+              <ListRow
+                key={action}
+                primaryText={tn(actionKey(action, ticket.technicianId))}
+                onPress={() => {
+                  setMoreOpen(false);
+                  perform(action, ticket);
+                }}
+                testID={`${testID}.more.${action}`}
               />
             ))}
           </Sheet>
@@ -929,6 +944,7 @@ export function TicketDetail({
 
               {layout.alternative === null &&
               more.length === 0 &&
+              finals.length === 0 &&
               messageKind === null &&
               claimAction === null ? null : (
                 <View style={styles.actions}>
@@ -966,7 +982,8 @@ export function TicketDetail({
                   )}
                   {/* One rare move needs no sheet; several wait behind "Lainnya". Same level as the
                 alternative, so the two never read as a choice between a button and a link. */}
-                  {more.length === 0 ? null : more.length === 1 ? (
+                  {more.length === 0 && finals.length === 0 ? null : more.length === 1 &&
+                    finals.length === 0 ? (
                     <Button
                       label={more[0]!.label}
                       variant="secondary"
@@ -1032,21 +1049,19 @@ export function TicketDetail({
           }
         />
 
-        {[...FINAL_ACTIONS]
-          .filter((action) => actions.includes(action))
-          .map((action) => (
-            <View key={action} style={styles.cancel}>
-              {/* Red text, kept apart at the end: final for the repair, or taking a handover back,
+        {finals.map((action) => (
+          <View key={action} style={styles.cancel}>
+            {/* Red text, kept apart at the end: final for the repair, or taking a handover back,
                   so it never looks like the next step. The step it opens says what it means. */}
-              <TextButton
-                label={tn(actionKey(action, row.technicianId))}
-                tone="danger"
-                onPress={() => perform(action, row)}
-                disabled={runner.busy}
-                testID={`${testID}.action.${action}`}
-              />
-            </View>
-          ))}
+            <TextButton
+              label={tn(actionKey(action, row.technicianId))}
+              tone="danger"
+              onPress={() => perform(action, row)}
+              disabled={runner.busy}
+              testID={`${testID}.action.${action}`}
+            />
+          </View>
+        ))}
       </View>
     );
   }

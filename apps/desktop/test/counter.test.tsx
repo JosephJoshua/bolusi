@@ -738,11 +738,34 @@ describe('counter app over demo data', () => {
       target: { value: '20000' },
     });
     expect(byTestId('repair.desk.handover.pay.line0.change').textContent).toContain('5.000');
+    expect(screen.queryByTestId('repair.desk.handover.pay.line0.changeBig')).toBeNull();
+    // QA round F: a zero too many (150.000 for 15.000) shows in the warning colour and asks first.
+    fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
+      target: { value: '150000' },
+    });
+    expect(byTestId('repair.desk.handover.pay.line0.change').className).toContain('text-warning');
+    expect(byTestId('repair.desk.handover.pay.line0.changeBig').textContent).toBe(
+      'Kembalian besar. Cek lagi uang diterima.',
+    );
     await waitFor(() =>
       expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
     );
     fireEvent.click(byTestId('repair.desk.handover.submit'));
+    const check = await screen.findByTestId('repair.desk.handover.changeCheck');
+    expect(check.textContent).toMatch(/Kembalian Rp\s?135\.000, sudah benar\?/);
+    expect(check.textContent).toMatch(/Uang diterima Rp\s?150\.000 untuk bayar Rp\s?15\.000\./);
+    fireEvent.click(screen.getByRole('button', { name: 'Cek lagi' }));
+    await waitFor(() =>
+      expect(screen.queryByTestId('repair.desk.handover.changeCheck')).toBeNull(),
+    );
+    // Nothing was saved: the handover is still open to put right.
+    expect(byTestId('repair.desk.handover')).toBeTruthy();
+    fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
+      target: { value: '20000' },
+    });
+    fireEvent.click(byTestId('repair.desk.handover.submit'));
     await waitFor(() => expect(screen.queryByTestId('repair.desk.handover')).toBeNull());
+    expect(screen.queryByTestId('repair.desk.handover.changeCheck')).toBeNull();
     // Then the bill the customer takes home is offered, as it stands after the handover.
     await waitFor(() =>
       expect(byTestId('repair.desk.print.about').textContent).toContain(
