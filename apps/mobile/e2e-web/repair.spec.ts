@@ -416,7 +416,7 @@ test('an owner changes a cancelled servisan’s fee beside it', async ({ page })
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-5');
   const change = page.getByTestId('repair.ticket.action.changeCancelFee');
-  await expect(change).toHaveText('Ubah biaya');
+  await expect(change).toHaveText('Ubah tagihan');
   await change.scrollIntoViewIfNeeded();
   await shoot(page, 'cancel-fee-beside');
   await tap(page, 'repair.ticket.action.changeCancelFee');

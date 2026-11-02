@@ -145,6 +145,15 @@ export interface FirstSyncProgress {
   readonly serverTime: number;
 }
 
+/**
+ * Whether the store's data is still on its way to a device that has never finished a sync (fresh
+ * from setup): lists then show loading rows rather than an empty state. Offline, or with sync
+ * stopped, nothing is coming, so an empty list may say so.
+ */
+export function dataArriving(input: SyncStatusInput): boolean {
+  return input.state.lastSuccessfulSyncAt === null && !input.isOffline && !input.state.syncDisabled;
+}
+
 /** Whole percent, capped at 99: 100 would claim a finished sync the loop has not reported. */
 export function firstSyncPercent(progress: FirstSyncProgress): number {
   const span = progress.serverTime - progress.historyStart;
@@ -398,6 +407,27 @@ export function manualSync(input: SyncStatusInput): ManualSync {
   // the app's opinion of the network override the user's — and NetInfo is often wrong on a phone
   // hopping between a flaky shop hotspot and cellular.
   return { kind: 'ready' };
+}
+
+/**
+ * What the Status data screen leads with, as its one filled action (design guide §2), on the phone
+ * and the PC alike:
+ *
+ * - `reenroll`: the server forgot the device, and registering it again is the only way on.
+ * - `markHandled`: refused changes wait to be checked, which only a person can do; the loop keeps
+ *   sending by itself, so "Kirim sekarang" steps back.
+ * - `syncNow`: work is waiting to go up (or sending is blocked, with its reason beside it).
+ * - `none`: nothing waits. "Kirim sekarang" stays as a quiet link, since pressing it is how
+ *   someone checks the connection or pulls the newest data, but it does not lead.
+ */
+export type SyncLead = 'reenroll' | 'markHandled' | 'syncNow' | 'none';
+
+export function syncLead(input: SyncStatusInput, canMarkHandled: boolean): SyncLead {
+  const manual = manualSync(input);
+  if (manual.kind === 'reenroll') return 'reenroll';
+  if (canMarkHandled && input.rejected.length > 0) return 'markHandled';
+  if (manual.kind === 'disabled') return 'syncNow';
+  return input.pendingOperationCount > 0 || input.pendingMediaCount > 0 ? 'syncNow' : 'none';
 }
 
 /**

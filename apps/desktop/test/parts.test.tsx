@@ -222,6 +222,22 @@ describe('parts on the PC', () => {
     expect(screen.queryByTestId('repair.desk.ticket.parts.take')).toBeNull();
   });
 
+  it('keeps Ambil sparepart under Lainnya once the phone went home: a correction, not work', async () => {
+    await renderApp(OWNER);
+    const tab = await screen.findByTestId('repair.desk.board.views.returned');
+    fireEvent.mouseDown(tab, { button: 0 });
+    fireEvent.click(tab);
+    fireEvent.click(await screen.findByText('Yakob Tabuni'));
+    await screen.findByTestId('repair.desk.ticket.customer');
+    expect(screen.queryByTestId('repair.desk.ticket.parts.take')).toBeNull();
+    fireEvent.pointerDown(await screen.findByTestId('repair.desk.ticket.more'), {
+      button: 0,
+      pointerType: 'mouse',
+    });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ambil sparepart' }));
+    await screen.findByTestId('inventory.desk.take');
+  });
+
   it('offers no Ambil sparepart on a cancelled servisan, even to an owner', async () => {
     await renderApp(OWNER);
     fireEvent.change(byTestId('repair.desk.board.search'), { target: { value: 'Lince' } });

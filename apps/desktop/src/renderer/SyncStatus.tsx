@@ -15,6 +15,7 @@ import {
   reassuranceMessage,
   relativeLabel,
   SYNC_TITLE_KEY,
+  syncLead,
   syncProblems,
   syncTitleState,
   type SyncStatusInput,
@@ -149,6 +150,12 @@ function SyncStatusDialog({
   const manualError = manualSyncErrorShown(input);
   const waitingPhotos = mediaQueue(input).length;
   const failedPhotos = input.media.filter((row) => row.uploadStatus === 'failed').length;
+  // One filled action (design guide §2): checking refused changes, else sending when work waits.
+  // With nothing waiting, "Kirim sekarang" is a quiet link: still how someone checks the line.
+  const lead = syncLead(input, true);
+  const sending =
+    manual.kind === 'busy' || input.loopState === 'pushing' || input.loopState === 'pulling';
+  const markHandled = (): void => onMarkRejectedHandled(input.rejected.map((row) => row.opId));
   return (
     <Dialog
       open={open}
@@ -160,23 +167,37 @@ function SyncStatusDialog({
       testId="desktop.sync.dialog"
       footer={
         // Sending cannot help a PC the server forgot: registering it again is the one way on.
-        manual.kind === 'reenroll' ? (
+        lead === 'reenroll' ? (
           <Button
             label={t('auth.pc.unrecognised.action')}
             variant="primary"
             onClick={onReenrol}
             data-testid="desktop.sync.reenrol"
           />
+        ) : lead === 'markHandled' ? (
+          <>
+            <Button
+              label={t('sync.action.syncNow')}
+              variant="text"
+              icon={RefreshCw}
+              busy={sending}
+              disabled={manual.kind === 'disabled'}
+              onClick={onSyncNow}
+              data-testid="desktop.sync.now"
+            />
+            <Button
+              label={t('sync.rejected.handled')}
+              variant="primary"
+              onClick={markHandled}
+              data-testid="desktop.sync.rejected.handled"
+            />
+          </>
         ) : (
           <Button
             label={t('sync.action.syncNow')}
-            variant="primary"
+            variant={lead === 'syncNow' ? 'primary' : 'secondary'}
             icon={RefreshCw}
-            busy={
-              manual.kind === 'busy' ||
-              input.loopState === 'pushing' ||
-              input.loopState === 'pulling'
-            }
+            busy={sending}
             disabled={manual.kind === 'disabled'}
             onClick={onSyncNow}
             data-testid="desktop.sync.now"
@@ -259,13 +280,6 @@ function SyncStatusDialog({
                 onClick={() => setRejectedShown((shown) => shown + REJECTED_SHOWN)}
               />
             ) : null}
-            <Button
-              label={t('sync.rejected.handled')}
-              variant="secondary"
-              className="self-start"
-              onClick={() => onMarkRejectedHandled(input.rejected.map((row) => row.opId))}
-              data-testid="desktop.sync.rejected.handled"
-            />
           </section>
         )}
       </div>

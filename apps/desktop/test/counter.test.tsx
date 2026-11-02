@@ -99,6 +99,15 @@ async function openTicket(name: string): Promise<void> {
   await screen.findByTestId('repair.desk.ticket.customer');
 }
 
+/** Pick a move from the open servisan's "Lainnya" menu. */
+async function openMore(item: string): Promise<void> {
+  fireEvent.pointerDown(await screen.findByTestId('repair.desk.ticket.more'), {
+    button: 0,
+    pointerType: 'mouse',
+  });
+  fireEvent.click(await screen.findByRole('menuitem', { name: item }));
+}
+
 async function showView(view: string): Promise<void> {
   const tab = await screen.findByTestId(`repair.desk.board.views.${view}`);
   fireEvent.mouseDown(tab, { button: 0 });
@@ -1056,7 +1065,9 @@ describe('money after pickup on the servisan', () => {
     await showView('returned');
     await openTicket('Yakob Tabuni');
     expect(screen.queryByTestId('repair.desk.ticket.reduce')).toBeNull();
-    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    // A settled bill given back is a correction: under Lainnya, never a link that reads as next.
+    expect(screen.queryByTestId('repair.desk.ticket.refund')).toBeNull();
+    await openMore('Kembalikan uang');
     await screen.findByTestId('money.desk.refund');
     expect(text('money.desk.refund.paid')).toBe('Rp625.000');
     fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '50000' } });
@@ -1075,7 +1086,7 @@ describe('money after pickup on the servisan', () => {
     await switchTo('Maria Kogoya');
     await showView('returned');
     await openTicket('Yakob Tabuni');
-    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    await openMore('Kembalikan uang');
     await screen.findByTestId('money.desk.refund');
     fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '40000' } });
     expect(text('money.desk.refund.limit')).toBe('Melebihibatasmu,jadiperlupersetujuan.');

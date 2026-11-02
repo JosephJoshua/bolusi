@@ -34,7 +34,10 @@ const BLEED = space.lg;
 const styles = StyleSheet.create({
   scroller: { flexGrow: 0, marginHorizontal: -BLEED },
   row: { paddingHorizontal: BLEED, gap: space.sm },
-  tile: { width: size.photoStrip },
+  // At least the photo's width, and wider for a caption that needs it (a large font, a long angle
+  // name): a caption wraps between words and is never cut. Two photos wide at most, so a long
+  // caption takes a second line instead of one very wide tile.
+  tile: { minWidth: size.photoStrip, maxWidth: size.photoStrip * 2 },
   image: {
     width: size.photoStrip,
     height: size.photoStrip,
@@ -69,9 +72,7 @@ export function PhotoStrip({
           style={styles.tile}
         >
           <View style={styles.image}>{photo.image}</View>
-          <Text style={styles.label} numberOfLines={1}>
-            {photo.label}
-          </Text>
+          <Text style={styles.label}>{photo.label}</Text>
         </Pressable>
       ))}
     </ScrollView>

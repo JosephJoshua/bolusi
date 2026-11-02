@@ -69,6 +69,8 @@ export { Menu, type MenuItem } from './components/Menu.js';
 export { FreshGlow } from './components/FreshGlow.js';
 /** Fed by the app with what another device changed; read by `FreshGlow`. */
 export { markFresh } from '@bolusi/ui/fresh';
+/** Fed by the app while a new PC's first sync runs; read by `DataTable`. */
+export { setDataArriving } from '@bolusi/ui/arrival';
 export { RollingText } from './components/RollingText.js';
 export {
   CaptureTile,

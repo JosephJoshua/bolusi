@@ -145,8 +145,11 @@ export function UsedPartsSection({
   );
 }
 
-/** Pick a part, say how many, take it. Stock may go below zero; the owner sees it flagged. */
-function TakePartDialog({
+/**
+ * Pick a part, say how many, take it. Stock may go below zero; the owner sees it flagged. Exported
+ * for a use that offers taking elsewhere (a servisan that went home keeps it under "Lainnya").
+ */
+export function TakePartDialog({
   use,
   device,
   onClose,

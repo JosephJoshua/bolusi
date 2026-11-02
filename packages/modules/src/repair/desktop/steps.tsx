@@ -614,8 +614,12 @@ export function CancelDialog({
                   autoFocus
                   data-testid="repair.desk.cancel.feeInput"
                 />
-              ) : (
-                <p className="tabular text-title font-bold text-text">
+              ) : charged === 0 && cancelRefund(downPayment, charged) === 0 ? null : (
+                // Free is already said above ("HP dikembalikan tanpa biaya."), so no "Rp 0".
+                <p
+                  className="tabular text-title font-bold text-text"
+                  data-testid="repair.desk.cancel.feeAmount"
+                >
                   {charged === null ? '–' : formatMoney(charged)}
                 </p>
               )}

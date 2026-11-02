@@ -414,9 +414,12 @@ export function CancelStep({
                 </View>
               ) : null}
             </View>
-            <Text style={styles.proposalAmount} testID={`${testID}.feeAmount`}>
-              {fee === null ? '–' : formatMoney(fee)}
-            </Text>
+            {/* Free is already said above ("HP dikembalikan tanpa biaya."), so no "Rp 0". */}
+            {fee === 0 && cancelRefund(downPayment, fee) === 0 ? null : (
+              <Text style={styles.proposalAmount} testID={`${testID}.feeAmount`}>
+                {fee === null ? '–' : formatMoney(fee)}
+              </Text>
+            )}
             <Text style={repairStyles.caption} testID={`${testID}.feeBasis`}>
               {changed
                 ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })

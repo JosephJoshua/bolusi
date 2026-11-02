@@ -4,6 +4,7 @@
  * / style value — never rendered copy. Per T-5 there is no snapshot anywhere.
  */
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { act } from 'react';
 import { View } from 'react-native';
 
 import { Avatar, identityColor } from '../src/components/Avatar.js';
@@ -11,6 +12,7 @@ import { Button } from '../src/components/Button.js';
 import { EmptyState } from '../src/components/EmptyState.js';
 import { ErrorState } from '../src/components/ErrorState.js';
 import { FreshnessCell } from '../src/components/FreshnessCell.js';
+import { setDataArriving } from '../src/arrival.js';
 import { List } from '../src/components/List.js';
 import { ListRow } from '../src/components/ListRow.js';
 import {
@@ -467,6 +469,21 @@ describe('List (§3.13) — virtualization and the four mandatory states', () =>
     const r = render(<List state={state} renderRow={row} keyExtractor={(i: string) => i} />);
     expect(r.query(`ui.list.${kind}`)).not.toBeNull();
     expect(r.query('ui.list')).toBeNull();
+  });
+
+  test('while a new device brings in its data, an empty list shows loading rows, not "Belum ada"', () => {
+    const empty = { kind: 'empty' as const, empty: { title: 'Kosong' } };
+    const r = render(<List state={empty} renderRow={row} keyExtractor={(i: string) => i} />);
+    expect(r.query('ui.list.empty')).not.toBeNull();
+    act(() => setDataArriving(true));
+    try {
+      expect(r.query('ui.list.loading')).not.toBeNull();
+      expect(r.query('ui.list.empty')).toBeNull();
+    } finally {
+      act(() => setDataArriving(false));
+    }
+    // The rows that did arrive show at once; only emptiness waits.
+    expect(r.query('ui.list.empty')).not.toBeNull();
   });
 
   test('unauthorized renders the denial, never an empty list (FR-1036)', () => {

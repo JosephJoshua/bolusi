@@ -954,6 +954,23 @@ describe('cancelling (owners; the counter asks)', () => {
     expect(owner.query('repair.board.views.approvals')).toBeNull();
   });
 
+  test('a free cancel says so once, without an "Rp 0" under it', async () => {
+    h = await openRepairScreenHarness(5509);
+    await h.run('setCancelFees', { beforeWork: 0, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    expect(text(screen, 'repair.cancel.consequence')).toBe(tn('repair.cancel.consequenceFree'));
+    expect(screen.query('repair.cancel.feeAmount')).toBeNull();
+    // Charging something after all brings the amount back.
+    await press(screen, 'repair.cancel.changeFee');
+    type(screen, 'repair.cancel.feeInput', '10.000');
+    await settle();
+    expect(text(screen, 'repair.cancel.feeAmount')).toContain('10.000');
+  });
+
   test('the store’s after-work fee is filled in; a changed fee asks why and both are recorded', async () => {
     h = await openRepairScreenHarness(5502);
     await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
@@ -1982,7 +1999,10 @@ describe('money once the phone went home', () => {
     await press(screen, 'repair.board.views.returned');
     await press(screen, `repair.board.row.${ticketId}`);
     expect(screen.query('repair.ticket.reduce')).toBeNull();
-    await press(screen, 'repair.ticket.refund');
+    // A settled bill given back is a correction: under Lainnya, never a link that reads as next.
+    expect(screen.query('repair.ticket.refund')).toBeNull();
+    await press(screen, 'repair.ticket.more.open');
+    await press(screen, 'repair.ticket.action.refund');
     expect(text(screen, 'money.refund.paid')).toContain('Rp 750.000');
     type(screen, 'money.refund.amount', '50000');
     await settle();
@@ -2016,7 +2036,8 @@ describe('money once the phone went home', () => {
     const manager = await mount(h, h.managerId);
     await press(manager, 'repair.board.views.returned');
     await press(manager, `repair.board.row.${ticketId}`);
-    await press(manager, 'repair.ticket.refund');
+    await press(manager, 'repair.ticket.more.open');
+    await press(manager, 'repair.ticket.action.refund');
     type(manager, 'money.refund.amount', '20000');
     await settle();
     expect(text(manager, 'money.refund.limit')).toBe('Batas pengembalianmu Rp 30.000.');
