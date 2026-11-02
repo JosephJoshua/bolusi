@@ -72,9 +72,12 @@ export const TextInput = hostComponent('TextInput');
 export const ActivityIndicator = hostComponent('ActivityIndicator');
 /** Every `scrollTo` a ScrollView was asked for, newest last. */
 export const scrollCalls: { y: number }[] = [];
+/** Every sideways `scrollTo` (a ChipRow bringing a chip into sight), newest last. */
+export const scrollXCalls: { x: number }[] = [];
 export const ScrollView = React.forwardRef<unknown, AnyProps>(function ScrollView(props, ref) {
   React.useImperativeHandle(ref, () => ({
-    scrollTo: (to: { y: number }) => scrollCalls.push({ y: to.y }),
+    scrollTo: (to: { x?: number; y?: number }) =>
+      to.x === undefined ? scrollCalls.push({ y: to.y ?? 0 }) : scrollXCalls.push({ x: to.x }),
   }));
   return React.createElement('ScrollView', props);
 });

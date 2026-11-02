@@ -28,7 +28,19 @@ describe('SearchField', () => {
   test('has no visible label but announces what it is', () => {
     const r = field('');
     expect(r.get('s.field').props['accessibilityLabel']).toBe('Cari');
-    expect(textsIn(r.container)).toEqual([]);
+    // The only text is the hint of what it searches, and a screen reader hears it once.
+    expect(textsIn(r.container)).toEqual(['Cari nama']);
+    expect(r.get('s.placeholder').props['importantForAccessibility']).toBe('no-hide-descendants');
+    expect(r.get('s.field').props['accessibilityHint']).toBe('Cari nama');
+  });
+
+  // Regression: at the largest font the input's own placeholder was cut to "Cari nama, no. HP,
+  // no. ser". Ours is text that wraps, so the whole hint shows; it goes once something is typed.
+  test('the hint wraps instead of being cut, and goes once something is typed', () => {
+    const r = field('');
+    expect(r.get('s.field').props['placeholder']).toBeUndefined();
+    expect(r.get('s.placeholder').props['numberOfLines']).toBeUndefined();
+    expect(field('maria').query('s.placeholder')).toBeNull();
   });
 
   test('offers clearing only once something is typed, and clearing empties it', () => {

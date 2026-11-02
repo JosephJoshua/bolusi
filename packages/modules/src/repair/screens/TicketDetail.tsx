@@ -4,7 +4,7 @@
  * own full-screen step (TicketSteps.tsx); the rest run in place. The rejected-op banner shows here,
  * where the change was made (05-operation-log §8).
  */
-import { formatDateTime, formatMoney, formatPhone, t } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, keepNumbersWhole, t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -816,7 +816,7 @@ export function TicketDetail({
               testID={`${testID}.phone`}
             >
               <Icon name="phone" size={size.iconChip} color={color.primary} />
-              <Text style={styles.link}>{formatPhone(row.customerPhone)}</Text>
+              <Text style={styles.link}>{keepNumbersWhole(formatPhone(row.customerPhone))}</Text>
             </Pressable>
           )}
           <View style={styles.deviceBox}>
@@ -862,7 +862,12 @@ export function TicketDetail({
               />
             )}
             {row.deviceImei === null ? null : (
-              <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
+              // Wide: 15 digits do not fit half a row at a large font, and a number never splits.
+              <Fact
+                label={tn('repair.device.imei')}
+                value={keepNumbersWhole(row.deviceImei)}
+                wide
+              />
             )}
             {lock === null ? null : (
               // The technician needs it to test the phone; hidden until asked so it is not read

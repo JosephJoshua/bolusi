@@ -26,7 +26,11 @@ export interface ActionChipProps {
 const styles = StyleSheet.create({
   chip: {
     alignSelf: 'flex-start',
+    // Like ToggleChip: wraps its label rather than run off a narrow screen.
+    flexShrink: 1,
     minHeight: touch.min,
+    // Room above and below a label that took a second line.
+    paddingVertical: space.xs,
     paddingHorizontal: space.md,
     borderRadius: radius.full,
     borderWidth: border.hairline,
@@ -34,7 +38,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.xs,
   },
-  label: { ...type.bodySm },
+  label: { ...type.bodySm, flexShrink: 1 },
 });
 
 export function ActionChip({

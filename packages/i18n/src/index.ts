@@ -39,6 +39,7 @@ export {
   formatMoney,
   formatPhone,
   formatNumber,
+  keepNumbersWhole,
   formatRelative,
   formatTime,
 } from './formatters.js';

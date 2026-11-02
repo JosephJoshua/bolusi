@@ -88,6 +88,18 @@ export function formatPhone(phone: string): string {
   return [digits.slice(0, 4), digits.slice(4, 8), digits.slice(8)].join('-');
 }
 
+/**
+ * A number written on screen (a phone, an IMEI) that may only wrap where its words do: the spaces
+ * and hyphens between its digits become non-breaking ones, so a large font moves the whole number
+ * to the next line instead of splitting it ("0812-3456-" / "7890"). Screen text only: the
+ * dot-matrix codepage has no non-breaking hyphen, so slips print `formatPhone` as it is.
+ */
+export function keepNumbersWhole(text: string): string {
+  return text.replace(/(\d)([ -])(?=\d)/g, (_, digit: string, gap: string) =>
+    gap === ' ' ? `${digit}\u00A0` : `${digit}\u2011`,
+  );
+}
+
 /** Counts and quantities, never money — active-locale grouping (§5.2). */
 export function formatNumber(value: number): string {
   return numberFormatFor(getLocale()).format(value).replace(NBSP, ' ');
