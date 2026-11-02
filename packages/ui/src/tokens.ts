@@ -214,6 +214,18 @@ export const size = Object.freeze({
    * stays one readable column in the middle instead of stretching lines and buttons edge to edge.
    */
   contentMax: 720,
+  /**
+   * The widest a screen laid out in `Columns` gets (`AppShell` `wide`): two columns a little wider
+   * than a phone's, so a big tablet's width is used without lines running across it.
+   */
+  wideMax: 1040,
+  /** The narrowest column `Columns` lays out: a 360 dp phone's content, so nothing inside rewraps. */
+  columnMin: 328,
+  /**
+   * The size a photo or capture tile in a `TileGrid` keeps near: a wider row takes another tile
+   * rather than growing them, so a tile stays within about a quarter of this either way.
+   */
+  tileTarget: 160,
   /** A person's identity at the top of a PIN screen or their own page: a face, not a bullet. */
   avatarHero: 64,
   /** §3.11 FreshnessCell geometry — the battery-cell signature. */

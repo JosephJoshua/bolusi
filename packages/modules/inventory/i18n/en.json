@@ -38,7 +38,8 @@
     "manageCategories": "Categories",
     "filter": "Filter",
     "filterCount": "Filter ({count})",
-    "scan": "Scan"
+    "scan": "Scan",
+    "pickPart": "Pick an item to see its details."
   },
   "filter": {
     "active": "All",

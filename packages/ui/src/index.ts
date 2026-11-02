@@ -57,6 +57,19 @@ export { NAV_BAR_INSET } from './platform-insets.js';
 // ---- Room on screen (phone, tablet) -------------------------------------------------------------
 export { ViewportProvider, breakpoint, useViewport, widthClassOf } from './viewport.js';
 export type { Viewport, WidthClass } from './viewport.js';
+export {
+  Columns,
+  ListDetail,
+  TileGrid,
+  bleedMargins,
+  bleedPadding,
+  listPaneWidth,
+  tileColumns,
+  twoColumnsMin,
+  useBleed,
+  useListDetailSplit,
+} from './layout.js';
+export type { Bleed } from './layout.js';
 
 // ---- Text that follows a live system font size change -----------------------------------------
 export { FontScaleProvider, Text } from './text.js';

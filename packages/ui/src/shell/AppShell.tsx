@@ -89,6 +89,11 @@ export interface AppShellProps {
    */
   readonly scrollKey?: string | number | undefined;
   /**
+   * The content may grow past `size.contentMax`, up to `size.wideMax`, for a screen that lays its
+   * halves out in `Columns`. The bottom action keeps its readable width.
+   */
+  readonly wide?: boolean | undefined;
+  /**
    * Screen-covering overlays — today only `ConfirmSheet` (§3.10, the one sanctioned modal).
    *
    * They render as a SIBLING of the content slot, never inside it, and that placement is the whole
@@ -170,6 +175,7 @@ const styles = StyleSheet.create({
    * running edge to edge. The header and banner still span the screen, as app bars do.
    */
   column: { width: '100%', maxWidth: size.contentMax, alignSelf: 'center' },
+  columnWide: { maxWidth: size.wideMax },
   columnFill: { flex: 1 },
 });
 
@@ -210,6 +216,7 @@ export function AppShell({
   bottomAction,
   scrollable = false,
   scrollKey,
+  wide = false,
   overlay,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
@@ -313,7 +320,7 @@ export function AppShell({
             <View
               ref={reveal.contentRef}
               collapsable={false}
-              style={[styles.contentInner, styles.column]}
+              style={[styles.contentInner, styles.column, wide ? styles.columnWide : null]}
               testID={`${testID}.contentInner`}
             >
               <RevealProvider port={reveal.port}>{children}</RevealProvider>
@@ -321,7 +328,9 @@ export function AppShell({
           </ScrollView>
         ) : (
           <View testID={`${testID}.content`} style={styles.contentFixed}>
-            <View style={[styles.column, styles.columnFill]}>{children}</View>
+            <View style={[styles.column, styles.columnFill, wide ? styles.columnWide : null]}>
+              {children}
+            </View>
           </View>
         )}
 

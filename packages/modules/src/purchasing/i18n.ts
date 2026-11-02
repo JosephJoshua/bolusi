@@ -53,6 +53,7 @@ export const PURCHASING_KEYS = [
   'purchasing.list.emptyDone',
   'purchasing.list.parts',
   'purchasing.list.progress',
+  'purchasing.list.pickOrder',
   'purchasing.order.lines',
   'purchasing.order.receipts',
   'purchasing.order.created',

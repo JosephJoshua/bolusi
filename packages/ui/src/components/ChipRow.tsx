@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { Defs, LinearGradient, Rect, Stop, Svg } from 'react-native-svg';
 
+import { bleedMargins, bleedPadding, useBleed } from '../layout.js';
 import { color, space } from '../tokens.js';
 
 export interface ChipRowProps {
@@ -41,18 +42,14 @@ export interface ChipRowProps {
   readonly testID?: string | undefined;
 }
 
-/** The screen padding the row bleeds through (AppShell content uses `space.lg`). */
-const BLEED = space.lg;
 /** How far an edge fades: wide enough to read as "more", narrow enough to leave a chip readable. */
 const FADE = space['2xl'];
 
 const styles = StyleSheet.create({
   frame: { flexGrow: 0 },
-  bleed: { marginHorizontal: -BLEED },
   // A ScrollView grows by default; inside a scrolling screen that stretched the row to fill it.
   scroller: { flexGrow: 0 },
   row: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  bleedRow: { paddingHorizontal: BLEED },
   fade: { position: 'absolute', top: 0, bottom: 0, width: FADE },
   fadeStart: { left: 0 },
   fadeEnd: { right: 0 },
@@ -104,6 +101,8 @@ export function ChipRow({
   accessibilityRole,
   testID = 'ui.chipRow',
 }: ChipRowProps): React.JSX.Element {
+  // It bleeds through the screen's gutter (`useBleed`), and only the outer one beside another column.
+  const gutter = useBleed();
   const scroller = useRef<ScrollView>(null);
   const width = useRef(0);
   const content = useRef(0);
@@ -158,7 +157,7 @@ export function ChipRow({
   );
 
   return (
-    <View style={[styles.frame, bleed ? styles.bleed : null]}>
+    <View style={[styles.frame, bleed ? bleedMargins(gutter) : null]}>
       <ScrollView
         ref={scroller}
         horizontal
@@ -166,7 +165,7 @@ export function ChipRow({
         // A tap on a chip lands even while a field above still holds the keyboard.
         keyboardShouldPersistTaps="handled"
         style={styles.scroller}
-        contentContainerStyle={[styles.row, bleed ? styles.bleedRow : null, contentStyle]}
+        contentContainerStyle={[styles.row, bleed ? bleedPadding(gutter) : null, contentStyle]}
         onLayout={onLayout}
         onContentSizeChange={onContentSizeChange}
         onScroll={onScroll}
