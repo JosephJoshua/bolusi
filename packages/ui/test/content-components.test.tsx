@@ -55,6 +55,12 @@ describe('SearchField', () => {
 });
 
 describe('TextButton', () => {
+  test('a label wraps instead of being cut when the room runs out (large font)', () => {
+    const r = render(<TextButton testID="tb" label="Lihat semua (8)" onPress={vi.fn()} />);
+    expect(r.get('tb.label').props['numberOfLines']).toBeUndefined();
+    expect(StyleSheet.flatten(r.get('tb.label').props['style'])).toMatchObject({ flexShrink: 1 });
+  });
+
   test('a disabled one is announced and does not fire', () => {
     const r = render(<TextButton testID="tb" label="Ganti" onPress={vi.fn()} disabled />);
     expect(r.get('tb').props['accessibilityState']).toEqual({ disabled: true });

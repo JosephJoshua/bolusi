@@ -206,16 +206,25 @@ function SyncStatusDialog({
       }
     >
       <div className="flex flex-col gap-6">
-        <FactGrid>
-          <Fact
-            label={t('sync.status.changesLabel')}
-            value={t('sync.status.waitingCount', { count: input.pendingOperationCount })}
-          />
-          <Fact
-            label={t('sync.status.photosLabel')}
-            value={t('sync.status.waitingCount', { count: waitingPhotos })}
-          />
-        </FactGrid>
+        {/* Only what is waiting is counted: a zero says nothing the title has not. */}
+        {input.pendingOperationCount === 0 && waitingPhotos === 0 ? null : (
+          <FactGrid>
+            {input.pendingOperationCount === 0 ? null : (
+              <Fact
+                label={t('sync.status.changesLabel')}
+                value={t('sync.status.waitingCount', { count: input.pendingOperationCount })}
+                testId="desktop.sync.waiting.changes"
+              />
+            )}
+            {waitingPhotos === 0 ? null : (
+              <Fact
+                label={t('sync.status.photosLabel')}
+                value={t('sync.status.waitingCount', { count: waitingPhotos })}
+                testId="desktop.sync.waiting.photos"
+              />
+            )}
+          </FactGrid>
+        )}
         <p className="text-small text-text-muted">
           {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
         </p>

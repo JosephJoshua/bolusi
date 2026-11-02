@@ -126,3 +126,30 @@ test('the refused changes listed can be marked checked, all of them at once', ()
   fireEvent.click(screen.getByTestId('desktop.sync.rejected.handled'));
   expect(marked).toEqual([['op-1', 'op-2']]);
 });
+
+test('only what is waiting is counted, and the filled action follows it', () => {
+  const panel = (over: Partial<SyncStatusInput>) =>
+    render(
+      <TooltipProvider>
+        <SyncStatusButton
+          input={{ ...input(), loopState: 'idle', manualSyncBusy: false, ...over }}
+          open
+          onOpenChange={() => undefined}
+          onSyncNow={() => undefined}
+          onReenrol={() => undefined}
+          onMarkRejectedHandled={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+  panel({ pendingOperationCount: 0 });
+  expect(screen.queryByTestId('desktop.sync.waiting.changes')).toBeNull();
+  expect(screen.queryByTestId('desktop.sync.waiting.photos')).toBeNull();
+  expect(screen.getByTestId('desktop.sync.dialog').textContent).not.toContain('0 belum');
+  cleanup();
+
+  panel({ pendingOperationCount: 2 });
+  expect(screen.getByTestId('desktop.sync.waiting.changes').textContent).toContain(
+    '2 belum terkirim',
+  );
+  expect(screen.queryByTestId('desktop.sync.waiting.photos')).toBeNull();
+});

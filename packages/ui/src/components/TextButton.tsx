@@ -35,8 +35,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.xs,
+    flexShrink: 1,
   },
-  label: { ...type.bodySm, fontWeight: '600' },
+  // Wraps rather than cut when the room beside it runs out (a large font): labels never truncate.
+  label: { ...type.bodySm, fontWeight: '600', flexShrink: 1 },
 });
 
 const TONE = { primary: color.primary, danger: color.danger } as const;
@@ -65,7 +67,6 @@ export function TextButton({
       {icon === undefined ? null : <Icon name={icon} size={size.iconChip} color={fg} />}
       <Text
         testID={testID === undefined ? undefined : `${testID}.label`}
-        numberOfLines={1}
         style={[styles.label, { color: fg }]}
       >
         {label}
