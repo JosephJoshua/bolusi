@@ -1244,7 +1244,9 @@ export function demoRepairRuntime(
       return update(t.id, 'repair.ticket_cancelled', {
         outcome: 'cancelled',
         outcomeNote: String(input['reason']),
-        cancelFee: Number(input['fee']),
+        // Left out, the store's fee for the ticket's stage, as the command does.
+        cancelFee:
+          input['fee'] === undefined ? standardCancelFee(t, cancelFees) : Number(input['fee']),
         cancelStandardFee: standardCancelFee(t, cancelFees),
         cancelledBy: actor.userId,
         cancelledByName: actor.name,

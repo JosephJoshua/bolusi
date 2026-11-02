@@ -79,6 +79,8 @@ import {
 } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
+  cancelConsequenceKey,
+  cancelFeeText,
   DOWN_PAYMENT_GAP_KEY,
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
@@ -481,6 +483,7 @@ export function CancelDialog({
   ticketId,
   stale,
   workStarted,
+  price,
   claimOf,
   downPayment,
   discounted,
@@ -489,6 +492,8 @@ export function CancelDialog({
   onClose,
 }: StepDialogProps & {
   readonly workStarted: boolean;
+  /** The agreed repair price, which the store's fee never goes above. */
+  readonly price: number;
   /** The discounts standing on the servisan, which a smaller fee counts with against a limit. */
   readonly discounted: number;
   /** Paid in so far: what is above the fee goes back at pickup. */
@@ -507,7 +512,7 @@ export function CancelDialog({
   const changing = fee !== undefined;
   const standard =
     fees.status === 'ready'
-      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf }, fees.data)
+      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf, quoteTotal: price }, fees.data)
       : null;
   const charged = changing ? fee : standard;
   const changed = standard !== null && charged !== null && charged !== standard;
@@ -554,7 +559,7 @@ export function CancelDialog({
             ? tn('repair.cancel.refundsDp', {
                 amount: formatMoney(cancelRefund(downPayment, charged)),
               })
-            : tn('repair.cancel.consequence')
+            : tn(cancelConsequenceKey(charged))
         }
         runner={runner}
         stale={stale}
@@ -765,8 +770,11 @@ export function ChangeCancelFeeDialog({
         title={tn('repair.cancelFee.title')}
         description={
           paid > 0
-            ? tn('repair.cancelFee.paid', { amount: formatMoney(paid) })
-            : tn('repair.cancelFee.unpaid')
+            ? tn('repair.cancelFee.paid', {
+                bill: formatMoney(current),
+                amount: formatMoney(paid),
+              })
+            : tn('repair.cancelFee.unpaid', { bill: formatMoney(current) })
         }
         runner={runner}
         stale={stale}
@@ -1492,7 +1500,9 @@ export function HandoverDialog({
               className="tabular text-title font-bold text-text"
               data-testid="repair.desk.handover.total"
             >
-              <RollingText value={amount}>{formatMoney(amount)}</RollingText>
+              <RollingText value={amount}>
+                {cancelled ? cancelFeeText(amount) : formatMoney(amount)}
+              </RollingText>
             </p>
           </div>
           {(downPayment ?? 0) === 0 && reduced === 0 ? null : (

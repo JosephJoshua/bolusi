@@ -144,6 +144,9 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   Servisan: before work starts and after work has started (a technician has
   started work on it at least once). Both start at Rp 0. The fee in force is
   filled in when cancelling and the owner may change it; the record keeps both.
+  The store's fee never goes above the agreed repair price (Joseph, 2026-11-01:
+  no customer pays more to cancel than to repair; with no price yet the store's
+  fee stands). Most stores charge nothing, so a zero fee reads "Tanpa biaya".
 - **Customer sees it:** the handover of a cancelled phone shows the fee owed
   ("Biaya pembatalan"), and the customer signs under it. The printed slip will
   show it too once printing lands.

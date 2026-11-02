@@ -67,6 +67,7 @@
     "title": "Cash",
     "expected": "Should be in the drawer",
     "drawer": "Cash drawer",
+    "blindHint": "Count the cash in the drawer when you close.",
     "notCounted": "Drawer not counted today",
     "counted": "Drawer counted at {time}",
     "count": "Count drawer",

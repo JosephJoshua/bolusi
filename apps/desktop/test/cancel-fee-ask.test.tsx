@@ -44,13 +44,18 @@ it('asks an owner for a cancelled servisan’s fee beyond the manager’s limit'
   );
   fireEvent.click(await screen.findByTestId('repair.desk.ticket.action.changeCancelFee'));
   await screen.findByTestId('repair.desk.cancelFee');
+  // QA round E: owners think in what the customer pays, so the dialog is about the bill.
+  expect(byTestId('repair.desk.cancelFee').textContent).toContain(
+    'Tagihan sekarang Rp 150.000, sudah dibayar Rp 100.000.',
+  );
+  expect(screen.getByLabelText('Tagihan baru')).toBe(byTestId('repair.desk.cancelFee.feeInput'));
   const fee = byTestId('repair.desk.cancelFee.feeInput');
   fireEvent.change(fee, { target: { value: '100000' } });
   fireEvent.change(byTestId('repair.desk.cancelFee.reason'), {
     target: { value: 'Pelanggan lama' },
   });
   await waitFor(() => expect(screen.queryByTestId('repair.desk.cancelFee.asks')).toBeNull());
-  expect(byTestId('repair.desk.cancelFee.submit').textContent).toBe('Simpan biaya');
+  expect(byTestId('repair.desk.cancelFee.submit').textContent).toBe('Simpan tagihan');
   fireEvent.change(fee, { target: { value: '90000' } });
   await waitFor(() =>
     expect(byTestId('repair.desk.cancelFee.asks').textContent).toBe(

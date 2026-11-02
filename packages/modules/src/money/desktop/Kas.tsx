@@ -255,6 +255,13 @@ function Today({
                       ? tm('money.kas.notCounted')
                       : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
                   </p>
+                  {/* A blind count hides what the drawer should hold; until it is counted, say
+                      why. */}
+                  {may.seeExpected || counted !== null ? null : (
+                    <p className="text-body text-text-muted" data-testid={`${testId}.blindHint`}>
+                      {tm('money.kas.blindHint')}
+                    </p>
+                  )}
                 </Card>
               )
             }
