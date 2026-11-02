@@ -4,14 +4,16 @@
  * then its amount beside what that method needs (cash handed over, an EDC's approval code). On a
  * QRIS method connected to Xendit that is the QR instead (`qris`, QrisDialog).
  */
-import { formatMoney } from '@bolusi/i18n';
+import { formatMoney, t } from '@bolusi/i18n';
 import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';
-import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
+import { Button, ConfirmDialog, TextField, ToggleChip } from '@bolusi/ui-web';
 import { Plus, QrCode } from 'lucide-react';
 
+import { changeCheckCopy, type ChangeCheck } from '../change-check.js';
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
+  changeLooksWrong,
   digitsOf,
   digitsText,
   lineKind,
@@ -206,10 +208,21 @@ export function PaymentLines({
               line.tendered !== '' &&
               tendered > amount &&
               amount > 0 ? (
-                <p className="text-body text-text" data-testid={`${id}.change`}>
-                  <span className="text-text-muted">{tm('money.pay.change')} </span>
-                  <span className="tabular font-semibold">{formatMoney(tendered - amount)}</span>
-                </p>
+                changeLooksWrong(tendered, amount) ? (
+                  // Change of a whole note or more is far more often a mistyped zero.
+                  <p className="text-body text-warning" data-testid={`${id}.change`}>
+                    <span>{tm('money.pay.change')} </span>
+                    <span className="tabular font-semibold">{formatMoney(tendered - amount)}</span>
+                    <span className="block text-small" data-testid={`${id}.changeBig`}>
+                      {tm('money.pay.changeBig')}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-body text-text" data-testid={`${id}.change`}>
+                    <span className="text-text-muted">{tm('money.pay.change')} </span>
+                    <span className="tabular font-semibold">{formatMoney(tendered - amount)}</span>
+                  </p>
+                )
               ) : null}
             </div>
           </div>
@@ -242,5 +255,30 @@ export function PaymentLines({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** Asks before saving a payment whose change looks wrong (`useChangeCheck`). */
+export function ChangeCheckDialog({
+  check,
+  testId,
+}: {
+  readonly check: ChangeCheck;
+  readonly testId: string;
+}): React.JSX.Element | null {
+  if (check.asking === null) return null;
+  const copy = changeCheckCopy(check.asking);
+  return (
+    <ConfirmDialog
+      open
+      title={copy.title}
+      message={copy.message}
+      confirmLabel={copy.confirm}
+      cancelLabel={copy.keep}
+      closeLabel={t('core.action.close')}
+      onConfirm={check.confirm}
+      onCancel={check.cancel}
+      testId={`${testId}.changeCheck`}
+    />
   );
 }

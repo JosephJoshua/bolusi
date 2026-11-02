@@ -400,6 +400,19 @@ describe('the blind count', () => {
     ).toBe(false);
   });
 
+  test('a count that is off needs a reason once its difference shows, a right one does not', () => {
+    const off = { ...NEW_CASH_COUNT, counted: '95000' };
+    expect(cashCountView(off, 100_000, false).noteRequired).toBe(true);
+    expect(cashCountView({ ...off, counted: '100000' }, 100_000, false).noteRequired).toBe(false);
+    // Over is as off as under.
+    expect(cashCountView({ ...off, counted: '105000' }, 100_000, false).noteRequired).toBe(true);
+    // Blind, nothing is asked before the check, which would give the difference away.
+    expect(cashCountView(off, 100_000, true).noteRequired).toBe(false);
+    expect(cashCountView({ ...off, checked: true }, 100_000, true).noteRequired).toBe(true);
+    // The drawer still loading: no difference known, nothing asked.
+    expect(cashCountView(off, null, false).noteRequired).toBe(false);
+  });
+
   test('someone who counts blind is never stopped at the drawer, which would give its figure away', () => {
     const move = {
       kind: 'withdrawal' as const,
