@@ -214,7 +214,7 @@ export function DevicesScreen({
                         setNotice(null);
                         setConfirming(item.row);
                       }}
-                      accessibilityLabel={t('auth.devices.blockTitle', { name: item.row.name })}
+                      accessibilityLabel={t('auth.devices.blockLabel', { name: item.row.name })}
                       testID={`devices-block-${item.row.id}`}
                     />
                   )
