@@ -471,5 +471,67 @@
       "rateLimited": "Terlalu banyak perangkat diblokir dalam satu jam. Coba lagi nanti.",
       "unexpected": "Belum berhasil. Coba lagi sebentar lagi."
     }
+  },
+  "approval": {
+    "title": "PIN persetujuan",
+    "summary": "Untuk menyetujui keputusan di perangkat bersama. Hanya dicek server, tidak disimpan di perangkat.",
+    "set": "Atur",
+    "ask": {
+      "title": "PIN persetujuan",
+      "prompt": "Masukkan PIN persetujuan",
+      "body": "Berlaku 10 menit di perangkat ini, atau sampai Anda keluar.",
+      "wrong": "PIN persetujuan salah.",
+      "locked": "Terlalu sering salah. Coba lagi dalam 15 menit.",
+      "offline": "Perlu internet untuk mengecek PIN persetujuan.",
+      "failed": "PIN persetujuan belum bisa dicek. Coba lagi.",
+      "checking": "Mengecek…",
+      "notSetTitle": "Belum ada PIN persetujuan",
+      "notSetBody": "Buat dulu PIN persetujuan Anda. PIN ini berbeda dari PIN masuk.",
+      "create": "Buat PIN persetujuan"
+    },
+    "setup": {
+      "title": "Atur PIN persetujuan",
+      "chooseProof": "Konfirmasi dengan",
+      "proof": {
+        "current": "PIN persetujuan lama",
+        "password": "Kata sandi akun",
+        "owner": "PIN persetujuan pemilik"
+      },
+      "proofHint": {
+        "current": "Untuk mengganti PIN persetujuan Anda.",
+        "password": "Kalau belum punya atau lupa PIN persetujuan.",
+        "owner": "Pemilik mengonfirmasi di sini dengan PIN persetujuannya."
+      },
+      "currentPrompt": "Masukkan PIN persetujuan lama",
+      "passwordLabel": "Kata sandi akun",
+      "ownerLabel": "Pemilik",
+      "ownerPrompt": "PIN persetujuan {name}",
+      "noOwner": "Belum ada pemilik lain di perangkat ini. Atur PIN persetujuan di HP Anda sendiri.",
+      "next": "Lanjut",
+      "new": "Buat PIN persetujuan baru",
+      "repeat": "Ulangi PIN persetujuan baru",
+      "hint": "6 angka, berbeda dari PIN masuk.",
+      "weak": "Pilih PIN lain. Jangan yang mudah ditebak atau sama dengan PIN masuk.",
+      "mismatch": "PIN tidak sama. Ulangi dari awal.",
+      "saving": "Menyimpan…",
+      "wrongCurrent": "PIN persetujuan lama salah.",
+      "wrongPassword": "Kata sandi salah.",
+      "wrongOwner": "PIN persetujuan pemilik salah.",
+      "offline": "Perlu internet untuk menyimpan PIN persetujuan.",
+      "denied": "Cara ini tidak bisa dipakai untuk akun Anda.",
+      "rateLimited": "Terlalu sering salah. Coba lagi nanti.",
+      "failed": "PIN persetujuan belum tersimpan. Coba lagi.",
+      "done": "PIN persetujuan tersimpan",
+      "doneBody": "Dipakai saat Anda menyetujui pembatalan, diskon, dan keputusan lain di perangkat bersama."
+    },
+    "clear": {
+      "action": "Hapus PIN persetujuan",
+      "title": "Hapus PIN persetujuan {name}?",
+      "body": "{name} perlu membuat PIN persetujuan baru sebelum menyetujui lagi.",
+      "prompt": "Masukkan PIN persetujuan Anda",
+      "done": "PIN persetujuan {name} sudah dihapus",
+      "wrong": "PIN persetujuan Anda salah.",
+      "notSet": "Buat PIN persetujuan Anda dulu di Akun."
+    }
   }
 }

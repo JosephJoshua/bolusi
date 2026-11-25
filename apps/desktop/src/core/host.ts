@@ -14,6 +14,7 @@ import {
   readDeviceId,
   readDeviceSetupFor,
   readSyncState,
+  type ApprovalPinProof,
   type ClockPort,
   type CommandIdentity,
   type LimitAmounts,
@@ -42,6 +43,10 @@ import {
   REPAIR_REJECTED_SUBJECTS,
   repairMediaSeamsFor,
 } from '@bolusi/device/bootstrap/repair';
+import {
+  createApprovalPinControls,
+  type ApprovalPinControls,
+} from '@bolusi/device/bootstrap/approval-pin';
 import { createDeviceControls, type DeviceControls } from '@bolusi/device/bootstrap/devices';
 import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
 import {
@@ -362,6 +367,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       canRenameDevice: snapshot.canRenameDevice,
       canBlockDevices: snapshot.canBlockDevices,
       tenantAdmin: snapshot.tenantAdmin,
+      makesDecisions: snapshot.makesDecisions,
       permissions,
       colleaguePermissions,
       limits,
@@ -533,6 +539,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       thisDeviceId: deviceId,
       now: () => clock.now(),
     });
+  }
+
+  /** The approval PIN of the person signed in now. */
+  function approvalPinFor(userId: string): ApprovalPinControls {
+    return createApprovalPinControls({ port: staffAdmin, session: actingSession(session, userId) });
   }
 
   /** The PIN session, for a window call made for the person signed in now. */
@@ -930,6 +941,14 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       sessionFor(userId).clearLockout(targetUserId),
     'session.resetPin': (userId: string, targetUserId: string, newPin: string) =>
       sessionFor(userId).resetPin(targetUserId, newPin),
+    // The approval PIN, checked only by the server: a decision session for the next ten minutes,
+    // and setting or clearing one (device approval-pin.ts). Online only.
+    'session.openDecision': (userId: string, approvalPin: string) =>
+      sessionFor(userId).openDecision(approvalPin),
+    'approvalPin.set': (userId: string, pin: string, proof?: ApprovalPinProof) =>
+      approvalPinFor(userId).set(pin, proof),
+    'approvalPin.clear': (userId: string, targetUserId: string, ownPin: string) =>
+      approvalPinFor(userId).clear(targetUserId, ownPin),
     // The screen locks even when `session_ended` cannot be written; the lost record is logged.
     'session.lock': () =>
       requireSession()

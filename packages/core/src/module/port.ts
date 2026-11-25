@@ -13,6 +13,7 @@ import type {
   CommandHandlerResult,
   CommandOutcome,
 } from '../runtime/execute.js';
+import { refusalKeyOf } from './op-rules.js';
 import type { ModuleRuntime } from './runtime.js';
 
 /** The commands and queries of a defined module, as `defineModule` returns them. */
@@ -90,11 +91,12 @@ export function bindModulePort<M extends ModuleOperations, DB>(
     query: (name, input) =>
       runtime.queries.execute(queries[name]!, input, identity) as Promise<never>,
     run: async (name, input) => {
-      const outcome: CommandOutcome<unknown> = await runtime.commands.execute(
-        commands[name]!,
-        input,
-        ctx,
-      );
+      const execute = (): Promise<CommandOutcome<unknown>> =>
+        runtime.commands.execute(commands[name]!, input, ctx);
+      const outcome = await retryAfterDecision(execute, () => {
+        const ask = runtime.askDecision?.() ?? null;
+        return ask === null ? Promise.resolve(false) : ask(identity.userId);
+      });
       // A screen awaits the result to navigate (the new ticket's id); a handler that returned none
       // is a module bug, surfaced here rather than as `undefined` deep in a screen.
       if (outcome.result === undefined) {
@@ -110,6 +112,26 @@ export function bindModulePort<M extends ModuleOperations, DB>(
       limitOfAllowance(runtime.commands.enforcementPoint.allowance(identity, permissionId)),
     newId: () => ctx.newId(),
   };
+}
+
+/** The refusal of a decision made on a shared device without the approval PIN (core runtime.ts). */
+export const DECISION_NEEDS_PIN = 'platform.refusal.decisionNeedsPin';
+
+/**
+ * Run `attempt`; when it is refused for want of the approval PIN, `ask` for it, and run once more if
+ * a decision session opened. Every app runs its commands through this, so no screen has to remember
+ * to ask. A second refusal reaches the caller.
+ */
+export async function retryAfterDecision<T>(
+  attempt: () => Promise<T>,
+  ask: () => Promise<boolean>,
+): Promise<T> {
+  try {
+    return await attempt();
+  } catch (error) {
+    if (refusalKeyOf(error) !== DECISION_NEEDS_PIN || !(await ask())) throw error;
+    return attempt();
+  }
 }
 
 /** `ModulePort.limitOf` from an allowance: 0 when not held, null when not limited. */

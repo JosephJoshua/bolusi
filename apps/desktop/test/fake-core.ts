@@ -125,6 +125,7 @@ export function session(over: Partial<SessionView> = {}): SessionView {
     canRenameDevice: true,
     canBlockDevices: true,
     tenantAdmin: true,
+    makesDecisions: true,
     permissions: [],
     colleaguePermissions: {},
     limits: {},

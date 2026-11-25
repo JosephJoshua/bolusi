@@ -44,6 +44,10 @@ export const HTTP_ERROR_CODES = [
   'QRIS_AMOUNT_REFUSED',
   'CHANGE_REFUSED',
   'PERSON_SESSION_INVALID',
+  // Approval PINs (server auth/approval-pins.ts): the person has none yet, so set one first.
+  'APPROVAL_PIN_NOT_SET',
+  // An approval PIN easy to guess, or the same as the person's sign-in PIN.
+  'APPROVAL_PIN_WEAK',
 ] as const;
 
 export const zHttpErrorCode = z.enum(HTTP_ERROR_CODES);

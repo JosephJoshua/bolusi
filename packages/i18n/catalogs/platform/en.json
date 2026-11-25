@@ -8,6 +8,6 @@
     "conflictNotFound": "This conflict wasn’t found.",
     "notYourPreference": "Only the account’s owner can change its language.",
     "idTaken": "This couldn’t be saved. Create it again.",
-    "decisionNeedsPin": "This needs your PIN checked online. Try again when you have internet, or ask for approval on the owner’s phone."
+    "decisionNeedsPin": "Not approved. This needs your approval PIN, checked online, or approve it on your own phone."
   }
 }

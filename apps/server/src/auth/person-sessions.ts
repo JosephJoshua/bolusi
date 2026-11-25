@@ -21,10 +21,17 @@ export interface MintedPersonSession {
 
 export async function mintPersonSession(
   db: TenantDb,
-  params: { tenantId: string; deviceId: string; userId: string; now: number },
+  params: {
+    tenantId: string;
+    deviceId: string;
+    userId: string;
+    now: number;
+    /** A decision session, opened on the approval PIN for `ttlMs` (auth/approval-pins.ts). */
+    decision?: { readonly ttlMs: number };
+  },
 ): Promise<MintedPersonSession> {
   const token = mintToken('bps_');
-  const expiresAt = params.now + PERSON_SESSION_TTL_MS;
+  const expiresAt = params.now + (params.decision?.ttlMs ?? PERSON_SESSION_TTL_MS);
   await db
     .insertInto('personSessions')
     .values({
@@ -35,6 +42,7 @@ export async function mintPersonSession(
       tokenHash: sha256Hex(token),
       createdAt: BigInt(params.now),
       expiresAt: BigInt(expiresAt),
+      provesDecisions: params.decision !== undefined,
     })
     .execute();
   return { token, expiresAt };
@@ -66,21 +74,26 @@ export async function usableOnDevice(
   return membership !== undefined;
 }
 
-/** The person a token names on this device, or null when it is unknown, ended, or not usable. */
+/**
+ * The person a token names on this device, or null when it is unknown, ended, or not usable. With
+ * `decision`, only a decision session counts: one opened on the person's approval PIN.
+ */
 export async function personOfSession(
   db: TenantDb,
   params: {
     token: string;
     device: { readonly deviceId: string; readonly storeId: string | null };
     now: number;
+    decision?: boolean;
   },
 ): Promise<string | null> {
   const row = await db
     .selectFrom('personSessions')
-    .select(['userId', 'deviceId', 'expiresAt', 'revokedAt'])
+    .select(['userId', 'deviceId', 'expiresAt', 'revokedAt', 'provesDecisions'])
     .where('tokenHash', '=', sha256Hex(params.token))
     .executeTakeFirst();
   if (row === undefined || row.deviceId !== params.device.deviceId) return null;
+  if (params.decision === true && !row.provesDecisions) return null;
   if (row.revokedAt !== null || Number(row.expiresAt) <= params.now) return null;
   return (await usableOnDevice(db, params.device, row.userId)) ? row.userId : null;
 }
@@ -102,13 +115,14 @@ export async function endPersonSession(
 /** End every live session of `userId`: their PIN changed, so whoever opened one with the old PIN is out. */
 export async function endPersonSessionsOf(
   db: TenantDb,
-  params: { userId: string; now: number; keepDeviceId?: string },
+  params: { userId: string; now: number; keepDeviceId?: string; decisionsOnly?: boolean },
 ): Promise<void> {
   let update = db
     .updateTable('personSessions')
     .set({ revokedAt: BigInt(params.now) })
     .where('userId', '=', params.userId)
     .where('revokedAt', 'is', null);
+  if (params.decisionsOnly === true) update = update.where('provesDecisions', '=', true);
   if (params.keepDeviceId !== undefined)
     update = update.where('deviceId', '<>', params.keepDeviceId);
   await update.execute();
