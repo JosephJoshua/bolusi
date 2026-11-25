@@ -1,5 +1,6 @@
 // The inventory module's React Native surface: importable only from apps/mobile (screens split).
 export { PartsSurface, type PartsSurfaceProps } from './PartsSurface.js';
+export { TransfersSurface, type TransfersSurfaceProps } from './transfers/TransfersSurface.js';
 export {
   PutBackStep,
   TakePartStep,
