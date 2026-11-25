@@ -186,7 +186,7 @@ describe('runClientMigrations against a fresh database', () => {
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
     expect(result.applied).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 33,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 32,
     ]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
@@ -217,7 +217,7 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 28, name: 'read_scope', applied_at: 1_700_000_000_000 },
       { version: 29, name: 'purchasing', applied_at: 1_700_000_000_000 },
       { version: 31, name: 'rejection_handled', applied_at: 1_700_000_000_000 },
-      { version: 33, name: 'transfers', applied_at: 1_700_000_000_000 },
+      { version: 32, name: 'transfers', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -228,7 +228,7 @@ describe('runner is idempotent', () => {
     const second = await runClientMigrations(driver, { now: () => 2 });
 
     expect(first.applied).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 33,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 32,
     ]);
     expect(second.applied).toEqual([]);
 

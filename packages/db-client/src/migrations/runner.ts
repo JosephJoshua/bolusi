@@ -24,7 +24,7 @@ import { repairStatusLinkMigration } from './024-repair-status-link.js';
 import { readScopeMigration } from './028-read-scope.js';
 import { purchasingMigration } from './029-purchasing.js';
 import { rejectionHandledMigration } from './031-rejection-handled.js';
-import { transfersMigration } from './033-transfers.js';
+import { transfersMigration } from './032-transfers.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */

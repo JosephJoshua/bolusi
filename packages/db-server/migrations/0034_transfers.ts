@@ -1,5 +1,5 @@
 // Parts sent between stores (product-scope.md, "Transfers between stores"). Mirrors client
-// migration 33.
+// migration 32.
 //
 // A transfer belongs to the store that sent it, and its arrivals to the store that received them,
 // but both stores must see all of it. `operations.other_store_id` is the second store an op reaches

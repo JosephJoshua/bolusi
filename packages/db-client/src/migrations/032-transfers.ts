@@ -1,12 +1,12 @@
 // Client migration 33 — parts sent between stores (inventory transfers).
 //
-// Mirrors server migration 0036. What a transfer has delivered or settled is the sum of its arrival
+// Mirrors server migration 0034. What a transfer has delivered or settled is the sum of its arrival
 // and settlement lines, never stored on the transfer, so the (transfer, part) indexes serve every
 // "where are its parts" read.
 import type { ClientMigration } from './types.js';
 
 export const transfersMigration: ClientMigration = {
-  version: 33,
+  version: 32,
   name: 'transfers',
   statements: [
     `CREATE TABLE inventory_transfers (
