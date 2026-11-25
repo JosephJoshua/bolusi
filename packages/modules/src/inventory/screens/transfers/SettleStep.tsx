@@ -3,7 +3,7 @@
  * into this store's stock or are written off with a reason; parts the other store recorded beyond
  * what was sent are settled as arrived, and come off this store's stock.
  */
-import { QuantityStepper, TextInput, border, color, space, type, Text } from '@bolusi/ui';
+import { QuantityStepper, TextInput, border, color, space, type, Text, numeric } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -168,5 +168,5 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   name: { ...type.bodyBold, color: color.text, flexShrink: 1 },
-  open: { ...type.bodySm, color: color.warning, fontVariant: ['tabular-nums'] },
+  open: { ...type.bodySm, color: color.warning, ...numeric },
 });

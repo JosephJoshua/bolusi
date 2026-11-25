@@ -19,6 +19,7 @@ import {
   space,
   type,
   Text,
+  numeric,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -291,7 +292,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: space.sm,
   },
-  number: { ...type.heading, color: color.text, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  number: { ...type.heading, color: color.text, ...numeric, flexShrink: 0 },
   meta: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
   note: { ...type.body, color: color.text, marginTop: space.sm },
   hint: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
@@ -306,7 +307,7 @@ const styles = StyleSheet.create({
   },
   lineName: { ...type.body, color: color.text, flex: 1 },
   lineQty: { alignItems: 'flex-end', gap: space.xs },
-  qty: { ...type.bodySm, color: color.textMuted, fontVariant: ['tabular-nums'] },
+  qty: { ...type.bodySm, color: color.textMuted, ...numeric },
   short: { color: color.warning },
   over: { color: color.danger },
   cancel: { marginTop: space['2xl'], alignItems: 'flex-start', marginLeft: -space.sm },

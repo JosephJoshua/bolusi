@@ -3,7 +3,17 @@
  * transfer. A part already picked says so, so a second tap reads as "one more".
  */
 import { t } from '@bolusi/i18n';
-import { SearchField, TextButton, color, radius, space, touch, type, Text } from '@bolusi/ui';
+import {
+  SearchField,
+  TextButton,
+  color,
+  radius,
+  space,
+  touch,
+  type,
+  Text,
+  numeric,
+} from '@bolusi/ui';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -148,6 +158,6 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: color.surfaceAlt },
   choiceText: { flex: 1 },
   choiceName: { ...type.bodySm, fontWeight: '600', color: color.text },
-  stock: { ...type.bodySm, color: color.textMuted, fontVariant: ['tabular-nums'] },
+  stock: { ...type.bodySm, color: color.textMuted, ...numeric },
   stockOut: { color: color.danger },
 });

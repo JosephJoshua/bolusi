@@ -5,20 +5,21 @@
  */
 import { formatDate, formatDateTime, t } from '@bolusi/i18n';
 import {
-  Columns,
   AppShell,
   Banner,
+  border,
   Button,
   Card,
   Chip,
+  color,
+  Columns,
   ConfirmSheet,
+  numeric,
+  space,
+  Text,
   TextButton,
   Timeline,
-  border,
-  color,
-  space,
   type,
-  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { Linking, Platform, Share, StyleSheet, View } from 'react-native';
@@ -336,7 +337,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: space.sm,
   },
-  number: { ...type.heading, color: color.text, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  number: { ...type.heading, color: color.text, ...numeric, flexShrink: 0 },
   meta: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
   note: { ...type.body, color: color.text, marginTop: space.sm },
   warning: { ...type.bodySm, color: color.warning, marginTop: space.sm },
@@ -350,7 +351,7 @@ const styles = StyleSheet.create({
     borderBottomColor: color.border,
   },
   lineName: { ...type.body, color: color.text, flex: 1 },
-  lineQty: { ...type.bodySm, color: color.textMuted, fontVariant: ['tabular-nums'] },
+  lineQty: { ...type.bodySm, color: color.textMuted, ...numeric },
   over: { color: color.warning },
   cancel: { marginTop: space['2xl'], alignItems: 'flex-start', marginLeft: -space.sm },
 });

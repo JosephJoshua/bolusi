@@ -6,24 +6,21 @@
  */
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
 import {
+  AmountRow,
   AppShell,
   Banner,
   Button,
-  Columns,
-  FreshGlow,
-  Icon,
-  LoadingState,
-  RollingText,
-  border,
   color,
+  Columns,
+  LoadingState,
+  numeric,
   radius,
+  RollingText,
   space,
-  touch,
-  type,
   Text,
+  type,
 } from '@bolusi/ui';
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
@@ -178,13 +175,13 @@ export function KasBoard({
             {turnedDown.length === 0 ? null : (
               <Section title={tm('money.kas.turnedDown')} testID={`${testID}.turnedDown`}>
                 {turnedDown.map((row) => (
-                  <Row
+                  <AmountRow
                     key={row.id}
                     label={ta(approvalKindKey(row.kind))}
                     detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
                       .filter(Boolean)
                       .join(' · ')}
-                    value={formatMoney(row.amount)}
+                    value={row.amount}
                     onPress={onHistory}
                     testID={`${testID}.turnedDown.${row.id}`}
                   />
@@ -194,7 +191,7 @@ export function KasBoard({
 
             {difference === null ? null : (
               <Section title={tm('money.kas.difference')} testID={`${testID}.differences`}>
-                <Row
+                <AmountRow
                   label={formatDateTime(difference.countedAt)}
                   detail={
                     maySettle
@@ -221,23 +218,23 @@ export function KasBoard({
                   ) : (
                     <>
                       {moneyIn.methods.map((method) => (
-                        <Row
+                        <AmountRow
                           key={method.account}
                           label={accountLabel(method.account, accountRows)}
-                          value={formatMoney(method.amount)}
+                          value={method.amount}
                           testID={`${testID}.in.${method.account}`}
                         />
                       ))}
                       {moneyIn.refunded === 0 ? null : (
-                        <Row
+                        <AmountRow
                           label={tm('money.kas.refunded')}
-                          value={formatMoney(-moneyIn.refunded)}
+                          value={-moneyIn.refunded}
                           testID={`${testID}.in.refunded`}
                         />
                       )}
-                      <Row
+                      <AmountRow
                         label={tm('money.kas.total')}
-                        value={formatMoney(moneyIn.total)}
+                        value={moneyIn.total}
                         strong
                         testID={`${testID}.in.total`}
                       />
@@ -248,13 +245,14 @@ export function KasBoard({
               {moves.length === 0 ? null : (
                 <Section title={tm('money.kas.movesToday')} testID={`${testID}.moves`}>
                   {moves.map(({ entry, label, delta }) => (
-                    <Row
+                    <AmountRow
                       key={entry.id}
                       label={tm(label)}
                       detail={[formatTime(entry.createdAt), entry.reason]
                         .filter(Boolean)
                         .join(' · ')}
-                      value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
+                      value={delta}
+                      signed
                       testID={`${testID}.moves.${entry.id}`}
                     />
                   ))}
@@ -264,7 +262,7 @@ export function KasBoard({
               {open.owed.length === 0 ? null : (
                 <Section title={tm('money.kas.owed')} testID={`${testID}.owed`}>
                   {open.owed.map((row) => (
-                    <Row
+                    <AmountRow
                       key={row.documentId}
                       label={row.customer ?? row.documentLabel}
                       detail={[
@@ -273,7 +271,7 @@ export function KasBoard({
                       ]
                         .filter(Boolean)
                         .join(' · ')}
-                      value={formatMoney(row.balance)}
+                      value={row.balance}
                       onPress={mayReceive ? () => onReceive(row) : undefined}
                       testID={`${testID}.owed.${row.documentId}`}
                     />
@@ -285,11 +283,11 @@ export function KasBoard({
                 <Section title={tm('money.kas.owedBack')} testID={`${testID}.owedBack`}>
                   <Text style={styles.muted}>{tm('money.kas.owedBackHint')}</Text>
                   {open.owedBack.map((row) => (
-                    <Row
+                    <AmountRow
                       key={row.documentId}
                       label={row.customer ?? row.documentLabel}
                       detail={row.customer === null ? undefined : row.documentLabel}
-                      value={formatMoney(-row.balance)}
+                      value={-row.balance}
                       onPress={mayReceive ? () => onRefund(row) : undefined}
                       testID={`${testID}.owedBack.${row.documentId}`}
                     />
@@ -304,66 +302,6 @@ export function KasBoard({
   );
 }
 
-/** A label (and a line under it) left, its amount right; a chevron when it opens a step. */
-export function Row({
-  label,
-  detail,
-  value,
-  tone = 'text',
-  strong = false,
-  onPress,
-  freshId,
-  testID,
-}: {
-  readonly label: string;
-  readonly detail?: string | undefined;
-  readonly value: string;
-  /** `struck`: a record that no longer counts (a cancelled payment). */
-  readonly tone?: 'text' | 'danger' | 'struck' | undefined;
-  readonly strong?: boolean | undefined;
-  readonly onPress?: (() => void) | undefined;
-  /** The record the row shows: it glows once when another device changes it. */
-  readonly freshId?: string | undefined;
-  readonly testID: string;
-}): React.JSX.Element {
-  const body: ReactNode = (
-    <>
-      {freshId === undefined ? null : <FreshGlow id={freshId} />}
-      <View style={styles.rowText}>
-        <Text style={strong ? styles.rowLabelStrong : styles.rowLabel}>{label}</Text>
-        {detail === undefined || detail === '' ? null : (
-          <Text style={styles.rowDetail}>{detail}</Text>
-        )}
-      </View>
-      <Text
-        style={[
-          strong ? styles.rowValueStrong : styles.rowValue,
-          tone === 'danger' && styles.danger,
-          tone === 'struck' && styles.struck,
-        ]}
-        testID={`${testID}.value`}
-      >
-        {value}
-      </Text>
-      {onPress === undefined ? null : <Icon name="chevron" size={20} color={color.textMuted} />}
-    </>
-  );
-  return onPress === undefined ? (
-    <View style={[styles.row, strong && styles.totalRow]} testID={testID}>
-      {body}
-    </View>
-  ) : (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-      testID={testID}
-    >
-      {body}
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   drawer: {
     padding: space.lg,
@@ -374,28 +312,9 @@ const styles = StyleSheet.create({
   expected: {
     ...type.title,
     color: color.text,
-    fontVariant: ['tabular-nums'],
+    ...numeric,
     marginTop: space.xs,
   },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
   drawerAction: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
-  row: {
-    minHeight: touch.min,
-    paddingVertical: space.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
-  },
-  totalRow: { borderBottomWidth: 0 },
-  pressed: { backgroundColor: color.surfaceAlt },
-  rowText: { flex: 1 },
-  rowLabel: { ...type.bodySm, color: color.text },
-  rowLabelStrong: { ...type.bodyBold, color: color.text },
-  rowDetail: { ...type.caption, color: color.textMuted, marginTop: space.xs },
-  rowValue: { ...type.bodySm, fontWeight: '600', color: color.text, fontVariant: ['tabular-nums'] },
-  rowValueStrong: { ...type.bodyBold, color: color.text, fontVariant: ['tabular-nums'] },
-  danger: { color: color.danger },
-  struck: { color: color.textMuted, textDecorationLine: 'line-through' },
 });
