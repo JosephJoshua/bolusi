@@ -10,6 +10,7 @@ import { normalizeText, type QueryContext, type QueryPage } from '@bolusi/core';
 import type { InventoryDatabase } from '../inventory/schema.js';
 import { deviceCode } from '../shared/device-code.js';
 import { userNames } from '../shared/user-names.js';
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { PURCHASING_PERMISSION, type OrderStage, type OrderStatus } from './constants.js';
 import type { PurchasingDatabase } from './schema.js';
 
@@ -70,6 +71,21 @@ export interface OrderDetailRow extends OrderRow {
   readonly lines: readonly OrderLineRow[];
   /** Newest first. */
   readonly receipts: readonly ReceiptRow[];
+}
+
+/**
+ * What one part of one delivery cost: the stock move it brought in (to price it) and a piece's
+ * price, or null while nobody has typed it. Read apart from the order (`orderCosts`), so an order
+ * opens on a device that holds no costs.
+ */
+export interface ReceiptCostRow {
+  readonly receiptId: string;
+  readonly at: number;
+  readonly movementId: string;
+  readonly itemId: string;
+  readonly name: string;
+  readonly qty: number;
+  readonly unitCost: number | null;
 }
 
 /** How an order reads, from what it is and what has arrived on each of its lines. */
@@ -305,6 +321,7 @@ export async function getOrderHandler(
           .orderBy('position')
           .execute();
   const people = await userNames(qctx.db, [row.createdBy, ...receipts.map((r) => r.userId)]);
+
   return {
     rows: [
       {
@@ -341,6 +358,67 @@ export const getOrderQuery = {
   permission: PURCHASING_PERMISSION.buy,
   input: getOrderInput,
   handler: getOrderHandler,
+} as const;
+
+// ── orderCosts ─────────────────────────────────────────────────────────────────────────────────
+
+export const orderCostsInput = z.object({ orderId: z.string().min(1) }).strict();
+export type OrderCostsInput = z.input<typeof orderCostsInput>;
+
+/** What each part of each delivery on an order cost a piece, newest delivery first. */
+export async function orderCostsHandler(
+  input: z.output<typeof orderCostsInput>,
+  qctx: Qctx,
+): Promise<QueryPage<ReceiptCostRow>> {
+  const rows = await (qctx.db as unknown as Kysely<InventoryDatabase & PurchasingDatabase>)
+    .selectFrom('purchasingReceipts as r')
+    .innerJoin('inventoryMovements as m', (join) =>
+      join
+        .onRef('m.useId', '=', 'r.id')
+        .on('m.useKind', '=', 'purchase_receipt')
+        .on('m.kind', '=', 'received'),
+    )
+    .innerJoin('purchasingOrderLines as l', (join) =>
+      join.onRef('l.orderId', '=', 'r.orderId').onRef('l.itemId', '=', 'm.itemId'),
+    )
+    .leftJoin('inventoryCosts as c', 'c.movementId', 'm.id')
+    .select([
+      'r.id as receiptId',
+      'r.at',
+      'm.id as movementId',
+      'm.itemId',
+      'l.itemName',
+      'l.position',
+      'm.qty',
+      'c.unitCost',
+    ])
+    .where('r.tenantId', '=', qctx.tenantId)
+    .where('r.storeId', '=', qctx.storeId)
+    .where('m.storeId', '=', qctx.storeId)
+    .where('r.orderId', '=', input.orderId)
+    .orderBy('r.at', 'desc')
+    .orderBy('r.id', 'desc')
+    .orderBy('l.position')
+    .execute();
+  return {
+    rows: rows.map((row) => ({
+      receiptId: row.receiptId,
+      at: Number(row.at),
+      movementId: row.movementId,
+      itemId: row.itemId,
+      name: row.itemName,
+      qty: Number(row.qty),
+      unitCost: row.unitCost === null ? null : Number(row.unitCost),
+    })),
+    nextCursor: null,
+  };
+}
+
+export const orderCostsQuery = {
+  name: 'orderCosts',
+  permission: INVENTORY_PERMISSION.readCost,
+  input: orderCostsInput,
+  handler: orderCostsHandler,
 } as const;
 
 // ── orderItems (the commands' read of the parts list) ─────────────────────────────────────────

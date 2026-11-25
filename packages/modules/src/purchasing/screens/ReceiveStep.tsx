@@ -1,12 +1,15 @@
 /**
  * ReceiveStep — what arrived on a placed order: each part opens at what is still to come, and the
- * buyer sets what actually came. Saving adds it all to this store's stock in one go.
+ * buyer sets what actually came, with the buy price per piece from the supplier's nota when they
+ * have it (it can be filled in later). Saving adds it all to this store's stock in one go.
  */
 import { QuantityStepper, TextInput, border, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { MAX_UNIT_COST } from '../../inventory/constants.js';
 import { useActionRunner } from '../../screen-kit/index.js';
+import { acceptsRupiahText, rupiahFieldText } from '../../shared/rupiah.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import { MAX_LINE_QTY, MAX_PURCHASING_NOTE } from '../constants.js';
 import { tp } from '../i18n.js';
@@ -33,10 +36,12 @@ export function ReceiveStep({
   const runner = useActionRunner();
   const [counts, setCounts] = useState(() => receiveStart(order));
   const [note, setNote] = useState('');
+  // Typed digits per part: kept apart from the count so a part set to 0 and back keeps its price.
+  const [prices, setPrices] = useState<Readonly<Record<string, string>>>({});
 
   const save = (): void => {
     void runner
-      .run(() => runtime.run('receiveOrder', receiveInput(order, counts, note)))
+      .run(() => runtime.run('receiveOrder', receiveInput(order, counts, note, prices)))
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -71,6 +76,19 @@ export function ReceiveStep({
             caption={receiveHint(line, counts[line.itemId] ?? 0)}
             testID={`${testID}.line.${line.itemId}.qty`}
           />
+          {(counts[line.itemId] ?? 0) > 0 ? (
+            <TextInput
+              label={tp('purchasing.receive.price')}
+              value={rupiahFieldText(prices[line.itemId] ?? '', MAX_UNIT_COST)}
+              onChangeText={(next) => {
+                if (!acceptsRupiahText(next, MAX_UNIT_COST)) return;
+                setPrices((now) => ({ ...now, [line.itemId]: next.replace(/\D/g, '') }));
+              }}
+              keyboardType="number-pad"
+              selectTextOnFocus
+              testID={`${testID}.line.${line.itemId}.price`}
+            />
+          ) : null}
         </View>
       ))}
       <View style={styles.noteField}>

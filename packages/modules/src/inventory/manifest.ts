@@ -7,6 +7,7 @@ import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolus
 
 import {
   inventoryCategoriesTable,
+  inventoryCostsTable,
   inventoryItemFacetsTable,
   inventoryItemFitsTable,
   inventoryItemsTable,
@@ -16,6 +17,8 @@ import {
   addCategoryHandler,
   addCategoryInput,
   addItemHandler,
+  addItemsHandler,
+  addItemsInput,
   addItemInput,
   countStockHandler,
   countStockInput,
@@ -23,6 +26,8 @@ import {
   editCategoryInput,
   editItemHandler,
   editItemInput,
+  priceStockHandler,
+  priceStockInput,
   putBackPartHandler,
   takePartHandler,
   usePartInput,
@@ -36,10 +41,12 @@ import {
   findByCodeQuery,
   getItemQuery,
   itemsFittingQuery,
+  itemCostQuery,
   itemsInCategoryQuery,
   listCategoriesQuery,
   listItemsQuery,
   partsForUseQuery,
+  receivedStockQuery,
 } from './queries.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
@@ -90,6 +97,7 @@ export const INVENTORY_PERMISSIONS = {
     scope: 'store',
     // A count sets what the store has, so a wrong one could hide parts that went missing.
     isDangerous: true,
+    decision: false,
     description: 'Can set how many of each part the store has, from a count.',
   },
   [INVENTORY_PERMISSION.useParts]: {
@@ -100,6 +108,7 @@ export const INVENTORY_PERMISSIONS = {
   [INVENTORY_PERMISSION.correctUse]: {
     scope: 'store',
     isDangerous: true,
+    decision: false,
     description:
       'Can take or put back parts on a servisan that is no longer being worked on, to correct it.',
   },
@@ -119,8 +128,15 @@ export const INVENTORY_PERMISSIONS = {
     scope: 'store',
     // Writing sent parts off closes a shortfall that could hide parts taken on the way.
     isDangerous: true,
+    decision: true,
     description:
       'Can settle parts a transfer from the store never delivered: back into stock, or written off with a reason.',
+  },
+  [INVENTORY_PERMISSION.readCost]: {
+    scope: 'store',
+    isDangerous: false,
+    description:
+      "Can see what parts cost to buy and the store's average cost of each, and, with the receive permission, fix a buy price.",
   },
 } as const;
 
@@ -145,6 +161,7 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         [INVENTORY_TABLE.transferArrivalLines]: inventoryTransferArrivalLinesTable,
         [INVENTORY_TABLE.transferSettlements]: inventoryTransferSettlementsTable,
         [INVENTORY_TABLE.transferSettlementLines]: inventoryTransferSettlementLinesTable,
+        [INVENTORY_TABLE.costs]: inventoryCostsTable,
       },
     },
 
@@ -165,6 +182,11 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         permission: INVENTORY_PERMISSION.manageItems,
         input: addItemInput,
         handler: addItemHandler,
+      },
+      addItems: {
+        permission: INVENTORY_PERMISSION.manageItems,
+        input: addItemsInput,
+        handler: addItemsHandler,
       },
       editItem: {
         permission: INVENTORY_PERMISSION.manageItems,
@@ -206,6 +228,11 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         input: settleTransferInput,
         handler: settleTransferHandler,
       },
+      priceStock: {
+        permission: INVENTORY_PERMISSION.receive,
+        input: priceStockInput,
+        handler: priceStockHandler,
+      },
     },
 
     queries: {
@@ -221,6 +248,8 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
       listTransfers: listTransfersQuery,
       getTransfer: getTransferQuery,
       nextTransferNumber: nextTransferNumberQuery,
+      receivedStock: receivedStockQuery,
+      itemCost: itemCostQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

@@ -7,7 +7,9 @@ import { useState } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import { QueryPanel, TaskDialog, type DiscardCopy } from '../../screen-kit/desktop/index.js';
+import { MAX_UNIT_COST } from '../../inventory/constants.js';
 import { QtyField } from '../../inventory/desktop/fields.js';
+import { MoneyField } from '../../screen-kit/desktop/money-field.js';
 import { PartSearch } from '../../inventory/desktop/PartSearch.js';
 import {
   MAX_LINE_QTY,
@@ -213,10 +215,17 @@ export function ReceiveDialog({ order, onClose, onDone }: ReceiveDialogProps): R
   const start = receiveStart(order);
   const [counts, setCounts] = useState(start);
   const [note, setNote] = useState('');
+  const [prices, setPrices] = useState<Readonly<Record<string, number | null>>>({});
   const total = receivedTotal(counts);
   const save = (): void => {
+    const typed = Object.fromEntries(
+      Object.entries(prices).map(([itemId, price]) => [
+        itemId,
+        price === null ? '' : String(price),
+      ]),
+    );
     void runner
-      .run(() => runtime.run('receiveOrder', receiveInput(order, counts, note)))
+      .run(() => runtime.run('receiveOrder', receiveInput(order, counts, note, typed)))
       .then((result) => {
         if (result !== undefined) onDone();
       });
@@ -226,7 +235,11 @@ export function ReceiveDialog({ order, onClose, onDone }: ReceiveDialogProps): R
       title={tp('purchasing.receive.title')}
       description={`${order.orderNumber} · ${order.supplierName}`}
       runner={runner}
-      dirty={JSON.stringify(counts) !== JSON.stringify(start) || note !== ''}
+      dirty={
+        JSON.stringify(counts) !== JSON.stringify(start) ||
+        note !== '' ||
+        Object.values(prices).some((price) => price !== null)
+      }
       discard={discardCopy()}
       onClose={onClose}
       submitLabel={tp('purchasing.receive.save')}
@@ -236,17 +249,29 @@ export function ReceiveDialog({ order, onClose, onDone }: ReceiveDialogProps): R
       size="md"
       testId="purchasing.desk.receive"
     >
+      <p className="text-small text-text-muted">{tp('purchasing.receive.hint')}</p>
       {order.lines.map((line, index) => (
-        <QtyField
-          key={line.itemId}
-          label={line.name}
-          value={counts[line.itemId] ?? 0}
-          onChange={(qty) => setCounts({ ...counts, [line.itemId]: qty })}
-          max={MAX_LINE_QTY}
-          autoFocus={index === 0}
-          hint={receiveHint(line, counts[line.itemId] ?? 0)}
-          testId={`purchasing.desk.receive.line.${line.itemId}`}
-        />
+        // The count and its price side by side: the price waits until something came.
+        <div key={line.itemId} className="grid grid-cols-[minmax(0,1fr)_12rem] items-start gap-4">
+          <QtyField
+            label={line.name}
+            value={counts[line.itemId] ?? 0}
+            onChange={(qty) => setCounts({ ...counts, [line.itemId]: qty })}
+            max={MAX_LINE_QTY}
+            autoFocus={index === 0}
+            hint={receiveHint(line, counts[line.itemId] ?? 0)}
+            testId={`purchasing.desk.receive.line.${line.itemId}`}
+          />
+          <MoneyField
+            label={tp('purchasing.receive.price')}
+            prefix={tp('purchasing.desk.currency')}
+            value={prices[line.itemId] ?? null}
+            onChange={(price) => setPrices({ ...prices, [line.itemId]: price })}
+            max={MAX_UNIT_COST}
+            disabled={(counts[line.itemId] ?? 0) === 0}
+            data-testid={`purchasing.desk.receive.line.${line.itemId}.price`}
+          />
+        </div>
       ))}
       <TextArea
         label={tp('purchasing.receive.note')}

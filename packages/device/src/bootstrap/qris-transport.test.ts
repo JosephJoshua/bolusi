@@ -165,3 +165,21 @@ describe('the QRIS wire', () => {
     expect(never).not.toHaveBeenCalled();
   });
 });
+
+describe('proving the signed-in person', () => {
+  test('their person session goes with the call', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(200, CHARGE));
+    await createFetchQris({
+      baseUrl: 'https://api.example.com',
+      deviceToken: () => Promise.resolve('bdt_secret'),
+      personSession: (userId) => Promise.resolve(userId === 'u-cashier' ? 'bps_cashier' : null),
+      fetchImpl: doFetch as unknown as typeof fetch,
+    })('u-cashier').createCharge({
+      id: CHARGE.id,
+      accountId: ACCOUNT,
+      document: { kind: 'repair.ticket', id: '01920000-0000-7000-8000-0000000000d1', label: 'K-1' },
+      amount: 150_000,
+    });
+    expect(sent(doFetch).headers['X-Person-Session']).toBe('bps_cashier');
+  });
+});

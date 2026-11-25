@@ -8,6 +8,8 @@
 // Falsification: drop the authorization step from pipeline.ts and the refusal tests go green-to-red
 // (the technician's cancel is accepted). Drop `refuse`'s head advance and every "keeps syncing" test
 // fails with CHAIN_GAP.
+import { createHash } from 'node:crypto';
+
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
 import { ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
@@ -22,9 +24,11 @@ import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
 import {
   readAnomalies,
   readOps,
+  seedDevice,
   seedRepairTicket,
   seedUser,
   seedWorld,
+  provenIdentity,
   testId,
 } from '../oplog/helpers.js';
 
@@ -161,11 +165,7 @@ function startWork(builder: ChainBuilder, userId?: string) {
 }
 
 async function push(world: ChainWorld, ops: Parameters<typeof processPushBatch>[2]) {
-  return processPushBatch(
-    productionDeps(),
-    { deviceId: world.deviceId, tenantId: world.tenantId },
-    ops,
-  );
+  return processPushBatch(productionDeps(), await provenIdentity(db, world), ops);
 }
 
 async function refusedRows(tenantId: string) {
@@ -578,5 +578,135 @@ describe('every media ref in a payload is bound to the op signer', () => {
       code: 'SCOPE_VIOLATION',
       reason: expect.stringContaining('media ref deviceId'),
     });
+  });
+});
+
+// Owner decision 2026-11-25: a shared device names an op's author on its own word, so its keys alone
+// could record an owner's cancel or refund. A decision is accepted from it only with the author's
+// person session, which the server opened after checking their PIN on that device.
+//
+// Falsification: drop step 9 (checkDecisionProof) from pipeline.ts and the unproven cancel and
+// discount tests go green-to-red.
+describe('a decision on a shared device needs its author’s PIN, checked by the server', () => {
+  const pushWith = (
+    world: ChainWorld,
+    ops: Parameters<typeof processPushBatch>[2],
+    sessions: string[],
+  ) =>
+    processPushBatch(
+      productionDeps(),
+      { deviceId: world.deviceId, tenantId: world.tenantId, personSessions: sessions },
+      ops,
+    );
+
+  let sessionSeed = 0;
+  async function sessionFor(
+    world: ChainWorld,
+    userId: string,
+    options: { deviceId?: string; expiresAt?: bigint; revokedAt?: bigint } = {},
+  ): Promise<string> {
+    const token = `bps_decision_${userId}_${options.deviceId ?? world.deviceId}_${String(options.expiresAt ?? 0n)}_${String(options.revokedAt ?? 0n)}`;
+    await db
+      .insertInto('personSessions')
+      .values({
+        id: testId(4_000 + (sessionSeed += 1)),
+        tenantId: world.tenantId,
+        deviceId: options.deviceId ?? world.deviceId,
+        userId,
+        tokenHash: createHash('sha256').update(token).digest('hex'),
+        createdAt: 1_726_000_000_000n,
+        expiresAt: options.expiresAt ?? 1_726_200_000_000n,
+        revokedAt: options.revokedAt ?? null,
+      })
+      .execute();
+    return token;
+  }
+
+  test('an owner’s cancel with no proof is refused, and the device keeps syncing', async () => {
+    const { world, builder } = await setupWorld(3601);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3601);
+
+    const result = await pushWith(world, [cancel(builder), startWork(builder)], []);
+
+    expect(result.results[0]).toMatchObject({ status: 'rejected', code: 'PERMISSION_DENIED' });
+    // Spent its chain place like any refusal: the next op is judged on its own.
+    expect(result.results[1]?.status).not.toBe('rejected');
+    expect(result.results[1]).not.toMatchObject({ code: 'CHAIN_GAP' });
+  });
+
+  test('the same cancel with the owner’s own session on this device is accepted', async () => {
+    const { world, builder } = await setupWorld(3602);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3602);
+    const proof = await sessionFor(world, world.userId);
+
+    const result = await pushWith(world, [cancel(builder)], [proof]);
+
+    expect(result.results[0]).toMatchObject({ status: 'accepted' });
+  });
+
+  test('no other session proves the owner: a cashier’s, another device’s, an expired or an ended one', async () => {
+    const { world, builder } = await setupWorld(3603);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3603);
+    const cashier = testId(3613);
+    await seedUser(db, world.tenantId, cashier);
+    await grantDefaultRole(world, cashier, 'cashier', world.storeId, 3623);
+    const other = {
+      ...makeWorld(3633, serverCryptoPort),
+      tenantId: world.tenantId,
+      storeId: world.storeId,
+    };
+    await seedDevice(db, other);
+    const otherDevice = other.deviceId;
+    const proofs = [
+      await sessionFor(world, cashier),
+      await sessionFor(world, world.userId, { deviceId: otherDevice }),
+      await sessionFor(world, world.userId, { expiresAt: 1_726_000_000_001n }),
+      await sessionFor(world, world.userId, { revokedAt: 1_726_000_000_001n }),
+    ];
+
+    const result = await pushWith(world, [cancel(builder)], proofs);
+
+    expect(result.results[0]).toMatchObject({ status: 'rejected', code: 'PERMISSION_DENIED' });
+  });
+
+  test('a discount the rule finds is a decision too; an ordinary price change is not', async () => {
+    const { world, builder } = await setupWorld(3604);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3604);
+    const discount = builder.append({
+      type: 'repair.quote_changed',
+      entityType: 'repair_ticket',
+      entityId: TICKET,
+      schemaVersion: 2,
+      payload: {
+        lineId: '01920000-0000-7000-8000-0000000d0f01',
+        kind: 'discount',
+        description: 'Diskon',
+        amount: -10_000,
+        reason: 'Langganan',
+        customerAgreed: true,
+        fromProposal: false,
+        waitsForCustomer: false,
+      },
+    });
+    const ordinary = changePrice(builder, 71);
+
+    const result = await pushWith(world, [discount, ordinary], []);
+
+    expect(result.results[0]).toMatchObject({ status: 'rejected', code: 'PERMISSION_DENIED' });
+    expect(result.results[1]).toMatchObject({ status: 'accepted' });
+  });
+
+  test('on the owner’s own phone no session is needed: the phone is only theirs', async () => {
+    const { world, builder } = await setupWorld(3605);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3605);
+    await db
+      .updateTable('devices')
+      .set({ personalUserId: world.userId })
+      .where('id', '=', world.deviceId)
+      .execute();
+
+    const result = await pushWith(world, [cancel(builder)], []);
+
+    expect(result.results[0]).toMatchObject({ status: 'accepted' });
   });
 });

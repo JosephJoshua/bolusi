@@ -8,7 +8,7 @@ import {
   opensTransfers,
   InventoryRuntimeProvider,
   NO_FILTER,
-  PartsPage,
+  PartsSection,
   TransfersPage,
   ti,
   type ListFilter,
@@ -398,9 +398,10 @@ export function Counter({
         />
       ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
         <InventoryRuntimeProvider runtime={inventory}>
-          <PartsPage
+          <PartsSection
             filter={partsFilter}
             onFilterChange={setPartsFilter}
+            onRegisterLeaveGuard={registerLeaveGuard}
             place={
               itemSections ? { title: ti('inventory.place.stock'), trail: itemsTrail } : undefined
             }

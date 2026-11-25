@@ -23,6 +23,7 @@ import {
   type StockSinkKind,
   type StockSourceKind,
 } from './constants.js';
+import { foldCost } from './cost.js';
 import type { InventoryDatabase } from './schema.js';
 import { itemSearchSource } from './search.js';
 
@@ -765,4 +766,108 @@ export const itemsInCategoryQuery = {
   permission: INVENTORY_PERMISSION.read,
   input: itemsInCategoryInput,
   handler: itemsInCategoryHandler,
+} as const;
+
+// ── receivedStock (the price command's read of a received movement) ────────────────────────────
+
+export const receivedStockInput = z.object({ movementId: z.string().min(1) }).strict();
+
+/** A movement that brought stock into this store, if `movementId` is one. */
+export async function receivedStockHandler(
+  input: z.output<typeof receivedStockInput>,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly movementId: string; readonly itemId: string }>> {
+  const row = await storeMovements(qctx)
+    .where('id', '=', input.movementId)
+    .where('kind', '=', 'received')
+    .executeTakeFirst();
+  return {
+    rows: row === undefined ? [] : [{ movementId: row.id, itemId: row.itemId }],
+    nextCursor: null,
+  };
+}
+
+export const receivedStockQuery = {
+  name: 'receivedStock',
+  permission: INVENTORY_PERMISSION.read,
+  input: receivedStockInput,
+  handler: receivedStockHandler,
+} as const;
+
+// ── itemCost ───────────────────────────────────────────────────────────────────────────────────
+
+/** How many of a part's latest receipts its cost shows. */
+export const COST_RECEIPTS_SHOWN = 20;
+
+export interface CostReceiptRow {
+  readonly movementId: string;
+  readonly at: number;
+  readonly qty: number;
+  /** Rupiah per piece, or null while nobody has typed it. */
+  readonly unitCost: number | null;
+  /** Where it came from (`PO-K7Q-0001`). */
+  readonly label: string | null;
+}
+
+export interface ItemCostRow {
+  /** This store's average cost per piece, or null before any priced receipt. */
+  readonly average: number | null;
+  /** Receipts here with no price yet: the average leaves them out. */
+  readonly unpriced: number;
+  /** Newest first. */
+  readonly receipts: readonly CostReceiptRow[];
+}
+
+export const itemCostInput = z.object({ itemId: z.string().min(1) }).strict();
+export type ItemCostInput = z.input<typeof itemCostInput>;
+
+/** What a part costs this store: the average now, and what each delivery cost a piece. */
+export async function itemCostHandler(
+  input: z.output<typeof itemCostInput>,
+  qctx: Qctx,
+): Promise<QueryPage<ItemCostRow>> {
+  const movements = await storeMovements(qctx).where('itemId', '=', input.itemId).execute();
+  const prices = new Map(
+    (
+      await qctx.db
+        .selectFrom('inventoryCosts')
+        .select(['movementId', 'unitCost'])
+        .where('tenantId', '=', qctx.tenantId)
+        .where('storeId', '=', qctx.storeId)
+        .where('itemId', '=', input.itemId)
+        .execute()
+    ).map((row) => [row.movementId, Number(row.unitCost)]),
+  );
+  const rows = movements.map((row) => ({
+    id: row.id,
+    at: Number(row.at),
+    kind: row.kind as MovementKind,
+    qty: Number(row.qty),
+    counted: row.counted === null ? null : Number(row.counted),
+    unitCost: prices.get(row.id) ?? null,
+    label: row.useLabel,
+  }));
+  const fold = foldCost(rows);
+  const receipts = rows
+    .filter((row) => row.kind === 'received')
+    .sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1))
+    .slice(0, COST_RECEIPTS_SHOWN)
+    .map((row) => ({
+      movementId: row.id,
+      at: row.at,
+      qty: row.qty,
+      unitCost: row.unitCost,
+      label: row.label,
+    }));
+  return {
+    rows: [{ average: fold.average, unpriced: fold.unpriced, receipts }],
+    nextCursor: null,
+  };
+}
+
+export const itemCostQuery = {
+  name: 'itemCost',
+  permission: INVENTORY_PERMISSION.readCost,
+  input: itemCostInput,
+  handler: itemCostHandler,
 } as const;

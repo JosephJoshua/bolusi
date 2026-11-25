@@ -40,6 +40,7 @@ export {
   formatSignedMoney,
   formatPhone,
   formatNumber,
+  keepCodeWhole,
   keepNumbersWhole,
   formatRelative,
   formatTime,
