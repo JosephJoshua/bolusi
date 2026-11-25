@@ -33,18 +33,12 @@ import {
 import { useCancelFeeAsk, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentAsk } from '../down-payment-ask.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
-import {
-  cancelDrop,
-  cancelRoom,
-  standardCancelFee,
-  type QuoteLineRow,
-  type TicketDetailRow,
-} from '../queries.js';
+import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
+import { useCancelTicket } from '../cancel-ticket.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
-  cancelConsequenceKey,
   DOWN_PAYMENT_GAP_KEY,
   PRICE_KIND_KEY,
   discountLimitHint,
@@ -64,13 +58,11 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
-  cancelRefund,
 } from '../flows.js';
 import { FlowScreen, PhotoThumb, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
 import { ta } from '../../approvals/i18n.js';
 import {
-  useCancelFees,
   useIntakeOptionSettings,
   useDownPaymentMethod,
   usePaymentAccounts,
@@ -307,13 +299,15 @@ export function CancelStep({
   readonly onAsked: () => void;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const fees = useCancelFees(reloadNonce);
   const [reason, setReason] = useState('');
   // Null until the owner taps "Ubah"; the store's fee applies until then.
   const [feeText, setFeeText] = useState<string | null>(null);
+  const cancel = useCancelTicket(
+    { ticketId, workStarted, price, claimOf, downPayment, discounted },
+    { fee: feeText === null ? undefined : parseRupiah(feeText), reason },
+    { onDone, onAsked },
+  );
+  const { runner, fees, standard, charged, changed, asking, room } = cancel;
   const discard = useDiscardConfirm({
     dirty: stale === null && (reason.trim() !== '' || feeText !== null),
     onRegisterDiscardGuard,
@@ -321,55 +315,17 @@ export function CancelStep({
   });
   const leave = (): void => discard.requestLeave(onCancel);
 
-  const standard =
-    fees.status === 'ready'
-      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf, quoteTotal: price }, fees.data)
-      : null;
-  const fee = feeText === null ? standard : parseRupiah(feeText);
-  const changed = standard !== null && fee !== null && fee !== standard;
-  const complete = fee !== null && reason.trim() !== '';
-  const holds = runtime.hasPermission(REPAIR_PERMISSION.cancel);
-  // A limited role (a manager) sees how far below the store's fee they may go before it is asked.
-  const limit = holds ? runtime.limitOf(REPAIR_PERMISSION.cancel) : null;
-  const asking = asksApproval(
-    holds,
-    limit,
-    standard === null || fee === null ? 0 : cancelDrop(standard, fee, discounted),
-  );
-  const room = cancelRoom(limit, standard, discounted);
-
-  const submit = (): void => {
-    if (fee === null || !complete) return;
-    // An unchanged fee is left to the command, which fills in the store's fee as it is then.
-    const input = feeText === null ? { ticketId, reason } : { ticketId, reason, fee };
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', {
-              kind: REPAIR_APPROVAL_KIND.cancel,
-              input,
-              reason,
-            })
-          : runtime.run('cancelTicket', input),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? onAsked : onDone)();
-      });
-  };
-
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(holds ? 'repair.cancel.title' : 'repair.approval.askCancel')}
+      title={cancel.title}
       onBack={leave}
-      primaryLabel={asking ? ta('approvals.action.ask') : tn('repair.action.cancel')}
+      primaryLabel={cancel.submitLabel}
       primaryVariant={asking ? 'primary' : 'destructive'}
-      onPrimary={submit}
+      onPrimary={cancel.submit}
       overlay={discard.overlay}
-      primaryDisabled={!complete}
-      primaryHint={tn(
-        feeText !== null && fee === null ? 'repair.hint.cancelFee' : 'repair.hint.reason',
-      )}
+      primaryDisabled={!cancel.complete}
+      primaryHint={cancel.hint}
       busy={runner.busy}
       errorCode={runner.errorCode}
       stale={stale}
@@ -377,21 +333,14 @@ export function CancelStep({
       testID={testID}
     >
       <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
-        {cancelRefund(downPayment, fee) > 0
-          ? tn('repair.cancel.refundsDp', { amount: formatMoney(cancelRefund(downPayment, fee)) })
-          : tn(cancelConsequenceKey(fee))}
+        {cancel.consequence}
       </Text>
-      {asking ? (
+      {cancel.askedBecause === null ? null : (
         <Text style={[repairStyles.caption, styles.consequence]} testID={`${testID}.asks`}>
-          {tn(askedBecauseKey(holds))}
+          {cancel.askedBecause}
         </Text>
-      ) : null}
-      <QueryView
-        query={fees}
-        onBack={leave}
-        onRetry={() => setReloadNonce((n) => n + 1)}
-        testID={`${testID}.fees`}
-      >
+      )}
+      <QueryView query={fees} onBack={leave} onRetry={cancel.retry} testID={`${testID}.fees`}>
         {() => (
           <View style={styles.proposal} testID={`${testID}.fee`}>
             <View style={styles.feeHeader}>
@@ -408,18 +357,10 @@ export function CancelStep({
               ) : null}
             </View>
             <Text style={styles.proposalAmount} testID={`${testID}.feeAmount`}>
-              {fee === null ? '–' : formatMoney(fee)}
+              {charged === null ? '–' : formatMoney(charged)}
             </Text>
             <Text style={repairStyles.caption} testID={`${testID}.feeBasis`}>
-              {changed
-                ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })
-                : tn(
-                    claimOf !== null
-                      ? 'repair.cancel.claimFree'
-                      : workStarted
-                        ? 'repair.cancel.afterWork'
-                        : 'repair.cancel.beforeWork',
-                  )}
+              {cancel.feeBasis}
             </Text>
           </View>
         )}

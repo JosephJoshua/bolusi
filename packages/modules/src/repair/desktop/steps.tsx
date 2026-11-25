@@ -67,20 +67,13 @@ import {
   toggled,
   type PriceKind,
   type StaleStep,
-  cancelRefund,
 } from '../flows.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { ta } from '../../approvals/i18n.js';
-import {
-  cancelDrop,
-  cancelRoom,
-  standardCancelFee,
-  type QuoteLineRow,
-  type TicketDetailRow,
-} from '../queries.js';
+import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
+import { useCancelTicket } from '../cancel-ticket.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
-  cancelConsequenceKey,
   cancelFeeText,
   DOWN_PAYMENT_GAP_KEY,
   INTAKE_STEP_KEY,
@@ -92,7 +85,6 @@ import {
   refundLabel,
 } from '../labels.js';
 import {
-  useCancelFees,
   useIntakeOptionSettings,
   useDownPaymentMethod,
   usePaymentAccounts,
@@ -503,49 +495,16 @@ export function CancelDialog({
   readonly claimOf: string | null;
   readonly onAsked: () => void;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const fees = useCancelFees(reloadNonce);
   const [reason, setReason] = useState('');
-  // Null until the owner chooses to change it; the store's fee applies until then.
+  // Undefined until the owner chooses to change it; the store's fee applies until then.
   const [fee, setFee] = useState<number | null | undefined>(undefined);
   const changing = fee !== undefined;
-  const standard =
-    fees.status === 'ready'
-      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf, quoteTotal: price }, fees.data)
-      : null;
-  const charged = changing ? fee : standard;
-  const changed = standard !== null && charged !== null && charged !== standard;
-  const complete = charged !== null && reason.trim() !== '';
-  const holds = runtime.hasPermission(REPAIR_PERMISSION.cancel);
-  // A limited role (a manager) sees how far below the store's fee they may go before it is asked.
-  const limit = holds ? runtime.limitOf(REPAIR_PERMISSION.cancel) : null;
-  const asking = asksApproval(
-    holds,
-    limit,
-    standard === null || charged === null ? 0 : cancelDrop(standard, charged, discounted),
+  const cancel = useCancelTicket(
+    { ticketId, workStarted, price, claimOf, downPayment, discounted },
+    { fee, reason },
+    { onDone, onAsked },
   );
-  const room = cancelRoom(limit, standard, discounted);
-
-  const submit = (): void => {
-    if (!complete || charged === null) return;
-    // An unchanged fee is left to the command, which fills in the store's fee as it is then.
-    const input = changing ? { ticketId, reason, fee: charged } : { ticketId, reason };
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', {
-              kind: REPAIR_APPROVAL_KIND.cancel,
-              input,
-              reason,
-            })
-          : runtime.run('cancelTicket', input),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? onAsked : onDone)();
-      });
-  };
+  const { runner, fees, standard, charged, changed, complete, asking, room } = cancel;
 
   const leave = useLeaveGuard(
     stale === null && (reason.trim() !== '' || fee !== undefined),
@@ -554,34 +513,20 @@ export function CancelDialog({
   return (
     <>
       <StepDialog
-        title={tn('repair.cancel.title')}
-        description={
-          cancelRefund(downPayment, charged) > 0
-            ? tn('repair.cancel.refundsDp', {
-                amount: formatMoney(cancelRefund(downPayment, charged)),
-              })
-            : tn(cancelConsequenceKey(charged))
-        }
+        title={cancel.title}
+        description={cancel.consequence}
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         testId="repair.desk.cancel"
         footer={
           <>
-            {complete ? null : (
-              <p className="mr-auto text-small text-text-muted">
-                {tn(
-                  charged === null && fees.status !== 'loading'
-                    ? 'repair.hint.cancelFee'
-                    : 'repair.hint.reason',
-                )}
-              </p>
-            )}
+            {complete ? null : <p className="mr-auto text-small text-text-muted">{cancel.hint}</p>}
             <CancelButton onClick={leave.requestClose} />
             <Button
-              label={asking ? ta('approvals.action.ask') : tn('repair.action.cancel')}
+              label={cancel.submitLabel}
               variant={asking ? 'primary' : 'danger'}
-              onClick={submit}
+              onClick={cancel.submit}
               busy={runner.busy}
               disabled={!complete || stale !== null}
               data-testid="repair.desk.cancel.submit"
@@ -589,7 +534,7 @@ export function CancelDialog({
           </>
         }
       >
-        <QueryPanel query={fees} onRetry={() => setReloadNonce((n) => n + 1)}>
+        <QueryPanel query={fees} onRetry={cancel.retry}>
           {() => (
             <div className="rounded-sm bg-surface-alt p-4" data-testid="repair.desk.cancel.fee">
               <div className="flex items-center justify-between gap-4">
@@ -620,17 +565,7 @@ export function CancelDialog({
                   {charged === null ? '–' : formatMoney(charged)}
                 </p>
               )}
-              <p className="mt-1 text-small text-text-muted">
-                {changed
-                  ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })
-                  : tn(
-                      claimOf !== null
-                        ? 'repair.cancel.claimFree'
-                        : workStarted
-                          ? 'repair.cancel.afterWork'
-                          : 'repair.cancel.beforeWork',
-                    )}
-              </p>
+              <p className="mt-1 text-small text-text-muted">{cancel.feeBasis}</p>
               {!changing || room === null ? null : (
                 <p
                   className="mt-1 text-small text-text-muted"
@@ -650,11 +585,11 @@ export function CancelDialog({
           onChange={(event) => setReason(event.target.value)}
           data-testid="repair.desk.cancel.reason"
         />
-        {asking ? (
+        {cancel.askedBecause === null ? null : (
           <p className="mt-4 text-small text-text-muted" data-testid="repair.desk.cancel.asks">
-            {tn(askedBecauseKey(holds))}
+            {cancel.askedBecause}
           </p>
-        ) : null}
+        )}
       </StepDialog>
       {leave.confirm}
     </>
