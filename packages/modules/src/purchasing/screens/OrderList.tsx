@@ -22,7 +22,7 @@ import {
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import type { ScreenChrome } from '../../screen-kit/screens/views.js';
+import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
 import type { OrderFilter, OrderRow } from '../queries.js';
@@ -34,7 +34,8 @@ export interface OrderListProps {
   readonly chrome: ScreenChrome;
   readonly filter: OrderFilter;
   readonly onFilter: (filter: OrderFilter) => void;
-  readonly onBack: () => void;
+  /** The Barang place's title and the switch to its other sections. */
+  readonly place: PlaceHeader;
   readonly onOpenOrder: (orderId: string) => void;
   readonly onNewOrder: () => void;
   readonly onOpenSuppliers: () => void;
@@ -50,7 +51,7 @@ export function OrderList({
   chrome,
   filter,
   onFilter,
-  onBack,
+  place,
   onOpenOrder,
   onNewOrder,
   onOpenSuppliers,
@@ -76,8 +77,9 @@ export function OrderList({
           unauthorized: {
             title: t('core.errors.PERMISSION_DENIED'),
             hint: t('core.unauthorized.askOwner'),
-            backLabel: t('core.action.back'),
-            onBack,
+            // A new grant arrives by sync, so the way forward is checking this device is current.
+            backLabel: t('sync.status.screenTitle'),
+            onBack: place.onOpenSyncStatus,
           },
         };
       case 'error':
@@ -102,7 +104,7 @@ export function OrderList({
             }
           : { kind: 'ready', items: query.data.rows };
     }
-  }, [query, filter, onBack]);
+  }, [query, filter, place.onOpenSyncStatus]);
 
   const openRef = useRef(onOpenOrder);
   openRef.current = onOpenOrder;
@@ -125,10 +127,7 @@ export function OrderList({
 
   return (
     <AppShell
-      title={tp('purchasing.list.title')}
-      titleVariant="detail"
-      onBack={onBack}
-      backLabel={t('core.action.back')}
+      title={place.title}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       bottomAction={
@@ -144,6 +143,7 @@ export function OrderList({
       }
       testID={testID}
     >
+      {place.sections}
       <View style={styles.chips}>
         <ChipRow testID={`${testID}.chips`}>
           <ToggleChip

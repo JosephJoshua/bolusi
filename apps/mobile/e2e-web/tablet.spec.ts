@@ -25,10 +25,10 @@ async function open(page: Page, role: 'owner' | 'counter', phone = false): Promi
   await expect(page.getByTestId('repair.board')).toBeVisible();
 }
 
-async function openFromMenu(page: Page, item: 'parts' | 'purchasing'): Promise<void> {
+async function openItems(page: Page, section: 'stock' | 'orders'): Promise<void> {
   await open(page, 'owner');
-  await page.getByLabel('Menu akun').first().click();
-  await tap(page, `shell-open-${item}`);
+  await tap(page, 'shell-tabs.items');
+  await tap(page, `items.sections.${section}`);
 }
 
 /** `#rrggbb` as the browser reports a computed colour. */
@@ -82,7 +82,7 @@ test('upright, Kas puts what is owed beside the drawer', async ({ page }) => {
 
 test('sideways, a part opens beside the parts list and the list stays', async ({ page }) => {
   await page.setViewportSize(SIDEWAYS);
-  await openFromMenu(page, 'parts');
+  await openItems(page, 'stock');
   await expect(page.getByTestId('inventory.split')).toBeVisible();
   await expect(page.getByTestId('inventory.noPartOpen')).toBeVisible();
   const row = page.locator('[data-testid^="inventory.list.row."]').first();
@@ -98,7 +98,7 @@ test('sideways, a part opens beside the parts list and the list stays', async ({
 
 test('sideways, an order opens beside the orders list', async ({ page }) => {
   await page.setViewportSize(SIDEWAYS);
-  await openFromMenu(page, 'purchasing');
+  await openItems(page, 'orders');
   await expect(page.getByTestId('purchasing.noOrderOpen')).toBeVisible();
   await page.locator('[data-testid^="purchasing.orders.row."]').first().click();
   await expect(page.getByTestId('purchasing.order.summary')).toBeVisible();

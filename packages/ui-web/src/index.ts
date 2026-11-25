@@ -102,6 +102,8 @@ export {
   PageHeader,
   Sidebar,
   SidebarToggle,
+  type Crumb,
+  type NavGroup,
   type NavItem,
   type SidebarToggleLabels,
 } from './components/Shell.js';

@@ -1,14 +1,15 @@
 /**
  * PurchasingSurface — "Belanja": this store's orders to suppliers and everything reached from them
  * (an order, a new one or a draft being finished, picking its parts, receiving what arrived, the
- * suppliers), as local navigation like PartsSurface. The order being written lives here, so a trip
- * to pick a part or add a supplier comes back to it. Back closes the open step first.
+ * suppliers), as local navigation like PartsSurface: the Belanja section of the Barang place. The
+ * order being written lives here, so a trip to pick a part or add a supplier comes back to it.
+ * While anything is open it publishes a `PlaceStep`, so back closes the open step first.
  */
 import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
-import type { ScreenChrome } from '../../screen-kit/screens/views.js';
+import type { DiscardGuard, PlaceStep } from '../../screen-kit/index.js';
+import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { EMPTY_ORDER, addLine, draftChanged, draftOf, type OrderDraft } from '../order-form.js';
 import type { OrderDetailRow, OrderFilter, SupplierRow } from '../queries.js';
@@ -36,15 +37,15 @@ type View =
 
 export interface PurchasingSurfaceProps {
   readonly chrome: ScreenChrome;
-  readonly onClose: () => void;
-  readonly onRegisterStepBack?: ((back: StepBack | null) => void) | undefined;
+  readonly place: PlaceHeader;
+  readonly onRegisterPlaceStep?: ((step: PlaceStep | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
 }
 
 export function PurchasingSurface({
   chrome,
-  onClose,
-  onRegisterStepBack,
+  place,
+  onRegisterPlaceStep,
   onRegisterDiscardGuard,
 }: PurchasingSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'list' });
@@ -71,38 +72,44 @@ export function PurchasingSurface({
     setView(to);
   }, [writing]);
 
-  const back = useCallback((): boolean => {
-    switch (view.kind) {
-      case 'list':
-        return false;
-      case 'order':
-      case 'suppliers':
-        setView({ kind: 'list' });
-        return true;
-      case 'form': {
-        // A half-written order asks first, through the form's discard sheet.
-        const guard = guardRef.current;
-        if (guard === null) closeForm();
-        else guard(closeForm);
-        return true;
-      }
-      case 'pick':
-      case 'formSupplier':
-        setView({ kind: 'form' });
-        return true;
-      case 'receive':
-        setView({ kind: 'order', orderId: view.order.id });
-        return true;
-      case 'supplier':
-        setView({ kind: 'suppliers' });
-        return true;
-    }
-  }, [view, closeForm]);
+  // On a wide screen the list stays beside the open order. Writing or receiving an order is a task
+  // of its own and keeps the whole screen, so a tap on the list never throws away a half-done one.
+  const beside = view.kind === 'list' || view.kind === 'order';
+  const split = useListDetailSplit() && beside;
 
   useEffect(() => {
-    onRegisterStepBack?.(back);
-    return () => onRegisterStepBack?.(null);
-  }, [back, onRegisterStepBack]);
+    if (view.kind === 'list') {
+      onRegisterPlaceStep?.(null);
+      return;
+    }
+    const back = (): void => {
+      switch (view.kind) {
+        case 'order':
+        case 'suppliers':
+          setView({ kind: 'list' });
+          return;
+        case 'form': {
+          // A half-written order asks first, through the form's discard sheet.
+          const guard = guardRef.current;
+          if (guard === null) closeForm();
+          else guard(closeForm);
+          return;
+        }
+        case 'pick':
+        case 'formSupplier':
+          setView({ kind: 'form' });
+          return;
+        case 'receive':
+          setView({ kind: 'order', orderId: view.order.id });
+          return;
+        case 'supplier':
+          setView({ kind: 'suppliers' });
+          return;
+      }
+    };
+    onRegisterPlaceStep?.({ back, listBeside: split });
+    return () => onRegisterPlaceStep?.(null);
+  }, [view, split, closeForm, onRegisterPlaceStep]);
 
   const openOrder = (orderId: string, done: PurchasingKey | null = null): void => {
     setNotice(done);
@@ -114,10 +121,6 @@ export function PurchasingSurface({
     setView({ kind: 'form' });
   };
 
-  // On a wide screen the list stays beside the open order. Writing or receiving an order is a task
-  // of its own and keeps the whole screen, so a tap on the list never throws away a half-done one.
-  const beside = view.kind === 'list' || view.kind === 'order';
-  const split = useListDetailSplit() && beside;
   // The list's header carries the sync chip and the avatar; the pane beside it keeps neither.
   const paneChrome: ScreenChrome = split ? { syncChip: null, avatar: null } : chrome;
   const openId = view.kind === 'order' ? view.orderId : null;
@@ -127,7 +130,7 @@ export function PurchasingSurface({
       chrome={chrome}
       filter={filter}
       onFilter={setFilter}
-      onBack={onClose}
+      place={place}
       onOpenOrder={(orderId) => {
         if (orderId !== openId) openOrder(orderId);
       }}

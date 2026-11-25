@@ -79,3 +79,14 @@ export type DiscardGuard = (proceed: () => void) => void;
  * step and the surface should leave the screen instead.
  */
 export type StepBack = () => boolean;
+
+/**
+ * A place's open step (a part, an order, a form), published to the shell so hardware back closes
+ * it and the place's tabs hide while it owns the screen. A place publishes `null` on its own list.
+ */
+export interface PlaceStep {
+  /** Step back one level; a step with something typed asks first. */
+  readonly back: () => void;
+  /** The place's list is still on screen beside the step (a wide tablet), so its tabs stay. */
+  readonly listBeside: boolean;
+}

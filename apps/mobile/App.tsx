@@ -16,6 +16,7 @@ import {
   size,
   space,
   useViewport,
+  type TabBarTab,
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,8 +28,7 @@ import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js
 import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { KasHome } from './src/screens/money/KasHome.js';
 import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
-import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
-import { PurchasingRoute } from './src/screens/purchasing/PurchasingRoute.js';
+import { ItemsHome } from './src/screens/inventory/ItemsHome.js';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import { placeTabsShow, type SurfaceNav } from './src/navigation/surface.js';
@@ -121,8 +121,6 @@ import { MONEY_PERMISSION } from '@bolusi/modules/money';
 import { tm, type MoneyRuntime } from '@bolusi/modules/money/screens';
 import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
 import { ti } from '@bolusi/modules/inventory/screens';
-import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
-import { tp } from '@bolusi/modules/purchasing/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -868,7 +866,6 @@ export default function App(props: AppProps): React.JSX.Element {
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const backToSettings = useCallback(() => setRoute('settings'), []);
-  const closeParts = useCallback(() => setRoute('home'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
   // The ledger as the Kas screens read it: repair's money port, live on the same tables.
@@ -904,30 +901,51 @@ export default function App(props: AppProps): React.JSX.Element {
         };
   }, [props.session, props.users]);
 
+  // Barang is a tab for whoever may read the store's items; Belanja sits inside it for buyers.
+  const itemsRuntime = props.repair?.inventory;
+  const showsItems = itemsRuntime?.hasPermission(INVENTORY_PERMISSION.read) === true;
+  const homeTabs: readonly HomeTab[] = [
+    'repair',
+    ...(showsKas ? (['kas'] as const) : []),
+    ...(showsItems ? (['items'] as const) : []),
+  ];
+  // A tab taken away (a grant changed) or another person's pick falls back to Servisan.
   const tab: HomeTab =
-    showsKas && currentUser !== null && homeTab.userId === currentUser.id ? homeTab.tab : 'repair';
+    currentUser !== null && homeTab.userId === currentUser.id && homeTabs.includes(homeTab.tab)
+      ? homeTab.tab
+      : 'repair';
   const selectTab = useCallback(
     (next: HomeTab): void => setHomeTab({ userId: currentUser?.id ?? '', tab: next }),
     [currentUser],
   );
+  // Barang mounts on its first visit and then stays, like Servisan; it unmounts with the session.
+  const [itemsOpenedBy, setItemsOpenedBy] = useState<string | null>(null);
+  if (tab === 'items' && currentUser !== null && itemsOpenedBy !== currentUser.id) {
+    setItemsOpenedBy(currentUser.id);
+  }
+  const itemsOpened = currentUser !== null && itemsOpenedBy === currentUser.id;
   /**
-   * The home surface's back/leave with tabs. On Servisan it is repair's own. On Kas, back closes an
-   * open Kas step or returns to Servisan (never an app exit from the second tab), and leaving home
-   * still asks about a half-done intake on the hidden Servisan, after showing it.
+   * The home surface's back/leave with tabs. On Servisan it is repair's own. On another tab, back
+   * closes that place's open step or returns to Servisan (never an app exit from a later tab), and
+   * leaving home still asks about a half-done intake on the hidden Servisan, after showing it.
    */
   const repairNavRef = useRef<SurfaceNav | null>(null);
-  const kasNavRef = useRef<SurfaceNav | null>(null);
+  const placeNavRef = useRef<Readonly<Record<Exclude<HomeTab, 'repair'>, SurfaceNav | null>>>({
+    kas: null,
+    items: null,
+  });
   const tabRef = useRef<HomeTab>(tab);
   const selectTabRef = useRef(selectTab);
   selectTabRef.current = selectTab;
   const syncHomeNav = useCallback((): void => {
+    const shown = tabRef.current;
     registerSurfaceNav(
-      tabRef.current === 'repair'
+      shown === 'repair'
         ? repairNavRef.current
         : {
             handleBack: () => {
-              const kas = kasNavRef.current;
-              if (kas !== null) return kas.handleBack();
+              const place = placeNavRef.current[shown];
+              if (place !== null) return place.handleBack();
               selectTabRef.current('repair');
               return true;
             },
@@ -941,10 +959,10 @@ export default function App(props: AppProps): React.JSX.Element {
                 selectTabRef.current('repair');
                 repair.requestLeave(proceed);
               };
-              // A half-typed Kas step asks first, then the intake behind it.
-              const kas = kasNavRef.current;
-              if (kas === null) toServisan();
-              else kas.requestLeave(toServisan);
+              // A half-typed step on this tab asks first, then the intake behind it.
+              const place = placeNavRef.current[shown];
+              if (place === null) toServisan();
+              else place.requestLeave(toServisan);
             },
           },
     );
@@ -963,8 +981,17 @@ export default function App(props: AppProps): React.JSX.Element {
   const [kasTabs, setKasTabs] = useState(true);
   const registerKasNav = useCallback(
     (nav: SurfaceNav | null): void => {
-      kasNavRef.current = nav;
+      placeNavRef.current = { ...placeNavRef.current, kas: nav };
       setKasTabs(placeTabsShow(nav));
+      syncHomeNav();
+    },
+    [syncHomeNav],
+  );
+  const [itemsTabs, setItemsTabs] = useState(true);
+  const registerItemsNav = useCallback(
+    (nav: SurfaceNav | null): void => {
+      placeNavRef.current = { ...placeNavRef.current, items: nav };
+      setItemsTabs(placeTabsShow(nav));
       syncHomeNav();
     },
     [syncHomeNav],
@@ -1452,31 +1479,6 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
-            if (shellZone.route === 'parts' && props.repair?.inventory !== undefined) {
-              return (
-                <PartsRoute
-                  runtime={props.repair.inventory}
-                  syncChip={routeSyncChip}
-                  onClose={closeParts}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (
-              shellZone.route === 'purchasing' &&
-              props.repair?.purchasing !== undefined &&
-              props.repair.inventory !== undefined
-            ) {
-              return (
-                <PurchasingRoute
-                  runtime={props.repair.purchasing}
-                  inventory={props.repair.inventory}
-                  syncChip={routeSyncChip}
-                  onClose={closeParts}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
             if (shellZone.route === 'deviceSetup') {
               return (
                 <DeviceSetupRoute
@@ -1658,15 +1660,15 @@ export default function App(props: AppProps): React.JSX.Element {
                     avatar={homeAvatar}
                   />
                 );
-                if (!showsKas || moneyRuntime === null) return repairHome;
-                // Servisan stays mounted behind Kas, so a half-done intake survives a look at the
-                // drawer. Kas holds nothing worth keeping, so it is only there while it shows.
-                const tabs = (tab === 'repair' ? repairTabs : kasTabs) ? (
+                if (homeTabs.length === 1) return repairHome;
+                // Servisan stays mounted behind the other places, so a half-done intake survives a
+                // look at the drawer. Barang stays mounted once opened, so its filter and a
+                // half-written order survive too. Kas holds nothing worth keeping.
+                const tabsShow =
+                  tab === 'repair' ? repairTabs : tab === 'kas' ? kasTabs : itemsTabs;
+                const tabs = tabsShow ? (
                   <TabBar
-                    tabs={[
-                      { key: 'repair', label: tn('repair.board.title'), icon: 'repair' },
-                      { key: 'kas', label: tm('money.kas.title'), icon: 'money' },
-                    ]}
+                    tabs={homeTabs.map(homeTabItem)}
                     selected={tab}
                     onSelect={selectTab}
                     variant={tabsAsRail ? 'rail' : 'bar'}
@@ -1685,7 +1687,7 @@ export default function App(props: AppProps): React.JSX.Element {
                         {repairHome}
                       </ShellTabsProvider>
                     </View>
-                    {tab === 'kas' ? (
+                    {tab === 'kas' && moneyRuntime !== null ? (
                       <View style={FILL}>
                         <ShellTabsProvider tabs={bottomTabs('kas')}>
                           <KasHome
@@ -1694,6 +1696,20 @@ export default function App(props: AppProps): React.JSX.Element {
                             syncChip={homeSyncChip}
                             avatar={homeAvatar}
                             onRegisterSurfaceNav={registerKasNav}
+                          />
+                        </ShellTabsProvider>
+                      </View>
+                    ) : null}
+                    {showsItems && itemsRuntime !== undefined && itemsOpened ? (
+                      <View style={tab === 'items' ? FILL : HIDDEN}>
+                        <ShellTabsProvider tabs={bottomTabs('items')}>
+                          <ItemsHome
+                            inventory={itemsRuntime}
+                            purchasing={props.repair.purchasing}
+                            syncChip={homeSyncChip}
+                            avatar={homeAvatar}
+                            onOpenSyncStatus={openSyncStatus}
+                            onRegisterSurfaceNav={registerItemsNav}
                           />
                         </ShellTabsProvider>
                       </View>
@@ -1768,28 +1784,6 @@ export default function App(props: AppProps): React.JSX.Element {
               }}
               testID="account-menu-switch-user"
             />
-            {props.repair?.inventory?.hasPermission(INVENTORY_PERMISSION.read) === true ? (
-              <ListRow
-                leading={<Icon name="parts" size={size.iconInline} color={color.text} />}
-                primaryText={ti('inventory.list.title')}
-                onPress={() => {
-                  setAccountMenu(false);
-                  leaveHome(() => setRoute('parts'));
-                }}
-                testID="shell-open-parts"
-              />
-            ) : null}
-            {props.repair?.purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true ? (
-              <ListRow
-                leading={<Icon name="buy" size={size.iconInline} color={color.text} />}
-                primaryText={tp('purchasing.list.title')}
-                onPress={() => {
-                  setAccountMenu(false);
-                  leaveHome(() => setRoute('purchasing'));
-                }}
-                testID="shell-open-purchasing"
-              />
-            ) : null}
             <ListRow
               leading={<Icon name="settings" size={size.iconInline} color={color.text} />}
               primaryText={t('core.settings.title')}
@@ -1871,7 +1865,19 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 }
 
 /** The home surface's tabs, shown when the person may see Kas. */
-type HomeTab = 'repair' | 'kas';
+type HomeTab = 'repair' | 'kas' | 'items';
+
+/** A place's tab: its name, read at render so it follows the language, and its icon. */
+function homeTabItem(key: HomeTab): TabBarTab<HomeTab> {
+  switch (key) {
+    case 'repair':
+      return { key, label: tn('repair.board.title'), icon: 'repair' };
+    case 'kas':
+      return { key, label: tm('money.kas.title'), icon: 'money' };
+    case 'items':
+      return { key, label: ti('inventory.list.title'), icon: 'parts' };
+  }
+}
 
 const FILL = { flex: 1 } as const;
 const ROW = { flex: 1, flexDirection: 'row' } as const;
@@ -1893,8 +1899,6 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'roles',
   'printSettings',
   'printPaper',
-  'parts',
-  'purchasing',
   'paymentMethods',
   'deviceSetup',
 ]);
