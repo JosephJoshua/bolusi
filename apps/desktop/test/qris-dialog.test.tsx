@@ -34,8 +34,9 @@ function charge(status: QrisCharge['status'], environment: 'test' | 'live' = 'li
     amount: BODY.amount,
     qrString: '00020101021226',
     environment,
-    expiresAt: Date.now() + 15 * 60_000,
+    expiresAt: Date.now() + 10 * 60_000,
     paidAt: status === 'paid' ? Date.now() : null,
+    cancelledAt: status === 'cancelled' ? Date.now() : null,
   };
 }
 
@@ -47,6 +48,8 @@ function port(overrides: Partial<QrisPort>): QrisPort {
     disconnect: refuse,
     createCharge: refuse,
     charge: refuse,
+    openCharges: refuse,
+    cancel: refuse,
     simulate: refuse,
     ...overrides,
   };
@@ -57,6 +60,7 @@ function show(qris: QrisPort, extra: Partial<Parameters<typeof QrisDialog>[0]> =
     onPaid: vi.fn(),
     onRenew: vi.fn(),
     onTakeByHand: vi.fn(),
+    onCancel: vi.fn(),
     onClose: vi.fn(),
   };
   render(
@@ -115,6 +119,13 @@ describe('the QR at the counter', () => {
     await screen.findByTestId('money.desk.qris.code');
     // The same QR is asked for again: one id, one payment, however often it is retried.
     expect(createCharge.mock.calls.map(([body]) => body.id)).toEqual([BODY.id, BODY.id]);
+  });
+
+  it('lets the counter cancel the QR while it waits', async () => {
+    const handlers = show(port({ createCharge: () => Promise.resolve(charge('waiting')) }));
+    await screen.findByTestId('money.desk.qris.code');
+    fireEvent.click(screen.getByTestId('money.desk.qris.cancelQr'));
+    expect(handlers.onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('offers a new QR once it expired', async () => {
