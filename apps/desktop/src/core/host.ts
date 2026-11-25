@@ -308,7 +308,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       }
     });
   };
-  /** Once per run: the restart that erases a blocked PC is asked for once. */
+  /** Once per run, and not for a block the start already knew: the restart is asked for once. */
   let blockedSeen = false;
 
   function sessionView(): SessionView | null {
@@ -577,16 +577,18 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
 
   /**
    * Erase everything the app keeps on this PC, for a blocked device (blocked-wipe.ts), in its
-   * order: photos, videos and the window's caches, then the database key and files, then the PC's
-   * own keys. Printer, paper, camera and language settings (device-settings.json) are not data and
+   * order: photos, videos and the window's caches, then the PC's own keys and token, then the
+   * database files and key. Printer, paper, camera and language settings (device-settings.json) are not data and
    * stay, so the PC is ready again once it is registered.
    */
   async function eraseThisPc(): Promise<void> {
     rmSync(join(deps.dataDir, 'files'), { recursive: true, force: true });
-    await deps.clearWebData?.();
-    await dbKeyStore.wipe();
-    removeDatabaseFiles();
+    // The window's caches hold nothing the database does not; a failure there must not stop the
+    // erase of the rest.
+    await deps.clearWebData?.().catch((error: unknown) => warn('web data not cleared', error));
     await keystore.wipe();
+    removeDatabaseFiles();
+    await dbKeyStore.wipe();
   }
 
   /** The start: a blocked PC is erased here, before any screen shows its data. */
@@ -809,6 +811,9 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       return;
     }
     app = booting;
+    // Still blocked after the start means the server could not be asked: stay on the blocked
+    // setup screen rather than restart again and again. Only a block learnt while running restarts.
+    blockedSeen = isBlockedSyncState(booting.syncState);
     locale = await loadDeviceLocale(booting.db.db);
     const enroll = createAppEnrollment(
       booting,

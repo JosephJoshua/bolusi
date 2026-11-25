@@ -1145,7 +1145,11 @@ export function Root({
   // The server just said this device is blocked: restart, so the start confirms it and erases the
   // device (blocked-wipe.ts). Only on the change while running; a start that could not ask the
   // server leaves the device on the blocked setup screen rather than restarting forever.
-  const blockedWhileRunning = app !== null && sync !== null && isBlockedSyncState(sync.syncState());
+  const blockedWhileRunning =
+    app !== null &&
+    !isBlockedSyncState(app.syncState) &&
+    sync !== null &&
+    isBlockedSyncState(sync.syncState());
   useEffect(() => {
     if (blockedWhileRunning) onDeviceBlocked?.();
   }, [blockedWhileRunning, onDeviceBlocked]);

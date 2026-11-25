@@ -60,9 +60,11 @@ const PROBE_TIMEOUT_MS = 15_000;
  * A missing token on a device the loop recorded as blocked is `blocked`: only an erase removes the
  * token, so its absence means an earlier erase stopped part way, and the rest must still go.
  */
-export function createBlockProbe(config: BlockProbeConfig): () => Promise<BlockCheck> {
+export function createBlockProbe(
+  config: BlockProbeConfig,
+): (deviceId: string | null) => Promise<BlockCheck> {
   const doFetch = config.fetchImpl ?? fetch;
-  return async () => {
+  return async (deviceId) => {
     const token = await config.deviceToken();
     if (token === null || token === '') return 'blocked';
     try {
@@ -71,7 +73,17 @@ export function createBlockProbe(config: BlockProbeConfig): () => Promise<BlockC
           headers: { Authorization: `Bearer ${token}` },
           signal,
         });
-        if (response.ok) return 'not_blocked';
+        // Clearing the record needs the server's own answer about THIS device, so a captive
+        // portal or a proxy answering 200 cannot unblock a stolen device.
+        if (response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            readonly deviceId?: unknown;
+            readonly status?: unknown;
+          } | null;
+          return deviceId !== null && body?.deviceId === deviceId && body.status === 'active'
+            ? 'not_blocked'
+            : 'unknown';
+        }
         const error = await toTransportError(response);
         return error.code === DEVICE_REVOKED_ERROR_CODE ? 'blocked' : 'unknown';
       });
@@ -86,11 +98,13 @@ export interface BlockedWipeDeps {
   readonly boot: () => Promise<Bootstrapped>;
   /** Forget a cached boot, so the call after the erase opens a new database (phone: one per realm). */
   readonly forgetBoot?: () => void;
-  readonly probe: () => Promise<BlockCheck>;
+  /** Asks the server about this registration (its id; null once an erase removed it). */
+  readonly probe: (deviceId: string | null) => Promise<BlockCheck>;
   /**
    * Erase everything the app keeps on this device, the database closed: photos and videos first,
-   * then the database key and files, then the device's own keys and token. The database goes after
-   * the media because it holds the "blocked" record, so a start interrupted part way erases again.
+   * then the device's own keys and token, then the database files and key. The database goes last
+   * because it holds the "blocked" record: a start interrupted part way finds it with no token
+   * left, which the probe counts as blocked, and erases again.
    */
   readonly eraseDevice: () => Promise<void>;
   readonly clock: ClockPort;
@@ -105,7 +119,7 @@ export async function bootErasingBlocked(deps: BlockedWipeDeps): Promise<Bootstr
   const app = await deps.boot();
   if (!isBlockedSyncState(app.syncState)) return app;
 
-  const check = await deps.probe().catch((): BlockCheck => 'unknown');
+  const check = await deps.probe(app.deviceId).catch((): BlockCheck => 'unknown');
   if (check === 'unknown') return app;
   if (check === 'not_blocked') {
     // The record was wrong (a stray answer): sync resumes.

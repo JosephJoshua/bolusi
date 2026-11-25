@@ -200,7 +200,7 @@ describe('createBlockProbe', () => {
 
   test('only the server saying DEVICE_REVOKED is a block', async () => {
     const revoked = answer(401, { error: { code: 'DEVICE_REVOKED', message: 'Device revoked' } });
-    expect(await probeWith(revoked as unknown as typeof fetch)()).toBe('blocked');
+    expect(await probeWith(revoked as unknown as typeof fetch)('d-1')).toBe('blocked');
     expect(revoked).toHaveBeenCalledWith(
       'https://api.test/v1/devices/me',
       expect.objectContaining({ headers: { Authorization: 'Bearer bdt_x' } }),
@@ -212,25 +212,29 @@ describe('createBlockProbe', () => {
     ['a portal page', 401, '<html>login</html>'],
     ['a server error', 500, { error: { code: 'INTERNAL', message: 'x' } }],
   ])('%s is no answer', async (_name, status, body) => {
-    expect(await probeWith(answer(status, body) as unknown as typeof fetch)()).toBe('unknown');
+    expect(await probeWith(answer(status, body) as unknown as typeof fetch)('d-1')).toBe('unknown');
   });
 
-  test('a normal answer means the device is not blocked', async () => {
-    expect(await probeWith(answer(200, { deviceId: 'x' }) as unknown as typeof fetch)()).toBe(
-      'not_blocked',
-    );
+  test("only the server's answer about this very device unblocks it", async () => {
+    const ok = (body: unknown) => probeWith(answer(200, body) as unknown as typeof fetch);
+    expect(await ok({ deviceId: 'd-1', status: 'active' })('d-1')).toBe('not_blocked');
+    // A portal or proxy answering 200 with anything else is no answer.
+    expect(await ok('<html>welcome</html>')('d-1')).toBe('unknown');
+    expect(await ok({ deviceId: 'd-2', status: 'active' })('d-1')).toBe('unknown');
+    expect(await ok({ deviceId: 'd-1', status: 'revoked' })('d-1')).toBe('unknown');
+    expect(await ok({ deviceId: 'd-1', status: 'active' })(null)).toBe('unknown');
   });
 
   test('a network failure is no answer', async () => {
     const down = vi.fn(async () => {
       throw new TypeError('network down');
     });
-    expect(await probeWith(down as unknown as typeof fetch)()).toBe('unknown');
+    expect(await probeWith(down as unknown as typeof fetch)('d-1')).toBe('unknown');
   });
 
   test('a recorded block with no token left finishes an interrupted erase', async () => {
     const fetchImpl = vi.fn();
-    expect(await probeWith(fetchImpl as unknown as typeof fetch, null)()).toBe('blocked');
+    expect(await probeWith(fetchImpl as unknown as typeof fetch, null)('d-1')).toBe('blocked');
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

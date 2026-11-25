@@ -184,14 +184,15 @@ const boot = bootOncePerRealm(bootDataLayer);
 
 /**
  * Erase everything the app keeps on this phone, for a blocked device (blocked-wipe.ts), in its
- * order: photos, videos and caches, then the database key and file, then the device's own keys.
+ * order: photos, videos and caches, then the device's own keys and token, then the database file
+ * and its key.
  * The language choice (bolusi-prefs.json) is not data and stays.
  */
 async function eraseThisPhone(): Promise<void> {
   eraseAppFiles();
-  await new SecureStoreDbKeyStore(quickCryptoPort).wipe();
-  deleteOpSqliteDatabase({ name: DEFAULT_DATABASE_NAME });
   await new SecureStoreKeyStore().wipe();
+  deleteOpSqliteDatabase({ name: DEFAULT_DATABASE_NAME });
+  await new SecureStoreDbKeyStore(quickCryptoPort).wipe();
 }
 
 /** A restart is how a running phone gets erased: the start does it (foregroundBoot). */
@@ -203,16 +204,27 @@ function restartAfterBlock(): void {
   );
 }
 
-/** The app's start: a blocked phone is erased here, before any screen shows its data. */
-const foregroundBoot = (): Promise<Bootstrapped> =>
+/**
+ * The app's start: a blocked phone is erased here, before any screen shows its data. One at a time:
+ * a second start during the server check (the activity recreated) waits for the first, so the
+ * phone is never erased twice and the fresh database the first opened is kept.
+ */
+let starting: Promise<Bootstrapped> | null = null;
+const foregroundBoot = (): Promise<Bootstrapped> => {
+  starting ??= startErasingBlocked().finally(() => {
+    starting = null;
+  });
+  return starting;
+};
+const startErasingBlocked = (): Promise<Bootstrapped> =>
   bootErasingBlocked({
     boot: () => boot('foreground'),
     forgetBoot: boot.forget,
-    probe: () =>
+    probe: (deviceId) =>
       createBlockProbe({
         baseUrl: apiBaseUrl(),
         deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
-      })(),
+      })(deviceId),
     eraseDevice: eraseThisPhone,
     clock: systemClock,
   });
