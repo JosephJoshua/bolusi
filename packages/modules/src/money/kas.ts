@@ -9,6 +9,7 @@ import {
   movesOut,
   type CashMoveKind,
 } from './constants.js';
+import type { MoneyDocument } from './documents.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, rupiah, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -145,6 +146,19 @@ export function countToday(counts: readonly CashCountRow[], now: number): CashCo
 /** An open balance with the customer it is for, when the document's module can name them. */
 export interface NamedBalance extends OpenBalanceRow {
   readonly customer: string | null;
+}
+
+/** What money goes back for, and whose it is. */
+export interface MoneyTarget {
+  readonly document: MoneyDocument;
+  readonly customer: string | null;
+}
+
+export function targetOf(balance: NamedBalance): MoneyTarget {
+  return {
+    document: { kind: balance.documentKind, id: balance.documentId, label: balance.documentLabel },
+    customer: balance.customer,
+  };
 }
 
 /** The open balances, each with its customer's name. */

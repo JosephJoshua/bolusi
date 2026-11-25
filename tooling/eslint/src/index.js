@@ -30,6 +30,7 @@ export default tseslint.config(
       'bolusi/no-legacy-upload-api': 'error',
       'bolusi/boundaries': 'error',
       'bolusi/permission-module-prefix': 'error',
+      'bolusi/react-only-in-tsx': 'error',
       'bolusi/runtime-emission-allowlist': [
         'error',
         {

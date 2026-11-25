@@ -16,7 +16,7 @@ import {
 } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { ApprovalRow } from '../approvals/queries.js';
-import type { MoneyTarget } from '../money/refund.js';
+import type { MoneyTarget } from '../money/kas.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
 import type { CorrectTicketDetailsInput, OpenTicketInput } from './commands.js';
 import { imeiInvalid, phoneInvalid } from './contact.js';
@@ -514,7 +514,7 @@ export function ticketMoneyTarget(
 }
 
 /**
- * What may be done with a servisan's money once the phone went home (refund.ts has the details):
+ * What may be done with a servisan's money once the phone went home (refund.tsx has the details):
  * give back an overpayment (the counter) or any of what was paid (an owner), and an owner lowers
  * what is still owed.
  */
