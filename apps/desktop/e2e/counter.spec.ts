@@ -1,5 +1,9 @@
 // The counter screens in the real Electron window: the parts jsdom cannot judge, namely keyboard
 // handling across dialogs and how the board fits common counter PC screens.
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import {
   _electron as electron,
   expect,
@@ -7,6 +11,10 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+
+// A fresh profile for this file, so a setting saved by an earlier run (the sidebar left expanded)
+// never changes the layout these tests measure. Restarts within the file keep it.
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'bolusi-e2e-'));
 
 let app: ElectronApplication;
 let page: Page;
@@ -23,7 +31,7 @@ async function launch(flags: readonly string[] = FLAGS): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
   // settings are unchanged.
   // These screens run over the seeded demo; the live app has its own tests.
-  const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1' };
+  const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1', BOLUSI_DESKTOP_DATA_DIR: DATA_DIR };
   app = await electron.launch(
     INSTALLED === undefined
       ? { args: [...flags, `${import.meta.dirname}/..`], env }
@@ -33,6 +41,11 @@ async function launch(flags: readonly string[] = FLAGS): Promise<void> {
   // Electron shows no dialog for an unload the page holds back (the close guard); Playwright still
   // reports one, and answering it itself fails. Taking it over leaves the page's question alone.
   page.on('dialog', (dialog) => void dialog.dismiss().catch(() => undefined));
+  await page.getByTestId('repair.desk.board').waitFor();
+  // The installed app ignores BOLUSI_DESKTOP_DATA_DIR, so its page settings (the sidebar) are wiped
+  // here too: every test starts from the layout a fresh install shows.
+  await page.evaluate(() => window.localStorage.clear());
+  await page.reload();
   await page.getByTestId('repair.desk.board').waitFor();
 }
 
