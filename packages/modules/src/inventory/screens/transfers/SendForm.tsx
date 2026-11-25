@@ -31,7 +31,7 @@ import {
   type SendDraft,
 } from '../../transfers/form.js';
 import { MAX_TRANSFER_NOTE } from '../../transfers/operations.js';
-import { useStores } from './stores.js';
+import { useStores } from '../../transfers/stores.js';
 
 export interface SendFormProps {
   readonly chrome: ScreenChrome;

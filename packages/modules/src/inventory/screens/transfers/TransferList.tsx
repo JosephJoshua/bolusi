@@ -33,7 +33,7 @@ import {
   type StoreChoice,
 } from '../../transfers/form.js';
 import type { TransferFilter, TransferRow } from '../../transfers/queries.js';
-import { useStores } from './stores.js';
+import { useStores } from '../../transfers/stores.js';
 
 export interface TransferListProps {
   readonly chrome: ScreenChrome;

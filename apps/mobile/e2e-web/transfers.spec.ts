@@ -65,7 +65,7 @@ test('an owner sends parts to another store', async ({ page }) => {
   await openTransfers(page);
   await tap(page, 'inventory.transfers.new');
   await expect(page.getByText('Pilih toko tujuan dan sparepartnya dulu.')).toBeVisible();
-  await tap(page, 'inventory.send.store.store-wosi');
+  await tap(page, 'inventory.send.store.store-jayapura');
   await tap(page, 'inventory.send.addPart');
   await page.locator('[data-testid^="inventory.send.pick.choice."]').first().click();
   await expect(page.locator('[data-testid^="inventory.send.line."]').first()).toBeVisible();

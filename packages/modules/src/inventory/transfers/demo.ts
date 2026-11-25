@@ -9,10 +9,10 @@ import type { TransferDetailRow, TransferRow } from './queries.js';
 import { excessLines, lineState, transferActions, transferStage } from './state.js';
 
 /** This demo store and the business's other ones. */
-export const DEMO_STORE_ID = 'store-rufei';
+export const DEMO_STORE_ID = 'store-sorong';
 export const DEMO_OTHER_STORES = [
-  { id: 'store-sanggeng', name: 'Bolusi Sanggeng' },
-  { id: 'store-wosi', name: 'Bolusi Wosi' },
+  { id: 'store-manokwari', name: 'Toko Manokwari' },
+  { id: 'store-jayapura', name: 'Toko Jayapura' },
 ] as const;
 
 const OTHER_STORE_STAFF = { userId: 'u-yohanes', name: 'Yohanes Mandacan' };
@@ -219,7 +219,7 @@ export function demoTransfers(options: DemoTransfersOptions) {
     string,
   ];
   const owner = me();
-  // On its way here from Sanggeng: nothing counted in yet.
+  // On its way here from Manokwari: nothing counted in yet.
   transfers.push({
     id: newId('tr'),
     number: 'TR-M2X-0018',
@@ -236,7 +236,7 @@ export function demoTransfers(options: DemoTransfersOptions) {
     arrivals: [],
     settlements: [],
   });
-  // To Wosi: one battery has not arrived, for the owner to settle.
+  // To Jayapura: one battery has not arrived, for the owner to settle.
   const partial = send(
     DEMO_OTHER_STORES[1].id,
     [
@@ -257,7 +257,7 @@ export function demoTransfers(options: DemoTransfersOptions) {
       { itemId: glass, qty: 4 },
     ],
   });
-  // To Sanggeng: taken back as never arrived, then counted in there after all.
+  // To Manokwari: taken back as never arrived, then counted in there after all.
   const over = send(
     DEMO_OTHER_STORES[0].id,
     [{ itemId: flex, qty: 2 }],

@@ -1,8 +1,8 @@
 // The business's other stores for the transfer screens, as the device last heard of them.
 import { useEffect, useState } from 'react';
 
-import { useInventoryRuntime } from '../../runtime.js';
-import type { StoreChoice } from '../../transfers/form.js';
+import { useInventoryRuntime } from '../runtime.js';
+import type { StoreChoice } from './form.js';
 
 /** The other stores by name; empty until read, or where the runtime knows none. */
 export function useStores(): readonly StoreChoice[] {

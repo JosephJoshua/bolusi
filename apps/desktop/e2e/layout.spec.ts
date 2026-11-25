@@ -81,5 +81,22 @@ for (const [width, height] of [
         .click();
       await check(`${place.toLowerCase()}-${size}`);
     }
+
+    // The owner's pages under Barang: Belanja and Kiriman, each with its first row open.
+    await page.getByTestId('desktop.person').click();
+    await page.getByRole('menuitem', { name: 'Andi Pratama' }).click();
+    await page.getByTestId('repair.desk.board').waitFor();
+    for (const [place, row] of [
+      ['Belanja', 'purchasing.desk.table'],
+      ['Kiriman', 'inventory.desk.transfers.table'],
+    ] as const) {
+      await page
+        .getByRole('navigation')
+        .getByRole('button', { name: place, exact: true })
+        .first()
+        .click();
+      await page.getByTestId(row).getByRole('row').nth(1).click();
+      await check(`${place.toLowerCase()}-${size}`);
+    }
   });
 }

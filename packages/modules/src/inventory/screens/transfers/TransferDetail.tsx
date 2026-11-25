@@ -3,7 +3,7 @@
  * not, and what happened since (arrivals, settlements, a cancel). The receiving store receives from
  * here; the sender cancels before anything arrived; the sending owner settles what is left open.
  */
-import { formatDate, formatDateTime, t } from '@bolusi/i18n';
+import { t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -30,18 +30,20 @@ import {
   Section,
   type ScreenChrome,
 } from '../../../screen-kit/screens/views.js';
-import { INVENTORY_PERMISSION } from '../../constants.js';
 import { ti, type InventoryKey } from '../../i18n.js';
 import { useInventoryQuery, useInventoryRuntime } from '../../runtime.js';
-import {
-  TRANSFER_STAGE_CHIP,
-  storeName,
-  transferSteps,
-  type StoreChoice,
-} from '../../transfers/form.js';
+import { TRANSFER_STAGE_CHIP, otherStoreText } from '../../transfers/form.js';
 import type { TransferDetailRow } from '../../transfers/queries.js';
 import type { TransferLineState } from '../../transfers/state.js';
-import { useStores } from './stores.js';
+import {
+  lineProgress,
+  lineStatus,
+  sentLine,
+  summaryHint,
+  transferHistory,
+  transferLead,
+} from '../../transfers/view.js';
+import { useStores } from '../../transfers/stores.js';
 
 export interface TransferDetailProps {
   readonly transferId: string;
@@ -79,19 +81,9 @@ export function TransferDetail({
     `transfer:${transferId}:${String(reloadNonce)}`,
   );
   const transfer = query.status === 'ready' ? query.data : undefined;
-  const steps =
-    transfer === undefined
-      ? []
-      : transferSteps(transfer, {
-          receive: runtime.hasPermission(INVENTORY_PERMISSION.receive),
-          transfer: runtime.hasPermission(INVENTORY_PERMISSION.transfer),
-          settle: runtime.hasPermission(INVENTORY_PERMISSION.settleTransfer),
-        });
-  // Settling is the next step once something is known to be short or over; while the parts are
-  // still on their way it waits quietly under the parts.
-  const settleLeads =
-    transfer !== undefined && steps.includes('settle') && transfer.stage !== 'sent';
-  const primary = steps.includes('receive') ? 'receive' : settleLeads ? 'settle' : null;
+  const lead = transfer === undefined ? null : transferLead(transfer, runtime);
+  const steps = lead?.steps ?? [];
+  const primary = lead?.primary ?? null;
   const primaryHeld = useJustReplaced(primary);
   const shownNotice = done ?? notice;
   const say = (key: InventoryKey | null): void => {
@@ -114,7 +106,7 @@ export function TransferDetail({
       scrollable
       wide={(transfer?.arrivals.length ?? 0) + (transfer?.settlements.length ?? 0) > 0}
       title={
-        transfer === undefined ? ti('inventory.transfer.section') : storeTitle(transfer, stores)
+        transfer === undefined ? ti('inventory.transfer.section') : otherStoreText(transfer, stores)
       }
       titleVariant="detail"
       onBack={hideBack ? undefined : onBack}
@@ -184,7 +176,8 @@ export function TransferDetail({
 
   function renderTransfer(row: TransferDetailRow): React.JSX.Element {
     const stage = TRANSFER_STAGE_CHIP[row.stage];
-    const history = historyOf(row);
+    const history = transferHistory(row);
+    const hint = summaryHint(row);
     return (
       <View testID={`${testID}.content`}>
         <Columns
@@ -201,28 +194,22 @@ export function TransferDetail({
                     testID={`${testID}.stage`}
                   />
                 </View>
-                <Text style={styles.meta}>
-                  {row.sentByName === null
-                    ? ti('inventory.transfer.detail.sentAt', { date: formatDate(row.sentAt) })
-                    : ti('inventory.transfer.detail.sent', {
-                        date: formatDate(row.sentAt),
-                        name: row.sentByName,
-                      })}
-                </Text>
+                <Text style={styles.meta}>{sentLine(row)}</Text>
                 {row.note === null ? null : <Text style={styles.note}>{row.note}</Text>}
-                {row.stage === 'over' ? (
-                  <Text style={styles.warning} testID={`${testID}.overHint`}>
-                    {ti('inventory.transfer.detail.overHint')}
+                {hint === null ? null : (
+                  <Text
+                    style={hint.tone === 'danger' ? styles.warning : styles.hint}
+                    testID={hint.tone === 'danger' ? `${testID}.overHint` : undefined}
+                  >
+                    {ti(hint.key)}
                   </Text>
-                ) : row.stage === 'partial' && row.direction === 'out' ? (
-                  <Text style={styles.hint}>{ti('inventory.transfer.detail.missingHint')}</Text>
-                ) : null}
+                )}
               </Card>
 
               <Section
                 title={ti('inventory.transfer.detail.lines')}
                 action={
-                  steps.includes('settle') && !settleLeads ? (
+                  lead?.settleQuietly === true ? (
                     <TextButton
                       label={ti('inventory.transfer.action.settle')}
                       onPress={() => onSettle(row)}
@@ -268,13 +255,6 @@ export function TransferDetail({
   }
 }
 
-/** "Ke Toko B" from the sender's side, "Dari Toko A" from the receiver's. */
-function storeTitle(row: TransferDetailRow, stores: readonly StoreChoice[]): string {
-  return row.direction === 'out'
-    ? ti('inventory.transfer.list.to', { store: storeName(stores, row.toStoreId) })
-    : ti('inventory.transfer.list.from', { store: storeName(stores, row.fromStoreId) });
-}
-
 function TransferLine({
   line,
   testID,
@@ -282,82 +262,25 @@ function TransferLine({
   readonly line: TransferLineState;
   readonly testID: string;
 }): React.JSX.Element {
-  const status =
-    line.sent === 0
-      ? ti('inventory.transfer.detail.notSent')
-      : line.missing > 0
-        ? ti('inventory.transfer.detail.missing', { count: line.missing })
-        : line.missing < 0
-          ? ti('inventory.transfer.detail.extra', { count: -line.missing })
-          : null;
+  const status = lineStatus(line);
   return (
     <View style={styles.line} testID={testID}>
       <Text style={styles.lineName}>{line.name}</Text>
       <View style={styles.lineQty}>
         <Text style={styles.qty} testID={`${testID}.qty`}>
-          {ti('inventory.transfer.detail.arrivedOf', { arrived: line.arrived, sent: line.sent })}
+          {lineProgress(line)}
         </Text>
         {status === null ? null : (
           <Text
-            style={[styles.qty, line.missing < 0 || line.sent === 0 ? styles.over : styles.short]}
+            style={[styles.qty, status.tone === 'danger' ? styles.over : styles.short]}
             testID={`${testID}.status`}
           >
-            {status}
+            {status.text}
           </Text>
         )}
       </View>
     </View>
   );
-}
-
-/** Arrivals, settlements and a cancel, newest first. */
-function historyOf(row: TransferDetailRow) {
-  const entries: { at: number; key: string; title: string; meta: string; detail?: string }[] = [];
-  const meta = (at: number, name: string | null) =>
-    [formatDateTime(at), name].filter((part) => part !== null).join(' · ');
-  for (const arrival of row.arrivals) {
-    entries.push({
-      at: arrival.at,
-      key: arrival.id,
-      title: `${ti('inventory.transfer.detail.arrival')}: ${arrival.lines
-        .map((line) => ti('inventory.transfer.detail.line', { name: line.name, qty: line.qty }))
-        .join(', ')}`,
-      meta: meta(arrival.at, arrival.userName),
-      ...(arrival.note === null ? {} : { detail: arrival.note }),
-    });
-  }
-  for (const settlement of row.settlements) {
-    for (const outcome of ['back', 'lost', 'found', 'arrived'] as const) {
-      const lines = settlement.lines.filter((line) => line.outcome === outcome);
-      if (lines.length === 0) continue;
-      entries.push({
-        at: settlement.at,
-        key: `${settlement.id}:${outcome}`,
-        title: `${ti(`inventory.transfer.outcome.${outcome}`)}: ${lines
-          .map((line) => ti('inventory.transfer.detail.line', { name: line.name, qty: line.qty }))
-          .join(', ')}`,
-        meta: meta(settlement.at, settlement.userName),
-        ...(settlement.reason === null ? {} : { detail: settlement.reason }),
-      });
-    }
-  }
-  if (row.cancelledAt !== null) {
-    entries.push({
-      at: row.cancelledAt,
-      key: 'cancelled',
-      title: ti('inventory.transfer.stage.cancelled'),
-      meta: meta(row.cancelledAt, row.cancelledByName),
-      ...(row.cancelReason === null ? {} : { detail: row.cancelReason }),
-    });
-  }
-  return entries
-    .sort((a, b) => b.at - a.at)
-    .map((entry) => ({
-      key: entry.key,
-      title: entry.title,
-      meta: entry.meta,
-      ...(entry.detail === undefined ? {} : { detail: entry.detail }),
-    }));
 }
 
 const styles = StyleSheet.create({
