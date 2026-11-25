@@ -275,15 +275,23 @@ function assertAuthOpCoverage(): void {
 assertAuthOpCoverage();
 
 // ── permissions (02-permissions §11.1, verbatim scopes / isDangerous / canonical EN) ─────────────
-const store = (isDangerous: boolean, description: string): PermissionDeclaration => ({
+// Every dangerous auth power is an owner's decision (authz/registry.ts `decision`).
+const store = (
+  isDangerous: boolean,
+  description: string,
+  extra: Pick<PermissionDeclaration, 'decision'> = {},
+): PermissionDeclaration => ({
   scope: 'store',
   isDangerous,
   description,
+  ...(isDangerous ? { decision: true } : {}),
+  ...extra,
 });
 const tenant = (isDangerous: boolean, description: string): PermissionDeclaration => ({
   scope: 'tenant',
   isDangerous,
   description,
+  ...(isDangerous ? { decision: true } : {}),
 });
 
 /** The manifest as authored (04 §1). */
@@ -315,11 +323,13 @@ export const authModuleManifest = {
     [AUTH_PERMISSION.userResetPin]: store(
       true,
       "Can reset another employee's PIN. Whoever holds this can take over that person's identity until they change it.",
+      { decision: true },
     ),
     [AUTH_PERMISSION.pinChange]: store(false, 'Can change their own PIN.'),
     [AUTH_PERMISSION.pinUnlock]: store(
       false,
       "Can clear an employee's PIN lockout so they can try again.",
+      { decision: true },
     ),
     [AUTH_PERMISSION.roleManage]: tenant(
       true,

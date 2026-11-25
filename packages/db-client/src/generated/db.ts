@@ -94,6 +94,16 @@ export interface InventoryCategories {
   updatedBy: string;
 }
 
+export interface InventoryCosts {
+  at: number;
+  itemId: string;
+  movementId: string | null;
+  storeId: string;
+  tenantId: string;
+  unitCost: number;
+  userId: string;
+}
+
 export interface InventoryItemFacets {
   facet: string;
   itemId: string;
@@ -671,6 +681,7 @@ export interface DB {
   conflicts: Conflicts;
   deviceRegistry: DeviceRegistry;
   inventoryCategories: InventoryCategories;
+  inventoryCosts: InventoryCosts;
   inventoryItemFacets: InventoryItemFacets;
   inventoryItemFits: InventoryItemFits;
   inventoryItems: InventoryItems;

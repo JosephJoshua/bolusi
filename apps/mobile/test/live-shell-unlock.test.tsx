@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { PIN_HARD_LOCK_THRESHOLD } from '@bolusi/core';
+import { PERSONAL_USER_META_KEY, PIN_HARD_LOCK_THRESHOLD, writeMeta } from '@bolusi/core';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 // The Expo native modules the Root chain touches — doubled so their `__DEV__`-dependent real code
@@ -113,6 +113,9 @@ describe('Owner Unlock reaches the screen and clears a real lockout (task 186b)'
     fixture = await bootFixture();
     await enrolledDevice(fixture);
     await seedOwnerAndLockedTarget(fixture);
+    // The owner's own phone: a reset or unlock made offline on a shared device needs the owner's
+    // PIN checked by the server first (server oplog/steps/decision.ts), which this test has no server for.
+    await writeMeta(fixture.app.db.db, PERSONAL_USER_META_KEY, fixture.userId);
     const screen = await mountRoot(fixture);
     await signInAsOwner(screen);
 

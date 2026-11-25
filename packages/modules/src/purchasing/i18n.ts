@@ -128,6 +128,22 @@ export const PURCHASING_KEYS = [
   'purchasing.desk.noPartMatches',
   'purchasing.desk.emptyHint',
   'purchasing.desk.suppliersHint',
+  'purchasing.receive.price',
+  'purchasing.order.costs',
+  'purchasing.order.costLine',
+  'purchasing.order.costMissing',
+  'purchasing.order.costTotal',
+  'purchasing.order.costUnpriced',
+  'purchasing.action.fillPrice',
+  'purchasing.action.fixPrice',
+  'purchasing.price.title',
+  'purchasing.price.field',
+  'purchasing.price.save',
+  'purchasing.price.empty',
+  'purchasing.done.priced',
+  'purchasing.price.discardTitle',
+  'purchasing.price.discardMessage',
+  'purchasing.desk.currency',
 ] as const;
 
 export type PurchasingKey = (typeof PURCHASING_KEYS)[number];

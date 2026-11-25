@@ -629,6 +629,8 @@ const source = {
           stockBuyHint: 'Pesan ke supplier dan terima barangnya',
           stockTransfer: 'Kirim sparepart antar toko',
           stockTransferHint: 'Kirim ke toko lain dan terima kiriman',
+          stockCost: 'Lihat harga beli',
+          stockCostHint: 'Harga beli dan modal rata-rata part',
           notes: 'Catatan',
           notesHint: 'Tulis dan arsipkan catatan toko',
           syncProblems: 'Masalah sinkron',
@@ -809,6 +811,8 @@ const source = {
         conflictNotFound: 'Data bentrok ini tidak ditemukan.',
         notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
         idTaken: 'Data ini belum bisa disimpan. Buat ulang, ya.',
+        decisionNeedsPin:
+          'Ini perlu PIN yang dicek saat online. Coba lagi saat ada internet, atau minta persetujuan lewat HP pemilik.',
       },
     },
     push: {
@@ -1476,6 +1480,8 @@ export const resources = {
             stockBuyHint: 'Order from suppliers and receive the parts',
             stockTransfer: 'Send parts between stores',
             stockTransferHint: 'Send to another store and receive transfers',
+            stockCost: 'See buy prices',
+            stockCostHint: 'Buy prices and the average cost of parts',
             notes: 'Notes',
             notesHint: 'Write and archive store notes',
             syncProblems: 'Sync problems',
@@ -1674,6 +1680,8 @@ export const resources = {
           conflictNotFound: 'This conflict wasn’t found.',
           notYourPreference: 'Only the account’s owner can change its language.',
           idTaken: 'This couldn’t be saved. Create it again.',
+          decisionNeedsPin:
+            'This needs your PIN checked online. Try again when you have internet, or ask for approval on the owner’s phone.',
         },
       },
       push: {

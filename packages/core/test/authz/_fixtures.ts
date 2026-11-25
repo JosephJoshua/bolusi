@@ -23,11 +23,13 @@ const store = (isDangerous: boolean, description: string): PermissionDeclaration
   scope: 'store',
   isDangerous,
   description,
+  ...(isDangerous ? { decision: true } : {}),
 });
 const tenant = (isDangerous: boolean, description: string): PermissionDeclaration => ({
   scope: 'tenant',
   isDangerous,
   description,
+  ...(isDangerous ? { decision: true } : {}),
 });
 
 /** §11.1 — the `auth` module's permissions, verbatim scopes and isDangerous flags. */

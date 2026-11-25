@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
 
-import { stockReceivedOp, type OpDraft } from '../inventory/commands.js';
+import { MAX_UNIT_COST } from '../inventory/constants.js';
+import { stockCostedOp, stockReceivedOp, type OpDraft } from '../inventory/commands.js';
 import {
   MAX_LINE_NAME,
   MAX_LINE_QTY,
@@ -304,11 +305,18 @@ export async function cancelOrderHandler(
 export const receiveOrderInput = z
   .object({
     orderId: z.string().min(1),
-    /** What arrived, per part; a part that did not come is left out or sent as 0. */
+    /**
+     * What arrived, per part; a part that did not come is left out or sent as 0. `unitCost` is
+     * what a piece cost, when the buyer has it (from the supplier's nota); it can be filled later.
+     */
     lines: z
       .array(
         z
-          .object({ itemId: z.string().min(1), qty: z.number().int().min(0).max(MAX_LINE_QTY) })
+          .object({
+            itemId: z.string().min(1),
+            qty: z.number().int().min(0).max(MAX_LINE_QTY),
+            unitCost: z.number().int().min(0).max(MAX_UNIT_COST).nullable().default(null),
+          })
           .strict(),
       )
       .min(1)
@@ -337,18 +345,32 @@ export async function receiveOrderHandler(
   if (arrived.some((line) => !onOrder.has(line.itemId))) throw invalid('lines', 'not on the order');
   const receiptId = ctx.newId();
   const source = { kind: 'purchase_receipt' as const, id: receiptId, label: order.orderNumber };
-  return {
-    ops: [
-      ctx.op({
-        type: PURCHASING_OP.orderReceived,
-        entityType: PURCHASING_RECEIPT_ENTITY,
-        entityId: receiptId,
-        payload: { orderId: order.id, note: input.note, lines: arrived },
-      }),
-      ...arrived.map((line) =>
-        stockReceivedOp(ctx, { itemId: line.itemId, qty: line.qty, source }),
-      ),
-    ],
-    result: { receiptId },
-  };
+  // Quantities and prices travel apart: the receipt and stock moves reach every store device, the
+  // prices only devices whose people may see costs.
+  const ops: OpDraft[] = [
+    ctx.op({
+      type: PURCHASING_OP.orderReceived,
+      entityType: PURCHASING_RECEIPT_ENTITY,
+      entityId: receiptId,
+      payload: {
+        orderId: order.id,
+        note: input.note,
+        lines: arrived.map((line) => ({ itemId: line.itemId, qty: line.qty })),
+      },
+    }),
+  ];
+  for (const line of arrived) {
+    const stock = stockReceivedOp(ctx, { itemId: line.itemId, qty: line.qty, source });
+    ops.push(stock);
+    if (line.unitCost !== null) {
+      ops.push(
+        stockCostedOp(ctx, {
+          movementId: stock.entityId,
+          itemId: line.itemId,
+          unitCost: line.unitCost,
+        }),
+      );
+    }
+  }
+  return { ops, result: { receiptId } };
 }

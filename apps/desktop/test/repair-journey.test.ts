@@ -666,6 +666,41 @@ describe('one servisan from intake to handover, offline in between', () => {
     expect(books.rows[0]!.net).toBe('0');
   }, 300_000);
 
+  test('an owner signed in on the counter with no internet cannot cancel there', async () => {
+    // Owner decision 2026-11-25: on a shared device a cancel needs the owner's PIN checked by the
+    // server, so a copied PC cannot cancel in their name. Offline, it is asked of the owner's phone.
+    await switchTo(counter, cashier, CASHIER_PIN);
+    const photos = [];
+    for (const slot of ['front', 'back', 'left', 'right', 'top', 'bottom']) {
+      photos.push({ slot, label: null, ref: await photo(counter) });
+    }
+    const { ticketId } = (await act(counter, 'repair')('openTicket', {
+      customer: { name: 'Yakob Rumbiak', phone: '0812-4455-6677' },
+      device: { brand: 'Vivo', model: 'Y21', color: 'Hitam', imei: '' },
+      complaint: 'Layar retak',
+      checklist: [],
+      peripherals: [],
+      quoteLines: [{ kind: 'part', description: 'LCD', amount: 400_000 }],
+      repairTypes: ['chargingPort'],
+      photos,
+      downPayment: 0,
+    })) as { ticketId: string };
+    await settle(counter);
+
+    await counter.setOnline(false);
+    await switchTo(counter, owner, lane.pin);
+    await expect(
+      act(counter, 'repair')('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }),
+    ).rejects.toThrow(/decisionNeedsPin/);
+
+    // Back online, the server checks the PIN at the next sign-in and the cancel goes through.
+    await counter.setOnline(true);
+    await switchTo(counter, owner, lane.pin);
+    await act(counter, 'repair')('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 });
+    await settle(counter);
+    await expectNothingRefused(counter);
+  }, 300_000);
+
   test("the PC's language stays after a power cut and follows its person to the server", async () => {
     const pc = await openDevice('PC Bahasa');
     await signIn(pc, owner, lane.pin);

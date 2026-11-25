@@ -35,7 +35,9 @@ import { tp, type PurchasingKey } from '../i18n.js';
 import { orderMessage, orderMessageUrl } from '../order-message.js';
 import { whatsAppAppUrl, whatsAppUrl } from '../../shared/whatsapp.js';
 import { STAGE_CHIP, draftOf, orderActions, orderInput, showsReceived } from '../order-form.js';
-import type { OrderDetailRow } from '../queries.js';
+import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
+import type { OrderDetailRow, ReceiptCostRow } from '../queries.js';
+import { OrderCosts } from './OrderCosts.js';
 import { useOrderStoreName, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 
 export interface OrderDetailProps {
@@ -44,6 +46,8 @@ export interface OrderDetailProps {
   readonly onBack: () => void;
   readonly onEdit: (order: OrderDetailRow) => void;
   readonly onReceive: (order: OrderDetailRow) => void;
+  /** Fill in or fix a delivered part's buy price (for those who may see buy prices). */
+  readonly onPrice: (line: ReceiptCostRow) => void;
   /** What the last step did ("Pesanan dipesan."), shown until dismissed. */
   readonly notice: PurchasingKey | null;
   readonly onClearNotice: () => void;
@@ -58,6 +62,7 @@ export function OrderDetail({
   onBack,
   onEdit,
   onReceive,
+  onPrice,
   notice,
   onClearNotice,
   hideBack = false,
@@ -66,6 +71,7 @@ export function OrderDetail({
   const runtime = usePurchasingRuntime();
   const runner = useActionRunner();
   const storeName = useOrderStoreName();
+  const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [done, setDone] = useState<PurchasingKey | null>(null);
@@ -291,23 +297,28 @@ export function OrderDetail({
           }
           end={
             row.receipts.length === 0 ? null : (
-              <Section title={tp('purchasing.order.receipts')} testID={`${testID}.receipts`}>
-                <Timeline
-                  entries={row.receipts.map((receipt) => ({
-                    key: receipt.id,
-                    title: receipt.lines
-                      .map((line) =>
-                        tp('purchasing.order.receiptLine', { name: line.name, qty: line.qty }),
-                      )
-                      .join(', '),
-                    meta: [formatDateTime(receipt.at), receipt.userName]
-                      .filter((part) => part !== null)
-                      .join(' · '),
-                    ...(receipt.note === null ? {} : { detail: receipt.note }),
-                  }))}
-                  testID={`${testID}.timeline`}
-                />
-              </Section>
+              <>
+                {seesCosts ? (
+                  <OrderCosts orderId={row.id} onPrice={onPrice} onBack={onBack} testID={testID} />
+                ) : null}
+                <Section title={tp('purchasing.order.receipts')} testID={`${testID}.receipts`}>
+                  <Timeline
+                    entries={row.receipts.map((receipt) => ({
+                      key: receipt.id,
+                      title: receipt.lines
+                        .map((line) =>
+                          tp('purchasing.order.receiptLine', { name: line.name, qty: line.qty }),
+                        )
+                        .join(', '),
+                      meta: [formatDateTime(receipt.at), receipt.userName]
+                        .filter((part) => part !== null)
+                        .join(' · '),
+                      ...(receipt.note === null ? {} : { detail: receipt.note }),
+                    }))}
+                    testID={`${testID}.timeline`}
+                  />
+                </Section>
+              </>
             )
           }
         />

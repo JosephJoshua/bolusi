@@ -91,6 +91,9 @@ export const ROLE_ABILITY_GROUPS = [
       },
       // "Kirim sparepart antar toko": send to another store, and cancel a send (its parts come back).
       { id: 'stockTransfer', permissionIds: [I.transfer], requires: ['stockReceive'] },
+      // "Lihat harga beli": buy prices and average costs. Off for every staff preset, so store
+      // devices hold no costs until an owner gives it to someone who works there.
+      { id: 'stockCost', permissionIds: [I.readCost], requires: ['stockView'] },
     ],
   },
   {

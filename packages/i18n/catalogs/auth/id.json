@@ -436,6 +436,8 @@
       "stockBuyHint": "Pesan ke supplier dan terima barangnya",
       "stockTransfer": "Kirim sparepart antar toko",
       "stockTransferHint": "Kirim ke toko lain dan terima kiriman",
+      "stockCost": "Lihat harga beli",
+      "stockCostHint": "Harga beli dan modal rata-rata part",
       "notes": "Catatan",
       "notesHint": "Tulis dan arsipkan catatan toko",
       "syncProblems": "Masalah sinkron",

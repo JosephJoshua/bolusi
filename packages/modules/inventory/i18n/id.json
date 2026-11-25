@@ -12,7 +12,8 @@
     "transferSent": "Transfer dikirim",
     "transferReceived": "Transfer diterima",
     "transferCancelled": "Transfer dibatalkan",
-    "transferSettled": "Transfer diselesaikan"
+    "transferSettled": "Transfer diselesaikan",
+    "stockCosted": "Harga beli dicatat"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
@@ -33,7 +34,9 @@
     "nothingToSettle": "Jumlahnya melebihi yang belum sampai.",
     "reasonRequired": "Tulis alasannya terlebih dahulu.",
     "numberNotThisDevice": "Nomor transfer ini bukan dari perangkat ini.",
-    "numberUsed": "Nomor transfer ini sudah dipakai."
+    "numberUsed": "Nomor transfer ini sudah dipakai.",
+    "notReceived": "Harga beli hanya untuk barang yang sudah diterima.",
+    "costNotYours": "Kamu tidak bisa mengubah harga beli ini."
   },
   "list": {
     "title": "Barang",
@@ -260,6 +263,16 @@
     },
     "results": "{count} barang",
     "closePart": "Tutup barang"
+  },
+  "cost": {
+    "title": "Harga beli",
+    "average": "Modal rata-rata",
+    "perPiece": "{amount}/pcs",
+    "noAverage": "Belum ada harga beli",
+    "unpriced": "Harga beli {count} kiriman belum diisi",
+    "receipt": "{qty} pcs · {label}",
+    "receiptNoLabel": "{qty} pcs",
+    "missing": "Belum diisi"
   },
   "bulk": {
     "open": "Tambah banyak",

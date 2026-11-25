@@ -174,6 +174,32 @@ describe('assembly — startup failures (§3.2 rules 2–4)', () => {
     expect(() => assemblePermissionRegistry([trespasser])).toThrow(/prefix is auth/);
   });
 
+  test('a dangerous permission must say whether it is a decision, and a limited one is one', () => {
+    const declare = (declaration: Record<string, unknown>): ModulePermissionManifest => ({
+      id: 'notes',
+      permissions: {
+        'notes.x': { scope: 'store', isDangerous: false, description: 'x', ...declaration },
+      },
+    });
+    expect(() => assemblePermissionRegistry([declare({ isDangerous: true })])).toThrow(
+      /notes\.x is dangerous: declare whether it is a decision/,
+    );
+    expect(() =>
+      assemblePermissionRegistry([declare({ limit: 'refund', decision: false })]),
+    ).toThrow(/notes\.x has a limit, so it is a decision/);
+    // Controls: stated either way, or a plain permission, assembles.
+    for (const ok of [
+      { isDangerous: true, decision: false },
+      { isDangerous: true, decision: true },
+      {},
+    ]) {
+      expect(() => assemblePermissionRegistry([declare(ok)])).not.toThrow();
+    }
+    expect(
+      assemblePermissionRegistry([declare({ limit: 'refund', decision: true })]).get('notes.x'),
+    ).toMatchObject({ decision: true, limit: 'refund' });
+  });
+
   test('§2 format: malformed ids are startup failures (the id-format class, T-12)', () => {
     // The CLASS of malformed ids, not one remembered example.
     const malformed = [
