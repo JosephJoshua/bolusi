@@ -31,6 +31,7 @@ export default tseslint.config(
       'bolusi/boundaries': 'error',
       'bolusi/permission-module-prefix': 'error',
       'bolusi/react-only-in-tsx': 'error',
+      'bolusi/desktop-processes': 'error',
       'bolusi/runtime-emission-allowlist': [
         'error',
         {
