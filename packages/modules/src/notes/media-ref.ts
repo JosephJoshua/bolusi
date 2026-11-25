@@ -9,9 +9,9 @@
 // policy — the rule that decides "may these bytes be fetched" has to be testable in a plain lane.
 import type { MediaRefMime } from '@bolusi/schemas';
 
-import type { ThumbnailRef } from '../screen-kit/thumbnail.js';
+import type { ThumbnailRef } from '@bolusi/schemas';
 
-/** The render-path ref (06 §6); shared by every module's screens (screen-kit/thumbnail.ts). */
+/** The render-path ref (06 §6); shared by every module's screens (screen-kit/thumbnail.tsx). */
 export type { ThumbnailRef };
 
 /** The subset of a note row this policy reads — so it is callable from a query row or a fixture. */

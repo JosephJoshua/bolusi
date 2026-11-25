@@ -100,3 +100,8 @@ export const MAX_MOVEMENT_QTY = 10_000;
 export const MAX_COUNTED_QTY = 1_000_000;
 /** The most one piece can cost to buy, in whole rupiah. Catches a mistyped run of zeros. */
 export const MAX_UNIT_COST = 1_000_000_000;
+
+/** Who sees the parts list. */
+export function opensParts(reader: { hasPermission(permissionId: string): boolean }): boolean {
+  return reader.hasPermission(INVENTORY_PERMISSION.read);
+}

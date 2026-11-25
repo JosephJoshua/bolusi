@@ -14,9 +14,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  # Lint, types and builds: no database needed.
+  static:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm i18n:check
+      # The web app the server serves (the customer's status page): it must build for production.
+      - run: pnpm --filter @bolusi/web build
+
+  # Every vitest suite, split across four runners by file. The server and sync chaos suites are most
+  # of the time, so one runner took about 17 minutes.
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:16-alpine
@@ -43,20 +69,40 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm i18n:check
-      - run: pnpm test
-      # The web app the server serves (the customer's status page): it must build for production.
-      - run: pnpm --filter @bolusi/web build
-      # The counter PC app in a real Electron window (keyboard handling, layout at common sizes).
-      - run: xvfb-run -a pnpm --filter @bolusi/desktop e2e
+      - run: pnpm exec tsc -b
+      - run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
       - name: Verify database types
+        if: matrix.shard == 1
         run: |
           pnpm db:migrate
           pnpm db:codegen:check
           pnpm --filter @bolusi/db-client db:codegen
           git diff --exit-code -- packages/db-client/src/generated
+
+  # The counter PC app in a real Electron window (keyboard handling, layout at common sizes).
+  desktop-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b
+      - run: xvfb-run -a pnpm --filter @bolusi/desktop e2e
+
+  # The one check branch protection requires: green only when every Linux job above is.
+  checks:
+    needs: [static, test, desktop-e2e]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - run: test "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}" = true
 
   # The counter PC app on Windows, the only place its printing and installer can be checked: a RAW
   # job through the real spooler to a printer whose port is a file, then the installer is built,

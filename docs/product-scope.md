@@ -598,9 +598,18 @@ governance notes in "Decision" where they differ.
 
 ## Open product choices
 
-- Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
-- Choose and verify a QRIS integration provider, onboarding and merchant-account model, fees/settlement and verification/reconciliation semantics; test both central and per-store account needs. No provider (including Midtrans) is selected here.
-- Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
+Settled since this list was first written: Xendit for QRIS, Epson ESC/P slips on
+carbonless forms, a 60 s 720p ownership video at intake. Still open (2026-11-25):
+
+- **Rest of parts and purchasing:** supplier bills and payments, transfers
+  between stores and supplier returns follow part costs. The October 14-17 notes
+  in "Decision" are the starting point; confirm the boundary before building.
+- **Security leftovers:** remote wipe when a device is blocked, reconciling
+  non-cash accounts (a recorded QRIS or transfer is a staff claim), clearing
+  media uploads that never finished.
+- **QRIS:** a QR shown but abandoned, then paid in cash, warns but does not block.
+- **Going live:** server hosting and domain, Windows installer signing, phone
+  release accounts (Play, Apple) and a pilot store on real phones.
 
 Changing the roadmap does not establish physical-device performance; see
 [architecture](architecture.md) for current limits. Resolve relevant open choices

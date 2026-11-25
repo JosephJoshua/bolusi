@@ -1,6 +1,5 @@
 // Expo config (08 §6.1: EXPO_PUBLIC_API_URL is the mobile env surface; read here and
 // inlined into app code by Expo — EXPO_PUBLIC_* never carries secrets, security-guide §10).
-// FCM wiring (android.googleServicesFile) lands with task 21; it is EAS-managed, never committed.
 import type { ExpoConfig } from 'expo/config';
 
 const API_URL = process.env['EXPO_PUBLIC_API_URL']?.replace(/\/+$/, '') ?? '';

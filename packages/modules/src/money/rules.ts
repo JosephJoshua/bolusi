@@ -33,33 +33,38 @@ type Rule = OpRule<MoneyDatabase>;
 type Db = Pick<Kysely<MoneyDatabase>, 'selectFrom'>;
 
 /** Every reason a money change is refused, each with its own copy at `money.refusal.<reason>`. */
-export const MONEY_REFUSALS = defineRefusals('money', [
-  'alreadyRecorded',
-  'documentNotFound',
-  'notChargeable',
-  'chargeMismatch',
-  'aboveCharged',
-  'accountNotUsable',
-  'referenceRequired',
-  'tenderedTooLow',
-  'paymentNotFound',
-  'alreadyVoided',
-  'replacementNotFound',
-  'refundAboveCredit',
-  'notCharged',
-  'refundAbovePaid',
-  'notThisStore',
-  'accountKindChanged',
-  'countRequired',
-  'countNotFound',
-  'countSettled',
-  'countSuperseded',
-  'differenceChanged',
-  'overLimit',
-  'moveAboveDrawer',
-  'cashMoveNotFound',
-  'laterCountSettled',
-] as const);
+export const MONEY_REFUSALS = defineRefusals(
+  'money',
+  [
+    'alreadyRecorded',
+    'documentNotFound',
+    'notChargeable',
+    'chargeMismatch',
+    'aboveCharged',
+    'accountNotUsable',
+    'referenceRequired',
+    'tenderedTooLow',
+    'paymentNotFound',
+    'alreadyVoided',
+    'replacementNotFound',
+    'refundAboveCredit',
+    'notCharged',
+    'refundAbovePaid',
+    'notThisStore',
+    'accountKindChanged',
+    'countRequired',
+    'countNotFound',
+    'countSettled',
+    'countSuperseded',
+    'differenceChanged',
+    'overLimit',
+    'cashMoveNotFound',
+    'laterCountSettled',
+  ] as const,
+  // The server records cash as it really moved, so only a device that sees the drawer stops a
+  // move above it.
+  ['moveAboveDrawer'] as const,
+);
 const { refuse } = MONEY_REFUSALS;
 
 /**

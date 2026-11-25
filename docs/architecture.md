@@ -33,7 +33,7 @@ device the index lives in memory per store, loads once, and reloads only the
 entities the projection engine reports as changed.
 
 Screens are live the same way: a module's screen reads through `useLiveQuery`
-(`packages/modules/src/screen-kit/live.ts`), which re-reads whenever the
+(`packages/modules/src/screen-kit/live.tsx`), which re-reads whenever the
 projection engine's invalidation bus reports a write to the module's tables, or
 a push changes op sync status (`OP_SYNC_STATUS_TABLE`). Local commands and
 pulled operations take the same path, so another device's change shows on an
@@ -134,6 +134,10 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+  A command never refuses on its own (`bolusi/refusals-in-rules`): it calls a
+  check exported from `rules.ts`, or `refuseOnDevice` for a reason declared
+  device-only in `defineRefusals` (a check the server cannot judge, such as the
+  drawer figure).
 - Every op type also declares `read`: the permission a person needs to see its ops.
   Sync follows least privilege, the same rule for every person and role. A device is
   sent only the ops its read set covers (`sync/read-scope.ts`): a shared store device
@@ -184,7 +188,7 @@ fails a build, a boot or a test rather than waiting for review:
   `apps/server/test/integration/sync/every-op-type-folds.test.ts`, which pushes it
   through the real pipeline on PostgreSQL. An applier that Postgres refuses fails the
   whole push, and the device would resend that batch forever.
-- Screens read through `useLiveQuery` (`screen-kit/live.ts`). The platform adapter
+- Screens read through `useLiveQuery` (`screen-kit/live.tsx`). The platform adapter
   subscribes the module runtime to the module's tables, so a pulled change re-runs
   every open read.
 - What another device just changed glows once where it shows. The engine flags pulled
@@ -194,6 +198,11 @@ fails a build, a boot or a test rather than waiting for review:
   else with `FreshGlow`. Pass the id the module's ops name as `entityId`. An op that
   changes how another record looks (a payment on a servisan) declares `concerns`, and
   that record glows too.
+- In `packages/modules`, the extension says where code runs. A `.ts` file is
+  platform-free: the server and the PC's background process load it, so it never
+  imports React, a UI package, a `.tsx` file or a `screens/`/`desktop/` folder, not
+  even a type (`bolusi/react-only-in-tsx`). Hooks and components shared by the phone
+  and the PC go in `.tsx`; what the server also needs stays in `.ts`.
 - Counter PC screens live in `src/<module>/desktop/`. The PC's stylesheet picks up their
   classes from that folder, and the PC window is told every module's permissions
   (`apps/desktop/src/core/permissions.ts`), so a new module needs no PC wiring for either.

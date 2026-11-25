@@ -1,4 +1,4 @@
-// When "Ubah biaya" on a cancelled servisan asks an owner instead (cancel-fee-ask.ts), and what it
+// When "Ubah biaya" on a cancelled servisan asks an owner instead (cancel-fee-ask.tsx), and what it
 // asks for, as the change's own rules would judge it: before a charge the fee, counted from the
 // store's fee with the discounts against the cancel limit; after it a cut off the bill, counted
 // with earlier cuts against the refund limit.

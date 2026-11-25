@@ -130,7 +130,7 @@ async function readTableColumns<DB>(db: Kysely<DB>, table: string): Promise<stri
  * Assert a table's manifest declares EXACTLY its physical columns (T-14: a coverage check
  * names its own denominator). An undeclared column is a review failure (04 §4.4) — the oracle
  * would silently skip it and two projections differing only there would read as equal. SQLite
- * only for now (uses `pragma_table_info`); the Postgres leg lands with the server (task 16).
+ * only (uses `pragma_table_info`).
  */
 export async function assertManifestColumnsComplete<DB>(
   db: Kysely<DB>,
