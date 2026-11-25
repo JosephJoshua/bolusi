@@ -32,8 +32,11 @@ export interface PhotoStripProps {
 // It bleeds through the screen's gutter (`useBleed`), and only the outer one beside another column.
 const styles = StyleSheet.create({
   scroller: { flexGrow: 0 },
-  row: { gap: space.sm },
-  tile: { width: size.photoStrip },
+  row: { gap: space.md },
+  // At least the photo's width, and wider for a caption that needs it (a large font, a long angle
+  // name): a caption wraps between words and is never cut. Two photos wide at most, so a long
+  // caption takes a second line instead of one very wide tile.
+  tile: { minWidth: size.photoStrip, maxWidth: size.photoStrip * 2 },
   image: {
     width: size.photoStrip,
     height: size.photoStrip,
@@ -41,7 +44,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: color.surfaceAlt,
   },
-  label: { ...type.caption, color: color.textMuted, marginTop: space.xs },
+  // No fixed lineHeight: on Android 15+ a one-word caption with one drew its last glyph on a
+  // second, hidden line at font 2.0 ("Belakan"), the same bounds bug the segmented labels had.
+  label: { ...type.caption, lineHeight: undefined, color: color.textMuted, marginTop: space.xs },
 });
 
 export function PhotoStrip({
@@ -69,9 +74,7 @@ export function PhotoStrip({
           style={styles.tile}
         >
           <View style={styles.image}>{photo.image}</View>
-          <Text style={styles.label} numberOfLines={1}>
-            {photo.label}
-          </Text>
+          <Text style={styles.label}>{photo.label}</Text>
         </Pressable>
       ))}
     </ScrollView>

@@ -27,6 +27,7 @@ import {
   touch,
   type,
   Text,
+  ValueText,
 } from '@bolusi/ui';
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -434,9 +435,9 @@ function FieldRow({
         style={({ pressed }) => [styles.rowPress, pressed ? styles.pressed : null]}
       >
         <View style={styles.rowText}>
-          <Text style={styles.fieldName} numberOfLines={1}>
+          <ValueText lines={1} style={styles.fieldName}>
             {field.label === '' ? ' ' : field.label}
-          </Text>
+          </ValueText>
           {problem === undefined ? (
             <Text style={styles.caption}>{summary}</Text>
           ) : (

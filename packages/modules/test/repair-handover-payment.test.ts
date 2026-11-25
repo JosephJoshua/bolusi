@@ -601,7 +601,7 @@ describe('money after the phone went home', () => {
     const overpaid = await ticket(h, ticketId);
     expect(amountOwed(overpaid) - (overpaid.downPayment ?? 0)).toBe(-100_000);
     expect(ticketMoneyActions(overpaid, may(h, h.cashierId))).toEqual({
-      refund: true,
+      refund: 'due',
       reduce: false,
     });
     const methods = refundMethods(await documentMoney(h, ticketId), [], false);
@@ -624,7 +624,7 @@ describe('money after the phone went home', () => {
     const settled = await ticket(h, ticketId);
     expect(settled).toMatchObject({ downPayment: TOTAL, reduced: 0 });
     expect(ticketMoneyActions(settled, may(h, h.cashierId))).toEqual({
-      refund: false,
+      refund: null,
       reduce: false,
     });
     expect((await h.moneyQuery('openBalances', {}, h.storeOwnerId)).rows).toEqual([]);
@@ -640,11 +640,14 @@ describe('money after the phone went home', () => {
       h.cashierId,
     );
     const paid = await ticket(h, ticketId);
-    expect(ticketMoneyActions(paid, may(h, h.ownerId))).toEqual({ refund: true, reduce: false });
+    expect(ticketMoneyActions(paid, may(h, h.ownerId))).toEqual({
+      refund: 'correction',
+      reduce: false,
+    });
     // Money goes back through the counter's command, which an owner without it cannot run.
     const without = (permission: string) =>
       permission !== 'money.receive' && h!.hasPermission(h!.ownerId, permission);
-    expect(ticketMoneyActions(paid, without)).toEqual({ refund: false, reduce: false });
+    expect(ticketMoneyActions(paid, without)).toEqual({ refund: null, reduce: false });
     expect(refundMethods(await documentMoney(h, ticketId), [], true)).toMatchObject([
       { account: 'cash', limit: TOTAL },
     ]);
@@ -666,9 +669,9 @@ describe('money after the phone went home', () => {
     const ticketId = await repaired(h);
     await h.run('returnDevice', handover(h, ticketId, { unpaidReason: 'Bayar Jumat' }), h.ownerId);
     const owing = await ticket(h, ticketId);
-    expect(ticketMoneyActions(owing, may(h, h.ownerId))).toEqual({ refund: false, reduce: true });
+    expect(ticketMoneyActions(owing, may(h, h.ownerId))).toEqual({ refund: null, reduce: true });
     expect(ticketMoneyActions(owing, may(h, h.cashierId))).toEqual({
-      refund: false,
+      refund: null,
       reduce: false,
     });
 

@@ -7,14 +7,15 @@
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import {
   ChipRow,
+  color,
   EmptyState,
+  numeric,
+  space,
+  Text,
   TextButton,
   TextInput,
   ToggleChip,
-  color,
-  space,
   type,
-  Text,
 } from '@bolusi/ui';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -859,11 +860,11 @@ const styles = StyleSheet.create({
   lineLabel: { ...type.bodySm, color: color.textMuted, flexShrink: 1, marginRight: space.md },
   lineLabelStrong: { ...type.bodyBold, color: color.text, flexShrink: 1, marginRight: space.md },
   // The amount never wraps: "Rp" and its figure stay on one line, the label wraps instead.
-  lineValue: { ...type.bodySm, color: color.text, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  lineValue: { ...type.bodySm, color: color.text, ...numeric, flexShrink: 0 },
   lineValueStrong: {
     ...type.heading,
     color: color.text,
-    fontVariant: ['tabular-nums'],
+    ...numeric,
     flexShrink: 0,
   },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   seedControlSession,
@@ -99,7 +100,10 @@ test('device path + self-revoke: an enrolled device revokes itself; its very nex
 
   const res = await h.app.request(`http://srv.test/v1/devices/${self.deviceId}/revoke`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${self.token}`, 'X-Acting-User': p.ownerUserId },
+    headers: {
+      Authorization: `Bearer ${self.token}`,
+      ...(await asPerson(h, self.token, p.ownerUserId)),
+    },
   });
   expect(res.status).toBe(200);
 
@@ -176,4 +180,37 @@ test('two revocations of one device: exactly ONE owns the transition', async () 
     .where('action', '=', 'device.revoked')
     .execute();
   expect(audits).toHaveLength(1);
+});
+
+test("the server's own signer cannot be blocked: 404, and it stays active", async () => {
+  const { p } = await setup();
+  const systemId = uuidv7(h.clock.now());
+  await h.idb.db
+    .insertInto('devices')
+    .values({
+      id: systemId,
+      tenantId: p.tenantId,
+      storeId: null,
+      kind: 'system',
+      name: 'server',
+      signingKeyPublic: `pk-${systemId}`,
+      tokenHash: null,
+      enrolledAt: BigInt(h.clock.now()),
+      enrolledBy: null,
+      status: 'active',
+    })
+    .execute();
+  const control = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
+
+  const res = await h.app.request(`http://srv.test/v1/devices/${systemId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${control}` },
+  });
+  expect(res.status).toBe(404);
+  const row = await h.idb.db
+    .selectFrom('devices')
+    .select('status')
+    .where('id', '=', systemId)
+    .executeTakeFirstOrThrow();
+  expect(row.status).toBe('active');
 });

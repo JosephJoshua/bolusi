@@ -7,7 +7,12 @@
     "itemPutBack": "Sparepart dikembalikan",
     "categoryAdded": "Kategori ditambahkan",
     "categoryEdited": "Kategori diubah",
-    "stockReceived": "Barang diterima"
+    "stockReceived": "Barang diterima",
+    "stockSent": "Barang dikirim ke toko lain",
+    "transferSent": "Transfer dikirim",
+    "transferReceived": "Transfer diterima",
+    "transferCancelled": "Transfer dibatalkan",
+    "transferSettled": "Transfer diselesaikan"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
@@ -17,7 +22,18 @@
     "wrongUse": "Data servisannya tidak cocok. Coba lagi.",
     "categoryNotFound": "Kategori ini tidak ada.",
     "categoryInvalid": "Isian atau format nama kategori ini belum benar.",
-    "wrongSource": "Data pesanannya tidak sesuai."
+    "wrongSource": "Data pesanannya tidak sesuai.",
+    "transferNotFound": "Transfer ini tidak ditemukan di toko ini.",
+    "transferMismatch": "Data transfernya tidak sesuai.",
+    "transferCancelled": "Transfer ini sudah dibatalkan toko pengirim.",
+    "sameStore": "Pilih toko lain sebagai tujuan.",
+    "notOnTransfer": "Sparepart ini tidak ada di transfer.",
+    "moreThanSent": "Jumlahnya melebihi yang dikirim.",
+    "nothingToCancel": "Transfer ini tidak bisa dibatalkan lagi karena sebagian sudah diterima.",
+    "nothingToSettle": "Jumlahnya melebihi yang belum sampai.",
+    "reasonRequired": "Tulis alasannya terlebih dahulu.",
+    "numberNotThisDevice": "Nomor transfer ini bukan dari perangkat ini.",
+    "numberUsed": "Nomor transfer ini sudah dipakai."
   },
   "list": {
     "title": "Barang",
@@ -110,7 +126,11 @@
     "counted": "Dikoreksi jadi {count}",
     "taken": "Diambil untuk {use}",
     "putBack": "Dikembalikan dari {use}",
-    "received": "Diterima dari {source}"
+    "received": "Diterima dari {source}",
+    "transferOut": "Dikirim lewat {transfer}",
+    "transferIn": "Diterima dari {transfer}",
+    "transferBack": "Kembali dari {transfer}",
+    "transferArrivedLate": "Ternyata sampai, {transfer}"
   },
   "stepper": {
     "decrease": "Kurangi",

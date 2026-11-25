@@ -240,6 +240,10 @@ export class RealtimeController {
       // A DROP (it had connected). Reconnect on the same rung; the connect-failure streak stays 0
       // (a successful open reset it), so a drop alone never escalates.
       this.#scheduleReconnect();
+      // The server also drops the socket of a device it just blocked (SEC-RT-02), and its reconnect
+      // is refused at auth, which the transport cannot tell apart from a network fault. One sync now
+      // learns a block at once, so the blocked device erases itself without waiting for the timer.
+      this.#safeTrigger();
       return;
     }
 

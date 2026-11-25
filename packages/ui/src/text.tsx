@@ -26,8 +26,31 @@ export function FontScaleProvider({ children }: { readonly children: ReactNode }
   return <FontScaleContext.Provider value={fontScale}>{children}</FontScaleContext.Provider>;
 }
 
-export function Text(props: ComponentPropsWithRef<typeof RNText>): React.JSX.Element {
+/**
+ * Text never cuts itself off: labels, titles, chips and amounts wrap or the layout changes
+ * (design guide §9). The one exception, a long value someone typed shown in a list row, is
+ * `ValueText`.
+ */
+export type TextProps = Omit<
+  ComponentPropsWithRef<typeof RNText>,
+  'numberOfLines' | 'ellipsizeMode'
+>;
+
+export function Text(props: TextProps): React.JSX.Element {
   return <RNText key={useContext(FontScaleContext)} {...props} />;
+}
+
+/**
+ * A value someone typed (a customer's name, a part's model list) shown in a list row, cut to
+ * `lines` with an ellipsis. Its full text must be one tap away. It marks itself so the browser
+ * layout check allows the cut.
+ */
+export function ValueText({
+  lines,
+  ...props
+}: TextProps & { readonly lines: number }): React.JSX.Element {
+  const marked = { ...props, dataSet: { ellipsis: 'value' } } as TextProps;
+  return <RNText key={useContext(FontScaleContext)} numberOfLines={lines} {...marked} />;
 }
 
 /**
@@ -37,7 +60,7 @@ export function Text(props: ComponentPropsWithRef<typeof RNText>): React.JSX.Ele
  * ("Animated node is already attached to a view").
  */
 export function AnimatedText(
-  props: ComponentPropsWithRef<typeof Animated.Text>,
+  props: Omit<ComponentPropsWithRef<typeof Animated.Text>, 'numberOfLines' | 'ellipsizeMode'>,
 ): React.JSX.Element {
   return <Animated.Text key={useContext(FontScaleContext)} {...props} />;
 }

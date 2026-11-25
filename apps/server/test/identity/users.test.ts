@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   roleIdOf,
@@ -145,7 +146,7 @@ test('pin-verifier: out-of-bounds params → 422; stale asOf → applied:false; 
   const hdr = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${device.token}`,
-    'X-Acting-User': ownerId,
+    ...(await asPerson(h, device.token, ownerId)),
   };
   const verifier = (asOfTs: number, mKiB = 32768, t = 3) => ({
     algorithm: 'argon2id',
@@ -227,7 +228,7 @@ test('pin-verifier reset of another user without auth.user_reset_pin → 403', a
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${device.token}`,
-      'X-Acting-User': staff,
+      ...(await asPerson(h, device.token, staff)),
     },
     body: JSON.stringify({
       verifierRef: uuidv7(h.clock.now()),
@@ -262,10 +263,10 @@ test('pin-verifier: an asOf ahead of the server clock or from another device is 
     roleKeys: ['cashier'],
   });
   const device = await seedDevice(h, { tenantId, storeId: s1 });
-  const post = (actor: string, asOf: { timestamp: number; deviceId: string; seq: number }) =>
+  const post = async (actor: string, asOf: { timestamp: number; deviceId: string; seq: number }) =>
     h.app.request(`http://srv.test/v1/users/${cashier}/pin-verifier`, {
       method: 'POST',
-      headers: { ...bearer(device.token), 'X-Acting-User': actor },
+      headers: { ...bearer(device.token), ...(await asPerson(h, device.token, actor)) },
       body: JSON.stringify({
         verifierRef: uuidv7(h.clock.now()),
         verifier: {
@@ -378,10 +379,10 @@ test('a deactivated user cannot set their own PIN verifier on a device', async (
     roleKeys: ['staff'],
   });
   const device = await seedDevice(h, { tenantId, storeId: s1 });
-  const post = (userId: string) =>
+  const post = async (userId: string) =>
     h.app.request(`http://srv.test/v1/users/${userId}/pin-verifier`, {
       method: 'POST',
-      headers: { ...bearer(device.token), 'X-Acting-User': userId },
+      headers: { ...bearer(device.token), ...(await asPerson(h, device.token, userId)) },
       body: verifierBody(device.deviceId),
     });
 
@@ -439,7 +440,10 @@ async function storeWithOwners() {
     roleKeys: ['store_owner'],
   });
   const device = await seedDevice(h, { tenantId, storeId: s1, enrolledBy: ownerId });
-  const as = (userId: string) => ({ ...bearer(device.token), 'X-Acting-User': userId });
+  const as = async (userId: string) => ({
+    ...bearer(device.token),
+    ...(await asPerson(h, device.token, userId)),
+  });
   return {
     tenantId,
     s1,
@@ -480,7 +484,7 @@ test('a store owner adds a cashier-technician from a store device, but never ano
 
   const created = await h.app.request('http://srv.test/v1/users', {
     method: 'POST',
-    headers: s.as(s.storeOwner),
+    headers: await s.as(s.storeOwner),
     body: newStaff(s.s1, [s.cashier, s.technician]),
   });
   expect(created.status).toBe(201);
@@ -490,7 +494,7 @@ test('a store owner adds a cashier-technician from a store device, but never ano
   for (const roleIds of [[s.storeOwnerRole], [s.cashier, s.storeOwnerRole], [s.mainOwnerRole]]) {
     const refused = await h.app.request('http://srv.test/v1/users', {
       method: 'POST',
-      headers: s.as(s.storeOwner),
+      headers: await s.as(s.storeOwner),
       body: newStaff(s.s1, roleIds),
     });
     expect(refused.status).toBe(403);
@@ -499,7 +503,7 @@ test('a store owner adds a cashier-technician from a store device, but never ano
   // The main owner may add a store owner.
   const owner = await h.app.request('http://srv.test/v1/users', {
     method: 'POST',
-    headers: s.as(s.ownerId),
+    headers: await s.as(s.ownerId),
     body: newStaff(s.s1, [s.storeOwnerRole]),
   });
   expect(owner.status).toBe(201);
@@ -516,7 +520,7 @@ test('changing roles replaces every grant, and a store owner cannot promote anyo
 
   const changed = await h.app.request(`http://srv.test/v1/users/${rina}`, {
     method: 'PATCH',
-    headers: s.as(s.storeOwner),
+    headers: await s.as(s.storeOwner),
     body: JSON.stringify({ name: 'Rina Wati', roleIds: [s.technician] }),
   });
   expect(changed.status).toBe(200);
@@ -530,7 +534,7 @@ test('changing roles replaces every grant, and a store owner cannot promote anyo
 
   const promote = await h.app.request(`http://srv.test/v1/users/${rina}`, {
     method: 'PATCH',
-    headers: s.as(s.storeOwner),
+    headers: await s.as(s.storeOwner),
     body: JSON.stringify({ roleIds: [s.storeOwnerRole] }),
   });
   expect(promote.status).toBe(403);
@@ -539,7 +543,7 @@ test('changing roles replaces every grant, and a store owner cannot promote anyo
   // A role id from nowhere is a denial, not a silent drop.
   const unknown = await h.app.request(`http://srv.test/v1/users/${rina}`, {
     method: 'PATCH',
-    headers: s.as(s.storeOwner),
+    headers: await s.as(s.storeOwner),
     body: JSON.stringify({ roleIds: [uuidv7(h.clock.now())] }),
   });
   expect(unknown.status).toBe(403);
@@ -564,7 +568,7 @@ test('a store owner cannot rename, re-role, deactivate or reactivate a peer owne
   for (const [method, path, body] of attempts) {
     const res = await h.app.request(`http://srv.test${path}`, {
       method,
-      headers: s.as(s.storeOwner),
+      headers: await s.as(s.storeOwner),
       ...(body === undefined ? {} : { body }),
     });
     expect(res.status, `${method} ${path}`).toBe(403);
@@ -572,7 +576,7 @@ test('a store owner cannot rename, re-role, deactivate or reactivate a peer owne
 
   const byMain = await h.app.request(`http://srv.test/v1/users/${peer}/deactivate`, {
     method: 'POST',
-    headers: s.as(s.ownerId),
+    headers: await s.as(s.ownerId),
   });
   expect(byMain.status).toBe(200);
 });
@@ -591,7 +595,7 @@ test('a store owner deactivates and reactivates a cashier of their store', async
   ] as const) {
     const res = await h.app.request(`http://srv.test/v1/users/${rina}/${path}`, {
       method: 'POST',
-      headers: s.as(s.storeOwner),
+      headers: await s.as(s.storeOwner),
     });
     expect(res.status).toBe(200);
     const row = await h.idb.db
@@ -607,7 +611,7 @@ test('LAST_ADMIN_PROTECTED: taking the last main owner role away is refused', as
   const s = await storeWithOwners();
   const res = await h.app.request(`http://srv.test/v1/users/${s.ownerId}`, {
     method: 'PATCH',
-    headers: s.as(s.ownerId),
+    headers: await s.as(s.ownerId),
     body: JSON.stringify({ roleIds: [s.storeOwnerRole] }),
   });
   expect(res.status).toBe(409);
@@ -635,7 +639,7 @@ test('a custom role with any power over accounts counts as an owner role, not ju
 
   const refused = await h.app.request('http://srv.test/v1/users', {
     method: 'POST',
-    headers: s.as(s.storeOwner),
+    headers: await s.as(s.storeOwner),
     body: newStaff(s.s1, [s.cashier, roleId]),
   });
   expect(refused.status).toBe(403);
@@ -655,23 +659,23 @@ test('every staff change pokes the whole tenant so other phones pull it now; a r
 
   const created = await h.app.request('http://srv.test/v1/users', {
     method: 'POST',
-    headers: s.as(s.storeOwner),
+    headers: await s.as(s.storeOwner),
     body: newStaff(s.s1, [s.cashier]),
   });
   expect(created.status).toBe(201);
   expect(h.pokes.at(-1)).toEqual(tenantPoke);
   const { userId } = (await created.json()) as { userId: string };
 
-  const patch = (body: object) =>
+  const patch = async (body: object) =>
     h.app.request(`http://srv.test/v1/users/${userId}`, {
       method: 'PATCH',
-      headers: s.as(s.storeOwner),
+      headers: await s.as(s.storeOwner),
       body: JSON.stringify(body),
     });
-  const post = (path: string) =>
+  const post = async (path: string) =>
     h.app.request(`http://srv.test/v1/users/${userId}/${path}`, {
       method: 'POST',
-      headers: s.as(s.storeOwner),
+      headers: await s.as(s.storeOwner),
     });
 
   expect(await pokesAfter(patch({ roleIds: [s.technician] }), 200)).toBe(1);
@@ -801,10 +805,10 @@ test("a store owner cannot reset a peer owner's PIN; they can reset a cashier's,
     storeIds: [s.s1],
     roleKeys: ['cashier'],
   });
-  const reset = (actor: string, target: string) =>
+  const reset = async (actor: string, target: string) =>
     h.app.request(`http://srv.test/v1/users/${target}/pin-verifier`, {
       method: 'POST',
-      headers: s.as(actor),
+      headers: await s.as(actor),
       body: verifierBody(s.deviceId),
     });
 
@@ -842,7 +846,7 @@ test('a new PIN ends the person sessions the old one opened, except where it was
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${here.token}`,
-      'X-Acting-User': ownerId,
+      ...(await asPerson(h, here.token, ownerId)),
     },
     body: verifierBody(here.deviceId),
   });
@@ -854,4 +858,54 @@ test('a new PIN ends the person sessions the old one opened, except where it was
     .execute();
   expect(rows.find((row) => row.deviceId === here.deviceId)?.revokedAt).toBeNull();
   expect(rows.find((row) => row.deviceId === there.deviceId)?.revokedAt).not.toBeNull();
+});
+
+// ── Deactivation blocks their own phone (owner decision 2026-11-25, thread "Wipe blocked devices") ─
+test('deactivating someone blocks their personal phone, and only theirs, so it erases itself', async () => {
+  const { tenantId, s1, ownerId } = await tenant();
+  const control = await seedControlSession(h, { tenantId, userId: ownerId });
+  const ani = await seedUser(h, { tenantId, name: 'Ani', storeIds: [s1], roleKeys: ['staff'] });
+  const budi = await seedUser(h, { tenantId, name: 'Budi', storeIds: [s1], roleKeys: ['staff'] });
+  const aniPhone = await seedDevice(h, { tenantId, storeId: s1 });
+  const budiPhone = await seedDevice(h, { tenantId, storeId: s1 });
+  const counter = await seedDevice(h, { tenantId, storeId: s1 });
+  await h.idb.db
+    .updateTable('devices')
+    .set({ personalUserId: ani })
+    .where('id', '=', aniPhone.deviceId)
+    .execute();
+  await h.idb.db
+    .updateTable('devices')
+    .set({ personalUserId: budi })
+    .where('id', '=', budiPhone.deviceId)
+    .execute();
+
+  const fired: string[] = [];
+  h.hooks.register(({ deviceId }) => {
+    fired.push(deviceId);
+  });
+
+  const res = await h.app.request(`http://srv.test/v1/users/${ani}/deactivate`, {
+    method: 'POST',
+    headers: bearer(control),
+  });
+  expect(res.status).toBe(200);
+
+  const status = async (id: string) =>
+    await h.idb.db
+      .selectFrom('devices')
+      .select(['status', 'revokedBy'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+  expect(await status(aniPhone.deviceId)).toEqual({ status: 'revoked', revokedBy: ownerId });
+  expect((await status(budiPhone.deviceId)).status).toBe('active');
+  expect((await status(counter.deviceId)).status).toBe('active');
+  expect(fired).toEqual([aniPhone.deviceId]);
+
+  // The blocked phone's next request is refused as blocked: its start then erases it.
+  const me = await h.app.request('http://srv.test/v1/devices/me', {
+    headers: { Authorization: `Bearer ${aniPhone.token}` },
+  });
+  expect(me.status).toBe(401);
+  expect(((await me.json()) as { error: { code: string } }).error.code).toBe('DEVICE_REVOKED');
 });

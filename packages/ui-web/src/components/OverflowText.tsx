@@ -24,7 +24,12 @@ export function OverflowText({
       }}
     >
       <RadixTooltip.Trigger asChild>
-        <span ref={ref} data-testid={testId} className={clsx('block truncate', className)}>
+        <span
+          ref={ref}
+          data-testid={testId}
+          data-ellipsis="value"
+          className={clsx('block truncate', className)}
+        >
           {text}
         </span>
       </RadixTooltip.Trigger>

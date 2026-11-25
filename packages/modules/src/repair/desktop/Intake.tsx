@@ -23,6 +23,7 @@ import {
   Tooltip,
   controlClass,
   useSelectOnFocus,
+  OverflowText,
 } from '@bolusi/ui-web';
 import { ArrowLeft, Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -351,13 +352,11 @@ export function IntakePage({
         }
       >
         {startedBy === null ? null : (
-          <p
-            className="truncate text-body text-text-muted"
-            title={tn('repair.intake.startedBy', { name: startedBy })}
-            data-testid="repair.desk.intake.startedBy"
-          >
-            {tn('repair.intake.startedBy', { name: startedBy })}
-          </p>
+          <OverflowText
+            text={tn('repair.intake.startedBy', { name: startedBy })}
+            className="text-body text-text-muted"
+            testId="repair.desk.intake.startedBy"
+          />
         )}
       </PageHeader>
       {settings.status === 'loading' ? (
@@ -1504,7 +1503,7 @@ function Summary({
                 </span>
                 <div className="min-w-0">
                   <dt className="text-small text-text-muted">{tn(INTAKE_STEP_KEY[row.key])}</dt>
-                  <dd className="line-clamp-2 break-words text-body font-semibold text-text">
+                  <dd className="break-words text-body font-semibold text-text">
                     {flagged(row.key)
                       ? jump(row.key, row.value === '' ? tn('repair.desk.incomplete') : row.value)
                       : row.value === ''

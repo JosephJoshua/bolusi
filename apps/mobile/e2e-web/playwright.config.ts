@@ -16,17 +16,25 @@ const MOBILE_ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env['VISUAL_PORT'] ?? 4599);
 const BASE_URL = `http://localhost:${PORT}`;
 
-export default defineConfig({
+export default defineConfig<{ fontScale: number }>({
   testDir: __dirname,
   outputDir: path.join(__dirname, 'test-results'),
-  // A phone-shaped viewport: the screens target ~360 dp Android (design-system §0). Serialized (not
-  // fullyParallel) so the shared static server and the fixed demo clock stay deterministic.
+  // A phone-shaped viewport: the screens target ~360 dp Android (design-system §0). Each page runs
+  // its own demo with its own fixed clock, so files run side by side; tests in a file stay in order.
   fullyParallel: false,
-  workers: 1,
+  workers: 4,
   timeout: 30_000,
   reporter: [['list']],
+  projects: [
+    { name: 'phone', use: { fontScale: 1 } },
+    // The same screens with the system font at 1.3x, the largest the design guide supports.
+    { name: 'large-font', use: { fontScale: 1.3 } },
+  ],
   use: {
     baseURL: BASE_URL,
+    ...(process.env['PLAYWRIGHT_CHROMIUM_PATH'] === undefined
+      ? {}
+      : { launchOptions: { executablePath: process.env['PLAYWRIGHT_CHROMIUM_PATH'] } }),
     browserName: 'chromium',
     headless: true,
     viewport: { width: 390, height: 844 },

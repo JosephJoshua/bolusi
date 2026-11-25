@@ -258,6 +258,7 @@ function PermissionRow({
           <Button
             label={t('auth.setup.allow')}
             onPress={state.request}
+            variant="secondary"
             size="compact"
             testID={`${testID}.allow`}
           />

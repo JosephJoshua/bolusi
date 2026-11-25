@@ -6,23 +6,25 @@
  */
 import { formatDateTime, formatMoney, t, translateErrorCode } from '@bolusi/i18n';
 import {
+  Amount,
   AppShell,
+  border,
   Button,
   Chip,
+  color,
   EmptyState,
   FreshGlow,
   List,
-  SearchField,
-  SegmentedControl,
-  SyncStatusChip,
-  border,
-  color,
-  space,
-  touch,
-  type,
   type ListState,
   type OperationSyncStatus,
+  SearchField,
+  SegmentedControl,
+  space,
+  SyncStatusChip,
   Text,
+  touch,
+  type,
+  ValueText,
 } from '@bolusi/ui';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -501,20 +503,18 @@ const TicketRow = memo(function TicketRow({
       <FreshGlow id={row.id} testID={`${testID}.fresh`} />
       <View style={styles.rowBody}>
         <View style={repairStyles.row}>
-          <Text style={[styles.customer, repairStyles.rowText]} numberOfLines={1}>
+          <ValueText lines={1} style={[styles.customer, repairStyles.rowText]}>
             {row.customerName}
-          </Text>
-          <Text style={styles.amount} testID={`${testID}.amount`}>
-            {formatMoney(amount)}
-          </Text>
+          </ValueText>
+          <Amount value={amount} testID={`${testID}.amount`} />
         </View>
-        <Text style={styles.details} numberOfLines={2}>
+        <ValueText lines={2} style={styles.details}>
           {details}
-        </Text>
+        </ValueText>
         {reason === null || reason === '' ? null : (
-          <Text style={styles.reason} numberOfLines={2} testID={`${testID}.reason`}>
+          <ValueText lines={2} style={styles.reason} testID={`${testID}.reason`}>
             {reason}
-          </Text>
+          </ValueText>
         )}
         <View style={styles.footer}>
           <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
@@ -583,7 +583,6 @@ const styles = StyleSheet.create({
   },
   rowBody: { flex: 1 },
   customer: { ...type.bodyBold, color: color.text },
-  amount: { ...type.bodySm, fontWeight: '600', color: color.text, fontVariant: ['tabular-nums'] },
   details: { ...type.bodySm, color: color.textMuted },
   reason: { ...type.bodySm, color: color.text, marginTop: space.xs },
   footer: {

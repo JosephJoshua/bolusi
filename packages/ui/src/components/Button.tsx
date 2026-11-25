@@ -137,8 +137,6 @@ export function Button({
         ) : (
           <Text
             testID={testID === undefined ? undefined : `${testID}.label`}
-            // §3.1: labels wrap to 2 lines rather than truncate — ID/EN length variance (§0).
-            numberOfLines={compact ? 1 : 2}
             style={[
               compact ? styles.compactLabel : styles.label,
               { color: disabled ? color.textDisabled : LABEL_COLOR[variant] },

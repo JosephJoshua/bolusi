@@ -487,8 +487,38 @@ Agreed with the owner on 2026-10-28; first part built 2026-10-31.
   out from its deliveries, so two phones receiving offline never clash; more than
   ordered is kept and flagged for a stock correction.
 - **Next:** buy prices at receiving with a moving average cost per store, seen
-  only on owners' own phones (permission-scoped sync); supplier bills and
-  payments; transfers between stores; supplier returns.
+  only on owners' own phones (permission-scoped sync); then transfers, supplier
+  bills and returns (below).
+
+## Transfers between stores (2026-11-25)
+
+Agreed with the owner on 2026-11-25; the records and sync built first, screens next.
+Designed so a later warehouse is just another place stock moves between.
+
+- **Who:** "Kirim sparepart antar toko" lets a person send (owners and the
+  Manajer preset by default). At the receiving store, whoever may receive
+  supplier deliveries receives. Only the sending store's owner settles.
+- **Sending:** no request step. A send works offline and the parts leave the
+  sender's stock at once; while on the way they belong to neither store.
+- **Receiving:** count what came, in as many arrivals as it takes, never more
+  than was sent. What has not come stays "Belum sampai", seen by both stores.
+- **Settling:** the sending owner puts parts that never came back into stock, or
+  writes them off with a reason. Parts that turn up after a write-off can still
+  be received.
+- **Cancelling:** only while nothing has arrived; the parts go back to the
+  sender. An arrival recorded offline before the cancel still counts, and the
+  owner then settles the difference.
+- **Sync and checks:** a transfer and its arrivals and settlements reach both
+  stores' devices, with the movements its parts left the sender's stock in, so
+  only what really left can arrive. Other stock records stay with their store.
+  The server checks every step, including that the other store is one of the
+  business's.
+- **Next:** parts carry the sender's average buy price (after part costs land).
+  Then supplier bills ("Tagihan supplier": prepay, on delivery and tempo, its own
+  record compared with the order and deliveries, payments without a bill kept
+  as supplier credit, ongkir spread into the buy price) and supplier returns (a
+  "Rusak" place per store, one owner step, closed by a replacement, a credit or
+  refund note, or a refusal).
 
 ## Managers, limits, approvals and roles (2026-10-28)
 
@@ -582,6 +612,21 @@ governance notes in "Decision" where they differ.
   page, so a new domain needs no app change.
 - `apps/web` is the start of the later back-office web app: customer pages need
   no sign-in, staff screens join it with their own routes.
+
+## Blocking a lost device (2026-11-25)
+
+- Pengaturan › Perangkat (phone and PC) lists the store's devices with their last
+  sync and offers "Blokir" to whoever holds `auth.device_revoke`. The device in
+  hand cannot block itself; the server's own signer cannot be blocked.
+- A blocked device erases everything the next time it reaches the server (data,
+  photos, caches, keys, sign-in). The server must answer `DEVICE_REVOKED` first;
+  no other failure erases. Unsent changes are lost: the confirmation names the
+  last sync instead of counting them. It then shows the register screen with the
+  reason.
+- Deactivating someone also blocks their personal phone; shared store devices
+  stay as they are.
+- Uploads left unfinished for 48 hours are deleted on the server; the device
+  starts that upload again.
 
 ## Open product choices
 

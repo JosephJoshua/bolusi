@@ -455,7 +455,7 @@ function partColumns(categoryName: (id: string) => string | undefined): Column[]
         <span className="flex min-w-0 flex-col">
           <OverflowText text={row.name} className="text-body font-semibold text-text" />
           {row.code === null ? null : (
-            <span className="tabular truncate text-small text-text-muted">{row.code}</span>
+            <OverflowText text={row.code} className="tabular text-small text-text-muted" />
           )}
         </span>
       ),

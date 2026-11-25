@@ -2,7 +2,7 @@
 // executed by the stage-6 lane.
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney, initI18n, setLocale } from '../src/index.js';
+import { formatMoney, formatSignedMoney, initI18n, setLocale } from '../src/index.js';
 import { runI18nVectors } from './vectors.js';
 
 describe('07-i18n §5.4 golden vectors (Node)', () => {
@@ -20,29 +20,18 @@ describe('07-i18n §5.4 golden vectors (Node)', () => {
 });
 
 describe('money rendering (§5.1)', () => {
-  it('normalizes the NBSP Intl inserts after Rp — printers and font fallbacks mangle it', () => {
+  it('keeps Rp and the figure together with a non-breaking space, on every engine', () => {
     initI18n({ locale: 'id' });
-
-    // Guard the intent, not just the output: Intl really does emit U+00A0 here, so this test
-    // fails if the normalization is ever dropped.
-    const raw = new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(250000);
-    expect(raw).toContain(' ');
-
     for (const amount of [250000, 0, 1500500, -50000]) {
-      expect(formatMoney(amount)).not.toContain(' ');
+      expect(formatMoney(amount)).toMatch(/^−?Rp\u00A0\d/);
     }
-    expect(formatMoney(250000)).toBe('Rp 250.000');
+    expect(formatMoney(250000)).toBe('Rp\u00A0250.000');
   });
 
   it('never renders a minor unit, whatever CLDR says the IDR default is (FR-1160)', () => {
     initI18n({ locale: 'id' });
     expect(formatMoney(250000)).not.toContain(',00');
-    expect(formatMoney(250050)).toBe('Rp 250.050');
+    expect(formatMoney(250050)).toBe('Rp\u00A0250.050');
   });
 
   it('is identical under the en toggle — no IDR 250,000 surprise', () => {
@@ -50,5 +39,12 @@ describe('money rendering (§5.1)', () => {
     const asId = formatMoney(1500500);
     setLocale('en');
     expect(formatMoney(1500500)).toBe(asId);
+  });
+
+  it('signs a change in money, and leaves zero unsigned', () => {
+    initI18n({ locale: 'id' });
+    expect(formatSignedMoney(5000)).toBe('+Rp\u00A05.000');
+    expect(formatSignedMoney(-5000)).toBe('−Rp\u00A05.000');
+    expect(formatSignedMoney(0)).toBe('Rp\u00A00');
   });
 });

@@ -6,6 +6,7 @@ import {
   formatDateTime,
   formatMoney,
   formatPhone,
+  formatSignedMoney,
   translateOpType,
 } from '@bolusi/i18n';
 
@@ -346,7 +347,12 @@ export function eventNote(detail: Readonly<Record<string, unknown>>): string | n
   }
   // What a cancel costs the customer, as set at the cancel or changed afterwards.
   const fee = detail['fee'];
-  if (typeof fee === 'number') lines.push(tn('repair.history.fee', { amount: formatMoney(fee) }));
+  if (typeof fee === 'number')
+    lines.push(
+      fee === 0
+        ? tn('repair.history.noFee')
+        : tn('repair.history.fee', { amount: formatMoney(fee) }),
+    );
   // What a price change or a DP was for, and how much: "Ganti baterai · Rp 200.000".
   const amount = detail['amount'];
   if (typeof amount === 'number') {
@@ -444,7 +450,7 @@ export function paidRow(
   paidLabel: RepairKey,
 ): { readonly label: string; readonly amount: string } {
   return paid < 0
-    ? { label: tn('repair.price.givenBack'), amount: `+${formatMoney(-paid)}` }
+    ? { label: tn('repair.price.givenBack'), amount: formatSignedMoney(-paid) }
     : { label: tn(paidLabel), amount: formatMoney(-paid) };
 }
 

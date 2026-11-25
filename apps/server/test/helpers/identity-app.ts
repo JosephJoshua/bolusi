@@ -16,6 +16,7 @@ import {
 import { InMemoryWindowLimitStore } from '../../src/identity/rate-limits.js';
 import { InProcessPokeHub, type PokeScope } from '../../src/realtime/poke-hub.js';
 import { RevocationHooks } from '../../src/identity/revocation.js';
+import { ImmediateDeliveryDispatcher } from '../../src/push/dispatcher.js';
 import { makeFakeClock, type FakeClock } from './app.js';
 import { makeIdentityDb, makeStubKdf, type IdentityDb } from './identity-db.js';
 
@@ -25,6 +26,8 @@ export interface IdentityHarness {
   readonly clock: FakeClock;
   readonly rateStore: InMemoryWindowLimitStore;
   readonly hooks: RevocationHooks;
+  /** Pushes sent off the request path; `close` waits for them, so none outlives the database. */
+  readonly deliveries: ImmediateDeliveryDispatcher;
   readonly kdf: PasswordKdf;
   readonly dummyCalls: () => number;
   /** Every `sync.poke` scope the app published, in order. */
@@ -46,6 +49,7 @@ export async function makeIdentityHarness(
     : makeStubKdf();
   const rateStore = new InMemoryWindowLimitStore();
   const hooks = new RevocationHooks();
+  const deliveries = new ImmediateDeliveryDispatcher();
   const pokeHub = new InProcessPokeHub();
   const pokes: PokeScope[] = [];
   pokeHub.subscribe((scope) => pokes.push(scope));
@@ -57,9 +61,24 @@ export async function makeIdentityHarness(
     passwordKdf: kdf,
     identityRateStore: rateStore,
     revocationHooks: hooks,
+    deliveryDispatcher: deliveries,
     ...opts.deps?.(clock),
   });
-  return { app, idb, clock, rateStore, hooks, kdf, dummyCalls, pokes, close: () => idb.close() };
+  return {
+    app,
+    idb,
+    clock,
+    rateStore,
+    hooks,
+    deliveries,
+    kdf,
+    dummyCalls,
+    pokes,
+    close: async () => {
+      await deliveries.flush();
+      await idb.close();
+    },
+  };
 }
 
 /** Provision a tenant through the real CLI code path, using the harness's clock + KDF. */
@@ -117,6 +136,54 @@ export async function enroll(
 }
 
 // ---- direct-seed helpers (owner handle; faster + more controlled than driving the API) ----------
+
+/**
+ * Insert a person-session row (the server checked `userId`'s PIN on `deviceId`); returns its `bps_`
+ * token, which a shared device sends as `X-Person-Session` to act as them (auth/acting-user.ts).
+ */
+export async function seedPersonSession(
+  h: IdentityHarness,
+  params: { tenantId: string; deviceId: string; userId: string; expiresAt?: number },
+): Promise<string> {
+  const token = `bps_${uuidv7(h.clock.now()).replace(/-/g, '')}test`;
+  await h.idb.db
+    .insertInto('personSessions')
+    .values({
+      id: uuidv7(h.clock.now()),
+      tenantId: params.tenantId,
+      deviceId: params.deviceId,
+      userId: params.userId,
+      tokenHash: sha256Hex(token),
+      createdAt: BigInt(h.clock.now()),
+      expiresAt: BigInt(params.expiresAt ?? h.clock.now() + 600_000),
+    })
+    .execute();
+  return token;
+}
+
+/**
+ * `X-Acting-User` with the person session that proves it on the device holding `deviceToken` (found
+ * by its token), as a shared device sends once the server checked the person's PIN there.
+ */
+export async function asPerson(
+  h: IdentityHarness,
+  deviceToken: string,
+  userId: string,
+): Promise<Record<string, string>> {
+  const device = await h.idb.db
+    .selectFrom('devices')
+    .select(['id', 'tenantId'])
+    .where('tokenHash', '=', sha256Hex(deviceToken))
+    .executeTakeFirstOrThrow();
+  return {
+    'X-Acting-User': userId,
+    'X-Person-Session': await seedPersonSession(h, {
+      tenantId: device.tenantId,
+      deviceId: device.id,
+      userId,
+    }),
+  };
+}
 
 /** Insert a control-session row for `userId`; returns its `bcs_` token. */
 export async function seedControlSession(

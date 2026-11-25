@@ -13,6 +13,7 @@ import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
 import { bootOncePerRealm, bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import { bootErasingBlocked, createBlockProbe } from '@bolusi/device/bootstrap/blocked-wipe';
 import { bootWithLocalRecovery } from '@bolusi/device/bootstrap/recovery';
 import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
 import {
@@ -62,7 +63,7 @@ import { createExpoVideoPlatform } from './src/media/native-video.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from '@bolusi/device/media/transport';
-import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
+import { eraseAppFiles, phonePhotoFiles, sha256Hex } from './src/media/files.js';
 import { createPhonePhotoLoader } from '@bolusi/device/media/phone-photos';
 import { appStatePort } from './src/ports/app-state.js';
 import { startAppUpdates, updateNow } from './src/bootstrap/app-updates.js';
@@ -180,7 +181,53 @@ function bootDataLayer(launch: 'foreground' | 'background'): Promise<Bootstrappe
  * to one database (see `bootOncePerRealm`).
  */
 const boot = bootOncePerRealm(bootDataLayer);
-const foregroundBoot = (): Promise<Bootstrapped> => boot('foreground');
+
+/**
+ * Erase everything the app keeps on this phone, for a blocked device (blocked-wipe.ts), in its
+ * order: photos, videos and caches, then the device's own keys and token, then the database file
+ * and its key.
+ * The language choice (bolusi-prefs.json) is not data and stays.
+ */
+async function eraseThisPhone(): Promise<void> {
+  eraseAppFiles();
+  await new SecureStoreKeyStore().wipe();
+  deleteOpSqliteDatabase({ name: DEFAULT_DATABASE_NAME });
+  await new SecureStoreDbKeyStore(quickCryptoPort).wipe();
+}
+
+/** A restart is how a running phone gets erased: the start does it (foregroundBoot). */
+function restartAfterBlock(): void {
+  void expoUpdatesPort.reload().catch((error: unknown) =>
+    consoleDiagnostics.warn('restart after block failed', {
+      error: error instanceof Error ? error.message : String(error),
+    }),
+  );
+}
+
+/**
+ * The app's start: a blocked phone is erased here, before any screen shows its data. One at a time:
+ * a second start during the server check (the activity recreated) waits for the first, so the
+ * phone is never erased twice and the fresh database the first opened is kept.
+ */
+let starting: Promise<Bootstrapped> | null = null;
+const foregroundBoot = (): Promise<Bootstrapped> => {
+  starting ??= startErasingBlocked().finally(() => {
+    starting = null;
+  });
+  return starting;
+};
+const startErasingBlocked = (): Promise<Bootstrapped> =>
+  bootErasingBlocked({
+    boot: () => boot('foreground'),
+    forgetBoot: boot.forget,
+    probe: (deviceId) =>
+      createBlockProbe({
+        baseUrl: apiBaseUrl(),
+        deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+      })(deviceId),
+    eraseDevice: eraseThisPhone,
+    clock: systemClock,
+  });
 const backgroundBoot = (): Promise<Bootstrapped> => boot('background');
 
 /**
@@ -232,11 +279,21 @@ const backgroundMedia: BackgroundHost = createBackgroundHost({
 expoBackgroundTaskPlatform.defineTask(SYNC_BACKGROUND_TASK, () => backgroundSync.runPass());
 expoBackgroundTaskPlatform.defineTask(MEDIA_DRAIN_TASK, () => backgroundMedia.runPass());
 
+/**
+ * The foreground app, whose signed-in person the online calls act as. The server takes that person
+ * only on proof it checked their PIN itself (server auth/acting-user.ts), so each call asks for their
+ * person session; the headless background passes make no such calls.
+ */
+let foregroundApp: Bootstrapped | null = null;
+const personSession = (userId: string): Promise<string | null> =>
+  foregroundApp?.person.sessionFor(userId) ?? Promise.resolve(null);
+
 function createSync(
   app: Bootstrapped,
   onBundleRefreshed?: () => void | Promise<void>,
   onBundleChecked?: () => void | Promise<void>,
 ): SyncClient | null {
+  foregroundApp = app;
   return buildSync(app, { background: true, onBundleRefreshed, onBundleChecked });
 }
 
@@ -373,6 +430,7 @@ function createEnrollment(
     // Same `APP_VERSION` the Settings block shows — empty in v0 (expo-constants unpinned, decision
     // deferred). Valid per the server's EnrollReq (`z.string().max(32)`); not faked (T-19).
     appVersion: APP_VERSION,
+    onBlocked: restartAfterBlock,
   };
   return createAppEnrollment(app, platform, onEnrolled);
 }
@@ -475,7 +533,11 @@ function createRepair(
     print: expoPrintPlatform,
     scanCode,
     // QRIS through Xendit: online-only server calls as the signed-in person, on the device bearer.
-    qris: createFetchQris({ baseUrl: apiBaseUrl(), deviceToken: () => keystore.loadDeviceToken() }),
+    qris: createFetchQris({
+      baseUrl: apiBaseUrl(),
+      deviceToken: () => keystore.loadDeviceToken(),
+      personSession: (userId) => app.person.sessionFor(userId),
+    }),
     statusSite: apiBaseUrl(),
   });
 }
@@ -506,6 +568,7 @@ function createPushRegistration(
     baseUrl: apiBaseUrl(),
     deviceId: app.deviceId,
     deviceToken: () => keystore.loadDeviceToken(),
+    personSession: (userId) => app.person.sessionFor(userId),
   });
   return {
     projectId,
@@ -580,6 +643,7 @@ let rootProps: RootProps | null = null;
 function buildRootProps(): RootProps {
   return {
     checkForUpdate: expoUpdatesPort.isEnabled ? () => updateNow(expoUpdatesPort) : undefined,
+    onDeviceBlocked: restartAfterBlock,
     boot: foregroundBoot,
     createSync,
     createEnrollment,
@@ -601,12 +665,14 @@ function buildRootProps(): RootProps {
     uploadPinVerifier: createFetchPinVerifierUpload({
       baseUrl: apiBaseUrl(),
       deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+      personSession,
     }),
     // THE OWNER'S STAFF CALLS (owner decision 2026-10-27): online-only `POST/PATCH /v1/users…` as the
     // signed-in owner, on the same per-call device bearer.
     staffAdmin: createFetchStaffAdmin({
       baseUrl: apiBaseUrl(),
       deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+      personSession,
     }),
     // THE IDLE LOCK'S PLATFORM INPUTS (api/02-auth §6.4; task 133). `appStatePort` is the same native
     // `AppState` binding the sync triggers take (§2.8) and is bound here for the same reason NetInfo

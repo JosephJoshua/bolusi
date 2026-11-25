@@ -9,6 +9,7 @@ import {
   MessageChannelMain,
   net,
   powerMonitor,
+  session,
   utilityProcess,
   type IpcMainEvent,
   type UtilityProcess,
@@ -17,7 +18,7 @@ import {
 
 import type { CorePortMode } from './bridge.js';
 import { mainPortChannel } from './main-port.js';
-import { MAIN_CALLS, MAIN_EVENTS, type CoreInit } from './process-api.js';
+import { CORE_RESTART_EXIT, MAIN_CALLS, MAIN_EVENTS, type CoreInit } from './process-api.js';
 import { serve } from './rpc.js';
 import { createSecretStore } from './secret-store.js';
 
@@ -63,6 +64,10 @@ export function registerCore(config: CoreProcessConfig): CoreProcess {
       [MAIN_CALLS.secretGet]: (name: string) => secrets.get(name),
       [MAIN_CALLS.secretSet]: (name: string, value: string) => secrets.set(name, value),
       [MAIN_CALLS.secretDelete]: (name: string) => secrets.delete(name),
+      [MAIN_CALLS.clearWebData]: async () => {
+        await session.defaultSession.clearCache();
+        await session.defaultSession.clearStorageData();
+      },
     });
     emitToCore = server.emit;
     const init: CoreInit = {
@@ -80,6 +85,12 @@ export function registerCore(config: CoreProcessConfig): CoreProcess {
         emitToCore = null;
       }
       if (stopping) return;
+      if (code === CORE_RESTART_EXIT) {
+        // The core asked to start again (a blocked PC erases itself at start): not a crash.
+        start();
+        for (const contents of config.windows()) contents.reload();
+        return;
+      }
       console.error(`core process exited with code ${String(code)}`);
       if (Date.now() - startedAt >= STABLE_RUN_MS) restarts = 0;
       if (restarts >= MAX_RESTARTS) return;

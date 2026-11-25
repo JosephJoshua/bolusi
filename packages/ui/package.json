@@ -32,6 +32,10 @@
     "./fresh": {
       "types": "./dist/fresh.d.ts",
       "default": "./dist/fresh.js"
+    },
+    "./arrival": {
+      "types": "./dist/arrival.d.ts",
+      "default": "./dist/arrival.js"
     }
   },
   "files": [

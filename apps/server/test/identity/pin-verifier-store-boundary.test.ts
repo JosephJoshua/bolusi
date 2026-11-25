@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   seedDevice,
@@ -51,7 +52,7 @@ function verifierBody(seed: number, deviceId = '00000000-0000-0000-0000-00000000
   };
 }
 
-function putVerifier(
+async function putVerifier(
   userId: string,
   actorUserId: string,
   device: { readonly token: string; readonly deviceId: string },
@@ -62,7 +63,7 @@ function putVerifier(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${device.token}`,
-      'X-Acting-User': actorUserId,
+      ...(await asPerson(harness, device.token, actorUserId)),
     },
     body: JSON.stringify(verifierBody(seed, device.deviceId)),
   });

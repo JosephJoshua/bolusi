@@ -7,6 +7,7 @@
 //
 // No queue: staff changes are online only, so a network fault is `offline` right away and the owner
 // tries again, rather than a change that lands hours later on a device they no longer watch.
+import { PERSON_SESSION_HEADER } from '@bolusi/schemas';
 import { StaffAdminError, type StaffAdminFailure, type StaffAdminPort } from '@bolusi/core';
 
 export interface StaffTransportConfig {
@@ -14,6 +15,12 @@ export interface StaffTransportConfig {
   readonly baseUrl: string;
   /** The `bdt_` device token, read at call time, never cached. */
   readonly deviceToken: () => Promise<string | null>;
+  /**
+   * The signed-in person's session, which the server opened after checking their PIN (device
+   * person-access.ts `sessionFor`): a shared device must send it to act as them. Null when there is
+   * none; the server then takes nobody it cannot prove (it still takes a personal phone's person).
+   */
+  readonly personSession?: (actingUserId: string) => Promise<string | null>;
   /** Injected for tests; defaults to the global. */
   readonly fetchImpl?: typeof fetch;
 }
@@ -23,11 +30,12 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
 
   const call = async (
     actingUserId: string,
-    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     body?: unknown,
   ): Promise<unknown> => {
     const token = await config.deviceToken();
+    const proof = (await config.personSession?.(actingUserId)) ?? null;
     if (token === null) throw new StaffAdminError('unexpected');
     let response: Response;
     try {
@@ -37,6 +45,7 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
           'X-Acting-User': actingUserId,
+          ...(proof === null ? {} : { [PERSON_SESSION_HEADER]: proof }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
@@ -49,6 +58,29 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
   };
 
   return {
+    async listDevices({ actingUserId }) {
+      const json = (await call(actingUserId, 'GET', '/v1/devices')) as {
+        readonly devices?: unknown;
+      } | null;
+      if (!Array.isArray(json?.devices)) throw new StaffAdminError('unexpected');
+      return (json.devices as readonly ListedDevice[])
+        .filter((device) => device.kind !== 'system')
+        .map((device) => ({
+          id: device.deviceId,
+          name: device.deviceName,
+          storeId: device.storeId,
+          blocked: device.status === 'revoked',
+          blockedAt: device.revokedAt,
+          personalUserId: device.personalUserId ?? null,
+          lastSyncAt: device.lastSyncAt,
+          lastSeenAt: device.lastSeenAt,
+        }));
+    },
+
+    async blockDevice({ actingUserId, deviceId }) {
+      await call(actingUserId, 'POST', `/v1/devices/${deviceId}/revoke`);
+    },
+
     async create({ actingUserId, storeId, name, roleIds }) {
       const json = (await call(actingUserId, 'POST', '/v1/users', {
         name,
@@ -107,6 +139,19 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
       await call(actingUserId, 'DELETE', `/v1/roles/${roleId}`);
     },
   };
+}
+
+/** A row of `GET /v1/devices` (api/02-auth §7.1), the fields the device list reads. */
+interface ListedDevice {
+  readonly deviceId: string;
+  readonly deviceName: string | null;
+  readonly storeId: string | null;
+  readonly status: string;
+  readonly kind?: string;
+  readonly personalUserId?: string | null;
+  readonly lastSyncAt: number | null;
+  readonly lastSeenAt: number | null;
+  readonly revokedAt: number | null;
 }
 
 /** The api/00 §7 error envelope's code, mapped to what the owner can do about it. */

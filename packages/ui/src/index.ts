@@ -43,6 +43,7 @@ export {
 } from './motion.js';
 export type { EntranceFrom, EntranceOptions, Wipe } from './motion.js';
 export { FRESH_MS, markFresh, useFresh } from './fresh.js';
+export { setDataArriving, useDataArriving } from './arrival.js';
 export { useChangeDirection } from './direction.js';
 export type { ChangeDirection } from './direction.js';
 export { StepTransition, useStepDirection } from './step-transition.js';
@@ -72,7 +73,7 @@ export {
 export type { Bleed } from './layout.js';
 
 // ---- Text that follows a live system font size change -----------------------------------------
-export { FontScaleProvider, Text } from './text.js';
+export { FontScaleProvider, Text, ValueText, type TextProps } from './text.js';
 
 // ---- Component inventory (design-system §3) ----------------------------------------------------
 export * from './components/index.js';
@@ -98,6 +99,7 @@ export type { ChipRowProps } from './components/ChipRow.js';
 export type { ChoiceChipsProps } from './components/ChoiceChips.js';
 export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
+export type { AmountProps, AmountRowProps, AmountTone } from './components/Amount.js';
 export type { FactProps } from './components/Fact.js';
 export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
 export type { RollingTextProps } from './components/RollingText.js';
@@ -147,7 +149,7 @@ export type { TabBarProps, TabBarTab } from './shell/TabBar.js';
 // Deliberately NOT re-exported through the component barrels: those are mapped over by the Gallery
 // state registry, and only things with visual states belong there.
 export { identityColor } from './components/Avatar.js';
-export { BANNER_MESSAGE_LINES, selectBanner } from './components/Banner.js';
+export { selectBanner } from './components/Banner.js';
 export { ICON_GLYPHS } from './components/Icon.js';
 export { LOADING_DELAY_MS, SKELETON_ROW_COUNT } from './components/LoadingState.js';
 export { PIN_LENGTH } from './components/PinPad.js';

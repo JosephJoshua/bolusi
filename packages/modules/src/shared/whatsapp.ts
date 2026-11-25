@@ -28,9 +28,14 @@ export function whatsAppNumber(phone: string | null): string | null {
   return number.length >= 10 && number.length <= 15 ? number : null;
 }
 
+/** A message as plain text for another app: the screen's non-breaking spaces become spaces. */
+function plain(text: string): string {
+  return encodeURIComponent(text.replace(/\u00A0/g, ' '));
+}
+
 /** The web link: WhatsApp's app when one is installed, else its site (the PC, the status page). */
 export function whatsAppUrl(number: string, text: string): string {
-  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/${number}?text=${plain(text)}`;
 }
 
 /**
@@ -38,5 +43,5 @@ export function whatsAppUrl(number: string, text: string): string {
  * WhatsApp Business) installed, opening it fails, so the screen can say so.
  */
 export function whatsAppAppUrl(number: string, text: string): string {
-  return `whatsapp://send?phone=${number}&text=${encodeURIComponent(text)}`;
+  return `whatsapp://send?phone=${number}&text=${plain(text)}`;
 }

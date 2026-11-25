@@ -17,6 +17,7 @@ export {
   BUNDLE_REFRESH_INTERVAL_MS,
   DEVICE_UNRECOGNISED_AFTER,
   DEVICE_UNRECOGNISED_REASON,
+  DEVICE_REVOKED_REASON,
   SyncLoop,
   type SyncCycleStats,
   type SyncLoopOptions,

@@ -4,6 +4,7 @@
 import { derivePinAuthState, type HeldPhone, type StaffDirectory } from '@bolusi/core';
 import type { PinOutcome } from '@bolusi/device/bootstrap/session';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
+import type { DeviceList } from '@bolusi/device/models/devices/model';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { tapTarget, type SwitcherUser } from '@bolusi/device/models/switcher/model';
@@ -12,7 +13,8 @@ import { withDraft, type UserWorkspace } from '@bolusi/device/state/user-workspa
 import { getLocale, setLocale, t, translateRoleKey } from '@bolusi/i18n';
 import { REPAIR_MODULE_ID, parseIntakeDraft } from '@bolusi/modules/repair';
 import { RepairRuntimeProvider, type IntakeDraft } from '@bolusi/modules/repair/desktop';
-import { Spinner, StatePanel } from '@bolusi/ui-web';
+import { dataArriving } from '@bolusi/device/models/sync-status/model';
+import { setDataArriving, Spinner, StatePanel } from '@bolusi/ui-web';
 import { CircleAlert, Lock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -34,6 +36,7 @@ import {
   DEMO_PEOPLE,
   DEMO_STORE_NAME,
   demoRuntimeFor,
+  demoDevicesFor,
   demoStaffFor,
   type DemoPerson,
 } from './demo.js';
@@ -123,6 +126,10 @@ function LiveApp({
     switching,
     route: 'home',
   });
+
+  // Tables read it: while a new PC's first sync brings the store's data, empty is loading.
+  const arriving = state.sync !== null && dataArriving(state.sync);
+  useEffect(() => setDataArriving(arriving), [arriving]);
 
   // A new session (or none) starts from a clean gate: no half-open switch from before.
   const activeUserId = active?.userId ?? null;
@@ -443,6 +450,7 @@ function useSettingsAccess(
     canManageStaff,
     canSetLimits,
     canRenameDevice,
+    canBlockDevices,
     tenantAdmin,
     pinRows,
   } = session;
@@ -486,6 +494,12 @@ function useSettingsAccess(
       staff,
       device,
       renameDevice: canRenameDevice ? (name) => call<void>('device.rename', name) : undefined,
+      devices: canBlockDevices
+        ? {
+            load: () => call<DeviceList>('devices.list'),
+            block: (deviceId) => call<void>('devices.block', deviceId),
+          }
+        : undefined,
       chooseLocale: (locale) => call<void>('device.setLocale', locale),
     };
   }, [
@@ -496,6 +510,7 @@ function useSettingsAccess(
     canManageStaff,
     canSetLimits,
     canRenameDevice,
+    canBlockDevices,
     tenantAdmin,
     lockedCount,
     device,
@@ -517,6 +532,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
   const settings = useMemo(
     (): SettingsAccess => ({
       staff: demoStaffFor(person),
+      devices: demoDevicesFor(person),
       chooseLocale: (next) => {
         setLocale(next);
         setDemoLocale(next);

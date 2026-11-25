@@ -116,7 +116,7 @@
   },
   "revoked": {
     "title": "Device Revoked",
-    "body": "This device has been revoked and can no longer be used. Contact the store owner to enroll it again."
+    "body": "The store owner blocked this device, so its data is erased. Register it again to use it."
   },
   "unrecognised": {
     "title": "This phone needs to be registered again",
@@ -178,7 +178,7 @@
     "makePin": "Make PIN",
     "deactivate": "Deactivate",
     "deactivateTitle": "Deactivate {name}?",
-    "deactivateBody": "They can no longer sign in, and changes from their phone that haven’t been synced yet will be refused. Their work history stays.",
+    "deactivateBody": "They can no longer sign in, and changes from their phone that haven’t been synced yet will be refused. Their work history stays. Their own phone is blocked too, and its data erased.",
     "deactivateConfirm": "Deactivate",
     "inactiveBody": "They can’t sign in until reactivated.",
     "reactivate": "Reactivate",
@@ -430,13 +430,44 @@
       "stockCorrectHint": "Change parts already used",
       "stockManage": "Manage parts",
       "stockManageHint": "Add and edit parts",
+      "stockReceive": "Receive incoming parts",
+      "stockReceiveHint": "Add parts that arrive to stock",
       "stockBuy": "Buy parts",
       "stockBuyHint": "Order from suppliers and receive the parts",
+      "stockTransfer": "Send parts between stores",
+      "stockTransferHint": "Send to another store and receive transfers",
       "notes": "Notes",
       "notesHint": "Write and archive store notes",
       "syncProblems": "Sync problems",
       "syncProblemsHint": "See and settle clashing changes"
     },
     "risky": "Risky · {hint}"
+  },
+  "devices": {
+    "title": "Devices",
+    "settingsSummary": "See the store’s phones and computers, block a lost one",
+    "thisDevice": "This device",
+    "shared": "Store device",
+    "personal": "{name}’s own phone",
+    "personalUnknown": "Personal phone",
+    "unnamed": "No name",
+    "lastSync": "synced {time}",
+    "neverSynced": "never synced",
+    "blockedAt": "blocked {time}",
+    "blockedSection": "Blocked",
+    "block": "Block",
+    "blockTitle": "Block {name}?",
+    "blockBody": "Last synced {time}. When it connects again, all its data is erased, including changes not yet sent.",
+    "blockBodyNever": "Never synced. When it connects, all its data is erased.",
+    "blockConfirm": "Block",
+    "blocked": "{name} is blocked.",
+    "empty": "No other devices yet",
+    "emptyBody": "Devices registered to this store will appear here.",
+    "failure": {
+      "offline": "The device list needs the internet. Connect this device, then try again.",
+      "denied": "Only the store owner can block devices.",
+      "rateLimited": "Too many devices blocked in one hour. Try again later.",
+      "unexpected": "That didn’t work. Try again in a moment."
+    }
   }
 }
