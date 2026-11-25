@@ -11,7 +11,8 @@ import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 import type { ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { EMPTY_ORDER, addLine, draftChanged, draftOf, type OrderDraft } from '../order-form.js';
-import type { OrderDetailRow, OrderFilter, SupplierRow } from '../queries.js';
+import type { OrderDetailRow, OrderFilter, ReceiptCostRow, SupplierRow } from '../queries.js';
+import { PriceStep } from './OrderCosts.js';
 import { OrderDetail } from './OrderDetail.js';
 import { OrderForm, PickPartStep } from './OrderForm.js';
 import { OrderList } from './OrderList.js';
@@ -31,6 +32,7 @@ type View =
   | { readonly kind: 'pick' }
   | { readonly kind: 'formSupplier' }
   | { readonly kind: 'receive'; readonly order: OrderDetailRow }
+  | { readonly kind: 'price'; readonly orderId: string; readonly line: ReceiptCostRow }
   | { readonly kind: 'suppliers' }
   | { readonly kind: 'supplier'; readonly supplier?: SupplierRow | undefined };
 
@@ -93,6 +95,9 @@ export function PurchasingSurface({
       case 'receive':
         setView({ kind: 'order', orderId: view.order.id });
         return true;
+      case 'price':
+        setView({ kind: 'order', orderId: view.orderId });
+        return true;
       case 'supplier':
         setView({ kind: 'suppliers' });
         return true;
@@ -150,6 +155,7 @@ export function PurchasingSurface({
         onBack={() => setView({ kind: 'list' })}
         onEdit={(order) => write(draftOf(order), order.id)}
         onReceive={(order) => setView({ kind: 'receive', order })}
+        onPrice={(line) => setView({ kind: 'price', orderId: view.orderId, line })}
         notice={notice}
         onClearNotice={() => setNotice(null)}
       />
@@ -181,6 +187,15 @@ export function PurchasingSurface({
             order={view.order}
             onDone={() => openOrder(view.order.id, 'purchasing.done.received')}
             onCancel={() => setView({ kind: 'order', orderId: view.order.id })}
+          />
+        );
+      case 'price':
+        return (
+          <PriceStep
+            chrome={chrome}
+            line={view.line}
+            onDone={() => openOrder(view.orderId, 'purchasing.done.priced')}
+            onCancel={() => setView({ kind: 'order', orderId: view.orderId })}
           />
         );
       case 'form':

@@ -254,6 +254,17 @@ export const INVENTORY_KEYS = [
   'inventory.desk.filter.chosen',
   'inventory.desk.results',
   'inventory.desk.closePart',
+  'inventory.opType.stockCosted',
+  'inventory.refusal.notReceived',
+  'inventory.refusal.costNotYours',
+  'inventory.cost.title',
+  'inventory.cost.average',
+  'inventory.cost.perPiece',
+  'inventory.cost.noAverage',
+  'inventory.cost.unpriced',
+  'inventory.cost.receipt',
+  'inventory.cost.receiptNoLabel',
+  'inventory.cost.missing',
 ] as const;
 
 export type InventoryKey = (typeof INVENTORY_KEYS)[number];

@@ -410,7 +410,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(56);
+    expect(app.registry.permissions.size).toBe(57);
     expect(app.registry.permissions.ids()).toStrictEqual([
       'approvals.use',
       'auth.audit_view',
@@ -431,6 +431,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'inventory.manage_categories',
       'inventory.manage_items',
       'inventory.read',
+      'inventory.read_cost',
       'inventory.receive',
       'inventory.settle_transfer',
       'inventory.transfer',

@@ -20,6 +20,11 @@ export const INVENTORY_TRANSFER_ENTITY = 'inventory_transfer' as const;
 export const INVENTORY_TRANSFER_ARRIVAL_ENTITY = 'inventory_transfer_arrival' as const;
 /** One owner's settlement of a transfer's parts that never arrived (or arrived after all). */
 export const INVENTORY_TRANSFER_SETTLEMENT_ENTITY = 'inventory_transfer_settlement' as const;
+/**
+ * What one received movement cost to buy, keyed by that movement's id. Its own entity and table,
+ * read only with `inventory.read_cost`, so a store device holds stock moves without their cost.
+ */
+export const INVENTORY_COST_ENTITY = 'inventory_cost' as const;
 
 export const INVENTORY_TABLE = {
   items: 'inventory_items',
@@ -33,6 +38,7 @@ export const INVENTORY_TABLE = {
   transferArrivalLines: 'inventory_transfer_arrival_lines',
   transferSettlements: 'inventory_transfer_settlements',
   transferSettlementLines: 'inventory_transfer_settlement_lines',
+  costs: 'inventory_costs',
 } as const;
 
 /** The most phone models one part can list as fitting. */
@@ -65,6 +71,7 @@ export const INVENTORY_OP = {
   transferReceived: 'inventory.transfer_received',
   transferCancelled: 'inventory.transfer_cancelled',
   transferSettled: 'inventory.transfer_settled',
+  stockCosted: 'inventory.stock_costed',
 } as const;
 
 export const INVENTORY_PERMISSION = {
@@ -85,6 +92,11 @@ export const INVENTORY_PERMISSION = {
   transfer: 'inventory.transfer',
   /** Settle what a sent transfer is missing: back into stock, or written off (owners). */
   settleTransfer: 'inventory.settle_transfer',
+  /**
+   * "Lihat harga beli": what parts cost to buy and each store's average cost. Devices hold costs
+   * only where everyone they sync for may read them (least-privilege sync).
+   */
+  readCost: 'inventory.read_cost',
 } as const;
 
 /** What a movement was. */
@@ -152,6 +164,8 @@ export const MAX_TRANSFER_LINES = 200;
 export const MAX_MOVEMENT_QTY = 10_000;
 /** The most a store can count of one part. */
 export const MAX_COUNTED_QTY = 1_000_000;
+/** The most one piece can cost to buy, in whole rupiah. Catches a mistyped run of zeros. */
+export const MAX_UNIT_COST = 1_000_000_000;
 
 /** Who sees the parts list. */
 export function opensParts(reader: { hasPermission(permissionId: string): boolean }): boolean {
