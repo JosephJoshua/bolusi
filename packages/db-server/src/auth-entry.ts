@@ -95,7 +95,7 @@ export async function findStatusLink(code: string): Promise<StatusLinkRecord | u
   return rows.length === 1 ? rows[0] : undefined;
 }
 
-/** A QRIS charge still unpaid (migration 0038): its tenant and id, nothing else. */
+/** A QRIS charge still unpaid (migration 0034): its tenant and id, nothing else. */
 export interface UnpaidQrisChargeRecord {
   readonly tenantId: string;
   readonly chargeId: string;

@@ -45,7 +45,7 @@ const EXPECTED_EXPORTS = [
   // Migration 0028: the customer's status page resolves its link code the same way, through one
   // definer function that returns where the servisan lives and nothing else.
   'findStatusLink',
-  // Migration 0038: the server's own check of unpaid QRIS charges lists them by tenant and id only.
+  // Migration 0034: the server's own check of unpaid QRIS charges lists them by tenant and id only.
   'findUnpaidQrisCharges',
   // Task 204 (approach 1): the lookups' SQL as UNEXECUTED query builders, so @bolusi/harness
   // can run the production statement against its own handle instead of a hand-copied mirror.
