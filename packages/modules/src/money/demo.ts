@@ -495,6 +495,12 @@ export function demoQris(options: {
     createCharge: (body) => {
       const known = charges.get(body.id);
       if (known !== undefined) return Promise.resolve(current(body.id));
+      const open = [...charges.values()].some(
+        (other) =>
+          other.body.document.id === body.document.id &&
+          current(other.charge.id).status === 'waiting',
+      );
+      if (open) return Promise.reject(new QrisError('chargeOpen'));
       const connection = connections.get(body.accountId);
       if (connection === undefined) return Promise.reject(new QrisError('notConnected'));
       const charge: QrisCharge = {
@@ -506,6 +512,7 @@ export function demoQris(options: {
         environment: connection.environment,
         expiresAt: options.now() + QRIS_TTL_MS,
         paidAt: null,
+        cancelledAt: null,
       };
       charges.set(body.id, { body, charge });
       return Promise.resolve(charge);
@@ -517,10 +524,26 @@ export function demoQris(options: {
         return Promise.reject(error);
       }
     },
+    openCharges: (documentId) =>
+      Promise.resolve(
+        [...charges.values()]
+          .filter((found) => found.body.document.id === documentId)
+          .map((found) => current(found.charge.id))
+          .filter((charge) => charge.status === 'waiting'),
+      ),
+    cancel: (id) => {
+      const found = charges.get(id);
+      if (found === undefined) return Promise.reject(new QrisError('notFound'));
+      if (current(id).status === 'waiting') {
+        found.charge = { ...found.charge, status: 'cancelled', cancelledAt: options.now() };
+      }
+      return Promise.resolve(current(id));
+    },
     simulate: (id) => {
       const found = charges.get(id);
       if (found === undefined) return Promise.reject(new QrisError('notFound'));
       if (found.charge.status !== 'paid') {
+        // A cancelled QR can still be paid, as at Xendit.
         found.charge = { ...found.charge, status: 'paid', paidAt: options.now() };
         options.onPaid(found.body);
       }

@@ -21,7 +21,19 @@
 // The charge is checked when the QR is made, by the same rule a device's own payment passes
 // (document in this store, account usable here), run as the person asking. A payment that arrives
 // later is recorded even if the account was switched off since: the money already moved.
+//
+// ONE OPEN QR PER BILL. While a bill has a QR that can still be paid, no other QR is made for it,
+// and the counter's devices take no other method for it (money/qris-hooks.ts): a customer must
+// never be able to pay one bill twice by accident. To take it another way the counter cancels the
+// QR first. Xendit cannot withdraw a QR, so a cancelled one stays payable until its time; cancelling
+// first asks Xendit whether it was paid, and a payment that still comes is recorded like any other
+// and shows as money to give back (Kas, "Lebih bayar").
+//
+// THE SERVER FOLLOWS EVERY QR ITSELF. Xendit's webhook can be lost and the counter's device can be
+// closed, so `sweepUnpaidCharges` asks Xendit about each unpaid QR every half minute until it is
+// paid or settled as expired: a customer who paid is always recorded.
 import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
+import { sql } from 'kysely';
 import {
   MONEY_ENTRY_ENTITY,
   MONEY_OP,
@@ -44,6 +56,7 @@ import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
 import type { ForTenant } from '@bolusi/db-server';
 
 import type { ActingUser } from '../auth/acting-user.js';
+import type { AuthDirectory } from '../auth/directory.js';
 import { createAuthorLookup } from '../oplog/steps/permission.js';
 import { checkRules } from '../oplog/steps/rules.js';
 import { appendSystemOp } from '../oplog/system-op.js';
@@ -65,6 +78,10 @@ import {
 
 /** How often a waiting charge may ask Xendit itself, when a device keeps asking about it. */
 const RECHECK_MS = 4_000;
+
+/** How often the server's own sweep asks Xendit about an unpaid charge. */
+export const SWEEP_EVERY_MS = 30_000;
+const SWEEP_RECHECK_MS = 20_000;
 
 /**
  * A QR past its time still waits this long, and for one look at Xendit after it, before it is said
@@ -90,6 +107,11 @@ export interface QrisServiceDeps extends AnnounceDeps {
   readonly projections: ProjectionRegistry<DB>;
   readonly systemKeyStore?: SystemKeyStore | undefined;
   readonly qris?: QrisConfig | undefined;
+}
+
+/** The sweep also lists unpaid charges across tenants (migration 0038's definer lookup). */
+export interface QrisSweepDeps extends QrisServiceDeps {
+  readonly authDirectory: Pick<AuthDirectory, 'findUnpaidQrisCharges'>;
 }
 
 interface Ready extends QrisServiceDeps {
@@ -305,6 +327,8 @@ interface ChargeRow {
   readonly checkedAt: number | null;
   readonly paymentId: string | null;
   readonly paidAt: number | null;
+  /** The counter gave up on the QR; it stays payable until `expiresAt` (see the file header). */
+  readonly cancelledAt: number | null;
   /** The account's key when the QR was made (see the file header); cleared once it is done with. */
   readonly secretSealed: string | null;
   readonly callbackTokenHash: string;
@@ -333,6 +357,7 @@ async function loadCharge(
     checkedAt: row.checkedAt === null ? null : Number(row.checkedAt),
     paymentId: row.paymentId,
     paidAt: row.paidAt === null ? null : Number(row.paidAt),
+    cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
     secretSealed: row.secretSealed,
     callbackTokenHash: row.callbackTokenHash,
   };
@@ -374,16 +399,61 @@ function expired(charge: ChargeRow, now: number): boolean {
   return charge.checkedAt !== null && charge.checkedAt >= charge.expiresAt + SETTLE_MS;
 }
 
+/** A QR the customer may still pay and the counter has not given up on: the bill waits for it. */
+function open(charge: ChargeRow, now: number): boolean {
+  return charge.paidAt === null && charge.cancelledAt === null && !expired(charge, now);
+}
+
 function chargeView(charge: ChargeRow, now: number): QrisCharge {
   return {
     id: charge.id,
-    status: charge.paidAt !== null ? 'paid' : expired(charge, now) ? 'expired' : 'waiting',
+    status:
+      charge.paidAt !== null
+        ? 'paid'
+        : charge.cancelledAt !== null
+          ? 'cancelled'
+          : expired(charge, now)
+            ? 'expired'
+            : 'waiting',
     amount: charge.amount,
     qrString: charge.qrString,
     environment: charge.environment,
     expiresAt: charge.expiresAt,
     paidAt: charge.paidAt,
+    cancelledAt: charge.cancelledAt,
   };
+}
+
+/** The bill's other open QR in this store, if any: a second one is never made beside it. */
+async function openChargeFor(
+  db: TenantDb,
+  storeId: string,
+  documentId: string,
+  except: string,
+  now: number,
+): Promise<ChargeRow | undefined> {
+  const rows = await db
+    .selectFrom('qrisCharges')
+    .select('id')
+    .where('documentId', '=', documentId)
+    .where('storeId', '=', storeId)
+    .where('paidAt', 'is', null)
+    .where('cancelledAt', 'is', null)
+    .where('id', '!=', except)
+    .where('expiresAt', '>', String(now - QRIS_TTL_MS))
+    .execute();
+  for (const row of rows) {
+    const charge = await loadCharge(db, row.id);
+    if (charge !== undefined && open(charge, now)) return charge;
+  }
+  return undefined;
+}
+
+/** Two devices making a QR for one bill at once: one at a time, so only one QR is ever open. */
+async function lockDocument(db: TenantDb, documentId: string): Promise<void> {
+  await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`qris-document:${documentId}`}, 0))`.execute(
+    db,
+  );
 }
 
 /** The payment this charge will record, as the device itself would have written it. */
@@ -496,6 +566,8 @@ export async function createCharge(
     if (refused !== null) throw new ApiError('CHANGE_REFUSED', { reason: refused.reason });
     const key = await connectionOf(ready, db, acting.tenantId, body.accountId);
     if (key === undefined) throw new ApiError('QRIS_NOT_CONNECTED');
+    const other = await openChargeFor(db, storeId, body.document.id, body.id, ready.now());
+    if (other !== undefined) throw new ApiError('QRIS_CHARGE_OPEN', { chargeId: other.id });
     await requireRecordable(ready, db, acting.tenantId);
     return { key };
   });
@@ -528,6 +600,7 @@ export async function createCharge(
     checkedAt: null,
     paymentId: null,
     paidAt: null,
+    cancelledAt: null,
     secretSealed: ready.qris.sealer.seal(
       checked.key.secretKey,
       sealContext('charge', acting.tenantId, body.id),
@@ -535,6 +608,11 @@ export async function createCharge(
     callbackTokenHash: checked.key.callbackTokenHash,
   };
   const saved = await ready.forTenant(acting.tenantId, async (db) => {
+    // Checked again under the bill's lock: another device may have made one while Xendit answered.
+    // The QR just made is then never shown, and expires.
+    await lockDocument(db, body.document.id);
+    const other = await openChargeFor(db, storeId, body.document.id, body.id, ready.now());
+    if (other !== undefined) throw new ApiError('QRIS_CHARGE_OPEN', { chargeId: other.id });
     // Keys of QRs long past their time are no longer needed: a late callback asks with the
     // account's current key.
     await db
@@ -552,6 +630,7 @@ export async function createCharge(
         storeId,
         accountId: charge.accountId,
         documentJson: JSON.stringify(charge.document),
+        documentId: charge.document.id,
         amount: charge.amount,
         xenditQrId: charge.xenditQrId,
         qrString: charge.qrString,
@@ -593,46 +672,182 @@ export async function chargeStatus(
     if (found === undefined) throw new ApiError('NOT_FOUND');
     requireSameStore(acting, found);
     await requireReceives(db, acting, found.storeId);
-    // A QR that expired a while ago can no longer be paid; a callback still records a late one.
-    if (found.paidAt !== null || now > found.expiresAt + QRIS_TTL_MS) {
-      return { charge: found, due: false };
-    }
-    // One asker per few seconds: the update claims the check, so two devices asking at once (or a
-    // device asking fast) ask Xendit once. Past the QR's time, the look that settles it is always due.
-    const settles = found.expiresAt + SETTLE_MS;
-    const claimed = await db
-      .updateTable('qrisCharges')
-      .set({ checkedAt: now })
-      .where('id', '=', id)
-      .where((eb) =>
-        eb.or([
-          eb('checkedAt', 'is', null),
-          eb('checkedAt', '<=', String(now - RECHECK_MS)),
-          ...(now >= settles ? [eb('checkedAt', '<', String(settles))] : []),
-        ]),
-      )
-      .executeTakeFirst();
-    return { charge: found, due: claimed.numUpdatedRows > 0n };
+    // A cancelled QR is no longer the counter's to wait for; the server's sweep still follows it.
+    if (found.cancelledAt !== null) return { charge: found, due: false };
+    return { charge: found, due: await claimCheck(db, found, now, RECHECK_MS) };
   });
   if (!due) return chargeView(charge, now);
+  return chargeView(await look(ready, acting.tenantId, charge, now), ready.now());
+}
+
+/**
+ * Claim the next look at Xendit for a charge: at most one asker per `recheckMs`, so two devices
+ * (or a device and the sweep) asking at once ask Xendit once. Past the QR's time, the look that
+ * settles it is always due. Nothing is due once it is paid or can no longer be paid.
+ */
+async function claimCheck(
+  db: TenantDb,
+  charge: ChargeRow,
+  now: number,
+  recheckMs: number,
+): Promise<boolean> {
+  // A QR that expired a while ago can no longer be paid; a callback still records a late one.
+  if (charge.paidAt !== null || now > charge.expiresAt + QRIS_TTL_MS) return false;
+  const settles = charge.expiresAt + SETTLE_MS;
+  // Settled: asked after its time and its last second, and not paid.
+  if (charge.checkedAt !== null && charge.checkedAt >= settles) return false;
+  const claimed = await db
+    .updateTable('qrisCharges')
+    .set({ checkedAt: now })
+    .where('id', '=', charge.id)
+    .where((eb) =>
+      eb.or([
+        eb('checkedAt', 'is', null),
+        eb('checkedAt', '<=', String(now - recheckMs)),
+        ...(now >= settles ? [eb('checkedAt', '<', String(settles))] : []),
+      ]),
+    )
+    .executeTakeFirst();
+  return claimed.numUpdatedRows > 0n;
+}
+
+/**
+ * Ask Xendit about a charge whose look was claimed at `now`, recording its payment if it was paid.
+ * Xendit being slow is not the asker's failure: the charge is returned as it was, and the claim
+ * given back, since a look that did not happen must not count as the one that says it expired.
+ */
+async function look(
+  ready: Ready,
+  tenantId: string,
+  charge: ChargeRow,
+  now: number,
+): Promise<ChargeRow> {
   const looked = { ...charge, checkedAt: now };
-  const settled = await reconcile(ready, acting.tenantId, looked).catch(async (error: unknown) => {
-    // A device asking again is the retry; Xendit being slow is not this request's failure. The
-    // look did not happen, so it must not count as the one that says the QR expired.
+  try {
+    return (await reconcile(ready, tenantId, looked)) ?? looked;
+  } catch (error) {
     if (error instanceof XenditUnavailable || error instanceof XenditRefusal) {
-      await ready.forTenant(acting.tenantId, (db) =>
+      await ready.forTenant(tenantId, (db) =>
         db
           .updateTable('qrisCharges')
           .set({ checkedAt: charge.checkedAt })
-          .where('id', '=', id)
+          .where('id', '=', charge.id)
           .where('checkedAt', '=', String(now))
           .execute(),
       );
       return charge;
     }
     throw error;
+  }
+}
+
+/**
+ * The bill's QRs in this store that can still be paid and were not cancelled: a device about to
+ * take the bill sees a QR another device (or itself, before a restart) showed.
+ */
+export async function openCharges(
+  deps: QrisServiceDeps,
+  acting: ActingUser,
+  documentId: string,
+): Promise<QrisCharge[]> {
+  const ready = readyOrUnavailable(deps);
+  const storeId = acting.deviceStoreId;
+  if (storeId === null) throw new ApiError('NOT_FOUND');
+  const now = ready.now();
+  return ready.forTenant(acting.tenantId, async (db) => {
+    await requireReceives(db, acting, storeId);
+    const rows = await db
+      .selectFrom('qrisCharges')
+      .select('id')
+      .where('documentId', '=', documentId)
+      .where('storeId', '=', storeId)
+      .where('paidAt', 'is', null)
+      .where('cancelledAt', 'is', null)
+      .where('expiresAt', '>', String(now - QRIS_TTL_MS))
+      .execute();
+    const charges = await Promise.all(rows.map((row) => loadCharge(db, row.id)));
+    return charges
+      .filter((charge): charge is ChargeRow => charge !== undefined && open(charge, now))
+      .map((charge) => chargeView(charge, now));
   });
-  return chargeView(settled ?? charge, ready.now());
+}
+
+/**
+ * The counter gives up on a QR to take the bill another way. Xendit is asked first, so a QR the
+ * customer already paid is said to be paid rather than cancelled (and the counter takes nothing
+ * more). If Xendit cannot be asked, it is cancelled anyway: the customer is at the counter, and a
+ * payment that still comes is recorded and shows as money to give back.
+ */
+export async function cancelCharge(
+  deps: QrisServiceDeps,
+  acting: ActingUser,
+  id: string,
+): Promise<QrisCharge> {
+  const ready = readyOrUnavailable(deps);
+  const charge = await ready.forTenant(acting.tenantId, async (db) => {
+    const found = await loadCharge(db, id);
+    if (found === undefined) throw new ApiError('NOT_FOUND');
+    requireSameStore(acting, found);
+    await requireReceives(db, acting, found.storeId);
+    return found;
+  });
+  if (charge.paidAt !== null || charge.cancelledAt !== null) {
+    return chargeView(charge, ready.now());
+  }
+  const now = ready.now();
+  const checked = await look(ready, acting.tenantId, charge, now);
+  if (checked.paidAt !== null) return chargeView(checked, ready.now());
+  const cancelled = await ready.forTenant(acting.tenantId, async (db) => {
+    await db
+      .updateTable('qrisCharges')
+      .set({ cancelledAt: now, cancelledBy: acting.userId })
+      .where('id', '=', id)
+      .where('paidAt', 'is', null)
+      .where('cancelledAt', 'is', null)
+      .execute();
+    return loadCharge(db, id);
+  });
+  return chargeView(cancelled ?? checked, ready.now());
+}
+
+/**
+ * The server's own look at every unpaid QR (see the file header), run every `SWEEP_EVERY_MS`. Each
+ * charge is claimed like a device's look, so the sweep and a device asking never ask Xendit twice.
+ * One tenant's trouble (Xendit refusing its key) never stops the others.
+ */
+export async function sweepUnpaidCharges(deps: QrisSweepDeps): Promise<void> {
+  if (deps.qris === undefined || deps.systemKeyStore === undefined) return;
+  const ready = deps as QrisSweepDeps & Ready;
+  const now = ready.now();
+  const due = await ready.authDirectory.findUnpaidQrisCharges(now - QRIS_TTL_MS);
+  for (const { tenantId, chargeId } of due) {
+    try {
+      const charge = await ready.forTenant(tenantId, async (db) => {
+        const found = await loadCharge(db, chargeId);
+        if (found === undefined) return undefined;
+        return (await claimCheck(db, found, now, SWEEP_RECHECK_MS)) ? found : undefined;
+      });
+      if (charge !== undefined) await look(ready, tenantId, charge, now);
+    } catch (error) {
+      console.error('qris sweep: charge check failed', { tenantId, chargeId, error });
+    }
+  }
+}
+
+/** Runs the sweep every `everyMs` until stopped; one run at a time. */
+export function startQrisSweep(deps: QrisSweepDeps, everyMs = SWEEP_EVERY_MS): () => void {
+  let running = false;
+  const timer = setInterval(() => {
+    if (running) return;
+    running = true;
+    sweepUnpaidCharges(deps)
+      .catch((error: unknown) => console.error('qris sweep failed', error))
+      .finally(() => {
+        running = false;
+      });
+  }, everyMs);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 /**

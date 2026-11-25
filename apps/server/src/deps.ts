@@ -325,6 +325,9 @@ export interface ServerDeps {
   /** Integrated QRIS through Xendit (qris/service.ts). Absent ⇒ its routes answer 503; it also
    *  needs `systemKeyStore`, since a confirmed payment is a record the server signs. */
   readonly qris?: QrisConfig;
+  /** Start the server's own check of unpaid QRs (qris/service.ts sweep); production only, since
+   *  tests run the sweep by hand. */
+  readonly qrisSweep?: boolean;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -461,6 +464,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
     ...(overrides.appUpdates === undefined ? {} : { appUpdates: overrides.appUpdates }),
     ...(overrides.qris === undefined ? {} : { qris: overrides.qris }),
+    ...(overrides.qrisSweep === true ? { qrisSweep: true } : {}),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.webDir !== undefined ? { webDir: overrides.webDir } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),

@@ -13,6 +13,7 @@ const CHARGE = {
   environment: 'test',
   expiresAt: 1_900_000_000_000,
   paidAt: null,
+  cancelledAt: null,
 };
 const ACCOUNT = '01920000-0000-7000-8000-00000000a001';
 
@@ -93,6 +94,14 @@ describe('the QRIS wire', () => {
       ],
       ['charge', (p) => p.charge(CHARGE.id), CHARGE, 'GET', `/charges/${CHARGE.id}`],
       ['simulate', (p) => p.simulate(CHARGE.id), CHARGE, 'POST', `/charges/${CHARGE.id}/simulate`],
+      ['cancel', (p) => p.cancel(CHARGE.id), CHARGE, 'POST', `/charges/${CHARGE.id}/cancel`],
+      [
+        'openCharges',
+        (p) => p.openCharges('01920000-0000-7000-8000-0000000000d1'),
+        { charges: [CHARGE] },
+        'GET',
+        '/charges?documentId=01920000-0000-7000-8000-0000000000d1',
+      ],
     ];
     for (const [, call, answer, method, path] of cases) {
       const doFetch = vi.fn(async () => jsonResponse(200, answer));
@@ -117,6 +126,7 @@ describe('the QRIS wire', () => {
       [409, 'QRIS_NOT_CONNECTED', 'notConnected'],
       [422, 'QRIS_KEY_REFUSED', 'keyRefused'],
       [422, 'QRIS_AMOUNT_REFUSED', 'amountRefused'],
+      [409, 'QRIS_CHARGE_OPEN', 'chargeOpen'],
       [503, 'QRIS_UNAVAILABLE', 'unavailable'],
       [409, 'CHANGE_REFUSED', 'refused'],
       [403, 'PERMISSION_DENIED', 'denied'],

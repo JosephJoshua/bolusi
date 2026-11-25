@@ -69,7 +69,7 @@ const app = createApp({
   ...(config.appUpdatesRepo === undefined
     ? {}
     : { appUpdates: gitHubReleaseSource({ repo: config.appUpdatesRepo }) }),
-  ...(qris === undefined ? {} : { qris }),
+  ...(qris === undefined ? {} : { qris, qrisSweep: true }),
 });
 
 // Attaches the `ws` server for the GET /v1/realtime upgrade (api/00 §12.1).

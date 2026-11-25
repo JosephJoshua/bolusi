@@ -26,11 +26,13 @@ import {
   loginCredentialQuery,
   mapControlSessionRow,
   statusLinkQuery,
+  unpaidQrisChargesQuery,
   type ControlSessionAuthRecord,
   type DB,
   type DeviceAuthRecord,
   type LoginCredentialRecord,
   type StatusLinkRecord,
+  type UnpaidQrisChargeRecord,
 } from '@bolusi/db-server';
 
 /**
@@ -47,6 +49,7 @@ export interface PgliteAuthDirectory {
   ): Promise<ControlSessionAuthRecord | undefined>;
   findLoginCredential(loginIdentifier: string): Promise<LoginCredentialRecord | undefined>;
   findStatusLink(code: string): Promise<StatusLinkRecord | undefined>;
+  findUnpaidQrisCharges(expiresAfter: number): Promise<readonly UnpaidQrisChargeRecord[]>;
 }
 
 /**
@@ -81,6 +84,10 @@ export function createPgliteAuthDirectory(db: Kysely<DB>): PgliteAuthDirectory {
     async findStatusLink(code) {
       const { rows } = await statusLinkQuery(code).execute(db);
       return rows.length === 1 ? rows[0] : undefined;
+    },
+    async findUnpaidQrisCharges(expiresAfter) {
+      const { rows } = await unpaidQrisChargesQuery(expiresAfter).execute(db);
+      return rows;
     },
   };
 }

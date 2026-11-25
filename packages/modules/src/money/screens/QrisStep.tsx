@@ -3,7 +3,8 @@
  * step over the payment it came from: the amount big, the QR, and what is happening until Xendit
  * confirms the payment. Back closes it and keeps the QR: shown again for the same amount it is the
  * same one, since the customer may have scanned it. When the QR cannot be made (no connection,
- * Xendit down) or it expired, the counter can take the payment by hand instead.
+ * Xendit down) or it expired, the counter can take the payment by hand instead. "Batalkan QR" gives
+ * up on it to take the bill another way (qris-hooks.ts, "One way at a time").
  */
 import { formatMoney, formatTime } from '@bolusi/i18n';
 import type { QrisCharge } from '@bolusi/schemas';
@@ -38,6 +39,8 @@ export interface QrisStepProps {
   readonly onPaid: (charge: QrisCharge) => void;
   readonly onRenew: () => void;
   readonly onTakeByHand: () => void;
+  /** Give up on the QR, to take the bill another way. */
+  readonly onCancel: () => void;
   readonly onClose: () => void;
   readonly testID?: string | undefined;
 }
@@ -53,6 +56,7 @@ export function QrisStep({
   onPaid,
   onRenew,
   onTakeByHand,
+  onCancel,
   onClose,
   testID = 'money.qris',
 }: QrisStepProps): React.JSX.Element {
@@ -64,11 +68,13 @@ export function QrisStep({
   const primary =
     state.kind === 'paid'
       ? { label: tm('money.qris.done'), onPress: onClose }
-      : state.kind === 'expired'
-        ? { label: tm('money.qris.renew'), onPress: onRenew }
-        : state.kind === 'failed'
-          ? { label: tm('money.qris.retry'), onPress: view.retry }
-          : null;
+      : state.kind === 'cancelled'
+        ? { label: tm('money.qris.close'), onPress: onClose }
+        : state.kind === 'expired'
+          ? { label: tm('money.qris.renew'), onPress: onRenew }
+          : state.kind === 'failed'
+            ? { label: tm('money.qris.retry'), onPress: view.retry }
+            : null;
 
   return (
     <FlowScreen
@@ -114,6 +120,14 @@ export function QrisStep({
                   : tm('money.qris.expiresAt', { time: formatTime(state.charge.expiresAt) })}
               </Text>
             ) : null}
+            {state.kind === 'waiting' ? (
+              <TextButton
+                label={tm('money.qris.cancelQr')}
+                tone="danger"
+                onPress={onCancel}
+                testID={`${testID}.cancelQr`}
+              />
+            ) : null}
             {state.kind === 'waiting' && state.charge.environment === 'test' ? (
               <View style={styles.test}>
                 <Banner variant="info" message={tm('money.qris.testMode')} />
@@ -144,6 +158,14 @@ export function QrisStep({
             title={tm('money.qris.paid')}
             message={tm('money.qris.paidMessage', { amount: formatMoney(state.charge.amount) })}
             testID={`${testID}.paid`}
+          />
+        ) : state.kind === 'cancelled' ? (
+          <OutcomeState
+            tone="warning"
+            icon="pending"
+            title={tm('money.qris.cancelled')}
+            message={tm('money.qris.cancelledMessage')}
+            testID={`${testID}.cancelled`}
           />
         ) : (
           <OutcomeState

@@ -260,13 +260,20 @@
       "amountRefused": "Xendit tidak menerima jumlah ini.",
       "unavailable": "Xendit belum bisa dihubungi. Coba lagi nanti.",
       "refused": "Pembayaran ini tidak bisa dicatat.",
-      "unexpected": "Ada yang salah. Coba lagi."
+      "unexpected": "Ada yang salah. Coba lagi.",
+      "chargeOpen": "Tagihan ini masih punya QR yang belum dibayar. Batalkan dulu."
     },
     "showKey": "Tampilkan kunci",
     "hideKey": "Sembunyikan kunci",
     "cancel": "Batal",
-    "unresolved": "QR {amount} tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar.",
-    "unresolvedMany": "{count} QR tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
+    "unresolved": "QR {amount} belum dibayar. Batalkan dulu untuk menerima dengan cara lain.",
+    "cancelQr": "Batalkan QR",
+    "cancelling": "Membatalkan QR…",
+    "cancelled": "QR dibatalkan",
+    "cancelledMessage": "Kalau pelanggan tetap membayar QR ini, uangnya tercatat sebagai lebih bayar untuk dikembalikan.",
+    "cancelFailed": "QR belum bisa dibatalkan karena tidak ada koneksi.",
+    "letGo": "Lepaskan di perangkat ini",
+    "blockedHint": "Batalkan QR yang belum dibayar dulu."
   },
   "refund": {
     "limit": "Batas pengembalianmu {amount}.",

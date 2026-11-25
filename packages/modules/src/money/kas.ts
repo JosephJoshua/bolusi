@@ -419,11 +419,12 @@ export function debtPayment(
   lines: readonly PaymentLine[],
   accounts: readonly PaymentAccountRow[],
   qrAccounts?: ReadonlySet<string>,
+  openQrs = 0,
 ): DebtPayment {
-  const entry = paymentEntry(owed, lines, accounts, qrAccounts);
+  const entry = paymentEntry(owed, lines, accounts, qrAccounts, openQrs);
   const taken =
     entry.paid > 0 && entry.overpaid === 0
-      ? paymentEntry(entry.paid, lines, accounts, qrAccounts)
+      ? paymentEntry(entry.paid, lines, accounts, qrAccounts, openQrs)
       : null;
   return { entry, taken };
 }

@@ -91,6 +91,20 @@ export function statusLinkQuery(code: string) {
   `;
 }
 
+/** Raw unpaid-QR row: a QRIS charge the server should still check with Xendit. */
+export interface UnpaidQrisChargeRow {
+  readonly tenantId: string;
+  readonly chargeId: string;
+}
+
+/** Unpaid QRIS charges whose QR expires after `expiresAfter`, oldest first. Cross-tenant, definer-gated. */
+export function unpaidQrisChargesQuery(expiresAfter: number) {
+  return sql<UnpaidQrisChargeRow>`
+    SELECT tenant_id AS "tenantId", charge_id AS "chargeId"
+      FROM qris_find_unpaid_charges(${expiresAfter})
+  `;
+}
+
 /**
  * Normalise a control-session row's `int8` columns to numbers.
  *

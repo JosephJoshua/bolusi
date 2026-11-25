@@ -229,6 +229,7 @@ export function Handover({
         onPaid={payment.qris.paid}
         onRenew={payment.qris.renew}
         onTakeByHand={payment.qris.takeByHand}
+        onCancel={payment.qris.cancelOpen}
         onClose={payment.qris.close}
         testID={`${testID}.qris`}
       />

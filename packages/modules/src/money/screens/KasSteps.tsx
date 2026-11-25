@@ -525,6 +525,7 @@ export function ReceiveDebtStep({
         onPaid={qris.paid}
         onRenew={qris.renew}
         onTakeByHand={qris.takeByHand}
+        onCancel={qris.cancelOpen}
         onClose={qris.close}
         testID={`${testID}.qris`}
       />

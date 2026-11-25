@@ -65,10 +65,11 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
     setLines,
     recorded,
     newId: () => runtime.newId(),
+    untouched: typed === null,
   });
   const accountRows: readonly PaymentAccountRow[] =
     accounts.status === 'ready' ? accounts.data : [];
-  const payment = debtPayment(owed, qris.lines, accountRows, qris.qrAccounts);
+  const payment = debtPayment(owed, qris.lines, accountRows, qris.qrAccounts, qris.blocking);
   const ready = accounts.status === 'ready' && payment.taken !== null && payment.taken.complete;
   const paidByQr = qris.received > 0 && qris.lines.length === 0;
   const input =
@@ -94,6 +95,8 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
         ? null
         : Object.values(payment.entry.problems).includes('qr')
           ? tm('money.receive.waitQr')
-          : tm('money.receive.hint'),
+          : payment.entry.blocked
+            ? tm('money.qris.blockedHint')
+            : tm('money.receive.hint'),
   };
 }
