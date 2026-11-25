@@ -7,7 +7,12 @@
     "itemPutBack": "Sparepart dikembalikan",
     "categoryAdded": "Kategori ditambahkan",
     "categoryEdited": "Kategori diubah",
-    "stockReceived": "Barang diterima"
+    "stockReceived": "Barang diterima",
+    "stockSent": "Barang dikirim ke toko lain",
+    "transferSent": "Transfer dikirim",
+    "transferReceived": "Transfer diterima",
+    "transferCancelled": "Transfer dibatalkan",
+    "transferSettled": "Transfer diselesaikan"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
@@ -17,7 +22,18 @@
     "wrongUse": "Data servisan tidak cocok. Coba lagi.",
     "categoryNotFound": "Kategori ini tidak ada.",
     "categoryInvalid": "Kolom atau format nama kategori ini belum benar.",
-    "wrongSource": "Data pesanan tidak sesuai."
+    "wrongSource": "Data pesanan tidak sesuai.",
+    "transferNotFound": "Transfer ini tidak ditemukan di toko ini.",
+    "transferMismatch": "Data transfer tidak sesuai.",
+    "transferCancelled": "Transfer ini sudah dibatalkan toko pengirim.",
+    "sameStore": "Pilih toko lain sebagai tujuan.",
+    "notOnTransfer": "Sparepart ini tidak ada di transfer.",
+    "moreThanSent": "Jumlah melebihi yang dikirim.",
+    "nothingToCancel": "Transfer ini tidak dapat dibatalkan karena sebagian sudah diterima.",
+    "nothingToSettle": "Jumlah melebihi yang belum sampai.",
+    "reasonRequired": "Tulis alasan terlebih dahulu.",
+    "numberNotThisDevice": "Nomor transfer ini bukan dari perangkat ini.",
+    "numberUsed": "Nomor transfer ini sudah dipakai."
   },
   "list": {
     "title": "Barang",
@@ -110,7 +126,11 @@
     "counted": "Dikoreksi menjadi {count}",
     "taken": "Diambil untuk {use}",
     "putBack": "Dikembalikan dari {use}",
-    "received": "Diterima dari {source}"
+    "received": "Diterima dari {source}",
+    "transferOut": "Dikirim melalui {transfer}",
+    "transferIn": "Diterima dari {transfer}",
+    "transferBack": "Kembali dari {transfer}",
+    "transferArrivedLate": "Akhirnya sampai, {transfer}"
   },
   "stepper": {
     "decrease": "Kurangi",
@@ -215,7 +235,10 @@
     "moveDown": "Turunkan",
     "removeOption": "Hapus pilihan {option}",
     "addToName": "Tambahkan {label} ke nama",
-    "noOptions": "Belum ada pilihan. Pilihan baru juga dapat ditulis saat mengisi barang."
+    "noOptions": "Belum ada pilihan. Pilihan baru juga dapat ditulis saat mengisi barang.",
+    "kindLabel": "Jenis kolom",
+    "formatHintPc": "Tambahkan ke nama:",
+    "optionsPlaceholder": "Tulis pilihan, lalu Enter"
   },
   "desk": {
     "col": {
@@ -234,5 +257,43 @@
     },
     "results": "{count} barang",
     "closePart": "Tutup barang"
+  },
+  "bulk": {
+    "open": "Tambah banyak",
+    "title": "Tambah banyak barang",
+    "col": {
+      "name": "Nama",
+      "fits": "Cocok untuk HP",
+      "code": "Kode",
+      "barcode": "Barcode",
+      "tags": "Label",
+      "stock": "Stok"
+    },
+    "problem": {
+      "tooLong": "Maksimal {max} huruf.",
+      "tooMany": "Maksimal {max}.",
+      "phoneUnknown": "{phones} belum ada di daftar HP, jadi disimpan sesuai yang ditulis.",
+      "phoneNear": "{phones} belum ada di daftar HP. Apakah maksudnya {near}?",
+      "wholeNumber": "Tulis angka bulat, misalnya 5.",
+      "nameOrFields": "Isi kolom kategori atau tulis nama terlebih dahulu."
+    },
+    "saved": "{count} barang disimpan.",
+    "left": "{count} baris belum disimpan. Periksa yang ditandai merah.",
+    "blocked": "{count} belum lengkap",
+    "save": "Simpan {count} barang",
+    "saving": "Menyimpan {done} dari {total}…",
+    "hint": {
+      "name": "Kosongkan untuk nama otomatis: {format}",
+      "fits": "Pisahkan dengan koma, misalnya Redmi Note 10, Redmi Note 10S",
+      "list": "Pisahkan dengan koma",
+      "sheet": "Ketik langsung, atau salin dari Excel lalu tempel dengan Ctrl+V. Judul kolom ikut dikenali."
+    },
+    "row": "Baris {n}",
+    "deleteRow": "Hapus baris",
+    "where": "Baris {n}, {column}",
+    "switchTitle": "Ganti kategori?",
+    "switchMessage": "Baris yang belum disimpan akan dihapus.",
+    "switchConfirm": "Ganti",
+    "leaveMessage": "Baris yang belum disimpan akan hilang."
   }
 }

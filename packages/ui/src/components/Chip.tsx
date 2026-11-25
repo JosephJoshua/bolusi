@@ -70,7 +70,6 @@ export function Chip({
       <Icon name={icon} size={size.iconChip} color={fg} />
       <Text
         testID={testID === undefined ? undefined : `${testID}.label`}
-        numberOfLines={1}
         style={[styles.label, { color: fg }]}
       >
         {label}

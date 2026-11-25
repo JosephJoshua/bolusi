@@ -98,6 +98,15 @@ async function openTicket(name: string): Promise<void> {
   await screen.findByTestId('repair.desk.ticket.customer');
 }
 
+/** Pick a move from the open servisan's "Lainnya" menu. */
+async function openMore(item: string): Promise<void> {
+  fireEvent.pointerDown(await screen.findByTestId('repair.desk.ticket.more'), {
+    button: 0,
+    pointerType: 'mouse',
+  });
+  fireEvent.click(await screen.findByRole('menuitem', { name: item }));
+}
+
 async function showView(view: string): Promise<void> {
   const tab = await screen.findByTestId(`repair.desk.board.views.${view}`);
   fireEvent.mouseDown(tab, { button: 0 });
@@ -460,7 +469,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(within(section).getByRole('button', { name: 'Putuskan' }));
     const dialog = await screen.findByTestId('repair.desk.approval');
     expect(within(dialog).getByTestId('repair.desk.approval.amount').textContent).toBe(
-      '−Rp 25.000',
+      '−Rp\u00A025.000',
     );
     fireEvent.click(within(dialog).getByTestId('repair.desk.approval.approve'));
     await screen.findByText('Disetujui dan dicatat.');
@@ -525,7 +534,7 @@ describe('counter app over demo data', () => {
     const dialog = await screen.findByTestId('repair.desk.price.change');
     fireEvent.click(within(dialog).getByTestId('repair.desk.price.change.kind.discount'));
     expect(byTestId('repair.desk.price.change.discountLimit').textContent).toBe(
-      'Batas diskon Anda Rp 50.000 per servisan.',
+      'Batas diskon Anda Rp\u00A050.000 per servisan.',
     );
     fireEvent.change(byTestId('repair.desk.price.change.description'), {
       target: { value: 'Diskon langganan' },
@@ -553,7 +562,7 @@ describe('counter app over demo data', () => {
     expect(screen.queryByTestId('repair.desk.cancel.limit')).toBeNull();
     fireEvent.click(await screen.findByTestId('repair.desk.cancel.changeFee'));
     expect(byTestId('repair.desk.cancel.limit').textContent).toBe(
-      'Anda dapat memotong biaya sampai Rp 50.000.',
+      'Anda dapat memotong biaya sampai Rp\u00A050.000.',
     );
   });
 
@@ -685,7 +694,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.ticket.downPayment.correct'));
     await screen.findByTestId('repair.desk.downPayment.correct');
     expect(screen.queryByTestId('repair.desk.downPayment.correct.asks')).toBeNull();
-    // Rp 40.000 off is above her Rp 30.000; no reason typed yet.
+    // Rp\u00A040.000 off is above her Rp\u00A030.000; no reason typed yet.
     fireEvent.change(byTestId('repair.desk.downPayment.correct.amount'), {
       target: { value: '60000' },
     });
@@ -708,7 +717,7 @@ describe('counter app over demo data', () => {
     // The DP came in partly by QRIS, so part of the 50.000 goes back through it.
     const handover = byTestId('repair.desk.handover').textContent;
     expect(handover).toContain('Kembalikan tunai');
-    expect(handover).toMatch(/Kembalikan melalui QRIS BCA\s*Rp 30\.000/);
+    expect(handover).toMatch(/Kembalikan melalui QRIS BCA\s*Rp\u00A030\.000/);
   });
 
   it('hands a phone back only once the rest is paid, with the change shown', async () => {
@@ -1080,7 +1089,9 @@ describe('money after pickup on the servisan', () => {
     await showView('returned');
     await openTicket('Yakob Tabuni');
     expect(screen.queryByTestId('repair.desk.ticket.reduce')).toBeNull();
-    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    // A settled bill given back is a correction: under Lainnya, never a link that reads as next.
+    expect(screen.queryByTestId('repair.desk.ticket.refund')).toBeNull();
+    await openMore('Kembalikan uang');
     await screen.findByTestId('money.desk.refund');
     expect(text('money.desk.refund.paid')).toBe('Rp625.000');
     fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '50000' } });
@@ -1099,7 +1110,7 @@ describe('money after pickup on the servisan', () => {
     await switchTo('Maria Kogoya');
     await showView('returned');
     await openTicket('Yakob Tabuni');
-    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    await openMore('Kembalikan uang');
     await screen.findByTestId('money.desk.refund');
     fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '40000' } });
     expect(text('money.desk.refund.limit')).toBe('MelebihibatasAnda,jadiperlupersetujuan.');

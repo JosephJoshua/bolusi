@@ -44,7 +44,7 @@ function open(limit: number | null) {
     <ApprovalDialog
       port={port}
       request={REQUEST}
-      description={{ title: 'DP yang benar', amount: 'Rp 40.000', notes: [] }}
+      description={{ title: 'DP yang benar', amount: 'Rp\u00A040.000', notes: [] }}
       onDone={onDone}
       onClose={() => undefined}
     />,
@@ -57,7 +57,7 @@ describe('ApprovalDialog', () => {
     const { run, onDone } = open(30_000);
     expect(screen.getByTestId('approvals.desk.dialog.approve')).toHaveProperty('disabled', true);
     expect(screen.getByTestId('approvals.desk.dialog.beyondLimit').textContent).toBe(
-      'Di atas batas Anda Rp 30.000. Hanya pemilik toko yang dapat menyetujui.',
+      'Di atas batas Anda Rp\u00A030.000. Hanya pemilik toko yang dapat menyetujui.',
     );
     fireEvent.change(screen.getByTestId('approvals.desk.dialog.note'), {
       target: { value: 'Pakai nota asli' },

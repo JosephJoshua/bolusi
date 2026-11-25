@@ -16,6 +16,8 @@ import {
   addCategoryHandler,
   addCategoryInput,
   addItemHandler,
+  addItemsHandler,
+  addItemsInput,
   addItemInput,
   countStockHandler,
   countStockInput,
@@ -44,6 +46,29 @@ import {
 import { INVENTORY_REFUSALS } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
 import type { StockSourceTargets } from './stock-source.js';
+import {
+  inventoryTransferArrivalLinesTable,
+  inventoryTransferArrivalsTable,
+  inventoryTransferLinesTable,
+  inventoryTransferSettlementLinesTable,
+  inventoryTransferSettlementsTable,
+  inventoryTransfersTable,
+} from './transfers/applier.js';
+import {
+  cancelTransferHandler,
+  cancelTransferInput,
+  receiveTransferHandler,
+  receiveTransferInput,
+  sendTransferHandler,
+  sendTransferInput,
+  settleTransferHandler,
+  settleTransferInput,
+} from './transfers/commands.js';
+import {
+  getTransferQuery,
+  listTransfersQuery,
+  nextTransferNumberQuery,
+} from './transfers/queries.js';
 
 export const INVENTORY_PERMISSIONS = {
   [INVENTORY_PERMISSION.read]: {
@@ -83,7 +108,21 @@ export const INVENTORY_PERMISSIONS = {
   [INVENTORY_PERMISSION.receive]: {
     scope: 'store',
     isDangerous: false,
-    description: "Can add parts that arrived on a supplier order to the store's stock.",
+    description:
+      "Can add parts that arrived to the store's stock: on a supplier order, or sent by another store.",
+  },
+  [INVENTORY_PERMISSION.transfer]: {
+    scope: 'store',
+    isDangerous: false,
+    description:
+      "Can send parts from the store's stock to another store, and cancel a send before anything arrives.",
+  },
+  [INVENTORY_PERMISSION.settleTransfer]: {
+    scope: 'store',
+    // Writing sent parts off closes a shortfall that could hide parts taken on the way.
+    isDangerous: true,
+    description:
+      'Can settle parts a transfer from the store never delivered: back into stock, or written off with a reason.',
   },
 } as const;
 
@@ -102,6 +141,12 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         [INVENTORY_TABLE.fits]: inventoryItemFitsTable,
         [INVENTORY_TABLE.facets]: inventoryItemFacetsTable,
         [INVENTORY_TABLE.categories]: inventoryCategoriesTable,
+        [INVENTORY_TABLE.transfers]: inventoryTransfersTable,
+        [INVENTORY_TABLE.transferLines]: inventoryTransferLinesTable,
+        [INVENTORY_TABLE.transferArrivals]: inventoryTransferArrivalsTable,
+        [INVENTORY_TABLE.transferArrivalLines]: inventoryTransferArrivalLinesTable,
+        [INVENTORY_TABLE.transferSettlements]: inventoryTransferSettlementsTable,
+        [INVENTORY_TABLE.transferSettlementLines]: inventoryTransferSettlementLinesTable,
       },
     },
 
@@ -123,6 +168,11 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         input: addItemInput,
         handler: addItemHandler,
       },
+      addItems: {
+        permission: INVENTORY_PERMISSION.manageItems,
+        input: addItemsInput,
+        handler: addItemsHandler,
+      },
       editItem: {
         permission: INVENTORY_PERMISSION.manageItems,
         input: editItemInput,
@@ -143,6 +193,26 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         input: usePartInput,
         handler: putBackPartHandler,
       },
+      sendTransfer: {
+        permission: INVENTORY_PERMISSION.transfer,
+        input: sendTransferInput,
+        handler: sendTransferHandler,
+      },
+      receiveTransfer: {
+        permission: INVENTORY_PERMISSION.receive,
+        input: receiveTransferInput,
+        handler: receiveTransferHandler,
+      },
+      cancelTransfer: {
+        permission: INVENTORY_PERMISSION.transfer,
+        input: cancelTransferInput,
+        handler: cancelTransferHandler,
+      },
+      settleTransfer: {
+        permission: INVENTORY_PERMISSION.settleTransfer,
+        input: settleTransferInput,
+        handler: settleTransferHandler,
+      },
     },
 
     queries: {
@@ -155,6 +225,9 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
       facetValues: facetValuesQuery,
       findByCode: findByCodeQuery,
       itemsInCategory: itemsInCategoryQuery,
+      listTransfers: listTransfersQuery,
+      getTransfer: getTransferQuery,
+      nextTransferNumber: nextTransferNumberQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

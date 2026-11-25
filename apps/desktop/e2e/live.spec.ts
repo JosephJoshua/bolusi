@@ -437,6 +437,33 @@ async function signInAs(name: string | null, pin: string): Promise<void> {
   await expect(counter.getByTestId('desktop.shell')).toBeVisible();
 }
 
+test('the owner enters 300 parts at once from a pasted sheet, saved in the core and synced', async () => {
+  await signInAs(null, '246802');
+  await counter.getByRole('button', { name: 'Barang', exact: true }).click();
+  await counter.getByTestId('inventory.desk.bulk').click();
+  const sheet = counter.getByTestId('inventory.desk.bulk.grid.body');
+  await sheet.focus();
+  const text = Array.from(
+    { length: 300 },
+    (_, i) => `Lem B7000 ${String(i + 1)} ml\t\tLEM-${String(i + 1)}\t\tbahan\t${String(i % 7)}`,
+  ).join('\r\n');
+  await sheet.evaluate((element, data) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', data);
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true }));
+  }, text);
+  await expect(counter.getByTestId('inventory.desk.bulk.save')).toHaveText('Simpan 300 barang');
+  await counter.getByTestId('inventory.desk.bulk.save').click();
+  await expect(counter.getByText('300 barang disimpan.')).toBeVisible({ timeout: 30_000 });
+  await expect(counter.getByTestId('desktop.sync')).toHaveAttribute('data-state', 'synced', {
+    timeout: 60_000,
+  });
+  await counter.getByTestId('inventory.desk.bulk.back').click();
+  await counter.getByTestId('inventory.desk.search').fill('LEM-300');
+  await expect(counter.getByTestId('inventory.desk.table')).toContainText('Lem B7000 300 ml');
+  await signInAs('Maria Kambu', '135790');
+});
+
 test('the owner uses Belanja on the store PC, which keeps none of it once they leave', async () => {
   const belanja = counter.getByRole('button', { name: 'Belanja', exact: true });
   // The cashier may not buy: the PC shows no Belanja, and holds none of it.

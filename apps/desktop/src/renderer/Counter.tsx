@@ -7,7 +7,7 @@ import {
   opensParts,
   InventoryRuntimeProvider,
   NO_FILTER,
-  PartsPage,
+  PartsSection,
   ti,
   type ListFilter,
 } from '@bolusi/modules/inventory/desktop';
@@ -34,6 +34,7 @@ import {
   Avatar,
   ConfirmDialog,
   Menu,
+  OverflowText,
   Sidebar,
   SidebarToggle,
   type MenuItem,
@@ -348,7 +349,11 @@ export function Counter({
         />
       ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
         <InventoryRuntimeProvider runtime={inventory}>
-          <PartsPage filter={partsFilter} onFilterChange={setPartsFilter} />
+          <PartsSection
+            filter={partsFilter}
+            onFilterChange={setPartsFilter}
+            onRegisterLeaveGuard={registerLeaveGuard}
+          />
         </InventoryRuntimeProvider>
       ) : page.kind === 'purchasing' &&
         showsPurchasing &&
@@ -453,8 +458,8 @@ function PersonMenu({
           className={`${BAR_CONTROL} pl-1`}
         >
           <Avatar userId={person.userId} name={person.name} size={28} />
-          <span className="hidden max-w-40 truncate font-semibold text-chrome-text @min-[56rem]:inline">
-            {person.name}
+          <span className="hidden max-w-40 min-w-0 font-semibold text-chrome-text @min-[56rem]:block">
+            <OverflowText text={person.name} />
           </span>
           <ChevronDown size={14} aria-hidden className="shrink-0" />
         </button>

@@ -385,3 +385,20 @@ export const stockReceivedApplier: Applier = async (db, op) => {
     note: null,
   });
 };
+
+export const stockSentApplier: Applier = async (db, op) => {
+  const payload = payloadOf<{
+    itemId: string;
+    qty: number;
+    sink: { kind: string; id: string; label: string };
+  }>(op);
+  // Where the parts went is filed where a use is, as a receipt's source is.
+  await insertMovement(db, op, {
+    itemId: payload.itemId,
+    kind: 'sent',
+    qty: -payload.qty,
+    counted: null,
+    use: payload.sink,
+    note: null,
+  });
+};

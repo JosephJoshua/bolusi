@@ -9,6 +9,7 @@
  * `resolveSyncChip`) and constants (`PIN_LENGTH`, …) are re-exported from `src/index.ts` directly
  * from their modules — they have no visual states and would only pollute the registry.
  */
+export { Amount, AmountRow } from './Amount.js';
 export { Avatar } from './Avatar.js';
 export { Banner } from './Banner.js';
 export { BrandMark } from './BrandMark.js';

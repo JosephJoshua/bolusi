@@ -609,12 +609,12 @@ describe('price changes and handover', () => {
     await press(screen, 'repair.board.views.pickup');
     await press(screen, `repair.board.row.${big}`);
     await press(screen, 'repair.ticket.action.handover');
-    // Rp 750.000 due is above the Rp 100.000 limit: an owner is asked, and the limit is said.
+    // Rp\u00A0750.000 due is above the Rp\u00A0100.000 limit: an owner is asked, and the limit is said.
     await press(screen, 'repair.handover.payLater');
     expect(text(screen, 'repair.handover.asks')).toBe(
       'Melebihi batas Anda, jadi perlu persetujuan.',
     );
-    expect(text(screen, 'repair.handover.limit')).toBe('Batas bayar nanti Anda Rp 100.000.');
+    expect(text(screen, 'repair.handover.limit')).toBe('Batas bayar nanti Anda Rp\u00A0100.000.');
     expect(screen.query('repair.handover.askPayLater')).not.toBeNull();
     screen.unmount();
     const again = await mount(h, h.managerId);
@@ -622,7 +622,7 @@ describe('price changes and handover', () => {
     await press(again, `repair.board.row.${small}`);
     await press(again, 'repair.ticket.action.handover');
     await press(again, 'repair.handover.payLater');
-    expect(text(again, 'repair.handover.limit')).toBe('Batas bayar nanti Anda Rp 100.000.');
+    expect(text(again, 'repair.handover.limit')).toBe('Batas bayar nanti Anda Rp\u00A0100.000.');
     expect(again.query('repair.handover.asks')).toBeNull();
   });
 
@@ -758,7 +758,7 @@ describe('a down payment fix (owners; the counter asks)', () => {
       await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.cashierId)
     ).rows;
 
-    // Rp 60.000 off is beyond the manager's Rp 30.000: only rejecting is offered.
+    // Rp\u00A060.000 off is beyond the manager's Rp\u00A030.000: only rejecting is offered.
     const manager = await mount(h, h.managerId);
     await press(manager, 'repair.board.views.approvals');
     await press(manager, `repair.board.row.${ticketId}`);
@@ -790,7 +790,7 @@ describe('a down payment fix (owners; the counter asks)', () => {
       h.storeOwnerId,
     );
 
-    // 80.000 to 70.000 is Rp 10.000 now, Rp 30.000 with the owner's earlier fix: still within.
+    // 80.000 to 70.000 is Rp\u00A010.000 now, Rp\u00A030.000 with the owner's earlier fix: still within.
     const manager = await mount(h, h.managerId);
     await press(manager, `repair.board.row.${ticketId}`);
     await press(manager, 'repair.ticket.downPayment.correct');
@@ -823,7 +823,7 @@ describe('putting a mistake right', () => {
     await press(manager, 'repair.board.views.pickup');
     await press(manager, `repair.board.row.${ticketId}`);
     await press(manager, 'repair.ticket.action.changeCancelFee');
-    // Rp 50.000 off the store's Rp 100.000 is within the manager's Rp 50.000.
+    // Rp\u00A050.000 off the store's Rp\u00A0100.000 is within the manager's Rp\u00A050.000.
     type(manager, 'repair.cancelFee.feeInput', '50.000');
     await settle();
     expect(manager.query('repair.cancelFee.asks')).toBeNull();
@@ -963,6 +963,23 @@ describe('cancelling (owners; the counter asks)', () => {
     expect(owner.query('repair.board.views.approvals')).toBeNull();
   });
 
+  test('a free cancel says so once, without an "Rp 0" under it', async () => {
+    h = await openRepairScreenHarness(5509);
+    await h.run('setCancelFees', { beforeWork: 0, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    expect(text(screen, 'repair.cancel.consequence')).toBe(tn('repair.cancel.consequenceFree'));
+    expect(screen.query('repair.cancel.feeAmount')).toBeNull();
+    // Charging something after all brings the amount back.
+    await press(screen, 'repair.cancel.changeFee');
+    type(screen, 'repair.cancel.feeInput', '10.000');
+    await settle();
+    expect(text(screen, 'repair.cancel.feeAmount')).toContain('10.000');
+  });
+
   test('the store’s after-work fee is filled in; a changed fee asks why and both are recorded', async () => {
     h = await openRepairScreenHarness(5502);
     await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
@@ -1012,7 +1029,7 @@ describe('cancelling (owners; the counter asks)', () => {
     await press(screen, 'repair.ticket.action.cancel');
     expect(screen.query('repair.cancel.limit')).toBeNull();
     await press(screen, 'repair.cancel.changeFee');
-    // The manager's limit is Rp 50.000, but a fee of Rp 10.000 can only be cut by that much.
+    // The manager's limit is Rp\u00A050.000, but a fee of Rp\u00A010.000 can only be cut by that much.
     expect(text(screen, 'repair.cancel.limit')).toMatch(
       /^Anda dapat memotong biaya sampai Rp\s?10\.000\.$/,
     );
@@ -1039,7 +1056,7 @@ describe('cancelling (owners; the counter asks)', () => {
     await press(screen, `repair.board.row.${ticketId}`);
     await press(screen, 'repair.ticket.action.cancel');
     await press(screen, 'repair.cancel.changeFee');
-    // Rp 50.000 less the Rp 30.000 discount leaves Rp 20.000 to cut.
+    // Rp\u00A050.000 less the Rp\u00A030.000 discount leaves Rp\u00A020.000 to cut.
     expect(text(screen, 'repair.cancel.limit')).toMatch(
       /^Anda dapat memotong biaya sampai Rp\s?20\.000\.$/,
     );
@@ -1585,7 +1602,7 @@ describe('price and assignment details', () => {
     await press(screen, 'repair.board.views.pickup');
     await press(screen, `repair.board.row.${opened.ticketId}`);
     const rows = text(screen, 'repair.ticket.downPaymentRows');
-    expect(rows).toContain('KembalikanRp 100.000');
+    expect(rows).toContain('KembalikanRp\u00A0100.000');
     expect(rows).not.toContain('Dikembalikan');
   });
 
@@ -1629,8 +1646,8 @@ describe('price and assignment details', () => {
     const screen = await mount(h, h.storeOwnerId);
     await press(screen, `repair.board.row.${ticketId}`);
     expect(text(screen, 'repair.ticket.downPaymentRows')).toContain('Sudah dikembalikan');
-    expect(text(screen, 'repair.ticket.downPayment')).toBe('+Rp 200.000');
-    expect(text(screen, 'repair.ticket.balance')).toBe('Rp 950.000');
+    expect(text(screen, 'repair.ticket.downPayment')).toBe('+Rp\u00A0200.000');
+    expect(text(screen, 'repair.ticket.balance')).toBe('Rp\u00A0950.000');
   });
 
   test('an amount typed without a description is named instead of silently dropped', async () => {
@@ -1998,19 +2015,22 @@ describe('money once the phone went home', () => {
     await press(screen, 'repair.board.views.returned');
     await press(screen, `repair.board.row.${ticketId}`);
     expect(screen.query('repair.ticket.reduce')).toBeNull();
-    await press(screen, 'repair.ticket.refund');
-    expect(text(screen, 'money.refund.paid')).toContain('Rp 750.000');
+    // A settled bill given back is a correction: under Lainnya, never a link that reads as next.
+    expect(screen.query('repair.ticket.refund')).toBeNull();
+    await press(screen, 'repair.ticket.more.open');
+    await press(screen, 'repair.ticket.action.refund');
+    expect(text(screen, 'money.refund.paid')).toContain('Rp\u00A0750.000');
     type(screen, 'money.refund.amount', '50000');
     await settle();
-    expect(text(screen, 'money.refund.lowersBill')).toBe('Tagihan juga turun Rp 50.000.');
+    expect(text(screen, 'money.refund.lowersBill')).toBe('Tagihan juga turun Rp\u00A050.000.');
     type(screen, 'money.refund.reason', 'Garansi kaca');
     await settle();
     await press(screen, 'money.refund.primary');
 
     expect(text(screen, 'repair.ticket.done')).toContain('Uang sudah dikembalikan.');
-    expect(text(screen, 'repair.ticket.reduced')).toBe('−Rp 50.000');
-    expect(text(screen, 'repair.ticket.downPayment')).toBe('−Rp 700.000');
-    expect(text(screen, 'repair.ticket.balance')).toBe('Rp 0');
+    expect(text(screen, 'repair.ticket.reduced')).toBe('−Rp\u00A050.000');
+    expect(text(screen, 'repair.ticket.downPayment')).toBe('−Rp\u00A0700.000');
+    expect(text(screen, 'repair.ticket.balance')).toBe('Rp\u00A00');
   });
   // Android QA round B: beyond the limit the manager was only told "Melebihi batasmu".
   test('a manager asks an owner to give back beyond their limit, and the owner’s yes does it', async () => {
@@ -2032,25 +2052,26 @@ describe('money once the phone went home', () => {
     const manager = await mount(h, h.managerId);
     await press(manager, 'repair.board.views.returned');
     await press(manager, `repair.board.row.${ticketId}`);
-    await press(manager, 'repair.ticket.refund');
+    await press(manager, 'repair.ticket.more.open');
+    await press(manager, 'repair.ticket.action.refund');
     type(manager, 'money.refund.amount', '20000');
     await settle();
-    expect(text(manager, 'money.refund.limit')).toBe('Batas pengembalian Anda Rp 30.000.');
-    expect(text(manager, 'money.refund.primary')).toContain('Kembalikan Rp 20.000');
-    // Rp 40.000 is past the Rp 30.000 limit: the step asks, and says what the typed amount does.
+    expect(text(manager, 'money.refund.limit')).toBe('Batas pengembalian Anda Rp\u00A030.000.');
+    expect(text(manager, 'money.refund.primary')).toContain('Kembalikan Rp\u00A020.000');
+    // Rp\u00A040.000 is past the Rp\u00A030.000 limit: the step asks, and says what the typed amount does.
     type(manager, 'money.refund.amount', '40000');
     await settle();
     expect(text(manager, 'money.refund.limit')).toBe(
       'Melebihi batas Anda, jadi perlu persetujuan.',
     );
-    expect(text(manager, 'money.refund.lowersBill')).toBe('Tagihan juga turun Rp 40.000.');
+    expect(text(manager, 'money.refund.lowersBill')).toBe('Tagihan juga turun Rp\u00A040.000.');
     expect(text(manager, 'money.refund.primary')).toContain('Minta persetujuan');
     type(manager, 'money.refund.reason', 'Garansi kaca');
     await settle();
     await press(manager, 'money.refund.primary');
     expect(text(manager, 'repair.ticket.done')).toContain('Permintaan dibuat.');
     // Nothing went back yet.
-    expect(text(manager, 'repair.ticket.balance')).toBe('Rp 0');
+    expect(text(manager, 'repair.ticket.balance')).toBe('Rp\u00A00');
     manager.unmount();
 
     const [request] = (
@@ -2064,7 +2085,7 @@ describe('money once the phone went home', () => {
     expect(text(owner, 'repair.ticket.approval')).toContain('Dikembalikan melalui Tunai.');
     await press(owner, 'repair.ticket.approval.primary');
     await settle();
-    expect(text(owner, 'repair.ticket.reduced')).toBe('−Rp 40.000');
-    expect(text(owner, 'repair.ticket.downPayment')).toBe('−Rp 710.000');
+    expect(text(owner, 'repair.ticket.reduced')).toBe('−Rp\u00A040.000');
+    expect(text(owner, 'repair.ticket.downPayment')).toBe('−Rp\u00A0710.000');
   });
 });

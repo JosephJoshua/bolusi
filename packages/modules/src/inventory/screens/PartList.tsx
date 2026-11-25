@@ -9,18 +9,20 @@ import { t, translateErrorCode } from '@bolusi/i18n';
 import {
   ActionChip,
   AppShell,
+  border,
   Button,
   ChipRow,
-  List,
-  SearchField,
-  ToggleChip,
-  border,
   color,
+  List,
+  type ListState,
+  numeric,
+  SearchField,
   space,
+  Text,
+  ToggleChip,
   touch,
   type,
-  type ListState,
-  Text,
+  ValueText,
 } from '@bolusi/ui';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -339,13 +341,13 @@ const PartListRow = memo(
         ]}
       >
         <View style={styles.rowText}>
-          <Text style={styles.name} numberOfLines={2}>
+          <ValueText lines={2} style={styles.name}>
             {row.name}
-          </Text>
+          </ValueText>
           {details === '' ? null : (
-            <Text style={styles.details} numberOfLines={1}>
+            <ValueText lines={1} style={styles.details}>
               {details}
-            </Text>
+            </ValueText>
           )}
         </View>
         <View style={styles.stock}>
@@ -385,7 +387,7 @@ const styles = StyleSheet.create({
   name: { ...type.bodyBold, color: color.text },
   details: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
   stock: { alignItems: 'flex-end', flexShrink: 0 },
-  count: { ...type.heading, color: color.text, fontVariant: ['tabular-nums'] },
+  count: { ...type.heading, color: color.text, ...numeric },
   countBelow: { color: color.danger },
   stockLabel: { ...type.caption, color: color.textMuted },
 });

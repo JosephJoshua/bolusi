@@ -569,6 +569,22 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
       items.push({ id, ...details(input), archived: false });
       return { itemId: id };
     },
+    addItems: (input) => {
+      require(I.manageItems);
+      const list = input['items'] as readonly Input[];
+      const counted = list.map((item) => Number(item['counted'] ?? 0));
+      if (counted.some((n) => n > 0)) require(I.count);
+      // As the command: every item checked before any is added, so a save is all or none.
+      const built = list.map(details);
+      const itemIds = built.map((item, i) => {
+        const id = newId('item');
+        items.push({ id, ...item, archived: false });
+        if (counted[i]! > 0)
+          record(id, 'counted', counted[i]!, { counted: counted[i]!, note: null });
+        return id;
+      });
+      return { itemIds };
+    },
     editItem: (input) => {
       require(I.manageItems);
       const item = find(String(input['itemId']));

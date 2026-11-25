@@ -59,13 +59,13 @@ describe('the number WhatsApp opens', () => {
   });
 
   it('carries the message in the link, encoded', () => {
-    expect(whatsAppUrl('6281234567890', 'Halo Kak, total: Rp 1.000 & DP')).toBe(
+    expect(whatsAppUrl('6281234567890', 'Halo Kak, total: Rp\u00A01.000 & DP')).toBe(
       'https://wa.me/6281234567890?text=Halo%20Kak%2C%20total%3A%20Rp%201.000%20%26%20DP',
     );
   });
 
   it('opens the app itself on a phone, so a phone without WhatsApp fails instead of opening a browser', () => {
-    expect(whatsAppAppUrl('6281234567890', 'Halo Kak, total: Rp 1.000 & DP')).toBe(
+    expect(whatsAppAppUrl('6281234567890', 'Halo Kak, total: Rp\u00A01.000 & DP')).toBe(
       'whatsapp://send?phone=6281234567890&text=Halo%20Kak%2C%20total%3A%20Rp%201.000%20%26%20DP',
     );
   });
@@ -99,7 +99,7 @@ describe('the words', () => {
       [
         'Halo Yohanes, HP Samsung Galaxy A15 sudah selesai diperbaiki dan dapat diambil di Bolusi Cell Sorong.',
         'No. servisan: K7Q-0042',
-        'Total: Rp 950.000',
+        'Total: Rp\u00A0950.000',
         'Terima kasih.',
       ].join('\n'),
     );
@@ -108,14 +108,14 @@ describe('the words', () => {
   it('takes a down payment off what is left to pay', () => {
     const text = customerMessage('ready', { ...repaired, downPayment: 200_000 }, null);
     expect(text).toContain('dapat diambil.');
-    expect(text).toContain('DP: Rp 200.000\nSisa bayar: Rp 750.000');
+    expect(text).toContain('DP: Rp\u00A0200.000\nSisa bayar: Rp\u00A0750.000');
   });
 
   it('gives a cancelled phone’s fee, or the down payment to return when the fee is less', () => {
     const cancelled = { ...repaired, outcome: 'cancelled' as const, cancelFee: 50_000 };
     const text = customerMessage('ready', cancelled, 'Bolusi Cell');
     expect(text).toContain('servisan HP Samsung Galaxy A15 dibatalkan');
-    expect(text).toContain('Biaya pembatalan: Rp 50.000');
+    expect(text).toContain('Biaya pembatalan: Rp\u00A050.000');
     expect(text).not.toContain('Total');
     const free = customerMessage(
       'ready',
@@ -123,7 +123,7 @@ describe('the words', () => {
       null,
     );
     expect(free).not.toContain('Biaya pembatalan');
-    expect(free).toContain('DP dikembalikan: Rp 100.000');
+    expect(free).toContain('DP dikembalikan: Rp\u00A0100.000');
   });
 
   it('lists each change waiting for the customer and the total if they agree', () => {
@@ -141,8 +141,8 @@ describe('the words', () => {
       [
         'Halo Yohanes, ada perubahan biaya untuk servisan HP Samsung Galaxy A15.',
         'No. servisan: K7Q-0042',
-        '- Ganti baterai: Rp 300.000',
-        'Total menjadi Rp 1.250.000.',
+        '- Ganti baterai: Rp\u00A0300.000',
+        'Total menjadi Rp\u00A01.250.000.',
         'Bolehkah kami melanjutkan?',
       ].join('\n'),
     );

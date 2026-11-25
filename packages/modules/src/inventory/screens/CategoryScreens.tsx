@@ -27,11 +27,12 @@ import {
   touch,
   type,
   Text,
+  ValueText,
 } from '@bolusi/ui';
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import type { DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import {
@@ -39,30 +40,14 @@ import {
   MAX_FIELD_LABEL,
   MAX_FIELD_VALUE,
   MAX_NAME_FORMAT,
-  defaultNameFormat,
-  dropToken,
-  formatItemName,
-  formatTokens,
-  renameToken,
   valueKey,
   type CategoryField,
 } from '../categories.js';
-import {
-  FIELD_KINDS,
-  MAX_CATEGORY_FIELDS,
-  MAX_FIELD_OPTIONS,
-  type FieldKind,
-} from '../constants.js';
+import { FIELD_KINDS, MAX_CATEGORY_FIELDS, MAX_FIELD_OPTIONS } from '../constants.js';
+import { FIELD_KIND_KEY, useCategoryForm, type CategorySaveOutcome } from '../category-form.js';
 import { ti, type InventoryKey } from '../i18n.js';
 import type { CategoryRow } from '../queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
-
-const KIND_KEY: Readonly<Record<FieldKind, InventoryKey>> = {
-  one: 'inventory.category.kind.one',
-  many: 'inventory.category.kind.many',
-  text: 'inventory.category.kind.text',
-  phones: 'inventory.category.kind.phones',
-};
+import { useInventoryQuery } from '../runtime.js';
 
 /** "Sparepart · 3 isian", or that it is archived. */
 function categorySummary(category: CategoryRow): string {
@@ -153,86 +138,6 @@ export function CategoryList({
 
 // ── CategoryForm ───────────────────────────────────────────────────────────────────────────────
 
-interface Draft {
-  readonly name: string;
-  readonly isPart: boolean;
-  readonly fields: readonly CategoryField[];
-  readonly nameFormat: string;
-  /** False while a new category's format still follows its name and fields by itself. */
-  readonly formatTouched: boolean;
-  /** Each field's label as the format names it, so relabelling a field renames its token. */
-  readonly formatLabels: Readonly<Record<string, string>>;
-}
-
-function draftOf(category: CategoryRow | undefined): Draft {
-  return {
-    name: category?.name ?? '',
-    isPart: category?.isPart ?? true,
-    fields: category?.fields ?? [],
-    nameFormat: category?.nameFormat ?? '',
-    formatTouched: category !== undefined,
-    formatLabels: Object.fromEntries((category?.fields ?? []).map((f) => [f.id, f.label])),
-  };
-}
-
-/** The format as it stands: a new category's follows its name and fields until edited. */
-const formatOf = (draft: Draft): string =>
-  draft.formatTouched
-    ? draft.nameFormat
-    : defaultNameFormat(
-        draft.name,
-        draft.fields.filter((f) => f.label.trim() !== ''),
-      );
-
-/** A field id the editor mints; never shown, kept across relabels. */
-const newFieldId = (): string =>
-  `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-
-interface Problems {
-  readonly name: InventoryKey | null;
-  readonly fields: ReadonlyMap<string, InventoryKey>;
-  readonly list: readonly string[];
-  readonly format: string | null;
-}
-
-function problemsOf(draft: Draft): Problems {
-  const fields = new Map<string, InventoryKey>();
-  const seen = new Set<string>();
-  for (const field of draft.fields) {
-    const key = valueKey(field.label);
-    if (key === '') fields.set(field.id, 'inventory.category.problem.labelEmpty');
-    else if (seen.has(key)) fields.set(field.id, 'inventory.category.problem.labelTwice');
-    seen.add(key);
-  }
-  const list: string[] = [];
-  if (draft.fields.filter((f) => f.kind === 'phones').length > 1) {
-    list.push(ti('inventory.category.problem.phonesTwice'));
-  }
-  const format = formatOf(draft).trim();
-  const unknown = formatTokens(format).find((token) => !seen.has(valueKey(token)));
-  return {
-    name: draft.name.trim() === '' ? 'inventory.category.nameRequired' : null,
-    fields,
-    list,
-    format:
-      format === ''
-        ? ti('inventory.category.problem.formatEmpty')
-        : unknown !== undefined
-          ? ti('inventory.category.problem.formatUnknown', { label: unknown })
-          : null,
-  };
-}
-
-/** What the example name fills each field with: its first choice, a sample phone, or its label. */
-function exampleName(draft: Draft): string {
-  const values = Object.fromEntries(
-    draft.fields.filter((f) => f.kind !== 'phones').map((f) => [f.id, [f.options[0] ?? f.label]]),
-  );
-  return formatItemName({ fields: draft.fields, nameFormat: formatOf(draft) }, values, [
-    { brand: 'Samsung', model: 'Galaxy A14' },
-  ]);
-}
-
 export interface CategoryFormProps {
   readonly chrome: ScreenChrome;
   /** The category being edited; absent to add one. */
@@ -252,21 +157,10 @@ export function CategoryForm({
   onRegisterDiscardGuard,
   testID = 'inventory.categoryForm',
 }: CategoryFormProps): React.JSX.Element {
-  const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const [base] = useState(() => draftOf(category));
-  const [draft, setDraft] = useState<Draft>(base);
+  const form = useCategoryForm(category);
+  const { draft, format, dirty, problems, tried, runner, example } = form;
   const [open, setOpen] = useState<string | null>(null);
-  const [tried, setTried] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const set = (patch: Partial<Draft>): void => setDraft((current) => ({ ...current, ...patch }));
-
-  const format = formatOf(draft);
-  const dirty =
-    draft.name !== base.name ||
-    draft.isPart !== base.isPart ||
-    JSON.stringify(draft.fields) !== JSON.stringify(base.fields) ||
-    format !== formatOf(base);
   const discard = useDiscardConfirm({
     dirty,
     copy: {
@@ -278,123 +172,19 @@ export function CategoryForm({
     onRegisterDiscardGuard,
     testID,
   });
-  const problems = problemsOf(draft);
-  const blocked =
-    problems.name !== null ||
-    problems.fields.size > 0 ||
-    problems.list.length > 0 ||
-    problems.format !== null;
 
-  const updateField = (id: string, patch: Partial<CategoryField>): void =>
-    setDraft((current) => {
-      const fields = current.fields.map((f) => (f.id === id ? { ...f, ...patch } : f));
-      const label = patch.label?.trim();
-      const was = current.formatLabels[id];
-      // A relabel carries the field's token along, unless the new label clashes with another.
-      if (label === undefined || was === undefined || label === '') return { ...current, fields };
-      const clash = current.fields.some(
-        (f) => f.id !== id && valueKey(f.label) === valueKey(label),
-      );
-      if (clash) return { ...current, fields };
-      return {
-        ...current,
-        fields,
-        nameFormat: renameToken(current.nameFormat, was, label),
-        formatLabels: { ...current.formatLabels, [id]: label },
-      };
-    });
-
-  const addField = (): void => {
-    const id = newFieldId();
-    setDraft((current) => ({
-      ...current,
-      fields: [...current.fields, { id, label: '', kind: 'one', options: [] }],
-      formatLabels: { ...current.formatLabels, [id]: '' },
-    }));
-    setOpen(id);
+  const finish = (outcome: CategorySaveOutcome): void => {
+    if (outcome.status === 'saved') onDone(outcome.notice);
+    else if (outcome.status === 'blocked' && outcome.field !== undefined) setOpen(outcome.field);
   };
-
+  const save = (): void => void form.save().then(finish);
+  const run = (archived: boolean): void => void form.setArchived(archived).then(finish);
+  const addField = (): void => setOpen(form.addField());
   const removeField = (id: string): void => {
-    setDraft((current) => {
-      const label = current.formatLabels[id];
-      const formatLabels = Object.fromEntries(
-        Object.entries(current.formatLabels).filter(([fieldId]) => fieldId !== id),
-      );
-      return {
-        ...current,
-        fields: current.fields.filter((f) => f.id !== id),
-        nameFormat:
-          label === undefined || label === ''
-            ? current.nameFormat
-            : dropToken(current.nameFormat, label),
-        formatLabels,
-      };
-    });
+    form.removeField(id);
     setOpen(null);
   };
 
-  const moveField = (from: number, to: number): void =>
-    setDraft((current) => {
-      const fields = [...current.fields];
-      const [moved] = fields.splice(from, 1);
-      if (moved !== undefined) fields.splice(to, 0, moved);
-      return { ...current, fields };
-    });
-
-  const addToken = (label: string): void =>
-    set({ formatTouched: true, nameFormat: `${format} {${label.trim()}}`.trim() });
-
-  const shape = () => ({
-    name: draft.name.trim(),
-    isPart: draft.isPart,
-    fields: draft.fields.map((f) => ({
-      id: f.id,
-      label: f.label.trim(),
-      kind: f.kind,
-      options: f.kind === 'one' || f.kind === 'many' ? [...f.options] : [],
-    })),
-    nameFormat: format.trim(),
-  });
-
-  const run = (archived: boolean): void => {
-    void runner
-      .run(async () => {
-        if (category === undefined) {
-          await runtime.run('addCategory', shape());
-          return 0;
-        }
-        const result = await runtime.run('editCategory', {
-          categoryId: category.id,
-          archived,
-          ...shape(),
-        });
-        return result.renamed;
-      })
-      .then((renamed) => {
-        if (renamed === undefined) return;
-        onDone(
-          renamed > 0
-            ? ti('inventory.category.savedRenamed', { count: renamed })
-            : ti('inventory.category.saved'),
-        );
-      });
-  };
-
-  const save = (): void => {
-    setTried(true);
-    if (blocked) {
-      const first = draft.fields.find((f) => problems.fields.has(f.id));
-      if (first !== undefined) setOpen(first.id);
-      return;
-    }
-    if (category !== undefined && !dirty) {
-      onDone(null);
-      return;
-    }
-    run(category?.archived ?? false);
-  };
-
-  const example = exampleName(draft);
   const archiveSheet = confirmArchive ? (
     <ConfirmSheet
       title={ti('inventory.category.archiveTitle')}
@@ -430,7 +220,7 @@ export function CategoryForm({
           label={ti('inventory.category.name')}
           placeholder={ti('inventory.category.namePlaceholder')}
           value={draft.name}
-          onChangeText={(name) => set({ name })}
+          onChangeText={(name) => form.set({ name })}
           maxLength={MAX_CATEGORY_NAME}
           errorMessage={tried && problems.name !== null ? ti(problems.name) : undefined}
           testID={`${testID}.name`}
@@ -439,7 +229,7 @@ export function CategoryForm({
           label={ti('inventory.category.isPart')}
           caption={ti('inventory.category.isPartCaption')}
           value={draft.isPart}
-          onValueChange={(isPart) => set({ isPart })}
+          onValueChange={(isPart) => form.set({ isPart })}
           testID={`${testID}.isPart`}
         />
         <View>
@@ -450,7 +240,7 @@ export function CategoryForm({
               <ReorderableList
                 items={draft.fields}
                 keyOf={(field) => field.id}
-                onMove={moveField}
+                onMove={form.moveField}
                 handleLabel={ti('inventory.category.dragHandle')}
                 moveUpLabel={ti('inventory.category.moveUp')}
                 moveDownLabel={ti('inventory.category.moveDown')}
@@ -462,7 +252,7 @@ export function CategoryForm({
                     handle={open === field.id ? null : handle}
                     problem={tried ? problems.fields.get(field.id) : undefined}
                     onToggle={() => setOpen((id) => (id === field.id ? null : field.id))}
-                    onChange={(patch) => updateField(field.id, patch)}
+                    onChange={(patch) => form.updateField(field.id, patch)}
                     onRemove={() => removeField(field.id)}
                     testID={`${testID}.field.${field.id}`}
                   />
@@ -492,7 +282,7 @@ export function CategoryForm({
           <TextInput
             label={ti('inventory.category.format')}
             value={format}
-            onChangeText={(nameFormat) => set({ nameFormat, formatTouched: true })}
+            onChangeText={form.setFormat}
             maxLength={MAX_NAME_FORMAT}
             autoCorrect={false}
             errorMessage={tried && problems.format !== null ? problems.format : undefined}
@@ -512,7 +302,7 @@ export function CategoryForm({
                       accessibilityLabel={ti('inventory.category.addToName', {
                         label: f.label.trim(),
                       })}
-                      onPress={() => addToken(f.label)}
+                      onPress={() => form.addToken(f.label)}
                       testID={`${testID}.token.${f.id}`}
                     />
                   ))}
@@ -577,7 +367,7 @@ function FieldRow({
 }): React.JSX.Element {
   const picks = field.kind === 'one' || field.kind === 'many';
   const summary = [
-    ti(KIND_KEY[field.kind]),
+    ti(FIELD_KIND_KEY[field.kind]),
     picks && field.options.length > 0
       ? ti('inventory.category.optionCount', { count: field.options.length })
       : '',
@@ -600,7 +390,7 @@ function FieldRow({
             testID={`${testID}.label`}
           />
           <SegmentedControl
-            options={FIELD_KINDS.map((kind) => ({ value: kind, label: ti(KIND_KEY[kind]) }))}
+            options={FIELD_KINDS.map((kind) => ({ value: kind, label: ti(FIELD_KIND_KEY[kind]) }))}
             value={field.kind}
             onChange={(kind) => onChange({ kind })}
             size="compact"
@@ -645,9 +435,9 @@ function FieldRow({
         style={({ pressed }) => [styles.rowPress, pressed ? styles.pressed : null]}
       >
         <View style={styles.rowText}>
-          <Text style={styles.fieldName} numberOfLines={1}>
+          <ValueText lines={1} style={styles.fieldName}>
             {field.label === '' ? ' ' : field.label}
-          </Text>
+          </ValueText>
           {problem === undefined ? (
             <Text style={styles.caption}>{summary}</Text>
           ) : (

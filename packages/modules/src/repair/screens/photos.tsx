@@ -123,9 +123,7 @@ export function usePhotoBrowser(
                     testID={`${testID}.sheet.${photo.key}`}
                   >
                     <PhotoThumb photo={photo.ref} testID={`${testID}.sheetThumb.${photo.key}`} />
-                    <Text style={repairStyles.caption} numberOfLines={1}>
-                      {photo.label}
-                    </Text>
+                    <Text style={repairStyles.caption}>{photo.label}</Text>
                   </Pressable>
                 ),
               )}

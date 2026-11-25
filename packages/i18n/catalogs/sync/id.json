@@ -35,7 +35,8 @@
     "explain": "Perubahan ini tidak berlaku. Lihat alasan di setiap perubahan.",
     "opMeta": "{opType} · {time}",
     "opMetaSubject": "{opType} · {subject} · {time}",
-    "technicalDetails": "Detail teknis",
+    "technicalDetails": "Lihat detail untuk laporan",
+    "technicalHide": "Tutup detail",
     "noReason": "Server tidak memberikan alasan.",
     "more": "Tampilkan {count} lainnya",
     "handled": "Tandai sudah diperiksa"

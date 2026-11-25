@@ -12,13 +12,12 @@
  * HONEST CEILING: this is a browser approximation. It does not replace the device gates (27a/27b) or
  * native E2E (117); it is a fast visual feedback loop below them.
  */
-import path from 'node:path';
+import type { Page } from '@playwright/test';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, shoot as check, test } from './qa';
 
 import * as tokens from '@bolusi/ui/tokens';
 
-const ARTIFACTS = path.join(__dirname, 'artifacts');
 const APPROX_LABEL = 'RNW browser approximation — NOT device-verified';
 
 /** The distinctively-named seed user (mirrors `src/web/seed.ts` PROBE_USER_NAME) — the data probe. */
@@ -31,9 +30,7 @@ async function open(page: Page, screen: string, state: string): Promise<void> {
   await expect(page.getByTestId('rnw-approx-label').getByText(APPROX_LABEL)).toBeVisible();
 }
 
-async function shoot(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), fullPage: true });
-}
+const shoot = (page: Page, name: string) => check(page, 'screens', name, { fullPage: true });
 
 /**
  * The four-states-plus screenshot matrix. Each row asserts a screen-SPECIFIC testID AND (where a
@@ -101,14 +98,12 @@ const MATRIX: readonly Row[] = [
     testId: 'sync-unrecognised',
     text: 'HP ini perlu didaftarkan ulang',
   },
-  // The §8.4-item-4 disclosure (task 130). Probed on the REASON node, not the section: the section
-  // is already visible in `attention`, so keying this row on it would pass with the detail collapsed
-  // — a screenshot row that cannot see the thing it was added for.
+  // The §8.4-item-4 disclosure (task 130), probed on the sheet itself: the section is already
+  // visible in `attention`. The code and the server's words stay behind "Lihat detail untuk laporan".
   {
     screen: 'sync-status',
     state: 'rejectedDetail',
-    testId: 'sync-rejected-reason-op_9f3a',
-    text: 'repair.refusal.cancelled',
+    testId: 'sync-rejected-detail-op_9f3a',
   },
 
   // Enrollment — steps + revoked banner.

@@ -88,7 +88,6 @@ export function Avatar({
         testID={`${testID}.initials`}
         // Never scale the initials down to fit: 2 characters always fit, and a shrinking letterform
         // would break the recognise-don't-read contract above.
-        numberOfLines={1}
         allowFontScaling={false}
         style={[TYPE[avatarSize], styles.initials]}
       >
