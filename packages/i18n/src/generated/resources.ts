@@ -656,6 +656,7 @@ const source = {
         blockedSection: 'Diblokir',
         block: 'Blokir',
         blockTitle: 'Blokir {name}?',
+        blockLabel: 'Blokir {name}',
         blockBody:
           'Terakhir disinkronkan {time}. Saat terhubung kembali, semua datanya dihapus, termasuk perubahan yang belum disinkronkan.',
         blockBodyNever: 'Belum pernah disinkronkan. Saat terhubung, semua datanya dihapus.',
@@ -1507,6 +1508,7 @@ export const resources = {
           blockedSection: 'Blocked',
           block: 'Block',
           blockTitle: 'Block {name}?',
+          blockLabel: 'Block {name}',
           blockBody:
             'Last synced {time}. When it connects again, all its data is erased, including changes not yet sent.',
           blockBodyNever: 'Never synced. When it connects, all its data is erased.',

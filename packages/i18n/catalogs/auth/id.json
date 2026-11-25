@@ -459,6 +459,7 @@
     "blockedSection": "Diblokir",
     "block": "Blokir",
     "blockTitle": "Blokir {name}?",
+    "blockLabel": "Blokir {name}",
     "blockBody": "Terakhir disinkronkan {time}. Saat terhubung kembali, semua datanya dihapus, termasuk perubahan yang belum disinkronkan.",
     "blockBodyNever": "Belum pernah disinkronkan. Saat terhubung, semua datanya dihapus.",
     "blockConfirm": "Blokir",
