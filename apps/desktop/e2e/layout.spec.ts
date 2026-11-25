@@ -1,6 +1,8 @@
 // Every main PC screen at the sizes counters use, checked against the design guide's layout rules
 // (packages/test-support/src/layout-audit.ts): nothing cut off, overlapping or off the type scale,
 // one filled primary in view. Screenshots go to e2e/artifacts/layout/.
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import {
@@ -10,6 +12,10 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+
+// A fresh profile for this file, so a setting saved by an earlier run (the sidebar left expanded)
+// never changes the layout these tests measure. Restarts within the file keep it.
+const DATA_DIR = mkdtempSync(path.join(tmpdir(), 'bolusi-e2e-'));
 
 import { expectCleanLayout } from '@bolusi/test-support/layout-audit';
 import { desktopType, themeVariables } from '@bolusi/ui-web/theme';
@@ -49,7 +55,7 @@ for (const [width, height] of [
   [1920, 1080],
 ] as const) {
   test(`the main screens keep the layout rules at ${String(width)}×${String(height)}`, async () => {
-    const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1' };
+    const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1', BOLUSI_DESKTOP_DATA_DIR: DATA_DIR };
     const args = ['--no-sandbox'];
     app = await electron.launch(
       INSTALLED === undefined
