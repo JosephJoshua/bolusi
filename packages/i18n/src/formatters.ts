@@ -69,10 +69,11 @@ function timeFormatFor(locale: Locale): Intl.DateTimeFormat {
 /**
  * Integer IDR → `Rp 250.000`. Identical in every locale (§5.1). Below zero it takes a true minus
  * sign, `−Rp 50.000`, so it matches the `+Rp`/`−Rp` the app writes itself and never reads as a dash.
- * The dot-matrix printer folds it back to ASCII.
+ * "Rp" and the figure are joined by a non-breaking space, so an amount inside a sentence moves to
+ * the next line whole instead of leaving "Rp" behind. The dot-matrix printer folds both back to ASCII.
  */
 export function formatMoney(amountIdr: number): string {
-  return moneyFormat.format(amountIdr).replace(NBSP, ' ').replace(/^-/, MINUS);
+  return moneyFormat.format(amountIdr).replace(/\s+/, '\u00A0').replace(/^-/, MINUS);
 }
 
 /**
@@ -89,15 +90,15 @@ export function formatPhone(phone: string): string {
 }
 
 /**
- * A number written on screen (a phone, an IMEI) that may only wrap where its words do: the spaces
- * and hyphens between its digits become non-breaking ones, so a large font moves the whole number
- * to the next line instead of splitting it ("0812-3456-" / "7890"). Screen text only: the
- * dot-matrix codepage has no non-breaking hyphen, so slips print `formatPhone` as it is.
+ * A number or code written on screen (a phone, an IMEI, a servisan code like `K7Q-0039`) that may
+ * only wrap where its words do: the spaces and hyphens before its digits become non-breaking ones,
+ * so a large font moves the whole value to the next line instead of splitting it ("0812-3456-" /
+ * "7890"). Spaces only join digit to digit, so "Servisan K7Q-0039" can still wrap before the
+ * code. Screen text only: the dot-matrix codepage has no non-breaking hyphen, so slips print
+ * `formatPhone` as it is.
  */
 export function keepNumbersWhole(text: string): string {
-  return text.replace(/(\d)([ -])(?=\d)/g, (_, digit: string, gap: string) =>
-    gap === ' ' ? `${digit}\u00A0` : `${digit}\u2011`,
-  );
+  return text.replace(/(\d) (?=\d)/g, '$1\u00A0').replace(/([A-Z0-9])-(?=\d)/g, '$1\u2011');
 }
 
 /** Counts and quantities, never money — active-locale grouping (§5.2). */

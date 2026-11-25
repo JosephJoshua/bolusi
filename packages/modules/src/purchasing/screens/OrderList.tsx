@@ -18,6 +18,7 @@ import {
   type,
   type ListState,
   Text,
+  ValueText,
 } from '@bolusi/ui';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -222,9 +223,9 @@ const OrderListRow = memo(function OrderListRow({
       ]}
     >
       <View style={styles.rowTop}>
-        <Text style={styles.name} numberOfLines={2}>
+        <ValueText lines={2} style={styles.name}>
           {row.supplierName}
-        </Text>
+        </ValueText>
         <Chip label={tp(`purchasing.stage.${row.stage}`)} icon={stage.icon} tone={stage.tone} />
       </View>
       <Text style={styles.details}>{orderProgress(row)}</Text>

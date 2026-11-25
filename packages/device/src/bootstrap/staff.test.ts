@@ -7,6 +7,8 @@ import { createStaffControls } from './staff.js';
 
 function port(): StaffAdminPort {
   return {
+    listDevices: vi.fn(() => Promise.resolve([])),
+    blockDevice: vi.fn(() => Promise.resolve()),
     create: vi.fn(() => Promise.resolve({ userId: 'u-new' })),
     update: vi.fn(() => Promise.resolve()),
     setActive: vi.fn(() => Promise.resolve()),

@@ -103,6 +103,9 @@ export const DEVICE_UNRECOGNISED_AFTER = { refusals: 3, ms: 10 * 60_000 } as con
 /** `syncDisabledReason` for a device the server no longer recognises. */
 export const DEVICE_UNRECOGNISED_REASON = 'device_unrecognised';
 
+/** `syncDisabledReason` for a device its owner blocked. The app erases its data once confirmed. */
+export const DEVICE_REVOKED_REASON = 'device_revoked';
+
 export interface SyncLoopOptions<DB> {
   readonly db: Kysely<DB>;
   readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -416,7 +419,14 @@ export class SyncLoop<DB> {
   }
 
   private async handleCycleFailure(error: unknown): Promise<void> {
-    if (error instanceof AppUpdateRequiredError && !this.stopped) {
+    // A retired loop records nothing. Above all not a revocation: re-enrolment stops the old loop and
+    // then revokes its registration, so a request still in flight comes back DEVICE_REVOKED, and
+    // recording that over the new registration would erase the device at its next start.
+    if (this.stopped) {
+      this.transition(isDeviceRevoked(error) ? 'device_revoked' : 'transport_failure');
+      return;
+    }
+    if (error instanceof AppUpdateRequiredError) {
       // The pull can wait days for an app update, but staff, roles and PIN verifiers cannot: a
       // dismissed employee's PIN must stop working here too. A failed refresh just waits for the
       // next cycle.
@@ -426,7 +436,11 @@ export class SyncLoop<DB> {
     if (isDeviceRevoked(error)) {
       // 03 §10 "any → idle on 401 DEVICE_REVOKED": all sync stops, no further automatic cycles
       // until re-enrollment. Terminal for this enrollment by design — there is no un-revoke (03 §5).
-      await this.disableSync('device_revoked', DEVICE_REVOKED_ERROR_CODE, 'auth.revoked.title');
+      await this.disableSync(
+        DEVICE_REVOKED_REASON,
+        DEVICE_REVOKED_ERROR_CODE,
+        'auth.revoked.title',
+      );
       return;
     }
 
@@ -456,8 +470,6 @@ export class SyncLoop<DB> {
     // Transport/server failure ⇒ backoff (03 §10). Op-level rejections never reach here — they are
     // results inside a resolved response, not thrown (push.ts).
     this.transition('transport_failure');
-    // A retired loop records nothing: the next owner has its own state and its own retries.
-    if (this.stopped) return;
     this.failureCount += 1;
     const delay = syncBackoffDelayMs(this.failureCount);
     const until = this.options.clock.now() + delay;

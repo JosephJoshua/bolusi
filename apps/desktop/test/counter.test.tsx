@@ -460,7 +460,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(within(section).getByRole('button', { name: 'Putuskan' }));
     const dialog = await screen.findByTestId('repair.desk.approval');
     expect(within(dialog).getByTestId('repair.desk.approval.amount').textContent).toBe(
-      '−Rp 25.000',
+      '−Rp\u00A025.000',
     );
     fireEvent.click(within(dialog).getByTestId('repair.desk.approval.approve'));
     await screen.findByText('Disetujui dan sudah dicatat.');
@@ -525,7 +525,7 @@ describe('counter app over demo data', () => {
     const dialog = await screen.findByTestId('repair.desk.price.change');
     fireEvent.click(within(dialog).getByTestId('repair.desk.price.change.kind.discount'));
     expect(byTestId('repair.desk.price.change.discountLimit').textContent).toBe(
-      'Batas diskonmu Rp 50.000 per servisan.',
+      'Batas diskonmu Rp\u00A050.000 per servisan.',
     );
     fireEvent.change(byTestId('repair.desk.price.change.description'), {
       target: { value: 'Diskon langganan' },
@@ -553,7 +553,7 @@ describe('counter app over demo data', () => {
     expect(screen.queryByTestId('repair.desk.cancel.limit')).toBeNull();
     fireEvent.click(await screen.findByTestId('repair.desk.cancel.changeFee'));
     expect(byTestId('repair.desk.cancel.limit').textContent).toBe(
-      'Kamu bisa memotong biaya sampai Rp 50.000.',
+      'Kamu bisa memotong biaya sampai Rp\u00A050.000.',
     );
   });
 
@@ -685,7 +685,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.ticket.downPayment.correct'));
     await screen.findByTestId('repair.desk.downPayment.correct');
     expect(screen.queryByTestId('repair.desk.downPayment.correct.asks')).toBeNull();
-    // Rp 40.000 off is above her Rp 30.000; no reason typed yet.
+    // Rp\u00A040.000 off is above her Rp\u00A030.000; no reason typed yet.
     fireEvent.change(byTestId('repair.desk.downPayment.correct.amount'), {
       target: { value: '60000' },
     });
@@ -708,7 +708,7 @@ describe('counter app over demo data', () => {
     // The DP came in partly by QRIS, so part of the 50.000 goes back through it.
     const handover = byTestId('repair.desk.handover').textContent;
     expect(handover).toContain('Kembalikan tunai');
-    expect(handover).toMatch(/Kembalikan lewat QRIS BCA\s*Rp 30\.000/);
+    expect(handover).toMatch(/Kembalikan lewat QRIS BCA\s*Rp\u00A030\.000/);
   });
 
   it('hands a phone back only once the rest is paid, with the change shown', async () => {

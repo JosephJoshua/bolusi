@@ -272,6 +272,13 @@ describe('backTarget — hardware back IS the header back (§8.1)', () => {
     });
   });
 
+  test('Perangkat backs to Settings, where it is opened from', () => {
+    expect(backTarget({ kind: 'shell', route: 'devices' })).toEqual({
+      kind: 'shellRoute',
+      route: 'settings',
+    });
+  });
+
   test('Karyawan backs to Settings, where it is opened from', () => {
     expect(backTarget({ kind: 'shell', route: 'staff' })).toEqual({
       kind: 'shellRoute',

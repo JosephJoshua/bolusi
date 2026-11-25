@@ -28,6 +28,7 @@ import {
   operationFromSignedCoreJcs,
   verifyOp,
   writeMeta,
+  writeSyncState,
   type DeviceBundle,
   type EnrollRequest,
   type EnrollResponse,
@@ -65,7 +66,11 @@ import * as SecureStore from 'expo-secure-store';
 
 import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
 import { readDeviceInfo } from '@bolusi/device/bootstrap/device-info';
-import { createAppEnrollment, type EnrollmentPlatform } from '@bolusi/device/bootstrap/enrollment';
+import {
+  BlockedDeviceError,
+  createAppEnrollment,
+  type EnrollmentPlatform,
+} from '@bolusi/device/bootstrap/enrollment';
 import { SecureStoreKeyStore } from '../ports/keystore.js';
 import { SecureStoreDbKeyStore } from '../ports/db-keystore.js';
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
@@ -424,4 +429,24 @@ test('RESUME after crash-before-genesis: a FRESH keystore reloads the seed and c
   expect(op.entityId).toBe(draftDeviceId);
   expect(op.previousHash).toBe(GENESIS_PREVIOUS_HASH);
   expect(verifyOp(op, keypair.publicKey, noblePort)).toBe(true);
+});
+
+test('a blocked device its start could not erase restarts instead of registering again', async () => {
+  // Blocked while offline at its start: the data is still here, so it must be erased first.
+  await writeSyncState(app.db.db, { syncDisabled: true, syncDisabledReason: 'device_revoked' });
+  const onBlocked = vi.fn();
+  const { platform, enrollBodies } = platformFor({ onBlocked });
+  const { controller } = createAppEnrollment(app, platform, () => undefined);
+
+  await expect(
+    controller.enroll({
+      login: loginResult(),
+      storeId: STORE_ID,
+      deviceName: 'Kasir 1',
+      personalUserId: null,
+    }),
+  ).rejects.toBeInstanceOf(BlockedDeviceError);
+  expect(onBlocked).toHaveBeenCalledTimes(1);
+  expect(enrollBodies).toHaveLength(0);
+  expect(await readDeviceId(app.db.db)).toBeNull();
 });

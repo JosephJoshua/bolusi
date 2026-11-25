@@ -21,6 +21,7 @@ import {
   type,
   Text,
   useRevealOnMount,
+  ValueText,
 } from '@bolusi/ui';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -198,9 +199,9 @@ export function TakePartStep({
           <View style={styles.usedText}>
             <Text style={styles.name}>{row.name}</Text>
             {row.fits === null ? null : (
-              <Text style={styles.muted} numberOfLines={1}>
+              <ValueText lines={1} style={styles.muted}>
                 {row.fits}
-              </Text>
+              </ValueText>
             )}
           </View>
           <Text style={[styles.stock, row.onHand < 0 ? styles.stockOut : null]}>

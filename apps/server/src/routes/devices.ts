@@ -98,6 +98,8 @@ export function createDevicesRouter(deps: ServerDeps) {
                 'revokedAt',
                 'revokedBy',
                 'signingKeyPublic',
+                'kind',
+                'personalUserId',
               ]);
             if (!tenantWide) query = query.where('storeId', 'in', readableStores);
             const rows = await query.orderBy('id').execute();
@@ -130,6 +132,9 @@ export function createDevicesRouter(deps: ServerDeps) {
                   revokedAt: d.revokedAt === null ? null : Number(d.revokedAt),
                   revokedBy: d.revokedBy,
                   signingKeyPublic: d.signingKeyPublic,
+                  // A system device is the server's own signer, not a phone or PC anyone holds.
+                  kind: d.kind,
+                  personalUserId: d.personalUserId,
                   anomalyCount: a?.count ?? 0,
                   lastAnomalyAt:
                     a?.lastAt === undefined || a.lastAt === null ? null : Number(a.lastAt),
@@ -500,10 +505,12 @@ export function createDevicesRouter(deps: ServerDeps) {
             const acting = await resolveActingUser(c, db);
             const target = await db
               .selectFrom('devices')
-              .select(['id', 'storeId'])
+              .select(['id', 'storeId', 'kind'])
               .where('id', '=', deviceId)
               .executeTakeFirst();
-            if (target === undefined) throw new ApiError('NOT_FOUND');
+            // The server's own signer is not a phone or PC anyone holds: blocking it would stop the
+            // events the server signs, so it reads as absent here, as it is absent from the list.
+            if (target === undefined || target.kind === 'system') throw new ApiError('NOT_FOUND');
             await requirePermission(db, {
               userId: acting.userId,
               tenantId,

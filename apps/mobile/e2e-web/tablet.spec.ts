@@ -6,19 +6,17 @@
  * HONEST CEILING: a browser approximation. Rotation, the status bar and the real font scale still
  * need the Android tablet run.
  */
-import path from 'node:path';
+import type { Page } from '@playwright/test';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, shoot as check, test } from './qa';
 
 import * as tokens from '@bolusi/ui/tokens';
 
-const ARTIFACTS = path.join(__dirname, 'artifacts', 'tablet');
 const UPRIGHT = { width: 800, height: 1280 };
 const SIDEWAYS = { width: 1280, height: 800 };
 
 const tap = (page: Page, testID: string) => page.getByTestId(testID).first().click();
-const shoot = (page: Page, name: string) =>
-  page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`) });
+const shoot = (page: Page, name: string) => check(page, 'tablet', name);
 
 async function open(page: Page, role: 'owner' | 'counter', phone = false): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}${phone ? '' : '&frame=tablet'}`);
