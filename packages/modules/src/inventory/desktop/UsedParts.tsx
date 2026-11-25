@@ -182,7 +182,7 @@ function UseCostSection({
                 </li>
               ))}
             </ul>
-            {rows.length > 1 && rows.length > unpriced ? (
+            {rows.length > 1 && unpriced === 0 ? (
               <div
                 className="flex items-baseline justify-between gap-4 border-t border-border pt-3"
                 data-testid={`${testId}.total`}

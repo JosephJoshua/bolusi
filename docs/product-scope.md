@@ -502,7 +502,7 @@ Agreed with the owner on 2026-10-28; first part built 2026-10-31.
   of parts already used on servisan.
 - **Cost of a servisan's parts:** under "Sparepart", people with "Lihat harga
   beli" see "Modal sparepart": each part at the average when it was taken, less
-  any put back at the average then, and a total. A part without a price shows
+  any put back at the average then, and a total once every part has a price. A part without one shows
   "Belum ada harga" and a warning, never Rp 0; it is read apart, so only that
   section needs internet on a store device.
 - **Next:** supplier bills and returns (below).

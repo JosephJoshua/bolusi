@@ -159,7 +159,7 @@ function UseCostSection({
                 testID={`${testID}.${row.itemId}`}
               />
             ))}
-            {rows.length > 1 && rows.length > unpriced ? (
+            {rows.length > 1 && unpriced === 0 ? (
               <AmountRow
                 label={ti('inventory.useCost.total')}
                 value={total}
