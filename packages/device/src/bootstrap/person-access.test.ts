@@ -35,6 +35,7 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
   let pinsStuck = false;
   let now = 0;
   let serverPin: string | null = null;
+  let unpushedWork = false;
   let onSendPins: (() => Promise<unknown>) | null = null;
   const offline = (): SyncTransportError =>
     new SyncTransportError('offline', { code: null, status: null });
@@ -83,6 +84,7 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     clock: { now: () => now },
     knowsOp: () => true,
     pinPending: () => Promise.resolve(pinPending),
+    unpushed: () => Promise.resolve(unpushedWork),
     openStore(reads) {
       const store: FakeStore = {
         reads: [...reads].sort(),
@@ -125,6 +127,7 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     pinsSent: () => pinsSent,
     advance: (ms: number) => (now += ms),
     serverKnowsPin: (pin: string) => (serverPin = pin),
+    workUnpushed: (value: boolean) => (unpushedWork = value),
     onSendPins: (fn: () => Promise<unknown>) => (onSendPins = fn),
   };
 }
@@ -532,6 +535,65 @@ describe('a lock right after a PIN change here', () => {
     await h.access.sync();
     await h.access.end();
     expect(h.pinsSent()).toBe(0);
+    expect(h.ended).toEqual(['bps_1']);
+  });
+});
+
+describe('an owner’s or manager’s decisions on a shared device', () => {
+  const manager = { userId: 'mgr-1', pin: '112233', mayRead: holding(REPAIR), mayDecide: true };
+
+  test('someone who decides is proven at sign-in, even with nothing extra to read', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin(manager);
+    await h.access.sync();
+
+    expect(h.opens).toEqual([{ userId: 'mgr-1', pin: '112233' }]);
+    expect(h.access.canProve('mgr-1')).toBe(true);
+    expect(h.access.canProve('owner-1')).toBe(false);
+    expect(h.access.proofs()).toEqual(['bps_1']);
+    expect(h.opened).toEqual([]);
+  });
+
+  test('someone who does not decide sends no PIN', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin({ ...manager, mayDecide: false });
+    await h.access.sync();
+    expect(h.opens).toEqual([]);
+    expect(h.access.canProve('mgr-1')).toBe(false);
+  });
+
+  test('a lock with a decision not yet pushed keeps the session for that push, then ends it', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin(manager);
+    await h.access.sync();
+    h.workUnpushed(true);
+    await h.access.end();
+
+    expect(h.access.proofs()).toEqual(['bps_1']);
+    expect(h.access.canProve('mgr-1')).toBe(true);
+    expect(h.ended).toEqual([]);
+
+    await h.access.pushed();
+    expect(h.ended).toEqual([]);
+    h.workUnpushed(false);
+    await h.access.pushed();
+    expect(h.ended).toEqual(['bps_1']);
+    expect(h.access.proofs()).toEqual([]);
+    expect(h.access.canProve('mgr-1')).toBe(false);
+  });
+
+  test('a left session is never kept past ten minutes, sent or not', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin(manager);
+    await h.access.sync();
+    h.workUnpushed(true);
+    await h.access.end();
+    h.advance(10 * 60 * 1000 + 1);
+    await h.access.pushed();
     expect(h.ended).toEqual(['bps_1']);
   });
 });

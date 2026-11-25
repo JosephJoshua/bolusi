@@ -59,6 +59,14 @@ export interface PermissionEntry {
    * customer pays less, gets back or owes. Absent: holding it is all or nothing.
    */
   readonly limit?: LimitKind | undefined;
+  /**
+   * An owner's or manager's decision (cancel, refund, void, discount, Bayar nanti, settling Kas, a
+   * PIN reset): someone with the device's keys could otherwise record it in their name. On a shared
+   * store device the server takes an op that uses it only with a person session it opened after
+   * checking that person's PIN itself (owner decision 2026-11-25; server oplog/steps/decision.ts).
+   * Offline, the decision is asked of the owner's own phone instead.
+   */
+  readonly decision?: boolean | undefined;
 }
 
 /** What a module manifest declares per permission (§3.2). The id is the map KEY. */
@@ -268,6 +276,7 @@ export function assemblePermissionRegistry(
         isDangerous: declaration.isDangerous,
         description: declaration.description,
         ...(declaration.limit === undefined ? {} : { limit: declaration.limit }),
+        ...(declaration.decision === true ? { decision: true } : {}),
       });
     }
   }

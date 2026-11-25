@@ -142,6 +142,7 @@ export const repairModuleManifest = {
       scope: 'store',
       // Cancelling was how counter staff kept a customer's cash, so only owners hold it.
       isDangerous: true,
+      decision: true,
       description:
         'Can cancel a repair and set what the customer pays for it. The device stays in the store until it is handed back.',
       limit: 'priceDrop',
@@ -166,6 +167,7 @@ export const repairModuleManifest = {
     [REPAIR_PERMISSION.discount]: {
       scope: 'store',
       isDangerous: true,
+      decision: true,
       description: "Can lower a repair's price with a discount, at intake or later.",
       limit: 'priceDrop',
     },
@@ -178,6 +180,7 @@ export const repairModuleManifest = {
       scope: 'store',
       // Recording less than the customer paid is how a down payment would go missing.
       isDangerous: true,
+      decision: true,
       description: 'Can change or remove a down payment already recorded on a repair.',
       limit: 'priceDrop',
     },
@@ -197,6 +200,7 @@ export const repairModuleManifest = {
       // A free repair outside the warranty is money the store gives away, and so is handing a
       // repaired phone back for free (deviceReturnedRule).
       isDangerous: true,
+      decision: true,
       description: 'Can open a warranty claim after the warranty ended, or charge for a claim.',
     },
   },

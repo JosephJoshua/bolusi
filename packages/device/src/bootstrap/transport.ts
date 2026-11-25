@@ -31,6 +31,11 @@ export interface SyncTransportConfig {
   readonly fetchImpl?: typeof fetch;
   /** How long one request may take before it counts as a network failure; defaults to a minute. */
   readonly timeoutMs?: number;
+  /**
+   * The person sessions a push carries (person-access.ts `proofs`): the server takes an owner's or
+   * manager's decision from a shared device only with its author's.
+   */
+  readonly personSessions?: () => readonly string[];
 }
 
 /**
@@ -154,7 +159,11 @@ export function createFetchSyncTransport(config: SyncTransportConfig): SyncTrans
     // `readPushBatch`'s batching is what keeps a request small. Filed rather than faked — a
     // `Content-Encoding: gzip` header on an uncompressed body would be the working-looking lie.
     async push(request: PushRequest): Promise<PushResponse> {
-      return post<PushResponse>('/v1/sync/push', request);
+      const personSessions = config.personSessions?.() ?? [];
+      return post<PushResponse>(
+        '/v1/sync/push',
+        personSessions.length === 0 ? request : { ...request, personSessions },
+      );
     },
 
     async pull(request: PullRequest): Promise<PullResponse> {

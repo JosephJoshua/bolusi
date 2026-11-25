@@ -61,6 +61,7 @@ import {
   mayManageOwnerPin,
   resolveDisplayRoleKeys,
   readIdleLockSeconds,
+  readPersonalUserId,
   readPinAttempt,
   readStaffDirectory,
   readVerifier,
@@ -335,6 +336,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   // session here: a lock, a switch or a sign-out ends them. If the server ends them first (expired,
   // or the person left the store), the session locks, and their PIN opens it all again.
   const person = deps.app.person;
+  const DECISION_PERMISSIONS = deps.app.registry.permissions
+    .all()
+    .filter((entry) => entry.decision === true)
+    .map((entry) => entry.id);
   shell.subscribe(() => {
     const active = shell.snapshot().locked ? null : (manager.current?.userId ?? null);
     if (person.userId() !== null && person.userId() !== active) void person.end();
@@ -345,10 +350,14 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }
   });
   const beginPerson = async (userId: string, pin: string): Promise<void> => {
+    const holds = (permissionId: string) =>
+      commands.enforcementPoint.hasPermission({ ...device, userId }, permissionId);
+    const shared = (await readPersonalUserId(db).catch(() => null)) === null;
     await person.begin({
       userId,
       pin,
-      mayRead: (read) => commands.enforcementPoint.hasPermission({ ...device, userId }, read),
+      mayRead: holds,
+      mayDecide: shared && DECISION_PERMISSIONS.some(holds),
     });
     // A lock or switch while the last person's store was closing found nobody to end.
     if (

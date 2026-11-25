@@ -19,6 +19,12 @@ export const MAX_PULL_LIMIT = 500;
 export const zPushRequest = z.strictObject({
   deviceId: zUuid,
   ops: z.array(zSignedOperation).max(MAX_PUSH_OPS),
+  /**
+   * Person sessions (`bps_…`) of the people signed in on this shared device, from the server's own
+   * PIN check: the proof the server needs for an owner's or manager's decision among `ops`
+   * (server oplog/steps/decision.ts). Absent or empty: no decision from this device is accepted.
+   */
+  personSessions: z.array(z.string().min(1).max(256)).max(4).optional(),
 });
 export type PushRequest = z.infer<typeof zPushRequest>;
 

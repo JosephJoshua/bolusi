@@ -804,6 +804,8 @@ const source = {
         conflictNotFound: 'Data bentrok ini tidak ditemukan.',
         notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
         idTaken: 'Data ini belum bisa disimpan. Buat ulang, ya.',
+        decisionNeedsPin:
+          'Ini perlu PIN yang dicek saat online. Coba lagi saat ada internet, atau minta persetujuan lewat HP pemilik.',
       },
     },
     push: {
@@ -1664,6 +1666,8 @@ export const resources = {
           conflictNotFound: 'This conflict wasn’t found.',
           notYourPreference: 'Only the account’s owner can change its language.',
           idTaken: 'This couldn’t be saved. Create it again.',
+          decisionNeedsPin:
+            'This needs your PIN checked online. Try again when you have internet, or ask for approval on the owner’s phone.',
         },
       },
       push: {

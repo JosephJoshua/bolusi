@@ -75,12 +75,14 @@ function moneyManifest(sources: MoneyDocumentSources) {
         scope: 'store',
         // Money back beyond an overpayment, or a lower bill, is how cash goes missing.
         isDangerous: true,
+        decision: true,
         description: 'Can give customers money back and lower what a customer owes.',
         limit: 'refund',
       },
       [MONEY_PERMISSION.voidPayment]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: 'Can cancel a payment that was recorded by mistake.',
         limit: 'refund',
       },
@@ -98,11 +100,13 @@ function moneyManifest(sources: MoneyDocumentSources) {
       [MONEY_PERMISSION.adjustCash]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: "Can settle a difference between the counted cash and the store's records.",
       },
       [MONEY_PERMISSION.extendCredit]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: 'Can let a customer take their phone before paying in full, leaving a debt.',
         limit: 'credit',
       },
