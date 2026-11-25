@@ -21,7 +21,7 @@ import { useState } from 'react';
 import { useActionRunner } from '../../screen-kit/index.js';
 import { QueryPanel, TaskDialog } from '../../screen-kit/desktop/index.js';
 import { QtyField } from '../../inventory/desktop/fields.js';
-import { groupedRupiah, keepsRupiahText } from '../../shared/rupiah-text.js';
+import { groupedRupiah, acceptsRupiahText } from '../../shared/rupiah.js';
 import {
   MAX_BILL_CHARGES,
   MAX_LINE_QTY,
@@ -456,14 +456,14 @@ function PriceField({
   return (
     <TextField
       label={label}
-      prefix={tp('purchasing.bill.currency')}
+      prefix={tp('purchasing.desk.currency')}
       inputMode="numeric"
       selectOnFocus
       inputClassName="tabular text-right"
       value={value}
       onChange={(event) => {
         const text = event.target.value;
-        if (keepsRupiahText(text, max)) onChange(groupedRupiah(text));
+        if (acceptsRupiahText(text, max)) onChange(groupedRupiah(text));
       }}
       data-testid={testId}
     />

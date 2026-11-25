@@ -7,10 +7,8 @@ import {
   Fact,
   FactGrid,
   Section,
-  TextField,
   type PhotoLabels,
   type PhotoState,
-  type TextFieldProps,
 } from '@bolusi/ui-web';
 import {
   Ban,
@@ -27,12 +25,11 @@ import { useCallback, useState } from 'react';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 import {
-  acceptsRupiahText,
-  parseRupiah,
-  statusTone,
-  type StaleStep,
-  type TicketStatus,
-} from '../flows.js';
+  MoneyField as SharedMoneyField,
+  type MoneyFieldProps,
+} from '../../screen-kit/desktop/money-field.js';
+import { MAX_LINE_AMOUNT } from '../constants.js';
+import { statusTone, type StaleStep, type TicketStatus } from '../flows.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
 import { specFacts } from '../device-specs.js';
@@ -138,29 +135,8 @@ export function rupiahText(amount: number | null): string {
 }
 
 /** An amount in whole rupiah, grouped as it is typed; refuses keystrokes past the line limit. */
-export function MoneyField({
-  value,
-  onChange,
-  ...rest
-}: Omit<TextFieldProps, 'value' | 'onChange' | 'prefix' | 'inputMode'> & {
-  readonly value: number | null;
-  readonly onChange: (value: number | null) => void;
-}): React.JSX.Element {
-  return (
-    <TextField
-      {...rest}
-      prefix={tn('repair.desk.currency')}
-      inputMode="numeric"
-      selectOnFocus
-      inputClassName="tabular text-right"
-      // Empty only when nothing is typed: a fee of 0 (waived) must read as 0.
-      value={value === null ? '' : formatNumber(value)}
-      onChange={(event) => {
-        const text = event.target.value;
-        if (acceptsRupiahText(text)) onChange(parseRupiah(text));
-      }}
-    />
-  );
+export function MoneyField(props: Omit<MoneyFieldProps, 'max' | 'prefix'>): React.JSX.Element {
+  return <SharedMoneyField {...props} max={MAX_LINE_AMOUNT} prefix={tn('repair.desk.currency')} />;
 }
 
 /**

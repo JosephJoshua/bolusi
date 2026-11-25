@@ -6,6 +6,10 @@ import { zMediaRef, zVideoRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
+import {
+  acceptsRupiahText as acceptsRupiahTextUpTo,
+  parseRupiah as parseRupiahUpTo,
+} from '../shared/rupiah.js';
 import type { PartUse } from '../inventory/part-use.js';
 import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
 import {
@@ -19,7 +23,6 @@ import type { ApprovalRow } from '../approvals/queries.js';
 import type { MoneyTarget } from '../money/kas.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
 import type { CorrectTicketDetailsInput, OpenTicketInput } from './commands.js';
-import { keepsRupiahText, rupiahFrom } from '../shared/rupiah-text.js';
 import { imeiInvalid, phoneInvalid } from './contact.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairKey } from './i18n.js';
@@ -1031,12 +1034,12 @@ export function capturedThumbnailRef(ref: MediaRef): ThumbnailRef {
  * amount is more than a line may carry.
  */
 export function parseRupiah(text: string): number | null {
-  return rupiahFrom(text, MAX_LINE_AMOUNT);
+  return parseRupiahUpTo(text, MAX_LINE_AMOUNT);
 }
 
 /** Whether a keystroke in an amount field should be kept: a too-long amount is not typed at all. */
 export function acceptsRupiahText(text: string): boolean {
-  return keepsRupiahText(text, MAX_LINE_AMOUNT);
+  return acceptsRupiahTextUpTo(text, MAX_LINE_AMOUNT);
 }
 
 /** Kinds offered when adding a price line. Adjustments (either sign) stay a back-office tool. */

@@ -10,12 +10,17 @@ export * from './constants.js';
 export type * from './schema.js';
 export type { PartUseCheck, PartUseTarget, PartUseTargets } from './part-use.js';
 export type { StockSourceCheck, StockSourceTarget, StockSourceTargets } from './stock-source.js';
-export { stockReceivedOp } from './commands.js';
+export { stockCostedOp, stockReceivedOp } from './commands.js';
+export { foldCost, type CostFold, type CostMovement } from './cost.js';
 export { INVENTORY_REFUSALS } from './rules.js';
 export { itemSearchSource } from './search.js';
 export {
+  COST_RECEIPTS_SHOWN,
   MOVEMENTS_SHOWN,
   PART_FILTERS,
+  type CostReceiptRow,
+  type ItemCostInput,
+  type ItemCostRow,
   type GetPartInput,
   type ListPartsInput,
   type MovementRow,
@@ -26,7 +31,13 @@ export {
   type PartsForUseRow,
   type UsedPartRow,
 } from './queries.js';
-export type { AddPartInput, CountStockInput, EditPartInput, UsePartInput } from './commands.js';
+export type {
+  AddPartInput,
+  CountStockInput,
+  EditPartInput,
+  PriceStockInput,
+  UsePartInput,
+} from './commands.js';
 export { transferActions, transferStage, type TransferLineState } from './transfers/state.js';
 export {
   TRANSFER_FILTERS,

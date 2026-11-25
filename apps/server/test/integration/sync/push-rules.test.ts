@@ -25,6 +25,7 @@ import {
   seedUser,
   seedWorld,
   testId,
+  provenIdentity,
 } from '../oplog/helpers.js';
 
 let db: Kysely<DB>;
@@ -93,12 +94,8 @@ function pick(fresh: ChainWorld) {
   return { deviceId, secretKey, publicKey, publicKeyB64 };
 }
 
-function push(world: ChainWorld, ops: Parameters<typeof processPushBatch>[2]) {
-  return processPushBatch(
-    productionDeps(),
-    { deviceId: world.deviceId, tenantId: world.tenantId },
-    ops,
-  );
+async function push(world: ChainWorld, ops: Parameters<typeof processPushBatch>[2]) {
+  return processPushBatch(productionDeps(), await provenIdentity(db, world), ops);
 }
 
 function ticketOp(

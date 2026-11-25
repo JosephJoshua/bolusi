@@ -1,11 +1,11 @@
-// Client migration 33 — supplier bills ("Tagihan supplier", purchasing module).
+// Client migration 34 — supplier bills ("Tagihan supplier", purchasing module).
 //
-// Mirrors server migration 0035. A device holds these only when everyone it syncs for may read
+// Mirrors server migration 0036. A device holds these only when everyone it syncs for may read
 // bills; an owner on a shared store device reads them in their own in-memory store instead.
 import type { ClientMigration } from './types.js';
 
 export const supplierBillsMigration: ClientMigration = {
-  version: 33,
+  version: 34,
   name: 'supplier_bills',
   statements: [
     `CREATE TABLE purchasing_bills (

@@ -1,5 +1,5 @@
 // Supplier bills ("Tagihan supplier", transfers-bills-returns.md): what a store owes a supplier for
-// one nota. Mirrors client migration 33.
+// one nota. Mirrors client migration 34.
 //
 // A bill carries what each part cost to buy, so it is read only with `purchasing.bills`, granted
 // here to the owners' system-default roles of existing tenants as provisioning grants it to new

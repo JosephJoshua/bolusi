@@ -1,5 +1,7 @@
 // What the order and receive forms hold, on the phone and the PC alike: the same lines, the same
 // checks before saving, the same input to the commands. Platform-free and pure.
+import { MAX_UNIT_COST } from '../inventory/constants.js';
+import { parseRupiah } from '../shared/rupiah.js';
 import { MAX_LINE_QTY, MAX_ORDER_LINES, type OrderStage } from './constants.js';
 import { tp } from './i18n.js';
 import { stillToCome, type OrderDetailRow, type OrderLineRow } from './queries.js';
@@ -77,16 +79,35 @@ export function receiveStart(order: OrderDetailRow): Readonly<Record<string, num
   return Object.fromEntries(order.lines.map((line) => [line.itemId, stillToCome(line)]));
 }
 
+/**
+ * The receive command's input. `prices` holds what was typed per part (digits); a part left blank,
+ * or one that did not come, carries no price.
+ */
 export function receiveInput(
   order: OrderDetailRow,
   counts: Readonly<Record<string, number>>,
   note: string,
+  prices: Readonly<Record<string, string>> = {},
 ) {
   return {
     orderId: order.id,
-    lines: order.lines.map((line) => ({ itemId: line.itemId, qty: counts[line.itemId] ?? 0 })),
+    lines: order.lines.map((line) => {
+      const qty = counts[line.itemId] ?? 0;
+      const unitCost = qty > 0 ? parseRupiah(prices[line.itemId] ?? '', MAX_UNIT_COST) : null;
+      return { itemId: line.itemId, qty, unitCost };
+    }),
     note: note.trim() === '' ? null : note.trim(),
   };
+}
+
+/** The total of the prices typed, for the lines that have one; null when none has. */
+export function pricedTotal(
+  lines: readonly { readonly qty: number; readonly unitCost: number | null }[],
+): number | null {
+  const priced = lines.filter((line) => line.unitCost !== null);
+  return priced.length === 0
+    ? null
+    : priced.reduce((sum, line) => sum + line.qty * line.unitCost!, 0);
 }
 
 export function receivedTotal(counts: Readonly<Record<string, number>>): number {

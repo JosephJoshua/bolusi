@@ -232,6 +232,49 @@ describe('a discount asked for by the counter', () => {
   });
 });
 
+describe('a shared device whose PIN was not checked online', () => {
+  test('asks for a decision but cannot make one', async () => {
+    let proven = true;
+    h = await openRepairHarness(9507, undefined, { decisionProven: () => proven });
+    await h.run('setCancelFees', { beforeWork: 100_000, afterWork: 150_000 }, h.storeOwnerId);
+    const cancelledId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId: cancelledId, reason: 'Batal' }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    proven = false;
+
+    // Asking is not deciding, even when the ask permission is itself a decision (cancel).
+    const fee = await ask(
+      h,
+      'repair.cancelFee',
+      { ticketId: cancelledId, fee: 40_000, reason: 'Pelanggan lama' },
+      h.managerId,
+    );
+    const discount = await ask(h, 'repair.discount', discountLine(ticketId, 50_001), h.managerId);
+    expect((await request(h, fee, h.managerId)).status).toBe('waiting');
+    expect((await request(h, discount, h.managerId)).status).toBe('waiting');
+
+    // Deciding needs the PIN: a discount within the manager's limit, the owner's own, a cancel.
+    for (const userId of [h.managerId, h.ownerId]) {
+      await refused(
+        h.run('changeQuote', discountLine(ticketId, 10_000), userId),
+        'platform.refusal.decisionNeedsPin',
+        'PERMISSION_DENIED',
+      );
+    }
+    await refused(
+      h.run('cancelTicket', { ticketId, reason: 'Batal' }, h.ownerId),
+      'platform.refusal.decisionNeedsPin',
+      'PERMISSION_DENIED',
+    );
+    // Control: an ordinary price change uses no decision.
+    await h.run(
+      'changeQuote',
+      { ...discountLine(ticketId, 0), kind: 'part', amount: 50_000, description: 'Baterai' },
+      h.cashierId,
+    );
+  });
+});
+
 describe('a cancel asked for by the counter', () => {
   test('the owner approves it at the asked fee', async () => {
     h = await openRepairHarness(9511);

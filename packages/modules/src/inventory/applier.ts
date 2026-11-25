@@ -8,6 +8,7 @@ import type { ProjectionApplier, ProjectionOperation, ProjectionTableManifest } 
 import { valueKey, type CategoryField, type FieldValues } from './categories.js';
 import {
   INVENTORY_CATEGORY_ENTITY,
+  INVENTORY_COST_ENTITY,
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_ITEM_ENTITY,
   TAG_FACET,
@@ -112,6 +113,26 @@ export const inventoryMovementsTable: ProjectionTableManifest = {
   primaryKey: ['id'],
   entityType: INVENTORY_MOVEMENT_ENTITY,
   entityIdColumn: 'id',
+  projectionVersion: 1,
+};
+
+/**
+ * What a received movement cost a piece, keyed to that movement (its own entity, read with
+ * `inventory.read_cost`). A later price for the same movement replaces it.
+ */
+export const inventoryCostsTable: ProjectionTableManifest = {
+  columns: {
+    movement_id: 'text',
+    tenant_id: 'text',
+    store_id: 'text',
+    item_id: 'text',
+    unit_cost: 'integer',
+    user_id: 'text',
+    at: 'integer',
+  },
+  primaryKey: ['movement_id'],
+  entityType: INVENTORY_COST_ENTITY,
+  entityIdColumn: 'movement_id',
   projectionVersion: 1,
 };
 
@@ -384,6 +405,28 @@ export const stockReceivedApplier: Applier = async (db, op) => {
     use: payload.source,
     note: null,
   });
+};
+
+export const stockCostedApplier: Applier = async (db, op) => {
+  const payload = payloadOf<{ itemId: string; unitCost: number }>(op);
+  // The latest price stands: the fold runs a movement's prices in order, so a fix replaces a typo.
+  await db
+    .deleteFrom('inventoryCosts')
+    .where('movementId', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .execute();
+  await db
+    .insertInto('inventoryCosts')
+    .values({
+      movementId: op.entityId,
+      tenantId: op.tenantId,
+      storeId: op.storeId ?? '',
+      itemId: payload.itemId,
+      unitCost: payload.unitCost,
+      userId: op.userId,
+      at: op.timestamp,
+    })
+    .execute();
 };
 
 export const stockSentApplier: Applier = async (db, op) => {

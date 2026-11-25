@@ -54,7 +54,9 @@
     "receive": "Receive parts",
     "send": "Send to supplier",
     "cancel": "Cancel order",
-    "deleteDraft": "Delete draft"
+    "deleteDraft": "Delete draft",
+    "fillPrice": "Add price",
+    "fixPrice": "Change price"
   },
   "list": {
     "title": "Purchasing",
@@ -75,7 +77,12 @@
     "overHint": "Some parts arrived beyond the order. Check them and correct the stock.",
     "qty": "{qty} pcs",
     "receivedOf": "{received} of {qty}",
-    "receiptLine": "{name} ({qty})"
+    "receiptLine": "{name} ({qty})",
+    "costs": "Buy prices",
+    "costLine": "{qty} × {price}",
+    "costMissing": "Not filled in",
+    "costTotal": "Total",
+    "costUnpriced": "{count} parts have no price yet"
   },
   "cancel": {
     "title": "Cancel this order?",
@@ -114,14 +121,15 @@
   },
   "receive": {
     "title": "Receive parts",
-    "hint": "Enter how many arrived.",
+    "hint": "Set how many came. The buy price can wait.",
     "arrived": "Arrived",
     "ordered": "Ordered {qty}",
     "orderedSoFar": "Ordered {qty}, {received} arrived",
     "over": "{extra} more than ordered.",
     "note": "Note",
     "nothing": "Enter how many parts arrived first.",
-    "save": "Save"
+    "save": "Save",
+    "price": "Buy price each"
   },
   "supplier": {
     "listTitle": "Suppliers",
@@ -145,6 +153,7 @@
     "received": "Parts received. The stock went up.",
     "cancelled": "Order cancelled.",
     "supplierSaved": "Supplier saved.",
+    "priced": "Buy price saved.",
     "billRecorded": "Bill recorded.",
     "billSaved": "Bill saved.",
     "billVoided": "Bill voided."
@@ -162,7 +171,16 @@
     "addPart": "Search for a part to add",
     "noPartMatches": "No parts found.",
     "emptyHint": "Orders to suppliers show up here.",
-    "suppliersHint": "Suppliers are shared by every store."
+    "suppliersHint": "Suppliers are shared by every store.",
+    "currency": "Rp"
+  },
+  "price": {
+    "title": "Buy price",
+    "field": "Price each",
+    "save": "Save price",
+    "empty": "Type the price first.",
+    "discardTitle": "Discard this price?",
+    "discardMessage": "The price you typed will be lost."
   },
   "bill": {
     "tab": "Bills",
@@ -224,7 +242,6 @@
       "due": "Due",
       "total": "Total"
     },
-    "linePrice": "{qty} × {price}",
-    "currency": "Rp"
+    "linePrice": "{qty} × {price}"
   }
 }

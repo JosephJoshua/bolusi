@@ -2,7 +2,7 @@
 // payment terms, the same checks before saving and the same input to the commands. Pure.
 import { formatDate } from '@bolusi/i18n';
 
-import { rupiahFrom } from '../../shared/rupiah-text.js';
+import { parseRupiah } from '../../shared/rupiah.js';
 import { MAX_BILL_CHARGES, MAX_LINE_QTY, MAX_ORDER_LINES, MAX_UNIT_PRICE } from '../constants.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import type { OrderDetailRow, OrderFilter } from '../queries.js';
@@ -205,10 +205,10 @@ export function removeBillLine(draft: BillDraft, itemId: string): BillDraft {
 
 /** A line's price per piece, or null while it is not typed. 0 is a part given free. */
 export const linePrice = (line: Pick<BillDraftLine, 'price'>): number | null =>
-  rupiahFrom(line.price, MAX_UNIT_PRICE);
+  parseRupiah(line.price, MAX_UNIT_PRICE);
 
 export const chargesOf = (draft: Pick<BillDraft, 'charges'>): number =>
-  rupiahFrom(draft.charges, MAX_BILL_CHARGES) ?? 0;
+  parseRupiah(draft.charges, MAX_BILL_CHARGES) ?? 0;
 
 /** The total so far: every priced line and the charges. */
 export function draftTotal(draft: BillDraft): number {

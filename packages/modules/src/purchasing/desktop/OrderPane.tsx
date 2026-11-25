@@ -20,7 +20,9 @@ import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { orderMessage, orderMessageUrl } from '../order-message.js';
 import { STAGE_CHIP, draftOf, orderActions, orderInput, showsReceived } from '../order-form.js';
-import type { OrderDetailRow } from '../queries.js';
+import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
+import type { OrderDetailRow, ReceiptCostRow } from '../queries.js';
+import { OrderCostsSection, PriceDialog } from './costs.js';
 import { useOrderStoreName, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 import { opensBills } from '../constants.js';
 import { billDraftFromOrder } from '../bills/bill-form.js';
@@ -36,7 +38,9 @@ export interface OrderPaneProps {
   readonly onClearNotice: () => void;
 }
 
-type Task = 'none' | 'edit' | 'receive' | 'cancel' | 'bill';
+type Task =
+  | { readonly kind: 'none' | 'edit' | 'receive' | 'cancel' | 'bill' }
+  | { readonly kind: 'price'; readonly line: ReceiptCostRow };
 
 export function OrderPane({
   orderId,
@@ -48,7 +52,10 @@ export function OrderPane({
   const runner = useActionRunner();
   const storeName = useOrderStoreName();
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [task, setTask] = useState<Task>('none');
+  const [task, setTaskState] = useState<Task>({ kind: 'none' });
+  const setTask = (kind: 'none' | 'edit' | 'receive' | 'cancel' | 'bill'): void =>
+    setTaskState({ kind });
+  const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const [done, setDone] = useState<PurchasingKey | null>(null);
   const say = (key: PurchasingKey | null): void => {
     onClearNotice();
@@ -289,6 +296,17 @@ export function OrderPane({
           />
         ) : null}
 
+        {row.receipts.length === 0 || !seesCosts ? null : (
+          <OrderCostsSection
+            orderId={row.id}
+            onPrice={(line) => {
+              say(null);
+              setTaskState({ kind: 'price', line });
+            }}
+            testId={testId}
+          />
+        )}
+
         {row.receipts.length === 0 ? null : (
           <Section title={tp('purchasing.order.receipts')} testId={`${testId}.receipts`}>
             <Timeline
@@ -330,7 +348,18 @@ export function OrderPane({
   }
 
   function renderTask(row: OrderDetailRow): React.JSX.Element | null {
-    switch (task) {
+    switch (task.kind) {
+      case 'price':
+        return (
+          <PriceDialog
+            line={task.line}
+            onClose={() => setTask('none')}
+            onDone={() => {
+              setTask('none');
+              setDone('purchasing.done.priced');
+            }}
+          />
+        );
       case 'none':
         return null;
       case 'edit':

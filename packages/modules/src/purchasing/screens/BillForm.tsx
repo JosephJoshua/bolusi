@@ -30,7 +30,7 @@ import {
   Section,
   type ScreenChrome,
 } from '../../screen-kit/screens/views.js';
-import { groupedRupiah, keepsRupiahText } from '../../shared/rupiah-text.js';
+import { groupedRupiah, acceptsRupiahText } from '../../shared/rupiah.js';
 import {
   MAX_BILL_CHARGES,
   MAX_LINE_QTY,
@@ -122,7 +122,7 @@ export function BillForm({
   };
 
   const amountField = (text: string, max: number): string | null =>
-    keepsRupiahText(text, max) ? groupedRupiah(text) : null;
+    acceptsRupiahText(text, max) ? groupedRupiah(text) : null;
 
   return (
     <FlowScreen

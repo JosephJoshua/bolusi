@@ -42,7 +42,7 @@ import {
   type TicketDetailRow,
 } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
-import { groupedRupiah } from '../../shared/rupiah-text.js';
+import { groupedRupiah } from '../../shared/rupiah.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import {

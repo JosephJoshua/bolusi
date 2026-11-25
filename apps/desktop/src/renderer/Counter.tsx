@@ -7,7 +7,7 @@ import {
   opensParts,
   InventoryRuntimeProvider,
   NO_FILTER,
-  PartsPage,
+  PartsSection,
   ti,
   type ListFilter,
 } from '@bolusi/modules/inventory/desktop';
@@ -349,7 +349,11 @@ export function Counter({
         />
       ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
         <InventoryRuntimeProvider runtime={inventory}>
-          <PartsPage filter={partsFilter} onFilterChange={setPartsFilter} />
+          <PartsSection
+            filter={partsFilter}
+            onFilterChange={setPartsFilter}
+            onRegisterLeaveGuard={registerLeaveGuard}
+          />
         </InventoryRuntimeProvider>
       ) : page.kind === 'purchasing' &&
         showsPurchasing &&
