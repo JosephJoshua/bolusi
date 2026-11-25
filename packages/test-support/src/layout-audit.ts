@@ -142,21 +142,48 @@ export function auditLayout(options: LayoutAuditOptions): LayoutIssue[] {
     }
   }
 
+  // The part of a text box a person can see: cut by the element and every ancestor that clips
+  // (a scrolling chip row, a list pane), so text scrolled out of a pane never counts as overlap.
+  const seen = (el: Element, box: DOMRect): DOMRect => {
+    let { left, top, right, bottom } = box;
+    for (let node: Element | null = el; node !== null; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+      const edge = node.getBoundingClientRect();
+      if (style.overflowX !== 'visible') {
+        left = Math.max(left, edge.left);
+        right = Math.min(right, edge.right);
+      }
+      if (style.overflowY !== 'visible') {
+        top = Math.max(top, edge.top);
+        bottom = Math.min(bottom, edge.bottom);
+      }
+    }
+    return new DOMRect(left, top, right - left, bottom - top);
+  };
+  // Where two texts cross, both are seen only when nothing filled sits between them: a pane drawn
+  // over a chip row hides the chip, so that is not text over text.
+  const bothShow = (a: Element, b: Element, x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= viewWidth || y >= viewHeight) return false;
+    const stack = document.elementsFromPoint(x, y);
+    const at = (el: Element): number => stack.findIndex((node) => node === el || el.contains(node));
+    const ia = at(a);
+    const ib = at(b);
+    if (ia < 0 || ib < 0) return false;
+    const [upper, lower] = ia < ib ? [a, b] : [b, a];
+    for (const node of stack.slice(Math.min(ia, ib), Math.max(ia, ib))) {
+      if (upper.contains(node) || node.contains(lower)) continue;
+      const fill = /rgba?\(([^)]+)\)/
+        .exec(getComputedStyle(node).backgroundColor)?.[1]
+        ?.split(/[\s,/]+/);
+      if (fill !== undefined && fill.length >= 3 && Number(fill[3] ?? 1) > 0.6) return false;
+    }
+    return true;
+  };
   const boxes = texts.map((el) => {
     const range = document.createRange();
     range.selectNodeContents(el);
-    const own = el.getBoundingClientRect();
-    const clips = getComputedStyle(el).overflowX !== 'visible';
-    const lines = [...range.getClientRects()].map((box) =>
-      clips
-        ? new DOMRect(
-            Math.max(box.left, own.left),
-            box.top,
-            Math.min(box.right, own.right) - Math.max(box.left, own.left),
-            box.height,
-          )
-        : box,
-    );
+    const lines = [...range.getClientRects()].map((box) => seen(el, box));
     return { el, lines: lines.filter((box) => box.width > 1 && box.height > 1) };
   });
   for (let i = 0; i < boxes.length; i += 1) {
@@ -166,9 +193,11 @@ export function auditLayout(options: LayoutAuditOptions): LayoutIssue[] {
       if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
       const hit = a.lines.find((p) =>
         b.lines.some((q) => {
-          const across = Math.min(p.right, q.right) - Math.max(p.left, q.left);
-          const down = Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top);
-          return across > 2 && down > 2 && onTop(a.el, p) && onTop(b.el, q);
+          const left = Math.max(p.left, q.left);
+          const top = Math.max(p.top, q.top);
+          const across = Math.min(p.right, q.right) - left;
+          const down = Math.min(p.bottom, q.bottom) - top;
+          return across > 2 && down > 2 && bothShow(a.el, b.el, left + across / 2, top + down / 2);
         }),
       );
       if (hit !== undefined)
