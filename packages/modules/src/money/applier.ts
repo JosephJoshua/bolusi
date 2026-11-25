@@ -62,11 +62,15 @@ export const moneyEntriesTable: ProjectionTableManifest = {
     voided_by: 'text',
     voided_at: 'integer',
     void_reason: 'text',
+    provider: 'text',
+    checked_outcome: 'text',
+    checked_by: 'text',
+    checked_at: 'integer',
   },
   primaryKey: ['id'],
   entityType: MONEY_ENTRY_ENTITY,
   entityIdColumn: 'id',
-  projectionVersion: 1,
+  projectionVersion: 2,
 };
 
 export const moneyLinesTable: ProjectionTableManifest = {
@@ -144,6 +148,7 @@ interface EntryPayload {
   readonly tendered?: number | null;
   readonly countId?: string | null;
   readonly replaces?: string;
+  readonly provider?: string;
 }
 
 /** The account an entry moved money through, as its payload names it. */
@@ -185,6 +190,10 @@ export const entryRecordedApplier: ProjectionApplier<MoneyDatabase> = async (db,
       voidedBy: null,
       voidedAt: null,
       voidReason: null,
+      provider: payload.provider ?? null,
+      checkedOutcome: null,
+      checkedBy: null,
+      checkedAt: null,
     })
     .execute();
   await insertLines(db, op, postingsFor({ kind, amount, account, subKind }), document, op.entityId);
@@ -240,6 +249,21 @@ function voidedApplier(
 
 export const paymentVoidedApplier = voidedApplier('payment_received', 'void');
 export const cashMoveVoidedApplier = voidedApplier('cash_moved', 'entry');
+
+/**
+ * A payment ticked off against the statement: the latest check stands. A check on a payment this
+ * store does not have changes nothing; the rule refuses it.
+ */
+export const paymentCheckedApplier: ProjectionApplier<MoneyDatabase> = async (db, op) => {
+  const { outcome } = payloadOf<{ outcome: string }>(op);
+  await db
+    .updateTable('moneyEntries')
+    .set({ checkedOutcome: outcome, checkedBy: op.userId, checkedAt: op.timestamp })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('kind', '=', 'payment_received')
+    .execute();
+};
 
 /** A store's own account, or a central one: the latest save is the account. */
 export const accountSavedApplier: ProjectionApplier<MoneyDatabase> = async (db, op) => {

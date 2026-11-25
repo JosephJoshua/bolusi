@@ -712,6 +712,8 @@ function journey(world: ChainWorld): OpSpec[] {
       reference: null,
       tendered: null,
     }),
+    // The owner finds it on the bank statement.
+    money('money.payment_checked', 0x404, { outcome: 'matched' }),
     money('money.payment_received', 0x405, {
       document,
       account: `account:${id(0x401)}`,

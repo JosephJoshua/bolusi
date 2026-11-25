@@ -10,7 +10,14 @@ import {
   type QrisConnection,
 } from '@bolusi/schemas';
 
-import { CASH_ACCOUNT, movesOut, type CashMoveKind, type EntryKind } from './constants.js';
+import {
+  CASH_ACCOUNT,
+  movesOut,
+  type CashMoveKind,
+  type EntryKind,
+  type PaymentCheckOutcome,
+  type PaymentProvider,
+} from './constants.js';
 import { dayStart } from './kas.js';
 import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDocument } from './documents.js';
@@ -54,6 +61,8 @@ export interface DemoMoneyLedger {
     readonly account: string;
     readonly amount: number;
     readonly at?: number | undefined;
+    /** Confirmed by its provider, as the server records a paid Xendit QR. */
+    readonly provider?: PaymentProvider | undefined;
   }): void;
   /** What a document charges once it is settled (a servisan handed back). */
   recordCharge(charge: {
@@ -91,10 +100,17 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     voidedAt: null,
     voidReason: null,
     relatedEntryId: null,
+    provider: null,
+    checkedOutcome: null,
+    checkedBy: null,
+    checkedByName: null,
+    checkedAt: null,
     ...fields,
     createdByName: options.nameOf?.(fields.createdBy ?? 'u-siti') ?? null,
   });
   const qris = accounts.find((row) => row.kind === 'qris');
+  const transfer = accounts.find((row) => row.kind === 'transfer');
+  const edc = accounts.find((row) => row.kind === 'edc');
   const document = (id: string, label: string) => ({
     documentKind: 'repair.ticket',
     documentId: id,
@@ -122,6 +138,42 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
       createdAt: today(2),
       ...document('t-demo-b', 'K7Q-0104'),
     }),
+    // Taken by hand through the bank: Cocokkan mutasi asks the owner to find them on the statement.
+    ...(transfer === undefined
+      ? []
+      : [
+          entry({
+            kind: 'payment_received',
+            account: `account:${transfer.id}`,
+            amount: 480_000,
+            reference: 'Budi S.',
+            createdAt: now - 26 * HOUR,
+            ...document('t-demo-c', 'K7Q-0098'),
+          }),
+          entry({
+            kind: 'payment_received',
+            account: `account:${transfer.id}`,
+            amount: 220_000,
+            createdAt: now - 50 * HOUR,
+            checkedOutcome: 'missing',
+            checkedBy: 'u-andi',
+            checkedByName: options.nameOf?.('u-andi') ?? null,
+            checkedAt: now - 20 * HOUR,
+            ...document('t-demo-d', 'K7Q-0091'),
+          }),
+        ]),
+    ...(edc === undefined
+      ? []
+      : [
+          entry({
+            kind: 'payment_received',
+            account: `account:${edc.id}`,
+            amount: 1_250_000,
+            reference: '004512',
+            createdAt: today(2.5),
+            ...document('t-demo-e', 'K7Q-0101'),
+          }),
+        ]),
     entry({
       kind: 'cash_moved',
       subKind: 'expense',
@@ -243,12 +295,13 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
   const page = (rows: unknown[]) => Promise.resolve({ rows, nextCursor: null });
   return {
     documentMoney,
-    recordPayment: ({ id, document: doc, account, amount, at }) => {
+    recordPayment: ({ id, document: doc, account, amount, at, provider }) => {
       add({
         id,
         kind: 'payment_received',
         account,
         amount,
+        provider: provider ?? null,
         documentKind: doc.kind,
         documentId: doc.id,
         documentLabel: doc.label,
@@ -307,6 +360,20 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
               .sort((a, b) => b.createdAt - a.createdAt),
           );
         }
+        case 'paymentChecks':
+          // As the query: hand-taken non-cash payments still counting, unchecked or missing.
+          return page(
+            entries
+              .filter(
+                (e) =>
+                  e.kind === 'payment_received' &&
+                  e.voidedAt === null &&
+                  e.account?.startsWith('account:') === true &&
+                  e.provider === null &&
+                  (input['open'] === false || e.checkedOutcome !== 'matched'),
+              )
+              .sort((a, b) => a.createdAt - b.createdAt),
+          );
         default:
           return page([]);
       }
@@ -430,6 +497,22 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
           accounts.sort((a, b) => a.name.localeCompare(b.name));
           notify();
           return Promise.resolve({ accountId });
+        }
+        case 'checkPayment': {
+          const at = entries.findIndex((e) => e.id === input['entryId']);
+          if (at !== -1) {
+            const actor = options.actor();
+            entries[at] = {
+              ...entries[at]!,
+              checkedOutcome: input['outcome'] as PaymentCheckOutcome,
+              checkedBy: actor,
+              checkedByName: options.nameOf?.(actor) ?? null,
+              checkedAt: now + ids,
+            };
+            ids += 1;
+            notify();
+          }
+          return Promise.resolve(null);
         }
         case 'voidPayment':
         case 'voidCashMove': {

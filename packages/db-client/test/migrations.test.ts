@@ -193,7 +193,7 @@ describe('runClientMigrations against a fresh database', () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
     expect(result.applied).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 32, 33,
-      34,
+      34, 35,
     ]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
@@ -227,6 +227,7 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 32, name: 'transfers', applied_at: 1_700_000_000_000 },
       { version: 33, name: 'inventory_costs', applied_at: 1_700_000_000_000 },
       { version: 34, name: 'supplier_bills', applied_at: 1_700_000_000_000 },
+      { version: 35, name: 'money_payment_checks', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -238,12 +239,12 @@ describe('runner is idempotent', () => {
 
     expect(first.applied).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 32, 33,
-      34,
+      34, 35,
     ]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 27 }]);
+    expect(rows.rows).toEqual([{ c: 28 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);

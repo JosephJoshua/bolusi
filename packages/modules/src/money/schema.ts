@@ -49,6 +49,12 @@ export interface MoneyEntriesTable {
   voidedBy: string | null;
   voidedAt: number | null;
   voidReason: string | null;
+  /** A payment its provider confirmed (`xendit`), recorded by the server; null for the rest. */
+  provider: string | null;
+  /** A non-cash payment ticked off against the statement (`PaymentCheckOutcome`), and by whom. */
+  checkedOutcome: string | null;
+  checkedBy: string | null;
+  checkedAt: number | null;
 }
 
 /** The double-entry lines. Each entry's lines balance: total debit = total credit. */

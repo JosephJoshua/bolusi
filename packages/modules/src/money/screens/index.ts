@@ -20,5 +20,6 @@ export type { CashCountRow, OpenBalanceRow } from '../queries.js';
 export type { NamedBalance } from '../kas.js';
 export { targetOf, type MoneyTarget } from '../kas.js';
 export { KasHistory, VoidPaymentStep } from './KasHistory.js';
+export { PaymentChecksStep, type PaymentChecksStepProps } from './PaymentChecks.js';
 export { PaymentMethodForm, PaymentMethodList, PaymentMethodsSurface } from './PaymentMethods.js';
 export type { MoneyEntryRow, PaymentAccountRow } from '../queries.js';

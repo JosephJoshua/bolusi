@@ -1018,11 +1018,15 @@ async function recordPayment(
           entityType: MONEY_ENTRY_ENTITY,
           entityId: taken === undefined ? charge.id : ready.newOpLogId(),
           schemaVersion: 1,
-          payload: paymentPayload(
-            charge,
-            amount,
-            charge.environment === 'test' ? `test:${paymentId}` : paymentId,
-          ),
+          payload: {
+            ...paymentPayload(
+              charge,
+              amount,
+              charge.environment === 'test' ? `test:${paymentId}` : paymentId,
+            ),
+            // Xendit confirmed it: the owner's statement check skips it (money rules.ts).
+            provider: 'xendit',
+          },
           timestamp: paidAt,
         },
       );

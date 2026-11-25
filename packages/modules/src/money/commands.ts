@@ -17,6 +17,7 @@ import {
   MONEY_OP,
   MONEY_PERMISSION,
   PAYMENT_ACCOUNT_KINDS,
+  PAYMENT_CHECK_OUTCOMES,
   movesOut,
   type CashMoveKind,
   type RevenueAccount,
@@ -197,6 +198,22 @@ export function voidPaymentHandler(
 ): CommandHandlerResult<null> {
   return {
     ops: [voidOp(ctx, input.entryId, input.reason)],
+    result: null,
+  };
+}
+
+export const checkPaymentInput = z
+  .object({ entryId: zUuid, outcome: z.enum(PAYMENT_CHECK_OUTCOMES) })
+  .strict();
+export type CheckPaymentInput = z.input<typeof checkPaymentInput>;
+
+/** An owner ticks a non-cash payment off against the statement, or flags it as not there. */
+export function checkPaymentHandler(
+  input: z.output<typeof checkPaymentInput>,
+  ctx: CommandContext,
+): CommandHandlerResult<null> {
+  return {
+    ops: [entryOp(ctx, MONEY_OP.paymentChecked, { outcome: input.outcome }, input.entryId)],
     result: null,
   };
 }

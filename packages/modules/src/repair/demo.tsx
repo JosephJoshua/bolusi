@@ -1635,6 +1635,7 @@ export function demoRepairRuntime(
         document: body.document,
         account: `account:${body.accountId}`,
         amount: body.amount,
+        provider: 'xendit',
       });
       if ((ledger.documentMoney(body.document.id)?.charged ?? 0) === 0) {
         tickets = tickets.map((t) =>

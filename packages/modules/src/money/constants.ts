@@ -29,6 +29,8 @@ export const MONEY_OP = {
   paymentReceived: 'money.payment_received',
   /** An owner cancels a payment recorded by mistake. */
   paymentVoided: 'money.payment_voided',
+  /** An owner ticks a non-cash payment off against the bank or provider statement. */
+  paymentChecked: 'money.payment_checked',
   refundPaid: 'money.refund_paid',
   /** Cash taken out of or put into the drawer, with a reason. */
   cashMoved: 'money.cash_moved',
@@ -55,6 +57,8 @@ export const MONEY_PERMISSION = {
   refund: 'money.refund',
   /** Cancel a payment recorded by mistake (owners). */
   voidPayment: 'money.void_payment',
+  /** Tick non-cash payments off against the statement (owners, or whom they give it). */
+  checkPayments: 'money.check_payments',
   /** Take cash out of the drawer or put it in, with a reason. */
   moveCash: 'money.move_cash',
   countCash: 'money.count_cash',
@@ -115,6 +119,17 @@ export type RevenueAccount = (typeof REVENUE_ACCOUNTS)[number];
 /** Configured accounts. Cash is never configured: it is each store's drawer. */
 export const PAYMENT_ACCOUNT_KINDS = ['qris', 'edc', 'transfer'] as const;
 export type PaymentAccountKind = (typeof PAYMENT_ACCOUNT_KINDS)[number];
+
+/**
+ * What an owner found for a payment on the statement. `missing` stays flagged, with who took the
+ * payment, until the payment is voided or checked again as `matched`.
+ */
+export const PAYMENT_CHECK_OUTCOMES = ['matched', 'missing'] as const;
+export type PaymentCheckOutcome = (typeof PAYMENT_CHECK_OUTCOMES)[number];
+
+/** Who confirmed a payment on their side; such a payment needs no check against a statement. */
+export const PAYMENT_PROVIDERS = ['xendit'] as const;
+export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number];
 
 /** EDC slips carry an approval code, the one thing that ties the payment to the bank's record. */
 export function referenceRequired(kind: PaymentAccountKind | 'cash'): boolean {

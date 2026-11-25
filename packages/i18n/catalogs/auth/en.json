@@ -414,6 +414,8 @@
       "moneyRefundHint": "Give money back to customers",
       "moneyVoid": "Cancel payments",
       "moneyVoidHint": "Remove a payment recorded by mistake",
+      "moneyCheck": "Check statements",
+      "moneyCheckHint": "Tick transfer, QRIS and card payments off against the bank statement",
       "moneyCredit": "Pay later",
       "moneyCreditHint": "Hand a phone back before it is paid",
       "moneyAdjust": "Settle cash differences",

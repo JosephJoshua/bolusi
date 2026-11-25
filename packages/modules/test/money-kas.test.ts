@@ -11,6 +11,7 @@ import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
 import { turnedDownLines } from '../src/money/void-ask.js';
 import { refundLimitText } from '../src/money/refund.js';
+import { checkLine, checksCount } from '../src/money/payment-checks.js';
 import type { ApprovalRow } from '../src/approvals/queries.js';
 
 import {
@@ -58,6 +59,11 @@ function entry(overrides: Partial<MoneyEntryRow>): MoneyEntryRow {
     voidedBy: null,
     voidedAt: null,
     voidReason: null,
+    provider: null,
+    checkedOutcome: null,
+    checkedBy: null,
+    checkedByName: null,
+    checkedAt: null,
     ...overrides,
   };
 }
@@ -495,5 +501,42 @@ describe('a manager’s refund limit, as the step says it', () => {
     expect(refundLimitText({ ...form, credit: 0, digits: '' })).toBe(
       `Batas pengembalian Anda ${formatMoney(30_000)}.`,
     );
+  });
+});
+
+describe('Cocokkan mutasi', () => {
+  const transfer: PaymentAccountRow = {
+    id: 'a3',
+    kind: 'transfer',
+    name: 'Transfer BRI',
+    active: true,
+    central: false,
+    storeIds: [],
+  };
+  const taken = entry({
+    id: 't1',
+    account: 'account:a3',
+    amount: 480_000,
+    reference: 'Budi S.',
+    documentLabel: 'K-12',
+    createdByName: 'Siti',
+  });
+
+  test('a payment reads method first, then for whom, its reference and who took it', () => {
+    const line = checkLine(taken, [transfer], 'Pak Budi');
+    expect(line.method).toBe('Transfer BRI');
+    expect(line.details.slice(1)).toEqual(['Pak Budi', 'K-12', 'Budi S.', 'Diterima Siti']);
+    expect(line.missing).toBeNull();
+    expect(line.answers).toEqual(['missing', 'matched']);
+  });
+
+  test('one flagged missing says who flagged it, and can only be found now', () => {
+    const flagged = { ...taken, checkedOutcome: 'missing' as const, checkedByName: 'Andi' };
+    const line = checkLine(flagged, [transfer], null);
+    expect(line.missing).toBe('Tidak ada di mutasi, ditandai Andi');
+    expect(line.answers).toEqual(['matched']);
+    expect(
+      checksCount({ rows: [taken, flagged], more: false, customers: new Map(), accounts: [] }),
+    ).toEqual({ open: 2, missing: 1, more: false });
   });
 });

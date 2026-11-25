@@ -19,6 +19,8 @@ import {
   type CashMoveKind,
   type EntryKind,
   type PaymentAccountKind,
+  type PaymentCheckOutcome,
+  type PaymentProvider,
 } from './constants.js';
 import type { MoneyDocumentSources } from './documents.js';
 import {
@@ -161,6 +163,13 @@ export interface MoneyEntryRow {
   readonly voidedBy: string | null;
   readonly voidedAt: number | null;
   readonly voidReason: string | null;
+  /** Confirmed by its provider (`xendit`): no statement check needed. */
+  readonly provider: PaymentProvider | null;
+  /** The latest statement check of a non-cash payment, and who made it. */
+  readonly checkedOutcome: PaymentCheckOutcome | null;
+  readonly checkedBy: string | null;
+  readonly checkedByName: string | null;
+  readonly checkedAt: number | null;
 }
 
 export interface DocumentMoney {
@@ -194,17 +203,24 @@ function entryRow(row: Record<string, unknown>, names: ReadonlyMap<string, strin
     voidedBy: (row['voidedBy'] as string | null) ?? null,
     voidedAt: num(row['voidedAt']),
     voidReason: (row['voidReason'] as string | null) ?? null,
+    provider: (row['provider'] as PaymentProvider | null) ?? null,
+    checkedOutcome: (row['checkedOutcome'] as PaymentCheckOutcome | null) ?? null,
+    checkedBy: (row['checkedBy'] as string | null) ?? null,
+    checkedByName: names.get((row['checkedBy'] as string | null) ?? '') ?? null,
+    checkedAt: num(row['checkedAt']),
   };
 }
 
 /** The records as the screens read them, each with the name of whoever recorded it. */
 async function entryRows(
   qctx: Qctx,
-  rows: readonly { readonly createdBy: string }[],
+  rows: readonly { readonly createdBy: string; readonly checkedBy?: string | null }[],
 ): Promise<MoneyEntryRow[]> {
   const names = await userNames(
     qctx.db,
-    rows.map((row) => row.createdBy),
+    rows.flatMap((row) =>
+      row.checkedBy == null ? [row.createdBy] : [row.createdBy, row.checkedBy],
+    ),
   );
   return rows.map((row) => entryRow(row as unknown as Record<string, unknown>, names));
 }
@@ -401,6 +417,63 @@ export const moneyEntriesQuery = {
   permission: MONEY_PERMISSION.read,
   input: moneyEntriesInput,
   handler: moneyEntriesHandler,
+} as const;
+
+// ── paymentChecks (non-cash payments taken by hand, to tick off against the statement) ─────────
+//
+// Transfer, QRIS and EDC payments the counter recorded by hand: the money only exists if the bank's
+// statement shows it. A provider-confirmed payment (Xendit QRIS) is not here; nor is a cancelled
+// one. `open` is what still needs the owner: never checked, or flagged missing.
+
+export const paymentChecksInput = z
+  .object({
+    open: z.boolean().default(true),
+    limit: z.number().int().min(1).max(500).default(200),
+    cursor: z.string().optional(),
+  })
+  .strict();
+
+const CHECKS_SORT = 'createdAt.asc';
+
+async function paymentChecksHandler(
+  input: z.output<typeof paymentChecksInput>,
+  qctx: Qctx,
+): Promise<QueryPage<MoneyEntryRow>> {
+  let query = qctx.db
+    .selectFrom('moneyEntries')
+    .selectAll()
+    .where('storeId', '=', storeOf(qctx))
+    .where('kind', '=', 'payment_received')
+    .where('voidedAt', 'is', null)
+    .where('account', 'like', 'account:%')
+    .where('provider', 'is', null)
+    .orderBy('createdAt', 'asc')
+    .orderBy('id', 'asc');
+  if (input.open) {
+    query = query.where((eb) =>
+      eb.or([eb('checkedOutcome', 'is', null), eb('checkedOutcome', '=', 'missing')]),
+    );
+  }
+  if (input.cursor !== undefined) {
+    const position = decodeCursor(input.cursor, CHECKS_SORT);
+    query = query.where((eb) =>
+      keysetPredicate(eb, { column: 'createdAt', idColumn: 'id', position, descending: false }),
+    );
+  }
+  const { rows, nextCursor } = await fetchKeysetPage({
+    fetch: (limitPlusOne) => query.limit(limitPlusOne).execute(),
+    limit: input.limit,
+    sort: CHECKS_SORT,
+    cursorValues: (last) => [Number(last.createdAt), last.id],
+  });
+  return { rows: await entryRows(qctx, rows), nextCursor };
+}
+
+export const paymentChecksQuery = {
+  name: 'paymentChecks',
+  permission: MONEY_PERMISSION.checkPayments,
+  input: paymentChecksInput,
+  handler: paymentChecksHandler,
 } as const;
 
 // ── openBalances (settled documents not square: a customer still owes, or is owed) ─────────────

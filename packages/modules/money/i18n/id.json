@@ -10,7 +10,8 @@
     "cashMoved": "Kas keluar/masuk",
     "cashCounted": "Tutup kas",
     "cashAdjusted": "Selisih kas diselesaikan",
-    "cashMoveVoided": "Catatan kas dibatalkan"
+    "cashMoveVoided": "Catatan kas dibatalkan",
+    "paymentChecked": "Pembayaran dicocokkan"
   },
   "refusal": {
     "alreadyRecorded": "Catatan ini sudah ada.",
@@ -38,7 +39,10 @@
     "overLimit": "Melebihi batas Anda. Minta persetujuan pemilik toko.",
     "moveAboveDrawer": "Uang di laci tidak cukup.",
     "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
-    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan."
+    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan.",
+    "providerConfirmed": "Pembayaran yang dikonfirmasi penyedia hanya dicatat oleh server.",
+    "notCheckable": "Pembayaran ini tidak perlu dicocokkan dengan mutasi.",
+    "alreadyChecked": "Pembayaran ini sudah ditandai demikian."
   },
   "method": {
     "cash": "Tunai"
@@ -319,5 +323,23 @@
     },
     "rejected": "{name} menolak memotong tagihan {amount}.",
     "rejectedNote": "{name} menolak memotong tagihan {amount}: {note}"
+  },
+  "checks": {
+    "title": "Cocokkan mutasi",
+    "summary": "{count} pembayaran perlu dicocokkan",
+    "missingCount": "{count} tidak ada di mutasi",
+    "matched": "Cocok",
+    "notFound": "Tidak ada di mutasi",
+    "missing": "Tidak ada di mutasi",
+    "missingBy": "Tidak ada di mutasi, ditandai {name}",
+    "takenBy": "Diterima {name}",
+    "none": "Semua pembayaran nontunai sudah dicocokkan.",
+    "hint": "Bandingkan dengan mutasi rekening atau laporan EDC.",
+    "answerLabel": "{answer}: {method} {amount}, {time}",
+    "col": {
+      "payment": "Pembayaran",
+      "status": "Status"
+    },
+    "open": "Perlu dicek"
   }
 }

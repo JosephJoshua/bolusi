@@ -417,6 +417,37 @@ describe('Kas on the PC', () => {
     expect(byTestId('money.desk.void.submit').textContent).toBe('Minta persetujuan');
   });
 
+  it('lets an owner tick payments taken by hand off against the statement', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.mouseDown(byTestId('money.desk.kas.tabs.checks'), { button: 0 });
+    fireEvent.click(byTestId('money.desk.kas.tabs.checks'));
+    const table = await screen.findByTestId('money.desk.checks.table');
+    // Transfers, EDC and QRIS taken by hand; cash is counted in the drawer, not here.
+    await within(table).findAllByText('Transfer BRI');
+    expect(within(table).getByText('EDC Mandiri')).toBeTruthy();
+    expect(within(table).queryByText('Tunai')).toBeNull();
+    // One already flagged stays, with who flagged it, and can only be found now.
+    expect(within(table).getByText('Tidak ada di mutasi, ditandai Andi Pratama')).toBeTruthy();
+
+    fireEvent.click(within(table).getByRole('button', { name: /^Cocok: EDC Mandiri/ }));
+    await waitFor(() => expect(within(table).queryByText('EDC Mandiri')).toBeNull());
+    fireEvent.click(
+      within(table).getByRole('button', {
+        name: /^Tidak ada di mutasi: Transfer BRI Rp\s?480\.000/,
+      }),
+    );
+    await waitFor(() =>
+      expect(within(table).getAllByText('Tidak ada di mutasi, ditandai Andi Pratama')).toHaveLength(
+        2,
+      ),
+    );
+  });
+
+  it('keeps the statement check from the counter', async () => {
+    await openKas();
+    expect(screen.queryByTestId('money.desk.kas.tabs.checks')).toBeNull();
+  });
+
   it('moves between days in Riwayat', async () => {
     await openKas();
     fireEvent.mouseDown(byTestId('money.desk.kas.tabs.history'), { button: 0 });

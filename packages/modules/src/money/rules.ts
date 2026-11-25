@@ -61,6 +61,9 @@ export const MONEY_REFUSALS = defineRefusals(
     'overLimit',
     'cashMoveNotFound',
     'laterCountSettled',
+    'providerConfirmed',
+    'notCheckable',
+    'alreadyChecked',
   ] as const,
   // The server records cash as it really moved, so only a device that sees the drawer stops a
   // move above it.
@@ -586,14 +589,24 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
   };
 
   const paymentReceivedRule: Rule = async (op, { db }) => {
-    const { document, account, amount, reference, tendered, replaces } = payloadOf<{
+    const { document, account, amount, reference, tendered, replaces, provider } = payloadOf<{
       document: MoneyDocument;
       account: string;
       amount: number;
       reference: string | null;
       tendered: number | null;
       replaces?: string;
+      provider?: string;
     }>(op);
+    // Only the server records what a provider confirmed (qris/service.ts), signed by the tenant's
+    // system device and never through these rules: a device naming a provider claims a check the
+    // owner would then skip.
+    if (provider !== undefined) {
+      throw refuse('providerConfirmed', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'provider', issue: 'recorded only by the server' },
+      });
+    }
     await requireFreshEntry(db, op);
     await requireDocument(db, op, document);
     const kind = await requireAccount(db, op, account);
@@ -655,6 +668,36 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
       entry,
     );
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
+  };
+
+  /**
+   * An owner ticks a payment off against the statement: a live payment of this store through one
+   * of its non-cash accounts, taken by hand (a provider's confirmation needs no check). Checking it
+   * again with the other outcome corrects a mistake; the same outcome again changes nothing.
+   */
+  const paymentCheckedRule: Rule = async (op, { db }) => {
+    const { outcome } = payloadOf<{ outcome: string }>(op);
+    const entry = await db
+      .selectFrom('moneyEntries')
+      .select(['kind', 'account', 'voidedBy', 'provider', 'checkedOutcome'])
+      .where('id', '=', op.entityId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirst();
+    if (entry === undefined || entry.kind !== 'payment_received') {
+      throw refuse('paymentNotFound', {
+        code: 'ENTITY_NOT_FOUND',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
+    if (entry.voidedBy !== null) {
+      throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
+    }
+    if (entry.account === null || entry.account === CASH_ACCOUNT || entry.provider !== null) {
+      throw refuse('notCheckable', { details: { entityId: op.entityId } });
+    }
+    if (entry.checkedOutcome === outcome) {
+      throw refuse('alreadyChecked', { details: { entityId: op.entityId, outcome } });
+    }
   };
 
   /**
@@ -852,6 +895,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     chargeReducedRule,
     paymentReceivedRule,
     paymentVoidedRule,
+    paymentCheckedRule,
     cashMoveVoidedRule,
     refundPaidRule,
     cashMovedRule,

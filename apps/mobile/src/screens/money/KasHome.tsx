@@ -9,6 +9,7 @@ import {
   KasHistory,
   MoneyRuntimeProvider,
   MoveCashStep,
+  PaymentChecksStep,
   ReceiveDebtStep,
   ReduceChargeStep,
   RefundStep,
@@ -38,6 +39,7 @@ type KasView =
   | { readonly kind: 'reduce'; readonly target: MoneyTarget }
   | { readonly kind: 'refund'; readonly target: MoneyTarget }
   | { readonly kind: 'history' }
+  | { readonly kind: 'checks' }
   | { readonly kind: 'void'; readonly entry: MoneyEntryRow };
 
 export interface KasHomeProps {
@@ -118,10 +120,13 @@ export function KasHome({
               setHistoryDay(null);
               toHistory();
             }}
+            onChecks={() => setView({ kind: 'checks' })}
             notice={boardNotice}
             onClearNotice={() => setBoardNotice(null)}
           />
         );
+      case 'checks':
+        return <PaymentChecksStep chrome={stepChrome} onBack={toBoard} />;
       case 'count':
         return (
           <CountCashStep

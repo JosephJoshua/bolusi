@@ -1056,3 +1056,116 @@ describe('the drawer', () => {
     expect(new Set(seen.map((row) => JSON.stringify(row))).size).toBe(3);
   });
 });
+
+describe('owners tick non-cash payments off against the statement', () => {
+  async function paidByHand(harness: RepairHarness) {
+    const document = await openTicket(harness);
+    const transfer = (await harness.money(
+      'saveAccount',
+      { kind: 'transfer', name: 'BCA 123' },
+      harness.storeOwnerId,
+    )) as { accountId: string };
+    const { entryIds } = (await harness.money(
+      'receivePayments',
+      {
+        document,
+        payments: [
+          { account: `account:${transfer.accountId}`, amount: 40_000 },
+          { account: 'cash', amount: 10_000 },
+        ],
+      },
+      harness.cashierId,
+    )) as { entryIds: string[] };
+    return { document, transferId: entryIds[0]!, cashId: entryIds[1]! };
+  }
+  const open = async (harness: RepairHarness) =>
+    (await harness.moneyQuery('paymentChecks', {}, harness.storeOwnerId)).rows as MoneyEntryRow[];
+
+  test('a transfer waits on the list until an owner finds it; a missing one stays flagged', async () => {
+    h = await openRepairHarness(520);
+    const { transferId, cashId } = await paidByHand(h);
+    // Cash is counted in the drawer, not on a statement.
+    expect((await open(h)).map((row) => row.id)).toEqual([transferId]);
+    await expectRefused(
+      h.money('checkPayment', { entryId: transferId, outcome: 'matched' }, h.cashierId),
+      'PERMISSION_DENIED',
+    );
+    await expectRefused(
+      h.money('checkPayment', { entryId: cashId, outcome: 'matched' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'notCheckable',
+    );
+
+    await h.money('checkPayment', { entryId: transferId, outcome: 'missing' }, h.storeOwnerId);
+    const [flagged] = await open(h);
+    expect(flagged).toMatchObject({
+      id: transferId,
+      checkedOutcome: 'missing',
+      checkedBy: h.storeOwnerId,
+      createdBy: h.cashierId,
+    });
+    await expectRefused(
+      h.money('checkPayment', { entryId: transferId, outcome: 'missing' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'alreadyChecked',
+    );
+    // Found after all: matched, off the list, still listed when asking for everything.
+    await h.money('checkPayment', { entryId: transferId, outcome: 'matched' }, h.storeOwnerId);
+    expect(await open(h)).toEqual([]);
+    const all = await h.moneyQuery('paymentChecks', { open: false }, h.storeOwnerId);
+    expect(all.rows).toMatchObject([{ id: transferId, checkedOutcome: 'matched' }]);
+    await expectBalancedBooks(h);
+  });
+
+  test('a voided payment leaves the list and can no longer be checked', async () => {
+    h = await openRepairHarness(521);
+    const { transferId } = await paidByHand(h);
+    await h.money('checkPayment', { entryId: transferId, outcome: 'missing' }, h.storeOwnerId);
+    await h.money('voidPayment', { entryId: transferId, reason: 'Tidak masuk' }, h.storeOwnerId);
+    expect(await open(h)).toEqual([]);
+    await expectRefused(
+      h.money('checkPayment', { entryId: transferId, outcome: 'matched' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'alreadyVoided',
+    );
+  });
+
+  test('a device cannot record a payment as confirmed by a provider', async () => {
+    h = await openRepairHarness(522);
+    const document = await openTicket(h);
+    const { paymentOp } = await import('../src/money/index.js');
+    const ctx = h.runtime.commands.createContext(h.cashierId);
+    const forged = h.runtime.commands.execute(
+      {
+        permission: 'money.receive',
+        input: { parse: (x: unknown) => x },
+        handler: (_input: unknown, c: typeof ctx) => {
+          const op = paymentOp(c, document, {
+            account: 'cash',
+            amount: 10_000,
+            reference: null,
+            tendered: null,
+          });
+          return { ops: [{ ...op, payload: { ...op.payload, provider: 'xendit' } }], result: null };
+        },
+      } as never,
+      {} as never,
+      ctx,
+    );
+    await expectRefused(forged, 'VALIDATION_FAILED', 'providerConfirmed');
+  });
+
+  test('on a shared device an owner ticks payments off only with a PIN the server checked', async () => {
+    let proven = true;
+    h = await openRepairHarness(523, undefined, { decisionProven: () => proven });
+    const { transferId } = await paidByHand(h);
+    proven = false;
+    await expectRefused(
+      h.money('checkPayment', { entryId: transferId, outcome: 'missing' }, h.storeOwnerId),
+      'PERMISSION_DENIED',
+    );
+    proven = true;
+    await h.money('checkPayment', { entryId: transferId, outcome: 'missing' }, h.storeOwnerId);
+    expect((await open(h))[0]?.checkedOutcome).toBe('missing');
+  });
+});
