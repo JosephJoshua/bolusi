@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
       postgres:
@@ -105,7 +105,7 @@ jobs:
 
   # The phone screens in a browser over the demo runtime: each flow tapped through end to end.
   mobile-web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -129,7 +129,7 @@ jobs:
           retention-days: 7
 
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # gitleaks comments on the PR when it finds a secret.
     permissions:
       contents: read
