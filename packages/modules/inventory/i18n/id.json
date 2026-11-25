@@ -215,7 +215,10 @@
     "moveDown": "Turunkan",
     "removeOption": "Hapus pilihan {option}",
     "addToName": "Tambahkan {label} ke nama",
-    "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang."
+    "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang.",
+    "kindLabel": "Jenis isian",
+    "formatHintPc": "Tambahkan ke nama:",
+    "optionsPlaceholder": "Tulis pilihan, lalu Enter"
   },
   "desk": {
     "col": {
@@ -234,5 +237,44 @@
     },
     "results": "{count} barang",
     "closePart": "Tutup barang"
+  },
+  "bulk": {
+    "open": "Tambah banyak",
+    "title": "Tambah banyak barang",
+    "col": {
+      "name": "Nama",
+      "fits": "Cocok untuk HP",
+      "code": "Kode",
+      "barcode": "Barcode",
+      "tags": "Label",
+      "stock": "Stok"
+    },
+    "problem": {
+      "tooLong": "Paling banyak {max} huruf.",
+      "tooMany": "Paling banyak {max}.",
+      "phoneUnknown": "{phones} belum ada di daftar HP, jadi disimpan seperti ditulis.",
+      "phoneNear": "{phones} belum ada di daftar HP. Maksudnya {near}?",
+      "wholeNumber": "Tulis angka bulat, misalnya 5.",
+      "nameOrFields": "Isi kolom isiannya atau tulis namanya dulu."
+    },
+    "saved": "{count} barang disimpan.",
+    "left": "{count} baris belum disimpan, cek yang ditandai merah.",
+    "ready": "{count} siap disimpan",
+    "blocked": "{count} belum lengkap",
+    "save": "Simpan {count} barang",
+    "saving": "Menyimpan {done} dari {total}…",
+    "hint": {
+      "name": "Kosongkan untuk nama otomatis: {format}",
+      "fits": "Pisahkan dengan koma, misalnya Redmi Note 10, Redmi Note 10S",
+      "list": "Pisahkan dengan koma",
+      "sheet": "Ketik langsung, atau salin dari Excel lalu tempel dengan Ctrl+V. Judul kolom ikut dikenali."
+    },
+    "row": "Baris {n}",
+    "deleteRow": "Hapus baris",
+    "where": "Baris {n}, {column}",
+    "switchTitle": "Ganti kategori?",
+    "switchMessage": "Baris yang belum disimpan akan dihapus.",
+    "switchConfirm": "Ganti",
+    "leaveMessage": "Baris yang belum disimpan akan hilang."
   }
 }
