@@ -308,5 +308,12 @@
     "switchMessage": "Baris yang belum disimpan akan dihapus.",
     "switchConfirm": "Ganti",
     "leaveMessage": "Baris yang belum disimpan akan hilang."
+  },
+  "useCost": {
+    "title": "Modal sparepart",
+    "line": "{count} pcs",
+    "missing": "Belum ada harga",
+    "total": "Total modal",
+    "unpriced": "{count} sparepart belum ada harga belinya"
   }
 }

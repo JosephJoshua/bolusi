@@ -265,6 +265,11 @@ export const INVENTORY_KEYS = [
   'inventory.cost.receipt',
   'inventory.cost.receiptNoLabel',
   'inventory.cost.missing',
+  'inventory.useCost.title',
+  'inventory.useCost.line',
+  'inventory.useCost.missing',
+  'inventory.useCost.total',
+  'inventory.useCost.unpriced',
 ] as const;
 
 export type InventoryKey = (typeof INVENTORY_KEYS)[number];
