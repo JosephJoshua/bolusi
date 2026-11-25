@@ -17,6 +17,8 @@ import {
   addCategoryHandler,
   addCategoryInput,
   addItemHandler,
+  addItemsHandler,
+  addItemsInput,
   addItemInput,
   countStockHandler,
   countStockInput,
@@ -177,6 +179,11 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         permission: INVENTORY_PERMISSION.manageItems,
         input: addItemInput,
         handler: addItemHandler,
+      },
+      addItems: {
+        permission: INVENTORY_PERMISSION.manageItems,
+        input: addItemsInput,
+        handler: addItemsHandler,
       },
       editItem: {
         permission: INVENTORY_PERMISSION.manageItems,

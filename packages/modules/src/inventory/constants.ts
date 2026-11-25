@@ -52,6 +52,8 @@ export type FieldKind = (typeof FIELD_KINDS)[number];
 export const MAX_CATEGORY_FIELDS = 12;
 export const MAX_FIELD_OPTIONS = 100;
 export const MAX_ITEM_TAGS = 20;
+/** The most items one save of the PC's table sends; a long sheet saves in runs of these. */
+export const MAX_ITEMS_PER_ADD = 100;
 /** The facet a tag is filed under in `inventory_item_facets`; field values use the field's id. */
 export const TAG_FACET = 'tag' as const;
 
