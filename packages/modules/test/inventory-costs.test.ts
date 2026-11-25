@@ -126,6 +126,17 @@ describe('the average cost fold', () => {
     expect(fold.average).toBe(70_000);
   });
 
+  test('parts sent to another store leave at the average and leave less to mix with', () => {
+    const fold = foldCost([
+      move('a', 1, 'received', 4, { unitCost: 100 }),
+      move('b', 2, 'sent', -3),
+      move('c', 3, 'received', 1, { unitCost: 200 }),
+    ]);
+    expect(fold.at.get('b')).toBe(100);
+    // 1 left at 100, 1 in at 200: (100 + 200) ÷ 2. Had the send not counted, (4×100 + 200) ÷ 5 = 120.
+    expect(fold.average).toBe(150);
+  });
+
   test('rounds half up once per receipt, in whole rupiah', () => {
     const fold = foldCost([
       move('a', 1, 'received', 2, { unitCost: 10_001 }),

@@ -69,6 +69,15 @@ export default tseslint.config(
     rules: { 'bolusi/no-cut-text': 'error' },
   },
   {
+    name: 'bolusi/numeric-token',
+    files: [
+      'packages/modules/src/**/*.tsx',
+      'apps/mobile/src/**/*.tsx',
+      'packages/ui/src/**/*.tsx',
+    ],
+    rules: { 'bolusi/numeric-token': 'error' },
+  },
+  {
     name: 'bolusi/handler-purity',
     files: [
       'packages/modules/src/**/*.{commands,queries,handlers}.{ts,tsx}',

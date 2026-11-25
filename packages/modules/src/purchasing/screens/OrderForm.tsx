@@ -7,18 +7,19 @@
  */
 import { formatPhone, keepNumbersWhole, t } from '@bolusi/i18n';
 import {
-  ListRow,
-  QuantityStepper,
-  SearchField,
-  TextButton,
-  TextInput,
   border,
   color,
+  ListRow,
+  numeric,
+  QuantityStepper,
   radius,
+  SearchField,
   space,
+  Text,
+  TextButton,
+  TextInput,
   touch,
   type,
-  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -358,6 +359,6 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: color.surfaceAlt },
   choiceText: { flex: 1 },
   choiceName: { ...type.bodySm, fontWeight: '600', color: color.text },
-  stock: { ...type.bodySm, color: color.textMuted, fontVariant: ['tabular-nums'] },
+  stock: { ...type.bodySm, color: color.textMuted, ...numeric },
   stockOut: { color: color.danger },
 });

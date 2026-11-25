@@ -5,7 +5,7 @@
  * needs internet. Never "Rp 0" for a price nobody has typed.
  */
 import { formatDate, formatMoney, keepCodeWhole } from '@bolusi/i18n';
-import { border, color, space, type, Text } from '@bolusi/ui';
+import { border, color, numeric, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   average: {
     ...type.heading,
     color: color.text,
-    fontVariant: ['tabular-nums'],
+    ...numeric,
     marginTop: space.xs,
   },
   none: { ...type.body, color: color.textMuted, marginTop: space.xs },
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     ...type.bodySm,
     fontWeight: '600',
     color: color.text,
-    fontVariant: ['tabular-nums'],
+    ...numeric,
     flexShrink: 0,
   },
   missing: { ...type.bodySm, color: color.warning, flexShrink: 0 },

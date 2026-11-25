@@ -1,12 +1,12 @@
 // Client migration 32 — what received stock cost to buy (inventory module, part costs).
 //
-// Mirrors server migration 0034. Its own table, read only with `inventory.read_cost`: a store device
+// Mirrors server migration 0035. Its own table, read only with `inventory.read_cost`: a store device
 // whose people may not see costs holds every stock move and none of this, and an owner signed in
 // there gets it into the in-memory person store instead (least-privilege sync).
 import type { ClientMigration } from './types.js';
 
 export const inventoryCostsMigration: ClientMigration = {
-  version: 32,
+  version: 33,
   name: 'inventory_costs',
   statements: [
     `CREATE TABLE inventory_costs (

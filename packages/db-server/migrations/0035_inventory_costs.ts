@@ -1,10 +1,10 @@
 // Part costs: what each delivery of stock cost a piece to buy (inventory module). Mirrors client
-// migration 32.
+// migration 33.
 //
 // Costs sit in their own table, read only with `inventory.read_cost` ("Lihat harga beli"), so a
 // store device syncs stock moves without what they cost. The permission is seeded here and granted
 // to the owners' system-default roles of existing tenants, as provisioning grants it to new ones
-// (apps/server identity/permissions.ts). Merge after 0033: the migrator refuses an earlier number
+// (apps/server identity/permissions.ts). Merge after 0034: the migrator refuses an earlier number
 // later.
 import { sql, type Kysely } from 'kysely';
 

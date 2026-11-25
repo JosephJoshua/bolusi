@@ -981,6 +981,49 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  Amount: [
+    { id: 'title', render: () => <componentInventory.Amount value={12_500_000} size="title" /> },
+    { id: 'signed', render: () => <componentInventory.Amount value={150_000} signed /> },
+    { id: 'negative', render: () => <componentInventory.Amount value={-25_000} tone="danger" /> },
+  ],
+
+  AmountRow: [
+    {
+      id: 'default',
+      render: (l) => (
+        <componentInventory.AmountRow
+          label={l.title}
+          detail={l.hint}
+          value={1_250_000}
+          testID="amount-row"
+        />
+      ),
+    },
+    {
+      id: 'total',
+      render: (l) => (
+        <componentInventory.AmountRow
+          label={l.title}
+          value={2_750_000}
+          strong
+          testID="amount-row"
+        />
+      ),
+    },
+    {
+      id: 'struck',
+      render: (l) => (
+        <componentInventory.AmountRow
+          label={l.title}
+          value={300_000}
+          tone="struck"
+          onPress={noop}
+          testID="amount-row"
+        />
+      ),
+    },
+  ],
+
   Fact: [
     { id: 'default', render: (l) => <componentInventory.Fact label={l.title} value={l.hint} /> },
     { id: 'wide', render: (l) => <componentInventory.Fact label={l.title} value={l.hint} wide /> },

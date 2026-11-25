@@ -4,7 +4,14 @@
  * owes or is owed on the right; Riwayat lists a day's records, where an owner cancels a payment.
  * Each task opens as a dialog over the page.
  */
-import { formatDate, formatDateTime, formatMoney, formatTime, t } from '@bolusi/i18n';
+import {
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  formatSignedMoney,
+  formatTime,
+  t,
+} from '@bolusi/i18n';
 import {
   Banner,
   Button,
@@ -352,7 +359,7 @@ function Today({
                     key={entry.id}
                     label={tm(label)}
                     detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
-                    value={`${delta < 0 ? '' : '+'}${formatMoney(delta)}`}
+                    value={formatSignedMoney(delta)}
                     testId={`${testId}.moves.${entry.id}`}
                   />
                 ))}

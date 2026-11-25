@@ -9,7 +9,7 @@ import type { Kysely } from 'kysely';
 import type { OpRuleContext } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
-import type { StockSourceKind } from './constants.js';
+import type { OutsideStockSourceKind, StockSourceKind } from './constants.js';
 
 export interface StockSourceCheck {
   readonly op: SignedOperation;
@@ -31,4 +31,8 @@ export interface StockSourceTarget {
   check(input: StockSourceCheck): Promise<{ readonly label: string }>;
 }
 
-export type StockSourceTargets = Readonly<Record<StockSourceKind, StockSourceTarget>>;
+/** The sources other modules own, wired at the composition root. */
+export type StockSourceTargets = Readonly<Record<OutsideStockSourceKind, StockSourceTarget>>;
+
+/** Every source the receive rule checks: the outside ones and inventory's own (transfers). */
+export type AllStockSourceTargets = Readonly<Record<StockSourceKind, StockSourceTarget>>;

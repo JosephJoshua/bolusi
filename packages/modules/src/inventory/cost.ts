@@ -4,8 +4,8 @@
 // late lands in the right place, and every reader of the same records gets the same answer.
 //
 // Movements run in the order stock does (queries.ts `stockByPart`): by when they happened on the
-// phone, then by id. A count sets what is on hand and keeps the average. A take or a put-back moves
-// stock at the average. A priced receipt mixes in: (on hand × average + received × price) ÷ (on hand
+// phone, then by id. A count sets what is on hand and keeps the average. A take, a put-back or a send
+// to another store moves stock at the average. A priced receipt mixes in: (on hand × average + received × price) ÷ (on hand
 // + received), rounded half up to whole rupiah; with nothing (or less than nothing) on hand, or no
 // average yet, its price becomes the average. A receipt with no price yet adds stock at the average,
 // and says so: the average is then not complete.
@@ -52,6 +52,7 @@ export function foldCost(movements: readonly CostMovement[]): CostFold {
         break;
       case 'taken':
       case 'put_back':
+      case 'sent':
         onHand += movement.qty;
         break;
       case 'received':
@@ -67,6 +68,11 @@ export function foldCost(movements: readonly CostMovement[]): CostFold {
         }
         onHand += movement.qty;
         break;
+      default: {
+        // A new movement kind must say how it moves the average.
+        const unhandled: never = movement.kind;
+        throw new Error(`no cost rule for movement kind ${String(unhandled)}`);
+      }
     }
     at.set(movement.id, average);
   }

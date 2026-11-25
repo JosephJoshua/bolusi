@@ -5,7 +5,7 @@
  * device holding no costs the order still opens and only this section says it needs internet.
  */
 import { formatMoney } from '@bolusi/i18n';
-import { TextButton, TextInput, border, color, space, type, Text } from '@bolusi/ui';
+import { TextButton, TextInput, border, color, numeric, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -200,12 +200,12 @@ const styles = StyleSheet.create({
   },
   lineText: { flex: 1, gap: space.xs },
   lineName: { ...type.body, color: color.text },
-  meta: { ...type.bodySm, color: color.textMuted, fontVariant: ['tabular-nums'] },
+  meta: { ...type.bodySm, color: color.textMuted, ...numeric },
   amount: {
     ...type.bodySm,
     fontWeight: '600',
     color: color.text,
-    fontVariant: ['tabular-nums'],
+    ...numeric,
     flexShrink: 0,
   },
   total: {
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   totalAmount: {
     ...type.bodyBold,
     color: color.text,
-    fontVariant: ['tabular-nums'],
+    ...numeric,
     flexShrink: 0,
   },
   unpriced: { ...type.bodySm, color: color.warning, marginTop: space.sm },
