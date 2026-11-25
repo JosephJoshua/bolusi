@@ -566,8 +566,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       runPinFlow(
         'changePin',
         (session) => session.userId,
-        (flowDeps, session) =>
-          changePinFlow(flowDeps, { userId: session.userId, currentPin, newPin }),
+        async (flowDeps, session) => {
+          await changePinFlow(flowDeps, { userId: session.userId, currentPin, newPin });
+          person.pinChanged(session.userId, newPin);
+        },
       ),
 
     // Clear another user's lockout as the acting owner. Affects the TARGET's row (its counter was reset).

@@ -224,18 +224,25 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     files: createDesktopPhonePhotoFiles(join(deps.dataDir, 'files')),
     ...fetchOptions,
   });
+  // The online calls act as the signed-in person, whom the server takes only on proof it checked
+  // their PIN itself (server auth/acting-user.ts): their person session, opened on demand.
+  const personSession = (userId: string): Promise<string | null> =>
+    app?.person.sessionFor(userId) ?? Promise.resolve(null);
   const uploadPinVerifier = createFetchPinVerifierUpload({
     baseUrl: deps.apiBaseUrl,
     deviceToken: loadDeviceToken,
+    personSession,
   });
   const staffAdmin = createFetchStaffAdmin({
     baseUrl: deps.apiBaseUrl,
     deviceToken: loadDeviceToken,
+    personSession,
     ...fetchOptions,
   });
   const qrisFor = createFetchQris({
     baseUrl: deps.apiBaseUrl,
     deviceToken: loadDeviceToken,
+    personSession,
     ...fetchOptions,
   });
 

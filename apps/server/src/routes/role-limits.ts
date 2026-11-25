@@ -29,7 +29,7 @@ export function createRoleLimitsRouter(deps: ServerDeps) {
       const tenantId = tenantIdFromContext(c);
 
       await withTenant(c, async (db) => {
-        const acting = await resolveActingUser(c, db);
+        const acting = await resolveActingUser(c, db, deps.now());
         // The store and the role must be this business's (RLS hides another's): a miss is a
         // denial, never a 404 that would confirm an id exists elsewhere.
         const store = await db

@@ -43,6 +43,7 @@ export {
 } from './motion.js';
 export type { EntranceFrom, EntranceOptions, Wipe } from './motion.js';
 export { FRESH_MS, markFresh, useFresh } from './fresh.js';
+export { setDataArriving, useDataArriving } from './arrival.js';
 export { useChangeDirection } from './direction.js';
 export type { ChangeDirection } from './direction.js';
 export { StepTransition, useStepDirection } from './step-transition.js';
@@ -98,6 +99,7 @@ export type { ChipRowProps } from './components/ChipRow.js';
 export type { ChoiceChipsProps } from './components/ChoiceChips.js';
 export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
+export type { AmountProps, AmountRowProps, AmountTone } from './components/Amount.js';
 export type { FactProps } from './components/Fact.js';
 export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
 export type { RollingTextProps } from './components/RollingText.js';

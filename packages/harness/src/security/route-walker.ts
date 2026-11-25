@@ -122,6 +122,8 @@ export interface ProbeContext {
   /** Bearer header for tenant A's CONTROL SESSION (user in store 1). */
   readonly tenantAControlAuth: string;
   readonly tenantAUserId: string;
+  /** A server-checked person session for `tenantAUserId` on tenant A's device (X-Person-Session). */
+  readonly tenantAPersonSession: string;
   readonly tenantADeviceId: string;
   /** The RFC-8032 private seed of tenant A's device — the sync-push leg signs a real op with it. */
   readonly tenantADeviceSeed: Uint8Array;

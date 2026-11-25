@@ -14,6 +14,7 @@ import {
   itemTakenApplier,
   stockCountedApplier,
   stockReceivedApplier,
+  stockSentApplier,
 } from './applier.js';
 import { MAX_FIELD_VALUE, zCategoryShape, zFieldValues } from './categories.js';
 import {
@@ -39,9 +40,12 @@ import {
   itemTakenRule,
   stockCountedRule,
   stockReceivedRule,
+  stockSentRule,
 } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
 import type { StockSourceTargets } from './stock-source.js';
+import { TRANSFER_OPERATIONS } from './transfers/operations.js';
+import { TRANSFER_STOCK_SOURCES } from './transfers/sources.js';
 import { zOptionalPayloadText } from '../shared/optional-text.js';
 
 export const MAX_PART_NAME = 200;
@@ -106,10 +110,26 @@ export const zStockSource = z
   .object({ kind: z.enum(STOCK_SOURCE_KINDS), id: zUuidV7, label: z.string().min(1).max(60) })
   .strict();
 
-/** Parts that arrived, and the receipt (or later, transfer) that brought them. */
+/** Parts that arrived, and the receipt or transfer that brought them. */
 export const stockReceivedPayload = z
   .object({ itemId: zUuidV7, qty: zQty, source: zStockSource })
   .strict();
+
+const zSinkLabel = z.string().min(1).max(60);
+
+/**
+ * Where parts went. A transfer's names the store it went to: the receiving store pulls these
+ * movements too, so what it may receive is what actually left the sender's stock.
+ */
+export const zStockSink = z.discriminatedUnion('kind', [
+  z
+    .object({ kind: z.literal('transfer'), id: zUuidV7, label: zSinkLabel, toStoreId: zUuidV7 })
+    .strict(),
+  z.object({ kind: z.literal('transfer_settlement'), id: zUuidV7, label: zSinkLabel }).strict(),
+]);
+
+/** Parts that left the store, and the transfer (or settlement) that took them. */
+export const stockSentPayload = z.object({ itemId: zUuidV7, qty: zQty, sink: zStockSink }).strict();
 
 /**
  * The op declarations. Rules that check a part's use, or where received parts came from, need the
@@ -201,11 +221,27 @@ export function inventoryOperations(
       payload: stockReceivedPayload,
       reversal: 'Corrected by a count, or later by a return to the supplier.',
       apply: stockReceivedApplier,
-      rule: stockReceivedRule(sources),
+      rule: stockReceivedRule({ ...sources, ...TRANSFER_STOCK_SOURCES }),
       permission: INVENTORY_PERMISSION.receive,
       // Staff see stock arrive; what it cost travels apart, to owners only.
       read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
+    [INVENTORY_OP.stockSent]: {
+      schemaVersion: 1,
+      payload: stockSentPayload,
+      otherStore: (payload) => {
+        const { sink } = payload as z.infer<typeof stockSentPayload>;
+        return sink.kind === 'transfer' ? sink.toStoreId : null;
+      },
+      reversal:
+        'Brought back by inventory.stock_received from the transfer (a cancel or a settlement).',
+      apply: stockSentApplier,
+      rule: stockSentRule,
+      permission: INVENTORY_PERMISSION.transfer,
+      read: INVENTORY_PERMISSION.read,
+      entityType: INVENTORY_MOVEMENT_ENTITY,
+    },
+    ...TRANSFER_OPERATIONS,
   };
 }

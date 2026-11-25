@@ -13,6 +13,7 @@ import type { XenditPort, XenditQrPayment } from '../../src/qris/xendit.js';
 import { XenditRefusal } from '../../src/qris/xendit.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   seedDevice,
@@ -215,17 +216,21 @@ afterEach(async () => {
   await world?.h.close();
 });
 
-function call(
+async function call(
   method: string,
   path: string,
-  options: { token?: string; as?: string; body?: unknown } = {},
+  options: { token?: string; as?: string; body?: unknown; proven?: boolean } = {},
 ): Promise<Response> {
+  const token = options.token ?? world.device;
   return Promise.resolve(
     world.h.app.request(`${BASE}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${options.token ?? world.device}`,
-        'X-Acting-User': options.as ?? world.cashierId,
+        Authorization: `Bearer ${token}`,
+        // The counter PC is shared: the server checked this person's PIN there.
+        ...(options.proven === false
+          ? { 'X-Acting-User': options.as ?? world.cashierId }
+          : await asPerson(world.h, token, options.as ?? world.cashierId)),
         ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
@@ -331,7 +336,7 @@ describe('connecting a QRIS account', () => {
       ['GET', '/v1/money/qris/accounts'],
       ['GET', `/v1/money/qris/charges/${stranger}`],
     ] as const) {
-      const response = await call(method, path, { as: stranger });
+      const response = await call(method, path, { as: stranger, proven: false });
       expect(response.status).toBe(403);
       expect(await errorCode(response)).toBe('ACTING_USER_INVALID');
     }

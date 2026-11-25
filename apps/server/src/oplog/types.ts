@@ -51,6 +51,11 @@ export interface OpRegistry {
    */
   entityTypeOf(type: string): string | undefined;
   /**
+   * The second store an accepted op of this type also reaches (`OperationDeclaration.otherStore`),
+   * read from its already validated payload; null when the type reaches only its own store.
+   */
+  otherStoreOf(type: string, payload: unknown): string | null;
+  /**
    * Run the op type's declared rule (core module/op-rules.ts) against the server's records. Throws
    * the rule's DomainError when the op must not be accepted. The module registry's own entry point,
    * so the server runs exactly the rule the device ran before saving.

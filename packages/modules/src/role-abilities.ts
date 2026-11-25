@@ -81,12 +81,16 @@ export const ROLE_ABILITY_GROUPS = [
       { id: 'stockCount', permissionIds: [I.count], requires: ['stockView'] },
       { id: 'stockCorrect', permissionIds: [I.correctUse], requires: ['stockView'] },
       { id: 'stockManage', permissionIds: [I.manageItems], requires: ['stockView'] },
-      // "Belanja sparepart": suppliers, orders and receiving what arrives into stock.
+      // Counting what arrived into stock: a supplier's delivery or another store's transfer.
+      { id: 'stockReceive', permissionIds: [I.receive], requires: ['stockView'] },
+      // "Belanja sparepart": suppliers, orders, and receiving what they deliver.
       {
         id: 'stockBuy',
-        permissionIds: [PURCHASING_PERMISSION.buy, I.receive],
-        requires: ['stockView'],
+        permissionIds: [PURCHASING_PERMISSION.buy],
+        requires: ['stockReceive'],
       },
+      // "Kirim sparepart antar toko": send to another store, and cancel a send (its parts come back).
+      { id: 'stockTransfer', permissionIds: [I.transfer], requires: ['stockReceive'] },
     ],
   },
   {
@@ -142,6 +146,8 @@ export const PRESET_ROLE_ABILITIES = {
     'stockUse',
     'stockCount',
     'stockCorrect',
+    'stockReceive',
+    'stockTransfer',
     'moneyView',
     'moneyReceive',
     'moneyCash',
@@ -191,6 +197,8 @@ export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.deviceRevoke,
   AUTH_PERMISSION.deviceRead,
   AUTH_PERMISSION.auditView,
+  // Writing off parts a transfer never delivered closes a shortfall (owner decision 2026-11-25).
+  INVENTORY_PERMISSION.settleTransfer,
 ];
 
 const BY_ID = new Map(ROLE_ABILITIES.map((ability) => [ability.id, ability]));

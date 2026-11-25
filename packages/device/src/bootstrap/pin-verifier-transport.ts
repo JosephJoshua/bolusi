@@ -9,6 +9,7 @@
 // expects. The queue treats a RETURNED result as terminal (drops the item) and a THROWN error as a
 // transport failure (keeps it queued for the next contact); so a 200 (`applied` true OR false — the
 // §5.3 greatest-`asOf` answer) returns, and any non-2xx / network fault throws to retry later.
+import { PERSON_SESSION_HEADER } from '@bolusi/schemas';
 import type { PinVerifier, PinVerifierUploadPort, PinVerifierUploadResult } from '@bolusi/core';
 
 export interface PinVerifierTransportConfig {
@@ -16,6 +17,12 @@ export interface PinVerifierTransportConfig {
   readonly baseUrl: string;
   /** The `bdt_`-prefixed device token (api/02-auth §3/§8), read at call time — never cached here. */
   readonly deviceToken: () => Promise<string | null>;
+  /**
+   * The signed-in person's session, which the server opened after checking their PIN (device
+   * person-access.ts `sessionFor`): a shared device must send it to act as them. Null when there is
+   * none; the server then takes nobody it cannot prove (it still takes a personal phone's person).
+   */
+  readonly personSession?: (actingUserId: string) => Promise<string | null>;
   /** Injected for tests; defaults to the global. */
   readonly fetchImpl?: typeof fetch;
 }
@@ -33,6 +40,7 @@ export function createFetchPinVerifierUpload(
       actingUserId: string,
     ): Promise<PinVerifierUploadResult> {
       const token = await config.deviceToken();
+      const proof = (await config.personSession?.(actingUserId)) ?? null;
       if (token === null) {
         // Fail closed: §5.4 requires the device bearer, and an anonymous POST earns a 401. Throwing
         // keeps the item queued (the token appears on next enroll/refresh) rather than dropping it.
@@ -49,6 +57,7 @@ export function createFetchPinVerifierUpload(
           // `actingUserId`: the server checks THAT user for `auth.user_reset_pin` before applying a
           // verifier to another user. Sending the target here on a reset would bypass that check (186b-2).
           'X-Acting-User': actingUserId,
+          ...(proof === null ? {} : { [PERSON_SESSION_HEADER]: proof }),
         },
         // The exact §5.4 body — strict on the server (an unknown key rejects), so send ONLY these two.
         body: JSON.stringify({ verifierRef, verifier }),

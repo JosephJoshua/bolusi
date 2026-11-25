@@ -1,6 +1,7 @@
 // POST /v1/push/tokens — the registration endpoint (api/04-push §2). Real PG16 (the push_tokens
 // table + its RLS), the real production createApp, an in-process app.fetch, and the FakeClock for the
 // daily rate window. Auth (bearer + X-Acting-User) is the real middleware chain.
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
 import { readError } from '../../helpers/http.js';
@@ -28,6 +29,24 @@ async function makeActingUsable(ctx: DeviceContext): Promise<void> {
     .values({ tenantId: ctx.tenantId, userId: ctx.userId, storeId: ctx.storeId })
     .onConflict((oc) => oc.doNothing())
     .execute();
+}
+
+/** A live person session for the device's user, as the server mints one after a PIN check. */
+async function personSession(ctx: DeviceContext): Promise<string> {
+  const token = `bps_${ctx.deviceId.replace(/-/g, '')}push`;
+  await h.db
+    .insertInto('personSessions')
+    .values({
+      id: ctx.deviceId,
+      tenantId: ctx.tenantId,
+      deviceId: ctx.deviceId,
+      userId: ctx.userId,
+      tokenHash: createHash('sha256').update(token).digest('hex'),
+      createdAt: 0n,
+      expiresAt: BigInt(Number.MAX_SAFE_INTEGER),
+    })
+    .execute();
+  return token;
 }
 
 async function tokenRow(deviceId: string) {
@@ -73,11 +92,22 @@ test('X-Acting-User stamps user_id; a later authed registration fills a previous
   );
   expect((await tokenRow(ctx.deviceId))?.userId).toBeNull();
 
-  // Then with a session → the previously-null user_id is filled.
-  const res = await h.app.request(
+  // A person the shared device cannot prove registers the token for nobody: a copied device token
+  // must not route someone's alerts to itself.
+  const unproven = await h.app.request(
     registerReq(
       { expoPushToken: expoToken('a2'), deviceId: ctx.deviceId },
       { auth: ctx.auth, actingUser: ctx.userId },
+    ),
+  );
+  expect(unproven.status).toBe(200);
+  expect((await tokenRow(ctx.deviceId))?.userId).toBeNull();
+
+  // Then with their person session (the server checked their PIN) → the user_id is filled.
+  const res = await h.app.request(
+    registerReq(
+      { expoPushToken: expoToken('a3'), deviceId: ctx.deviceId },
+      { auth: ctx.auth, actingUser: ctx.userId, personSession: await personSession(ctx) },
     ),
   );
   expect(res.status).toBe(200);

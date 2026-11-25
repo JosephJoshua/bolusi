@@ -6,14 +6,15 @@ import {
   AppShell,
   Banner,
   Button,
+  color,
   ErrorState,
   LoadingState,
-  UnauthorizedState,
-  color,
+  numeric,
   radius,
   space,
-  type,
   Text,
+  type,
+  UnauthorizedState,
 } from '@bolusi/ui';
 import type { StorageBand } from '@bolusi/core';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -301,6 +302,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: color.danger,
   },
-  timerText: { ...type.bodySm, color: color.onPrimary, fontVariant: ['tabular-nums'] },
+  timerText: { ...type.bodySm, color: color.onPrimary, ...numeric },
   reviewActions: { gap: space.sm },
 });

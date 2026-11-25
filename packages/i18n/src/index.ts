@@ -37,6 +37,7 @@ export {
   formatDateTime,
   formatDuration,
   formatMoney,
+  formatSignedMoney,
   formatPhone,
   formatNumber,
   keepNumbersWhole,

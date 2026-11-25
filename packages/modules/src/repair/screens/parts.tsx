@@ -3,18 +3,19 @@
 import { formatMoney } from '@bolusi/i18n';
 import {
   Chip,
+  color,
   Fact,
   FactGrid,
   Icon,
+  type IconName,
   LoadingState,
-  RollingText,
-  color,
+  numeric,
   radius,
+  RollingText,
   size,
   space,
-  type,
-  type IconName,
   Text,
+  type,
 } from '@bolusi/ui';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
@@ -382,7 +383,7 @@ const styles = StyleSheet.create({
   billedText: { ...type.bodySm, fontWeight: '600', color: color.text },
   balanceLabel: { ...type.bodyBold, color: color.text },
   balanceValue: { ...type.heading, color: color.text },
-  amount: { fontVariant: ['tabular-nums'] },
+  amount: { ...numeric },
   thumb: {
     width: '100%',
     aspectRatio: 1,

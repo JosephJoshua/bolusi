@@ -9,6 +9,7 @@ import { uuidv7 } from '../../src/uuidv7.js';
 import {
   enroll,
   login,
+  asPerson,
   makeIdentityHarness,
   provision,
   roleIdOf,
@@ -90,7 +91,10 @@ test('a cashier cannot burn the tenant user-management quota with refused calls'
   for (let i = 0; i <= IDENTITY_LIMITS.usersPerTenantDay.limit; i += 1) {
     const r = await h.app.request(`${BASE}/v1/users/${p.ownerUserId}/deactivate`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${device.token}`, 'X-Acting-User': cashier },
+      headers: {
+        Authorization: `Bearer ${device.token}`,
+        ...(await asPerson(h, device.token, cashier)),
+      },
     });
     expect(r.status).toBe(403);
   }

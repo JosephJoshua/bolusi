@@ -102,6 +102,8 @@ export function useCancelTicket(
     room: cancelRoom(limit, standard, facts.discounted),
     title: tn(holds ? 'repair.cancel.title' : 'repair.approval.askCancel'),
     submitLabel: asking ? ta('approvals.action.ask') : tn('repair.action.cancel'),
+    /** Nothing is billed and nothing goes back, which the consequence already says. */
+    free: charged === 0 && refund === 0,
     /** What cancelling does to the customer's money. */
     consequence:
       refund > 0
