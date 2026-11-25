@@ -100,6 +100,14 @@ export function keepNumbersWhole(text: string): string {
   );
 }
 
+/**
+ * A code written on screen (an order number such as `PO-W4M-0002`) that never wraps inside
+ * itself: its hyphens become non-breaking ones. Screen text only, as for `keepNumbersWhole`.
+ */
+export function keepCodeWhole(code: string): string {
+  return code.replace(/-/g, '\u2011');
+}
+
 /** Counts and quantities, never money — active-locale grouping (§5.2). */
 export function formatNumber(value: number): string {
   return numberFormatFor(getLocale()).format(value).replace(NBSP, ' ');

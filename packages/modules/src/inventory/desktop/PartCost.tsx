@@ -1,7 +1,7 @@
 // What a part costs this store, on the counter PC, for people who may see buy prices: the average
 // cost per piece and what the latest deliveries cost. Read apart from the part (`itemCost`), as on
 // the phone, so on a PC holding no costs only this section says it needs internet.
-import { formatDate, formatMoney } from '@bolusi/i18n';
+import { formatDate, formatMoney, keepCodeWhole } from '@bolusi/i18n';
 import { Section } from '@bolusi/ui-web';
 import { useState } from 'react';
 
@@ -63,7 +63,10 @@ function CostBody({ cost }: { readonly cost: ItemCostRow }): React.JSX.Element {
                 <div className="text-body text-text">
                   {receipt.label === null
                     ? ti('inventory.cost.receiptNoLabel', { qty: receipt.qty })
-                    : ti('inventory.cost.receipt', { qty: receipt.qty, label: receipt.label })}
+                    : ti('inventory.cost.receipt', {
+                        qty: receipt.qty,
+                        label: keepCodeWhole(receipt.label),
+                      })}
                 </div>
                 <div className="tabular text-small text-text-muted">{formatDate(receipt.at)}</div>
               </div>

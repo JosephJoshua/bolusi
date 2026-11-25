@@ -4,7 +4,7 @@
  * part, so on a store device holding no costs the part still opens and only this section says it
  * needs internet. Never "Rp 0" for a price nobody has typed.
  */
-import { formatDate, formatMoney } from '@bolusi/i18n';
+import { formatDate, formatMoney, keepCodeWhole } from '@bolusi/i18n';
 import { border, color, space, type, Text } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -80,7 +80,10 @@ function CostBody({
                 <Text style={styles.rowTitle}>
                   {receipt.label === null
                     ? ti('inventory.cost.receiptNoLabel', { qty: receipt.qty })
-                    : ti('inventory.cost.receipt', { qty: receipt.qty, label: receipt.label })}
+                    : ti('inventory.cost.receipt', {
+                        qty: receipt.qty,
+                        label: keepCodeWhole(receipt.label),
+                      })}
                 </Text>
                 <Text style={styles.meta}>{formatDate(receipt.at)}</Text>
               </View>

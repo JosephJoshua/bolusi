@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatPhone, keepNumbersWhole } from '../src/index.js';
+import { formatPhone, keepCodeWhole, keepNumbersWhole } from '../src/index.js';
 
 describe('formatPhone', () => {
   it('groups Indonesian mobile numbers in fours', () => {
@@ -34,5 +34,11 @@ describe('keepNumbersWhole', () => {
       '0812\u20113456\u20117890 / 0813\u00A01111 (istri)',
     );
     expect(keepNumbersWhole('Kantor - 0951')).toBe('Kantor - 0951');
+  });
+});
+
+describe('keepCodeWhole', () => {
+  it('makes every hyphen in a code non-breaking', () => {
+    expect(keepCodeWhole('PO-W4M-0002')).toBe('PO‑W4M‑0002');
   });
 });

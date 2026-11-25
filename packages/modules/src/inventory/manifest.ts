@@ -94,7 +94,7 @@ export const INVENTORY_PERMISSIONS = {
     scope: 'store',
     isDangerous: false,
     description:
-      "Can see what parts cost to buy and the store's average cost of each, and fix a buy price.",
+      "Can see what parts cost to buy and the store's average cost of each, and, with the receive permission, fix a buy price.",
   },
 } as const;
 

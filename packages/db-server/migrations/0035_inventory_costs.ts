@@ -15,7 +15,7 @@ const PERMISSION = {
   module: 'inventory',
   action: 'read_cost',
   description:
-    "Can see what parts cost to buy and the store's average cost of each, and fix a buy price.",
+    "Can see what parts cost to buy and the store's average cost of each, and, with the receive permission, fix a buy price.",
 } as const;
 
 const OWNER_ROLES = ['main_owner', 'store_owner'] as const;

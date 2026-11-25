@@ -39,6 +39,7 @@ export {
   formatMoney,
   formatPhone,
   formatNumber,
+  keepCodeWhole,
   keepNumbersWhole,
   formatRelative,
   formatTime,
