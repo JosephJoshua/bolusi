@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
 import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
 import { registerRepairCatalog, tn } from '../src/repair/i18n.js';
+import { openStepStale, ticketMove, ticketPageActions } from '../src/repair/ticket-view.js';
 
 import {
   arrangeTicketActions,
@@ -430,6 +431,50 @@ describe('ticket actions', () => {
       alternative: null,
       more: ['reopen'],
     });
+  });
+});
+
+describe("a servisan's page", () => {
+  test('every action offered opens a step that is not stale yet, or runs in place', async () => {
+    h = await openRepairHarness(4210);
+    const states: readonly State[] = [
+      'received',
+      'in_repair',
+      'proposed',
+      'waiting_for_parts',
+      'repaired',
+      'cancelled',
+      'returned',
+    ];
+    const offered = new Set<string>();
+    for (const state of states) {
+      const ticketId = await ticketIn(h, state);
+      for (const userId of [h.technicianId, h.cashierId, h.storeOwnerId]) {
+        const ticket = (await h.query('getTicket', { ticketId }, userId)).rows[0]!;
+        const can = abilitiesOf(h, userId);
+        const { actions } = ticketPageActions(ticket, can, {
+          userId,
+          now: Date.now(),
+          statusSite: null,
+          offersClaim: false,
+        });
+        for (const action of actions) {
+          offered.add(action);
+          const move = ticketMove(action, ticket);
+          expect(move, `${state} ${action}`).not.toBeNull();
+          if (move?.kind === 'step') {
+            expect(
+              openStepStale(move.step, ticket, can, userId, Date.now()),
+              `${state} ${action}`,
+            ).toBeNull();
+          }
+        }
+      }
+    }
+    // Every kind of move was walked: a step, a run in place, and a price decision.
+    expect([...offered]).toEqual(
+      expect.arrayContaining(['start', 'claim', 'decidePrice', 'cancel']),
+    );
   });
 });
 

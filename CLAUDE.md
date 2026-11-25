@@ -19,6 +19,10 @@ Before any UI or copy work, read `docs/design-guide.md` and meet it.
   Concurrent threads need separate branches/worktrees. Coordinate shared migrations.
 - Code, migrations, and executed tests establish what exists. Project memory
   supplies context, not proof that work landed or verification passed.
+- When a mistake can recur, make it impossible (types, `defineModule`, file layout)
+  or add a `bolusi/*` lint rule in `tooling/eslint`. A comment or note stops nobody.
+  Comments say what the code does now; lint refuses deferral notes, so fix the gap
+  or report it.
 - Add regression tests for bugs and meaningful tests for new behavior. Run checks
   appropriate to the change; report actual results and anything not verified.
 - Preserve tenant isolation, authorization, operation integrity, offline recovery,

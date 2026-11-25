@@ -23,10 +23,8 @@ import {
   useRevealOnMount,
   ValueText,
 } from '@bolusi/ui';
-import { useState } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { useActionRunner, useSettledValue } from '../../screen-kit/index.js';
 import {
   FlowScreen,
   QueryView,
@@ -37,12 +35,13 @@ import { MAX_MOVEMENT_QTY } from '../constants.js';
 import { stockText } from '../labels.js';
 import { ti } from '../i18n.js';
 import type { ItemRow, UsedPartRow } from '../queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
+import { useInventoryRuntime } from '../runtime.js';
 import {
   moreHint,
   overStockHint,
-  partForCode,
-  useTakeChoices,
+  usePutBack,
+  useTakePart,
+  useUsedParts,
   type PartUse,
 } from '../take-part.js';
 
@@ -70,14 +69,8 @@ export function UsedPartsSection({
   onPutBack,
   testID = 'inventory.used',
 }: UsedPartsSectionProps): React.JSX.Element | null {
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const query = useInventoryQuery(
-    async (rt) => (await rt.query('partsForUse', { useKind: use.kind, useId: use.id })).rows[0],
-    `used:${use.kind}:${use.id}:${String(reloadNonce)}`,
-  );
-  // A put-back to zero leaves the part's history, not a row reading "0 dipakai".
-  const parts = query.status === 'ready' ? (query.data?.parts ?? []).filter((p) => p.out > 0) : [];
-  if (query.status === 'ready' && parts.length === 0 && !takeable) return null;
+  const { query, parts, hidden, retry } = useUsedParts(use, takeable);
+  if (hidden) return null;
   return (
     <Section
       title={ti('inventory.use.title')}
@@ -93,12 +86,7 @@ export function UsedPartsSection({
       }
       testID={testID}
     >
-      <QueryView
-        query={query}
-        onBack={() => undefined}
-        onRetry={() => setReloadNonce((n) => n + 1)}
-        testID={testID}
-      >
+      <QueryView query={query} onBack={() => undefined} onRetry={retry} testID={testID}>
         {() =>
           parts.length === 0 ? (
             <Text style={styles.muted}>{ti('inventory.use.none')}</Text>
@@ -158,15 +146,20 @@ export function TakePartStep({
   testID = 'inventory.take',
 }: TakePartStepProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const [text, setText] = useState('');
-  const [picked, setPicked] = useState<ItemRow | null>(null);
-  const [qty, setQty] = useState(1);
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const typed = text.trim();
-  const settled = useSettledValue(typed);
-  const searchText = typed === '' ? '' : settled;
-  const query = useTakeChoices(searchText, device, reloadNonce);
+  const {
+    text,
+    setText,
+    searchText,
+    query,
+    retry,
+    picked,
+    pick,
+    qty,
+    setQty,
+    pickCode,
+    take,
+    runner,
+  } = useTakePart(use, device, onDone);
 
   // How many is asked right under the picked row, where the finger is: a stepper at the top of a
   // long list is out of sight, and the part would be taken as one. The row already says its stock.
@@ -195,10 +188,7 @@ export function TakePartStep({
           accessibilityRole="radio"
           accessibilityState={{ selected }}
           accessibilityLabel={`${row.name}, ${ti('inventory.list.stockCount', { count: stockText(row.onHand) })}`}
-          onPress={() => {
-            setPicked(row);
-            setQty(1);
-          }}
+          onPress={() => pick(row)}
           style={({ pressed }) => [
             styles.choice,
             selected ? styles.choiceSelected : null,
@@ -233,20 +223,7 @@ export function TakePartStep({
     const code = (await runtime.scanCode?.())?.trim() ?? '';
     if (code === '') return;
     setText(code);
-    const part = await partForCode(runtime, code);
-    if (part !== null) {
-      setPicked(part);
-      setQty(1);
-    }
-  };
-
-  const take = (): void => {
-    if (picked === null) return;
-    void runner
-      .run(() => runtime.run('takePart', { itemId: picked.id, qty, use }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
+    await pickCode(code);
   };
 
   return (
@@ -288,12 +265,7 @@ export function TakePartStep({
           />
         </View>
       )}
-      <QueryView
-        query={query}
-        onBack={onCancel}
-        onRetry={() => setReloadNonce((n) => n + 1)}
-        testID={testID}
-      >
+      <QueryView query={query} onBack={onCancel} onRetry={retry} testID={testID}>
         {({ fitting, rest }) =>
           fitting.length === 0 && rest.length === 0 ? (
             <Text style={[styles.muted, styles.empty]}>
@@ -362,16 +334,7 @@ export function PutBackStep({
   onCancel,
   testID = 'inventory.putBack',
 }: PutBackStepProps): React.JSX.Element {
-  const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const [qty, setQty] = useState(1);
-  const putBack = (): void => {
-    void runner
-      .run(() => runtime.run('putBackPart', { itemId: part.itemId, qty, use }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { qty, setQty, putBack, runner } = usePutBack(use, part, onDone);
   return (
     <FlowScreen
       chrome={chrome}

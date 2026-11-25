@@ -9,18 +9,17 @@ import { Button, SearchField, Section, OverflowText } from '@bolusi/ui-web';
 import { Check, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 
-import { useActionRunner, useSettledValue } from '../../screen-kit/index.js';
 import { QueryPanel, TaskDialog } from '../../screen-kit/desktop/index.js';
 import { MAX_MOVEMENT_QTY } from '../constants.js';
 import { ti } from '../i18n.js';
 import { stockText } from '../labels.js';
 import type { ItemRow, UsedPartRow } from '../queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 import {
   moreHint,
   overStockHint,
-  partForCode,
-  useTakeChoices,
+  usePutBack,
+  useTakePart,
+  useUsedParts,
   type PartUse,
 } from '../take-part.js';
 import { discardCopy } from './dialogs.js';
@@ -55,15 +54,9 @@ export function UsedPartsSection({
   onDone,
   testId = 'inventory.desk.used',
 }: UsedPartsSectionProps): React.JSX.Element | null {
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [task, setTask] = useState<Task>({ kind: 'none' });
-  const query = useInventoryQuery(
-    async (rt) => (await rt.query('partsForUse', { useKind: use.kind, useId: use.id })).rows[0],
-    `desk.used:${use.kind}:${use.id}:${String(reloadNonce)}`,
-  );
-  // A put-back to zero leaves the part's history, not a row reading "0 diambil".
-  const parts = query.status === 'ready' ? (query.data?.parts ?? []).filter((p) => p.out > 0) : [];
-  if (query.status === 'ready' && parts.length === 0 && !takeable) return null;
+  const { query, parts, hidden, retry } = useUsedParts(use, takeable);
+  if (hidden) return null;
   const finish = (message: string): void => {
     setTask({ kind: 'none' });
     onDone(message);
@@ -86,7 +79,7 @@ export function UsedPartsSection({
       }
       testId={testId}
     >
-      <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
+      <QueryPanel query={query} onRetry={retry}>
         {() =>
           parts.length === 0 ? (
             <p className="text-body text-text-muted">{ti('inventory.use.none')}</p>
@@ -157,36 +150,22 @@ function TakePartDialog({
   readonly onClose: () => void;
   readonly onDone: () => void;
 }): React.JSX.Element {
-  const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const [text, setText] = useState('');
-  const [picked, setPicked] = useState<ItemRow | null>(null);
-  const [qty, setQty] = useState(1);
-  const [reloadNonce, setReloadNonce] = useState(0);
+  const {
+    text,
+    setText,
+    searchText,
+    query,
+    retry,
+    picked,
+    pick,
+    qty,
+    setQty,
+    pickCode,
+    take,
+    runner,
+  } = useTakePart(use, device, onDone);
   const typed = text.trim();
-  const settled = useSettledValue(typed);
-  const searchText = typed === '' ? '' : settled;
-  const query = useTakeChoices(searchText, device, reloadNonce);
   const testId = 'inventory.desk.take';
-
-  const pick = (row: ItemRow): void => {
-    setPicked(row);
-    setQty(1);
-  };
-  /** A scanned code picks its part when it names exactly one; otherwise it stays a search. */
-  const pickCode = async (): Promise<void> => {
-    if (typed === '') return;
-    const part = await partForCode(runtime, typed);
-    if (part !== null) pick(part);
-  };
-  const take = (): void => {
-    if (picked === null) return;
-    void runner
-      .run(() => runtime.run('takePart', { itemId: picked.id, qty, use }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   const choice = (row: ItemRow): React.JSX.Element => {
     const selected = picked?.id === row.id;
@@ -249,7 +228,7 @@ function TakePartDialog({
         onKeyDown={(event) => {
           if (event.key === 'Enter' && event.target instanceof HTMLInputElement && typed !== '') {
             event.preventDefault();
-            void pickCode();
+            void pickCode(typed);
           }
         }}
       >
@@ -269,7 +248,7 @@ function TakePartDialog({
         role="radiogroup"
         aria-label={ti('inventory.use.title')}
       >
-        <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
+        <QueryPanel query={query} onRetry={retry}>
           {({ fitting, rest }) =>
             fitting.length === 0 && rest.length === 0 ? (
               <p className="py-6 text-center text-body text-text-muted">
@@ -348,16 +327,7 @@ function PutBackDialog({
   readonly onClose: () => void;
   readonly onDone: () => void;
 }): React.JSX.Element {
-  const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const [qty, setQty] = useState(1);
-  const putBack = (): void => {
-    void runner
-      .run(() => runtime.run('putBackPart', { itemId: part.itemId, qty, use }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { qty, setQty, putBack, runner } = usePutBack(use, part, onDone);
   return (
     <TaskDialog
       title={ti('inventory.use.putBackTitle')}

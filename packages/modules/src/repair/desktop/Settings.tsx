@@ -88,21 +88,6 @@ const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
   hidesAll: 'repair.options.problem.hidesAll',
 };
 
-/** Which repair settings pages this person may open here; the core still decides each save. */
-export function repairSettingsAccess(abilities: RepairAbilities): {
-  readonly intakeOptions: boolean;
-  readonly cancelFees: boolean;
-  readonly uncollected: boolean;
-  readonly printSettings: boolean;
-} {
-  return {
-    intakeOptions: abilities.manageIntakeOptions || abilities.hideIntakeOptions,
-    cancelFees: abilities.setCancelFees,
-    uncollected: abilities.setUncollectedDays,
-    printSettings: abilities.setPrintSettings,
-  };
-}
-
 /** Reports `dirty` to Settings as it changes, and clean again when the page goes. */
 function useReportDirty(dirty: boolean, onDirtyChange: RepairSettingsProps['onDirtyChange']): void {
   const report = useRef(onDirtyChange);

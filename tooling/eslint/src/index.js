@@ -30,6 +30,9 @@ export default tseslint.config(
       'bolusi/no-legacy-upload-api': 'error',
       'bolusi/boundaries': 'error',
       'bolusi/permission-module-prefix': 'error',
+      'bolusi/react-only-in-tsx': 'error',
+      'bolusi/desktop-processes': 'error',
+      'bolusi/no-excuse-comments': 'error',
       'bolusi/runtime-emission-allowlist': [
         'error',
         {
@@ -73,6 +76,13 @@ export default tseslint.config(
     ],
     rules: {
       'bolusi/no-clock-in-handlers': 'error',
+    },
+  },
+  {
+    name: 'bolusi/refusals-in-rules',
+    files: ['packages/modules/src/**/commands.ts', 'packages/core/src/**/commands.ts'],
+    rules: {
+      'bolusi/refusals-in-rules': 'error',
     },
   },
   {

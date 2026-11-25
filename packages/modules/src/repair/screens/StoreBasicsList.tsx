@@ -1,5 +1,5 @@
 /**
- * StoreBasicsList — what the store still lacks (store-basics.ts), each row opening the setting that
+ * StoreBasicsList — what the store still lacks (store-basics.tsx), each row opening the setting that
  * fills it. Nothing when nothing is missing or it is still loading.
  */
 import { Icon, ListRow, color, size, type IconName } from '@bolusi/ui';

@@ -41,7 +41,7 @@ import { useKasDay } from '../kas-day.js';
 import { turnedDownLines, useAskedAbout, useOnVoidDecided, useVoidRequests } from '../void-ask.js';
 import { approvalByLine } from '../../approvals/copy.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
-import { targetOf, type MoneyTarget } from '../refund.js';
+import { targetOf, type MoneyTarget } from '../kas.js';
 import { useMoneyRuntime } from '../runtime.js';
 
 import {

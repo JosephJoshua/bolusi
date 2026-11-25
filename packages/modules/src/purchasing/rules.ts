@@ -30,22 +30,25 @@ type Rule = OpRule<PurchasingDatabase>;
 type Db = Parameters<Rule>[1]['db'];
 
 /** Every reason a purchasing change is refused, each with copy at `purchasing.refusal.<reason>`. */
-export const PURCHASING_REFUSALS = defineRefusals('purchasing', [
-  'alreadyRecorded',
-  'supplierNotFound',
-  'orderNotFound',
-  'itemNotFound',
-  'notDraft',
-  'notOrdered',
-  'alreadyCancelled',
-  'notOnOrder',
-  'receiptMismatch',
-  'nothingToCancel',
-  'numberNotThisDevice',
-  'numberUsed',
-  // A command's own check: a draft names a part archived since it was written.
-  'partArchived',
-] as const);
+export const PURCHASING_REFUSALS = defineRefusals(
+  'purchasing',
+  [
+    'alreadyRecorded',
+    'supplierNotFound',
+    'orderNotFound',
+    'itemNotFound',
+    'notDraft',
+    'notOrdered',
+    'alreadyCancelled',
+    'notOnOrder',
+    'receiptMismatch',
+    'nothingToCancel',
+    'numberNotThisDevice',
+    'numberUsed',
+  ] as const,
+  // A draft names a part archived since it was written. The order itself stays valid.
+  ['partArchived'] as const,
+);
 const { refuse } = PURCHASING_REFUSALS;
 
 function payloadOf<T>(op: SignedOperation): T {

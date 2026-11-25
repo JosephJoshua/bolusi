@@ -18,12 +18,11 @@ export {
   FormFooter,
   SaveBar,
   IntakeListSettings,
-  repairSettingsAccess,
   SlipSettings,
   UncollectedSettings,
   type RepairSettingsProps,
 } from './Settings.js';
-export { repairAbilities } from '../flows.js';
+export { repairAbilities, repairSettingsAccess } from '../flows.js';
 export { INTAKE_LIST_KEY } from '../labels.js';
 export { INTAKE_OPTION_LISTS, type IntakeOptionList } from '../intake-options.js';
 export {

@@ -238,17 +238,11 @@ export async function refundHandler(
   const { kind, id } = input.document;
   const money = (await ctx.query(documentMoneyQuery, { kind, id })).rows[0]!;
   const credit = Math.max(0, -money.balance);
-  // What came in and still counts, less what already went back: on a debt nothing was paid.
-  const paid = Math.max(0, money.paid);
-  if (input.amount > paid) {
-    throw MONEY_REFUSALS.refuse('refundAbovePaid', {
-      code: 'VALIDATION_FAILED',
-      details: { field: 'amount', issue: `at most ${paid}` },
-    });
-  }
+  // Never lower the bill past what was paid: beyond that the refund's own rule refuses it.
+  const backed = Math.min(input.amount, Math.max(0, money.paid));
   const ops: OpDraft[] = [];
-  if (input.amount > credit && ctx.colleagueHasPermission(ctx.userId, MONEY_PERMISSION.refund)) {
-    ops.push(reduceChargeOp(ctx, input.document, input.amount - credit, input.reason));
+  if (backed > credit && ctx.colleagueHasPermission(ctx.userId, MONEY_PERMISSION.refund)) {
+    ops.push(reduceChargeOp(ctx, input.document, backed - credit, input.reason));
   }
   ops.push(
     refundOp(ctx, input.document, {
@@ -301,7 +295,7 @@ export async function moveCashHandler(
   if (movesOut(kind) && !blind) {
     const drawer = (await ctx.query(drawerForMoveQuery, { counts: 0 })).rows[0]!.expected;
     if (input.amount > drawer) {
-      throw MONEY_REFUSALS.refuse('moveAboveDrawer', {
+      throw MONEY_REFUSALS.refuseOnDevice('moveAboveDrawer', {
         code: 'VALIDATION_FAILED',
         details: { field: 'amount', issue: `at most ${Math.max(0, drawer)}` },
       });
