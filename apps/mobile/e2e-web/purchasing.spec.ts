@@ -34,7 +34,7 @@ test('an owner orders a part from a supplier and places it', async ({ page }) =>
 
   await tap(page, 'purchasing.orders.new');
   // Nothing to save until there is a supplier and a part.
-  await expect(page.getByText('Pilih supplier dan barangnya dulu.')).toBeVisible();
+  await expect(page.getByText('Pilih supplier dan barang terlebih dahulu.')).toBeVisible();
   await page.getByTestId('purchasing.form.supplier.sup-2').first().click();
   await tap(page, 'purchasing.form.addPart');
   await page.locator('[data-testid^="purchasing.pick.choice."]').first().click();
@@ -58,7 +58,7 @@ test('receiving what came moves the order on and says the stock grew', async ({ 
   await shoot(page, '03-receive');
   await page.getByText('Simpan', { exact: true }).last().click();
 
-  await expect(page.getByTestId('purchasing.order.notice')).toContainText('Stok sudah bertambah.');
+  await expect(page.getByTestId('purchasing.order.notice')).toContainText('stok bertambah.');
   await expect(page.getByTestId('purchasing.order.stage')).toContainText('Diterima');
   await expect(page.getByTestId('purchasing.order.receive')).toHaveCount(0);
   await shoot(page, '04-received');

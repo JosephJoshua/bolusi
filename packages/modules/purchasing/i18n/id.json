@@ -13,15 +13,15 @@
     "supplierNotFound": "Supplier ini tidak ada di daftar.",
     "orderNotFound": "Pesanan ini tidak ada di toko ini.",
     "itemNotFound": "Ada barang yang tidak ada di daftar.",
-    "notDraft": "Pesanan ini sudah dipesan, jadi tidak bisa diubah lagi.",
+    "notDraft": "Pesanan ini sudah dipesan, jadi tidak dapat diubah.",
     "notOrdered": "Pesanan ini belum dipesan atau sudah dibatalkan.",
     "alreadyCancelled": "Pesanan ini sudah dibatalkan.",
     "notOnOrder": "Ada barang yang tidak ada di pesanan ini.",
-    "receiptMismatch": "Jumlah barangnya tidak sesuai dengan yang diterima.",
-    "nothingToCancel": "Semua barang pesanan ini sudah datang, jadi tidak bisa dibatalkan.",
+    "receiptMismatch": "Jumlah barang tidak sesuai dengan yang diterima.",
+    "nothingToCancel": "Semua barang pesanan ini sudah datang, jadi tidak dapat dibatalkan.",
     "numberNotThisDevice": "Nomor pesanan ini bukan dari HP ini.",
     "numberUsed": "Nomor pesanan ini sudah dipakai.",
-    "partArchived": "Ada barang di pesanan ini yang sudah diarsipkan. Hapus dulu dari pesanannya."
+    "partArchived": "Ada barang di pesanan ini yang sudah diarsipkan. Hapus terlebih dahulu dari pesanan."
   },
   "stage": {
     "draft": "Draf",
@@ -32,7 +32,7 @@
     "cancelled": "Dibatalkan"
   },
   "message": {
-    "greeting": "Halo {supplier}, kami mau pesan:",
+    "greeting": "Halo {supplier}, kami ingin memesan:",
     "line": "{n}. {name}: {qty} pcs",
     "note": "Catatan: {note}",
     "thanks": "Terima kasih.",
@@ -63,7 +63,7 @@
     "receipts": "Riwayat terima",
     "created": "Dibuat {date}",
     "ordered": "Dipesan {date}",
-    "overHint": "Ada barang yang diterima lebih dari pesanan. Cek lalu koreksi stoknya.",
+    "overHint": "Ada barang yang diterima melebihi pesanan. Periksa, lalu koreksi stoknya.",
     "qty": "{qty} pcs",
     "receivedOf": "{received} dari {qty}",
     "receiptLine": "{name} ({qty})"
@@ -75,15 +75,15 @@
   },
   "discard": {
     "title": "Buang pesanan ini?",
-    "message": "Isian pesanan ini akan hilang.",
+    "message": "Data pesanan ini akan hilang.",
     "confirm": "Buang",
-    "keep": "Lanjut isi"
+    "keep": "Lanjutkan mengisi"
   },
   "form": {
     "newTitle": "Pesanan baru",
     "editTitle": "Ubah draf",
     "supplier": "Supplier",
-    "noSuppliers": "Belum ada supplier. Tambah dulu.",
+    "noSuppliers": "Belum ada supplier. Tambahkan terlebih dahulu.",
     "addPart": "Tambah barang",
     "noParts": "Belum ada barang.",
     "remove": "Hapus",
@@ -91,7 +91,7 @@
     "decrease": "Kurangi",
     "increase": "Tambah",
     "note": "Catatan untuk supplier",
-    "pickFirst": "Pilih supplier dan barangnya dulu."
+    "pickFirst": "Pilih supplier dan barang terlebih dahulu."
   },
   "pick": {
     "title": "Pilih barang",
@@ -100,7 +100,7 @@
     "scan": "Pindai",
     "empty": "Belum ada barang di daftar.",
     "noMatches": "Barang tidak ditemukan.",
-    "onOrder": "Sudah di pesanan, tap untuk tambah 1",
+    "onOrder": "Sudah di pesanan, ketuk untuk menambah 1",
     "stock": "Stok {count}"
   },
   "receive": {
@@ -111,7 +111,7 @@
     "orderedSoFar": "Dipesan {qty}, sudah datang {received}",
     "over": "Lebih {extra} dari pesanan.",
     "note": "Catatan",
-    "nothing": "Isi jumlah barang yang datang dulu.",
+    "nothing": "Isi jumlah barang yang datang terlebih dahulu.",
     "save": "Simpan"
   },
   "supplier": {
@@ -125,15 +125,15 @@
     "name": "Nama",
     "phone": "Nomor WhatsApp",
     "note": "Catatan",
-    "nameFirst": "Isi nama supplier dulu.",
+    "nameFirst": "Isi nama supplier terlebih dahulu.",
     "save": "Simpan",
     "archive": "Arsipkan",
-    "restore": "Aktifkan lagi"
+    "restore": "Aktifkan kembali"
   },
   "done": {
-    "placed": "Pesanan dipesan. Kirim ke supplier lewat WhatsApp.",
+    "placed": "Pesanan dipesan. Kirim ke supplier melalui WhatsApp.",
     "drafted": "Draf disimpan.",
-    "received": "Barang diterima. Stok sudah bertambah.",
+    "received": "Barang diterima dan stok bertambah.",
     "cancelled": "Pesanan dibatalkan.",
     "supplierSaved": "Supplier disimpan."
   },
@@ -146,10 +146,10 @@
     },
     "close": "Tutup pesanan",
     "copied": "Pesan disalin. Tempel di chat supplier.",
-    "copyFailed": "Pesan tidak bisa disalin.",
-    "addPart": "Cari barang untuk ditambah",
+    "copyFailed": "Pesan tidak dapat disalin.",
+    "addPart": "Cari barang untuk ditambahkan",
     "noPartMatches": "Barang tidak ditemukan.",
-    "emptyHint": "Pesanan ke supplier muncul di sini.",
+    "emptyHint": "Pesanan ke supplier akan muncul di sini.",
     "suppliersHint": "Supplier dipakai di semua toko."
   }
 }

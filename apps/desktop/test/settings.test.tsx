@@ -580,7 +580,7 @@ describe('repair settings on the PC', () => {
 
     // An empty new row is pointed out, not saved.
     fireEvent.click(byTestId('repair.desk.options.accessories.save'));
-    await screen.findByText('Isi namanya dulu.');
+    await screen.findByText('Isi nama terlebih dahulu.');
     expect(callsTo('repair.run')).toEqual([]);
 
     fireEvent.change(added, { target: { value: 'Tali gantungan' } });

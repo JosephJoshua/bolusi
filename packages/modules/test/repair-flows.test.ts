@@ -1038,10 +1038,10 @@ describe('downPaymentChangeLine', () => {
 
   test('a correction says whether it adds the difference or replaces what was taken', () => {
     expect(downPaymentChangeLine(200_000, 500_000, 'QRIS')).toBe(
-      'Tambahannya Rp 300.000 dicatat lewat QRIS. DP Rp 200.000 tetap seperti tercatat.',
+      'Tambahan Rp 300.000 dicatat melalui QRIS. DP Rp 200.000 tetap.',
     );
     expect(downPaymentChangeLine(200_000, 150_000, 'QRIS')).toBe(
-      'DP Rp 200.000 dibatalkan, lalu Rp 150.000 dicatat lewat QRIS.',
+      'DP Rp 200.000 dibatalkan, lalu Rp 150.000 dicatat melalui QRIS.',
     );
     expect(downPaymentChangeLine(200_000, 0, 'QRIS')).toBeNull();
     expect(downPaymentChangeLine(200_000, null, 'QRIS')).toBeNull();

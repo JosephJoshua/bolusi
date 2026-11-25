@@ -227,7 +227,7 @@ describe('the PC over the offline core', () => {
     renderApp();
     fireEvent.click(await screen.findByText('Yohanis Wenda'));
     await screen.findByText('2 perubahan ditolak server.');
-    fireEvent.click(screen.getByRole('button', { name: 'Cek status sinkron' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Periksa status sinkronisasi' }));
     const panel = await screen.findByTestId('desktop.sync.dialog');
     expect(panel.textContent).toContain('Ditolak server (2)');
     expect(panel.textContent).toContain('Perubahan ini tidak berlaku.');
