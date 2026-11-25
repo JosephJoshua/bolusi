@@ -179,7 +179,7 @@ export function PhotoViewer({
           <Icon name="close" size={size.iconInline} color={color.onPrimary} />
         </Pressable>
         <View style={styles.barTitle}>
-          <Text style={styles.label} numberOfLines={1} testID={`${testID}.label`}>
+          <Text style={styles.label} testID={`${testID}.label`}>
             {current?.label ?? ''}
           </Text>
           <Text style={styles.position} testID={`${testID}.position`}>

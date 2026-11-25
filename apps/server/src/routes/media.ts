@@ -19,6 +19,7 @@ import { assembleChunks, isAllowedMime, magicBytesMatch } from '../media/assembl
 import { LocalDiskBlobStore, mediaStorageKey, type BlobStore } from '../media/blob-store.js';
 import { MEDIA_CHUNK_RATE_PER_MINUTE, resolveMediaStorageDir } from '../media/config.js';
 import { renderMediaError } from '../media/errors.js';
+import { sweepAbandonedUploads } from '../media/sweep.js';
 import {
   MEDIA_CHUNK_SIZE,
   MEDIA_MAX_SIZE_BYTES,
@@ -198,6 +199,14 @@ export function createMediaRouter(deps: ServerDeps) {
           if (video !== (body.type === 'video')) return renderMediaError(c, 'MIME_UNSUPPORTED');
           const cap = video ? VIDEO_MAX_SIZE_BYTES : MEDIA_MAX_SIZE_BYTES;
           if (body.sizeBytes > cap) return renderMediaError(c, 'MEDIA_TOO_LARGE');
+
+          // Clear this tenant's abandoned uploads in a transaction of its own, so neither side's
+          // failure undoes the other. A failed sweep (a chunk racing in) is retried by the next init.
+          await deps
+            .forTenant(device.tenantId, (db) =>
+              sweepAbandonedUploads(db, device.tenantId, deps.now()),
+            )
+            .catch(() => undefined);
 
           return withTenant(c, async (db) => {
             const existing = await db

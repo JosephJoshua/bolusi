@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import idCatalog from '../repair/i18n/id.json' with { type: 'json' };
 import enCatalog from '../repair/i18n/en.json' with { type: 'json' };
 import { registerRepairCatalog, tn } from '../src/repair/i18n.js';
+import { openStepStale, ticketMove, ticketPageActions } from '../src/repair/ticket-view.js';
 
 import {
   arrangeTicketActions,
@@ -433,6 +434,50 @@ describe('ticket actions', () => {
   });
 });
 
+describe("a servisan's page", () => {
+  test('every action offered opens a step that is not stale yet, or runs in place', async () => {
+    h = await openRepairHarness(4210);
+    const states: readonly State[] = [
+      'received',
+      'in_repair',
+      'proposed',
+      'waiting_for_parts',
+      'repaired',
+      'cancelled',
+      'returned',
+    ];
+    const offered = new Set<string>();
+    for (const state of states) {
+      const ticketId = await ticketIn(h, state);
+      for (const userId of [h.technicianId, h.cashierId, h.storeOwnerId]) {
+        const ticket = (await h.query('getTicket', { ticketId }, userId)).rows[0]!;
+        const can = abilitiesOf(h, userId);
+        const { actions } = ticketPageActions(ticket, can, {
+          userId,
+          now: Date.now(),
+          statusSite: null,
+          offersClaim: false,
+        });
+        for (const action of actions) {
+          offered.add(action);
+          const move = ticketMove(action, ticket);
+          expect(move, `${state} ${action}`).not.toBeNull();
+          if (move?.kind === 'step') {
+            expect(
+              openStepStale(move.step, ticket, can, userId, Date.now()),
+              `${state} ${action}`,
+            ).toBeNull();
+          }
+        }
+      }
+    }
+    // Every kind of move was walked: a step, a run in place, and a price decision.
+    expect([...offered]).toEqual(
+      expect.arrayContaining(['start', 'claim', 'decidePrice', 'cancel']),
+    );
+  });
+});
+
 describe('down payment and slips', () => {
   test('recording a down payment is offered exactly where the command accepts it', async () => {
     h = await openRepairHarness(4109);
@@ -634,7 +679,7 @@ describe('board views', () => {
 describe('money and dates', () => {
   test('parseRupiah reads what people type', () => {
     expect(parseRupiah('650.000')).toBe(650_000);
-    expect(parseRupiah('Rp 1.250.000')).toBe(1_250_000);
+    expect(parseRupiah('Rp\u00A01.250.000')).toBe(1_250_000);
     expect(parseRupiah('')).toBeNull();
     expect(parseRupiah('abc')).toBeNull();
     // One past the most a line may carry is not an amount, so the field refuses the keystroke.
@@ -642,7 +687,7 @@ describe('money and dates', () => {
     expect(parseRupiah('10000000000000')).toBeNull();
     expect(acceptsRupiahText('10000000000000')).toBe(false);
     expect(acceptsRupiahText('')).toBe(true);
-    expect(acceptsRupiahText('Rp 5.000')).toBe(true);
+    expect(acceptsRupiahText('Rp\u00A05.000')).toBe(true);
   });
 
   test('a phone field keeps digits, spaces, dashes and a leading plus only', () => {
@@ -1007,7 +1052,7 @@ describe('downPaymentEntry', () => {
     expect(downPaymentEntry({ ...base, typed: 50_000, referenceMissing: false }).gap).toBeNull();
   });
 
-  test('a new down payment is at least Rp 1 and never above the total', () => {
+  test('a new down payment is at least Rp\u00A01 and never above the total', () => {
     expect(entry('record', null).gap).toBe('amount');
     expect(entry('record', 0).gap).toBe('amount');
     expect(entry('record', 150_000)).toEqual({
@@ -1038,10 +1083,10 @@ describe('downPaymentChangeLine', () => {
 
   test('a correction says whether it adds the difference or replaces what was taken', () => {
     expect(downPaymentChangeLine(200_000, 500_000, 'QRIS')).toBe(
-      'Tambahannya Rp 300.000 dicatat lewat QRIS. DP Rp 200.000 tetap seperti tercatat.',
+      'Tambahannya Rp\u00A0300.000 dicatat lewat QRIS. DP Rp\u00A0200.000 tetap seperti tercatat.',
     );
     expect(downPaymentChangeLine(200_000, 150_000, 'QRIS')).toBe(
-      'DP Rp 200.000 dibatalkan, lalu Rp 150.000 dicatat lewat QRIS.',
+      'DP Rp\u00A0200.000 dibatalkan, lalu Rp\u00A0150.000 dicatat lewat QRIS.',
     );
     expect(downPaymentChangeLine(200_000, 0, 'QRIS')).toBeNull();
     expect(downPaymentChangeLine(200_000, null, 'QRIS')).toBeNull();

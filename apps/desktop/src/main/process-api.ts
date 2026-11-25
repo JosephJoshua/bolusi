@@ -14,6 +14,8 @@ export const MAIN_CALLS = {
   secretGet: 'secrets.get',
   secretSet: 'secrets.set',
   secretDelete: 'secrets.delete',
+  /** A blocked PC is being erased: clear the window's cached pages, images and storage. */
+  clearWebData: 'web.clear',
 } as const;
 
 /** Events main pushes to the core. */
@@ -24,3 +26,6 @@ export const MAIN_EVENTS = {
   /** The app is quitting: close the database and exit. */
   shutdown: 'shutdown',
 } as const;
+
+/** The exit code a core uses to ask main to start it again, rather than to report a crash. */
+export const CORE_RESTART_EXIT = 75;

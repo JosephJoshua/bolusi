@@ -23,6 +23,7 @@ import {
   type ListState,
   type OperationSyncStatus,
   Text,
+  ValueText,
 } from '@bolusi/ui';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -501,20 +502,20 @@ const TicketRow = memo(function TicketRow({
       <FreshGlow id={row.id} testID={`${testID}.fresh`} />
       <View style={styles.rowBody}>
         <View style={repairStyles.row}>
-          <Text style={[styles.customer, repairStyles.rowText]} numberOfLines={1}>
+          <ValueText lines={1} style={[styles.customer, repairStyles.rowText]}>
             {row.customerName}
-          </Text>
+          </ValueText>
           <Text style={styles.amount} testID={`${testID}.amount`}>
             {formatMoney(amount)}
           </Text>
         </View>
-        <Text style={styles.details} numberOfLines={2}>
+        <ValueText lines={2} style={styles.details}>
           {details}
-        </Text>
+        </ValueText>
         {reason === null || reason === '' ? null : (
-          <Text style={styles.reason} numberOfLines={2} testID={`${testID}.reason`}>
+          <ValueText lines={2} style={styles.reason} testID={`${testID}.reason`}>
             {reason}
-          </Text>
+          </ValueText>
         )}
         <View style={styles.footer}>
           <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />

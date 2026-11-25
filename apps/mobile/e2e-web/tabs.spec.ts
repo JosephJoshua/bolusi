@@ -5,37 +5,19 @@
  *
  * HONEST CEILING: a browser approximation. The real font scale and the system bars need the device.
  */
-import path from 'node:path';
+import type { Page } from '@playwright/test';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, shoot as check, test } from './qa';
 
-const ARTIFACTS = path.join(__dirname, 'artifacts', 'tabs');
 const PHONE = { width: 360, height: 760 };
 const SIDEWAYS = { width: 1280, height: 800 };
 
 const tap = (page: Page, testID: string) => page.getByTestId(testID).first().click();
-const shoot = (page: Page, name: string) =>
-  page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`) });
+const shoot = (page: Page, name: string) => check(page, 'tabs', name);
 
 async function open(page: Page, frame = ''): Promise<void> {
   await page.goto(`/?screen=repair&state=owner${frame}`);
   await expect(page.getByTestId('repair.board')).toBeVisible();
-}
-
-/** Text 1.3x larger, as a large system font would draw it (RN-web always reports 1). */
-async function largeFont(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    for (const el of Array.from(document.querySelectorAll<HTMLElement>('div, span, input'))) {
-      const holdsText = Array.from(el.childNodes).some(
-        (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '',
-      );
-      if (!holdsText && el.tagName !== 'INPUT') continue;
-      const style = getComputedStyle(el);
-      el.style.fontSize = `${parseFloat(style.fontSize) * 1.3}px`;
-      if (style.lineHeight.endsWith('px'))
-        el.style.lineHeight = `${parseFloat(style.lineHeight) * 1.3}px`;
-    }
-  });
 }
 
 test('on a phone the tabs sit in the board dock, and leave a servisan page to its own action', async ({
@@ -49,8 +31,6 @@ test('on a phone the tabs sit in the board dock, and leave a servisan page to it
   const action = (await page.getByTestId('repair.board.newIntake').boundingBox())!;
   expect((await tabs.boundingBox())!.y).toBeGreaterThan(action.y + action.height);
   await shoot(page, 'phone-board');
-  await largeFont(page);
-  await shoot(page, 'phone-board-font13');
 
   await open(page);
   await tap(page, 'repair.board.row.t-1');

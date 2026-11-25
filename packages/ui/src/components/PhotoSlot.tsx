@@ -94,9 +94,7 @@ export function PhotoSlot({
           {body}
         </Pressable>
       )}
-      <Text style={styles.label} numberOfLines={2}>
-        {label}
-      </Text>
+      <Text style={styles.label}>{label}</Text>
     </View>
   );
 }

@@ -1,6 +1,7 @@
 import boundaries from './rules/boundaries.js';
 import desktopProcesses from './rules/desktop-processes.js';
 import noClockInHandlers from './rules/no-clock-in-handlers.js';
+import noCutText from './rules/no-cut-text.js';
 import noExcuseComments from './rules/no-excuse-comments.js';
 import noFloatMoney from './rules/no-float-money.js';
 import noHardcodedStrings from './rules/no-hardcoded-strings.js';
@@ -18,6 +19,7 @@ const plugin = {
   },
   rules: {
     boundaries,
+    'no-cut-text': noCutText,
     'desktop-processes': desktopProcesses,
     'no-excuse-comments': noExcuseComments,
     'no-float-money': noFloatMoney,
