@@ -37,6 +37,7 @@ import {
   PERMISSION_DENIED_OP_TYPE,
   type DenialSurface,
 } from '../authz/denials.js';
+import { authOperationRegistry } from '../auth/operations.js';
 import type { PermissionEvaluator } from '../authz/memo.js';
 import { describeParseFailure } from '../errors/describe-parse-failure.js';
 import { DomainError } from '../errors/domain-error.js';
@@ -154,24 +155,21 @@ export interface CommandOutcome<TResult = void> {
   readonly timestamp: number;
 }
 
+/** The sanctioned types are auth's, so their version is the one the auth registry declares. */
+function sanctionedSchemaVersion(type: SanctionedRuntimeEmissionType): number {
+  const version = authOperationRegistry.schemaVersionFor(type);
+  if (version === undefined) {
+    throw new Error(`runtime emission ${type} is not declared by the auth operation registry`);
+  }
+  return version;
+}
+
 /** An op the runtime appends without a command (04 §5.1's six sanctioned emissions). */
 export interface RuntimeEmissionDraft {
   /** Compile-time restricted to the six; `assertSanctionedEmission` is the runtime backstop. */
   readonly type: SanctionedRuntimeEmissionType;
   readonly entityType: string;
   readonly entityId: string;
-  /**
-   * The emission's payload version.
-   *
-   * NOT resolved from the 04 §3 operation registry the way `ctx.op()` is — deliberately, for now.
-   * The sanctioned types are appended by the runtime BEFORE any module could own them, and no
-   * v0 manifest declares them yet: `auth.*` op types arrive with the auth module (tasks 13/25),
-   * which will declare `auth.permission_denied` alongside the `auth_permission_denials` applier
-   * (02 §7). WHEN THAT LANDS, this field should resolve from the registry exactly as `ctx.op()`
-   * does, and this default deleted — otherwise the same op type has two answers about its version
-   * (CLAUDE.md §2.8). Flagged for tasks 13/25; not silently left as "fine".
-   */
-  readonly schemaVersion?: number;
   readonly payload: Record<string, unknown>;
   /**
    * The op's `userId` (05 §2.1). Explicit because the six do not share one answer: a lockout op
@@ -675,7 +673,7 @@ export class CommandRuntime {
           type: draft.type,
           entityType: draft.entityType,
           entityId: draft.entityId,
-          schemaVersion: draft.schemaVersion ?? 1,
+          schemaVersion: sanctionedSchemaVersion(draft.type),
           payload: draft.payload,
           source: draft.source ?? 'system',
           agentInitiated: draft.agentInitiated ?? false,

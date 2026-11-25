@@ -150,3 +150,8 @@ export const MAX_TRANSFER_LINES = 200;
 export const MAX_MOVEMENT_QTY = 10_000;
 /** The most a store can count of one part. */
 export const MAX_COUNTED_QTY = 1_000_000;
+
+/** Who sees the parts list. */
+export function opensParts(reader: { hasPermission(permissionId: string): boolean }): boolean {
+  return reader.hasPermission(INVENTORY_PERMISSION.read);
+}

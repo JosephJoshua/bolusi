@@ -20,7 +20,7 @@ import { useState } from 'react';
 
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
-import { MAX_ACCOUNT_NAME, MONEY_PERMISSION, PAYMENT_ACCOUNT_KINDS } from '../constants.js';
+import { MAX_ACCOUNT_NAME, PAYMENT_ACCOUNT_KINDS } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
   KIND_KEY,
@@ -32,19 +32,10 @@ import {
 } from '../methods.js';
 import { useQrisConnection } from '../qris-hooks.js';
 import type { PaymentAccountRow } from '../queries.js';
-import { useMoneyQuery, useMoneyRuntime, type MoneyRuntime } from '../runtime.js';
+import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { MoneyDialog } from './parts.js';
 import { QrisConnectSection } from './QrisConnect.js';
-
-/** Whether this person may open the page: it reads the methods as the payment step does. */
-export function managesPaymentMethods(runtime: Pick<MoneyRuntime, 'hasPermission'>): boolean {
-  return (
-    runtime.hasPermission(MONEY_PERMISSION.receive) &&
-    (runtime.hasPermission(MONEY_PERMISSION.manageAccounts) ||
-      runtime.hasPermission(MONEY_PERMISSION.manageCentralAccounts))
-  );
-}
 
 type Editing =
   { readonly kind: 'add' } | { readonly kind: 'edit'; readonly account: PaymentAccountRow };

@@ -111,9 +111,8 @@ export interface AppSessionSnapshot {
    * A lock ended the session (api/02-auth §6.4) — `resolveZone`'s `locked` input, which is what turns
    * the switcher into the LOCK screen (no header back, §8.2) rather than a voluntary switch.
    *
-   * Derived from `ShellSession`, never a literal. `Root` passed `locked={false}` until task 133, so
-   * an idle lock and a sign-out were indistinguishable on screen and the lock screen offered a back
-   * button into the previous user's session.
+   * Derived from `ShellSession`, never a literal: a hardcoded `false` makes an idle lock look like a
+   * sign-out, and the lock screen would offer a back button into the previous user's session.
    */
   readonly locked: boolean;
   /** Why (§6.2's `session_ended` reasons). Null when nothing is locked. */
@@ -294,8 +293,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     // reading through the outgoing user's cached grants.
     memo: deps.runtime.evaluator,
     // THE TENANT'S §6.4 SETTING, from the bundle `applyBundle` persisted (enroll + every refresh).
-    // Omitting this — which is what happened until task 133 — silently pinned every device to the
-    // 300 s default, so a shop that tightened the lock to 60 s got 300 s and never knew.
+    // Omitting it silently pins every device to the 300 s default, so a shop that tightened the lock
+    // to 60 s would get 300 s and never know.
     idleLockSeconds: await readIdleLockSeconds(db),
     // Each user's drafts also go to disk (sealed), so a half-entered servisan survives Android
     // recreating the activity or killing the app; only that user's next PIN unlock reads it back.

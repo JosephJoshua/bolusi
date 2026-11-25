@@ -3,10 +3,9 @@
 //
 // ── WHY THIS FILE EXISTS ────────────────────────────────────────────────────────────────────────
 // The device block is what a shop reads to an owner over the phone during a revocation (model.ts §3):
-// device name, id, store, tenant. Until task 94 index.ts handed a hardcoded EMPTY deviceInfo, so a
-// device that now enrolls (task 92) rendered every field blank. The reader that fixes it lives in
-// bootstrap/device-info.ts and is proven over a real DB in device-info.test.ts; THIS file proves the
-// other half — that the screen actually paints whatever DeviceInfo it is given onto the three rows.
+// device name, id, store, tenant. The reader lives in bootstrap/device-info.ts and is proven over a
+// real DB in device-info.test.ts; this file proves the screen paints whatever DeviceInfo it is
+// given onto the three rows.
 //
 // FALSIFIED (§2.11): hardcoding any device row's `primaryText`/`secondaryText` back to a literal (or
 // blank) turns the "renders the identity" test RED; the blank control below is the positive control

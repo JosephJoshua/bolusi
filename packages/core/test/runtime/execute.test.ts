@@ -463,7 +463,7 @@ describe('ctx — the §5.2 surface', () => {
       payload: { title: 't', body: 'b' },
     });
 
-    expect(draft.schemaVersion, 'defaults to 1 until task 11 lands the operation registry').toBe(1);
+    expect(draft.schemaVersion, 'the registry declares notes.note_created at version 1').toBe(1);
     expect(appendedOps(fixture), 'ctx.op() must not append').toEqual([]);
   });
 });

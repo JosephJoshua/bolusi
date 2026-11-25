@@ -39,8 +39,8 @@ export const SYNC_COALESCE_MS = 60_000;
 
 /**
  * Which devices currently hold a live WS/SSE connection (api/04-push §6). `sync` is NOT sent to a
- * connected device — the realtime poke already covers it. Default: NONE connected, until task 20's
- * realtime hub registers the real registry (this task's brief).
+ * connected device; the realtime poke already covers it. The realtime hub is the registry
+ * (deps.ts); `NO_LIVE_CONNECTIONS` is for tests.
  */
 export interface LiveConnectionRegistry {
   isConnected(deviceId: string): boolean;

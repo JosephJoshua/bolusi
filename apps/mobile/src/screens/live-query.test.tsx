@@ -1,4 +1,4 @@
-// The shared live read every module screen uses (screen-kit/live.ts), driven by hand so the order
+// The shared live read every module screen uses (screen-kit/live.tsx), driven by hand so the order
 // in which reads finish is the test's choice, not the database's.
 import { useLiveQuery, type QueryState } from '@bolusi/modules/screen-kit';
 import { act } from 'react';
