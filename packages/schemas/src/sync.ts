@@ -24,7 +24,7 @@ export const zPushRequest = z.strictObject({
    * PIN check: the proof the server needs for an owner's or manager's decision among `ops`
    * (server oplog/steps/decision.ts). Absent or empty: no decision from this device is accepted.
    */
-  personSessions: z.array(z.string().min(1).max(256)).max(4).optional(),
+  personSessions: z.array(z.string().min(1).max(256)).max(16).optional(),
 });
 export type PushRequest = z.infer<typeof zPushRequest>;
 

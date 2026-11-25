@@ -528,7 +528,7 @@ export function createSyncClientForApp(
     baseUrl: config.baseUrl,
     deviceToken: config.loadDeviceToken,
     // Owners' and managers' decisions go with their server-checked sessions (person-access.ts).
-    personSessions: () => app.person.proofs(),
+    personSessions: (authors) => app.person.proofs(authors),
     ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
   });
   const bundle = createFetchBundleRefresh({

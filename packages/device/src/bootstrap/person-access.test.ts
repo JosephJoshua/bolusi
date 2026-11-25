@@ -551,7 +551,9 @@ describe('an owner’s or manager’s decisions on a shared device', () => {
     expect(h.opens).toEqual([{ userId: 'mgr-1', pin: '112233' }]);
     expect(h.access.canProve('mgr-1')).toBe(true);
     expect(h.access.canProve('owner-1')).toBe(false);
-    expect(h.access.proofs()).toEqual(['bps_1']);
+    expect(h.access.proofs(['mgr-1', 'cashier-1'])).toEqual(['bps_1']);
+    // A push carries only its own authors' sessions.
+    expect(h.access.proofs(['cashier-1'])).toEqual([]);
     expect(h.opened).toEqual([]);
   });
 
@@ -572,7 +574,7 @@ describe('an owner’s or manager’s decisions on a shared device', () => {
     h.workUnpushed(true);
     await h.access.end();
 
-    expect(h.access.proofs()).toEqual(['bps_1']);
+    expect(h.access.proofs(['mgr-1'])).toEqual(['bps_1']);
     expect(h.access.canProve('mgr-1')).toBe(true);
     expect(h.ended).toEqual([]);
 
@@ -581,8 +583,34 @@ describe('an owner’s or manager’s decisions on a shared device', () => {
     h.workUnpushed(false);
     await h.access.pushed();
     expect(h.ended).toEqual(['bps_1']);
-    expect(h.access.proofs()).toEqual([]);
+    expect(h.access.proofs(['mgr-1'])).toEqual([]);
     expect(h.access.canProve('mgr-1')).toBe(false);
+  });
+
+  test('an expired session proves nobody, even with a store open', async () => {
+    const h = harness();
+    h.serverGrants([COSTS]);
+    await h.access.begin({ ...manager, mayRead: holding(COSTS, REPAIR) });
+    await h.access.sync();
+    expect(h.access.canProve('mgr-1')).toBe(true);
+    h.advance(SESSION_TTL - 60_000);
+    expect(h.access.canProve('mgr-1')).toBe(false);
+    expect(h.access.proofs(['mgr-1'])).toEqual([]);
+    // The PIN left memory when the store opened, so the device refuses the decision itself
+    // rather than send a token the server would refuse.
+    expect(await h.access.sessionFor('mgr-1')).toBeNull();
+  });
+
+  test('a left session that expired is not sent', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin(manager);
+    await h.access.sync();
+    h.workUnpushed(true);
+    await h.access.end();
+    h.advance(SESSION_TTL - 60_000);
+    expect(h.access.canProve('mgr-1')).toBe(false);
+    expect(h.access.proofs(['mgr-1'])).toEqual([]);
   });
 
   test('a left session is never kept past ten minutes, sent or not', async () => {
