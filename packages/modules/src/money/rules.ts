@@ -50,6 +50,7 @@ export const MONEY_REFUSALS = defineRefusals(
     'refundAboveCredit',
     'notCharged',
     'refundAbovePaid',
+    'paymentRefunded',
     'notThisStore',
     'accountKindChanged',
     'countRequired',
@@ -606,6 +607,18 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     }
     if (entry.voidedBy !== null) {
       throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
+    }
+    // As with a refund, the book never shows more given back than came in: a payment whose money
+    // was already handed back stays, or re-recording it would pay the customer out twice.
+    if (entry.documentKind !== null && entry.documentId !== null) {
+      const document = { kind: entry.documentKind, id: entry.documentId };
+      const refunded = await documentTotal(db, storeOf(op), document, 'refund_paid');
+      const paidIn = await documentPaidIn(db, storeOf(op), document);
+      if (refunded > paidIn - Number(entry.amount)) {
+        throw refuse('paymentRefunded', {
+          details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+        });
+      }
     }
     const takenOff = await voidCounted(
       db,
