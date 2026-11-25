@@ -60,7 +60,14 @@
       "tendered": "Cash received is less than the amount."
     },
     "method": "Payment method",
-    "currency": "Rp"
+    "currency": "Rp",
+    "changeBig": "Large change. Check the cash received.",
+    "changeCheck": {
+      "title": "Change {change}, is that right?",
+      "message": "Cash received {tendered} to pay {amount}.",
+      "confirm": "That’s right",
+      "keep": "Check again"
+    }
   },
   "kas": {
     "turnedDown": "Turned down by the owner",
@@ -105,7 +112,9 @@
     "recount": "Count again",
     "recountHint": "It is off. Count once more if unsure, or save.",
     "save": "Save count",
-    "hint": "Count the drawer, then enter the amount."
+    "hint": "Count the drawer, then enter the amount.",
+    "reason": "Reason for the difference",
+    "reasonHint": "Write why it is off first."
   },
   "move": {
     "kind": "Type",

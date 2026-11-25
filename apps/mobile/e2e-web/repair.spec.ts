@@ -300,6 +300,22 @@ test('handover takes the rest of the bill, then the photo and the signature', as
   await tickHandoverChecks(page);
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
+  // QA round F: a zero too many shows in the warning colour and asks before the handover saves.
+  await fill(page, 'repair.handover.pay.line0.tendered', '150000');
+  await expect(page.getByTestId('repair.handover.pay.line0.changeBig')).toHaveText(
+    'Kembalian besar. Cek lagi uang diterima.',
+  );
+  await shoot(page, 'handover-change-big');
+  await tap(page, 'repair.handover.primary');
+  await expect(page.getByTestId('repair.handover.changeCheck.title')).toHaveText(
+    'Kembalian Rp 135.000, sudah benar?',
+  );
+  // The sheet slides up; shoot it once it is in place.
+  await page.waitForTimeout(600);
+  await shoot(page, 'handover-change-check');
+  await tap(page, 'repair.handover.changeCheck.cancel');
+  await expect(page.getByTestId('repair.handover.changeCheck')).toHaveCount(0);
+  await fill(page, 'repair.handover.pay.line0.tendered', '20000');
   await tap(page, 'repair.handover.primary');
   await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.photos.strip.signature')).toBeVisible();
@@ -995,11 +1011,17 @@ test('a cancelled servisan waiting for pickup offers no down payment', async ({ 
   }
 });
 
+/** Printing sits under "Lainnya" with the servisan's other rare moves. */
+async function openPrint(page: Page): Promise<void> {
+  await tap(page, 'repair.ticket.more.open');
+  await tap(page, 'repair.ticket.action.print');
+}
+
 test('the counter prints the handover slip, and the next print is a reprint', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-4');
-  await tap(page, 'repair.ticket.action.print');
+  await openPrint(page);
   await expect(page.getByTestId('repair.print')).toBeVisible();
   await shoot(page, 'print-step');
   const popup = page.waitForEvent('popup');
@@ -1014,14 +1036,14 @@ test('the counter prints the handover slip, and the next print is a reprint', as
   await shoot(page, 'print-ask');
   await tap(page, 'repair.print.ask.cancel');
   await tap(page, 'repair.print.back');
-  await tap(page, 'repair.ticket.action.print');
+  await openPrint(page);
   await expect(page.getByTestId('repair.print.reprint')).toHaveCount(0);
   const again = page.waitForEvent('popup');
   await tap(page, 'repair.print.primary');
   await (await again).close();
   await tap(page, 'repair.print.ask.confirm');
   await expect(page.getByTestId('repair.ticket.done')).toBeVisible();
-  await tap(page, 'repair.ticket.action.print');
+  await openPrint(page);
   await expect(page.getByTestId('repair.print.reprint')).toBeVisible();
   await shoot(page, 'print-step-reprint');
 });
@@ -1038,7 +1060,7 @@ test('the counter sets the paper once in Settings, and printing uses it', async 
   await tap(page, 'settings-screen.back');
   await tap(page, 'repair.board.views.pickup');
   await tap(page, 'repair.board.row.t-4');
-  await tap(page, 'repair.ticket.action.print');
+  await openPrint(page);
   await expect(page.getByTestId('repair.print.paper')).toHaveText('Kertas A5');
   await shoot(page, 'print-step-paper');
   const popup = page.waitForEvent('popup');
@@ -1177,4 +1199,30 @@ test('taking a part asks how many right under the part picked', async ({ page })
   await expect(page.getByTestId('inventory.take.picked')).toHaveCount(0);
   await page.getByText('Ambil sparepart', { exact: true }).last().click();
   await expect(page.getByTestId('repair.ticket.parts')).toContainText('2 diambil');
+});
+
+// QA round F: cancelling is found under "Lainnya" too, and a count that is off says why.
+test('Batalkan servisan is under Lainnya as well as at the end of the page', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await expect(page.getByTestId('repair.ticket.action.cancel')).toHaveCount(1);
+  await tap(page, 'repair.ticket.more.open');
+  await expect(page.getByTestId('repair.ticket.more.cancel')).toBeVisible();
+  await page.waitForTimeout(600);
+  await shoot(page, 'ticket-more-cancel');
+});
+
+test('Tutup kas asks why when the drawer is off', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'shell-tabs.kas');
+  await tap(page, 'money.kas.count');
+  await fill(page, 'money.count.counted', '1');
+  await tap(page, 'money.count.primary');
+  await expect(page.getByTestId('money.count.difference')).toBeVisible();
+  await expect(page.getByTestId('money.count.primary')).toBeDisabled();
+  await expect(page.getByText('Alasan selisih').first()).toBeVisible();
+  await shoot(page, 'count-reason');
+  await fill(page, 'money.count.note', 'Uang kembalian kurang');
+  await expect(page.getByTestId('money.count.primary')).toBeEnabled();
 });

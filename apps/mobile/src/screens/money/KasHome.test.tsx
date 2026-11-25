@@ -119,6 +119,12 @@ describe('the drawer', () => {
     // Once only.
     expect(screen.query('money.count.recount')).toBeNull();
     expect(text(screen, 'money.count.primary')).toContain('Simpan hitungan');
+    // QA round F: a count that is off is saved with a reason, for the owner who settles it.
+    expect(screen.all('money.count.primary')[0]!.props['disabled']).toBe(true);
+    expect(text(screen, 'money.count')).toContain('Tulis alasan selisihnya dulu.');
+    expect(text(screen, 'money.count')).toContain('Alasan selisih');
+    type(screen, 'money.count.note', 'Uang kembalian kurang');
+    await settle();
     await press(screen, 'money.count.primary');
 
     expect(text(screen, 'money.kas.lastCount')).toMatch(/^Sudah tutup kas pukul/);
@@ -437,10 +443,28 @@ describe('what customers owe', () => {
     type(screen, 'money.receive.pay.line0.tendered', '500000');
     await settle();
     expect(screen.query('money.receive.pay.line0.change')).toBeNull();
-    type(screen, 'money.receive.pay.line0.tendered', '600000');
+    type(screen, 'money.receive.pay.line0.tendered', '550000');
     await settle();
-    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp 100.000');
+    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp 50.000');
+    expect(screen.query('money.receive.pay.line0.changeBig')).toBeNull();
+    // QA round F: a zero too many shows in the warning colour and asks before it is saved.
+    type(screen, 'money.receive.pay.line0.tendered', '5000000');
+    await settle();
+    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp 4.500.000');
+    expect(text(screen, 'money.receive.pay.line0.changeBig')).toBe(
+      'Kembalian besar. Cek lagi uang diterima.',
+    );
     expect(text(screen, 'money.receive.primary')).toContain('Terima Rp 500.000');
+    await press(screen, 'money.receive.primary');
+    expect(text(screen, 'money.receive.changeCheck.title')).toBe(
+      'Kembalian Rp\u00A04.500.000, sudah benar?',
+    );
+    await press(screen, 'money.receive.changeCheck.cancel');
+    expect(screen.query('money.receive.changeCheck')).toBeNull();
+    // Nothing was saved: the step is still open to put right.
+    expect(screen.query('money.receive.primary')).not.toBeNull();
+    type(screen, 'money.receive.pay.line0.tendered', '550000');
+    await settle();
     await press(screen, 'money.receive.primary');
 
     expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 250.000');

@@ -45,6 +45,7 @@ import {
   type CashCountForm,
   type NamedBalance,
 } from '../kas.js';
+import { useChangeCheck } from '../change-check.js';
 import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
 import { canSimulateQris } from '../qris.js';
 import type { CashCountRow } from '../queries.js';
@@ -62,7 +63,7 @@ import {
 } from '../refund.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
-import { PaymentLines } from './PaymentLines.js';
+import { ChangeCheckSheet, PaymentLines } from './PaymentLines.js';
 import { QrisStep, useQrStepBack } from './QrisStep.js';
 
 interface StepProps {
@@ -173,6 +174,7 @@ export function CountCashStep({
   );
   const view = cashCountView(form, drawer.status === 'ready' ? drawer.data.expected : null, blind);
   const { amount } = view;
+  const noteMissing = view.noteRequired && note.trim() === '';
 
   const submit = (): void => {
     if (amount === null) return;
@@ -180,6 +182,7 @@ export function CountCashStep({
       setForm({ ...form, checked: true });
       return;
     }
+    if (noteMissing) return;
     void runner
       .run(() => runtime.run('countCash', { counted: amount, note }))
       .then((result) => {
@@ -195,8 +198,8 @@ export function CountCashStep({
       overlay={leave.overlay}
       primaryLabel={tm(view.next === 'check' ? 'money.count.check' : 'money.count.save')}
       onPrimary={submit}
-      primaryDisabled={amount === null}
-      primaryHint={tm('money.count.hint')}
+      primaryDisabled={amount === null || noteMissing}
+      primaryHint={tm(noteMissing ? 'money.count.reasonHint' : 'money.count.hint')}
       secondary={
         view.mayRecount
           ? {
@@ -248,7 +251,7 @@ export function CountCashStep({
       )}
       <View style={styles.gap}>
         <TextInput
-          label={tm('money.count.note')}
+          label={tm(view.noteRequired ? 'money.count.reason' : 'money.count.note')}
           value={note}
           onChangeText={setNote}
           maxLength={MAX_REASON}
@@ -495,6 +498,7 @@ export function ReceiveDebtStep({
     },
     testID,
   );
+  const changeCheck = useChangeCheck();
 
   const submit = (): void => {
     if (receipt.paidByQr) {
@@ -502,11 +506,13 @@ export function ReceiveDebtStep({
       return;
     }
     if (input === null) return;
-    void runner
-      .run(() => runtime.run('receivePayments', input))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
+    changeCheck.guard(input.payments, () => {
+      void runner
+        .run(() => runtime.run('receivePayments', input))
+        .then((result) => {
+          if (result !== undefined) onDone();
+        });
+    });
   };
 
   if (qris.open !== null && runtime.qris !== undefined) {
@@ -530,7 +536,12 @@ export function ReceiveDebtStep({
       chrome={chrome}
       title={tm('money.receive.title')}
       onBack={leave.onBack}
-      overlay={leave.overlay}
+      overlay={
+        <>
+          {leave.overlay}
+          <ChangeCheckSheet check={changeCheck} testID={testID} />
+        </>
+      }
       primaryLabel={
         receipt.paidByQr
           ? tm('money.qris.done')

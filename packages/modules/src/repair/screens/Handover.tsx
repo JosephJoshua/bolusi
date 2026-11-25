@@ -30,7 +30,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
-import { PaymentLines } from '../../money/screens/PaymentLines.js';
+import { useChangeCheck } from '../../money/change-check.js';
+import { ChangeCheckSheet, PaymentLines } from '../../money/screens/PaymentLines.js';
 import { QrisStep, useQrStepBack } from '../../money/screens/QrisStep.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { tn } from '../i18n.js';
@@ -195,24 +196,27 @@ export function Handover({
     });
   };
 
+  const changeCheck = useChangeCheck();
   const submit = (): void => {
     if (!ready || photo === null || signature === null) return;
-    void runner
-      .run(() =>
-        runtime.run('returnDevice', {
-          ticketId,
-          handoverPhoto: photo,
-          signature,
-          note,
-          checklist: [...checks.lines],
-          ...payment.input,
-        }),
-      )
-      .then((result) => {
-        if (result === undefined) return;
-        onDraftChange?.(null);
-        onDone();
-      });
+    changeCheck.guard(payment.input.payments, () => {
+      void runner
+        .run(() =>
+          runtime.run('returnDevice', {
+            ticketId,
+            handoverPhoto: photo,
+            signature,
+            note,
+            checklist: [...checks.lines],
+            ...payment.input,
+          }),
+        )
+        .then((result) => {
+          if (result === undefined) return;
+          onDraftChange?.(null);
+          onDone();
+        });
+    });
   };
 
   if (payment.qris.open !== null && qris.port !== undefined) {
@@ -237,7 +241,12 @@ export function Handover({
       wide
       title={tn('repair.handover.title')}
       onBack={() => discard.requestLeave(onCancel)}
-      overlay={discard.overlay}
+      overlay={
+        <>
+          {discard.overlay}
+          <ChangeCheckSheet check={changeCheck} testID={testID} />
+        </>
+      }
       primaryLabel={tn('repair.action.handover')}
       onPrimary={submit}
       primaryDisabled={!ready}

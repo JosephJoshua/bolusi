@@ -82,7 +82,7 @@ const MATRIX: readonly Row[] = [
     screen: 'sync-status',
     state: 'photosPending',
     testId: 'sync-counter-media',
-    text: 'Foto & video belum tersinkron',
+    text: 'Foto\u00a0&\u00a0video belum tersinkron',
   },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
   // task 144 item 5: the loop actively pushing — the fifth chip state, previously never screenshotted.

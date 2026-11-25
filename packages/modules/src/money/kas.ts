@@ -466,6 +466,8 @@ export interface CashCountView {
   readonly locked: boolean;
   /** A blind count that came out off may be counted once more before it is saved. */
   readonly mayRecount: boolean;
+  /** Saving a count that is off needs a reason in its note, for the owner who settles it. */
+  readonly noteRequired: boolean;
 }
 
 /**
@@ -482,13 +484,15 @@ export function cashCountView(
   const shown = !blind || form.checked;
   const expected = shown ? drawer : null;
   const difference = amount === null || expected === null ? null : amount - expected;
+  const off = difference !== null && difference !== 0;
   return {
     amount,
     expected,
     difference,
     next: blind && !form.checked ? 'check' : 'save',
     locked: blind && form.checked,
-    mayRecount: blind && form.checked && !form.recounted && difference !== null && difference !== 0,
+    mayRecount: blind && form.checked && !form.recounted && off,
+    noteRequired: off && !(blind && !form.checked),
   };
 }
 

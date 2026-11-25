@@ -38,4 +38,15 @@ export interface SurfaceNav {
    * unfinished intake belongs to the device). The switch then skips the discard gate.
    */
   readonly keepsWorkOnSwitch?: boolean;
+  /**
+   * The surface's own list is still on screen beside what is open (a wide tablet's split), so the
+   * place is still at its top level and keeps its tabs. Anything else open owns the screen and its
+   * bottom: the shell hides the tabs while a surface nav is registered (`placeTabsShow`).
+   */
+  readonly listBeside?: boolean;
+}
+
+/** Whether a place shows its tabs: on its top level, or with its list still beside what is open. */
+export function placeTabsShow(nav: SurfaceNav | null): boolean {
+  return nav === null || nav.listBeside === true;
 }

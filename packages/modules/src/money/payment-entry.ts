@@ -65,6 +65,42 @@ const MAX_DIGITS = 13;
 
 const NO_QR_ACCOUNTS: ReadonlySet<string> = new Set();
 
+/**
+ * The largest rupiah note. Change of a whole one or more means the customer handed over a note they
+ * did not need to, which happens far less often than a mistyped zero (1.750.000 for 175.000).
+ */
+export const LARGEST_NOTE = 100_000;
+
+/** Whether the change on a cash line is big enough that the counter should check what was typed. */
+export function changeLooksWrong(tendered: number, amount: number): boolean {
+  return tendered - amount >= LARGEST_NOTE;
+}
+
+/** Change that looks wrong on the payments about to be recorded: what to ask about first. */
+export interface ChangeToCheck {
+  readonly change: number;
+  readonly tendered: number;
+  readonly amount: number;
+}
+
+/**
+ * The cash lines whose change looks wrong, summed; null when none does. Read from the payments
+ * that will be recorded, so a payment let go unpaid or paid by QR never asks.
+ */
+export function changeToCheck(payments: readonly PaymentInput[]): ChangeToCheck | null {
+  let change = 0;
+  let tendered = 0;
+  let amount = 0;
+  for (const payment of payments) {
+    const handed = payment.tendered ?? null;
+    if (handed === null || !changeLooksWrong(handed, payment.amount)) continue;
+    change += handed - payment.amount;
+    tendered += handed;
+    amount += payment.amount;
+  }
+  return change === 0 ? null : { change, tendered, amount };
+}
+
 /** The digits of what was typed into an amount field, or null when it is too long to be money. */
 export function digitsOf(text: string): string | null {
   const digits = text.replace(/\D/g, '').replace(/^0+(?=\d)/, '');

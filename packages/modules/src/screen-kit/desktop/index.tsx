@@ -140,7 +140,14 @@ export function TaskDialog({
   readonly hint?: string | null | undefined;
   /** A second way to finish, such as saving and starting the next one. */
   readonly secondary?:
-    { readonly label: string; readonly onClick: () => void; readonly testId: string } | undefined;
+    | {
+        readonly label: string;
+        readonly onClick: () => void;
+        /** Defaults to the submit's own state. */
+        readonly disabled?: boolean | undefined;
+        readonly testId: string;
+      }
+    | undefined;
   readonly size?: 'sm' | 'md' | 'lg';
   readonly children: ReactNode;
   readonly testId: string;
@@ -175,7 +182,7 @@ export function TaskDialog({
               <Button
                 label={secondary.label}
                 onClick={secondary.onClick}
-                disabled={runner.busy || submitDisabled}
+                disabled={runner.busy || (secondary.disabled ?? submitDisabled)}
                 data-testid={secondary.testId}
               />
             )}

@@ -60,7 +60,14 @@
       "tendered": "Uang diterima kurang dari jumlahnya."
     },
     "method": "Metode pembayaran",
-    "currency": "Rp"
+    "currency": "Rp",
+    "changeBig": "Kembalian besar. Cek lagi uang diterima.",
+    "changeCheck": {
+      "title": "Kembalian {change}, sudah benar?",
+      "message": "Uang diterima {tendered} untuk bayar {amount}.",
+      "confirm": "Sudah benar",
+      "keep": "Cek lagi"
+    }
   },
   "kas": {
     "turnedDown": "Tidak disetujui pemilik",
@@ -105,7 +112,9 @@
     "recount": "Hitung ulang",
     "recountHint": "Ada selisih. Hitung sekali lagi kalau ragu, atau simpan.",
     "save": "Simpan hitungan",
-    "hint": "Hitung uang di laci, lalu isi jumlahnya."
+    "hint": "Hitung uang di laci, lalu isi jumlahnya.",
+    "reason": "Alasan selisih",
+    "reasonHint": "Tulis alasan selisihnya dulu."
   },
   "move": {
     "kind": "Jenis",
