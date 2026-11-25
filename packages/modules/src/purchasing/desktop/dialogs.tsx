@@ -45,7 +45,7 @@ import {
 import type { OrderDetailRow, SupplierRow } from '../queries.js';
 import { usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 
-function discardCopy(): DiscardCopy {
+export function discardCopy(): DiscardCopy {
   return {
     title: tp('purchasing.discard.title'),
     message: tp('purchasing.discard.message'),
@@ -216,7 +216,7 @@ export function OrderDialog({ order, onClose, onDone }: OrderDialogProps): React
  * Find a part to add: typing ranks the parts list, a click adds the part (one more when it is
  * already on the order). A USB scanner types a code and presses Enter, which adds the part it names.
  */
-function PartSearch({
+export function PartSearch({
   onOrder,
   onPick,
   testId,

@@ -19,6 +19,7 @@ import type { ApprovalRow } from '../approvals/queries.js';
 import type { MoneyTarget } from '../money/kas.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
 import type { CorrectTicketDetailsInput, OpenTicketInput } from './commands.js';
+import { keepsRupiahText, rupiahFrom } from '../shared/rupiah-text.js';
 import { imeiInvalid, phoneInvalid } from './contact.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairKey } from './i18n.js';
@@ -1030,15 +1031,12 @@ export function capturedThumbnailRef(ref: MediaRef): ThumbnailRef {
  * amount is more than a line may carry.
  */
 export function parseRupiah(text: string): number | null {
-  const digits = text.replace(/\D/g, '');
-  if (digits === '') return null;
-  const value = Number(digits);
-  return value <= MAX_LINE_AMOUNT ? value : null;
+  return rupiahFrom(text, MAX_LINE_AMOUNT);
 }
 
 /** Whether a keystroke in an amount field should be kept: a too-long amount is not typed at all. */
 export function acceptsRupiahText(text: string): boolean {
-  return text.replace(/\D/g, '') === '' || parseRupiah(text) !== null;
+  return keepsRupiahText(text, MAX_LINE_AMOUNT);
 }
 
 /** Kinds offered when adding a price line. Adjustments (either sign) stay a back-office tool. */

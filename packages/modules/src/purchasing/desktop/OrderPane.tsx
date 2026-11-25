@@ -22,6 +22,9 @@ import { orderMessage, orderMessageUrl } from '../order-message.js';
 import { STAGE_CHIP, draftOf, orderActions, orderInput, showsReceived } from '../order-form.js';
 import type { OrderDetailRow } from '../queries.js';
 import { useOrderStoreName, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
+import { opensBills } from '../constants.js';
+import { billDraftFromOrder } from '../bills/bill-form.js';
+import { BillDialog, OrderBillsSection } from './bills.js';
 import { OrderDialog, ReceiveDialog } from './dialogs.js';
 import { STAGE_ICON } from './stage.js';
 
@@ -33,7 +36,7 @@ export interface OrderPaneProps {
   readonly onClearNotice: () => void;
 }
 
-type Task = 'none' | 'edit' | 'receive' | 'cancel';
+type Task = 'none' | 'edit' | 'receive' | 'cancel' | 'bill';
 
 export function OrderPane({
   orderId,
@@ -275,6 +278,17 @@ export function OrderPane({
           </ul>
         </Section>
 
+        {opensBills(runtime) && row.stage !== 'draft' ? (
+          <OrderBillsSection
+            order={row}
+            onNewBill={() => {
+              say(null);
+              setTask('bill');
+            }}
+            testId={`${testId}.bills`}
+          />
+        ) : null}
+
         {row.receipts.length === 0 ? null : (
           <Section title={tp('purchasing.order.receipts')} testId={`${testId}.receipts`}>
             <Timeline
@@ -327,6 +341,17 @@ export function OrderPane({
             onDone={(_, placed) => {
               setTask('none');
               setDone(placed ? 'purchasing.done.placed' : 'purchasing.done.drafted');
+            }}
+          />
+        );
+      case 'bill':
+        return (
+          <BillDialog
+            start={billDraftFromOrder(row)}
+            onClose={() => setTask('none')}
+            onDone={() => {
+              setTask('none');
+              setDone('purchasing.done.billRecorded');
             }}
           />
         );

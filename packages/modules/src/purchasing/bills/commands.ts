@@ -19,8 +19,8 @@ import {
 import { orderItemsQuery } from '../queries.js';
 import { zOptionalText } from '../../shared/optional-text.js';
 import {
+  billsWithRefQuery,
   getBillQuery,
-  listBillsQuery,
   nextBillNumberQuery,
   type BillDetailRow,
 } from './queries.js';
@@ -111,17 +111,13 @@ async function requireNewNota(
   billId: string | null,
 ): Promise<void> {
   if (input.supplierRef === null) return;
-  const ref = input.supplierRef.toLowerCase();
-  const open = (await ctx.query(listBillsQuery, { filter: 'open', orderId: null, limit: 500 }))
-    .rows;
-  if (
-    open.some(
-      (bill) =>
-        bill.id !== billId &&
-        bill.supplierId === input.supplierId &&
-        bill.supplierRef?.toLowerCase() === ref,
-    )
-  ) {
+  const same = (
+    await ctx.query(billsWithRefQuery, {
+      supplierId: input.supplierId,
+      supplierRef: input.supplierRef,
+    })
+  ).rows;
+  if (same.some((bill) => bill.id !== billId)) {
     throw invalid('supplierRef', 'already recorded');
   }
 }

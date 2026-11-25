@@ -18,7 +18,7 @@ import {
   opensPurchasing,
   PurchasingRuntimeProvider,
   tp,
-  type OrderFilter,
+  type BelanjaTab,
 } from '@bolusi/modules/purchasing/desktop';
 import {
   IntakePage,
@@ -189,7 +189,7 @@ export function Counter({
   // Belanja, for whoever orders from suppliers; it picks parts from the same list.
   const purchasing = repair.purchasing;
   const showsPurchasing = opensPurchasing(inventory, purchasing);
-  const [ordersFilter, setOrdersFilter] = useState<OrderFilter>('open');
+  const [ordersFilter, setOrdersFilter] = useState<BelanjaTab>('open');
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
   const showsKas = opensKas(money);
   // Settings asks before it is left with unsaved changes.

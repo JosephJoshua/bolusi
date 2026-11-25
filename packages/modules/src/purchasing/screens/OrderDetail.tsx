@@ -36,6 +36,8 @@ import { orderMessage, orderMessageUrl } from '../order-message.js';
 import { whatsAppAppUrl, whatsAppUrl } from '../../shared/whatsapp.js';
 import { STAGE_CHIP, draftOf, orderActions, orderInput, showsReceived } from '../order-form.js';
 import type { OrderDetailRow } from '../queries.js';
+import { opensBills } from '../constants.js';
+import { OrderBills } from './OrderBills.js';
 import { useOrderStoreName, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 
 export interface OrderDetailProps {
@@ -44,6 +46,9 @@ export interface OrderDetailProps {
   readonly onBack: () => void;
   readonly onEdit: (order: OrderDetailRow) => void;
   readonly onReceive: (order: OrderDetailRow) => void;
+  /** Record the supplier's bill for this order (owners only see it). */
+  readonly onNewBill: (order: OrderDetailRow) => void;
+  readonly onOpenBill: (billId: string) => void;
   /** What the last step did ("Pesanan dipesan."), shown until dismissed. */
   readonly notice: PurchasingKey | null;
   readonly onClearNotice: () => void;
@@ -58,6 +63,8 @@ export function OrderDetail({
   onBack,
   onEdit,
   onReceive,
+  onNewBill,
+  onOpenBill,
   notice,
   onClearNotice,
   hideBack = false,
@@ -130,8 +137,8 @@ export function OrderDetail({
   return (
     <AppShell
       scrollable
-      // Wide only with receipts to put beside the order; otherwise one readable column.
-      wide={(order?.receipts.length ?? 0) > 0}
+      // Wide only with receipts or bills to put beside the order; otherwise one readable column.
+      wide={(order?.receipts.length ?? 0) > 0 || (opensBills(runtime) && order?.stage !== 'draft')}
       title={order?.supplierName ?? tp('purchasing.list.title')}
       titleVariant="detail"
       onBack={hideBack ? undefined : onBack}
@@ -211,6 +218,8 @@ export function OrderDetail({
   function renderOrder(row: OrderDetailRow): React.JSX.Element {
     const stage = STAGE_CHIP[row.stage];
     const draft = row.stage === 'draft';
+    // A placed order's nota is billed by whoever reads bills; a draft has nothing to bill yet.
+    const billable = opensBills(runtime) && !draft;
     return (
       <View testID={`${testID}.content`}>
         {/* On a tablet what came in sits beside the order instead of under it. */}
@@ -290,25 +299,35 @@ export function OrderDetail({
             </>
           }
           end={
-            row.receipts.length === 0 ? null : (
-              <Section title={tp('purchasing.order.receipts')} testID={`${testID}.receipts`}>
-                <Timeline
-                  entries={row.receipts.map((receipt) => ({
-                    key: receipt.id,
-                    title: receipt.lines
-                      .map((line) =>
-                        tp('purchasing.order.receiptLine', { name: line.name, qty: line.qty }),
-                      )
-                      .join(', '),
-                    meta: [formatDateTime(receipt.at), receipt.userName]
-                      .filter((part) => part !== null)
-                      .join(' · '),
-                    ...(receipt.note === null ? {} : { detail: receipt.note }),
-                  }))}
-                  testID={`${testID}.timeline`}
+            <>
+              {billable ? (
+                <OrderBills
+                  order={row}
+                  onNewBill={() => onNewBill(row)}
+                  onOpenBill={onOpenBill}
+                  testID={`${testID}.bills`}
                 />
-              </Section>
-            )
+              ) : null}
+              {row.receipts.length === 0 ? null : (
+                <Section title={tp('purchasing.order.receipts')} testID={`${testID}.receipts`}>
+                  <Timeline
+                    entries={row.receipts.map((receipt) => ({
+                      key: receipt.id,
+                      title: receipt.lines
+                        .map((line) =>
+                          tp('purchasing.order.receiptLine', { name: line.name, qty: line.qty }),
+                        )
+                        .join(', '),
+                      meta: [formatDateTime(receipt.at), receipt.userName]
+                        .filter((part) => part !== null)
+                        .join(' · '),
+                      ...(receipt.note === null ? {} : { detail: receipt.note }),
+                    }))}
+                    testID={`${testID}.timeline`}
+                  />
+                </Section>
+              )}
+            </>
           }
         />
 

@@ -147,7 +147,8 @@ export const listBillsInput = z
     filter: z.enum(BILL_FILTERS).default('open'),
     /** Only one order's bills. */
     orderId: z.string().min(1).nullable().default(null),
-    limit: z.number().int().min(1).max(500).default(200),
+    limit: z.number().int().min(1).max(500).default(100),
+    offset: z.number().int().min(0).default(0),
   })
   .strict();
 export type ListBillsInput = z.input<typeof listBillsInput>;
@@ -168,8 +169,12 @@ export async function listBillsHandler(
           .orderBy('b.billedOn')
       : query.orderBy('b.billedOn', 'desc').orderBy('b.createdAt', 'desc')
   )
-    .limit(input.limit)
+    // One past the page says whether another follows.
+    .limit(input.limit + 1)
+    .offset(input.offset)
     .execute();
+  const more = raws.length > input.limit;
+  if (more) raws.pop();
   const lines = await billLines(
     qctx,
     raws.map((raw) => raw.id),
@@ -183,7 +188,7 @@ export async function listBillsHandler(
       ),
     ),
   );
-  return { rows, nextCursor: null };
+  return { rows, nextCursor: more ? String(input.offset + input.limit) : null };
 }
 
 export const listBillsQuery = {
@@ -259,6 +264,36 @@ export const getBillQuery = {
   permission: PURCHASING_PERMISSION.bills,
   input: getBillInput,
   handler: getBillHandler,
+} as const;
+
+// ── billsWithRef ───────────────────────────────────────────────────────────────────────────────
+
+export const billsWithRefInput = z
+  .object({ supplierId: z.string().min(1), supplierRef: z.string().trim().min(1) })
+  .strict();
+
+/** This store's standing bills with a supplier's nota number, whatever its case: a nota twice. */
+export async function billsWithRefHandler(
+  input: z.output<typeof billsWithRefInput>,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly id: string; readonly billNumber: string }>> {
+  const rows = await qctx.db
+    .selectFrom('purchasingBills')
+    .select(['id', 'billNumber'])
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .where('supplierId', '=', input.supplierId)
+    .where('status', '=', 'open')
+    .where(sql<string>`lower(supplier_ref)`, '=', input.supplierRef.toLowerCase())
+    .execute();
+  return { rows, nextCursor: null };
+}
+
+export const billsWithRefQuery = {
+  name: 'billsWithRef',
+  permission: PURCHASING_PERMISSION.bills,
+  input: billsWithRefInput,
+  handler: billsWithRefHandler,
 } as const;
 
 // ── nextBillNumber ─────────────────────────────────────────────────────────────────────────────
