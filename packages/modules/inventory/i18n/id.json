@@ -60,6 +60,9 @@
     "scan": "Pindai",
     "pickPart": "Pilih barang untuk melihat detailnya."
   },
+  "place": {
+    "stock": "Stok"
+  },
   "filter": {
     "active": "Semua",
     "belowZero": "Stok minus",

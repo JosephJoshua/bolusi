@@ -7,6 +7,7 @@ export {
   useCapture,
   type ActionRunner,
   type DiscardGuard,
+  type PlaceStep,
   type StepBack,
 } from './action.js';
 export { createRuntimeContext, type RuntimeContext } from './context.js';

@@ -6,9 +6,11 @@ import { useState } from 'react';
 import type { ListFilter } from '../list-filter.js';
 import { BulkAddPage, type LeaveGuard } from './bulk.js';
 import { CategoriesPage } from './categories.js';
-import { PartsPage } from './PartsPage.js';
+import { PartsPage, type PartsPageProps } from './PartsPage.js';
 
 export interface PartsSectionProps {
+  /** Where the list sits when Barang has sections (Barang › Stok). */
+  readonly place?: PartsPageProps['place'];
   readonly filter: ListFilter;
   readonly onFilterChange: (filter: ListFilter) => void;
   /** The app asks this before it leaves Barang, so a sheet being filled is not lost. */
@@ -18,6 +20,7 @@ export interface PartsSectionProps {
 type View = 'list' | 'categories' | 'bulk';
 
 export function PartsSection({
+  place,
   filter,
   onFilterChange,
   onRegisterLeaveGuard,
@@ -32,6 +35,7 @@ export function PartsSection({
     case 'list':
       return (
         <PartsPage
+          place={place}
           filter={filter}
           onFilterChange={onFilterChange}
           onOpenCategories={() => setView('categories')}
