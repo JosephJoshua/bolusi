@@ -7,12 +7,7 @@
  */
 import { describe, expect, test, vi } from 'vitest';
 
-import {
-  Banner,
-  BANNER_MESSAGE_LINES,
-  selectBanner,
-  type BannerCause,
-} from '../src/components/Banner.js';
+import { Banner, selectBanner, type BannerCause } from '../src/components/Banner.js';
 import { FreshnessCell } from '../src/components/FreshnessCell.js';
 import { color } from '../src/tokens.js';
 import { fire, render } from './render.js';
@@ -184,10 +179,9 @@ describe('dismiss matrix (§3.6) — enforced by the component, not trusted to c
 });
 
 describe('anatomy (§3.6)', () => {
-  test('the message allows 3 lines — the real ID stale string needs them at 1.3x scale', () => {
-    expect(BANNER_MESSAGE_LINES).toBe(3);
+  test('the message is never cut off, however long', () => {
     const r = render(<Banner variant="danger" message="x" />);
-    expect(r.get('ui.banner.message').props['numberOfLines']).toBe(3);
+    expect(r.get('ui.banner.message').props['numberOfLines']).toBeUndefined();
   });
 
   test('the staleness banner carries the FreshnessCell as its glyph (§3.11)', () => {

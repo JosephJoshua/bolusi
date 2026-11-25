@@ -307,7 +307,7 @@ const source = {
       },
       revoked: {
         title: 'Perangkat Diblokir',
-        body: 'Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang.',
+        body: 'Pemilik toko memblokir perangkat ini, jadi datanya dihapus. Daftarkan ulang untuk memakainya lagi.',
       },
       unrecognised: {
         title: 'HP ini perlu didaftarkan ulang',
@@ -371,7 +371,7 @@ const source = {
         deactivate: 'Nonaktifkan karyawan',
         deactivateTitle: 'Nonaktifkan {name}?',
         deactivateBody:
-          'Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum tersinkron akan ditolak. Riwayat kerjanya tetap ada.',
+          'Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum tersinkron akan ditolak. Riwayat kerjanya tetap ada. HP pribadinya juga diblokir dan datanya dihapus.',
         deactivateConfirm: 'Nonaktifkan',
         inactiveBody: 'Dia tidak bisa masuk sampai diaktifkan lagi.',
         reactivate: 'Aktifkan lagi',
@@ -628,6 +628,35 @@ const source = {
           syncProblemsHint: 'Lihat dan tandai perubahan yang bentrok',
         },
         risky: 'Berisiko · {hint}',
+      },
+      devices: {
+        title: 'Perangkat',
+        settingsSummary: 'Lihat HP dan komputer toko, blokir yang hilang',
+        thisDevice: 'Perangkat ini',
+        shared: 'Perangkat toko',
+        personal: 'HP pribadi {name}',
+        personalUnknown: 'HP pribadi',
+        unnamed: 'Tanpa nama',
+        lastSync: 'disinkronkan {time}',
+        neverSynced: 'belum pernah disinkronkan',
+        blockedAt: 'diblokir {time}',
+        blockedSection: 'Diblokir',
+        block: 'Blokir',
+        blockTitle: 'Blokir {name}?',
+        blockBody:
+          'Terakhir disinkronkan {time}. Saat terhubung lagi, semua datanya dihapus, termasuk perubahan yang belum terkirim.',
+        blockBodyNever: 'Belum pernah disinkronkan. Saat terhubung, semua datanya dihapus.',
+        blockConfirm: 'Blokir',
+        blocked: '{name} sudah diblokir.',
+        empty: 'Belum ada perangkat lain',
+        emptyBody: 'Perangkat yang didaftarkan ke toko ini akan muncul di sini.',
+        failure: {
+          offline:
+            'Butuh internet untuk membuka daftar perangkat. Sambungkan perangkat ini, lalu ulangi.',
+          denied: 'Hanya pemilik toko yang bisa memblokir perangkat.',
+          rateLimited: 'Terlalu banyak perangkat diblokir dalam satu jam. Coba lagi nanti.',
+          unexpected: 'Belum berhasil. Coba lagi sebentar lagi.',
+        },
       },
     },
     sync: {
@@ -1114,7 +1143,7 @@ export const resources = {
         },
         revoked: {
           title: 'Device Revoked',
-          body: 'This device has been revoked and can no longer be used. Contact the store owner to enroll it again.',
+          body: 'The store owner blocked this device, so its data is erased. Register it again to use it.',
         },
         unrecognised: {
           title: 'This phone needs to be registered again',
@@ -1179,7 +1208,7 @@ export const resources = {
           deactivate: 'Deactivate',
           deactivateTitle: 'Deactivate {name}?',
           deactivateBody:
-            'They can no longer sign in, and changes from their phone that haven’t been synced yet will be refused. Their work history stays.',
+            'They can no longer sign in, and changes from their phone that haven’t been synced yet will be refused. Their work history stays. Their own phone is blocked too, and its data erased.',
           deactivateConfirm: 'Deactivate',
           inactiveBody: 'They can’t sign in until reactivated.',
           reactivate: 'Reactivate',
@@ -1438,6 +1467,34 @@ export const resources = {
             syncProblemsHint: 'See and settle clashing changes',
           },
           risky: 'Risky · {hint}',
+        },
+        devices: {
+          title: 'Devices',
+          settingsSummary: 'See the store’s phones and computers, block a lost one',
+          thisDevice: 'This device',
+          shared: 'Store device',
+          personal: '{name}’s own phone',
+          personalUnknown: 'Personal phone',
+          unnamed: 'No name',
+          lastSync: 'synced {time}',
+          neverSynced: 'never synced',
+          blockedAt: 'blocked {time}',
+          blockedSection: 'Blocked',
+          block: 'Block',
+          blockTitle: 'Block {name}?',
+          blockBody:
+            'Last synced {time}. When it connects again, all its data is erased, including changes not yet sent.',
+          blockBodyNever: 'Never synced. When it connects, all its data is erased.',
+          blockConfirm: 'Block',
+          blocked: '{name} is blocked.',
+          empty: 'No other devices yet',
+          emptyBody: 'Devices registered to this store will appear here.',
+          failure: {
+            offline: 'The device list needs the internet. Connect this device, then try again.',
+            denied: 'Only the store owner can block devices.',
+            rateLimited: 'Too many devices blocked in one hour. Try again later.',
+            unexpected: 'That didn’t work. Try again in a moment.',
+          },
         },
       },
       sync: {

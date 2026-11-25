@@ -38,14 +38,14 @@ export function runI18nVectors(): VectorResult[] {
   // Money is locale-independent by design (§5.1) — assert it in both locales.
   for (const locale of ['id', 'en'] satisfies Locale[]) {
     setLocale(locale);
-    check(`formatMoney(250000) [${locale}]`, 'Rp 250.000', formatMoney(250000));
+    check(`formatMoney(250000) [${locale}]`, 'Rp\u00A0250.000', formatMoney(250000));
     check(`formatDate(2026-07-14) [${locale}]`, '14/07/2026', formatDate(VECTOR_INSTANT_MS));
   }
 
   setLocale('id');
-  check('formatMoney(0)', 'Rp 0', formatMoney(0));
-  check('formatMoney(1500500)', 'Rp 1.500.500', formatMoney(1500500));
-  check('formatMoney(-50000)', '\u2212Rp 50.000', formatMoney(-50000));
+  check('formatMoney(0)', 'Rp\u00A00', formatMoney(0));
+  check('formatMoney(1500500)', 'Rp\u00A01.500.500', formatMoney(1500500));
+  check('formatMoney(-50000)', '\u2212Rp\u00A050.000', formatMoney(-50000));
   check('formatTime(14:30) [id]', '14.30', formatTime(VECTOR_INSTANT_MS));
   check('formatNumber(1234567) [id]', '1.234.567', formatNumber(1234567));
 

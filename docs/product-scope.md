@@ -596,6 +596,21 @@ governance notes in "Decision" where they differ.
 - `apps/web` is the start of the later back-office web app: customer pages need
   no sign-in, staff screens join it with their own routes.
 
+## Blocking a lost device (2026-11-25)
+
+- Pengaturan › Perangkat (phone and PC) lists the store's devices with their last
+  sync and offers "Blokir" to whoever holds `auth.device_revoke`. The device in
+  hand cannot block itself; the server's own signer cannot be blocked.
+- A blocked device erases everything the next time it reaches the server (data,
+  photos, caches, keys, sign-in). The server must answer `DEVICE_REVOKED` first;
+  no other failure erases. Unsent changes are lost: the confirmation names the
+  last sync instead of counting them. It then shows the register screen with the
+  reason.
+- Deactivating someone also blocks their personal phone; shared store devices
+  stay as they are.
+- Uploads left unfinished for 48 hours are deleted on the server; the device
+  starts that upload again.
+
 ## Open product choices
 
 Settled since this list was first written: Xendit for QRIS, Epson ESC/P slips on

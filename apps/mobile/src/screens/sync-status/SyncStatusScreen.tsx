@@ -26,6 +26,7 @@
 import {
   formatDate,
   formatRelative,
+  keepNumbersWhole,
   t,
   translateErrorCode,
   translateOpType,
@@ -240,7 +241,7 @@ export function SyncStatusScreen({
             subtitle={
               openRejected.subject === null
                 ? formatRelative(input.now - openRejected.at)
-                : `${openRejected.subject} · ${formatRelative(input.now - openRejected.at)}`
+                : `${keepNumbersWhole(openRejected.subject)} · ${formatRelative(input.now - openRejected.at)}`
             }
             closeLabel={t('core.action.close')}
             onClose={() => onOpenRejected(openRejected)}
@@ -428,7 +429,7 @@ export function SyncStatusScreen({
                       })
                     : t('sync.rejected.opMetaSubject', {
                         opType: translateOpType(row.type),
-                        subject: row.subject,
+                        subject: keepNumbersWhole(row.subject),
                         time: formatRelative(input.now - row.at),
                       })
                 }

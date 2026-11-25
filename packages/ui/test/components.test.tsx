@@ -94,9 +94,9 @@ describe('Button (§3.1)', () => {
     expect(r.styleOf('b')['backgroundColor']).toBe(color.primaryPressed);
   });
 
-  test('the label wraps to 2 lines rather than truncating (ID/EN length variance, §0)', () => {
+  test('the label wraps rather than truncating (ID/EN length variance, §0)', () => {
     const r = render(<Button testID="b" label="Ya, Lanjutkan" onPress={vi.fn()} />);
-    expect(r.get('b.label').props['numberOfLines']).toBe(2);
+    expect(r.get('b.label').props['numberOfLines']).toBeUndefined();
   });
 
   test('height is the 56 dp primary target (§1.4)', () => {

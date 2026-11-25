@@ -7,6 +7,7 @@ import {
   StaffAdminError,
   type StaffDirectory,
 } from '@bolusi/core';
+import type { DeviceList, DeviceRow } from '@bolusi/device/models/devices/model';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { initI18n } from '@bolusi/i18n';
 import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
@@ -145,6 +146,7 @@ describe('Settings on the PC', () => {
       'staffPins',
       'limits',
       'roles',
+      'devices',
       'fees',
       'uncollected',
       'slip',
@@ -165,6 +167,7 @@ describe('Settings on the PC', () => {
           canManageStaff: false,
           canSetLimits: false,
           canRenameDevice: false,
+          canBlockDevices: false,
           tenantAdmin: false,
         }),
       }),
@@ -175,6 +178,54 @@ describe('Settings on the PC', () => {
       .getAllByRole('button')
       .map((button) => button.getAttribute('data-testid'));
     expect(items).toEqual(['desktop.settings.nav.account', 'desktop.settings.nav.computer']);
+  });
+
+  it('blocks a lost device as the owner, after a confirmation naming its last sync', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    const row = (id: string, name: string, more: Partial<DeviceRow> = {}): DeviceRow => ({
+      id,
+      name,
+      detail: 'Perangkat toko · disinkronkan 5 menit lalu',
+      isThis: false,
+      blocked: false,
+      lastSyncAt: Date.UTC(2026, 10, 25, 1, 0),
+      ...more,
+    });
+    let blocked = false;
+    core.answers['devices.list'] = (): DeviceList => ({
+      active: [
+        row('d-pc', 'PC Kasir', { isThis: true }),
+        ...(blocked ? [] : [row('d-hp', 'HP Ani')]),
+      ],
+      blocked: blocked ? [row('d-hp', 'HP Ani', { blocked: true })] : [],
+    });
+    core.answers['devices.block'] = () => {
+      blocked = true;
+    };
+    renderApp();
+    await openSettings('devices');
+    await screen.findByTestId('desktop.settings.devices.row.d-hp');
+    // The PC in hand has nothing to press.
+    expect(within(byTestId('desktop.settings.devices.row.d-pc')).queryByRole('button')).toBeNull();
+
+    fireEvent.click(byTestId('desktop.settings.devices.block.d-hp'));
+    const confirm = await screen.findByTestId('desktop.settings.devices.confirm');
+    expect(confirm.textContent).toContain('Terakhir disinkronkan');
+    expect(callsTo('devices.block')).toEqual([]);
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Blokir' }));
+
+    await screen.findByText('HP Ani sudah diblokir.');
+    expect(callsTo('devices.block')).toEqual([[OWNER.id, 'd-hp']]);
+    expect(screen.queryByTestId('desktop.settings.devices.block.d-hp')).toBeNull();
+  });
+
+  it('says a device list needs the internet, and offers to try again', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    core.answers['devices.list'] = () => Promise.reject(new StaffAdminError('offline'));
+    renderApp();
+    await openSettings('devices');
+    const error = await screen.findByTestId('desktop.settings.devices.error');
+    expect(error.textContent).toContain('Butuh internet');
   });
 
   it('counts the locked colleagues beside "PIN karyawan"', async () => {

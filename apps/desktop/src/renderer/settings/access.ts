@@ -1,6 +1,7 @@
 // What the PC's Settings may do for the person signed in, built from the core's state: their own
 // PIN, colleagues' PINs and "Karyawan". Each part is present only for someone allowed it, so a page
 // they may not use is absent rather than shown and refused; the core and the server still decide.
+import type { DeviceControls } from '@bolusi/device/bootstrap/devices';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { DeviceInfo } from '@bolusi/device/models/settings/model';
@@ -22,6 +23,8 @@ export interface SettingsAccess {
   readonly changePin?: ((currentPin: string, newPin: string) => Promise<void>) | undefined;
   readonly staffPins?: StaffPinAccess | undefined;
   readonly staff?: StaffControls | undefined;
+  /** "Perangkat": the store's devices and blocking a lost one; REJECTS with a `StaffAdminError`. */
+  readonly devices?: DeviceControls | undefined;
   /** This PC as registered; null before the core read it. */
   readonly device?: DeviceInfo | null | undefined;
   /** Rename this PC, for someone who may register devices here; REJECTS with a `StaffAdminError`. */

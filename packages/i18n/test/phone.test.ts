@@ -29,6 +29,13 @@ describe('keepNumbersWhole', () => {
     expect(keepNumbersWhole('0813 1111 2222')).toBe('0813\u00A01111\u00A02222');
   });
 
+  it('keeps a servisan code whole but lets the words before it wrap', () => {
+    expect(keepNumbersWhole('Harga diubah · Servisan K7Q-0039')).toBe(
+      'Harga diubah · Servisan K7Q\u20110039',
+    );
+    expect(keepNumbersWhole('Wi-Fi rusak')).toBe('Wi-Fi rusak');
+  });
+
   it('still lets the words around and between numbers wrap', () => {
     expect(keepNumbersWhole('0812-3456-7890 / 0813 1111 (istri)')).toBe(
       '0812\u20113456\u20117890 / 0813\u00A01111 (istri)',

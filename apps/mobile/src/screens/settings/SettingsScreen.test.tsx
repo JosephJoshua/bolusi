@@ -210,6 +210,30 @@ describe('the screen title and section headers are distinct, correct labels (§1
     expect(staff.query('settings-section-team')).toBeNull();
   });
 
+  test('"Perangkat" shows under the store team ONLY for someone who may block devices, and opens it', () => {
+    const onOpenDevices = vi.fn();
+    const owner = render(
+      <SettingsScreen
+        locale="id"
+        onSelectLocale={vi.fn()}
+        onOpenNotificationSettings={vi.fn()}
+        device={ENROLLED}
+        currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
+        onBack={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onOpenChangePin={vi.fn()}
+        onOpenDevices={onOpenDevices}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={vi.fn()}
+      />,
+    );
+    expect(lineText(owner, 'settings-section-team')).toBe(t('core.settings.team'));
+    fire(owner.get('settings-devices'), 'onPress');
+    expect(onOpenDevices).toHaveBeenCalledTimes(1);
+    expect(renderSettings(ENROLLED).query('settings-devices')).toBeNull();
+  });
+
   test('the three section headers are mutually distinct (no two sections share a label)', () => {
     const screen = renderSettings(ENROLLED);
     const headers = [

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Golden vectors, determinism kit, fakes, driver-conformance suite — test-only, never imported by shipping source (08 §3.2)",
+  "description": "Golden vectors, determinism kit, fakes, driver-conformance suite \u2014 test-only, never imported by shipping source (08 \u00a73.2)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -17,7 +17,11 @@
       "types": "./dist/chaos/index.d.ts",
       "default": "./dist/chaos/index.js"
     },
-    "./vectors/ed25519.json": "./vectors/ed25519.json"
+    "./vectors/ed25519.json": "./vectors/ed25519.json",
+    "./layout-audit": {
+      "types": "./dist/layout-audit.d.ts",
+      "default": "./dist/layout-audit.js"
+    }
   },
   "files": [
     "dist",
