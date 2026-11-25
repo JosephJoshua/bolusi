@@ -80,6 +80,7 @@ import type { AppSessionController as AppSession } from '@bolusi/device/bootstra
 import { isBlockedSyncState } from '@bolusi/device/bootstrap/blocked-wipe';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { renameDevice } from '@bolusi/device/bootstrap/device-info';
+import { createDeviceControls } from '@bolusi/device/bootstrap/devices';
 import { createStaffControls } from '@bolusi/device/bootstrap/staff';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import {
@@ -1353,6 +1354,22 @@ export function Root({
                   client.requestManual();
                   await client.settle();
                 },
+              })
+        }
+        // Settings › Perangkat (owner decision 2026-11-25), for someone who may block devices here:
+        // the server's list of this store's devices, and its revoke, made as the signed-in owner.
+        devices={
+          session === null ||
+          staffAdmin === undefined ||
+          app === null ||
+          app.deviceId === null ||
+          sessionSnapshot?.canBlockDevices !== true
+            ? undefined
+            : createDeviceControls({
+                port: staffAdmin,
+                session,
+                thisDeviceId: app.deviceId,
+                now: () => systemClock.now(),
               })
         }
         // Settings › rename this phone, for someone who may register devices here: the server takes

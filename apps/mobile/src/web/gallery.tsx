@@ -62,6 +62,7 @@ import {
   STAFF_MANY,
   StaffDemo,
 } from './staff-demo.js';
+import { DEVICES_DEMO, DevicesDemo } from './devices-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -795,6 +796,23 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => (
       <ApproxFrame screen="staff" state={state}>
         <StaffDemo {...props} />
+      </ApproxFrame>
+    ),
+  })),
+
+  // Perangkat (owner) — the store's devices, blocking a lost one over an in-memory server.
+  ...(
+    [
+      ['ready', {}],
+      ['alone', { devices: DEVICES_DEMO.filter((d) => d.id === 'd-this') }],
+      ['offline', { offline: true }],
+    ] as const
+  ).map(([state, props]) => ({
+    screen: 'devices',
+    state,
+    render: () => (
+      <ApproxFrame screen="devices" state={state}>
+        <DevicesDemo {...props} />
       </ApproxFrame>
     ),
   })),

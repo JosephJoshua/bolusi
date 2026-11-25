@@ -98,6 +98,8 @@ export interface SettingsScreenProps {
   readonly onOpenLimits?: (() => void) | undefined;
   /** The main owner's role editor ("Tugas karyawan"); absent for anyone else. */
   readonly onOpenRoles?: (() => void) | undefined;
+  /** "Perangkat": the store's devices, and blocking a lost one; absent for anyone who may not block. */
+  readonly onOpenDevices?: (() => void) | undefined;
   /**
    * The modules' settings (repair's intake lists and fees, money's payment methods) — each row present
    * ONLY for someone who may change it at this store, and a section absent when it has no rows; core
@@ -128,6 +130,7 @@ export function SettingsScreen({
   onOpenStaff,
   onOpenLimits,
   onOpenRoles,
+  onOpenDevices,
   modules = [],
   syncChip,
   pendingCount,
@@ -181,7 +184,8 @@ export function SettingsScreen({
       {onOpenStaff === undefined &&
       onOpenStaffPins === undefined &&
       onOpenLimits === undefined &&
-      onOpenRoles === undefined ? null : (
+      onOpenRoles === undefined &&
+      onOpenDevices === undefined ? null : (
         // The owner's people: who works here, and their PINs.
         <Section title={t('core.settings.team')} testID="settings-section-team">
           {onOpenStaff === undefined ? null : (
@@ -223,6 +227,15 @@ export function SettingsScreen({
               }
               onPress={onOpenStaffPins}
               testID="settings-staff-pins"
+            />
+          )}
+          {onOpenDevices === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="phoneDevice" />}
+              primaryText={t('auth.devices.title')}
+              secondaryText={t('auth.devices.settingsSummary')}
+              onPress={onOpenDevices}
+              testID="settings-devices"
             />
           )}
         </Section>

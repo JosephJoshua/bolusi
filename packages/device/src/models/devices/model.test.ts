@@ -44,6 +44,7 @@ describe('deviceList', () => {
     expect(list.active.map((row) => row.id)).toEqual(['d-this', 'd-a', 'd-z']);
     expect(list.blocked.map((row) => row.id)).toEqual(['d-new', 'd-old']);
     expect(list.active[0]?.isThis).toBe(true);
+    expect(list.active[0]?.detail).toBe('Perangkat ini · disinkronkan 5 menit lalu');
     expect(list.active[1]?.isThis).toBe(false);
   });
 

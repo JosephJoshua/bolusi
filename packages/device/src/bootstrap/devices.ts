@@ -4,6 +4,8 @@ import { StaffAdminError, type StaffAdminPort } from '@bolusi/core';
 
 import { deviceList, type DeviceList } from '../models/devices/model.js';
 
+import type { AppSessionController } from './session.js';
+
 export interface DeviceControls {
   /** This store's devices, as the server has them now. REJECTS with a `StaffAdminError`. */
   readonly load: () => Promise<DeviceList>;
@@ -13,37 +15,39 @@ export interface DeviceControls {
 
 export interface DeviceControlsDeps {
   readonly port: StaffAdminPort;
-  /** The signed-in owner, this device's store and this device; null with no session. */
-  readonly context: () => {
-    readonly actingUserId: string;
-    readonly storeId: string;
-    readonly thisDeviceId: string;
-  } | null;
-  /** The store's people by id, for the phones set up as someone's own. */
-  readonly names: () => Promise<ReadonlyMap<string, string>>;
+  /** Who acts and for which store, and the store's people (for the phones set up as someone's own). */
+  readonly session: Pick<AppSessionController, 'staffContext' | 'listStaff'>;
+  /** The device this list is open on. */
+  readonly thisDeviceId: string;
   readonly now: () => number;
 }
 
 export function createDeviceControls(deps: DeviceControlsDeps): DeviceControls {
   const context = () => {
-    const current = deps.context();
+    const current = deps.session.staffContext();
     // Unreachable from the screen (it is behind a session), so never sent anonymously.
     if (current === null) throw new StaffAdminError('denied');
     return current;
   };
   return {
     load: async () => {
-      const { actingUserId, storeId, thisDeviceId } = context();
-      const [devices, names] = await Promise.all([
+      const { actingUserId, storeId } = context();
+      const [devices, directory] = await Promise.all([
         deps.port.listDevices({ actingUserId }),
-        deps.names(),
+        deps.session.listStaff(),
       ]);
-      return deviceList(devices, { storeId, thisDeviceId, names, now: deps.now() });
+      const names = new Map(directory.members.map((member) => [member.id, member.name]));
+      return deviceList(devices, {
+        storeId,
+        thisDeviceId: deps.thisDeviceId,
+        names,
+        now: deps.now(),
+      });
     },
     block: async (deviceId) => {
-      const { actingUserId, thisDeviceId } = context();
+      const { actingUserId } = context();
       // Blocking the device in hand would erase it under the owner; another device does that.
-      if (deviceId === thisDeviceId) throw new StaffAdminError('denied');
+      if (deviceId === deps.thisDeviceId) throw new StaffAdminError('denied');
       await deps.port.blockDevice({ actingUserId, deviceId });
     },
   };

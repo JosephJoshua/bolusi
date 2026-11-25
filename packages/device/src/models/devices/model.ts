@@ -8,7 +8,7 @@ export interface DeviceRow {
   readonly id: string;
   /** Its name, or a stand-in for a device registered before names existed. */
   readonly name: string;
-  /** "HP pribadi Ani" or "Perangkat toko", and when it last synced or was blocked. */
+  /** "Perangkat ini", "HP pribadi Ani" or "Perangkat toko", and when it last synced or was blocked. */
   readonly detail: string;
   /** The device this list is open on: it cannot block itself from here. */
   readonly isThis: boolean;
@@ -53,12 +53,15 @@ export function deviceList(
 function toRow(device: RegisteredDevice, context: DeviceListContext): DeviceRow {
   const owner =
     device.personalUserId === null ? null : (context.names.get(device.personalUserId) ?? null);
+  // The device in hand says so first: the owner knows whose it is.
   const whose =
-    device.personalUserId === null
-      ? t('auth.devices.shared')
-      : owner === null
-        ? t('auth.devices.personalUnknown')
-        : t('auth.devices.personal', { name: owner });
+    device.id === context.thisDeviceId
+      ? t('auth.devices.thisDevice')
+      : device.personalUserId === null
+        ? t('auth.devices.shared')
+        : owner === null
+          ? t('auth.devices.personalUnknown')
+          : t('auth.devices.personal', { name: owner });
   const when = device.blocked
     ? device.blockedAt === null
       ? null

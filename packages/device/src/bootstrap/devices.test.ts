@@ -1,6 +1,11 @@
 // "Perangkat" composition: the list and a block are made as the signed-in owner, and this device
 // can never block itself from here.
-import { StaffAdminError, staffAdminFailure, type StaffAdminPort } from '@bolusi/core';
+import {
+  StaffAdminError,
+  staffAdminFailure,
+  type StaffAdminPort,
+  type StaffDirectory,
+} from '@bolusi/core';
 import { describe, expect, test, vi } from 'vitest';
 
 import { createDeviceControls } from './devices.js';
@@ -33,15 +38,26 @@ function port(): StaffAdminPort {
   };
 }
 
-const CONTEXT = { actingUserId: 'u-owner', storeId: 's-1', thisDeviceId: 'd-this' };
+const CONTEXT = { actingUserId: 'u-owner', storeId: 's-1' };
+
+function session(context: typeof CONTEXT | null) {
+  return {
+    staffContext: () => context,
+    listStaff: () =>
+      Promise.resolve({
+        roles: [],
+        members: [{ id: 'u-ani', name: 'Ani' }],
+      } as unknown as StaffDirectory),
+  };
+}
 
 describe('createDeviceControls', () => {
   test('loads as the owner and names the personal phones', async () => {
     const admin = port();
     const controls = createDeviceControls({
       port: admin,
-      context: () => CONTEXT,
-      names: () => Promise.resolve(new Map([['u-ani', 'Ani']])),
+      session: session(CONTEXT),
+      thisDeviceId: 'd-this',
       now: () => 2,
     });
     const list = await controls.load();
@@ -53,8 +69,8 @@ describe('createDeviceControls', () => {
     const admin = port();
     const controls = createDeviceControls({
       port: admin,
-      context: () => CONTEXT,
-      names: () => Promise.resolve(new Map()),
+      session: session(CONTEXT),
+      thisDeviceId: 'd-this',
       now: () => 0,
     });
     await controls.block('d-1');
@@ -70,8 +86,8 @@ describe('createDeviceControls', () => {
     const admin = port();
     const controls = createDeviceControls({
       port: admin,
-      context: () => null,
-      names: () => Promise.resolve(new Map()),
+      session: session(null),
+      thisDeviceId: 'd-this',
       now: () => 0,
     });
     await expect(controls.load()).rejects.toBeInstanceOf(StaffAdminError);
