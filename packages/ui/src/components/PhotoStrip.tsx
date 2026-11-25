@@ -69,9 +69,7 @@ export function PhotoStrip({
           style={styles.tile}
         >
           <View style={styles.image}>{photo.image}</View>
-          <Text style={styles.label} numberOfLines={1}>
-            {photo.label}
-          </Text>
+          <Text style={styles.label}>{photo.label}</Text>
         </Pressable>
       ))}
     </ScrollView>

@@ -63,6 +63,7 @@ import {
   type DbKeyStore,
 } from '@bolusi/db-client';
 
+import { readWipedAfterBlock } from './blocked-wipe.js';
 import { assertDatabaseKeyBinding } from './db-identity.js';
 import { CLIENT_MODULES } from './modules.js';
 import { createPersonAccess, type PersonAccess } from './person-access.js';
@@ -145,6 +146,8 @@ export interface Bootstrapped {
    * `null` today, and the sync loop is deliberately not started. Never defaulted — the null is read.
    */
   readonly deviceId: string | null;
+  /** An unregistered database left by erasing a blocked device (blocked-wipe.ts): setup says so. */
+  readonly wipedAfterBlock: boolean;
   close(): Promise<void>;
 }
 
@@ -242,6 +245,7 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
       migrationsApplied: applied,
       syncState,
       deviceId,
+      wipedAfterBlock: deviceId === null && (await readWipedAfterBlock(db.db as never)),
       close: () => db.close(),
     };
   } catch (error) {
@@ -252,6 +256,9 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     throw error;
   }
 }
+
+/** A boot shared by every caller in the realm. `forget` drops it once its database is closed. */
+export type SharedBoot<A> = ((arg: A) => Promise<Bootstrapped>) & { readonly forget: () => void };
 
 /**
  * Boot the data layer once per JS realm, however many callers want it.
@@ -269,9 +276,7 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
  * joined someone else's failed boot retries once with its own `arg`: the UI still gets its
  * self-healing boot after a background boot (which never wipes) failed.
  */
-export function bootOncePerRealm<A = void>(
-  boot: (arg: A) => Promise<Bootstrapped>,
-): (arg: A) => Promise<Bootstrapped> {
+export function bootOncePerRealm<A = void>(boot: (arg: A) => Promise<Bootstrapped>): SharedBoot<A> {
   let first: Promise<Bootstrapped> | null = null;
   const run = async (arg: A, mayRetry: boolean): Promise<Bootstrapped> => {
     if (first === null) {
@@ -289,12 +294,18 @@ export function bootOncePerRealm<A = void>(
       if (mayRetry) return run(arg, false);
       throw error;
     }
+    const deviceId = await readDeviceId(app.db.db as never);
     return {
       ...app,
       migrationsApplied: [],
-      deviceId: await readDeviceId(app.db.db as never),
+      deviceId,
+      wipedAfterBlock: deviceId === null && (await readWipedAfterBlock(app.db.db as never)),
       syncState: await readSyncState(app.db.db as never),
     };
   };
-  return (arg) => run(arg, true);
+  return Object.assign((arg: A) => run(arg, true), {
+    forget: () => {
+      first = null;
+    },
+  });
 }

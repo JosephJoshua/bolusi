@@ -86,7 +86,7 @@ export function Toast({
       style={[styles.base, entrance]}
     >
       <Icon name={icon} size={size.iconInline} color={fg} />
-      <Text testID={`${testID}.message`} numberOfLines={2} style={styles.message}>
+      <Text testID={`${testID}.message`} style={styles.message}>
         {message}
       </Text>
 

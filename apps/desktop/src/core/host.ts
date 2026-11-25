@@ -31,12 +31,18 @@ import { createAppEnrollment, type AppEnrollment } from '@bolusi/device/bootstra
 import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
 import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
+import {
+  bootErasingBlocked,
+  createBlockProbe,
+  isBlockedSyncState,
+} from '@bolusi/device/bootstrap/blocked-wipe';
 import { bootWithLocalRecovery } from '@bolusi/device/bootstrap/recovery';
 import {
   createSessionRepairRuntime,
   REPAIR_REJECTED_SUBJECTS,
   repairMediaSeamsFor,
 } from '@bolusi/device/bootstrap/repair';
+import { createDeviceControls, type DeviceControls } from '@bolusi/device/bootstrap/devices';
 import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
 import {
   createStaffControls,
@@ -87,7 +93,13 @@ import {
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingDeviceAdmin, actingSession, actingStaffAdmin, readForActing } from './acting.js';
+import {
+  actingDeviceAdmin,
+  actingDeviceBlocker,
+  actingSession,
+  actingStaffAdmin,
+  readForActing,
+} from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
@@ -123,6 +135,10 @@ export interface CoreHostDeps {
   readonly clock?: ClockPort;
   readonly timer?: TimerPort;
   readonly fetchImpl?: typeof fetch;
+  /** Clear what the window's browser engine cached (main owns it), when a blocked PC is erased. */
+  readonly clearWebData?: () => Promise<void>;
+  /** The running core learnt the PC is blocked: restart it, so the start erases the PC. */
+  readonly onBlocked?: () => void;
 }
 
 export interface CoreHost {
@@ -286,8 +302,14 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       emitQueued = false;
       current = computeState();
       for (const listener of stateListeners) listener(current);
+      if (!blockedSeen && sync !== null && isBlockedSyncState(sync.syncState())) {
+        blockedSeen = true;
+        deps.onBlocked?.();
+      }
     });
   };
+  /** Once per run, and not for a block the start already knew: the restart is asked for once. */
+  let blockedSeen = false;
 
   function sessionView(): SessionView | null {
     if (session === null) return null;
@@ -331,6 +353,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       canManageStaff: snapshot.canManageStaff,
       canSetLimits: snapshot.canSetLimits,
       canRenameDevice: snapshot.canRenameDevice,
+      canBlockDevices: snapshot.canBlockDevices,
       tenantAdmin: snapshot.tenantAdmin,
       permissions,
       colleaguePermissions,
@@ -492,6 +515,19 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     });
   }
 
+  /** "Perangkat" as the person signed in now, the phone's composition. */
+  function devicesFor(userId: string): DeviceControls {
+    const current = actingDeviceBlocker(session, userId);
+    const deviceId = app?.deviceId ?? null;
+    if (deviceId === null) throw new DomainError('NOT_AUTHENTICATED');
+    return createDeviceControls({
+      port: staffAdmin,
+      session: current,
+      thisDeviceId: deviceId,
+      now: () => clock.now(),
+    });
+  }
+
   /** The PIN session, for a window call made for the person signed in now. */
   const sessionFor = (userId: string): AppSessionController => actingSession(session, userId);
 
@@ -532,7 +568,44 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     }
   }
 
-  async function bootDataLayer(): Promise<Bootstrapped> {
+  /** The database files, removed by both erases below. */
+  function removeDatabaseFiles(): void {
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+      rmSync(join(deps.dataDir, `${DEFAULT_DATABASE_NAME}${suffix}`), { force: true });
+    }
+  }
+
+  /**
+   * Erase everything the app keeps on this PC, for a blocked device (blocked-wipe.ts), in its
+   * order: photos, videos and the window's caches, then the PC's own keys and token, then the
+   * database files and key. Printer, paper, camera and language settings (device-settings.json) are not data and
+   * stay, so the PC is ready again once it is registered.
+   */
+  async function eraseThisPc(): Promise<void> {
+    rmSync(join(deps.dataDir, 'files'), { recursive: true, force: true });
+    // The window's caches hold nothing the database does not; a failure there must not stop the
+    // erase of the rest.
+    await deps.clearWebData?.().catch((error: unknown) => warn('web data not cleared', error));
+    await keystore.wipe();
+    removeDatabaseFiles();
+    await dbKeyStore.wipe();
+  }
+
+  /** The start: a blocked PC is erased here, before any screen shows its data. */
+  function bootDataLayer(): Promise<Bootstrapped> {
+    return bootErasingBlocked({
+      boot: bootRecovering,
+      probe: createBlockProbe({
+        baseUrl: deps.apiBaseUrl,
+        deviceToken: loadDeviceToken,
+        ...fetchOptions,
+      }),
+      eraseDevice: eraseThisPc,
+      clock,
+    });
+  }
+
+  async function bootRecovering(): Promise<Bootstrapped> {
     const location = deps.dataDir;
     return bootWithLocalRecovery({
       boot: () =>
@@ -546,9 +619,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         }),
       wipeLocalData: async () => {
         await dbKeyStore.wipe();
-        for (const suffix of ['', '-wal', '-shm', '-journal']) {
-          rmSync(join(location, `${DEFAULT_DATABASE_NAME}${suffix}`), { force: true });
-        }
+        removeDatabaseFiles();
       },
     });
   }
@@ -740,6 +811,9 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       return;
     }
     app = booting;
+    // Still blocked after the start means the server could not be asked: stay on the blocked
+    // setup screen rather than restart again and again. Only a block learnt while running restarts.
+    blockedSeen = isBlockedSyncState(booting.syncState);
     locale = await loadDeviceLocale(booting.db.db);
     const enroll = createAppEnrollment(
       booting,
@@ -753,6 +827,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         location: NO_LOCATION,
         platform: PLATFORM,
         appVersion: deps.appVersion,
+        onBlocked: deps.onBlocked,
       },
       (deviceId) => void adopt(deviceId),
     );
@@ -881,6 +956,10 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'staff.updateRole': (userId: string, roleId: string, change: RoleChange) =>
       staffFor(userId).onUpdateRole(roleId, change),
     'staff.deleteRole': (userId: string, roleId: string) => staffFor(userId).onDeleteRole(roleId),
+
+    // ── Perangkat (online only; the server's list and its revoke, as the signed-in owner) ───────
+    'devices.list': (userId: string) => devicesFor(userId).load(),
+    'devices.block': (userId: string, deviceId: string) => devicesFor(userId).block(deviceId),
 
     // Online only, like Karyawan: the server takes the new name first, then this PC shows it.
     async 'device.rename'(userId: string, name: string) {

@@ -391,7 +391,7 @@ describe('Kas on the PC', () => {
     await openKas('Maria Kogoya');
     await openVoid();
     expect(byTestId('money.desk.void.limit').textContent).toBe(
-      'Batas pembatalanmu Rp 30.000 per servisan.',
+      'Batas pembatalanmu Rp\u00A030.000 per servisan.',
     );
     // Every payment today is beyond it: said up front, and the cancel goes to an owner.
     expect((await screen.findByTestId('money.desk.void.asks')).textContent).toBe(

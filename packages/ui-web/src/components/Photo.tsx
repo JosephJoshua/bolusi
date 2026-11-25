@@ -250,7 +250,7 @@ export function PhotoViewer({
             <>
               <div className="flex h-14 shrink-0 items-center gap-4 px-4">
                 <div className="min-w-0 flex-1">
-                  <RadixDialog.Title className="truncate text-body font-semibold">
+                  <RadixDialog.Title className="text-body font-semibold break-words">
                     {photo.caption}
                   </RadixDialog.Title>
                   <p className="text-small text-white/70">

@@ -17,6 +17,7 @@ import {
 import { InMemoryWindowLimitStore } from '../../src/identity/rate-limits.js';
 import { InProcessPokeHub, type PokeScope } from '../../src/realtime/poke-hub.js';
 import { RevocationHooks } from '../../src/identity/revocation.js';
+import { ImmediateDeliveryDispatcher } from '../../src/push/dispatcher.js';
 import { makeFakeClock, type FakeClock } from './app.js';
 import { makeIdentityDb, makeStubKdf, type IdentityDb } from './identity-db.js';
 
@@ -26,6 +27,8 @@ export interface IdentityHarness {
   readonly clock: FakeClock;
   readonly rateStore: InMemoryWindowLimitStore;
   readonly hooks: RevocationHooks;
+  /** Pushes sent off the request path; `close` waits for them, so none outlives the database. */
+  readonly deliveries: ImmediateDeliveryDispatcher;
   readonly kdf: PasswordKdf;
   readonly dummyCalls: () => number;
   /** Every `sync.poke` scope the app published, in order. */
@@ -49,6 +52,7 @@ export async function makeIdentityHarness(
     : makeStubKdf();
   const rateStore = new InMemoryWindowLimitStore();
   const hooks = new RevocationHooks();
+  const deliveries = new ImmediateDeliveryDispatcher();
   const pokeHub = new InProcessPokeHub();
   const pokes: PokeScope[] = [];
   pokeHub.subscribe((scope) => pokes.push(scope));
@@ -60,6 +64,7 @@ export async function makeIdentityHarness(
     passwordKdf: kdf,
     identityRateStore: rateStore,
     revocationHooks: hooks,
+    deliveryDispatcher: deliveries,
     ...opts.deps?.(clock),
   };
   const app = createApp(overrides);
@@ -71,11 +76,15 @@ export async function makeIdentityHarness(
     clock,
     rateStore,
     hooks,
+    deliveries,
     kdf,
     dummyCalls,
     pokes,
     sweepQris: () => sweepUnpaidCharges(sweepDeps),
-    close: () => idb.close(),
+    close: async () => {
+      await deliveries.flush();
+      await idb.close();
+    },
   };
 }
 
