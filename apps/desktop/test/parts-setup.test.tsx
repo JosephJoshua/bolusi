@@ -128,6 +128,21 @@ describe('categories on the PC', () => {
       within(byTestId('inventory.desk.categories.table')).getByText('Speaker {Posisi}'),
     ).toBeTruthy();
   });
+
+  it('marks a field added after a failed save only once it is typed in or saved again', async () => {
+    await renderApp(OWNER);
+    await openParts();
+    fireEvent.click(byTestId('inventory.desk.categories'));
+    fireEvent.click(await screen.findByTestId('inventory.desk.categories.add'));
+    await screen.findByTestId('inventory.desk.category');
+    fireEvent.click(byTestId('inventory.desk.category.submit'));
+    fireEvent.click(byTestId('inventory.desk.category.addField'));
+    const label = await screen.findByPlaceholderText('Contoh: Kualitas');
+    expect(label.getAttribute('aria-invalid')).toBeNull();
+    expect(screen.queryByText('Isi nama isiannya.')).toBeNull();
+    fireEvent.click(byTestId('inventory.desk.category.submit'));
+    await waitFor(() => expect(label.getAttribute('aria-invalid')).toBe('true'));
+  });
 });
 
 describe('many items at once on the PC', () => {

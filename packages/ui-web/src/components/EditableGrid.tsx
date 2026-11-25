@@ -33,6 +33,7 @@ import {
   type GridRow,
   type PasteColumn,
 } from './grid-model.js';
+import { OverflowText } from './OverflowText.js';
 import { Tooltip } from './Tooltip.js';
 
 export type { CellPos, CellRange, GridRow } from './grid-model.js';
@@ -556,7 +557,7 @@ export function EditableGrid({
                     column.align === 'end' && 'justify-end',
                   )}
                 >
-                  <span className="truncate">{column.label}</span>
+                  <OverflowText text={column.label} />
                 </div>
               );
               return column.hint === undefined ? (
@@ -712,9 +713,9 @@ export function EditableGrid({
                             data-testid={testId === undefined ? undefined : `${testId}.input`}
                           />
                         ) : placeholder !== undefined && placeholder !== '' ? (
-                          <span className="truncate text-text-muted">{placeholder}</span>
+                          <OverflowText text={placeholder} className="text-text-muted" />
                         ) : (
-                          <span className="truncate">{value}</span>
+                          <OverflowText text={value} />
                         )}
                         {problem === undefined || isEditing ? null : (
                           <span

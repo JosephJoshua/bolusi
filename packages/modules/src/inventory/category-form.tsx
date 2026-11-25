@@ -146,6 +146,8 @@ export function useCategoryForm(category: CategoryRow | undefined): CategoryForm
   const [base] = useState(() => draftOf(category));
   const [draft, setDraft] = useState<CategoryDraft>(base);
   const [tried, setTried] = useState(false);
+  // Fields added since saving was last tried: not marked until typed in or saving is tried again.
+  const [untouched, setUntouched] = useState<ReadonlySet<string>>(new Set());
 
   const format = formatOf(draft);
   const dirty =
@@ -153,14 +155,16 @@ export function useCategoryForm(category: CategoryRow | undefined): CategoryForm
     draft.isPart !== base.isPart ||
     JSON.stringify(draft.fields) !== JSON.stringify(base.fields) ||
     format !== formatOf(base);
-  const problems = categoryProblems(draft);
+  const found = categoryProblems(draft);
   const blocked =
-    problems.name !== null ||
-    problems.fields.size > 0 ||
-    problems.list.length > 0 ||
-    problems.format !== null;
+    found.name !== null || found.fields.size > 0 || found.list.length > 0 || found.format !== null;
+  const problems =
+    untouched.size === 0
+      ? found
+      : { ...found, fields: new Map([...found.fields].filter(([id]) => !untouched.has(id))) };
 
-  const updateField: CategoryForm['updateField'] = (id, patch) =>
+  const updateField: CategoryForm['updateField'] = (id, patch) => {
+    if (untouched.has(id)) setUntouched(new Set([...untouched].filter((u) => u !== id)));
     setDraft((current) => {
       const fields = current.fields.map((f) => (f.id === id ? { ...f, ...patch } : f));
       const label = patch.label?.trim();
@@ -178,9 +182,11 @@ export function useCategoryForm(category: CategoryRow | undefined): CategoryForm
         formatLabels: { ...current.formatLabels, [id]: label },
       };
     });
+  };
 
   const addField = (): string => {
     const id = newFieldId();
+    if (tried) setUntouched(new Set([...untouched, id]));
     setDraft((current) => ({
       ...current,
       fields: [...current.fields, { id, label: '', kind: 'one', options: [] }],
@@ -250,8 +256,9 @@ export function useCategoryForm(category: CategoryRow | undefined): CategoryForm
 
   const check = (): CategorySaveOutcome | null => {
     setTried(true);
+    setUntouched(new Set());
     if (!blocked) return null;
-    return { status: 'blocked', field: draft.fields.find((f) => problems.fields.has(f.id))?.id };
+    return { status: 'blocked', field: draft.fields.find((f) => found.fields.has(f.id))?.id };
   };
 
   return {

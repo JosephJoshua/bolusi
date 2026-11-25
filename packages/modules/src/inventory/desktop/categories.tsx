@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   DataTable,
   IconButton,
+  OverflowText,
   PageHeader,
   Segmented,
   SortableList,
@@ -163,16 +164,15 @@ function COLUMNS(): Column[] {
       meta: { track: 'minmax(200px, 2fr)' },
       cell: ({ row: { original: row } }) => (
         <span className="flex min-w-0 flex-col">
-          <span
+          <OverflowText
+            text={row.name}
             className={
               row.archived
-                ? 'truncate text-body font-semibold text-text-muted'
-                : 'truncate text-body font-semibold text-text'
+                ? 'text-body font-semibold text-text-muted'
+                : 'text-body font-semibold text-text'
             }
-          >
-            {row.name}
-          </span>
-          <span className="truncate text-small text-text-muted">{row.nameFormat}</span>
+          />
+          <OverflowText text={row.nameFormat} className="text-small text-text-muted" />
         </span>
       ),
     },
@@ -182,7 +182,7 @@ function COLUMNS(): Column[] {
       header: ti('inventory.category.fields'),
       meta: { track: 'minmax(200px, 3fr)', fold: 1 },
       cell: ({ getValue }) => (
-        <span className="truncate text-body text-text">{String(getValue()) || '–'}</span>
+        <OverflowText text={String(getValue()) || '–'} className="text-body text-text" />
       ),
     },
     {
