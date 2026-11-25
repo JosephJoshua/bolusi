@@ -44,7 +44,7 @@ import {
   type SlipKind,
   type WorkPhotoStage,
 } from '../constants.js';
-import { useCancelFeeAsk, type CancelFeeTicket } from '../cancel-fee-ask.js';
+import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentAsk } from '../down-payment-ask.js';
 import {
   amountOwed,
@@ -662,7 +662,6 @@ export function UndoHandoverDialog({
  * device after the cancel: the bill follows the new fee, charging or giving back the difference.
  */
 export function ChangeCancelFeeDialog({
-  ticketId,
   stale,
   ticket,
   current,
@@ -679,64 +678,32 @@ export function ChangeCancelFeeDialog({
   /** A manager beyond their limit asked an owner instead. */
   readonly onAsked: () => void;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [fee, setFee] = useState<number | null>(current);
   const [reason, setReason] = useState('');
-  const changed = fee !== null && fee !== current;
-  const complete = changed && reason.trim() !== '';
-  const ask = useCancelFeeAsk(ticket, current, changed ? fee : null);
-  const submit = (): void => {
-    if (fee === null || !complete) return;
-    const asking = ask.asking;
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', ask.request(reason.trim()))
-          : runtime.run('changeCancelFee', { ticketId, fee, reason }),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? onAsked : onDone)();
-      });
-  };
-  const leave = useLeaveGuard(stale === null && (changed || reason.trim() !== ''), onClose);
+  const form = useChangeCancelFee({ ticket, current, paid }, { fee, reason }, { onDone, onAsked });
+  const leave = useLeaveGuard(stale === null && form.dirty, onClose);
   return (
     <>
       <StepDialog
         title={tn('repair.cancelFee.title')}
-        description={
-          paid > 0
-            ? tn('repair.cancelFee.paid', {
-                bill: formatMoney(current),
-                amount: formatMoney(paid),
-              })
-            : tn('repair.cancelFee.unpaid', { bill: formatMoney(current) })
-        }
-        runner={runner}
+        description={form.explain}
+        runner={form.runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         size="sm"
         testId="repair.desk.cancelFee"
         footer={
           <>
-            {complete ? null : (
-              <p className="mr-auto text-small text-text-muted">
-                {tn(
-                  fee === null
-                    ? 'repair.hint.cancelFee'
-                    : changed
-                      ? 'repair.hint.reason'
-                      : 'repair.cancelFee.same',
-                )}
-              </p>
+            {form.complete ? null : (
+              <p className="mr-auto text-small text-text-muted">{form.hint}</p>
             )}
             <CancelButton onClick={leave.requestClose} />
             <Button
-              label={ask.asking ? ta('approvals.action.ask') : tn('repair.cancelFee.save')}
+              label={form.submitLabel}
               variant="primary"
-              onClick={submit}
-              busy={runner.busy}
-              disabled={!complete || stale !== null}
+              onClick={form.submit}
+              busy={form.runner.busy}
+              disabled={!form.complete || stale !== null}
               data-testid="repair.desk.cancelFee.submit"
             />
           </>
@@ -756,11 +723,11 @@ export function ChangeCancelFeeDialog({
           onChange={(event) => setReason(event.target.value)}
           data-testid="repair.desk.cancelFee.reason"
         />
-        {ask.asking ? (
+        {form.askedBecause === null ? null : (
           <p className="mt-4 text-small text-text-muted" data-testid="repair.desk.cancelFee.asks">
-            {tn(askedBecauseKey(true))}
+            {form.askedBecause}
           </p>
-        ) : null}
+        )}
       </StepDialog>
       {leave.confirm}
     </>
