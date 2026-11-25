@@ -57,6 +57,9 @@
     "scan": "Scan",
     "pickPart": "Pick an item to see its details."
   },
+  "place": {
+    "stock": "Stock"
+  },
   "filter": {
     "active": "All",
     "belowZero": "Below zero",

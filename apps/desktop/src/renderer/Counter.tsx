@@ -190,6 +190,8 @@ export function Counter({
   const purchasing = repair.purchasing;
   const showsPurchasing = opensPurchasing(inventory, purchasing);
   const [ordersFilter, setOrdersFilter] = useState<OrderFilter>('open');
+  // Stok and Belanja sit under Barang, which is no page of its own: its crumb only names the place.
+  const itemsTrail = [{ key: 'items', label: ti('inventory.list.title') }];
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
   const showsKas = opensKas(money);
   // Settings asks before it is left with unsaved changes.
@@ -285,28 +287,6 @@ export function Counter({
                 (page.kind === 'purchasing' && !showsPurchasing),
               onSelect: () => go({ kind: 'board' }),
             },
-            ...(showsParts
-              ? [
-                  {
-                    key: 'parts',
-                    label: ti('inventory.list.title'),
-                    icon: Package,
-                    active: page.kind === 'parts',
-                    onSelect: () => go({ kind: 'parts' }),
-                  },
-                ]
-              : []),
-            ...(showsPurchasing
-              ? [
-                  {
-                    key: 'purchasing',
-                    label: tp('purchasing.list.title'),
-                    icon: ShoppingCart,
-                    active: page.kind === 'purchasing',
-                    onSelect: () => go({ kind: 'purchasing' }),
-                  },
-                ]
-              : []),
             ...(showsKas
               ? [
                   {
@@ -318,6 +298,41 @@ export function Counter({
                   },
                 ]
               : []),
+            // Barang: the stock, and Belanja beside it for whoever buys from suppliers.
+            ...(!showsParts
+              ? []
+              : !showsPurchasing
+                ? [
+                    {
+                      key: 'parts',
+                      label: ti('inventory.list.title'),
+                      icon: Package,
+                      active: page.kind === 'parts',
+                      onSelect: () => go({ kind: 'parts' }),
+                    },
+                  ]
+                : [
+                    {
+                      key: 'items',
+                      label: ti('inventory.list.title'),
+                      items: [
+                        {
+                          key: 'parts',
+                          label: ti('inventory.place.stock'),
+                          icon: Package,
+                          active: page.kind === 'parts',
+                          onSelect: () => go({ kind: 'parts' }),
+                        },
+                        {
+                          key: 'purchasing',
+                          label: tp('purchasing.list.title'),
+                          icon: ShoppingCart,
+                          active: page.kind === 'purchasing',
+                          onSelect: () => go({ kind: 'purchasing' }),
+                        },
+                      ],
+                    },
+                  ]),
             {
               key: 'settings',
               label: t('core.settings.title'),
@@ -349,7 +364,15 @@ export function Counter({
         />
       ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
         <InventoryRuntimeProvider runtime={inventory}>
-          <PartsPage filter={partsFilter} onFilterChange={setPartsFilter} />
+          <PartsPage
+            filter={partsFilter}
+            onFilterChange={setPartsFilter}
+            place={
+              showsPurchasing
+                ? { title: ti('inventory.place.stock'), trail: itemsTrail }
+                : undefined
+            }
+          />
         </InventoryRuntimeProvider>
       ) : page.kind === 'purchasing' &&
         showsPurchasing &&
@@ -357,7 +380,11 @@ export function Counter({
         purchasing !== undefined ? (
         <InventoryRuntimeProvider runtime={inventory}>
           <PurchasingRuntimeProvider runtime={purchasing}>
-            <OrdersPage filter={ordersFilter} onFilterChange={setOrdersFilter} />
+            <OrdersPage
+              filter={ordersFilter}
+              onFilterChange={setOrdersFilter}
+              place={{ title: tp('purchasing.list.title'), trail: itemsTrail }}
+            />
           </PurchasingRuntimeProvider>
         </InventoryRuntimeProvider>
       ) : page.kind === 'kas' && showsKas ? (

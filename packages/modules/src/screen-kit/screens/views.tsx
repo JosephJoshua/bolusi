@@ -112,6 +112,18 @@ export interface ScreenChrome {
 }
 
 /**
+ * The top of a place's list (Barang, with Stok and Belanja): the place's name as the screen title,
+ * and the switch between its sections under it when it has more than one. A list at its place's
+ * top level has no back arrow; the place tabs take the bottom.
+ */
+export interface PlaceHeader {
+  readonly title: string;
+  readonly sections?: ReactNode;
+  /** A list refused for lack of access points here: a new grant arrives by sync. */
+  readonly onOpenSyncStatus: () => void;
+}
+
+/**
  * One full-screen step of a flow (design-system §3.10: flows, not modals): a back arrow, the body,
  * the refused-action banner and one primary action at the bottom. A step whose choices are its rows
  * (picking a technician) has no primary action. A step that asks a yes/no question (did the customer
