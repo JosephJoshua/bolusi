@@ -33,7 +33,7 @@ export function createTenantRouter(deps: ServerDeps) {
       const tenantId = tenantIdFromContext(c);
 
       const settings = await withTenant(c, async (db) => {
-        const acting = await resolveActingUser(c, db);
+        const acting = await resolveActingUser(c, db, deps.now());
         // tenant_configure is tenant-scoped → only a tenant-wide grant satisfies it.
         await requirePermission(db, {
           userId: acting.userId,

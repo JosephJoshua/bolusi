@@ -9,6 +9,8 @@
 // try/catch swallows it to `skipped` — so a missing token, an offline device, or a 4xx/5xx never
 // blocks or crashes the boot. The bearer is fail-closed (a null token throws rather than sending an
 // anonymous POST that would earn a 401 anyway).
+import { PERSON_SESSION_HEADER } from '@bolusi/schemas';
+
 export interface PushTokenTransportConfig {
   /** Base URL of the server, no trailing slash (08 §6.1's `EXPO_PUBLIC_API_URL`). */
   readonly baseUrl: string;
@@ -16,6 +18,11 @@ export interface PushTokenTransportConfig {
   readonly deviceId: string;
   /** The `bdt_`-prefixed device token (api/02-auth §3/§8), read at call time — never cached here. */
   readonly deviceToken: () => Promise<string | null>;
+  /**
+   * The signed-in person's session, which the server opened after checking their PIN. A shared
+   * device's token is stamped with the person only with it (server routes/push.ts).
+   */
+  readonly personSession?: (actingUserId: string) => Promise<string | null>;
   /** Injected for tests; defaults to the global. */
   readonly fetchImpl?: typeof fetch;
 }
@@ -42,7 +49,11 @@ export function createFetchPushTransport(
       Authorization: `Bearer ${token}`,
     };
     // Only when a session is active — an empty/absent header makes the server stamp `user_id = null`.
-    if (actingUserId !== null) headers['X-Acting-User'] = actingUserId;
+    if (actingUserId !== null) {
+      headers['X-Acting-User'] = actingUserId;
+      const proof = (await config.personSession?.(actingUserId)) ?? null;
+      if (proof !== null) headers[PERSON_SESSION_HEADER] = proof;
+    }
 
     const response = await doFetch(`${config.baseUrl}/v1/push/tokens`, {
       method: 'POST',
