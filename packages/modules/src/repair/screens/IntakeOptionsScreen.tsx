@@ -19,6 +19,7 @@ import {
   touch,
   type,
   Text,
+  ValueText,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -503,9 +504,9 @@ function OptionRow({
         style={({ pressed }) => [styles.rowPress, pressed ? styles.pressed : null]}
       >
         <View style={styles.rowText}>
-          <Text style={[styles.name, row.hidden ? styles.hiddenName : null]} numberOfLines={2}>
+          <ValueText lines={2} style={[styles.name, row.hidden ? styles.hiddenName : null]}>
             {name === '' ? ' ' : name}
-          </Text>
+          </ValueText>
           {caption}
         </View>
         <Text style={styles.editLabel}>{t('core.action.edit')}</Text>
