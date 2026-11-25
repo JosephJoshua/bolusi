@@ -116,7 +116,7 @@
   },
   "revoked": {
     "title": "Perangkat Diblokir",
-    "body": "Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang."
+    "body": "Pemilik toko memblokir perangkat ini, jadi datanya dihapus. Daftarkan ulang untuk memakainya lagi."
   },
   "unrecognised": {
     "title": "HP ini perlu didaftarkan ulang",
@@ -178,7 +178,7 @@
     "makePin": "Buat PIN",
     "deactivate": "Nonaktifkan karyawan",
     "deactivateTitle": "Nonaktifkan {name}?",
-    "deactivateBody": "Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum tersinkron akan ditolak. Riwayat kerjanya tetap ada.",
+    "deactivateBody": "Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum tersinkron akan ditolak. Riwayat kerjanya tetap ada. HP pribadinya juga diblokir dan datanya dihapus.",
     "deactivateConfirm": "Nonaktifkan",
     "inactiveBody": "Dia tidak bisa masuk sampai diaktifkan lagi.",
     "reactivate": "Aktifkan lagi",
@@ -442,5 +442,32 @@
       "syncProblemsHint": "Lihat dan tandai perubahan yang bentrok"
     },
     "risky": "Berisiko · {hint}"
+  },
+  "devices": {
+    "title": "Perangkat",
+    "settingsSummary": "Lihat HP dan komputer toko, blokir yang hilang",
+    "thisDevice": "Perangkat ini",
+    "shared": "Perangkat toko",
+    "personal": "HP pribadi {name}",
+    "personalUnknown": "HP pribadi",
+    "unnamed": "Tanpa nama",
+    "lastSync": "disinkronkan {time}",
+    "neverSynced": "belum pernah disinkronkan",
+    "blockedAt": "diblokir {time}",
+    "blockedSection": "Diblokir",
+    "block": "Blokir",
+    "blockTitle": "Blokir {name}?",
+    "blockBody": "Terakhir disinkronkan {time}. Saat terhubung lagi, semua datanya dihapus, termasuk perubahan yang belum terkirim.",
+    "blockBodyNever": "Belum pernah disinkronkan. Saat terhubung, semua datanya dihapus.",
+    "blockConfirm": "Blokir",
+    "blocked": "{name} sudah diblokir.",
+    "empty": "Belum ada perangkat lain",
+    "emptyBody": "Perangkat yang didaftarkan ke toko ini akan muncul di sini.",
+    "failure": {
+      "offline": "Butuh internet untuk membuka daftar perangkat. Sambungkan perangkat ini, lalu ulangi.",
+      "denied": "Hanya pemilik toko yang bisa memblokir perangkat.",
+      "rateLimited": "Terlalu banyak perangkat diblokir dalam satu jam. Coba lagi nanti.",
+      "unexpected": "Belum berhasil. Coba lagi sebentar lagi."
+    }
   }
 }

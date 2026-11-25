@@ -85,6 +85,7 @@ again changes nothing.
 
 To click through the screens in a browser without a server or device, run
 `pnpm dev:web`; hosted previews of main and each PR are in [Previews](previews.md).
+How to check screens (browser lanes, the layout check, Android) is in [QA](qa.md).
 
 Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 `http://10.0.2.2:3000` on Android emulator; a phone needs a reachable LAN address).

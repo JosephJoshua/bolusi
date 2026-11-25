@@ -58,6 +58,17 @@ export default tseslint.config(
     },
   },
   {
+    name: 'bolusi/no-cut-text',
+    files: [
+      'packages/ui-web/src/**/*.tsx',
+      'packages/modules/src/**/desktop/**/*.tsx',
+      'apps/desktop/src/**/*.tsx',
+      'apps/web/src/**/*.tsx',
+    ],
+    ignores: ['packages/ui-web/src/components/OverflowText.tsx'],
+    rules: { 'bolusi/no-cut-text': 'error' },
+  },
+  {
     name: 'bolusi/handler-purity',
     files: [
       'packages/modules/src/**/*.{commands,queries,handlers}.{ts,tsx}',

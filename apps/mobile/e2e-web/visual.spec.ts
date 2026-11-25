@@ -12,13 +12,12 @@
  * HONEST CEILING: this is a browser approximation. It does not replace the device gates (27a/27b) or
  * native E2E (117); it is a fast visual feedback loop below them.
  */
-import path from 'node:path';
+import type { Page } from '@playwright/test';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, shoot as check, test } from './qa';
 
 import * as tokens from '@bolusi/ui/tokens';
 
-const ARTIFACTS = path.join(__dirname, 'artifacts');
 const APPROX_LABEL = 'RNW browser approximation — NOT device-verified';
 
 /** The distinctively-named seed user (mirrors `src/web/seed.ts` PROBE_USER_NAME) — the data probe. */
@@ -31,9 +30,7 @@ async function open(page: Page, screen: string, state: string): Promise<void> {
   await expect(page.getByTestId('rnw-approx-label').getByText(APPROX_LABEL)).toBeVisible();
 }
 
-async function shoot(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), fullPage: true });
-}
+const shoot = (page: Page, name: string) => check(page, 'screens', name, { fullPage: true });
 
 /**
  * The four-states-plus screenshot matrix. Each row asserts a screen-SPECIFIC testID AND (where a

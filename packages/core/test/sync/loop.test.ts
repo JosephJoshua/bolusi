@@ -321,6 +321,23 @@ describe('a full cycle walks idle → pushing → pulling → idle (03 §10)', (
     expect(harness.timer.pending()).toBe(0);
   });
 
+  it('a loop stopped mid-cycle records no revocation, so a re-enrolled device is not erased', async () => {
+    // Re-enrolment stops the old loop, then the server revokes the old registration. A request
+    // still in flight answers DEVICE_REVOKED, and that must not land on the new registration.
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(() => {
+      loop.stop();
+      throw new SyncTransportError('revoked', { code: 'DEVICE_REVOKED', status: 401 });
+    });
+    loop.requestSync('manual');
+    await loop.settle();
+
+    const state = await syncStateRow();
+    expect(state.syncDisabled).toBe(0);
+    expect(state.syncDisabledReason).toBeNull();
+    expect(harness.timer.pending()).toBe(0);
+  });
+
   it('pause() during push stops between push batches; the rest stay local for the next trigger', async () => {
     const ops = [await seedLocalOp(1), await seedLocalOp(2), await seedLocalOp(3)];
     const loop = await harness.makeLoop({ deviceId: device.id, pushBatchSize: 1 });

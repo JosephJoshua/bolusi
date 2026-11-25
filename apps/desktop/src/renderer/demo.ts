@@ -1,6 +1,8 @@
 // Demo data for the desktop build, which runs the counter screens over the in-memory repair demo
 // before the offline core is wired in. Names here are seeded data, not interface copy.
-import { StaffAdminError, type StaffDirectory } from '@bolusi/core';
+import { StaffAdminError, type RegisteredDevice, type StaffDirectory } from '@bolusi/core';
+import type { DeviceControls } from '@bolusi/device/bootstrap/devices';
+import { deviceList } from '@bolusi/device/models/devices/model';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { demoRepairRuntime, type DemoRepairRole } from '@bolusi/modules/repair/demo';
 import type { RepairRuntime } from '@bolusi/modules/repair/desktop';
@@ -320,4 +322,59 @@ export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
 
 function keysOf(roleIds: readonly string[]): string[] {
   return roleIds.flatMap((id) => demoDirectory.roles.find((role) => role.id === id)?.key ?? []);
+}
+
+const HOUR = 3_600_000;
+
+function demoDevice(
+  id: string,
+  name: string,
+  rest: Partial<RegisteredDevice> = {},
+): RegisteredDevice {
+  return {
+    id,
+    name,
+    storeId: 's-demo',
+    blocked: false,
+    blockedAt: null,
+    personalUserId: null,
+    lastSyncAt: Date.now() - 0.05 * HOUR,
+    lastSeenAt: null,
+    ...rest,
+  };
+}
+
+/** "Perangkat" for the demo's owners: this PC, a few phones, one blocked. Blocks last until reload. */
+export function demoDevicesFor(person: DemoPerson): DeviceControls | undefined {
+  if (person.role !== 'owner' && person.role !== 'storeOwner') return undefined;
+  let devices: RegisteredDevice[] = [
+    demoDevice('d-pc', 'Komputer Kasir'),
+    demoDevice('d-front', 'HP Kasir Depan', { lastSyncAt: Date.now() - 0.2 * HOUR }),
+    demoDevice('d-budi', 'Redmi 13C', {
+      personalUserId: 'u-budi',
+      lastSyncAt: Date.now() - 3 * HOUR,
+    }),
+    demoDevice('d-back', 'HP Teknisi Belakang', { lastSyncAt: Date.now() - 50 * HOUR }),
+    demoDevice('d-old', 'HP Kasir Lama', { blocked: true, blockedAt: Date.now() - 120 * HOUR }),
+  ];
+  const names = new Map(DEMO_PEOPLE.map((p) => [p.userId, p.name]));
+  const server = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 400));
+  return {
+    load: async () => {
+      await server();
+      return deviceList(devices, {
+        storeId: 's-demo',
+        thisDeviceId: 'd-pc',
+        names,
+        now: Date.now(),
+      });
+    },
+    block: async (deviceId) => {
+      await server();
+      if (deviceId === 'd-pc') throw new StaffAdminError('denied');
+      devices = devices.map((d) =>
+        d.id === deviceId ? { ...d, blocked: true, blockedAt: Date.now() } : d,
+      );
+    },
+  };
 }

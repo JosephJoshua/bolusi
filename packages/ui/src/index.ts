@@ -72,7 +72,7 @@ export {
 export type { Bleed } from './layout.js';
 
 // ---- Text that follows a live system font size change -----------------------------------------
-export { FontScaleProvider, Text } from './text.js';
+export { FontScaleProvider, Text, ValueText, type TextProps } from './text.js';
 
 // ---- Component inventory (design-system §3) ----------------------------------------------------
 export * from './components/index.js';
@@ -147,7 +147,7 @@ export type { TabBarProps, TabBarTab } from './shell/TabBar.js';
 // Deliberately NOT re-exported through the component barrels: those are mapped over by the Gallery
 // state registry, and only things with visual states belong there.
 export { identityColor } from './components/Avatar.js';
-export { BANNER_MESSAGE_LINES, selectBanner } from './components/Banner.js';
+export { selectBanner } from './components/Banner.js';
 export { ICON_GLYPHS } from './components/Icon.js';
 export { LOADING_DELAY_MS, SKELETON_ROW_COUNT } from './components/LoadingState.js';
 export { PIN_LENGTH } from './components/PinPad.js';
