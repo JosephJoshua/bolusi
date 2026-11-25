@@ -42,6 +42,7 @@ import {
   getItemQuery,
   itemsFittingQuery,
   itemCostQuery,
+  useCostQuery,
   itemsInCategoryQuery,
   listCategoriesQuery,
   listItemsQuery,
@@ -250,6 +251,7 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
       nextTransferNumber: nextTransferNumberQuery,
       receivedStock: receivedStockQuery,
       itemCost: itemCostQuery,
+      useCost: useCostQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

@@ -10,9 +10,10 @@ import {
   type QueryState,
 } from '../screen-kit/index.js';
 
+import { INVENTORY_PERMISSION } from './constants.js';
 import { ti } from './i18n.js';
 import type { PartUse } from './part-use.js';
-import type { ItemRow, PartsForUseRow, UsedPartRow } from './queries.js';
+import type { ItemRow, PartsForUseRow, UseCostRow, UsedPartRow } from './queries.js';
 import { useInventoryQuery, useInventoryRuntime, type InventoryRuntime } from './runtime.js';
 
 export type { PartUse };
@@ -104,6 +105,36 @@ export function useUsedParts(
     query,
     parts,
     hidden: query.status === 'ready' && parts.length === 0 && !takeable,
+    retry: () => setReloadNonce((n) => n + 1),
+  };
+}
+
+/**
+ * What the parts on a use cost the store, for people who may see buy prices: read apart from the
+ * parts, so a store device holding no costs still shows the parts. `shown` is false for everyone
+ * else. `total` adds the priced parts; `unpriced` counts the rest.
+ */
+export function useUseCost(use: PartUse): {
+  readonly shown: boolean;
+  readonly query: QueryState<readonly UseCostRow[]>;
+  readonly total: number;
+  readonly unpriced: number;
+  readonly retry: () => void;
+} {
+  const runtime = useInventoryRuntime();
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const shown = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
+  const query = useInventoryQuery(
+    async (rt) =>
+      shown ? (await rt.query('useCost', { useKind: use.kind, useId: use.id })).rows : [],
+    `useCost:${use.kind}:${use.id}:${String(shown)}:${String(reloadNonce)}`,
+  );
+  const rows = query.status === 'ready' ? query.data : [];
+  return {
+    shown,
+    query,
+    total: rows.reduce((sum, row) => sum + (row.cost ?? 0), 0),
+    unpriced: rows.filter((row) => row.cost === null).length,
     retry: () => setReloadNonce((n) => n + 1),
   };
 }

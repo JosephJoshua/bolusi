@@ -11,7 +11,8 @@ import { inventoryOperations } from '../src/inventory/operations.js';
 import { PRESET_ROLE_ABILITIES, permissionsFor } from '../src/role-abilities.js';
 import type { ItemCostRow } from '../src/inventory/queries.js';
 import type { ReceiptCostRow } from '../src/purchasing/queries.js';
-import { openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import type { UseCostRow } from '../src/inventory/queries.js';
+import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
 const open: RepairHarness[] = [];
 afterEach(async () => {
@@ -313,5 +314,88 @@ describe('who sees costs', () => {
     for (const abilities of Object.values(PRESET_ROLE_ABILITIES)) {
       expect(permissionsFor(new Set(abilities))).not.toContain('inventory.read_cost');
     }
+  });
+});
+
+/** A servisan the first technician is working on, and what its parts cost the store. */
+async function inWork(h: RepairHarness) {
+  const { ticketId, ticketNumber } = (await h.run('openTicket', intake(h), h.cashierId)) as {
+    ticketId: string;
+    ticketNumber: string;
+  };
+  await h.run('startWork', { ticketId, beforePhotos: [h.photo(1)] }, h.technicianId);
+  const use = { kind: 'repair_ticket' as const, id: ticketId, label: ticketNumber };
+  const take = (itemId: string, qty: number) =>
+    h.runInventory('takePart', { itemId, qty, use }, h.technicianId);
+  const putBack = (itemId: string, qty: number) =>
+    h.runInventory('putBackPart', { itemId, qty, use }, h.technicianId);
+  const costs = async (actor = h.storeOwnerId) =>
+    (await h.queryInventory('useCost', { useKind: 'repair_ticket', useId: ticketId }, actor))
+      .rows as UseCostRow[];
+  return { take, putBack, costs };
+}
+
+describe("what a servisan's parts cost", () => {
+  test('each part at the average when taken; a put-back returns at the average then', async () => {
+    const h = await harness(7310);
+    const { lcd, battery, orderId } = await placed(h);
+    await h.purchasing(
+      'receiveOrder',
+      {
+        orderId,
+        lines: [
+          { itemId: lcd, qty: 3, unitCost: 185_000 },
+          { itemId: battery, qty: 2 },
+        ],
+      },
+      h.storeOwnerId,
+    );
+    const s = await inWork(h);
+    await s.take(lcd, 2);
+    await s.take(battery, 1);
+    await s.putBack(lcd, 1);
+    expect(await s.costs()).toEqual([
+      { itemId: battery, name: 'Baterai Redmi Note 10', out: 1, cost: null },
+      { itemId: lcd, name: 'LCD Redmi Note 10 + frame', out: 1, cost: 185_000 },
+    ]);
+
+    // A dearer delivery after the take leaves what this servisan used alone.
+    await h.purchasing(
+      'receiveOrder',
+      { orderId, lines: [{ itemId: lcd, qty: 1, unitCost: 245_000 }] },
+      h.storeOwnerId,
+    );
+    // The battery's price, typed in later from the nota, reaches the servisan too.
+    const batteryReceipt = (await orderCosts(h, orderId)).find((row) => row.itemId === battery)!;
+    await h.runInventory(
+      'priceStock',
+      { movementId: batteryReceipt.movementId, unitCost: 60_000 },
+      h.storeOwnerId,
+    );
+    expect((await s.costs()).map((row) => [row.out, row.cost])).toEqual([
+      [1, 60_000],
+      [1, 185_000],
+    ]);
+
+    // Everything put back leaves nothing to cost.
+    await s.putBack(lcd, 1);
+    await s.putBack(battery, 1);
+    expect(await s.costs()).toEqual([]);
+  });
+
+  test('read only with Lihat harga beli, and live on a device without costs', async () => {
+    let costsHere = true;
+    const h = await harness(7311, (read) => read !== 'inventory.read_cost' || costsHere);
+    const { lcd, orderId } = await placed(h);
+    await h.purchasing(
+      'receiveOrder',
+      { orderId, lines: [{ itemId: lcd, qty: 3, unitCost: 185_000 }] },
+      h.storeOwnerId,
+    );
+    const s = await inWork(h);
+    await s.take(lcd, 1);
+    await expectRefused(s.costs(h.cashierId), 'PERMISSION_DENIED');
+    costsHere = false;
+    await expect(s.costs()).rejects.toMatchObject({ code: 'NOT_ON_DEVICE' });
   });
 });

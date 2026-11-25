@@ -2,7 +2,7 @@
 // cannot drift. The phone once showed Belanja to a buyer who could not read the parts list.
 import { describe, expect, test } from 'vitest';
 
-import { INVENTORY_PERMISSION, opensParts } from '../src/inventory/index.js';
+import { INVENTORY_PERMISSION, opensParts, opensTransfers } from '../src/inventory/index.js';
 import { MONEY_PERMISSION, managesPaymentMethods, opensKas } from '../src/money/index.js';
 import { PURCHASING_PERMISSION, opensPurchasing } from '../src/purchasing/index.js';
 import { REPAIR_PERMISSION, repairAbilities, repairSettingsAccess } from '../src/repair/index.js';
@@ -19,6 +19,14 @@ describe('places', () => {
     expect(opensPurchasing(holding(INVENTORY_PERMISSION.read), buyer)).toBe(true);
     expect(opensPurchasing(holding(INVENTORY_PERMISSION.read), holding())).toBe(false);
     expect(opensParts(holding(INVENTORY_PERMISSION.read))).toBe(true);
+  });
+
+  test('Kiriman needs the parts list and sending or receiving', () => {
+    const I = INVENTORY_PERMISSION;
+    expect(opensTransfers(holding(I.read, I.transfer))).toBe(true);
+    expect(opensTransfers(holding(I.read, I.receive))).toBe(true);
+    expect(opensTransfers(holding(I.read))).toBe(false);
+    expect(opensTransfers(holding(I.transfer, I.receive))).toBe(false);
   });
 
   test('Kas opens for counting alone; payment methods need receive too', () => {

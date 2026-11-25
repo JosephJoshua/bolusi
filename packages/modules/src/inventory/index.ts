@@ -21,6 +21,7 @@ export {
   type CostReceiptRow,
   type ItemCostInput,
   type ItemCostRow,
+  type UseCostRow,
   type GetPartInput,
   type ListPartsInput,
   type MovementRow,

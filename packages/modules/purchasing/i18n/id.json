@@ -101,14 +101,7 @@
     "pickFirst": "Pilih supplier dan barangnya dulu."
   },
   "pick": {
-    "title": "Pilih barang",
-    "searchHint": "Cari nama atau kode barang",
-    "clear": "Hapus pencarian",
-    "scan": "Pindai",
-    "empty": "Belum ada barang di daftar.",
-    "noMatches": "Barang tidak ditemukan.",
-    "onOrder": "Sudah di pesanan, tap untuk tambah 1",
-    "stock": "Stok {count}"
+    "title": "Pilih barang"
   },
   "receive": {
     "title": "Terima barang",
@@ -156,8 +149,6 @@
     "close": "Tutup pesanan",
     "copied": "Pesan disalin. Tempel di chat supplier.",
     "copyFailed": "Pesan tidak bisa disalin.",
-    "addPart": "Cari barang untuk ditambah",
-    "noPartMatches": "Barang tidak ditemukan.",
     "emptyHint": "Pesanan ke supplier muncul di sini.",
     "suppliersHint": "Supplier dipakai di semua toko.",
     "currency": "Rp"
