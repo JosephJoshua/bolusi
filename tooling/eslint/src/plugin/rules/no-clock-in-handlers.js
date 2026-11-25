@@ -149,7 +149,7 @@ export default {
       NewExpression(node) {
         // `new Date()` reads the clock; `new Date(ms)` is a pure conversion of a value the handler
         // was already given (typically off an op or an input), so it stays legal — banning it
-        // would push handlers into worse workarounds for a non-problem.
+        // would push handlers into contortions for a non-problem.
         const name = bareCalleeName(node.callee);
         if (name === 'Date' && node.arguments.length === 0) report(node, 'new Date');
       },

@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import {
+  authOperationRegistry,
   isSanctionedRuntimeEmission,
   RuntimeEmissionError,
   SANCTIONED_RUNTIME_EMISSION_TYPES,
@@ -97,6 +98,9 @@ describe('the emission channel (04 §5.1)', () => {
 
       const ops = allOps(fixture).filter((op) => op.type === type);
       expect(ops, `${type} must append`).toHaveLength(1);
+      expect(ops[0]!.schemaVersion, 'the version auth declares').toBe(
+        authOperationRegistry.schemaVersionFor(type),
+      );
       expect(fixture.evaluator.checks, 'exempt from the check by design (02 §4)').toEqual([]);
       expect(fixture.log.count('handler'), 'no handler is involved').toBe(0);
     },

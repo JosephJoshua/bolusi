@@ -516,9 +516,8 @@ describe('quarantined ops (api/01-sync §4.2) — a held-out pull batch reaches 
     });
     expect(held, 'the pull leg never wrote a quarantined_ops row').toBe(true);
 
-    // And the shell re-read and rendered the section. `SyncStatusInput.quarantined` was the hardcoded
-    // `[]` until task 169, so this node could not exist on any device that had ever held an op out —
-    // FALSIFIED by reverting `quarantined: reads.quarantined` to `[]` in shell-inputs.ts: this goes red.
+    // And the shell re-read and rendered the section: hardcoding `quarantined` to `[]` in
+    // shell-inputs.ts turns this red.
     const shown = await waitUntil(() => screen.query('sync-quarantine') !== null);
     expect(shown, 'the quarantine section never reached the sync-status screen').toBe(true);
   });
