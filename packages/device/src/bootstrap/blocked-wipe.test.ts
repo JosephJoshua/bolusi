@@ -84,11 +84,11 @@ async function blockedDevice(): Promise<void> {
 function eraser(steps: string[]) {
   return async () => {
     steps.push('media');
-    await dbKeys.wipe();
-    for (const suffix of ['', '-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true });
-    steps.push('database');
     secrets.map.delete('bolusi.device_token');
     steps.push('keys');
+    for (const suffix of ['', '-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true });
+    await dbKeys.wipe();
+    steps.push('database');
   };
 }
 
@@ -112,7 +112,7 @@ describe('bootErasingBlocked', () => {
       clock,
     });
 
-    expect(steps).toEqual(['media', 'database', 'keys']);
+    expect(steps).toEqual(['media', 'keys', 'database']);
     expect(app.deviceId).toBeNull();
     expect(app.wipedAfterBlock).toBe(true);
     expect(isBlockedSyncState(app.syncState)).toBe(false);
@@ -123,6 +123,41 @@ describe('bootErasingBlocked', () => {
     const again = await boot();
     expect(again.wipedAfterBlock).toBe(true);
     expect(resolveShellInputs(again, null, clock.now()).device).toBe('revoked');
+  });
+
+  test('an erase that fails part way is not cached: the next start erases again', async () => {
+    await blockedDevice();
+    const forgetBoot = vi.fn();
+    const failing = vi.fn(async () => {
+      // The token went, then the storage failed before the database.
+      secrets.map.delete('bolusi.device_token');
+      throw new Error('storage busy');
+    });
+    await expect(
+      bootErasingBlocked({
+        boot,
+        forgetBoot,
+        probe: async () => 'blocked',
+        eraseDevice: failing,
+        clock,
+      }),
+    ).rejects.toThrow('storage busy');
+    expect(forgetBoot).toHaveBeenCalledOnce();
+
+    // The database still says blocked and no token is left: the probe counts that as blocked.
+    const steps: string[] = [];
+    const app = await bootErasingBlocked({
+      boot,
+      probe: createBlockProbe({
+        baseUrl: 'https://api.test',
+        deviceToken: async () => secrets.map.get('bolusi.device_token') ?? null,
+        fetchImpl: vi.fn() as unknown as typeof fetch,
+      }),
+      eraseDevice: eraser(steps),
+      clock,
+    });
+    expect(steps).toEqual(['media', 'keys', 'database']);
+    expect(app.wipedAfterBlock).toBe(true);
   });
 
   test('no answer from the server erases nothing and keeps the device locked', async () => {

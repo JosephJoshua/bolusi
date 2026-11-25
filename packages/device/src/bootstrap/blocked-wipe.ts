@@ -132,8 +132,10 @@ export async function bootErasingBlocked(deps: BlockedWipeDeps): Promise<Bootstr
   }
 
   await app.close();
-  await deps.eraseDevice();
+  // Forgotten before the erase: a failed erase must not leave the closed database cached, so the
+  // next start opens it again, finds the block and erases again.
   deps.forgetBoot?.();
+  await deps.eraseDevice();
   const fresh = await deps.boot();
   await writeMeta(fresh.db.db as never, BLOCKED_WIPE_META_KEY, String(deps.clock.now()));
   return { ...fresh, wipedAfterBlock: true };
