@@ -111,21 +111,21 @@ export function DevicesScreen({
     setConfirming(null);
     setBusy(true);
     setNotice(null);
-    onBlock(row.id)
-      .then(
-        async () => {
-          await reload();
-          setNotice({ tone: 'info', message: t('auth.devices.blocked', { name: row.name }) });
-        },
-        (error: unknown) => {
-          const reason = staffAdminFailure(error);
-          setNotice({
-            tone: reason === 'offline' ? 'warning' : 'danger',
-            message: devicesFailureMessage(reason),
-          });
-        },
-      )
-      .finally(() => setBusy(false));
+    void onBlock(row.id).then(
+      async () => {
+        await reload();
+        setBusy(false);
+        setNotice({ tone: 'info', message: t('auth.devices.blocked', { name: row.name }) });
+      },
+      (error: unknown) => {
+        const reason = staffAdminFailure(error);
+        setBusy(false);
+        setNotice({
+          tone: reason === 'offline' ? 'warning' : 'danger',
+          message: devicesFailureMessage(reason),
+        });
+      },
+    );
   };
 
   const listState: ListState<Item> =

@@ -42,6 +42,7 @@ import {
   REPAIR_REJECTED_SUBJECTS,
   repairMediaSeamsFor,
 } from '@bolusi/device/bootstrap/repair';
+import { createDeviceControls, type DeviceControls } from '@bolusi/device/bootstrap/devices';
 import { createAppSession, type AppSessionController } from '@bolusi/device/bootstrap/session';
 import {
   createStaffControls,
@@ -92,7 +93,13 @@ import {
 } from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
-import { actingDeviceAdmin, actingSession, actingStaffAdmin, readForActing } from './acting.js';
+import {
+  actingDeviceAdmin,
+  actingDeviceBlocker,
+  actingSession,
+  actingStaffAdmin,
+  readForActing,
+} from './acting.js';
 import type {
   CoreState,
   CoreVideoLoad,
@@ -346,6 +353,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       canManageStaff: snapshot.canManageStaff,
       canSetLimits: snapshot.canSetLimits,
       canRenameDevice: snapshot.canRenameDevice,
+      canBlockDevices: snapshot.canBlockDevices,
       tenantAdmin: snapshot.tenantAdmin,
       permissions,
       colleaguePermissions,
@@ -504,6 +512,19 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         sync.requestManual();
         await sync.settle();
       },
+    });
+  }
+
+  /** "Perangkat" as the person signed in now, the phone's composition. */
+  function devicesFor(userId: string): DeviceControls {
+    const current = actingDeviceBlocker(session, userId);
+    const deviceId = app?.deviceId ?? null;
+    if (deviceId === null) throw new DomainError('NOT_AUTHENTICATED');
+    return createDeviceControls({
+      port: staffAdmin,
+      session: current,
+      thisDeviceId: deviceId,
+      now: () => clock.now(),
     });
   }
 
@@ -930,6 +951,10 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'staff.updateRole': (userId: string, roleId: string, change: RoleChange) =>
       staffFor(userId).onUpdateRole(roleId, change),
     'staff.deleteRole': (userId: string, roleId: string) => staffFor(userId).onDeleteRole(roleId),
+
+    // ── Perangkat (online only; the server's list and its revoke, as the signed-in owner) ───────
+    'devices.list': (userId: string) => devicesFor(userId).load(),
+    'devices.block': (userId: string, deviceId: string) => devicesFor(userId).block(deviceId),
 
     // Online only, like Karyawan: the server takes the new name first, then this PC shows it.
     async 'device.rename'(userId: string, name: string) {
