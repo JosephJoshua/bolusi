@@ -32,6 +32,7 @@ import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
+import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
@@ -47,7 +48,7 @@ import {
 } from '../flows.js';
 import { FlowScreen, PhotoThumb, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useIntakeOptionSettings, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { useIntakeOptionSettings, useRepairRuntime } from '../runtime.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 export interface StepProps {
@@ -747,30 +748,10 @@ export function AssignStep({
   readonly currentTechnicianId: string | null;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reloadNonce, setReloadNonce] = useState(0);
-  // Each technician with how many repairs they already hold, so the counter can spread the work.
-  const technicians = useRepairQuery(
-    async (rt) => {
-      const [people, loads] = await Promise.all([
-        rt.technicians(),
-        rt.query('technicianLoads', {}),
-      ]);
-      const load = new Map(loads.rows.map((row) => [row.technicianId, row.load]));
-      return people.map((tech) => ({ ...tech, load: load.get(tech.id) ?? 0 }));
-    },
-    `technicians:${String(reloadNonce)}`,
+  const { runner, technicians, retry, assign } = useAssignTechnician(
+    { ticketId, currentTechnicianId },
+    onDone,
   );
-
-  const assign = (technicianId: string): void => {
-    if (technicianId === currentTechnicianId) return;
-    void runner
-      .run(() => runtime.run('assignTechnician', { ticketId, technicianId }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <FlowScreen
@@ -783,12 +764,7 @@ export function AssignStep({
       onClearError={runner.clearError}
       testID={testID}
     >
-      <QueryView
-        query={technicians}
-        onBack={onCancel}
-        onRetry={() => setReloadNonce((n) => n + 1)}
-        testID={`${testID}.list`}
-      >
+      <QueryView query={technicians} onBack={onCancel} onRetry={retry} testID={`${testID}.list`}>
         {(rows) =>
           rows.length === 0 ? (
             <Text style={repairStyles.muted} testID={`${testID}.none`}>

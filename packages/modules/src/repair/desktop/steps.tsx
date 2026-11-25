@@ -59,6 +59,7 @@ import {
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { ta } from '../../approvals/i18n.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
+import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
@@ -73,7 +74,6 @@ import {
   useIntakeOptionSettings,
   usePaymentAccounts,
   useTicketQris,
-  useRepairQuery,
   useRepairRuntime,
   type RepairPrinting,
 } from '../runtime.js';
@@ -887,29 +887,11 @@ export function AssignDialog({
   onDone,
   onClose,
 }: StepDialogProps & { readonly currentTechnicianId: string | null }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reloadNonce, setReloadNonce] = useState(0);
-  // Each technician with how many repairs they already hold, so the counter can spread the work.
-  const technicians = useRepairQuery(
-    async (rt) => {
-      const [people, loads] = await Promise.all([
-        rt.technicians(),
-        rt.query('technicianLoads', {}),
-      ]);
-      const load = new Map(loads.rows.map((row) => [row.technicianId, row.load]));
-      return people.map((tech) => ({ ...tech, load: load.get(tech.id) ?? 0 }));
-    },
-    `technicians:${String(reloadNonce)}`,
+  const { runner, technicians, retry, assign } = useAssignTechnician(
+    { ticketId, currentTechnicianId },
+    onDone,
   );
-  const assign = (technicianId: string): void => {
-    if (technicianId === currentTechnicianId) return;
-    void runner
-      .run(() => runtime.run('assignTechnician', { ticketId, technicianId }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+
   return (
     <StepDialog
       title={tn(currentTechnicianId === null ? 'repair.action.assign' : 'repair.action.reassign')}
@@ -920,7 +902,7 @@ export function AssignDialog({
       testId="repair.desk.assign"
       footer={<CancelButton onClick={onClose} />}
     >
-      <QueryPanel query={technicians} onRetry={() => setReloadNonce((n) => n + 1)}>
+      <QueryPanel query={technicians} onRetry={retry}>
         {(rows) =>
           rows.length === 0 ? (
             <p className="text-body text-text-muted">{tn('repair.assign.none')}</p>
