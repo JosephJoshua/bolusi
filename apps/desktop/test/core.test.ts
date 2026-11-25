@@ -26,6 +26,7 @@ import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 
 import {
   actingDeviceAdmin,
+  actingDeviceBlocker,
   actingSession,
   actingStaffAdmin,
   readForActing,
@@ -187,7 +188,12 @@ describe('window to core calls', () => {
 describe('who a window call may act as', () => {
   const sessionAs = (
     userId: string | null,
-    flags: { locked?: boolean; canManageStaff?: boolean; canRenameDevice?: boolean } = {},
+    flags: {
+      locked?: boolean;
+      canManageStaff?: boolean;
+      canRenameDevice?: boolean;
+      canBlockDevices?: boolean;
+    } = {},
   ): AppSessionController =>
     ({
       snapshot: () => ({
@@ -195,6 +201,7 @@ describe('who a window call may act as', () => {
         locked: flags.locked ?? false,
         canManageStaff: flags.canManageStaff ?? false,
         canRenameDevice: flags.canRenameDevice ?? false,
+        canBlockDevices: flags.canBlockDevices ?? false,
       }),
     }) as unknown as AppSessionController;
 
@@ -255,6 +262,17 @@ describe('who a window call may act as', () => {
     expect(code(() => actingDeviceAdmin(sessionAs('u-1', { canRenameDevice: true }), 'u-2'))).toBe(
       'NOT_AUTHENTICATED',
     );
+  });
+  it('blocks devices only with the permission to block them', () => {
+    expect(
+      code(() => actingDeviceBlocker(sessionAs('u-1', { canRenameDevice: true }), 'u-1')),
+    ).toBe('denied');
+    expect(
+      code(() => actingDeviceBlocker(sessionAs('u-1', { canBlockDevices: true }), 'u-1')),
+    ).toBeUndefined();
+    expect(
+      code(() => actingDeviceBlocker(sessionAs('u-1', { canBlockDevices: true }), 'u-2')),
+    ).toBe('NOT_AUTHENTICATED');
   });
 });
 

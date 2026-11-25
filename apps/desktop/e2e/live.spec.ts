@@ -370,6 +370,30 @@ test('the same phone records the ownership video for a PC without a webcam', asy
   await expect(player).toBeHidden();
 });
 
+test('the owner blocks a lost PC from Perangkat; it erases itself and asks to be registered again', async () => {
+  await counter.getByTestId('nav.settings').click();
+  await counter.getByTestId('desktop.settings.nav.devices').click();
+  const devices = counter.getByTestId('desktop.settings.devices');
+  const lost = devices.locator('li', { hasText: 'PC Tanpa Kamera' });
+  // The PC in hand cannot block itself from here.
+  await expect(devices.locator('li', { hasText: 'PC Kasir' }).getByRole('button')).toHaveCount(0);
+  await lost.getByRole('button').click();
+  await expect(counter.getByTestId('desktop.settings.devices.confirm')).toContainText(
+    'Terakhir disinkronkan',
+  );
+  await counter
+    .getByTestId('desktop.settings.devices.confirm')
+    .getByRole('button', { name: 'Blokir' })
+    .click();
+  await expect(devices.locator('li', { hasText: 'PC Tanpa Kamera' })).toContainText('diblokir');
+
+  // The blocked PC hears it at once, erases everything and starts over at registration.
+  await expect(pc.getByText('Pemilik toko memblokir perangkat ini')).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(pc.getByTestId('enrol.identifier')).toBeVisible();
+});
+
 test('the owner adds a cashier with a first PIN, and changes their own PIN, on the PC alone', async () => {
   await counter.getByTestId('nav.settings').click();
   await counter.getByTestId('desktop.settings.nav.staff').click();

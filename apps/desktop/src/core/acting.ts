@@ -50,3 +50,13 @@ export function actingDeviceAdmin(
   if (!current.snapshot().canRenameDevice) throw new StaffAdminError('denied');
   return current;
 }
+
+/** The same, for "Perangkat": only someone who may block devices here. */
+export function actingDeviceBlocker(
+  session: AppSessionController | null,
+  userId: string,
+): AppSessionController {
+  const current = actingSession(session, userId);
+  if (!current.snapshot().canBlockDevices) throw new StaffAdminError('denied');
+  return current;
+}

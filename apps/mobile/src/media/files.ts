@@ -328,3 +328,16 @@ export const phonePhotoFiles: PhonePhotoFiles = {
 export function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
+
+/**
+ * Erase a blocked phone's files (blocked-wipe.ts): captured photos, videos and signatures, and the
+ * whole cache (render temps, slips, catalog photos, picker copies). Keys and the database are the
+ * caller's, after this.
+ */
+export function eraseAppFiles(): void {
+  const media = mediaDocumentDirectory();
+  if (media.exists) media.delete();
+  const cache = new Directory(Paths.cache);
+  if (!cache.exists) return;
+  for (const entry of cache.list()) entry.delete();
+}

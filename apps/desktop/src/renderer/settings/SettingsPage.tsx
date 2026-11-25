@@ -48,6 +48,7 @@ import { StartWithWindows } from '../startup.js';
 import { useAppVersion } from '../updates.js';
 import type { SettingsAccess } from './access.js';
 import { AccountPanel } from './AccountPanel.js';
+import { DevicesPanel } from './DevicesPanel.js';
 import { LimitsPanel } from './LimitsPanel.js';
 import { RenameDeviceDialog } from './RenameDevice.js';
 import { RolesPanel } from './RolesPanel.js';
@@ -58,6 +59,7 @@ type SettingsPageKey =
   | 'account'
   | 'staff'
   | 'staffPins'
+  | 'devices'
   | 'limits'
   | 'roles'
   | 'fees'
@@ -93,7 +95,7 @@ export function SettingsPage({
   );
   const money = useMoneyRuntime();
   const methods = useMemo(() => managesPaymentMethods(money), [money]);
-  const { staff, staffPins } = access;
+  const { staff, staffPins, devices } = access;
   // Every label below follows a switch of this PC's language.
   const locale = getLocale();
   const groups = useMemo((): readonly SectionNavGroup<SettingsPageKey>[] => {
@@ -129,6 +131,9 @@ export function SettingsPage({
           ...(staff?.tenantAdmin === true
             ? [{ value: 'roles' as const, label: t('auth.roles.title') }]
             : []),
+          ...(devices === undefined
+            ? []
+            : [{ value: 'devices' as const, label: t('auth.devices.title') }]),
         ],
       },
       {
@@ -169,7 +174,7 @@ export function SettingsPage({
         items: [{ value: 'computer', label: t('auth.pc.settings.thisPc') }],
       },
     ];
-  }, [staff, staffPins, repair, methods, locale]);
+  }, [staff, staffPins, devices, repair, methods, locale]);
 
   const [page, setPage] = useState<SettingsPageKey>(initialPage);
   const [pending, setPending] = useState<(() => void) | null>(null);
@@ -276,6 +281,8 @@ function Page({
       );
     case 'roles':
       return <RolesPanel controls={access.staff!} onDirtyChange={onDirtyChange} />;
+    case 'devices':
+      return <DevicesPanel controls={access.devices!} />;
     case 'fees':
       return <CancelFeesSettings onDirtyChange={onDirtyChange} />;
     case 'uncollected':

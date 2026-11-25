@@ -20,6 +20,7 @@
 import type { DevicePlatform } from '@bolusi/schemas';
 import {
   readHeldPhone,
+  readSyncState,
   runEnrollment,
   type ClockPort,
   type CommandRuntime,
@@ -35,6 +36,7 @@ import {
 
 import type { LoginResult } from '../models/enrollment/model.js';
 
+import { isBlockedSyncState } from './blocked-wipe.js';
 import type { Bootstrapped } from './bootstrap.js';
 import { persistEnrolledNames } from './device-info.js';
 import type { LoginTransportPort } from './enroll-transport.js';
@@ -85,6 +87,19 @@ export interface EnrollmentPlatform {
   readonly location: LocationPort;
   readonly platform: DevicePlatform;
   readonly appVersion: string;
+  /**
+   * Restart the app, for a blocked device that has not been erased yet (its start could not reach
+   * the server). Registering it again needs the internet, so the start can now confirm and erase.
+   */
+  readonly onBlocked?: (() => void) | undefined;
+}
+
+/** A blocked device is erased before it is registered again: its old data must not carry over. */
+export class BlockedDeviceError extends Error {
+  constructor() {
+    super('a blocked device is erased before it is registered again');
+    this.name = 'BlockedDeviceError';
+  }
 }
 
 /** The wired enrollment surface: the controller `App` drives + the evaluator the loop invalidates. */
@@ -163,6 +178,10 @@ export function createAppEnrollment(
     },
 
     async enroll(req): Promise<void> {
+      if (isBlockedSyncState(await readSyncState(app.db.db))) {
+        platform.onBlocked?.();
+        throw new BlockedDeviceError();
+      }
       // A re-enrolment of a phone whose registration still works replaces it, so the server revokes
       // the old one in the same step instead of leaving two active (task 168).
       const replacesDeviceId = (await readHeldPhone(app.db.db))?.replacesDeviceId ?? null;
