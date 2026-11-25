@@ -20,6 +20,7 @@ import {
   MAX_ITEM_TAGS,
   MAX_COUNTED_QTY,
   MAX_MOVEMENT_QTY,
+  MAX_ITEMS_PER_ADD,
   MAX_PART_FITS,
   PART_USE_KINDS,
   type StockSourceKind,
@@ -85,8 +86,12 @@ async function loadCategory(ctx: CommandContext, categoryId: string): Promise<Ca
  * What an item's op says: values kept to its category's fields, tags once each, and the name
  * filled in from the category's format when it is not typed.
  */
-async function itemPayload(ctx: CommandContext, input: PartDetailsInput) {
-  const category = input.categoryId === null ? null : await loadCategory(ctx, input.categoryId);
+async function itemPayload(
+  ctx: CommandContext,
+  input: PartDetailsInput,
+  load: (categoryId: string) => Promise<CategoryRow> = (id) => loadCategory(ctx, id),
+) {
+  const category = input.categoryId === null ? null : await load(input.categoryId);
   const values: FieldValues = category === null ? {} : cleanValues(category.fields, input.values);
   const tags = cleanTags(input.tags);
   if (tags.length > MAX_ITEM_TAGS) {
@@ -153,6 +158,66 @@ export async function addItemHandler(
     ],
     result: { itemId },
   };
+}
+
+export const addItemsInput = z
+  .object({
+    items: z
+      .array(
+        zPartDetails
+          .extend({ counted: z.number().int().min(0).max(MAX_COUNTED_QTY).default(0) })
+          .strict(),
+      )
+      .min(1)
+      .max(MAX_ITEMS_PER_ADD),
+  })
+  .strict();
+export type AddItemsInput = z.input<typeof addItemsInput>;
+
+/**
+ * Add a run of items at once, as the PC's table does, each with how many are on the shelf. All or
+ * none: one save never leaves half a sheet behind, and an item never lands without its count. A
+ * count needs `inventory.count` like any count, which the runtime checks per op.
+ */
+export async function addItemsHandler(
+  input: z.output<typeof addItemsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ itemIds: readonly string[] }>> {
+  const categories = new Map<string, Promise<CategoryRow>>();
+  const load = (categoryId: string): Promise<CategoryRow> => {
+    let category = categories.get(categoryId);
+    if (category === undefined) {
+      category = loadCategory(ctx, categoryId);
+      categories.set(categoryId, category);
+    }
+    return category;
+  };
+  const ops: OpDraft[] = [];
+  const itemIds: string[] = [];
+  for (const { counted, ...details } of input.items) {
+    const itemId = ctx.newId();
+    itemIds.push(itemId);
+    ops.push(
+      ctx.op({
+        type: INVENTORY_OP.itemAdded,
+        entityType: INVENTORY_ITEM_ENTITY,
+        entityId: itemId,
+        payload: await itemPayload(ctx, details, load),
+      }),
+    );
+    if (counted > 0) {
+      // A new item has nothing recorded yet, so its count is what was on the shelf.
+      ops.push(
+        ctx.op({
+          type: INVENTORY_OP.stockCounted,
+          entityType: INVENTORY_MOVEMENT_ENTITY,
+          entityId: ctx.newId(),
+          payload: { itemId, counted, expected: 0, note: null },
+        }),
+      );
+    }
+  }
+  return { ops, result: { itemIds } };
 }
 
 export const editItemInput = zPartDetails
