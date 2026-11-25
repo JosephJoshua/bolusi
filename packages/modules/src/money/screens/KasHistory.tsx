@@ -4,7 +4,18 @@
  * with its reason; the books reverse it (money/applier.ts).
  */
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
-import { Button, EmptyState, TextButton, TextInput, color, space, type, Text } from '@bolusi/ui';
+import {
+  Amount,
+  AmountRow,
+  Button,
+  color,
+  EmptyState,
+  space,
+  Text,
+  TextButton,
+  TextInput,
+  type,
+} from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -28,8 +39,6 @@ import {
 } from '../void-ask.js';
 import { approvalByLine } from '../../approvals/copy.js';
 import { ta } from '../../approvals/i18n.js';
-
-import { Row } from './Kas.js';
 
 export interface KasHistoryProps {
   readonly chrome: ScreenChrome;
@@ -130,7 +139,7 @@ export function KasHistory({
                 const asked = standing && asks.waiting.has(entry.id);
                 const turnedDown = standing ? asks.rejected.get(entry.id) : undefined;
                 return (
-                  <Row
+                  <AmountRow
                     key={entry.id}
                     label={tm(line.label)}
                     detail={[
@@ -249,9 +258,7 @@ export function VoidPaymentStep({
       onClearError={runner.clearError}
       testID={testID}
     >
-      <Text style={styles.amount} testID={`${testID}.amount`}>
-        {formatMoney(entry.amount)}
-      </Text>
+      <Amount value={entry.amount} size="title" testID={`${testID}.amount`} />
       <Text style={styles.muted}>
         {[customer, method, entry.documentLabel, formatDateTime(entry.createdAt)]
           .filter((part) => part !== null && part !== '')
@@ -295,7 +302,6 @@ const styles = StyleSheet.create({
   },
   day: { ...type.bodyBold, color: color.text, flex: 1, textAlign: 'center' },
   more: { marginTop: space.lg },
-  amount: { ...type.title, color: color.text, fontVariant: ['tabular-nums'] },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
   body: { ...type.body, color: color.text, marginTop: space.lg },
   gap: { marginTop: space.lg },

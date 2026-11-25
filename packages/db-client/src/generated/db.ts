@@ -145,6 +145,68 @@ export interface InventoryMovements {
   userId: string;
 }
 
+export interface InventoryTransferArrivalLines {
+  arrivalId: string;
+  itemId: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+  transferId: string;
+}
+
+export interface InventoryTransferArrivals {
+  at: number;
+  id: string | null;
+  note: string | null;
+  storeId: string;
+  tenantId: string;
+  transferId: string;
+  userId: string;
+}
+
+export interface InventoryTransferLines {
+  itemId: string;
+  itemName: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+  transferId: string;
+}
+
+export interface InventoryTransfers {
+  cancelledAt: number | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  id: string | null;
+  note: string | null;
+  sentAt: number;
+  sentBy: string;
+  storeId: string;
+  tenantId: string;
+  toStoreId: string;
+  transferNumber: string;
+}
+
+export interface InventoryTransferSettlementLines {
+  itemId: string;
+  outcome: string;
+  position: number;
+  qty: number;
+  settlementId: string;
+  tenantId: string;
+  transferId: string;
+}
+
+export interface InventoryTransferSettlements {
+  at: number;
+  id: string | null;
+  reason: string | null;
+  storeId: string;
+  tenantId: string;
+  transferId: string;
+  userId: string;
+}
+
 export interface MediaItems {
   attachedToOperationId: string | null;
   byteSize: number;
@@ -613,6 +675,12 @@ export interface DB {
   inventoryItemFits: InventoryItemFits;
   inventoryItems: InventoryItems;
   inventoryMovements: InventoryMovements;
+  inventoryTransferArrivalLines: InventoryTransferArrivalLines;
+  inventoryTransferArrivals: InventoryTransferArrivals;
+  inventoryTransferLines: InventoryTransferLines;
+  inventoryTransfers: InventoryTransfers;
+  inventoryTransferSettlementLines: InventoryTransferSettlementLines;
+  inventoryTransferSettlements: InventoryTransferSettlements;
   mediaItems: MediaItems;
   metaKv: MetaKv;
   migrations: Migrations;

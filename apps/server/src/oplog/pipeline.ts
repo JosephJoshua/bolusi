@@ -348,6 +348,20 @@ export async function processPushBatch(
         continue;
       }
 
+      // 6b. a second store the op reaches (a transfer's destination): a real store of this business,
+      // not the op's own. Read from the validated payload, so it is never the author's free choice
+      // of who pulls the op beyond what the payload itself says.
+      const otherStoreId = deps.registry.otherStoreOf(op.type, op.payload);
+      if (
+        otherStoreId !== null &&
+        (otherStoreId === op.storeId || !(await scopeLookup.storeExists(otherStoreId)))
+      ) {
+        const reason = 'op names a second store that is its own or not a store of the tenant';
+        await anomaly(op, 'SCOPE_VIOLATION', reason);
+        await refuse(op, 'SCOPE_VIOLATION', reason);
+        continue;
+      }
+
       // 7. authorization: the author must hold the op type's declared permission, judged by the
       // server's directory. No anomaly: an author whose role changed while offline is not tamper.
       const permission = await checkPermission(op, device, deps.registry, authors);
@@ -392,6 +406,7 @@ export async function processPushBatch(
         receivedAt,
         jcs: signature.jcs,
         clockSkewFlagged,
+        otherStoreId,
       });
       if (!inserted) {
         if (careful) await sql`RELEASE SAVEPOINT push_op`.execute(db);

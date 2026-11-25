@@ -9,17 +9,18 @@
 import { formatMoney } from '@bolusi/i18n';
 import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';
 import {
+  border,
   Button,
   ChipRow,
+  color,
   ConfirmSheet,
+  numeric,
+  space,
+  Text,
   TextButton,
   TextInput,
   ToggleChip,
-  border,
-  color,
-  space,
   type,
-  Text,
 } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
@@ -308,7 +309,7 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   changeLabel: { ...type.bodySm, color: color.textMuted, flexShrink: 1 },
-  changeValue: { ...type.bodyBold, color: color.text, fontVariant: ['tabular-nums'] },
+  changeValue: { ...type.bodyBold, color: color.text, ...numeric },
   changeWarn: { color: color.warning },
   changeBig: { ...type.bodySm, color: color.warning },
   qr: { gap: space.sm, alignItems: 'flex-start' },

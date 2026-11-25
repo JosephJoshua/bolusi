@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Text, NativeTextInput as RNTextInput } from '../text.js';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { border, color, radius, size, space, touch, type } from '../tokens.js';
+import { border, color, numeric, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
 
 export interface QuantityStepperProps {
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surfaceAlt,
     color: color.text,
     textAlign: 'center',
-    fontVariant: ['tabular-nums'],
+    ...numeric,
   },
   caption: { ...type.caption, color: color.textMuted, marginTop: space.xs },
 });

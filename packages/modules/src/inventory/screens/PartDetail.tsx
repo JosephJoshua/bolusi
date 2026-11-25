@@ -5,21 +5,22 @@
  */
 import { formatDateTime, t } from '@bolusi/i18n';
 import {
-  Columns,
   AppShell,
   Banner,
   Button,
   Card,
   Chip,
+  color,
+  Columns,
   ConfirmSheet,
   Fact,
   FactGrid,
+  numeric,
+  space,
+  Text,
   TextButton,
   Timeline,
-  color,
-  space,
   type,
-  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -261,7 +262,7 @@ export function PartDetail({
 
 const styles = StyleSheet.create({
   stockLabel: { ...type.caption, color: color.textMuted },
-  stock: { ...type.display, color: color.text, fontVariant: ['tabular-nums'], marginTop: space.xs },
+  stock: { ...type.display, color: color.text, ...numeric, marginTop: space.xs },
   below: { color: color.danger },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
   muted: { ...type.bodySm, color: color.textMuted },

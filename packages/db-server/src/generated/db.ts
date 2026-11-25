@@ -212,6 +212,68 @@ export interface InventoryMovements {
   userId: string;
 }
 
+export interface InventoryTransferArrivalLines {
+  arrivalId: string;
+  itemId: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+  transferId: string;
+}
+
+export interface InventoryTransferArrivals {
+  at: Int8;
+  id: string;
+  note: string | null;
+  storeId: string;
+  tenantId: string;
+  transferId: string;
+  userId: string;
+}
+
+export interface InventoryTransferLines {
+  itemId: string;
+  itemName: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+  transferId: string;
+}
+
+export interface InventoryTransfers {
+  cancelledAt: Int8 | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  id: string;
+  note: string | null;
+  sentAt: Int8;
+  sentBy: string;
+  storeId: string;
+  tenantId: string;
+  toStoreId: string;
+  transferNumber: string;
+}
+
+export interface InventoryTransferSettlementLines {
+  itemId: string;
+  outcome: string;
+  position: number;
+  qty: number;
+  settlementId: string;
+  tenantId: string;
+  transferId: string;
+}
+
+export interface InventoryTransferSettlements {
+  at: Int8;
+  id: string;
+  reason: string | null;
+  storeId: string;
+  tenantId: string;
+  transferId: string;
+  userId: string;
+}
+
 export interface Media {
   attachedOperationId: string | null;
   byteSize: Int8;
@@ -317,6 +379,7 @@ export interface Operations {
   hash: string;
   id: string;
   location: Json | null;
+  otherStoreId: string | null;
   payload: Json;
   previousHash: string;
   receivedAt: Int8;
@@ -778,6 +841,12 @@ export interface DB {
   inventoryItemFits: InventoryItemFits;
   inventoryItems: InventoryItems;
   inventoryMovements: InventoryMovements;
+  inventoryTransferArrivalLines: InventoryTransferArrivalLines;
+  inventoryTransferArrivals: InventoryTransferArrivals;
+  inventoryTransferLines: InventoryTransferLines;
+  inventoryTransfers: InventoryTransfers;
+  inventoryTransferSettlementLines: InventoryTransferSettlementLines;
+  inventoryTransferSettlements: InventoryTransferSettlements;
   media: Media;
   mediaChunks: MediaChunks;
   moneyAccounts: MoneyAccounts;
