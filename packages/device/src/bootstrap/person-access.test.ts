@@ -505,3 +505,33 @@ describe('proving the signed-in person to the server on an online call', () => {
     expect(h.opens.map((o) => o.pin)).toEqual(['135790']);
   });
 });
+
+describe('a lock right after a PIN change here', () => {
+  test('the change still goes up, proven by the session of the person who left', async () => {
+    const h = harness();
+    await h.access.begin(owner);
+    await h.access.sync();
+    h.pinChangeQueued(true);
+    const proofs: (string | null)[] = [];
+    h.onSendPins(async () => {
+      proofs.push(await h.access.sessionFor('owner-1'));
+    });
+    await h.access.end();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(h.pinsSent()).toBe(1);
+    expect(proofs).toEqual(['bps_1']);
+    // Ended once the change is up, and never handed out after.
+    expect(h.ended).toEqual(['bps_1']);
+    expect(await h.access.sessionFor('owner-1')).toBeNull();
+  });
+
+  test('with nothing pending, the session ends at once', async () => {
+    const h = harness();
+    await h.access.begin(owner);
+    await h.access.sync();
+    await h.access.end();
+    expect(h.pinsSent()).toBe(0);
+    expect(h.ended).toEqual(['bps_1']);
+  });
+});

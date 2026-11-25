@@ -132,6 +132,12 @@ const SESSION_EXPIRY_MARGIN_MS = 5 * 60 * 1000;
 export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
   let transport: PersonTransportPort | null = null;
   let person: Person | null = null;
+  /**
+   * The session of someone who just left, kept only while a PIN change made here goes up with it:
+   * a lock right after changing a PIN must not strand the change (the next sign-in, with the new
+   * PIN, cannot prove the upload while the server still knows the old one).
+   */
+  let departing: { readonly userId: string; readonly token: string } | null = null;
   let running: Promise<void> | null = null;
   let again = false;
   /** Bumped by every sign-in, so a slower earlier one never overwrites a later one. */
@@ -345,8 +351,28 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       const target = person;
       if (target === null) return;
       person = null;
+      const token = target.token;
+      target.token = null;
       await drop(target);
       notify();
+      const port = transport;
+      if (token === null || port === null) return;
+      const pending = await pinPending(target.userId).catch(() => false);
+      if (!pending) {
+        void port.end(token).catch(() => undefined);
+        return;
+      }
+      departing = { userId: target.userId, token };
+      void (async () => {
+        try {
+          await port.sendPendingPins();
+        } catch {
+          // Still queued: it goes with the next proof.
+        } finally {
+          if (departing?.token === token) departing = null;
+          void port.end(token).catch(() => undefined);
+        }
+      })();
     },
 
     sync() {
@@ -420,6 +446,14 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
     async sessionFor(userId) {
       const target = person;
       const port = transport;
+      const leaving = departing;
+      if (
+        leaving !== null &&
+        leaving.userId === userId &&
+        (target === null || target.token === null)
+      ) {
+        return leaving.token;
+      }
       if (target === null || target.userId !== userId || port === null) return null;
       if (target.token !== null) {
         // A store's own pull finds out when its session ends; without one, an expired token is
