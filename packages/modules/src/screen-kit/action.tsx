@@ -23,7 +23,7 @@ export function useActionRunner(): ActionRunner {
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const running = useRef(false);
 
-  const run = useCallback(async <T>(action: () => Promise<T>): Promise<T | undefined> => {
+  const run = useCallback(async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
     if (running.current) return undefined;
     running.current = true;
     setBusy(true);
@@ -54,7 +54,7 @@ export function useCapture(runner: ActionRunner): {
 } {
   const [capturing, setCapturing] = useState(false);
   const capture = useCallback(
-    async <T>(take: () => Promise<T>): Promise<T | undefined> => {
+    async <T,>(take: () => Promise<T>): Promise<T | undefined> => {
       setCapturing(true);
       try {
         return await runner.run(take);

@@ -109,17 +109,18 @@ import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
-  REPAIR_PERMISSION,
   keptIntakeDraft,
   parseIntakeDraft,
   parseRepairDraft,
+  repairAbilities,
+  repairSettingsAccess,
   startedByOther,
   type RepairDraft,
 } from '@bolusi/modules/repair';
 import { moneyRuntimeOf, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
-import { MONEY_PERMISSION } from '@bolusi/modules/money';
+import { managesPaymentMethods, opensKas } from '@bolusi/modules/money';
 import { tm, type MoneyRuntime } from '@bolusi/modules/money/screens';
-import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
+import { opensParts } from '@bolusi/modules/inventory';
 import { ti } from '@bolusi/modules/inventory/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
@@ -855,16 +856,12 @@ export default function App(props: AppProps): React.JSX.Element {
   };
 
   const chip = useMemo(() => syncChipState(props.sync), [props.sync]);
-  const canSetIntakeOptions =
-    props.repair !== undefined &&
-    (props.repair.hasPermission(REPAIR_PERMISSION.manageIntakeOptions) ||
-      props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
-  const canSetCancelFees =
-    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setCancelFees);
-  const canSetUncollectedDays =
-    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setUncollectedDays);
-  const canSetPrintSettings =
-    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
+  const repairSettings = useMemo(() => {
+    const repair = props.repair;
+    return repairSettingsAccess(
+      repairAbilities((id) => repair !== undefined && repair.hasPermission(id)),
+    );
+  }, [props.repair]);
   const backToSettings = useCallback(() => setRoute('settings'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
@@ -878,16 +875,8 @@ export default function App(props: AppProps): React.JSX.Element {
     );
   }, [props.repair, props.users]);
   // Kas is a tab for whoever counts the drawer or reads the store's money; others see no tabs.
-  const showsKas =
-    moneyRuntime !== null &&
-    (moneyRuntime.hasPermission(MONEY_PERMISSION.read) ||
-      moneyRuntime.hasPermission(MONEY_PERMISSION.countCash));
-  // The list reads the methods as the payment step does, so it also needs `receive`.
-  const canManageAccounts =
-    moneyRuntime !== null &&
-    moneyRuntime.hasPermission(MONEY_PERMISSION.receive) &&
-    (moneyRuntime.hasPermission(MONEY_PERMISSION.manageAccounts) ||
-      moneyRuntime.hasPermission(MONEY_PERMISSION.manageCentralAccounts));
+  const showsKas = moneyRuntime !== null && opensKas(moneyRuntime);
+  const canManageAccounts = moneyRuntime !== null && managesPaymentMethods(moneyRuntime);
   const currentUser = useMemo(() => {
     if (props.session === null) return null;
     const found = (props.users ?? []).find((user) => user.id === props.session?.userId);
@@ -903,7 +892,7 @@ export default function App(props: AppProps): React.JSX.Element {
 
   // Barang is a tab for whoever may read the store's items; Belanja sits inside it for buyers.
   const itemsRuntime = props.repair?.inventory;
-  const showsItems = itemsRuntime?.hasPermission(INVENTORY_PERMISSION.read) === true;
+  const showsItems = itemsRuntime !== undefined && opensParts(itemsRuntime);
   const homeTabs: readonly HomeTab[] = [
     'repair',
     ...(showsKas ? (['kas'] as const) : []),
@@ -1371,7 +1360,7 @@ export default function App(props: AppProps): React.JSX.Element {
                       section: tn('repair.board.title'),
                       testID: 'settings-section-repair',
                       rows: [
-                        ...(canSetIntakeOptions
+                        ...(repairSettings.intakeOptions
                           ? [
                               {
                                 icon: 'list' as const,
@@ -1382,7 +1371,7 @@ export default function App(props: AppProps): React.JSX.Element {
                               },
                             ]
                           : []),
-                        ...(canSetCancelFees
+                        ...(repairSettings.cancelFees
                           ? [
                               {
                                 icon: 'money' as const,
@@ -1393,7 +1382,7 @@ export default function App(props: AppProps): React.JSX.Element {
                               },
                             ]
                           : []),
-                        ...(canSetUncollectedDays
+                        ...(repairSettings.uncollected
                           ? [
                               {
                                 icon: 'clock' as const,
@@ -1404,7 +1393,7 @@ export default function App(props: AppProps): React.JSX.Element {
                               },
                             ]
                           : []),
-                        ...(canSetPrintSettings
+                        ...(repairSettings.printSettings
                           ? [
                               {
                                 icon: 'print' as const,

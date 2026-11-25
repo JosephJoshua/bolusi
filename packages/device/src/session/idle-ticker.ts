@@ -10,8 +10,7 @@
  *
  * That separation is deliberate. `@bolusi/core` owns no timers (08 §3.3 rule 3) precisely so the
  * TRANSITION is testable from a FakeClock without a sleeping test (T-6), which is why 14's class
- * shipped with the decision and no driver. This is the driver — and until task 133 it did not
- * exist, so the transition was reachable only from `shell-session.test.ts`.
+ * shipped with the decision and no driver. This is the driver.
  *
  * ── WHY THE APP-STATE SUBSCRIPTION IS PART OF THE CONTROL, NOT AN OPTIMISATION ───────────────────
  * A JS interval does not run reliably in the background — RN throttles it, and Android's Doze may

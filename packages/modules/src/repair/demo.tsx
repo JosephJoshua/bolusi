@@ -755,7 +755,7 @@ function historyTickets(count: number): TicketDetailRow[] {
     seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
     return seed / 2_147_483_648;
   };
-  const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)]!;
+  const pick = <T,>(items: readonly T[]): T => items[Math.floor(next() * items.length)]!;
   return Array.from({ length: count }, (_, i) => {
     const [brand, model] = pick(HISTORY_DEVICES);
     // One in twenty is still in the shop; the rest were repaired, or cancelled, and handed back.
@@ -945,9 +945,9 @@ export function demoRepairRuntime(
     ...t.photos,
     ...refs.map((ref) => photoRow(`${stage}:${ref.mediaId}`, ref)),
   ];
-  const page = <T>(rows: readonly T[]) => Promise.resolve({ rows, nextCursor: null });
+  const page = <T,>(rows: readonly T[]) => Promise.resolve({ rows, nextCursor: null });
   // Pages like the device's `listTickets`: `limit` rows, with the next offset as the cursor.
-  const paged = <T>(rows: readonly T[], input: Input) => {
+  const paged = <T,>(rows: readonly T[], input: Input) => {
     const start = Number(input['cursor'] ?? 0);
     const end = start + Number(input['limit'] ?? 50);
     return Promise.resolve({

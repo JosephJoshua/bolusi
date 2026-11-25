@@ -2,7 +2,7 @@
 // the same: one or more lines, each a method and an amount, against what is due. A cash line may
 // carry what the customer handed over, so the screen can show the change; an EDC line needs its
 // approval code (`referenceRequired`). A QRIS line on a method connected to Xendit is paid by
-// showing the customer a QR (qris-hooks.ts): it is never recorded from here, since the server
+// showing the customer a QR (qris-hooks.tsx): it is never recorded from here, since the server
 // records the payment once Xendit confirms it, unless the counter falls back to taking it by hand.
 import { formatNumber } from '@bolusi/i18n';
 import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';

@@ -510,17 +510,15 @@ tester.run('boundaries', rule, {
       filename: '/repo/packages/modules/test/support/harness.ts',
       errors: [{ messageId: 'dbDriver' }],
     },
-    // ...and harness — an UNRESTRICTED owner until task 185 — is barred in its own src/ now: its
+    // ...and harness is barred in its own src/: its
     // simulated devices reach the driver through @bolusi/sqlite-test-driver, never a raw import.
     {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/harness/src/device.ts',
       errors: [{ messageId: 'dbDriver' }],
     },
-    // @electric-sql/pglite is the SAME class as better-sqlite3, and until task 42 the lock did not
-    // name it — so a real Postgres engine reached shipping source uncaught (review-03's positive
-    // control: better-sqlite3 BLOCKED, pglite CLEAN, same file). These fixtures pin the gap shut in
-    // each testOnly owner's SHIPPING source:
+    // @electric-sql/pglite is the same class as better-sqlite3: a real Postgres engine must not
+    // reach shipping source. These fixtures check each testOnly owner's shipping source:
     {
       code: `import { PGlite } from '@electric-sql/pglite';`,
       filename: '/repo/packages/core/src/projection/engine.ts',

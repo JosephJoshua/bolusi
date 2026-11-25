@@ -10,7 +10,7 @@ import {
   ti,
   type InventoryRuntime,
 } from '@bolusi/modules/inventory/screens';
-import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
+import { opensPurchasing } from '@bolusi/modules/purchasing';
 import {
   PurchasingRuntimeProvider,
   PurchasingSurface,
@@ -45,7 +45,7 @@ export function ItemsHome({
   onOpenSyncStatus,
   onRegisterSurfaceNav,
 }: ItemsHomeProps): React.JSX.Element {
-  const buys = purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true;
+  const buys = opensPurchasing(inventory, purchasing);
   const [picked, setPicked] = useState<Section>('stock');
   // Belanja taken away (a grant changed) falls back to the stock.
   const section: Section = buys ? picked : 'stock';

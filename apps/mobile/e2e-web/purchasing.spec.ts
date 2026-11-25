@@ -1,6 +1,6 @@
 /**
  * Belanja driven through the real phone screens in a browser, over the in-memory demo
- * (`packages/modules/src/purchasing/demo.ts`): an owner orders parts from a supplier and receives
+ * (`packages/modules/src/purchasing/demo.tsx`): an owner orders parts from a supplier and receives
  * them in the Barang tab, and a technician is offered only the stock. A screenshot per flow into `artifacts/purchasing/`.
  *
  * HONEST CEILING: a browser approximation. WhatsApp, the share sheet and the camera scan are device QA.

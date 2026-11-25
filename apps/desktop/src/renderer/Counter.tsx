@@ -4,18 +4,18 @@
 // here, the person menu, the sync status) comes in as props.
 import { t } from '@bolusi/i18n';
 import {
-  INVENTORY_PERMISSION,
+  opensParts,
   InventoryRuntimeProvider,
   NO_FILTER,
   PartsPage,
   ti,
   type ListFilter,
 } from '@bolusi/modules/inventory/desktop';
-import { KasPage, MONEY_PERMISSION, MoneyRuntimeProvider, tm } from '@bolusi/modules/money/desktop';
+import { KasPage, MoneyRuntimeProvider, opensKas, tm } from '@bolusi/modules/money/desktop';
 import { keptIntakeDraft, startedByOther } from '@bolusi/modules/repair';
 import {
   OrdersPage,
-  PURCHASING_PERMISSION,
+  opensPurchasing,
   PurchasingRuntimeProvider,
   tp,
   type OrderFilter,
@@ -183,18 +183,16 @@ export function Counter({
   const money = useMemo(() => moneyRuntimeOf(repair, nameOf), [repair, nameOf]);
   // Parts, for whoever may read the list; their filter is still there when they come back.
   const inventory = repair.inventory;
-  const showsParts = inventory?.hasPermission(INVENTORY_PERMISSION.read) === true;
+  const showsParts = inventory !== undefined && opensParts(inventory);
   const [partsFilter, setPartsFilter] = useState<ListFilter>(NO_FILTER);
   // Belanja, for whoever orders from suppliers; it picks parts from the same list.
   const purchasing = repair.purchasing;
-  const showsPurchasing =
-    showsParts && purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true;
+  const showsPurchasing = opensPurchasing(inventory, purchasing);
   const [ordersFilter, setOrdersFilter] = useState<OrderFilter>('open');
   // Stok and Belanja sit under Barang, which is no page of its own: its crumb only names the place.
   const itemsTrail = [{ key: 'items', label: ti('inventory.list.title') }];
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
-  const showsKas =
-    money.hasPermission(MONEY_PERMISSION.read) || money.hasPermission(MONEY_PERMISSION.countCash);
+  const showsKas = opensKas(money);
   // Settings asks before it is left with unsaved changes.
   const leaveGuard = useRef<LeaveGuard | null>(null);
   const leave = (proceed: () => void): void => {

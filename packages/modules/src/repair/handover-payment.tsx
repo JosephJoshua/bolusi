@@ -2,7 +2,7 @@
 // lines for what is due, or "Bayar nanti" with a reason, which leaves a debt. Bayar nanti is an
 // owner's decision (a manager's within their limit); anyone else asks for it, and an approval lets
 // the counter use it at this handover. A QRIS line on a method connected to Xendit is paid by its
-// QR (money/qris-hooks.ts); the handover then waits for that payment to sync, since the ledger
+// QR (money/qris-hooks.tsx); the handover then waits for that payment to sync, since the ledger
 // must show the phone paid in full.
 import { formatMoney } from '@bolusi/i18n';
 import { useRef, useState } from 'react';
