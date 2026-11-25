@@ -19,6 +19,8 @@ export interface OperationInsert {
   /** The verbatim JCS bytes hashed/verified — stored as `signed_core_jcs` (05 §3, 10-db §2.1). */
   readonly jcs: string;
   readonly clockSkewFlagged: boolean;
+  /** The second store that also pulls this op (`OperationDeclaration.otherStore`), or null. */
+  readonly otherStoreId?: string | null;
 }
 
 function operationRow(input: OperationInsert) {
@@ -47,6 +49,7 @@ function operationRow(input: OperationInsert) {
     serverSeq: input.serverSeq,
     receivedAt: input.receivedAt,
     clockSkewFlagged: input.clockSkewFlagged,
+    otherStoreId: input.otherStoreId ?? null,
   };
 }
 

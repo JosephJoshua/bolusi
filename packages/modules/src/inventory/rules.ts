@@ -4,29 +4,25 @@
 //
 // Stock is allowed to go below zero (owner decision, 2026-10-28): two phones taking the last part
 // offline must not block a repair. The owner sees it flagged instead.
-import { defineRefusals, type OpRule } from '@bolusi/core';
+import type { OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { categoryProblem, type CategoryShape } from './categories.js';
-import { INVENTORY_CATEGORY_ENTITY, INVENTORY_ITEM_ENTITY } from './constants.js';
+import {
+  INVENTORY_CATEGORY_ENTITY,
+  INVENTORY_ITEM_ENTITY,
+  type StockSinkKind,
+} from './constants.js';
 import type { PartUseTargets } from './part-use.js';
+import { INVENTORY_REFUSALS } from './refusals.js';
 import type { InventoryDatabase } from './schema.js';
-import type { StockSourceTargets } from './stock-source.js';
+import type { AllStockSourceTargets } from './stock-source.js';
+import { STOCK_SINKS } from './transfers/sources.js';
 
 type Rule = OpRule<InventoryDatabase>;
 type Db = Parameters<Rule>[1]['db'];
 
-/** Every reason a stock change is refused, each with copy at `inventory.refusal.<reason>`. */
-export const INVENTORY_REFUSALS = defineRefusals('inventory', [
-  'alreadyRecorded',
-  'categoryInvalid',
-  'categoryNotFound',
-  'itemNotFound',
-  'itemArchived',
-  'moreThanTaken',
-  'wrongUse',
-  'wrongSource',
-] as const);
+export { INVENTORY_REFUSALS };
 const { refuse } = INVENTORY_REFUSALS;
 
 interface UsePayload {
@@ -242,7 +238,7 @@ interface ReceivedPayload {
   readonly itemId: string;
   readonly qty: number;
   readonly source: {
-    readonly kind: keyof StockSourceTargets;
+    readonly kind: keyof AllStockSourceTargets;
     readonly id: string;
     readonly label: string;
   };
@@ -252,7 +248,7 @@ interface ReceivedPayload {
  * Parts come into stock only as their source says: the receipt lists this part in this quantity,
  * and it comes in once. An archived part can still arrive (it was on the order).
  */
-export function stockReceivedRule(sources: StockSourceTargets): Rule {
+export function stockReceivedRule(sources: AllStockSourceTargets): Rule {
   return async (op, ctx) => {
     await requireFreshMovement(ctx.db, op);
     const payload = payloadOf<ReceivedPayload>(op);
@@ -287,3 +283,46 @@ export function stockReceivedRule(sources: StockSourceTargets): Rule {
     }
   };
 }
+
+interface SentPayload {
+  readonly itemId: string;
+  readonly qty: number;
+  readonly sink: { readonly kind: StockSinkKind; readonly id: string; readonly label: string };
+}
+
+/**
+ * Parts leave stock only as their transfer (or settlement) says: this part, in this quantity, by
+ * the same person, once. An archived part can still be sent: it was on the transfer.
+ */
+export const stockSentRule: Rule = async (op, ctx) => {
+  await requireFreshMovement(ctx.db, op);
+  const payload = payloadOf<SentPayload>(op);
+  await requirePart(ctx.db, op, payload.itemId);
+  const { label } = await STOCK_SINKS[payload.sink.kind].check({
+    op,
+    sourceId: payload.sink.id,
+    itemId: payload.itemId,
+    qty: payload.qty,
+    db: ctx.db,
+  });
+  if (label !== payload.sink.label) {
+    throw refuse('wrongSource', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'sink.label', issue: `expected ${label}` },
+    });
+  }
+  const already = await ctx.db
+    .selectFrom('inventoryMovements')
+    .select('id')
+    .where('tenantId', '=', op.tenantId)
+    .where('useId', '=', payload.sink.id)
+    .where('itemId', '=', payload.itemId)
+    .where('kind', '=', 'sent')
+    .executeTakeFirst();
+  if (already !== undefined) {
+    throw refuse('alreadyRecorded', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'sink.id', issue: 'already sent' },
+    });
+  }
+};

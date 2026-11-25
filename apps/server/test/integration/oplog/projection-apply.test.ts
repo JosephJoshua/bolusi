@@ -35,6 +35,7 @@ import {
   seedWorld,
   testScopeOf,
   testEntityTypeOf,
+  testOtherStoreOf,
   testCheckRule,
   testPermissionOf,
   type OplogTestDb,
@@ -112,6 +113,7 @@ const probeOpRegistry: OpRegistry = {
   // The production rule per type (a test-only type declares none).
   checkRule: testCheckRule,
   permissionOf: testPermissionOf((type) => type === GENESIS_TYPE || type === PROBE_TYPE),
+  otherStoreOf: testOtherStoreOf,
   entityTypeOf: testEntityTypeOf((type) => type === GENESIS_TYPE || type === PROBE_TYPE, {
     [PROBE_TYPE]: PROBE_ENTITY,
   }),
