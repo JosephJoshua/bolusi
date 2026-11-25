@@ -245,6 +245,17 @@ describe('QRs at checkout', () => {
     expect(complete()).toBe('true');
   });
 
+  it('a QR shown on another device while this screen is open blocks cash here soon after', async () => {
+    const { port, showElsewhere } = xendit();
+    render(<Checkout port={port} />);
+    takeCash(within(await screen.findByTestId('pay.line0.methods')));
+    expect(complete()).toBe('true');
+    showElsewhere('01920000-0000-7000-8000-0000000000e2', 150_000);
+    await act(() => vi.advanceTimersByTimeAsync(6_000));
+    expect(screen.getByTestId('pay.qrisUnresolved').textContent).toContain('150.000');
+    expect(complete()).toBe('false');
+  });
+
   it('with no connection to cancel, the counter may let the QR go on this device', async () => {
     const { port, setOffline } = xendit();
     render(<Checkout port={port} />);

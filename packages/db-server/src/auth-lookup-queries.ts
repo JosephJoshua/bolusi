@@ -97,11 +97,14 @@ export interface UnpaidQrisChargeRow {
   readonly chargeId: string;
 }
 
-/** Unpaid QRIS charges whose QR expires after `expiresAfter`, oldest first. Cross-tenant, definer-gated. */
-export function unpaidQrisChargesQuery(expiresAfter: number) {
+/**
+ * Unpaid QRIS charges whose QR expires after `expiresAfter` and that were not looked at `settleMs`
+ * past their expiry, the longest unchecked first. Cross-tenant, definer-gated.
+ */
+export function unpaidQrisChargesQuery(expiresAfter: number, settleMs: number) {
   return sql<UnpaidQrisChargeRow>`
     SELECT tenant_id AS "tenantId", charge_id AS "chargeId"
-      FROM qris_find_unpaid_charges(${expiresAfter})
+      FROM qris_find_unpaid_charges(${expiresAfter}, ${settleMs})
   `;
 }
 

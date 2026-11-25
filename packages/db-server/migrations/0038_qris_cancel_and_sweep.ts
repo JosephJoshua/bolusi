@@ -15,7 +15,7 @@ import { sql, type Kysely } from 'kysely';
 
 const AUTH_ROLE = 'bolusi_auth';
 const APP_ROLE = 'bolusi_app';
-const FUNCTION = 'qris_find_unpaid_charges(bigint)';
+const FUNCTION = 'qris_find_unpaid_charges(bigint, bigint)';
 
 export async function up(db: Kysely<unknown>): Promise<void> {
   await sql`
@@ -35,17 +35,20 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   `.execute(db);
 
   await sql`
-    GRANT SELECT (tenant_id, id, expires_at, paid_at) ON qris_charges TO ${sql.id(AUTH_ROLE)}
+    GRANT SELECT (tenant_id, id, expires_at, paid_at, checked_at) ON qris_charges TO ${sql.id(AUTH_ROLE)}
   `.execute(db);
   await sql`
-    CREATE FUNCTION qris_find_unpaid_charges(p_expires_after bigint)
+    CREATE FUNCTION qris_find_unpaid_charges(p_expires_after bigint, p_settle_ms bigint)
       RETURNS TABLE (tenant_id uuid, charge_id uuid)
       LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
         SELECT c.tenant_id, c.id
           FROM qris_charges c
          WHERE c.paid_at IS NULL
            AND c.expires_at > p_expires_after
-         ORDER BY c.expires_at
+           -- Settled: looked at after its last second and not paid; a callback still records it.
+           AND (c.checked_at IS NULL OR c.checked_at < c.expires_at + p_settle_ms)
+         -- The longest unchecked first, so a busy minute never starves the rest.
+         ORDER BY c.checked_at NULLS FIRST
          LIMIT 500
     $$
   `.execute(db);
@@ -57,7 +60,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 export async function down(db: Kysely<unknown>): Promise<void> {
   await sql`DROP FUNCTION IF EXISTS ${sql.raw(FUNCTION)}`.execute(db);
   await sql`
-    REVOKE SELECT (tenant_id, id, expires_at, paid_at) ON qris_charges FROM ${sql.id(AUTH_ROLE)}
+    REVOKE SELECT (tenant_id, id, expires_at, paid_at, checked_at) ON qris_charges FROM ${sql.id(AUTH_ROLE)}
   `.execute(db);
   await sql`DROP INDEX IF EXISTS idx_qris_charges_unpaid`.execute(db);
   await sql`DROP INDEX IF EXISTS idx_qris_charges_unpaid_document`.execute(db);

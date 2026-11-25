@@ -34,6 +34,8 @@ import { qrisFailure, type QrisFailure, type QrisPort } from './qris.js';
 
 /** How often an open QR asks whether it is paid; the server reads Xendit at most every 4 s. */
 export const QRIS_POLL_MS = 3_000;
+/** How often an open payment screen asks for QRs shown for its bill on other devices. */
+export const QRIS_OPEN_POLL_MS = 5_000;
 
 const ACCOUNT_PREFIX = 'account:';
 
@@ -208,21 +210,30 @@ export function useQrisCheckout({
   const gone = (id: string): boolean =>
     done(id) || shown.some((c) => c.id === id && c.status !== 'waiting');
 
-  // A QR another device of the store showed for this bill, or this one before a restart.
+  // A QR another device of the store showed for this bill, or this one before a restart. Asked
+  // again every QRIS_OPEN_POLL_MS while the screen is open, so a QR shown elsewhere meanwhile blocks
+  // other methods here too; only where Xendit is connected, since no QR exists otherwise.
+  const followsQrs =
+    connections.status === 'ready' && connections.connections.length > 0 && port !== undefined;
   useEffect(() => {
-    if (port === undefined || documentId === undefined) return;
+    if (!followsQrs || port === undefined || documentId === undefined) return;
     let live = true;
-    port.openCharges(documentId).then(
-      (charges) => {
-        if (!live) return;
-        for (const charge of charges) remember(documentId, charge);
-      },
-      () => undefined,
-    );
+    const ask = () => {
+      port.openCharges(documentId).then(
+        (charges) => {
+          if (!live) return;
+          for (const charge of charges) remember(documentId, charge);
+        },
+        () => undefined,
+      );
+    };
+    ask();
+    const timer = setInterval(ask, QRIS_OPEN_POLL_MS);
     return () => {
       live = false;
+      clearInterval(timer);
     };
-  }, [port, documentId, openNonce]);
+  }, [followsQrs, port, documentId, openNonce]);
 
   const connected = useMemo(
     () => (connections.status === 'ready' ? connections.connections : []),

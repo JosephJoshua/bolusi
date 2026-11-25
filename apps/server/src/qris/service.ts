@@ -819,7 +819,7 @@ export async function sweepUnpaidCharges(deps: QrisSweepDeps): Promise<void> {
   if (deps.qris === undefined || deps.systemKeyStore === undefined) return;
   const ready = deps as QrisSweepDeps & Ready;
   const now = ready.now();
-  const due = await ready.authDirectory.findUnpaidQrisCharges(now - QRIS_TTL_MS);
+  const due = await ready.authDirectory.findUnpaidQrisCharges(now - QRIS_TTL_MS, SETTLE_MS);
   for (const { tenantId, chargeId } of due) {
     try {
       const charge = await ready.forTenant(tenantId, async (db) => {

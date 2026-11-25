@@ -89,11 +89,11 @@ export async function makeIdentityDb(): Promise<IdentityDb> {
       }>`SELECT * FROM public_find_status_link(${code})`.execute(db);
       return rows.length === 1 ? rows[0] : undefined;
     },
-    async findUnpaidQrisCharges(expiresAfter) {
+    async findUnpaidQrisCharges(expiresAfter, settleMs) {
       const { rows } = await sql<{
         tenantId: string;
         chargeId: string;
-      }>`SELECT * FROM qris_find_unpaid_charges(${expiresAfter})`.execute(db);
+      }>`SELECT * FROM qris_find_unpaid_charges(${expiresAfter}, ${settleMs})`.execute(db);
       return rows;
     },
   };

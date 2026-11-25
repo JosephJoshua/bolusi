@@ -2,6 +2,7 @@
 // faked at its port: connecting an account, making a QR, and a confirmed payment becoming a money
 // record signed by the tenant's system device, exactly once.
 import { verifyOp } from '@bolusi/core';
+import { sql } from 'kysely';
 import { QRIS_TTL_MS, type SignedOperation } from '@bolusi/schemas';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
@@ -600,6 +601,12 @@ describe('the server follows unpaid QRs itself', () => {
     expect(await (await call('GET', `/v1/money/qris/charges/${chargeId}`)).json()).toMatchObject({
       status: 'expired',
     });
+    // Settled QRs leave the sweep's list, so they never crowd out QRs still to be looked at.
+    const now = world.h.clock.now();
+    const { rows } = await sql<{ chargeId: string }>`
+      SELECT charge_id AS "chargeId" FROM qris_find_unpaid_charges(${now - QRIS_TTL_MS}, 10000)
+    `.execute(world.h.idb.db);
+    expect(rows.map((row) => row.chargeId)).not.toContain(chargeId);
   });
 
   test('Xendit not answering is tried again next time, and does not stop other QRs', async () => {

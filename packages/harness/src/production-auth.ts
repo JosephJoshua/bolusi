@@ -49,7 +49,10 @@ export interface PgliteAuthDirectory {
   ): Promise<ControlSessionAuthRecord | undefined>;
   findLoginCredential(loginIdentifier: string): Promise<LoginCredentialRecord | undefined>;
   findStatusLink(code: string): Promise<StatusLinkRecord | undefined>;
-  findUnpaidQrisCharges(expiresAfter: number): Promise<readonly UnpaidQrisChargeRecord[]>;
+  findUnpaidQrisCharges(
+    expiresAfter: number,
+    settleMs: number,
+  ): Promise<readonly UnpaidQrisChargeRecord[]>;
 }
 
 /**
@@ -85,8 +88,8 @@ export function createPgliteAuthDirectory(db: Kysely<DB>): PgliteAuthDirectory {
       const { rows } = await statusLinkQuery(code).execute(db);
       return rows.length === 1 ? rows[0] : undefined;
     },
-    async findUnpaidQrisCharges(expiresAfter) {
-      const { rows } = await unpaidQrisChargesQuery(expiresAfter).execute(db);
+    async findUnpaidQrisCharges(expiresAfter, settleMs) {
+      const { rows } = await unpaidQrisChargesQuery(expiresAfter, settleMs).execute(db);
       return rows;
     },
   };
