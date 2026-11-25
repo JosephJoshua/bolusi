@@ -78,3 +78,24 @@ export function foldCost(movements: readonly CostMovement[]): CostFold {
   }
   return { average, unpriced, at };
 }
+
+/**
+ * What one use (a servisan) still has out of a part, and what those pieces cost the store: each
+ * take at the average when it was taken, each put-back returning pieces at the average when it came
+ * back. `cost` is null while a price it depends on is not typed yet.
+ */
+export function costOnUse(
+  movements: readonly (CostMovement & { readonly useId: string | null })[],
+  fold: CostFold,
+  useId: string,
+): { readonly out: number; readonly cost: number | null } {
+  let out = 0;
+  let cost: number | null = 0;
+  for (const movement of movements) {
+    if (movement.useId !== useId) continue;
+    out -= movement.qty;
+    const average = fold.at.get(movement.id) ?? null;
+    cost = cost === null || average === null ? null : cost - movement.qty * average;
+  }
+  return { out, cost };
+}

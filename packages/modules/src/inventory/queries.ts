@@ -23,7 +23,7 @@ import {
   type StockSinkKind,
   type StockSourceKind,
 } from './constants.js';
-import { foldCost } from './cost.js';
+import { costOnUse, foldCost } from './cost.js';
 import type { InventoryDatabase } from './schema.js';
 import { itemSearchSource } from './search.js';
 
@@ -821,12 +821,9 @@ export interface ItemCostRow {
 export const itemCostInput = z.object({ itemId: z.string().min(1) }).strict();
 export type ItemCostInput = z.input<typeof itemCostInput>;
 
-/** What a part costs this store: the average now, and what each delivery cost a piece. */
-export async function itemCostHandler(
-  input: z.output<typeof itemCostInput>,
-  qctx: Qctx,
-): Promise<QueryPage<ItemCostRow>> {
-  const movements = await storeMovements(qctx).where('itemId', '=', input.itemId).execute();
+/** A part's movements in this store with the prices typed for its receipts, and their fold. */
+async function costedMovements(qctx: Qctx, itemId: string) {
+  const movements = await storeMovements(qctx).where('itemId', '=', itemId).execute();
   const prices = new Map(
     (
       await qctx.db
@@ -834,7 +831,7 @@ export async function itemCostHandler(
         .select(['movementId', 'unitCost'])
         .where('tenantId', '=', qctx.tenantId)
         .where('storeId', '=', qctx.storeId)
-        .where('itemId', '=', input.itemId)
+        .where('itemId', '=', itemId)
         .execute()
     ).map((row) => [row.movementId, Number(row.unitCost)]),
   );
@@ -846,8 +843,18 @@ export async function itemCostHandler(
     counted: row.counted === null ? null : Number(row.counted),
     unitCost: prices.get(row.id) ?? null,
     label: row.useLabel,
+    useKind: row.useKind,
+    useId: row.useId,
   }));
-  const fold = foldCost(rows);
+  return { rows, fold: foldCost(rows) };
+}
+
+/** What a part costs this store: the average now, and what each delivery cost a piece. */
+export async function itemCostHandler(
+  input: z.output<typeof itemCostInput>,
+  qctx: Qctx,
+): Promise<QueryPage<ItemCostRow>> {
+  const { rows, fold } = await costedMovements(qctx, input.itemId);
   const receipts = rows
     .filter((row) => row.kind === 'received')
     .sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1))
@@ -870,4 +877,63 @@ export const itemCostQuery = {
   permission: INVENTORY_PERMISSION.readCost,
   input: itemCostInput,
   handler: itemCostHandler,
+} as const;
+
+// ── useCost ────────────────────────────────────────────────────────────────────────────────────
+
+/** What the parts still on one use (a servisan) cost the store, each at its average when taken. */
+export interface UseCostRow {
+  readonly itemId: string;
+  readonly name: string;
+  /** Taken minus put back. */
+  readonly out: number;
+  /** Rupiah for all `out` pieces, or null while a price it depends on is not typed yet. */
+  readonly cost: number | null;
+}
+
+/**
+ * Each part a use still has out, costed at the store's average when it was taken; a put-back
+ * returns pieces at the average when it came back. Read with `inventory.read_cost`, apart from the
+ * parts themselves, so a servisan opens on a store device and only this says it needs internet.
+ */
+export async function useCostHandler(
+  input: z.output<typeof partsForUseInput>,
+  qctx: Qctx,
+): Promise<QueryPage<UseCostRow>> {
+  const itemIds = (
+    await storeMovements(qctx)
+      .clearSelect()
+      .select('itemId')
+      .distinct()
+      .where('useKind', '=', input.useKind)
+      .where('useId', '=', input.useId)
+      .execute()
+  ).map((row) => row.itemId);
+  if (itemIds.length === 0) return { rows: [], nextCursor: null };
+  const names = new Map(
+    (
+      await qctx.db
+        .selectFrom('inventoryItems')
+        .select(['id', 'name'])
+        .where('tenantId', '=', qctx.tenantId)
+        .where('id', 'in', itemIds)
+        .execute()
+    ).map((row) => [row.id, row.name]),
+  );
+  const rows: UseCostRow[] = [];
+  for (const itemId of itemIds) {
+    const { rows: movements, fold } = await costedMovements(qctx, itemId);
+    const onUse = movements.filter((movement) => movement.useKind === input.useKind);
+    const { out, cost } = costOnUse(onUse, fold, input.useId);
+    if (out > 0) rows.push({ itemId, name: names.get(itemId) ?? '', out, cost });
+  }
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  return { rows, nextCursor: null };
+}
+
+export const useCostQuery = {
+  name: 'useCost',
+  permission: INVENTORY_PERMISSION.readCost,
+  input: partsForUseInput,
+  handler: useCostHandler,
 } as const;
