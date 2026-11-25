@@ -1,11 +1,19 @@
-// Choosing a part to take for a use (a servisan), on the phone and the PC: the parts that fit the
-// phone being repaired come first, before anything is typed, and only spareparts are offered.
-import type { QueryState } from '../screen-kit/index.js';
+// Parts on a use (a servisan), on the phone and the PC alike: what it has out, choosing a part to
+// take (the parts that fit the phone being repaired come first, before anything is typed, and only
+// spareparts are offered) and putting one back. Each app only draws these.
+import { useState } from 'react';
+
+import {
+  useActionRunner,
+  useSettledValue,
+  type ActionRunner,
+  type QueryState,
+} from '../screen-kit/index.js';
 
 import { ti } from './i18n.js';
 import type { PartUse } from './part-use.js';
-import type { ItemRow } from './queries.js';
-import { useInventoryQuery, type InventoryRuntime } from './runtime.js';
+import type { ItemRow, PartsForUseRow, UsedPartRow } from './queries.js';
+import { useInventoryQuery, useInventoryRuntime, type InventoryRuntime } from './runtime.js';
 
 export type { PartUse };
 
@@ -73,4 +81,118 @@ export async function partForCode(
   const only = found.length === 1 ? found[0] : undefined;
   const part = parts.find((row) => row.id === only?.id);
   return part !== undefined && !part.archived ? part : null;
+}
+
+/** The parts a use still has out. `hidden` once there are none and none may be taken. */
+export function useUsedParts(
+  use: PartUse,
+  takeable: boolean,
+): {
+  readonly query: QueryState<PartsForUseRow | undefined>;
+  readonly parts: readonly UsedPartRow[];
+  readonly hidden: boolean;
+  readonly retry: () => void;
+} {
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const query = useInventoryQuery(
+    async (rt) => (await rt.query('partsForUse', { useKind: use.kind, useId: use.id })).rows[0],
+    `used:${use.kind}:${use.id}:${String(reloadNonce)}`,
+  );
+  // A put-back to zero leaves the part's history, not a row reading "0 diambil".
+  const parts = query.status === 'ready' ? (query.data?.parts ?? []).filter((p) => p.out > 0) : [];
+  return {
+    query,
+    parts,
+    hidden: query.status === 'ready' && parts.length === 0 && !takeable,
+    retry: () => setReloadNonce((n) => n + 1),
+  };
+}
+
+/** Pick a part, say how many, take it. Stock may go below zero; the owner sees it flagged. */
+export function useTakePart(
+  use: PartUse,
+  device: { readonly brand: string; readonly model: string } | undefined,
+  onDone: () => void,
+): {
+  readonly text: string;
+  readonly setText: (text: string) => void;
+  /** What the list is searched for: nothing while the box is empty, else the settled text. */
+  readonly searchText: string;
+  readonly query: QueryState<TakeChoices>;
+  readonly retry: () => void;
+  readonly picked: ItemRow | null;
+  readonly pick: (row: ItemRow) => void;
+  readonly qty: number;
+  readonly setQty: (qty: number) => void;
+  /** A scanned or typed code picks its part when it names exactly one. */
+  readonly pickCode: (code: string) => Promise<void>;
+  readonly take: () => void;
+  readonly runner: ActionRunner;
+} {
+  const runtime = useInventoryRuntime();
+  const runner = useActionRunner();
+  const [text, setText] = useState('');
+  const [picked, setPicked] = useState<ItemRow | null>(null);
+  const [qty, setQty] = useState(1);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const typed = text.trim();
+  const settled = useSettledValue(typed);
+  const searchText = typed === '' ? '' : settled;
+  const query = useTakeChoices(searchText, device, reloadNonce);
+  const pick = (row: ItemRow): void => {
+    setPicked(row);
+    setQty(1);
+  };
+  return {
+    text,
+    setText,
+    searchText,
+    query,
+    retry: () => setReloadNonce((n) => n + 1),
+    picked,
+    pick,
+    qty,
+    setQty,
+    pickCode: async (code) => {
+      const part = await partForCode(runtime, code);
+      if (part !== null) pick(part);
+    },
+    take: () => {
+      if (picked === null) return;
+      void runner
+        .run(() => runtime.run('takePart', { itemId: picked.id, qty, use }))
+        .then((result) => {
+          if (result !== undefined) onDone();
+        });
+    },
+    runner,
+  };
+}
+
+/** Put unused parts back on the shelf: at most what this use took. */
+export function usePutBack(
+  use: PartUse,
+  part: UsedPartRow,
+  onDone: () => void,
+): {
+  readonly qty: number;
+  readonly setQty: (qty: number) => void;
+  readonly putBack: () => void;
+  readonly runner: ActionRunner;
+} {
+  const runtime = useInventoryRuntime();
+  const runner = useActionRunner();
+  const [qty, setQty] = useState(1);
+  return {
+    qty,
+    setQty,
+    putBack: () => {
+      void runner
+        .run(() => runtime.run('putBackPart', { itemId: part.itemId, qty, use }))
+        .then((result) => {
+          if (result !== undefined) onDone();
+        });
+    },
+    runner,
+  };
 }
