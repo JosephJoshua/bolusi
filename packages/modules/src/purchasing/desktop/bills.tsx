@@ -52,7 +52,8 @@ import {
 import type { BillDetailRow, BillRow } from '../bills/queries.js';
 import type { OrderDetailRow } from '../queries.js';
 import { usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
-import { PartSearch, discardCopy } from './dialogs.js';
+import { PartSearch } from '../../inventory/desktop/PartSearch.js';
+import { discardCopy } from './dialogs.js';
 
 // ── the Tagihan list ───────────────────────────────────────────────────────────────────────────
 
@@ -647,7 +648,8 @@ export function BillDialog({ bill, start, onClose, onDone }: BillDialogProps): R
       <div role="group" aria-label={tp('purchasing.bill.lines')}>
         <p className="mb-2 text-small font-semibold text-text">{tp('purchasing.bill.lines')}</p>
         <PartSearch
-          onOrder={new Set(draft.lines.map((line) => line.itemId))}
+          label={tp('purchasing.form.addPart')}
+          picked={new Set(draft.lines.map((line) => line.itemId))}
           onPick={(item) => setDraft(addBillLine(draft, item))}
           testId={`${testId}.part`}
         />

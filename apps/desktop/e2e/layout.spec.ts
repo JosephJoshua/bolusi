@@ -82,12 +82,28 @@ for (const [width, height] of [
       await check(`${place.toLowerCase()}-${size}`);
     }
 
-    // The owner's supplier bills: the Tagihan list, and one bill open beside it.
+    // The owner's pages under Barang: Belanja and Kiriman, each with its first row open.
     await page.getByTestId('desktop.person').click();
     await page.getByRole('menuitem', { name: 'Andi Pratama' }).click();
+    await page.getByTestId('repair.desk.board').waitFor();
+    for (const [place, row] of [
+      ['Belanja', 'purchasing.desk.table'],
+      ['Kiriman', 'inventory.desk.transfers.table'],
+    ] as const) {
+      await page
+        .getByRole('navigation')
+        .getByRole('button', { name: place, exact: true })
+        .first()
+        .click();
+      await page.getByTestId(row).getByRole('row').nth(1).click();
+      await check(`${place.toLowerCase()}-${size}`);
+    }
+
+    // The owner's supplier bills: the Tagihan list, and one bill open beside it.
     await page
       .getByRole('navigation')
       .getByRole('button', { name: 'Belanja', exact: true })
+      .first()
       .click();
     await page.getByTestId('purchasing.desk.views.bills').click();
     await expect(page.getByTestId('purchasing.desk.bills')).toBeVisible();

@@ -1,7 +1,7 @@
 // Belanja on the counter PC: this store's orders to suppliers, the ones still running first, with
 // the selected order open beside them, and for whoever reads them the suppliers' bills. A new order
 // (or bill, on Tagihan) is F2; the suppliers are a dialog away.
-import { formatDate } from '@bolusi/i18n';
+import { formatDate, t } from '@bolusi/i18n';
 import {
   Button,
   Chip,
@@ -11,6 +11,7 @@ import {
   StatePanel,
   Tabs,
   type ColumnDef,
+  type Crumb,
 } from '@bolusi/ui-web';
 import { Plus, ShoppingCart, Store } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -36,12 +37,17 @@ import { STAGE_ICON } from './stage.js';
 const PAGE = 100;
 
 export interface OrdersPageProps {
+  /**
+   * Where the page sits when its place has sections (Barang › Stok): the section's name as the
+   * title and the place above it. Without it the page is its place's only page.
+   */
+  readonly place?: { readonly title: string; readonly trail: readonly Crumb[] } | undefined;
   /** Running, done or the bills, owned by the app so it survives a trip to another page. */
   readonly filter: BelanjaTab;
   readonly onFilterChange: (filter: BelanjaTab) => void;
 }
 
-export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.JSX.Element {
+export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): React.JSX.Element {
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -130,7 +136,9 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={`${testId}.orders`}>
       <PageHeader
-        title={tp('purchasing.list.title')}
+        title={place?.title ?? tp('purchasing.list.title')}
+        trail={place?.trail}
+        trailLabel={t('core.nav.trail')}
         actions={
           <>
             <Button

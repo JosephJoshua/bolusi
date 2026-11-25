@@ -1,27 +1,16 @@
 // Buying's tasks on the counter PC, each a dialog over the orders: write or finish an order, receive
 // what came, and keep the suppliers. The rules and the form's state are the phone's (`order-form`).
 import { formatPhone, t } from '@bolusi/i18n';
-import {
-  Button,
-  ChoiceList,
-  Dialog,
-  IconButton,
-  SearchField,
-  Tabs,
-  TextArea,
-  TextField,
-} from '@bolusi/ui-web';
+import { Button, ChoiceList, Dialog, IconButton, Tabs, TextArea, TextField } from '@bolusi/ui-web';
 import { ChevronRight, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { useActionRunner, useSettledValue } from '../../screen-kit/index.js';
+import { useActionRunner } from '../../screen-kit/index.js';
 import { QueryPanel, TaskDialog, type DiscardCopy } from '../../screen-kit/desktop/index.js';
 import { MAX_UNIT_COST } from '../../inventory/constants.js';
 import { QtyField } from '../../inventory/desktop/fields.js';
 import { MoneyField } from '../../screen-kit/desktop/money-field.js';
-import { stockText } from '../../inventory/labels.js';
-import type { ItemRow } from '../../inventory/queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../../inventory/runtime.js';
+import { PartSearch } from '../../inventory/desktop/PartSearch.js';
 import {
   MAX_LINE_QTY,
   MAX_PURCHASING_NOTE,
@@ -55,8 +44,6 @@ export function discardCopy(): DiscardCopy {
     keep: tp('purchasing.discard.keep'),
   };
 }
-
-const PICK_LIMIT = 8;
 
 export interface OrderDialogProps {
   /** The draft being finished; absent for a new order. */
@@ -155,7 +142,8 @@ export function OrderDialog({ order, onClose, onDone }: OrderDialogProps): React
         <div role="group" aria-label={tp('purchasing.order.lines')}>
           <p className="mb-2 text-small font-semibold text-text">{tp('purchasing.order.lines')}</p>
           <PartSearch
-            onOrder={new Set(draft.lines.map((line) => line.itemId))}
+            label={tp('purchasing.form.addPart')}
+            picked={new Set(draft.lines.map((line) => line.itemId))}
             onPick={(item) => setDraft(addLine(draft, item))}
             testId={`${testId}.part`}
           />
@@ -211,117 +199,6 @@ export function OrderDialog({ order, onClose, onDone }: OrderDialogProps): React
         />
       ) : null}
     </>
-  );
-}
-
-/**
- * Find a part to add: typing ranks the parts list, a click adds the part (one more when it is
- * already on the order). A USB scanner types a code and presses Enter, which adds the part it names.
- */
-export function PartSearch({
-  onOrder,
-  onPick,
-  testId,
-}: {
-  readonly onOrder: ReadonlySet<string>;
-  readonly onPick: (item: ItemRow) => void;
-  readonly testId: string;
-}): React.JSX.Element {
-  const inventory = useInventoryRuntime();
-  const [text, setText] = useState('');
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const typed = text.trim();
-  const settled = useSettledValue(typed);
-  const searchText = typed === '' ? '' : settled;
-  const query = useInventoryQuery(
-    async (rt) =>
-      searchText === ''
-        ? []
-        : (await rt.query('listItems', { text: searchText, filter: 'active', limit: PICK_LIMIT }))
-            .rows,
-    `desk.buyPick:${searchText}:${String(reloadNonce)}`,
-  );
-  const pick = (item: ItemRow): void => {
-    onPick(item);
-    setText('');
-  };
-  const pickCode = async (): Promise<void> => {
-    const found = await inventory
-      .query('findByCode', { code: typed })
-      .then((page) => page.rows)
-      .catch(() => []);
-    const only = found.length === 1 ? found[0] : undefined;
-    if (only !== undefined && !only.archived) pick(only);
-  };
-  return (
-    <div
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' && event.target instanceof HTMLInputElement && typed !== '') {
-          event.preventDefault();
-          void pickCode();
-        }
-      }}
-    >
-      <SearchField
-        value={text}
-        onChange={setText}
-        placeholder={tp('purchasing.desk.addPart')}
-        label={tp('purchasing.form.addPart')}
-        clearLabel={tp('purchasing.pick.clear')}
-        testId={`${testId}.search`}
-      />
-      {searchText === '' ? null : (
-        <div className="mt-1 max-h-64 overflow-y-auto rounded-sm border border-border">
-          <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
-            {(rows) =>
-              rows.length === 0 ? (
-                <p className="px-3 py-4 text-center text-body text-text-muted">
-                  {tp('purchasing.desk.noPartMatches')}
-                </p>
-              ) : (
-                <ul>
-                  {rows.map((row) => (
-                    <li key={row.id}>
-                      <button
-                        type="button"
-                        onClick={() => pick(row)}
-                        className="flex w-full cursor-pointer items-center gap-3 border-b border-border px-3 py-2 text-left last:border-b-0 hover:bg-surface-alt focus-visible:bg-surface-alt focus-visible:outline-none"
-                        data-testid={`${testId}.choice.${row.id}`}
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-body font-semibold text-text">
-                            {row.name}
-                          </span>
-                          {onOrder.has(row.id) ? (
-                            <span className="block text-small text-text-muted">
-                              {tp('purchasing.pick.onOrder')}
-                            </span>
-                          ) : row.code === null ? null : (
-                            <span className="tabular block text-small text-text-muted">
-                              {row.code}
-                            </span>
-                          )}
-                        </span>
-                        <span
-                          className={
-                            row.onHand < 0
-                              ? 'tabular shrink-0 text-small font-semibold text-danger'
-                              : 'tabular shrink-0 text-small text-text-muted'
-                          }
-                        >
-                          {tp('purchasing.pick.stock', { count: stockText(row.onHand) })}
-                        </span>
-                        <Plus size={16} aria-hidden className="shrink-0 text-primary" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )
-            }
-          </QueryPanel>
-        </div>
-      )}
-    </div>
   );
 }
 

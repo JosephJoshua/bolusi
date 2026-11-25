@@ -43,8 +43,6 @@ export const SHELL_ROUTES = [
   'uncollectedDays',
   'printSettings',
   'printPaper',
-  'parts',
-  'purchasing',
   'paymentMethods',
   'renameDevice',
   'devices',

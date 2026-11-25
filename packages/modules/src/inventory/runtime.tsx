@@ -28,6 +28,12 @@ export type InventoryRuntime = ModulePort<InventoryModule> &
      * Absent where there is no camera to scan with (a counter PC types codes with a USB scanner).
      */
     readonly scanCode?: (() => Promise<string | null>) | undefined;
+    /**
+     * The business's other stores, by name, as the device last heard of them: where a transfer can
+     * go and where one came from. Absent where none are known; the transfer screens then name none.
+     */
+    readonly otherStores?:
+      (() => Promise<readonly { readonly id: string; readonly name: string }[]>) | undefined;
   };
 
 const InventoryRuntimeContext = createRuntimeContext<InventoryRuntime>('inventory');
