@@ -90,7 +90,8 @@ export function useBulkEntry(): BulkEntry {
   const [left, setLeft] = useState(0);
   const [saves, setSaves] = useState(0);
   const [fits, setFits] = useState<ReadonlyMap<string, FitMatch>>(new Map());
-  const asked = useRef(new Set<string>());
+  // One lookup per phone, kept as its promise so a save waits for one still under way.
+  const asked = useRef(new Map<string, Promise<FitMatch>>());
 
   const categoryList = useInventoryQuery<readonly CategoryRow[]>(
     async (rt) => (await rt.query('listCategories', {})).rows,
@@ -144,13 +145,18 @@ export function useBulkEntry(): BulkEntry {
     const search = runtime.searchModels;
     const found = new Map<string, FitMatch>();
     if (search === undefined) return found;
+    let fresh = false;
     for (const typed of phones) {
       const key = compactModel(typed);
-      if (asked.current.has(key)) continue;
-      asked.current.add(key);
-      found.set(key, await lookUpFit(search, typed));
+      let pending = asked.current.get(key);
+      if (pending === undefined) {
+        pending = lookUpFit(search, typed);
+        asked.current.set(key, pending);
+        fresh = true;
+      }
+      found.set(key, await pending);
     }
-    if (found.size > 0) setFits((current) => new Map([...current, ...found]));
+    if (fresh) setFits((current) => new Map([...current, ...found]));
     return found;
   };
   useEffect(() => {

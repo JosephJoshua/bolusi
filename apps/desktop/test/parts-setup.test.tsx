@@ -163,6 +163,30 @@ describe('many items at once on the PC', () => {
     expect(row).toBeTruthy();
   });
 
+  it('saves a phone still being looked up with the catalog spelling', async () => {
+    await renderApp(OWNER);
+    await openParts();
+    fireEvent.click(byTestId('inventory.desk.bulk'));
+    await screen.findByTestId('inventory.desk.bulk.grid');
+    fireEvent.change(byTestId('inventory.desk.bulk.category'), { target: { value: 'cat-bat' } });
+    await waitFor(() =>
+      expect(screen.getByRole('columnheader', { name: 'Kualitas' })).toBeTruthy(),
+    );
+    // Saved at once, before the lookup the paste started has come back.
+    paste('HP\tKualitas\r\ngalaxy a55\tOriginal\r\n');
+    fireEvent.click(byTestId('inventory.desk.bulk.save'));
+    expect(await screen.findByText('1 barang disimpan.')).toBeTruthy();
+    fireEvent.click(byTestId('inventory.desk.bulk.back'));
+    fireEvent.change(await screen.findByTestId('inventory.desk.search'), {
+      target: { value: 'galaxy a55' },
+    });
+    expect(
+      await within(byTestId('inventory.desk.table')).findByText(
+        'Baterai Samsung Galaxy A55 Original',
+      ),
+    ).toBeTruthy();
+  });
+
   it('keeps a row it cannot save, marked, and saves the rest', async () => {
     await renderApp(OWNER);
     await openParts();
