@@ -144,7 +144,10 @@ export function OrderDetail({
     <AppShell
       scrollable
       // Wide only with receipts or bills to put beside the order; otherwise one readable column.
-      wide={(order?.receipts.length ?? 0) > 0 || (opensBills(runtime) && order?.stage !== 'draft')}
+      wide={
+        (order?.receipts.length ?? 0) > 0 ||
+        (opensBills(runtime) && order !== undefined && order.stage !== 'draft')
+      }
       title={order?.supplierName ?? tp('purchasing.list.title')}
       titleVariant="detail"
       onBack={hideBack ? undefined : onBack}
@@ -311,6 +314,7 @@ export function OrderDetail({
                   order={row}
                   onNewBill={() => onNewBill(row)}
                   onOpenBill={onOpenBill}
+                  onBack={onBack}
                   testID={`${testID}.bills`}
                 />
               ) : null}

@@ -14,6 +14,7 @@ import {
   Card,
   Chip,
   color,
+  EmptyState,
   numeric,
   space,
   Text,
@@ -94,7 +95,13 @@ export function BillDetail({
         onRetry={() => setReloadNonce((n) => n + 1)}
         testID={testID}
       >
-        {(row) => (row === undefined ? null : renderBill(row))}
+        {(row) =>
+          row === undefined ? (
+            <EmptyState title={t('core.errors.ENTITY_NOT_FOUND')} testID={`${testID}.missing`} />
+          ) : (
+            renderBill(row)
+          )
+        }
       </QueryView>
     </AppShell>
   );

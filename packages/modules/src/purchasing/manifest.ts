@@ -19,6 +19,7 @@ import {
 } from './bills/commands.js';
 import { BILL_OPERATIONS } from './bills/operations.js';
 import {
+  billItemsQuery,
   billsWithRefQuery,
   getBillQuery,
   listBillsQuery,
@@ -112,6 +113,7 @@ export const purchasingModuleManifest = {
     getBill: getBillQuery,
     nextBillNumber: nextBillNumberQuery,
     billsWithRef: billsWithRefQuery,
+    billItems: billItemsQuery,
   },
 } as const satisfies ModuleManifest<PurchasingDatabase>;
 

@@ -92,7 +92,11 @@ for (const [width, height] of [
     await page.getByTestId('purchasing.desk.views.bills').click();
     await expect(page.getByTestId('purchasing.desk.bills')).toBeVisible();
     await check(`bills-${size}`);
-    await page.getByTestId('purchasing.desk.bills').getByText('SJ-0912').first().click();
+    await page
+      .getByTestId('purchasing.desk.bills')
+      .getByText(/SJ.0912/)
+      .first()
+      .click();
     await expect(page.getByTestId('purchasing.desk.bill.check')).toBeVisible();
     await check(`bill-${size}`);
   });

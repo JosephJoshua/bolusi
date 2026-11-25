@@ -22,7 +22,12 @@ import { STAGE_CHIP } from '../order-form.js';
 import { ORDER_FILTERS, type OrderRow } from '../queries.js';
 import { EMPTY_BILL, type BelanjaTab } from '../bills/bill-form.js';
 import type { BillRow } from '../bills/queries.js';
-import { loadOrderPages, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
+import {
+  loadBillPages,
+  loadOrderPages,
+  usePurchasingQuery,
+  usePurchasingRuntime,
+} from '../runtime.js';
 import { BillDialog, BillPane, billColumns } from './bills.js';
 import { OrderDialog, SuppliersDialog } from './dialogs.js';
 import { OrderPane } from './OrderPane.js';
@@ -61,15 +66,7 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
   const billQuery = usePurchasingQuery(
     async (rt) => {
       if (!bills) return { rows: [] as readonly BillRow[], hasMore: false };
-      let rows: BillRow[] = [];
-      let next: string | null = '0';
-      for (let n = 0; n < pages && next !== null; n += 1) {
-        const page: { readonly rows: readonly BillRow[]; readonly nextCursor: string | null } =
-          await rt.query('listBills', { filter: 'all', limit: PAGE, offset: Number(next) });
-        rows = [...rows, ...page.rows];
-        next = page.nextCursor;
-      }
-      return { rows, hasMore: next !== null };
+      return loadBillPages(rt, pages, PAGE);
     },
     `desk.bills:${String(bills)}:${String(pages)}:${String(reloadNonce)}`,
   );
@@ -265,6 +262,12 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
                   key={selectedId}
                   orderId={selectedId}
                   onClose={closePane}
+                  onOpenBill={(billId) => {
+                    setPages(1);
+                    setNotice(null);
+                    onFilterChange('bills');
+                    setSelectedId(billId);
+                  }}
                   notice={notice}
                   onClearNotice={() => setNotice(null)}
                 />

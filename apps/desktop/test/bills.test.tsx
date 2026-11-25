@@ -80,7 +80,7 @@ describe('supplier bills on the PC', () => {
   it('lists the bills for an owner, voided ones marked, and opens one with its checks', async () => {
     await renderApp(OWNER);
     await openBills();
-    const voided = await billWith(/Nota INV\/MP\/2611-B/);
+    const voided = await billWith(/Nota INV\/MP\/2611.B/);
     expect(within(voided).getByText('Dibatalkan')).toBeTruthy();
 
     fireEvent.click(await billWith('Sumber Jaya Sparepart'));
@@ -120,7 +120,7 @@ describe('supplier bills on the PC', () => {
 
     const pane = await screen.findByTestId('purchasing.desk.bill');
     expect(await within(pane).findByText('Tagihan dicatat.')).toBeTruthy();
-    expect(within(pane).getByText(/Nota AB-77/)).toBeTruthy();
+    expect(within(pane).getByText(/Nota AB.77/)).toBeTruthy();
     expect(byTestId('purchasing.desk.bill.total').textContent).toContain('95.000');
   });
 
@@ -151,7 +151,7 @@ describe('supplier bills on the PC', () => {
     const [cell] = await within(table).findAllByText('Diterima sebagian', {}, { timeout: 5000 });
     fireEvent.click(cell!.closest('[role="row"]') as HTMLElement);
     const bills = await screen.findByTestId('purchasing.desk.order.bills');
-    expect(await within(bills).findByText(/SJ-0912/)).toBeTruthy();
+    expect(await within(bills).findByText(/SJ.0912/)).toBeTruthy();
     fireEvent.click(byTestId('purchasing.desk.order.bills.new'));
     await screen.findByTestId('purchasing.desk.billForm');
     expect(byTestId('purchasing.desk.billForm.fromOrder').textContent).toBe(
@@ -160,5 +160,18 @@ describe('supplier bills on the PC', () => {
     expect(
       within(byTestId('purchasing.desk.billForm.lines')).getAllByRole('listitem'),
     ).toHaveLength(3);
+  });
+
+  it("opens one of an order's bills in the Tagihan list", async () => {
+    await renderApp(OWNER);
+    await openBuying();
+    const table = byTestId('purchasing.desk.table');
+    const [cell] = await within(table).findAllByText('Diterima sebagian', {}, { timeout: 5000 });
+    fireEvent.click(cell!.closest('[role="row"]') as HTMLElement);
+    const bills = await screen.findByTestId('purchasing.desk.order.bills');
+    fireEvent.click((await within(bills).findByText(/SJ.0912/)).closest('button')!);
+    await screen.findByTestId('purchasing.desk.bills');
+    const pane = await screen.findByTestId('purchasing.desk.bill');
+    expect(within(pane).getByText(/Nota SJ.0912/)).toBeTruthy();
   });
 });

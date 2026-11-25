@@ -23,15 +23,15 @@ async function openBills(page: Page): Promise<void> {
   await expect(billWith(page, 'Toko Abadi')).toBeVisible();
 }
 
-const billWith = (page: Page, text: string) =>
+const billWith = (page: Page, text: string | RegExp) =>
   page.locator('[data-testid^="purchasing.orders.bill."]').filter({ hasText: text }).first();
 
 test('the Tagihan list, and a bill billed ahead of its parts', async ({ page }) => {
   await openBills(page);
-  await expect(billWith(page, 'INV/MP/2611-B')).toContainText('Dibatalkan');
+  await expect(billWith(page, /INV\/MP\/2611.B/)).toContainText('Dibatalkan');
   await shoot(page, '01-list');
 
-  await billWith(page, 'SJ-0912').click();
+  await billWith(page, /SJ.0912/).click();
   await expect(page.getByTestId('purchasing.bill.check')).toBeVisible();
   await expect(page.getByText(/belum datang/).first()).toBeVisible();
   await shoot(page, '02-bill');

@@ -25,12 +25,15 @@ import { billEditedRule, billRecordedRule, billVoidedRule } from './rules.js';
 /** `TG-K7Q-0001`: the recording device's code and its own counter. */
 export const BILL_NUMBER_PATTERN = /^TG-[0-9A-Z]{3}-\d{4,9}$/;
 
-/** A day, as ms epoch: from 2020 to 2100, enough to catch a mistyped year. */
-const zDay = z
+/**
+ * A day, as ms epoch at the start of that day where it was recorded: a nota dated 2020 to 2099,
+ * due up to a year later. A day either side spans every time zone; enough to catch a mistyped year.
+ */
+export const zBillDay = z
   .number()
   .int()
-  .min(Date.UTC(2020, 0, 1))
-  .max(Date.UTC(2100, 0, 1));
+  .min(Date.UTC(2019, 11, 31))
+  .max(Date.UTC(2101, 0, 2));
 
 /** Each part once: the same part twice is one line with both counts. */
 const zBillLines = z
@@ -55,8 +58,8 @@ const billDetails = z
     supplierId: zUuidV7,
     orderId: zUuidV7.nullable(),
     supplierRef: zOptionalPayloadText(MAX_SUPPLIER_REF),
-    billedOn: zDay,
-    dueOn: zDay.nullable(),
+    billedOn: zBillDay,
+    dueOn: zBillDay.nullable(),
     charges: z.number().int().min(0).max(MAX_BILL_CHARGES),
     note: zOptionalPayloadText(MAX_PURCHASING_NOTE),
     lines: zBillLines,

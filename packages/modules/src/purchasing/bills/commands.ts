@@ -16,25 +16,19 @@ import {
   PURCHASING_BILL_ENTITY,
   PURCHASING_OP,
 } from '../constants.js';
-import { orderItemsQuery } from '../queries.js';
 import { zOptionalText } from '../../shared/optional-text.js';
 import {
+  billItemsQuery,
   billsWithRefQuery,
   getBillQuery,
   nextBillNumberQuery,
   type BillDetailRow,
 } from './queries.js';
+import { zBillDay } from './operations.js';
 
 function invalid(field: string, issue: string): DomainError {
   return new DomainError('VALIDATION_FAILED', { field, issue });
 }
-
-/** A day as the screens pick it: midnight UTC of that date, as ms epoch. */
-const zDay = z
-  .number()
-  .int()
-  .min(Date.UTC(2020, 0, 1))
-  .max(Date.UTC(2100, 0, 1));
 
 const zBillDetails = z
   .object({
@@ -42,9 +36,9 @@ const zBillDetails = z
     /** The order this nota bills, or null for one bought without an order in the app. */
     orderId: z.string().min(1).nullable().default(null),
     supplierRef: zOptionalText(MAX_SUPPLIER_REF),
-    billedOn: zDay,
+    billedOn: zBillDay,
     /** When it must be paid ("tempo"); null when it is paid at once or in advance. */
-    dueOn: zDay.nullable().default(null),
+    dueOn: zBillDay.nullable().default(null),
     /** Ongkir and other charges on the nota, whole rupiah. */
     charges: z.number().int().min(0).max(MAX_BILL_CHARGES).default(0),
     note: zOptionalText(MAX_PURCHASING_NOTE),
@@ -75,7 +69,7 @@ async function billPayload(ctx: CommandContext, input: BillInput) {
     throw invalid('lines', 'a part twice');
   }
   const items = new Map(
-    (await ctx.query(orderItemsQuery, { itemIds: lines.map((line) => line.itemId) })).rows.map(
+    (await ctx.query(billItemsQuery, { itemIds: lines.map((line) => line.itemId) })).rows.map(
       (row) => [row.id, row],
     ),
   );

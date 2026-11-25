@@ -31,7 +31,12 @@ import { STAGE_CHIP } from '../order-form.js';
 import type { OrderRow } from '../queries.js';
 import { dueText, notaText, type BelanjaTab } from '../bills/bill-form.js';
 import type { BillRow } from '../bills/queries.js';
-import { loadOrderPages, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
+import {
+  loadBillPages,
+  loadOrderPages,
+  usePurchasingQuery,
+  usePurchasingRuntime,
+} from '../runtime.js';
 
 const PAGE = 50;
 
@@ -73,8 +78,11 @@ export function OrderList({
   const query = usePurchasingQuery(
     async (rt): Promise<{ readonly rows: readonly ListedRow[]; readonly hasMore: boolean }> => {
       if (bills) {
-        const page = await rt.query('listBills', { filter: 'all' });
-        return { rows: page.rows.map((row) => ({ kind: 'bill' as const, row })), hasMore: false };
+        const page = await loadBillPages(rt, pages, PAGE);
+        return {
+          rows: page.rows.map((row) => ({ kind: 'bill' as const, row })),
+          hasMore: page.hasMore,
+        };
       }
       const page = await loadOrderPages(rt, filter === 'bills' ? 'open' : filter, pages, PAGE);
       return {

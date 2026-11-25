@@ -15,7 +15,7 @@ import {
   type BillDetailRow,
   type BillRow,
 } from '../src/purchasing/bills/queries.js';
-import { billCheckKey } from '../src/purchasing/bills/bill-form.js';
+import { billCheckKey, billDraftOf } from '../src/purchasing/bills/bill-form.js';
 import { registerPurchasingCatalog } from '../src/purchasing/i18n.js';
 import { openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
@@ -149,6 +149,39 @@ describe('recording a bill', () => {
     const row = await bill(h, billId);
     expect(row).toMatchObject({ orderId: null, dueOn: null, charges: 0, total: 50_000 });
     expect(row.lines.map(billLineCheck)).toEqual([null]);
+  });
+
+  test('the first and last days the form takes are saved in any time zone', async () => {
+    const h = await harness(7310);
+    const supplierId = await addSupplier(h);
+    const glass = await addItem(h, 'Tempered glass');
+    // 1 January 2020 starts at 15:00 UTC the day before in WIT (UTC+9), the screens' local day.
+    const firstDay = Date.UTC(2019, 11, 31, 15);
+    const { billId } = (await h.purchasing(
+      'recordBill',
+      {
+        supplierId,
+        billedOn: firstDay,
+        lines: [{ itemId: glass, qty: 1, unitPrice: 5_000 }],
+      },
+      h.storeOwnerId,
+    )) as { billId: string };
+    expect((await bill(h, billId)).billedOn).toBe(firstDay);
+    // A nota of 31 December 2099 due a year later, in a time zone west of UTC.
+    const lastDay = Date.UTC(2099, 11, 31, 10);
+    await expect(
+      h.purchasing(
+        'recordBill',
+        {
+          supplierId,
+          supplierRef: 'LAST',
+          billedOn: lastDay,
+          dueOn: lastDay + 365 * DAY,
+          lines: [{ itemId: glass, qty: 1, unitPrice: 5_000 }],
+        },
+        h.storeOwnerId,
+      ),
+    ).resolves.toBeDefined();
   });
 
   test('a part billed on two bills of one order counts against what arrived once', async () => {
@@ -354,6 +387,10 @@ describe('correcting and voiding', () => {
       h.ownerId,
     );
     let row = await bill(h, billId);
+    // Corrected in the form, the prices read as they are typed: grouped.
+    expect(billDraftOf(row, Date.now()).lines.every((line) => !/\d{4}/.test(line.price))).toBe(
+      true,
+    );
     expect(row.lines.map((line) => [line.name, line.qty])).toEqual([
       ['Lensa kamera', 1],
       ['Tempered glass', 8],

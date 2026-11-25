@@ -153,6 +153,7 @@ export const billVoidedApplier: Applier = async (db, op) => {
       voidedAt: op.timestamp,
       voidReason: payload.reason,
       updatedAt: op.timestamp,
+      updatedBy: op.userId,
     })
     .where('id', '=', op.entityId)
     .where('tenantId', '=', op.tenantId)

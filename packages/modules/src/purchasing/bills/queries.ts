@@ -9,7 +9,7 @@ import type { QueryContext, QueryPage } from '@bolusi/core';
 import { deviceCode } from '../../shared/device-code.js';
 import { userNames } from '../../shared/user-names.js';
 import { PURCHASING_PERMISSION, type BillStatus } from '../constants.js';
-import { linesOf } from '../queries.js';
+import { linesOf, orderItemsHandler, orderItemsInput } from '../queries.js';
 import type { PurchasingDatabase } from '../schema.js';
 
 type Qctx = QueryContext<PurchasingDatabase>;
@@ -331,4 +331,14 @@ export const nextBillNumberQuery = {
   permission: PURCHASING_PERMISSION.bills,
   input: nextBillNumberInput,
   handler: nextBillNumberHandler,
+} as const;
+
+// ── billItems ──────────────────────────────────────────────────────────────────────────────────
+
+/** The parts a bill names, read with the bill's own permission: whoever records bills, not buys. */
+export const billItemsQuery = {
+  name: 'billItems',
+  permission: PURCHASING_PERMISSION.bills,
+  input: orderItemsInput,
+  handler: orderItemsHandler,
 } as const;

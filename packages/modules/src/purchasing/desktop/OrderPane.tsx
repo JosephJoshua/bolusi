@@ -33,6 +33,8 @@ import { STAGE_ICON } from './stage.js';
 export interface OrderPaneProps {
   readonly orderId: string;
   readonly onClose: () => void;
+  /** One of the order's bills, opened in the Tagihan list. */
+  readonly onOpenBill: (billId: string) => void;
   /** What the list's last task did ("Pesanan dipesan."), shown until dismissed. */
   readonly notice: PurchasingKey | null;
   readonly onClearNotice: () => void;
@@ -45,6 +47,7 @@ type Task =
 export function OrderPane({
   orderId,
   onClose,
+  onOpenBill,
   notice,
   onClearNotice,
 }: OrderPaneProps): React.JSX.Element {
@@ -292,6 +295,7 @@ export function OrderPane({
               say(null);
               setTask('bill');
             }}
+            onOpenBill={onOpenBill}
             testId={`${testId}.bills`}
           />
         ) : null}

@@ -385,15 +385,20 @@ function TotalLine({
 export function OrderBillsSection({
   order,
   onNewBill,
+  onOpenBill,
   testId,
 }: {
   readonly order: OrderDetailRow;
   readonly onNewBill: () => void;
+  readonly onOpenBill: (billId: string) => void;
   readonly testId: string;
 }): React.JSX.Element {
+  const [reloadNonce, setReloadNonce] = useState(0);
   const query = usePurchasingQuery(
-    async (rt) => (await rt.query('listBills', { filter: 'open', orderId: order.id })).rows,
-    `desk.orderBills:${order.id}`,
+    async (rt) =>
+      (await rt.query('listBills', { filter: 'open', orderId: order.id, limit: 100, offset: 0 }))
+        .rows,
+    `desk.orderBills:${order.id}:${String(reloadNonce)}`,
   );
   return (
     <Section
@@ -410,27 +415,30 @@ export function OrderBillsSection({
       }
       testId={testId}
     >
-      <QueryPanel query={query} onRetry={() => undefined}>
+      <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
         {(rows) =>
           rows.length === 0 ? (
             <p className="text-body text-text-muted">{tp('purchasing.bill.orderNoBills')}</p>
           ) : (
             <ul>
               {rows.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex items-baseline gap-4 border-b border-border py-2 last:border-b-0"
-                  data-testid={`${testId}.row.${row.id}`}
-                >
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="tabular text-body text-text">
-                      {row.billNumber} · {notaText(row)}
+                <li key={row.id} className="border-b border-border last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => onOpenBill(row.id)}
+                    className="-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-baseline gap-4 px-2 py-2 text-left hover:bg-surface-alt focus-visible:bg-surface-alt focus-visible:outline-none"
+                    data-testid={`${testId}.row.${row.id}`}
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="tabular text-body text-text">
+                        {row.billNumber} · {notaText(row)}
+                      </span>
+                      <span className="text-small text-text-muted">{dueText(row)}</span>
                     </span>
-                    <span className="text-small text-text-muted">{dueText(row)}</span>
-                  </span>
-                  <span className="tabular shrink-0 text-body font-semibold text-text">
-                    {formatMoney(row.total)}
-                  </span>
+                    <span className="tabular shrink-0 text-body font-semibold text-text">
+                      {formatMoney(row.total)}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>

@@ -2,7 +2,9 @@
  * OrderBills — the supplier's bills for one order, on the order's page, for whoever reads bills:
  * each with its total and when it is due, and the way to record the next one.
  */
+import { keepCodeWhole } from '@bolusi/i18n';
 import { AmountRow, color, Text, TextButton, type } from '@bolusi/ui';
+import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { QueryView, Section } from '../../screen-kit/screens/views.js';
@@ -15,16 +17,22 @@ export function OrderBills({
   order,
   onNewBill,
   onOpenBill,
+  onBack,
   testID,
 }: {
   readonly order: OrderDetailRow;
   readonly onNewBill: () => void;
   readonly onOpenBill: (billId: string) => void;
+  /** Leaves the order, when the bills cannot be read here. */
+  readonly onBack: () => void;
   readonly testID: string;
 }): React.JSX.Element {
+  const [reloadNonce, setReloadNonce] = useState(0);
   const query = usePurchasingQuery(
-    async (rt) => (await rt.query('listBills', { filter: 'open', orderId: order.id })).rows,
-    `orderBills:${order.id}`,
+    async (rt) =>
+      (await rt.query('listBills', { filter: 'open', orderId: order.id, limit: 100, offset: 0 }))
+        .rows,
+    `orderBills:${order.id}:${String(reloadNonce)}`,
   );
   return (
     <Section
@@ -38,7 +46,12 @@ export function OrderBills({
       }
       testID={testID}
     >
-      <QueryView query={query} onBack={() => undefined} onRetry={() => undefined} testID={testID}>
+      <QueryView
+        query={query}
+        onBack={onBack}
+        onRetry={() => setReloadNonce((n) => n + 1)}
+        testID={testID}
+      >
         {(rows) =>
           rows.length === 0 ? (
             <Text style={styles.muted}>{tp('purchasing.bill.orderNoBills')}</Text>
@@ -47,7 +60,7 @@ export function OrderBills({
               {rows.map((row) => (
                 <AmountRow
                   key={row.id}
-                  label={`${row.billNumber} · ${notaText(row)}`}
+                  label={`${keepCodeWhole(row.billNumber)} · ${notaText(row)}`}
                   detail={dueText(row)}
                   value={row.total}
                   onPress={() => onOpenBill(row.id)}

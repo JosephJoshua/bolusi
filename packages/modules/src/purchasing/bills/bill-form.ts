@@ -1,8 +1,8 @@
 // What the bill form holds, on the phone and the PC alike: the same lines and prices, the same
 // payment terms, the same checks before saving and the same input to the commands. Pure.
-import { formatDate } from '@bolusi/i18n';
+import { formatDate, keepCodeWhole } from '@bolusi/i18n';
 
-import { parseRupiah } from '../../shared/rupiah.js';
+import { groupedRupiah, parseRupiah } from '../../shared/rupiah.js';
 import { MAX_BILL_CHARGES, MAX_LINE_QTY, MAX_ORDER_LINES, MAX_UNIT_PRICE } from '../constants.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import type { OrderDetailRow, OrderFilter } from '../queries.js';
@@ -156,13 +156,13 @@ export function billDraftOf(bill: BillDetailRow, now: number): BillDraft {
     billedText: billedDay === 'other' ? formatDate(bill.billedOn) : '',
     term,
     termDays: term === 'other' ? String(days) : '',
-    charges: bill.charges === 0 ? '' : String(bill.charges),
+    charges: bill.charges === 0 ? '' : groupedRupiah(String(bill.charges)),
     note: bill.note ?? '',
     lines: bill.lines.map((line) => ({
       itemId: line.itemId,
       name: line.name,
       qty: line.qty,
-      price: String(line.unitPrice),
+      price: groupedRupiah(String(line.unitPrice)),
     })),
   };
 }
@@ -261,7 +261,10 @@ export function dueText(bill: { readonly dueOn: number | null }): string {
     : tp('purchasing.bill.due', { date: formatDate(bill.dueOn) });
 }
 
-/** "Nota INV-889 · 20/11/2026": the supplier's number when it has one, and the nota's date. */
+/**
+ * "Nota INV-889 · 20/11/2026": the supplier's number when it has one, kept whole on screen, and the
+ * nota's date.
+ */
 export function notaText(bill: {
   readonly supplierRef: string | null;
   readonly billedOn: number;
@@ -269,7 +272,7 @@ export function notaText(bill: {
   const date = formatDate(bill.billedOn);
   return bill.supplierRef === null
     ? tp('purchasing.bill.notaDate', { date })
-    : tp('purchasing.bill.nota', { ref: bill.supplierRef, date });
+    : tp('purchasing.bill.nota', { ref: keepCodeWhole(bill.supplierRef), date });
 }
 
 /** What a billed part needs checked against its order, or null when it matches. */
