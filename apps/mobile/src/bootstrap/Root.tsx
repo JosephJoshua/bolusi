@@ -77,6 +77,7 @@ import {
 import { REPAIR_REJECTED_SUBJECTS } from '@bolusi/device/bootstrap/repair';
 import type { AppRuntime } from '@bolusi/device/bootstrap/runtime';
 import type { AppSessionController as AppSession } from '@bolusi/device/bootstrap/session';
+import { isBlockedSyncState } from '@bolusi/device/bootstrap/blocked-wipe';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { renameDevice } from '@bolusi/device/bootstrap/device-info';
 import { createStaffControls } from '@bolusi/device/bootstrap/staff';
@@ -139,6 +140,8 @@ const UNWIRED_ENROLLMENT: EnrollmentController = {
 export interface RootProps {
   /** Fetch and restart into a newer app update; `undefined` where updates are off (src/bootstrap/app-updates.ts). */
   readonly checkForUpdate?: (() => Promise<UpdateCheckResult>) | undefined;
+  /** The running app learnt the device is blocked: restart it, so the start erases the device. */
+  readonly onDeviceBlocked?: (() => void) | undefined;
   /** §1.2's plain local storage. Injected so the root is drivable from Node. */
   readonly localeStore: LocaleStorePort;
   /**
@@ -358,6 +361,7 @@ export function Root({
   notificationPermission,
   hideSplash,
   checkForUpdate,
+  onDeviceBlocked,
   cameraPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
@@ -1136,6 +1140,14 @@ export function Root({
     // `syncTick` is the loop/session bump: a pushed batch changes `syncStatus` without writing a
     // projection table, so the invalidation bus alone would leave the counters one push behind.
   }, [app, syncTick, rejectedFor]);
+
+  // The server just said this device is blocked: restart, so the start confirms it and erases the
+  // device (blocked-wipe.ts). Only on the change while running; a start that could not ask the
+  // server leaves the device on the blocked setup screen rather than restarting forever.
+  const blockedWhileRunning = app !== null && sync !== null && isBlockedSyncState(sync.syncState());
+  useEffect(() => {
+    if (blockedWhileRunning) onDeviceBlocked?.();
+  }, [blockedWhileRunning, onDeviceBlocked]);
 
   // What a colleague just changed on another device glows once wherever it shows (ui `FreshGlow`).
   useEffect(() => {

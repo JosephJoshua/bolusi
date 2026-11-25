@@ -13,6 +13,7 @@ import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
 import { bootOncePerRealm, bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
+import { bootErasingBlocked, createBlockProbe } from '@bolusi/device/bootstrap/blocked-wipe';
 import { bootWithLocalRecovery } from '@bolusi/device/bootstrap/recovery';
 import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
 import {
@@ -62,7 +63,7 @@ import { createExpoVideoPlatform } from './src/media/native-video.js';
 import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from '@bolusi/device/media/transport';
-import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
+import { eraseAppFiles, phonePhotoFiles, sha256Hex } from './src/media/files.js';
 import { createPhonePhotoLoader } from '@bolusi/device/media/phone-photos';
 import { appStatePort } from './src/ports/app-state.js';
 import { startAppUpdates, updateNow } from './src/bootstrap/app-updates.js';
@@ -180,7 +181,32 @@ function bootDataLayer(launch: 'foreground' | 'background'): Promise<Bootstrappe
  * to one database (see `bootOncePerRealm`).
  */
 const boot = bootOncePerRealm(bootDataLayer);
-const foregroundBoot = (): Promise<Bootstrapped> => boot('foreground');
+
+/**
+ * Erase everything the app keeps on this phone, for a blocked device (blocked-wipe.ts), in its
+ * order: photos, videos and caches, then the database key and file, then the device's own keys.
+ * The language choice (bolusi-prefs.json) is not data and stays.
+ */
+async function eraseThisPhone(): Promise<void> {
+  eraseAppFiles();
+  await new SecureStoreDbKeyStore(quickCryptoPort).wipe();
+  deleteOpSqliteDatabase({ name: DEFAULT_DATABASE_NAME });
+  await new SecureStoreKeyStore().wipe();
+}
+
+/** The app's start: a blocked phone is erased here, before any screen shows its data. */
+const foregroundBoot = (): Promise<Bootstrapped> =>
+  bootErasingBlocked({
+    boot: () => boot('foreground'),
+    forgetBoot: boot.forget,
+    probe: () =>
+      createBlockProbe({
+        baseUrl: apiBaseUrl(),
+        deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+      })(),
+    eraseDevice: eraseThisPhone,
+    clock: systemClock,
+  });
 const backgroundBoot = (): Promise<Bootstrapped> => boot('background');
 
 /**
@@ -580,6 +606,14 @@ let rootProps: RootProps | null = null;
 function buildRootProps(): RootProps {
   return {
     checkForUpdate: expoUpdatesPort.isEnabled ? () => updateNow(expoUpdatesPort) : undefined,
+    // A restart is how a running phone gets erased: the start does it (foregroundBoot).
+    onDeviceBlocked: () => {
+      void expoUpdatesPort.reload().catch((error: unknown) =>
+        consoleDiagnostics.warn('restart after block failed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    },
     boot: foregroundBoot,
     createSync,
     createEnrollment,

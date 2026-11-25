@@ -31,6 +31,11 @@ import { createAppEnrollment, type AppEnrollment } from '@bolusi/device/bootstra
 import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
 import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
 import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
+import {
+  bootErasingBlocked,
+  createBlockProbe,
+  isBlockedSyncState,
+} from '@bolusi/device/bootstrap/blocked-wipe';
 import { bootWithLocalRecovery } from '@bolusi/device/bootstrap/recovery';
 import {
   createSessionRepairRuntime,
@@ -123,6 +128,10 @@ export interface CoreHostDeps {
   readonly clock?: ClockPort;
   readonly timer?: TimerPort;
   readonly fetchImpl?: typeof fetch;
+  /** Clear what the window's browser engine cached (main owns it), when a blocked PC is erased. */
+  readonly clearWebData?: () => Promise<void>;
+  /** The running core learnt the PC is blocked: restart it, so the start erases the PC. */
+  readonly onBlocked?: () => void;
 }
 
 export interface CoreHost {
@@ -286,8 +295,14 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       emitQueued = false;
       current = computeState();
       for (const listener of stateListeners) listener(current);
+      if (!blockedSeen && sync !== null && isBlockedSyncState(sync.syncState())) {
+        blockedSeen = true;
+        deps.onBlocked?.();
+      }
     });
   };
+  /** Once per run: the restart that erases a blocked PC is asked for once. */
+  let blockedSeen = false;
 
   function sessionView(): SessionView | null {
     if (session === null) return null;
@@ -532,7 +547,42 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     }
   }
 
-  async function bootDataLayer(): Promise<Bootstrapped> {
+  /** The database files, removed by both erases below. */
+  function removeDatabaseFiles(): void {
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+      rmSync(join(deps.dataDir, `${DEFAULT_DATABASE_NAME}${suffix}`), { force: true });
+    }
+  }
+
+  /**
+   * Erase everything the app keeps on this PC, for a blocked device (blocked-wipe.ts), in its
+   * order: photos, videos and the window's caches, then the database key and files, then the PC's
+   * own keys. Printer, paper, camera and language settings (device-settings.json) are not data and
+   * stay, so the PC is ready again once it is registered.
+   */
+  async function eraseThisPc(): Promise<void> {
+    rmSync(join(deps.dataDir, 'files'), { recursive: true, force: true });
+    await deps.clearWebData?.();
+    await dbKeyStore.wipe();
+    removeDatabaseFiles();
+    await keystore.wipe();
+  }
+
+  /** The start: a blocked PC is erased here, before any screen shows its data. */
+  function bootDataLayer(): Promise<Bootstrapped> {
+    return bootErasingBlocked({
+      boot: bootRecovering,
+      probe: createBlockProbe({
+        baseUrl: deps.apiBaseUrl,
+        deviceToken: loadDeviceToken,
+        ...fetchOptions,
+      }),
+      eraseDevice: eraseThisPc,
+      clock,
+    });
+  }
+
+  async function bootRecovering(): Promise<Bootstrapped> {
     const location = deps.dataDir;
     return bootWithLocalRecovery({
       boot: () =>
@@ -546,9 +596,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         }),
       wipeLocalData: async () => {
         await dbKeyStore.wipe();
-        for (const suffix of ['', '-wal', '-shm', '-journal']) {
-          rmSync(join(location, `${DEFAULT_DATABASE_NAME}${suffix}`), { force: true });
-        }
+        removeDatabaseFiles();
       },
     });
   }
