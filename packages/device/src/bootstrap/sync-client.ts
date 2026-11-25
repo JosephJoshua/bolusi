@@ -527,6 +527,8 @@ export function createSyncClientForApp(
   const transport = createFetchSyncTransport({
     baseUrl: config.baseUrl,
     deviceToken: config.loadDeviceToken,
+    // Owners' and managers' decisions go with their server-checked sessions (person-access.ts).
+    personSessions: (authors) => app.person.proofs(authors),
     ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
   });
   const bundle = createFetchBundleRefresh({
@@ -603,7 +605,11 @@ export function createSyncClientForApp(
     },
     // The person's store follows the device's after every cycle: a poke, the connection coming
     // back (which is also when a PIN checked offline goes to the server) and the periodic one.
-    onCycleSettled: () => void app.person.sync(),
+    // Sessions kept for someone who left end once their work is up (person-access.ts `leaving`).
+    onCycleSettled: () => {
+      void app.person.sync();
+      void app.person.pushed();
+    },
     ...(config.background === undefined ? {} : { background: config.background }),
     // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
     // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT

@@ -556,11 +556,19 @@ governance notes in "Decision" where they differ.
   longer fits (paid, picked up, repriced), and the asker can withdraw it. An
   approved price drop still waits for the customer's yes; a refund request names
   how the money goes back and is recorded when approved.
-- **Offline:** a request reaches the approver when both phones sync. With no
-  signal, an owner or manager at the counter can approve on the same phone with
-  their PIN. Role and limit changes are online only and reach phones with the
-  next sync; the server judges each synced action by the current roles and
-  limits and refuses one over them, which the owner sees.
+- **Offline:** a request reaches the approver when both phones sync. Role and
+  limit changes are online only and reach phones with the next sync; the server
+  judges each synced action by the current roles and limits and refuses one over
+  them, which the owner sees.
+- **Decisions on a shared device need the server's PIN check (2026-11-25):** a
+  counter PC or shared phone names who did something on its own word, so someone
+  with its keys could cancel or refund in the owner's name. An owner's or
+  manager's decision there (cancel, discount, DP fix, refund, void, Bayar nanti,
+  warranty exception, settling Kas, a PIN reset or unlock, approving a request)
+  needs internet: their PIN goes to the server at sign-in, and the decision
+  syncs with that check. Offline it is refused with "Ini perlu PIN yang dicek
+  saat online" and is asked of the owner's own phone instead, which needs no
+  check. Replaces approving at the counter with no signal.
 - **Approvals as built (first part):** a discount and a cancel. The counter's
   "Batalkan" and a discount past someone's limit (counting the servisan's other
   discounts) become "Minta persetujuan". The request shows on the servisan, and

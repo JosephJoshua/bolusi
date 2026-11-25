@@ -21,6 +21,7 @@ import {
   type InvalidationBus,
   type ModuleRegistry,
 } from '@bolusi/core';
+import { sql } from 'kysely';
 import type { ClientDb } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
 
@@ -45,6 +46,8 @@ export interface PersonAccessDeps {
   readonly knowsOp: (op: Pick<SignedOperation, 'type' | 'schemaVersion'>) => boolean;
   /** Whether a PIN change for the person made here has not reached the server yet. */
   readonly pinPending?: (userId: string) => Promise<boolean>;
+  /** Whether the person has changes here not yet pushed; reads the outbox unless a test passes one. */
+  readonly unpushed?: (userId: string) => Promise<boolean>;
   /** Opens the store; core's `PersonStore.open` unless a test passes another. */
   readonly openStore?: (reads: readonly string[]) => Promise<PersonStoreLike>;
 }
@@ -69,6 +72,11 @@ export interface PersonAccess {
     readonly userId: string;
     readonly pin: string;
     readonly mayRead: (permissionId: string) => boolean;
+    /**
+     * They hold an owner's or manager's decision and this device is shared: their session is opened
+     * at sign-in even with nothing extra to read, so a cancel or refund is proven at once.
+     */
+    readonly mayDecide?: boolean;
   }): Promise<void>;
   /** The person left: drop their store and end their session (best effort). */
   end(): Promise<void>;
@@ -102,6 +110,16 @@ export interface PersonAccess {
   sessionFor(userId: string): Promise<string | null>;
   /** The signed-in person changed their own PIN here: sessions opened from now on can use it. */
   pinChanged(userId: string, newPin: string): void;
+  /**
+   * The live person sessions a push of these authors' changes carries: the signed-in person's and
+   * those of people who just left with work still unsent. The server takes a decision from a shared
+   * device only with its author's (server oplog/steps/decision.ts).
+   */
+  proofs(authors: readonly string[]): readonly string[];
+  /** A sync cycle finished: sessions kept only for what has now been sent are ended. */
+  pushed(): Promise<void>;
+  /** Whether a session proves `userId` right now (signed in here, or just left with work unsent). */
+  canProve(userId: string): boolean;
   status(): PersonAccessStatus;
   /** The signed-in person this access is for, or null. */
   userId(): string | null;
@@ -111,6 +129,7 @@ export interface PersonAccess {
 interface Person {
   readonly userId: string;
   readonly mayRead: (permissionId: string) => boolean;
+  readonly mayDecide: boolean;
   /** Kept in memory until the server has checked it, or until they leave if it never needs to. */
   pin: string | null;
   /** A PIN they changed to here: the server takes it once the change reaches it. */
@@ -118,6 +137,8 @@ interface Person {
   token: string | null;
   /** When the server stops taking `token` (its clock, so read with a margin). */
   tokenExpiresAt: number;
+  /** A session being opened for an online call (`sessionFor`), which later calls wait for. */
+  opening: Promise<string | null> | null;
   store: PersonStoreLike | null;
   /** The store pulled to the end at least once: its reads are here. */
   complete: boolean;
@@ -126,18 +147,49 @@ interface Person {
   status: PersonAccessStatus;
 }
 
+/** The longest a left person's session is kept for their unsent work (`leaving` below). */
+const LEAVING_MAX_MS = 10 * 60 * 1000;
+
+interface Leaving {
+  readonly userId: string;
+  readonly token: string;
+  readonly since: number;
+  readonly expiresAt: number;
+}
+
 /** Opened again this long before the server's expiry, so a device clock a little behind still works. */
 const SESSION_EXPIRY_MARGIN_MS = 5 * 60 * 1000;
 
 export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
+  /** Whether a session expiring then still works now, with the margin for a clock behind. */
+  const live = (expiresAt: number): boolean =>
+    expiresAt - SESSION_EXPIRY_MARGIN_MS > deps.clock.now();
   let transport: PersonTransportPort | null = null;
   let person: Person | null = null;
   /**
-   * The session of someone who just left, kept only while a PIN change made here goes up with it:
-   * a lock right after changing a PIN must not strand the change (the next sign-in, with the new
-   * PIN, cannot prove the upload while the server still knows the old one).
+   * Sessions of people who just left, kept only until what they did here reaches the server with
+   * them: a decision still waiting to be pushed (the server takes it only with their session, server
+   * oplog/steps/decision.ts) and a PIN change still waiting to be sent (the next sign-in, with the
+   * new PIN, cannot prove it while the server still knows the old one). A lock right after a cancel
+   * or a PIN change must not strand either. Never past LEAVING_MAX_MS.
    */
-  let departing: { readonly userId: string; readonly token: string } | null = null;
+  const leaving: Leaving[] = [];
+  const finishLeaving = (entry: Leaving): void => {
+    const at = leaving.indexOf(entry);
+    if (at === -1) return;
+    leaving.splice(at, 1);
+    void transport?.end(entry.token).catch(() => undefined);
+  };
+  const settleLeaving = async (): Promise<void> => {
+    for (const entry of [...leaving]) {
+      const overdue = deps.clock.now() - entry.since > LEAVING_MAX_MS;
+      const waiting =
+        !overdue &&
+        ((await unpushed(entry.userId).catch(() => false)) ||
+          (await pinPending(entry.userId).catch(() => false)));
+      if (!waiting) finishLeaving(entry);
+    }
+  };
   let running: Promise<void> | null = null;
   let again = false;
   /** Bumped by every sign-in, so a slower earlier one never overwrites a later one. */
@@ -154,6 +206,14 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
 
   const pinPending =
     deps.pinPending ?? ((userId: string) => hasPendingVerifier(deps.db.db, userId));
+  const unpushed =
+    deps.unpushed ??
+    (async (userId: string) => {
+      const rows = await sql`
+        SELECT 1 FROM operations WHERE sync_status = 'local' AND user_id = ${userId} LIMIT 1
+      `.execute(deps.db.db);
+      return rows.rows.length > 0;
+    });
 
   const storeDeps = {
     db: deps.db.db as never,
@@ -289,6 +349,8 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
         // signed in, so if the device comes to hold less (the store's first staff person was just
         // added) their extra opens without asking for it again.
         setStatus(target, 'none');
+        // Someone who decides here is proven now, while the connection is up.
+        if (target.mayDecide) await access.sessionFor(target.userId);
         return;
       }
       if (target.pin === null) {
@@ -327,17 +389,19 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
 
     heldReads: () => deps.deviceReads.heldReads(),
 
-    async begin({ userId, pin, mayRead }) {
+    async begin({ userId, pin, mayRead, mayDecide = false }) {
       const mine = (generation += 1);
       await access.end();
       if (mine !== generation) return;
       person = {
         userId,
         mayRead,
+        mayDecide,
         pin,
         nextPin: null,
         token: null,
         tokenExpiresAt: 0,
+        opening: null,
         store: null,
         complete: false,
         reopen: null,
@@ -357,22 +421,44 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       notify();
       const port = transport;
       if (token === null || port === null) return;
-      const pending = await pinPending(target.userId).catch(() => false);
-      if (!pending) {
-        void port.end(token).catch(() => undefined);
-        return;
+      const entry: Leaving = {
+        userId: target.userId,
+        token,
+        since: deps.clock.now(),
+        expiresAt: target.tokenExpiresAt,
+      };
+      leaving.push(entry);
+      if (await pinPending(target.userId).catch(() => false)) {
+        // Sent now, proven by this session; the queue keeps it if the send fails.
+        await port.sendPendingPins().catch(() => undefined);
       }
-      departing = { userId: target.userId, token };
-      void (async () => {
-        try {
-          await port.sendPendingPins();
-        } catch {
-          // Still queued: it goes with the next proof.
-        } finally {
-          if (departing?.token === token) departing = null;
-          void port.end(token).catch(() => undefined);
-        }
-      })();
+      await settleLeaving();
+    },
+
+    proofs(authors) {
+      const wanted = new Set(authors);
+      const tokens = new Set<string>();
+      for (const entry of leaving) {
+        if (wanted.has(entry.userId) && live(entry.expiresAt)) tokens.add(entry.token);
+      }
+      if (person?.token != null && wanted.has(person.userId) && live(person.tokenExpiresAt)) {
+        tokens.add(person.token);
+      }
+      return [...tokens];
+    },
+
+    async pushed() {
+      await settleLeaving();
+    },
+
+    canProve(userId) {
+      if (leaving.some((entry) => entry.userId === userId && live(entry.expiresAt))) return true;
+      return (
+        person !== null &&
+        person.userId === userId &&
+        person.token !== null &&
+        live(person.tokenExpiresAt)
+      );
     },
 
     sync() {
@@ -446,32 +532,33 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
     async sessionFor(userId) {
       const target = person;
       const port = transport;
-      const leaving = departing;
-      if (
-        leaving !== null &&
-        leaving.userId === userId &&
-        (target === null || target.token === null)
-      ) {
-        return leaving.token;
-      }
+      const left = leaving.find((entry) => entry.userId === userId && live(entry.expiresAt));
+      if (left !== undefined && (target === null || target.token === null)) return left.token;
       if (target === null || target.userId !== userId || port === null) return null;
       if (target.token !== null) {
-        // A store's own pull finds out when its session ends; without one, an expired token is
-        // opened again here, while the PIN is still in memory.
-        const live = target.tokenExpiresAt - SESSION_EXPIRY_MARGIN_MS > deps.clock.now();
-        if (live || target.store !== null || target.pin === null) return target.token;
+        // An expired token proves nobody: it is opened again while the PIN is still in memory. A
+        // store's pull reads the token each time, so it carries on with the new one.
+        if (live(target.tokenExpiresAt)) return target.token;
         void port.end(target.token).catch(() => undefined);
         target.token = null;
       }
       if (target.pin === null) return null;
-      let opened: Awaited<ReturnType<PersonTransportPort['open']>>;
-      try {
-        // The sign-in PIN in memory is the one the server knows until a change made here reaches
-        // it, and that upload is itself proven by this session, so it opens first.
-        opened = await openSession(target, port, target.pin);
-      } catch {
-        return null;
-      }
+      // One open at a time: a decision made right after sign-in waits for the one under way.
+      if (target.opening !== null) return target.opening;
+      const pin = target.pin;
+      const opening = (async () => {
+        try {
+          // The sign-in PIN in memory is the one the server knows until a change made here
+          // reaches it, and that upload is itself proven by this session, so it opens first.
+          return await openSession(target, port, pin);
+        } catch {
+          return null;
+        }
+      })();
+      target.opening = opening.then((result) => result?.token ?? null);
+      const opened = await opening;
+      target.opening = null;
+      if (opened === null) return null;
       if (person !== target || target.token !== null) {
         void port.end(opened.token).catch(() => undefined);
         return person === target ? target.token : null;

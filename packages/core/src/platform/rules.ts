@@ -10,6 +10,9 @@ export const PLATFORM_REFUSALS = defineRefusals('platform', [
   'notYourPreference',
   // The server's apply step: an op's fold hit a unique key that is already taken.
   'idTaken',
+  // An owner's or manager's decision on a shared device, without a PIN the server checked
+  // (module/runtime.ts on the device, server oplog/steps/decision.ts).
+  'decisionNeedsPin',
 ] as const);
 const { refuse } = PLATFORM_REFUSALS;
 

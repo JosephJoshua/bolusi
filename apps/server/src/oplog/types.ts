@@ -123,6 +123,11 @@ export interface OplogPipelineDeps {
 export interface PushIdentity {
   readonly deviceId: string;
   readonly tenantId: string;
+  /**
+   * Person sessions the push carries (`PushRequest.personSessions`): the people it proves were
+   * checked by PIN on this device, for the decisions they made on it (steps/decision.ts).
+   */
+  readonly personSessions?: readonly string[];
 }
 
 /**

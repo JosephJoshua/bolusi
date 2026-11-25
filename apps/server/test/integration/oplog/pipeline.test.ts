@@ -29,6 +29,7 @@ import {
   testId,
   type OplogTestDb,
   type SeedWorldOptions,
+  provenIdentity,
 } from './helpers.js';
 
 let testDb: OplogTestDb;
@@ -675,7 +676,7 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
 
     const result = await processPushBatch(
       makeDeps({ forTenant: testDb.appForTenant }),
-      identityOf(world),
+      await provenIdentity(testDb.db, world),
       [genesis, op],
     );
 
@@ -787,7 +788,7 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
 
     const result = await processPushBatch(
       makeDeps({ forTenant: testDb.appForTenant }),
-      identityOf(world),
+      await provenIdentity(testDb.db, world),
       [genesis, op],
     );
 
@@ -837,7 +838,7 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
 
     const result = await processPushBatch(
       makeDeps({ forTenant: testDb.appForTenant }),
-      identityOf(world),
+      await provenIdentity(testDb.db, world),
       [genesis, op],
     );
 
