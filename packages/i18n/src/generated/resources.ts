@@ -698,7 +698,7 @@ const source = {
       },
       updateNeeded: {
         title: 'Perbarui aplikasi',
-        body: 'Perangkat lain sudah memakai versi baru. Perbarui aplikasi ini untuk menerima data terbarunya.',
+        body: 'Perangkat lain sudah memakai versi baru. Perbarui aplikasi untuk menerima datanya; perubahan dari sini tetap disinkronkan.',
         check: 'Periksa pembaruan',
         checking: 'Memeriksa pembaruan…',
         none: 'Belum ada pembaruan untuk HP ini. Coba lagi nanti.',
