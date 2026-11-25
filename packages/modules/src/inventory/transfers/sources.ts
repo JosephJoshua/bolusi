@@ -10,6 +10,7 @@ import type { SettlementOutcome, StockSinkKind } from '../constants.js';
 import { INVENTORY_REFUSALS } from '../refusals.js';
 import type { InventoryDatabase } from '../schema.js';
 import type { StockSourceTarget } from '../stock-source.js';
+import { loadTransferState } from './state.js';
 
 const { refuse } = INVENTORY_REFUSALS;
 
@@ -31,7 +32,10 @@ function mismatch(): Error {
   });
 }
 
-/** The transfer's number, when this store sent it, by this person, with this part in this qty. */
+/**
+ * The transfer's number, when this store sent it, by this person, with this part: leaving in the
+ * qty the transfer lists, to the store it names; or, on a cancel, coming back in the qty that left.
+ */
 async function sentLine(
   { op, sourceId, itemId, qty, db }: LineCheck,
   cancelled: boolean,
@@ -41,14 +45,22 @@ async function sentLine(
     .leftJoin('inventoryTransferLines as l', (join) =>
       join.onRef('l.transferId', '=', 't.id').on('l.itemId', '=', itemId),
     )
-    .select(['t.transferNumber', 't.sentBy', 't.cancelledBy', 'l.qty'])
+    .select(['t.transferNumber', 't.toStoreId', 't.sentBy', 't.cancelledBy', 'l.qty'])
     .where('t.id', '=', sourceId)
     .where('t.tenantId', '=', op.tenantId)
     .where('t.storeId', '=', op.storeId ?? '')
     .executeTakeFirst();
-  const by = cancelled ? row?.cancelledBy : row?.sentBy;
-  if (row === undefined || row.qty === null || Number(row.qty) !== qty || by !== op.userId) {
-    throw mismatch();
+  if (row === undefined || row.qty === null) throw mismatch();
+  if (cancelled) {
+    const line = (await loadTransferState(db as Db, op.tenantId, sourceId))?.lines.find(
+      (candidate) => candidate.itemId === itemId,
+    );
+    if (row.cancelledBy !== op.userId || line?.sent !== qty) throw mismatch();
+  } else {
+    const { sink } = op.payload as { sink: { toStoreId?: string } };
+    if (row.sentBy !== op.userId || Number(row.qty) !== qty || sink.toStoreId !== row.toStoreId) {
+      throw mismatch();
+    }
   }
   return { label: row.transferNumber };
 }

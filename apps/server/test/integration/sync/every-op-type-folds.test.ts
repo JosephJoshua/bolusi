@@ -275,7 +275,7 @@ function journey(world: ChainWorld): OpSpec[] {
           payload: {
             itemId: part,
             qty: 1,
-            sink: { kind: 'transfer', id: entityId, label: transferNumber },
+            sink: { kind: 'transfer', id: entityId, label: transferNumber, toStoreId: OTHER_STORE },
           },
         },
       ];
@@ -859,6 +859,25 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
       itemId: id(8),
       itemName: 'LCD Samsung A14',
       qty: 1,
+    })
+    .execute();
+  // …and the stock that left the other store for it, which reaches this store with the transfer.
+  await db
+    .insertInto('inventoryMovements')
+    .values({
+      id: id(0x706),
+      tenantId: world.tenantId,
+      storeId: OTHER_STORE,
+      itemId: id(8),
+      kind: 'sent',
+      qty: -1,
+      counted: null,
+      useKind: 'transfer',
+      useId: INCOMING_TRANSFER,
+      useLabel: 'TR-B0B-0001',
+      note: null,
+      userId: ASKER,
+      at: 1_726_000_000_000n,
     })
     .execute();
   // Conflicts are recorded only by the server, so the one the journey acknowledges is seeded.

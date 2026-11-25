@@ -2,7 +2,7 @@
 // stored: the rules, the queries and the screens all read it through this one fold, so a screen never
 // offers what the rules refuse.
 //
-// Per part: what was sent, less what arrived, less what the sender took back (a cancel, or an owner
+// Per part: what was sent (what left the sender's stock, not merely what was listed), less what arrived, less what the sender took back (a cancel, or an owner
 // settling it as back on the shelf), less what was written off, plus what an owner settled as having
 // arrived after all (a write-off undone, or a take-back undone). What is left is "Belum sampai". It goes below zero only when an arrival recorded
 // offline crossed a cancel or a settlement: more is then accounted for than was sent, and the sending
@@ -15,6 +15,12 @@ import type { InventoryDatabase } from '../schema.js';
 export interface TransferLineState {
   readonly itemId: string;
   readonly name: string;
+  /** What the sender listed. */
+  readonly listed: number;
+  /**
+   * What actually left the sender's stock for it (its `inventory.stock_sent`): the listed qty, or 0
+   * when the movement never came. Only what was sent can arrive or come back.
+   */
   readonly sent: number;
   readonly arrived: number;
   /** Back on the sender's shelf: cancelled, or settled as back. */
@@ -111,6 +117,22 @@ export async function loadTransferStates(
     .orderBy('transferId')
     .orderBy('position')
     .execute();
+  // The sender's movements reach the receiving store with the transfer (`otherStore`).
+  const moved = await db
+    .selectFrom('inventoryMovements')
+    .select(['useId', 'storeId', 'itemId', 'qty'])
+    .where('tenantId', '=', tenantId)
+    .where('kind', '=', 'sent')
+    .where('useKind', '=', 'transfer')
+    .where('useId', 'in', ids)
+    .execute();
+  const left = new Map<string, number>();
+  const fromOf = new Map(transfers.map((row) => [row.id, row.storeId]));
+  for (const row of moved) {
+    if (row.useId === null || fromOf.get(row.useId) !== row.storeId) continue;
+    const k = key(row.useId, row.itemId);
+    left.set(k, (left.get(k) ?? 0) - Number(row.qty));
+  }
   const arrived = sums(
     await db
       .selectFrom('inventoryTransferArrivalLines')
@@ -136,7 +158,7 @@ export async function loadTransferStates(
       .filter((line) => line.transferId === transfer.id)
       .map((line): TransferLineState => {
         const k = key(transfer.id, line.itemId);
-        const sent = Number(line.qty);
+        const sent = left.get(k) ?? 0;
         const came = arrived.get(k) ?? 0;
         // A cancel takes back everything sent: it is only allowed before anything moved.
         const backQty = (cancelled ? sent : 0) + (back.get(k) ?? 0);
@@ -146,6 +168,7 @@ export async function loadTransferStates(
         return {
           itemId: line.itemId,
           name: line.itemName,
+          listed: Number(line.qty),
           sent,
           arrived: came,
           back: backQty,

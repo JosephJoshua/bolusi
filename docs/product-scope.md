@@ -509,8 +509,10 @@ Designed so a later warehouse is just another place stock moves between.
   sender. An arrival recorded offline before the cancel still counts, and the
   owner then settles the difference.
 - **Sync and checks:** a transfer and its arrivals and settlements reach both
-  stores' devices; their stock movements stay with their own store. The server
-  checks every step, including that the other store is one of the business's.
+  stores' devices, with the movements its parts left the sender's stock in, so
+  only what really left can arrive. Other stock records stay with their store.
+  The server checks every step, including that the other store is one of the
+  business's.
 - **Next:** parts carry the sender's average buy price (after part costs land).
   Then supplier bills ("Tagihan supplier": prepay, on delivery and tempo, its own
   record compared with the order and deliveries, payments without a bill kept

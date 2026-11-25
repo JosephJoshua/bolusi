@@ -1,7 +1,8 @@
 // Parts sent between stores over the real HTTP surface and PG16 (owner decisions 2026-11-25). A
 // device pulls its own store's ops and the tenant's; a transfer must also reach the store it names
-// (`OperationDeclaration.otherStore`), and its arrival must reach the sender. Nothing else of the
-// sender's crosses: its stock movements and counts stay with its own store.
+// (`OperationDeclaration.otherStore`) with the movements its parts left the sender's stock in, so
+// the receiver can take in only what really left; and its arrival must reach the sender. Nothing
+// else of the sender's crosses: its counts and other movements stay with its own store.
 //
 // The second store an op names is read from its payload, so the server checks it: a store of this
 // business and not the op's own, else SCOPE_VIOLATION (a tampered phone cannot widen who pulls it).
@@ -84,6 +85,7 @@ function send(
   toStoreId: string,
   itemId: string,
   movedQty = 4,
+  movedTo = toStoreId,
 ) {
   const transferNumber = `TR-${formatTicketNumber(world.deviceId, 1)}`;
   const sent = builder.append({
@@ -102,7 +104,7 @@ function send(
     payload: {
       itemId,
       qty: movedQty,
-      sink: { kind: 'transfer', id: sent.entityId, label: transferNumber },
+      sink: { kind: 'transfer', id: sent.entityId, label: transferNumber, toStoreId: movedTo },
     },
   });
   return { sent, movement, transferNumber };
@@ -113,7 +115,7 @@ describe('a transfer reaches both stores, and only the transfer', () => {
     expect(h.provenance).not.toBe('');
   });
 
-  test('B pulls the transfer but not A’s stock movements; A pulls B’s arrival back', async () => {
+  test('B pulls the transfer and the stock that left for it, not A’s count; A pulls the arrival', async () => {
     const { a, b, storeB, itemId } = await twoStores(7401);
     const { sent, movement, transferNumber } = send(a.builder, a.world, storeB, itemId);
     expect((await push(a, [sent, movement])).map((r) => r.status)).toEqual([
@@ -128,14 +130,14 @@ describe('a transfer reaches both stores, and only the transfer', () => {
     expect(new Map(stored.map((row) => [row.id, row.otherStoreId]))).toEqual(
       new Map([
         [sent.id, storeB],
-        [movement.id, null],
+        [movement.id, storeB],
       ]),
     );
 
     const atB = await pulledTypes(b.auth);
     expect(atB).toContain('inventory.transfer_sent');
     expect(atB).toContain('inventory.item_added');
-    expect(atB).not.toContain('inventory.stock_sent');
+    expect(atB).toContain('inventory.stock_sent');
     expect(atB).not.toContain('inventory.stock_counted');
 
     const arrival = b.builder.append({
@@ -196,6 +198,33 @@ describe('a transfer reaches both stores, and only the transfer', () => {
     });
     const [result] = await push(b, [arrival]);
     expect(result).toMatchObject({ status: 'rejected', code: 'RULE_VIOLATED' });
+  });
+
+  test('B cannot receive a transfer whose stock never left A (sent without its movement)', async () => {
+    const { a, b, storeB, itemId } = await twoStores(7404);
+    const { sent } = send(a.builder, a.world, storeB, itemId);
+    expect((await push(a, [sent]))[0]?.status).toBe('accepted');
+    const arrival = b.builder.append({
+      type: 'inventory.transfer_received',
+      entityType: 'inventory_transfer_arrival',
+      payload: {
+        transferId: sent.entityId,
+        fromStoreId: a.world.storeId,
+        note: null,
+        lines: [{ itemId, qty: 1 }],
+      },
+    });
+    const [result] = await push(b, [arrival]);
+    expect(result).toMatchObject({ status: 'rejected', code: 'RULE_VIOLATED' });
+  });
+
+  test('a stock movement naming another store than its transfer is refused', async () => {
+    const { a, storeB, itemId } = await twoStores(7405);
+    const storeC = await h.seedStore(a.world.tenantId, 7405 + 600_000);
+    const { sent, movement } = send(a.builder, a.world, storeB, itemId, 4, storeC);
+    const results = await push(a, [sent, movement]);
+    expect(results[0]?.status).toBe('accepted');
+    expect(results[1]).toMatchObject({ status: 'rejected', code: 'RULE_VIOLATED' });
   });
 
   test('a stock movement that does not match its transfer is refused', async () => {

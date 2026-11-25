@@ -4,8 +4,9 @@
 // with a reason; a cancel takes everything back but only before anything arrived; and an arrival
 // recorded offline before a cancel still stands, leaving the transfer over for the owner to settle.
 //
-// Each store is its own phone. Between them only the ops a store would pull travel: the transfer's
-// own records, which name the other store (`otherStore`), never the sender's stock movements.
+// Each store is its own phone. Between them only the ops a store would pull travel: the ops that
+// name the other store (`otherStore`): the transfer's records, and the movements its parts left the
+// sender's stock in, so only what really left can arrive. Nothing else of the sender's stock.
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
@@ -56,10 +57,14 @@ async function twoStores(seed: number) {
   ]);
   let arrival = 1;
   /** What `to` would pull from `from`: tenant-wide ops (the parts list) and ops naming its store. */
-  const sync = async (from: RepairHarness, to: RepairHarness) => {
+  const sync = async (
+    from: RepairHarness,
+    to: RepairHarness,
+    skip: (op: SignedOperation) => boolean = () => false,
+  ) => {
     const seen = delivered.get(to)!;
     for (const op of await from.ownOps()) {
-      if (seen.has(op.id)) continue;
+      if (seen.has(op.id) || skip(op)) continue;
       const declared = inventoryModule.operations[op.type];
       const reaches = op.storeId === null || declared?.otherStore?.(op.payload) === to.storeId;
       if (!reaches) continue;
@@ -177,13 +182,21 @@ describe('sending', () => {
     );
   });
 
-  test('the transfer ops reach the other store; the stock movements stay home', () => {
+  test('the transfer ops and the stock that left reach the other store; the rest stays home', () => {
     const ops = inventoryModule.operations;
     expect(ops['inventory.transfer_sent']?.otherStore?.({ toStoreId: 'b' })).toBe('b');
     expect(ops['inventory.transfer_received']?.otherStore?.({ fromStoreId: 'a' })).toBe('a');
     expect(ops['inventory.transfer_cancelled']?.otherStore?.({ toStoreId: 'b' })).toBe('b');
     expect(ops['inventory.transfer_settled']?.otherStore?.({ toStoreId: 'b' })).toBe('b');
-    expect(ops['inventory.stock_sent']?.otherStore).toBeUndefined();
+    const sink = { id: 'x', label: 'TR-K7Q-0001' };
+    expect(
+      ops['inventory.stock_sent']?.otherStore?.({
+        sink: { kind: 'transfer', toStoreId: 'b', ...sink },
+      }),
+    ).toBe('b');
+    expect(
+      ops['inventory.stock_sent']?.otherStore?.({ sink: { kind: 'transfer_settlement', ...sink } }),
+    ).toBeNull();
     expect(ops['inventory.stock_received']?.otherStore).toBeUndefined();
   });
 });
@@ -296,6 +309,53 @@ describe('stock leaves only as the transfer lists it', () => {
     await expectRefused(
       a.checkRule({ ...forged, payload: { ...movement.payload, itemId: lcd, qty: 1 } }),
       'VALIDATION_FAILED',
+    );
+  });
+});
+
+describe('only what left the sender can arrive', () => {
+  test('a transfer whose stock never left (a send without its movements) cannot be received', async () => {
+    const stores = await twoStores(7322);
+    const { a, b, sync } = stores;
+    const lcd = await addItem(a, 'LCD Redmi Note 10 + frame', 10);
+    const { transferId } = (await a.runInventory(
+      'sendTransfer',
+      { toStoreId: b.storeId, note: null, lines: [{ itemId: lcd, qty: 5 }] },
+      a.storeOwnerId,
+    )) as { transferId: string };
+    // As a tampered phone would push it: the transfer, but not the stock leaving.
+    await sync(a, b, (op) => op.type === 'inventory.stock_sent');
+    const atB = await transfer(b, transferId);
+    expect(atB.lines.map((line) => [line.listed, line.sent])).toEqual([[5, 0]]);
+    expect(atB.can.receive).toBe(false);
+    await expectRefused(
+      b.runInventory(
+        'receiveTransfer',
+        { transferId, lines: [{ itemId: lcd, qty: 1 }], note: null },
+        b.storeOwnerId,
+      ),
+      'VALIDATION_FAILED',
+    );
+    const arrival = await lastOp(b, 'inventory.transfer_received').catch(() => undefined);
+    expect(arrival).toBeUndefined();
+  });
+
+  test('a send naming another store than its transfer is refused', async () => {
+    const { a } = await sent(7323);
+    const movement = await lastOp(a, 'inventory.stock_sent');
+    const payload = movement.payload as { sink: Record<string, unknown> };
+    await expectRefused(
+      a.checkRule({
+        ...movement,
+        id: '01920000-0000-7000-8000-00000000f007',
+        entityId: '01920000-0000-7000-8000-00000000f008',
+        payload: {
+          ...payload,
+          sink: { ...payload.sink, toStoreId: '01920000-0000-7000-8000-00000000c0c0' },
+        },
+      }),
+      'VALIDATION_FAILED',
+      'inventory.refusal.transferMismatch',
     );
   });
 });

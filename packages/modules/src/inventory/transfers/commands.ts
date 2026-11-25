@@ -15,8 +15,8 @@ import {
   MAX_MOVEMENT_QTY,
   MAX_TRANSFER_LINES,
   type SettlementOutcome,
-  type StockSinkKind,
 } from '../constants.js';
+import type { zStockSink } from '../operations.js';
 import { getItemQuery } from '../queries.js';
 import { INVENTORY_REFUSALS } from '../refusals.js';
 import { MAX_TRANSFER_NOTE } from './operations.js';
@@ -32,7 +32,7 @@ function stockSentOp(
   sent: {
     readonly itemId: string;
     readonly qty: number;
-    readonly sink: { readonly kind: StockSinkKind; readonly id: string; readonly label: string };
+    readonly sink: z.infer<typeof zStockSink>;
   },
 ): OpDraft {
   return ctx.op({
@@ -107,7 +107,12 @@ export async function sendTransferHandler(
   const { transferNumber } = (await ctx.query(nextTransferNumberQuery, { deviceId: ctx.deviceId }))
     .rows[0]!;
   const transferId = ctx.newId();
-  const sink = { kind: 'transfer' as const, id: transferId, label: transferNumber };
+  const sink = {
+    kind: 'transfer' as const,
+    id: transferId,
+    label: transferNumber,
+    toStoreId: input.toStoreId,
+  };
   return {
     ops: [
       ctx.op({
@@ -204,9 +209,9 @@ export async function cancelTransferHandler(
         entityId: transfer.id,
         payload: { toStoreId: transfer.toStoreId, reason: input.reason },
       }),
-      ...transfer.lines.map((line) =>
-        stockReceivedOp(ctx, { itemId: line.itemId, qty: line.sent, source }),
-      ),
+      ...transfer.lines
+        .filter((line) => line.sent > 0)
+        .map((line) => stockReceivedOp(ctx, { itemId: line.itemId, qty: line.sent, source })),
     ],
     result: { transferId: transfer.id },
   };

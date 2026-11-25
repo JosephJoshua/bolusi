@@ -28,7 +28,6 @@ import {
   MAX_ITEM_TAGS,
   MAX_MOVEMENT_QTY,
   PART_USE_KINDS,
-  STOCK_SINK_KINDS,
   STOCK_SOURCE_KINDS,
 } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
@@ -116,9 +115,18 @@ export const stockReceivedPayload = z
   .object({ itemId: zUuidV7, qty: zQty, source: zStockSource })
   .strict();
 
-export const zStockSink = z
-  .object({ kind: z.enum(STOCK_SINK_KINDS), id: zUuidV7, label: z.string().min(1).max(60) })
-  .strict();
+const zSinkLabel = z.string().min(1).max(60);
+
+/**
+ * Where parts went. A transfer's names the store it went to: the receiving store pulls these
+ * movements too, so what it may receive is what actually left the sender's stock.
+ */
+export const zStockSink = z.discriminatedUnion('kind', [
+  z
+    .object({ kind: z.literal('transfer'), id: zUuidV7, label: zSinkLabel, toStoreId: zUuidV7 })
+    .strict(),
+  z.object({ kind: z.literal('transfer_settlement'), id: zUuidV7, label: zSinkLabel }).strict(),
+]);
 
 /** Parts that left the store, and the transfer (or settlement) that took them. */
 export const stockSentPayload = z.object({ itemId: zUuidV7, qty: zQty, sink: zStockSink }).strict();
@@ -222,6 +230,10 @@ export function inventoryOperations(
     [INVENTORY_OP.stockSent]: {
       schemaVersion: 1,
       payload: stockSentPayload,
+      otherStore: (payload) => {
+        const { sink } = payload as z.infer<typeof stockSentPayload>;
+        return sink.kind === 'transfer' ? sink.toStoreId : null;
+      },
       reversal:
         'Brought back by inventory.stock_received from the transfer (a cancel or a settlement).',
       apply: stockSentApplier,
