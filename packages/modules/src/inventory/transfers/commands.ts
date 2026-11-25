@@ -18,7 +18,6 @@ import {
 } from '../constants.js';
 import type { zStockSink } from '../operations.js';
 import { getItemQuery } from '../queries.js';
-import { INVENTORY_REFUSALS } from '../refusals.js';
 import { MAX_TRANSFER_NOTE } from './operations.js';
 import { excessLines, settlementFits } from './state.js';
 import { getTransferQuery, nextTransferNumberQuery, type TransferDetailRow } from './queries.js';
@@ -98,9 +97,6 @@ export async function sendTransferHandler(
         entityType: 'inventory_item',
         entityId: line.itemId,
       });
-    }
-    if (item.archived) {
-      throw INVENTORY_REFUSALS.refuse('itemArchived', { details: { entityId: line.itemId } });
     }
     lines.push({ itemId: line.itemId, name: item.name.slice(0, 200), qty: line.qty });
   }
