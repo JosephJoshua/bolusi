@@ -26,13 +26,6 @@ import { ChangeCheckDialog, PaymentLines } from '../../money/desktop/PaymentLine
 import { QrisDialog } from '../../money/desktop/QrisDialog.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
-import { accountLabel } from '../../money/kas.js';
-import {
-  chosenMethod,
-  methodMissing,
-  offeredAccount,
-  referenceMissing,
-} from '../../money/payment-entry.js';
 import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { freeHandoverNeedsOwner } from '../rules.js';
 import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
@@ -45,7 +38,7 @@ import {
   type WorkPhotoStage,
 } from '../constants.js';
 import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
-import { useDownPaymentAsk } from '../down-payment-ask.js';
+import { useDownPaymentForm } from '../down-payment-form.js';
 import {
   amountOwed,
   askedBecauseKey,
@@ -60,7 +53,6 @@ import {
   toCorrectionInput,
   type IntakeDraft,
   type IntakeProblem,
-  downPaymentEntry,
   printableSlips,
   priceKinds,
   signedAmount,
@@ -75,18 +67,14 @@ import { useCancelTicket } from '../cancel-ticket.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
   cancelFeeText,
-  DOWN_PAYMENT_GAP_KEY,
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
   discountLimitHint,
-  downPaymentChangeLine,
-  downPaymentTitleKey,
   optionLabel,
   refundLabel,
 } from '../labels.js';
 import {
   useIntakeOptionSettings,
-  useDownPaymentMethod,
   usePaymentAccounts,
   useTicketQris,
   useRepairQuery,
@@ -1627,75 +1615,21 @@ export function DownPaymentDialog({
   /** A fix beyond this person was asked of an owner instead. */
   readonly onAsked: () => void;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [typed, setTyped] = useState<number | null>(null);
   const [reason, setReason] = useState('');
-  const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
-  // Until the store's methods load, a method picked earlier would read as cash.
-  const loadedAccounts = usePaymentAccounts();
-  const accounts = loadedAccounts ?? [];
-  const correcting = mode === 'correct';
-  const { amount, aboveTotal, gap } = downPaymentEntry({
-    mode,
-    typed,
-    reason,
-    current,
-    total,
-    methodMissing: methodMissing(method.account, accounts),
-    referenceMissing: referenceMissing(method.account, method.reference, accounts),
-  });
+  const form = useDownPaymentForm(
+    { ticketId, mode, current, total },
+    { typed, reason },
+    { onDone, onAsked },
+  );
+  const { correcting } = form;
   const testId = `repair.desk.downPayment.${mode}`;
-  // Through which method is said once one is picked.
-  const changeLine = methodMissing(method.account, accounts)
-    ? null
-    : downPaymentChangeLine(
-        current,
-        amount,
-        accountLabel(offeredAccount(method.account, accounts), accounts),
-      );
-  const fix =
-    correcting && gap === null && amount !== null && loadedAccounts !== null
-      ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
-      : null;
-  // Whether it goes to an owner shows as soon as the new amount is typed, before the reason.
-  const typedFix =
-    correcting && amount !== null && amount !== current && !aboveTotal && loadedAccounts !== null
-      ? { ticketId, amount, ...chosenMethod(method.account, method.reference, accounts) }
-      : null;
-  const ask = useDownPaymentAsk(typedFix, current ?? 0);
-  const asking = correcting && ask.asking;
-
-  const submit = (): void => {
-    if (gap !== null || amount === null || loadedAccounts === null) return;
-    void runner
-      .run<unknown>(() =>
-        fix === null
-          ? runtime.run('recordDownPayment', {
-              ticketId,
-              amount,
-              ...chosenMethod(method.account, method.reference, accounts),
-            })
-          : asking
-            ? runtime.approvals.run('requestApproval', {
-                kind: REPAIR_APPROVAL_KIND.downPayment,
-                input: fix,
-                reason,
-              })
-            : runtime.run('correctDownPayment', fix),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? onAsked : onDone)();
-      });
-  };
   const leave = useLeaveGuard(stale === null && (typed !== null || reason.trim() !== ''), onClose);
   return (
     <>
       <StepDialog
-        title={tn(
-          downPaymentTitleKey(mode, runtime.hasPermission(REPAIR_PERMISSION.correctDownPayment)),
-        )}
-        runner={runner}
+        title={form.title}
+        runner={form.runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         size="sm"
@@ -1703,16 +1637,16 @@ export function DownPaymentDialog({
         footer={
           <>
             {/* Above the total is said under the amount; anything else missing is said here. */}
-            {gap === null || gap === 'aboveTotal' ? null : (
-              <p className="mr-auto text-small text-text-muted">{tn(DOWN_PAYMENT_GAP_KEY[gap])}</p>
+            {form.gapHint === null || form.aboveTotal ? null : (
+              <p className="mr-auto text-small text-text-muted">{form.gapHint}</p>
             )}
             <CancelButton onClick={leave.requestClose} />
             <Button
-              label={asking ? ta('approvals.action.ask') : tn('repair.downPayment.save')}
+              label={form.submitLabel}
               variant="primary"
-              onClick={submit}
-              busy={runner.busy}
-              disabled={gap !== null || stale !== null || loadedAccounts === null}
+              onClick={form.submit}
+              busy={form.runner.busy}
+              disabled={!form.complete || stale !== null}
               data-testid={`${testId}.submit`}
             />
           </>
@@ -1722,7 +1656,7 @@ export function DownPaymentDialog({
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            submit();
+            form.submit();
           }}
         >
           {correcting && current !== null ? (
@@ -1736,30 +1670,30 @@ export function DownPaymentDialog({
           <MoneyField
             label={tn(correcting ? 'repair.downPayment.newAmount' : 'repair.downPayment.amount')}
             hint={
-              aboveTotal
+              form.aboveTotal
                 ? undefined
                 : tn('repair.downPayment.ofTotal', { amount: formatMoney(total) })
             }
-            error={aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
+            error={form.aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
             value={typed}
             onChange={setTyped}
             autoFocus
             data-testid={`${testId}.amount`}
           />
-          {correcting && (amount ?? 0) === 0 ? null : (
+          {form.asksMethod ? (
             <PaymentMethodField
-              accounts={accounts}
-              account={method.account}
-              reference={method.reference}
-              onChange={setMethod}
+              accounts={form.accounts}
+              account={form.method.account}
+              reference={form.method.reference}
+              onChange={form.setMethod}
               testId={`${testId}.method`}
             />
-          )}
-          {correcting && changeLine !== null ? (
-            <p className="text-small text-text-muted" data-testid={`${testId}.change`}>
-              {changeLine}
-            </p>
           ) : null}
+          {form.changeLine === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.change`}>
+              {form.changeLine}
+            </p>
+          )}
           {correcting ? (
             <TextArea
               label={tn('repair.downPayment.reason')}
@@ -1770,21 +1704,21 @@ export function DownPaymentDialog({
               data-testid={`${testId}.reason`}
             />
           ) : null}
-          {correcting && ask.limit !== null ? (
+          {form.limitLine === null ? null : (
             <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
-              {tn('repair.hint.downPaymentLimit', { amount: formatMoney(ask.limit) })}
-            </p>
-          ) : null}
-          {ask.withEarlier === null ? null : (
-            <p className="text-small text-text-muted" data-testid={`${testId}.withEarlier`}>
-              {tn('repair.hint.downPaymentWithEarlier', { amount: formatMoney(ask.withEarlier) })}
+              {form.limitLine}
             </p>
           )}
-          {asking ? (
-            <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
-              {tn(ask.because)}
+          {form.withEarlierLine === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.withEarlier`}>
+              {form.withEarlierLine}
             </p>
-          ) : null}
+          )}
+          {form.askedBecause === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
+              {form.askedBecause}
+            </p>
+          )}
         </form>
       </StepDialog>
       {leave.confirm}
