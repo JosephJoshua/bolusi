@@ -2,7 +2,7 @@
 // executed by the stage-6 lane.
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney, initI18n, setLocale } from '../src/index.js';
+import { formatMoney, formatSignedMoney, initI18n, setLocale } from '../src/index.js';
 import { runI18nVectors } from './vectors.js';
 
 describe('07-i18n §5.4 golden vectors (Node)', () => {
@@ -39,5 +39,12 @@ describe('money rendering (§5.1)', () => {
     const asId = formatMoney(1500500);
     setLocale('en');
     expect(formatMoney(1500500)).toBe(asId);
+  });
+
+  it('signs a change in money, and leaves zero unsigned', () => {
+    initI18n({ locale: 'id' });
+    expect(formatSignedMoney(5000)).toBe('+Rp\u00A05.000');
+    expect(formatSignedMoney(-5000)).toBe('−Rp\u00A05.000');
+    expect(formatSignedMoney(0)).toBe('Rp\u00A00');
   });
 });

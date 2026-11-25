@@ -10,14 +10,15 @@ import type { QrisCharge } from '@bolusi/schemas';
 import {
   Banner,
   Button,
+  color,
+  numeric,
   OutcomeState,
   QrCode,
-  TextButton,
-  color,
   size,
   space,
-  type,
   Text,
+  TextButton,
+  type,
 } from '@bolusi/ui';
 import { useCallback, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -188,7 +189,7 @@ export function useQrStepBack(
 
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', gap: space.md },
-  amount: { ...type.title, color: color.text, fontVariant: ['tabular-nums'] },
+  amount: { ...type.title, color: color.text, ...numeric },
   placeholder: {
     alignItems: 'center',
     justifyContent: 'center',

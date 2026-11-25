@@ -3,18 +3,19 @@
 // about reads in its own module's words, handed in as a `ApprovalDescription`.
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import {
+  bleedMargins,
   Chip,
+  color,
   ConfirmSheet,
+  type IconName,
   ListRow,
+  numeric,
+  radius,
+  space,
   Text,
   TextButton,
   TextInput,
-  bleedMargins,
-  color,
-  radius,
-  space,
   type,
-  type IconName,
   useBleed,
 } from '@bolusi/ui';
 import { t } from '@bolusi/i18n';
@@ -252,7 +253,7 @@ const styles = StyleSheet.create({
   },
   kind: { ...type.caption, color: color.textMuted, flexShrink: 1 },
   title: { ...type.bodyBold, color: color.text, marginTop: space.xs },
-  amount: { ...type.title, color: color.text, marginTop: space.xs, fontVariant: ['tabular-nums'] },
+  amount: { ...type.title, color: color.text, marginTop: space.xs, ...numeric },
   label: { ...type.caption, color: color.textMuted, marginTop: space.md },
   reason: { ...type.bodySm, color: color.text },
   note: { ...type.bodySm, color: color.textMuted, marginTop: space.md },

@@ -6,23 +6,24 @@
  */
 import { formatDateTime, formatMoney, t, translateErrorCode } from '@bolusi/i18n';
 import {
+  Amount,
   AppShell,
+  border,
   Button,
   Chip,
+  color,
   EmptyState,
   FreshGlow,
   List,
-  SearchField,
-  SegmentedControl,
-  SyncStatusChip,
-  border,
-  color,
-  space,
-  touch,
-  type,
   type ListState,
   type OperationSyncStatus,
+  SearchField,
+  SegmentedControl,
+  space,
+  SyncStatusChip,
   Text,
+  touch,
+  type,
   ValueText,
 } from '@bolusi/ui';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -505,9 +506,7 @@ const TicketRow = memo(function TicketRow({
           <ValueText lines={1} style={[styles.customer, repairStyles.rowText]}>
             {row.customerName}
           </ValueText>
-          <Text style={styles.amount} testID={`${testID}.amount`}>
-            {formatMoney(amount)}
-          </Text>
+          <Amount value={amount} testID={`${testID}.amount`} />
         </View>
         <ValueText lines={2} style={styles.details}>
           {details}
@@ -584,7 +583,6 @@ const styles = StyleSheet.create({
   },
   rowBody: { flex: 1 },
   customer: { ...type.bodyBold, color: color.text },
-  amount: { ...type.bodySm, fontWeight: '600', color: color.text, fontVariant: ['tabular-nums'] },
   details: { ...type.bodySm, color: color.textMuted },
   reason: { ...type.bodySm, color: color.text, marginTop: space.xs },
   footer: {

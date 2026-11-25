@@ -76,6 +76,11 @@ export function formatMoney(amountIdr: number): string {
   return moneyFormat.format(amountIdr).replace(/\s+/, '\u00A0').replace(/^-/, MINUS);
 }
 
+/** A change in money: `+Rp 5.000` or `−Rp 5.000`. Zero has no sign. */
+export function formatSignedMoney(amountIdr: number): string {
+  return amountIdr > 0 ? `+${formatMoney(amountIdr)}` : formatMoney(amountIdr);
+}
+
 /**
  * A phone number as people read it aloud: `0812-3456-7890`. Indonesian mobile numbers group in
  * fours from the front; `+62` and `62` become `0`. Anything else (a landline, a short code, a
