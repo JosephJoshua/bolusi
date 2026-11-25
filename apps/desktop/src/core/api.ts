@@ -28,6 +28,8 @@ export interface SessionView {
   readonly canSetLimits: boolean;
   /** May rename this PC (`auth.device_enroll` at its store). */
   readonly canRenameDevice: boolean;
+  /** May block a lost device of this store (`auth.device_revoke`): Settings › Perangkat. */
+  readonly canBlockDevices: boolean;
   readonly tenantAdmin: boolean;
   /**
    * Every module's permissions the signed-in person holds (repair's, money's, ...), for showing

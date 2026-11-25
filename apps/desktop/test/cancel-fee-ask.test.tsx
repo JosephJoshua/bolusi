@@ -31,7 +31,7 @@ const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
 
 it('asks an owner for a cancelled servisan’s fee beyond the manager’s limit', async () => {
   const runtime = demoRepairRuntime('owner', { now: Date.now() });
-  // Rp 150.000 after work: the manager may come down to Rp 100.000 alone.
+  // Rp\u00A0150.000 after work: the manager may come down to Rp\u00A0100.000 alone.
   await runtime.run('setCancelFees', { beforeWork: 0, afterWork: 150_000 });
   await runtime.run('changeCancelFee', { ticketId: 't-5', fee: 150_000, reason: 'Biaya toko' });
   runtime.actAs('manager');
@@ -46,7 +46,7 @@ it('asks an owner for a cancelled servisan’s fee beyond the manager’s limit'
   await screen.findByTestId('repair.desk.cancelFee');
   // QA round E: owners think in what the customer pays, so the dialog is about the bill.
   expect(byTestId('repair.desk.cancelFee').textContent).toContain(
-    'Tagihan sekarang Rp 150.000, sudah dibayar Rp 100.000.',
+    'Tagihan sekarang Rp\u00A0150.000, sudah dibayar Rp\u00A0100.000.',
   );
   expect(screen.getByLabelText('Tagihan baru')).toBe(byTestId('repair.desk.cancelFee.feeInput'));
   const fee = byTestId('repair.desk.cancelFee.feeInput');

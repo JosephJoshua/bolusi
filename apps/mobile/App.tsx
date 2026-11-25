@@ -68,6 +68,7 @@ import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
 import { pinView } from '@bolusi/device/models/pin/model';
+import { DevicesScreen } from './src/screens/settings/DevicesScreen.js';
 import { RenameDeviceScreen } from './src/screens/settings/RenameDeviceScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { DeviceSetupRoute } from './src/screens/setup/DeviceSetupRoute.js';
@@ -107,6 +108,7 @@ import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
+import type { DeviceControls } from '@bolusi/device/bootstrap/devices';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
@@ -289,6 +291,11 @@ export interface AppProps {
    * REJECTS with a `StaffAdminError`. Absent for everyone else, and then the action is absent too.
    */
   readonly onRenameDevice?: ((name: string) => Promise<void>) | undefined;
+  /**
+   * Settings › Perangkat (owner decision 2026-11-25): the store's devices and blocking a lost one, for
+   * someone who may block devices here. Online only. Absent for everyone else, and then the row too.
+   */
+  readonly devices?: DeviceControls | undefined;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -1327,6 +1334,9 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenRoles={
                     props.staff?.tenantAdmin === true ? () => setRoute('roles') : undefined
                   }
+                  onOpenDevices={
+                    props.devices === undefined ? undefined : () => setRoute('devices')
+                  }
                   lockedStaffCount={
                     [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
                       (id) => id !== currentUser.id,
@@ -1485,6 +1495,17 @@ export default function App(props: AppProps): React.JSX.Element {
                     setRoute(setupReturn);
                     setSetupReturn('home');
                   }}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'devices' && props.devices !== undefined) {
+              // The owner's "Perangkat": the store's devices, and blocking a lost one, online.
+              return (
+                <DevicesScreen
+                  load={props.devices.load}
+                  onBlock={props.devices.block}
+                  onClose={() => setRoute('settings')}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );

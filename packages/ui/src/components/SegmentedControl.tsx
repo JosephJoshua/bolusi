@@ -111,10 +111,6 @@ export function SegmentedControl<V extends string>({
         ]}
       >
         <Text
-          // A pill is one line by design and the layout gives it its text's full width (pills never
-          // shrink). One line with `clip` keeps any draw-time rounding to a sliver, never a word.
-          numberOfLines={1}
-          ellipsizeMode="clip"
           style={[
             compact ? styles.compactLabel : styles.label,
             { color: selected ? color.onPrimary : color.text },

@@ -77,8 +77,10 @@ import {
 import { REPAIR_REJECTED_SUBJECTS } from '@bolusi/device/bootstrap/repair';
 import type { AppRuntime } from '@bolusi/device/bootstrap/runtime';
 import type { AppSessionController as AppSession } from '@bolusi/device/bootstrap/session';
+import { isBlockedSyncState } from '@bolusi/device/bootstrap/blocked-wipe';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { renameDevice } from '@bolusi/device/bootstrap/device-info';
+import { createDeviceControls } from '@bolusi/device/bootstrap/devices';
 import { createStaffControls } from '@bolusi/device/bootstrap/staff';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import {
@@ -139,6 +141,8 @@ const UNWIRED_ENROLLMENT: EnrollmentController = {
 export interface RootProps {
   /** Fetch and restart into a newer app update; `undefined` where updates are off (src/bootstrap/app-updates.ts). */
   readonly checkForUpdate?: (() => Promise<UpdateCheckResult>) | undefined;
+  /** The running app learnt the device is blocked: restart it, so the start erases the device. */
+  readonly onDeviceBlocked?: (() => void) | undefined;
   /** §1.2's plain local storage. Injected so the root is drivable from Node. */
   readonly localeStore: LocaleStorePort;
   /**
@@ -358,6 +362,7 @@ export function Root({
   notificationPermission,
   hideSplash,
   checkForUpdate,
+  onDeviceBlocked,
   cameraPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
@@ -1137,6 +1142,18 @@ export function Root({
     // projection table, so the invalidation bus alone would leave the counters one push behind.
   }, [app, syncTick, rejectedFor]);
 
+  // The server just said this device is blocked: restart, so the start confirms it and erases the
+  // device (blocked-wipe.ts). Only on the change while running; a start that could not ask the
+  // server leaves the device on the blocked setup screen rather than restarting forever.
+  const blockedWhileRunning =
+    app !== null &&
+    !isBlockedSyncState(app.syncState) &&
+    sync !== null &&
+    isBlockedSyncState(sync.syncState());
+  useEffect(() => {
+    if (blockedWhileRunning) onDeviceBlocked?.();
+  }, [blockedWhileRunning, onDeviceBlocked]);
+
   // What a colleague just changed on another device glows once wherever it shows (ui `FreshGlow`).
   useEffect(() => {
     if (app === null) return;
@@ -1341,6 +1358,22 @@ export function Root({
                   client.requestManual();
                   await client.settle();
                 },
+              })
+        }
+        // Settings › Perangkat (owner decision 2026-11-25), for someone who may block devices here:
+        // the server's list of this store's devices, and its revoke, made as the signed-in owner.
+        devices={
+          session === null ||
+          staffAdmin === undefined ||
+          app === null ||
+          app.deviceId === null ||
+          sessionSnapshot?.canBlockDevices !== true
+            ? undefined
+            : createDeviceControls({
+                port: staffAdmin,
+                session,
+                thisDeviceId: app.deviceId,
+                now: () => systemClock.now(),
               })
         }
         // Settings › rename this phone, for someone who may register devices here: the server takes

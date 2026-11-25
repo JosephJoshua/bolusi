@@ -8,7 +8,7 @@ import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { SecretsPort } from '@bolusi/device/ports/secret-keystores';
 
 import { CORE_EVENTS } from './api.js';
-import { MAIN_CALLS, MAIN_EVENTS, type CoreInit } from '../main/process-api.js';
+import { CORE_RESTART_EXIT, MAIN_CALLS, MAIN_EVENTS, type CoreInit } from '../main/process-api.js';
 import { mainPortChannel } from '../main/main-port.js';
 import { connect, serve } from '../main/rpc.js';
 
@@ -79,6 +79,14 @@ function start(init: CoreInit, mainPort: MessagePortMain): void {
     secrets,
     netInfo,
     appState,
+    clearWebData: () => main.call<void>(MAIN_CALLS.clearWebData),
+    // The start erases a blocked PC, so close the database and ask main for a new core.
+    onBlocked: () => {
+      void core
+        .stop()
+        .catch(() => undefined)
+        .finally(() => process.exit(CORE_RESTART_EXIT));
+    },
   });
   host = core;
   for (const port of waiting.splice(0)) serveWindow(core, port);

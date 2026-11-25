@@ -21,6 +21,7 @@ import { isUniqueViolation } from '../db-errors.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { ApiError } from '../errors.js';
+import { revokeDevice } from '../identity/revocation.js';
 import { appendAudit } from '../identity/audit.js';
 import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
@@ -407,7 +408,7 @@ export function createUsersRouter(deps: ServerDeps) {
           if (!LOWERCASE_UUID.test(targetUserId)) throw new ApiError('NOT_FOUND');
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
-          await withTenant(c, async (db) => {
+          const blocked = await withTenant(c, async (db) => {
             const acting = await resolveActingUser(c, db);
             const target = await db
               .selectFrom('users')
@@ -449,8 +450,31 @@ export function createUsersRouter(deps: ServerDeps) {
               after: { status: 'deactivated' },
               at: t,
             });
+
+            // Their own phones are blocked with them, so the shop's data on them is erased the next
+            // time they reach the server (blocked-wipe.ts). Deciding the person is gone is deciding
+            // their phone is too; shared store devices are not theirs and stay.
+            const personal = await db
+              .selectFrom('devices')
+              .select('id')
+              .where('personalUserId', '=', targetUserId)
+              .where('status', '=', 'active')
+              .execute();
+            const newly: string[] = [];
+            for (const device of personal) {
+              const outcome = await revokeDevice(db, {
+                tenantId,
+                deviceId: device.id,
+                revokedBy: acting.userId,
+                now: t,
+              });
+              if (outcome.kind === 'revoked' && outcome.newlyRevoked) newly.push(device.id);
+            }
+            return newly;
           });
 
+          // Post-commit, once per device, as the revoke endpoint does: their sockets close now.
+          for (const deviceId of blocked) await deps.revocationHooks.fire({ deviceId, tenantId });
           announceDirectoryChange(deps, tenantId);
           return c.json({ userId: targetUserId, status: 'deactivated' });
         }),

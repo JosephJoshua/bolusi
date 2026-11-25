@@ -40,6 +40,7 @@
  */
 
 import {
+  DEVICE_REVOKED_REASON,
   APP_UPDATE_REQUIRED_ERROR_CODE,
   DEVICE_UNRECOGNISED_REASON,
   stalenessLevel,
@@ -182,7 +183,7 @@ export type SyncProblem =
 export function syncProblems(input: SyncStatusInput): readonly SyncProblem[] {
   const problems: SyncProblem[] = [];
   // Revocation first: it subsumes everything else. Nothing will send again, ever, until re-enroll.
-  if (input.state.syncDisabled && input.state.syncDisabledReason === 'device_revoked') {
+  if (input.state.syncDisabled && input.state.syncDisabledReason === DEVICE_REVOKED_REASON) {
     problems.push({ kind: 'deviceRevoked' });
   }
   if (input.state.syncDisabled && input.state.syncDisabledReason === DEVICE_UNRECOGNISED_REASON) {
@@ -395,7 +396,7 @@ export type ManualSync =
   | { readonly kind: 'reenroll' };
 
 export function manualSync(input: SyncStatusInput): ManualSync {
-  if (input.state.syncDisabled && input.state.syncDisabledReason === 'device_revoked') {
+  if (input.state.syncDisabled && input.state.syncDisabledReason === DEVICE_REVOKED_REASON) {
     return { kind: 'disabled', reasonCode: 'DEVICE_REVOKED' };
   }
   if (input.state.syncDisabled && input.state.syncDisabledReason === DEVICE_UNRECOGNISED_REASON) {

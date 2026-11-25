@@ -174,6 +174,17 @@ describe('RealtimeController — poke handling', () => {
   });
 });
 
+test('a drop asks for one sync at once: a blocked device learns it without waiting for the timer', () => {
+  const { deps, ws, triggerCount } = makeDeps();
+  const controller = new RealtimeController(deps);
+  controller.start();
+  ws.last.cb.onOpen();
+  const afterOpen = triggerCount();
+  ws.last.cb.onClose();
+  expect(triggerCount()).toBe(afterOpen + 1);
+  controller.stop();
+});
+
 describe('RealtimeController — fallback ladder (api/00 §12.3)', () => {
   test('3 consecutive WS connect failures → SSE; reconnect delays follow the sync backoff (5 s, 15 s)', () => {
     const { deps, ws, sse, timer } = makeDeps();

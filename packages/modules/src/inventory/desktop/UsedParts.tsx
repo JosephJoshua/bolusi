@@ -5,7 +5,7 @@
 // Whether the user may take or put back now is the owning module's call (the servisan pane knows
 // its state); the stock rules check it again on save and on the server.
 import { t } from '@bolusi/i18n';
-import { Button, SearchField, Section } from '@bolusi/ui-web';
+import { Button, SearchField, Section, OverflowText } from '@bolusi/ui-web';
 import { Check, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 
@@ -189,7 +189,7 @@ export function TakePartDialog({
           <span className="min-w-0 flex-1">
             <span className="block text-body font-semibold text-text">{row.name}</span>
             {row.fits === null ? null : (
-              <span className="block truncate text-small text-text-muted">{row.fits}</span>
+              <OverflowText text={row.fits} className="text-small text-text-muted" />
             )}
           </span>
           <span

@@ -4,6 +4,7 @@
 import { derivePinAuthState, type HeldPhone, type StaffDirectory } from '@bolusi/core';
 import type { PinOutcome } from '@bolusi/device/bootstrap/session';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
+import type { DeviceList } from '@bolusi/device/models/devices/model';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { LoginResult } from '@bolusi/device/models/enrollment/model';
 import { tapTarget, type SwitcherUser } from '@bolusi/device/models/switcher/model';
@@ -35,6 +36,7 @@ import {
   DEMO_PEOPLE,
   DEMO_STORE_NAME,
   demoRuntimeFor,
+  demoDevicesFor,
   demoStaffFor,
   type DemoPerson,
 } from './demo.js';
@@ -448,6 +450,7 @@ function useSettingsAccess(
     canManageStaff,
     canSetLimits,
     canRenameDevice,
+    canBlockDevices,
     tenantAdmin,
     pinRows,
   } = session;
@@ -491,6 +494,12 @@ function useSettingsAccess(
       staff,
       device,
       renameDevice: canRenameDevice ? (name) => call<void>('device.rename', name) : undefined,
+      devices: canBlockDevices
+        ? {
+            load: () => call<DeviceList>('devices.list'),
+            block: (deviceId) => call<void>('devices.block', deviceId),
+          }
+        : undefined,
       chooseLocale: (locale) => call<void>('device.setLocale', locale),
     };
   }, [
@@ -501,6 +510,7 @@ function useSettingsAccess(
     canManageStaff,
     canSetLimits,
     canRenameDevice,
+    canBlockDevices,
     tenantAdmin,
     lockedCount,
     device,
@@ -522,6 +532,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
   const settings = useMemo(
     (): SettingsAccess => ({
       staff: demoStaffFor(person),
+      devices: demoDevicesFor(person),
       chooseLocale: (next) => {
         setLocale(next);
         setDemoLocale(next);
