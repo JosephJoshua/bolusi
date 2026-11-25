@@ -12,6 +12,7 @@ import {
   OptionsFilter,
   OverflowText,
   PageHeader,
+  type Crumb,
   SearchField,
   StatePanel,
   Tabs,
@@ -44,6 +45,11 @@ const NO_CATEGORIES: readonly CategoryRow[] = [];
 const ALL = 'all';
 
 export interface PartsPageProps {
+  /**
+   * Where the page sits when its place has sections (Barang › Stok): the section's name as the
+   * title and the place above it. Without it the page is its place's only page.
+   */
+  readonly place?: { readonly title: string; readonly trail: readonly Crumb[] } | undefined;
   /** The list's filter, owned by the app so it survives a trip to another page. */
   readonly filter: ListFilter;
   readonly onFilterChange: (filter: ListFilter) => void;
@@ -64,6 +70,7 @@ interface LoadedParts {
 export function PartsPage({
   filter,
   onFilterChange,
+  place,
   onOpenCategories,
   onBulkAdd,
 }: PartsPageProps): React.JSX.Element {
@@ -299,7 +306,9 @@ export function PartsPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="inventory.desk.parts">
       <PageHeader
-        title={ti('inventory.list.title')}
+        title={place?.title ?? ti('inventory.list.title')}
+        trail={place?.trail}
+        trailLabel={t('core.nav.trail')}
         actions={
           canManage || canSetUp ? (
             <>

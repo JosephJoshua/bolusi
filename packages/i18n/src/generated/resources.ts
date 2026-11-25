@@ -112,7 +112,12 @@ const source = {
         UNKNOWN_TYPE: 'Perbarui aplikasi supaya bisa dikirim.',
       },
       account: { menu: 'Menu akun', switchUser: 'Ganti pengguna' },
-      nav: { main: 'Menu utama', collapse: 'Ciutkan menu', expand: 'Lebarkan menu' },
+      nav: {
+        main: 'Menu utama',
+        collapse: 'Ciutkan menu',
+        expand: 'Lebarkan menu',
+        trail: 'Lokasi halaman',
+      },
       update: {
         ready: 'Versi baru siap',
         later: 'Terpasang sendiri saat aplikasi ditutup.',
@@ -955,7 +960,12 @@ export const resources = {
           UNKNOWN_TYPE: 'Update the app so this can be sent.',
         },
         account: { menu: 'Account menu', switchUser: 'Switch user' },
-        nav: { main: 'Main menu', collapse: 'Collapse menu', expand: 'Expand menu' },
+        nav: {
+          main: 'Main menu',
+          collapse: 'Collapse menu',
+          expand: 'Expand menu',
+          trail: 'You are here',
+        },
         update: {
           ready: 'New version ready',
           later: 'Installs by itself when the app closes.',

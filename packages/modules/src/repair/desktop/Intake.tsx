@@ -25,7 +25,7 @@ import {
   useSelectOnFocus,
   OverflowText,
 } from '@bolusi/ui-web';
-import { ArrowLeft, Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
+import { Camera, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useActionRunner, useCapture, type VideoMediaRef } from '../../screen-kit/index.js';
@@ -331,15 +331,10 @@ export function IntakePage({
         title={tn(
           draft.claimOf === null ? 'repair.action.newIntake' : 'repair.warrantyClaim.title',
         )}
-        leading={
-          <IconButton
-            icon={ArrowLeft}
-            label={t('core.action.back')}
-            className="-ml-2"
-            onClick={requestLeave}
-            data-testid="repair.desk.intake.back"
-          />
-        }
+        onBack={requestLeave}
+        backLabel={t('core.action.back')}
+        trail={[{ key: 'repair', label: tn('repair.board.title'), onSelect: requestLeave }]}
+        trailLabel={t('core.nav.trail')}
         actions={
           dirty ? (
             <Button

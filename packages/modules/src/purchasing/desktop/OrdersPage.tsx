@@ -1,12 +1,13 @@
 // Belanja on the counter PC: this store's orders to suppliers, the ones still running first, with
 // the selected order open beside them. A new order is F2; the suppliers are a dialog away.
-import { formatDate } from '@bolusi/i18n';
+import { formatDate, t } from '@bolusi/i18n';
 import {
   Button,
   Chip,
   DataTable,
   OverflowText,
   PageHeader,
+  type Crumb,
   StatePanel,
   Tabs,
   type ColumnDef,
@@ -26,12 +27,17 @@ import { STAGE_ICON } from './stage.js';
 const PAGE = 100;
 
 export interface OrdersPageProps {
+  /**
+   * Where the page sits when its place has sections (Barang › Stok): the section's name as the
+   * title and the place above it. Without it the page is its place's only page.
+   */
+  readonly place?: { readonly title: string; readonly trail: readonly Crumb[] } | undefined;
   /** Running or done, owned by the app so it survives a trip to another page. */
   readonly filter: OrderFilter;
   readonly onFilterChange: (filter: OrderFilter) => void;
 }
 
-export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.JSX.Element {
+export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): React.JSX.Element {
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -103,7 +109,9 @@ export function OrdersPage({ filter, onFilterChange }: OrdersPageProps): React.J
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={`${testId}.orders`}>
       <PageHeader
-        title={tp('purchasing.list.title')}
+        title={place?.title ?? tp('purchasing.list.title')}
+        trail={place?.trail}
+        trailLabel={t('core.nav.trail')}
         actions={
           <>
             <Button

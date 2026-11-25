@@ -1,6 +1,12 @@
 // The desktop frame: a sidebar of sections with the store and the signed-in person, and the page.
 import { clsx } from 'clsx';
-import { PanelLeftClose, PanelLeftOpen, type LucideIcon } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 
 import { IconButton } from './IconButton.js';
@@ -13,6 +19,20 @@ export interface NavItem {
   readonly active: boolean;
   readonly onSelect: () => void;
   readonly shortcut?: string | undefined;
+}
+
+/**
+ * A place with more than one section (Barang: Stok and Belanja): its name over its sections when
+ * the sidebar is open, a hairline before them when it is down to icons.
+ */
+export interface NavGroup {
+  readonly key: string;
+  readonly label: string;
+  readonly items: readonly NavItem[];
+}
+
+function isGroup(entry: NavItem | NavGroup): entry is NavGroup {
+  return 'items' in entry;
 }
 
 export function AppShell({
@@ -80,7 +100,7 @@ export function Sidebar({
 }: {
   /** The store as shown in each state: its name, or a mark that fits the icon rail. */
   readonly header?: ((collapsed: boolean) => ReactNode) | undefined;
-  readonly nav: readonly NavItem[];
+  readonly nav: readonly (NavItem | NavGroup)[];
   readonly footer?: ((collapsed: boolean) => ReactNode) | undefined;
   readonly label: string;
   readonly collapsed?: boolean;
@@ -132,41 +152,29 @@ export function Sidebar({
           header === undefined && toggle === null && 'pt-3',
         )}
       >
-        {nav.map((item) => {
-          const button = (
-            <button
-              key={item.key}
-              type="button"
-              aria-current={item.active ? 'page' : undefined}
-              aria-label={collapsed ? item.label : undefined}
-              onClick={item.onSelect}
-              data-testid={`nav.${item.key}`}
-              className={clsx(
-                'flex min-h-10 cursor-pointer items-center gap-3 rounded-sm py-2 text-body font-semibold transition-colors',
-                collapsed ? 'justify-center' : 'px-3',
-                item.active
-                  ? 'bg-surface text-primary shadow-sm'
-                  : 'text-text-muted hover:bg-black/5 hover:text-text',
-              )}
+        {nav.map((entry) =>
+          isGroup(entry) ? (
+            <div
+              key={entry.key}
+              role="group"
+              aria-label={entry.label}
+              className="flex flex-col gap-1"
             >
-              <item.icon size={18} aria-hidden className="shrink-0" />
-              {collapsed ? null : (
-                <span className="flex-1 break-words text-left leading-tight">{item.label}</span>
+              {collapsed ? (
+                <hr className="mx-2 my-1 border-border" />
+              ) : (
+                <p className="px-3 pb-0.5 pt-2 text-small font-semibold text-text-muted">
+                  {entry.label}
+                </p>
               )}
-            </button>
-          );
-          return (
-            <Tooltip
-              key={item.key}
-              label={item.label}
-              shortcut={item.shortcut}
-              side="right"
-              disabled={!collapsed && item.shortcut === undefined}
-            >
-              {button}
-            </Tooltip>
-          );
-        })}
+              {entry.items.map((item) => (
+                <SidebarItem key={item.key} item={item} collapsed={collapsed} />
+              ))}
+            </div>
+          ) : (
+            <SidebarItem key={entry.key} item={entry} collapsed={collapsed} />
+          ),
+        )}
       </nav>
       {footer === undefined ? null : (
         <div className={clsx('border-t border-border', collapsed ? 'p-2' : 'p-3')}>
@@ -174,6 +182,43 @@ export function Sidebar({
         </div>
       )}
     </aside>
+  );
+}
+
+function SidebarItem({
+  item,
+  collapsed,
+}: {
+  readonly item: NavItem;
+  readonly collapsed: boolean;
+}): React.JSX.Element {
+  return (
+    <Tooltip
+      label={item.label}
+      shortcut={item.shortcut}
+      side="right"
+      disabled={!collapsed && item.shortcut === undefined}
+    >
+      <button
+        type="button"
+        aria-current={item.active ? 'page' : undefined}
+        aria-label={collapsed ? item.label : undefined}
+        onClick={item.onSelect}
+        data-testid={`nav.${item.key}`}
+        className={clsx(
+          'flex min-h-10 cursor-pointer items-center gap-3 rounded-sm py-2 text-body font-semibold transition-colors',
+          collapsed ? 'justify-center' : 'px-3',
+          item.active
+            ? 'bg-surface text-primary shadow-sm'
+            : 'text-text-muted hover:bg-black/5 hover:text-text',
+        )}
+      >
+        <item.icon size={18} aria-hidden className="shrink-0" />
+        {collapsed ? null : (
+          <span className="flex-1 break-words text-left leading-tight">{item.label}</span>
+        )}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -211,23 +256,93 @@ export function SidebarToggle({
   );
 }
 
-/** The top of a page: its title, then the page's own controls, then its main action on the right. */
+/**
+ * One step of the way to a page, from its place down: a link back to that level, or only its name
+ * when that level is no page of its own (Barang, over its sections).
+ */
+export interface Crumb {
+  readonly key: string;
+  readonly label: string;
+  readonly onSelect?: (() => void) | undefined;
+}
+
+/**
+ * The top of a page: the way to it, its title, then the page's own controls, then its main action
+ * on the right.
+ *
+ * - `trail` names the levels above this page, from its place down ("Barang › Belanja"); each is a
+ *   link back to it. A place's own top page has none.
+ * - `onBack` puts a back arrow first and takes the mouse's back button and Alt+Left too, so going
+ *   back works the same from any page below a place. Unsaved work is the page's to ask about.
+ */
 export function PageHeader({
   title,
+  trail,
+  trailLabel,
+  onBack,
+  backLabel,
   leading,
   children,
   actions,
 }: {
   readonly title: string;
+  readonly trail?: readonly Crumb[] | undefined;
+  /** Names the trail for screen readers ("Lokasi halaman"); required with `trail`. */
+  readonly trailLabel?: string | undefined;
+  readonly onBack?: (() => void) | undefined;
+  /** Required with `onBack`: read aloud and shown as the arrow's tooltip. */
+  readonly backLabel?: string | undefined;
   readonly leading?: ReactNode;
   readonly children?: ReactNode;
   readonly actions?: ReactNode;
 }): React.JSX.Element {
+  useBackGesture(onBack);
   return (
     <header className="flex h-16 shrink-0 items-center gap-6 px-6">
       <div className="flex min-w-0 items-center gap-2">
+        {onBack === undefined ? null : (
+          <IconButton
+            icon={ArrowLeft}
+            label={backLabel ?? ''}
+            shortcut="Alt+←"
+            tooltipSide="bottom"
+            className="-ml-2"
+            onClick={onBack}
+            data-testid="page.back"
+          />
+        )}
         {leading}
-        <h1 className="whitespace-nowrap text-title font-bold text-text">{title}</h1>
+        {trail === undefined || trail.length === 0 ? null : (
+          <nav aria-label={trailLabel} className="flex min-w-0 items-center gap-1">
+            <ol className="flex min-w-0 items-center gap-1">
+              {trail.map((crumb) => (
+                <li key={crumb.key} className="flex items-center gap-1">
+                  {crumb.onSelect === undefined ? (
+                    <span
+                      data-testid={`page.crumb.${crumb.key}`}
+                      className="whitespace-nowrap text-heading font-semibold text-text-muted"
+                    >
+                      {crumb.label}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={crumb.onSelect}
+                      data-testid={`page.crumb.${crumb.key}`}
+                      className="cursor-pointer whitespace-nowrap rounded-sm text-heading font-semibold text-text-muted hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      {crumb.label}
+                    </button>
+                  )}
+                  <ChevronRight size={18} aria-hidden className="shrink-0 text-text-muted" />
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )}
+        <h1 className="whitespace-nowrap text-title font-bold text-text" aria-current="page">
+          {title}
+        </h1>
       </div>
       <div className="flex min-w-0 flex-1 items-center">{children}</div>
       {actions === undefined ? null : (
@@ -235,4 +350,35 @@ export function PageHeader({
       )}
     </header>
   );
+}
+
+/**
+ * The mouse's back button and Alt+Left run `onBack`, as in a browser, while a page that offers back
+ * is showing. A dialog open over the page keeps them (it has its own way out).
+ */
+export function useBackGesture(onBack: (() => void) | undefined): void {
+  useEffect(() => {
+    if (onBack === undefined) return;
+    const overDialog = (): boolean => document.querySelector('[role="dialog"]') !== null;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.altKey && event.key === 'ArrowLeft' && !overDialog()) {
+        event.preventDefault();
+        onBack();
+      }
+    };
+    // Button 3 is the mouse's back button; stop the browser's own history step as well.
+    const onMouse = (event: MouseEvent): void => {
+      if (event.button !== 3) return;
+      event.preventDefault();
+      if (event.type === 'mouseup' && !overDialog()) onBack();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onMouse);
+    window.addEventListener('mouseup', onMouse);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onMouse);
+      window.removeEventListener('mouseup', onMouse);
+    };
+  }, [onBack]);
 }

@@ -44,6 +44,7 @@ export const INVENTORY_KEYS = [
   'inventory.movement.transferBack',
   'inventory.movement.transferArrivedLate',
   'inventory.list.title',
+  'inventory.place.stock',
   'inventory.list.pickPart',
   'inventory.list.searchHint',
   'inventory.list.clearSearch',
