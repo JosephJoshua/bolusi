@@ -154,6 +154,10 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       return byType.get(type)?.entityType;
     },
 
+    otherStoreOf(type, payload) {
+      return byType.get(type)?.otherStore?.(payload) ?? null;
+    },
+
     checkRule: (op, ctx) => registry.checkOpRule(op, ctx),
 
     resolve(type, schemaVersion) {

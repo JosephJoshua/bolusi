@@ -62,6 +62,7 @@ import {
   seedWorld,
   testScopeOf,
   testEntityTypeOf,
+  testOtherStoreOf,
   testCheckRule,
   testPermissionOf,
   type OplogTestDb,
@@ -165,6 +166,7 @@ const suiteRegistry: OpRegistry = {
       PLATFORM_OP.userLocaleChanged,
     ].includes(type),
   ),
+  otherStoreOf: testOtherStoreOf,
   entityTypeOf: testEntityTypeOf((type) =>
     [
       NOTE_CREATED,

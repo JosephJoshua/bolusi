@@ -12,7 +12,19 @@ export function movementTitle(movement: MovementRow): string {
     case 'put_back':
       return ti('inventory.movement.putBack', { use: movement.useLabel ?? '' });
     case 'received':
-      return ti('inventory.movement.received', { source: movement.useLabel ?? '' });
+      switch (movement.useKind) {
+        case 'transfer_arrival':
+          return ti('inventory.movement.transferIn', { transfer: movement.useLabel ?? '' });
+        case 'transfer_cancel':
+        case 'transfer_settlement':
+          return ti('inventory.movement.transferBack', { transfer: movement.useLabel ?? '' });
+        default:
+          return ti('inventory.movement.received', { source: movement.useLabel ?? '' });
+      }
+    case 'sent':
+      return movement.useKind === 'transfer_settlement'
+        ? ti('inventory.movement.transferArrivedLate', { transfer: movement.useLabel ?? '' })
+        : ti('inventory.movement.transferOut', { transfer: movement.useLabel ?? '' });
   }
 }
 

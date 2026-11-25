@@ -36,6 +36,7 @@ import {
   seedDevice,
   seedWorld,
   testEntityTypeOf,
+  testOtherStoreOf,
   testCheckRule,
   testPermissionOf,
   testScopeOf,
@@ -204,6 +205,7 @@ function threadTestDeps(
     // The production rule per type (a test-only type declares none).
     checkRule: testCheckRule,
     permissionOf: testPermissionOf((type) => knownTypes.has(type)),
+    otherStoreOf: testOtherStoreOf,
     entityTypeOf: testEntityTypeOf((type) => knownTypes.has(type)),
     resolve: (type) =>
       knownTypes.has(type) ? { kind: 'known', validate: () => true } : { kind: 'unknown' },

@@ -14,6 +14,7 @@ import {
   itemTakenApplier,
   stockCountedApplier,
   stockReceivedApplier,
+  stockSentApplier,
 } from './applier.js';
 import { MAX_FIELD_VALUE, zCategoryShape, zFieldValues } from './categories.js';
 import {
@@ -27,6 +28,7 @@ import {
   MAX_ITEM_TAGS,
   MAX_MOVEMENT_QTY,
   PART_USE_KINDS,
+  STOCK_SINK_KINDS,
   STOCK_SOURCE_KINDS,
 } from './constants.js';
 import type { PartUseTargets } from './part-use.js';
@@ -39,9 +41,12 @@ import {
   itemTakenRule,
   stockCountedRule,
   stockReceivedRule,
+  stockSentRule,
 } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
 import type { StockSourceTargets } from './stock-source.js';
+import { TRANSFER_OPERATIONS } from './transfers/operations.js';
+import { TRANSFER_STOCK_SOURCES } from './transfers/sources.js';
 import { zOptionalPayloadText } from '../shared/optional-text.js';
 
 export const MAX_PART_NAME = 200;
@@ -106,10 +111,17 @@ export const zStockSource = z
   .object({ kind: z.enum(STOCK_SOURCE_KINDS), id: zUuidV7, label: z.string().min(1).max(60) })
   .strict();
 
-/** Parts that arrived, and the receipt (or later, transfer) that brought them. */
+/** Parts that arrived, and the receipt or transfer that brought them. */
 export const stockReceivedPayload = z
   .object({ itemId: zUuidV7, qty: zQty, source: zStockSource })
   .strict();
+
+export const zStockSink = z
+  .object({ kind: z.enum(STOCK_SINK_KINDS), id: zUuidV7, label: z.string().min(1).max(60) })
+  .strict();
+
+/** Parts that left the store, and the transfer (or settlement) that took them. */
+export const stockSentPayload = z.object({ itemId: zUuidV7, qty: zQty, sink: zStockSink }).strict();
 
 /**
  * The op declarations. Rules that check a part's use, or where received parts came from, need the
@@ -201,11 +213,23 @@ export function inventoryOperations(
       payload: stockReceivedPayload,
       reversal: 'Corrected by a count, or later by a return to the supplier.',
       apply: stockReceivedApplier,
-      rule: stockReceivedRule(sources),
+      rule: stockReceivedRule({ ...sources, ...TRANSFER_STOCK_SOURCES }),
       permission: INVENTORY_PERMISSION.receive,
       // Staff see stock arrive; what it cost travels apart, to owners only.
       read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
     },
+    [INVENTORY_OP.stockSent]: {
+      schemaVersion: 1,
+      payload: stockSentPayload,
+      reversal:
+        'Brought back by inventory.stock_received from the transfer (a cancel or a settlement).',
+      apply: stockSentApplier,
+      rule: stockSentRule,
+      permission: INVENTORY_PERMISSION.transfer,
+      read: INVENTORY_PERMISSION.read,
+      entityType: INVENTORY_MOVEMENT_ENTITY,
+    },
+    ...TRANSFER_OPERATIONS,
   };
 }

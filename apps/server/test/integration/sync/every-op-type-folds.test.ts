@@ -84,6 +84,11 @@ const id = (n: number): string =>
 /** A colleague who asks for approvals; only someone else may answer them. */
 const ASKER = id(0x5ff);
 
+/** A second store of the business: the journey's transfers go to it, and one comes from it. */
+const OTHER_STORE = id(0x700);
+/** Sent from OTHER_STORE by a device the journey does not include, so it is seeded. */
+const INCOMING_TRANSFER = id(0x701);
+
 /** One legal journey per module, in push order, touching every op type a device can push. */
 function journey(world: ChainWorld): OpSpec[] {
   const photo = (n: number): MediaRef => ({
@@ -248,6 +253,106 @@ function journey(world: ChainWorld): OpSpec[] {
         lines,
       }),
       orderOp('purchasing.order_cancelled', dropped, { reason: 'Salah supplier' }),
+    ];
+  };
+  /** A transfer sent and cancelled, one sent and settled back, and one from the other store that
+   *  arrives here: each with the stock it moves. Uses the part above. */
+  const transfers = (): OpSpec[] => {
+    const lines = [{ itemId: part, name: 'LCD Samsung A14', qty: 1 }];
+    const sent = (n: number, entityId: string): OpSpec[] => {
+      const transferNumber = `TR-${formatTicketNumber(world.deviceId, n)}`;
+      return [
+        {
+          type: 'inventory.transfer_sent',
+          entityType: 'inventory_transfer',
+          entityId,
+          payload: { transferNumber, toStoreId: OTHER_STORE, note: null, lines },
+        },
+        {
+          type: 'inventory.stock_sent',
+          entityType: 'inventory_movement',
+          entityId: id(0x710 + n),
+          payload: {
+            itemId: part,
+            qty: 1,
+            sink: { kind: 'transfer', id: entityId, label: transferNumber },
+          },
+        },
+      ];
+    };
+    const cancelled = id(0x702);
+    const settled = id(0x703);
+    const settlement = id(0x704);
+    const arrival = id(0x705);
+    return [
+      ...sent(1, cancelled),
+      {
+        type: 'inventory.transfer_cancelled',
+        entityType: 'inventory_transfer',
+        entityId: cancelled,
+        payload: { toStoreId: OTHER_STORE, reason: 'Salah toko' },
+      },
+      {
+        type: 'inventory.stock_received',
+        entityType: 'inventory_movement',
+        entityId: id(0x720),
+        payload: {
+          itemId: part,
+          qty: 1,
+          source: {
+            kind: 'transfer_cancel',
+            id: cancelled,
+            label: `TR-${formatTicketNumber(world.deviceId, 1)}`,
+          },
+        },
+      },
+      ...sent(2, settled),
+      {
+        type: 'inventory.transfer_settled',
+        entityType: 'inventory_transfer_settlement',
+        entityId: settlement,
+        payload: {
+          transferId: settled,
+          toStoreId: OTHER_STORE,
+          reason: null,
+          lines: [{ itemId: part, outcome: 'back', qty: 1 }],
+        },
+      },
+      {
+        type: 'inventory.stock_received',
+        entityType: 'inventory_movement',
+        entityId: id(0x721),
+        payload: {
+          itemId: part,
+          qty: 1,
+          source: {
+            kind: 'transfer_settlement',
+            id: settlement,
+            label: `TR-${formatTicketNumber(world.deviceId, 2)}`,
+          },
+        },
+      },
+      {
+        type: 'inventory.transfer_received',
+        entityType: 'inventory_transfer_arrival',
+        entityId: arrival,
+        payload: {
+          transferId: INCOMING_TRANSFER,
+          fromStoreId: OTHER_STORE,
+          note: null,
+          lines: [{ itemId: part, qty: 1 }],
+        },
+      },
+      {
+        type: 'inventory.stock_received',
+        entityType: 'inventory_movement',
+        entityId: id(0x722),
+        payload: {
+          itemId: part,
+          qty: 1,
+          source: { kind: 'transfer_arrival', id: arrival, label: 'TR-B0B-0001' },
+        },
+      },
     ];
   };
   /** The current version, with the repair types picked at intake (none when left out). */
@@ -483,6 +588,7 @@ function journey(world: ChainWorld): OpSpec[] {
     }),
     ...partsUsed(),
     ...purchasing(),
+    ...transfers(),
     onTicket('repair.quote_change_proposed', {
       lineId: id(0x201),
       kind: 'part',
@@ -721,6 +827,40 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
     roleName: 'cashier',
     permissionIds: ['approvals.use', 'repair.read', 'repair.quote_change', 'repair.intake'],
   });
+  // The other store, and the transfer it sent here (another store's device, so not in the journey).
+  await db
+    .insertInto('stores')
+    .values({
+      id: OTHER_STORE,
+      tenantId: world.tenantId,
+      name: 'Toko B',
+      createdAt: 1_726_000_000_000n,
+    })
+    .execute();
+  await db
+    .insertInto('inventoryTransfers')
+    .values({
+      id: INCOMING_TRANSFER,
+      tenantId: world.tenantId,
+      storeId: OTHER_STORE,
+      toStoreId: world.storeId,
+      transferNumber: 'TR-B0B-0001',
+      note: null,
+      sentBy: ASKER,
+      sentAt: 1_726_000_000_000n,
+    })
+    .execute();
+  await db
+    .insertInto('inventoryTransferLines')
+    .values({
+      transferId: INCOMING_TRANSFER,
+      position: 0,
+      tenantId: world.tenantId,
+      itemId: id(8),
+      itemName: 'LCD Samsung A14',
+      qty: 1,
+    })
+    .execute();
   // Conflicts are recorded only by the server, so the one the journey acknowledges is seeded.
   await db
     .insertInto('conflicts')
