@@ -103,6 +103,8 @@ export async function makeQrisWorld<X extends XenditPort>(options: {
   readonly qris?: boolean;
   /** The tenant's system key goes missing while this says so: no signer to record a payment. */
   readonly signerMissing?: () => boolean;
+  /** Where Xendit is told to send webhooks; real Xendit refuses a `.test` host. */
+  readonly publicUrl?: string;
 }): Promise<World<X>> {
   const { xendit } = options;
   const signerMissing = options.signerMissing ?? (() => false);
@@ -110,7 +112,7 @@ export async function makeQrisWorld<X extends XenditPort>(options: {
   const qris: QrisConfig = {
     sealer: createSecretSealer(Buffer.alloc(32, 7).toString('base64')),
     xendit,
-    publicUrl: PUBLIC_URL,
+    publicUrl: options.publicUrl ?? PUBLIC_URL,
   };
   const h = await makeIdentityHarness({
     deps: () => ({

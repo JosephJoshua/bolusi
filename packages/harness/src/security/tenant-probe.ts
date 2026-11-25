@@ -256,11 +256,11 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
       db,
     );
     await sql`INSERT INTO qris_charges (id, tenant_id, store_id, account_id, document_json, amount, xendit_qr_id, qr_string,
-                                        environment, expires_at, requested_by, device_id, created_at, secret_sealed, callback_token_hash)
+                                        environment, expires_at, requested_by, device_id, created_at, secret_sealed, callback_token_hash,
+                                        document_id)
               VALUES (${chargeId}, ${tenantId}, ${storeId}, ${accountId}, ${'{}'}, ${15000n}, ${`qr_${chargeId}`}, ${'000201'},
-                      ${'test'}, ${BigInt(CLOCK_BASE + 900_000)}, ${userId}, ${deviceId}, ${CREATED_AT}, ${'sealed'}, ${'0'.repeat(64)})`.execute(
-      db,
-    );
+                      ${'test'}, ${BigInt(CLOCK_BASE + 900_000)}, ${userId}, ${deviceId}, ${CREATED_AT}, ${'sealed'}, ${'0'.repeat(64)},
+                      ${chargeId})`.execute(db);
   };
   await seedQris(ID.tenantB, ID.storeB, ID.qrisAccountB, ID.qrisChargeB, ID.deviceB, ID.userB);
   await seedQris(ID.tenantA, ID.storeA2, ID.qrisAccountA2, ID.qrisChargeA2, ID.deviceA2, ID.userA2);

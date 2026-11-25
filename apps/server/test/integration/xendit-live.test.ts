@@ -62,16 +62,9 @@ describe.skipIf(!LIVE)('Xendit test mode, as Bolusi calls it', () => {
     expect(Math.abs(payments[0]!.paidAt! - before)).toBeLessThan(5 * 60_000);
   }, 90_000);
 
-  test('refusals are said as such: an amount under the minimum, a wrong key', async () => {
-    const tooSmall = await xendit
-      .createDynamicQr(KEY, {
-        referenceId: uuidv7(Date.now()),
-        amount: 100,
-        expiresAt: expiresAt(),
-      })
-      .catch((error: unknown) => error);
-    expect(tooSmall).toBeInstanceOf(XenditRefusal);
-    expect((tooSmall as XenditRefusal).reason).toBe('amountNotAllowed');
+  // Test mode takes a QR below what QRIS allows (Rp 100 came back as a QR), so the server's own
+  // QRIS_MIN_AMOUNT check is what keeps those out; only a wrong key is Xendit's to refuse here.
+  test('a wrong key is refused as such', async () => {
     const wrongKey = await xendit
       .listQrPayments('xnd_development_not_a_real_key_0000000000', 'qr_x')
       .catch((error: unknown) => error);
@@ -85,7 +78,7 @@ describe.skipIf(!LIVE)('the server’s QRIS flow over Xendit test mode', () => {
   const { call, connect, chargeBody, paymentOps } = qrisCalls(() => world, KEY);
 
   beforeEach(async () => {
-    world = await makeQrisWorld({ xendit: createXenditClient() });
+    world = await makeQrisWorld({ xendit: createXenditClient(), publicUrl: PUBLIC_URL });
     // Xendit refuses a QR that expires in the past: the server's clock is the real one here.
     world.h.clock.set(Date.now());
     const connected = await connect();
