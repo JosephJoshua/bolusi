@@ -8,7 +8,7 @@ import { zUuid } from '@bolusi/schemas';
 
 import { APPROVAL_ENTITY, APPROVAL_OP } from './constants.js';
 import type { ApprovalKinds } from './kinds.js';
-import { APPROVAL_REFUSALS } from './rules.js';
+import { requireWaiting } from './rules.js';
 import { zApprovalNote, zApprovalReason } from './operations.js';
 import type { createApprovalQueries } from './queries.js';
 
@@ -102,9 +102,7 @@ export function createApprovalCommands(kinds: ApprovalKinds, queries: Queries) {
 
   async function waiting(ctx: CommandContext, requestId: string) {
     const request = (await ctx.query(queries.approvalRequestQuery, { requestId })).rows[0]!;
-    if (request.status !== 'waiting') {
-      throw APPROVAL_REFUSALS.refuse(request.status === 'closed' ? 'changed' : 'alreadyAnswered');
-    }
+    requireWaiting(request.status);
     return request;
   }
 

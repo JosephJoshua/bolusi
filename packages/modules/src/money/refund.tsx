@@ -14,24 +14,11 @@ import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import { CASH_ACCOUNT, MONEY_APPROVAL_KIND, MONEY_PERMISSION } from './constants.js';
 import type { RefundInput, ReduceChargeInput } from './commands.js';
 import type { MoneyDocument } from './documents.js';
-import { accountLabel, moneyInByMethod, type NamedBalance } from './kas.js';
+import { accountLabel, moneyInByMethod, type MoneyTarget } from './kas.js';
 import { tm } from './i18n.js';
 import { rupiah } from './payment-entry.js';
 import type { DocumentMoney, PaymentAccountRow } from './queries.js';
 import { useMoneyQuery, useMoneyRuntime, type MoneyRuntime } from './runtime.js';
-
-/** What money goes back for, and whose it is. */
-export interface MoneyTarget {
-  readonly document: MoneyDocument;
-  readonly customer: string | null;
-}
-
-export function targetOf(balance: NamedBalance): MoneyTarget {
-  return {
-    document: { kind: balance.documentKind, id: balance.documentId, label: balance.documentLabel },
-    customer: balance.customer,
-  };
-}
 
 /** A method money can go back through, and the most that can. */
 export interface RefundMethod {

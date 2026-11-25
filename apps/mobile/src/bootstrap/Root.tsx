@@ -721,13 +721,9 @@ export function Root({
       // The injected `boot` (index.ts wires `bootWithLocalRecovery`) self-heals a DB that throws
       // `not_a_database`/`missing_key` by wiping and re-enrolling, so those classes never reach here.
       //
-      // ⚠️ ONE case is neither healed there NOR caught here, POST-D22: a restored device (iOS
-      // restore-to-new-hardware restores `bolusi.db` but not its THIS_DEVICE_ONLY key). Under
-      // SQLCipher its wrong-key open was a loud `not_a_database` the self-heal caught. Now `open()`
-      // takes no key and the restored PLAINTEXT file OPENS, so `boot()` RESOLVES — this no-catch sees
-      // a success — and the app boots half-enrolled, throwing AEAD errors deep in the UI. That is the
-      // `KNOWN GAP SINCE D22` in recovery.ts, filed as task 160 (a decrypt-probe at boot). Do not read
-      // this no-catch as covering the restore case: it covers only a DB that fails to open at all.
+      // A restored device (an iOS restore brings back `bolusi.db` but not its key) opens fine, so it
+      // is caught earlier: boot's key-tag probe (`@bolusi/device` db-identity.ts) throws
+      // `ForeignDatabaseError`, and the recovery wrapper heals it like the cases above.
       // The opening hop first: loading holds the JS thread, and the hop must already be running on
       // the UI thread by then (BrandIntro `onPlaying`). Never more than a moment's wait, and only
       // where there is a native splash to hand over from (not on web or in tests).

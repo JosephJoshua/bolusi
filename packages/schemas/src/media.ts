@@ -1,20 +1,5 @@
-// `mediaRef` — the shared payload fragment any module embeds when it attaches media
-// (06-media-pipeline §3.2). Defined ONCE here and never redefined per module (CLAUDE.md §2.8).
-//
-// WHY THIS LIVES IN @bolusi/schemas AND NOT @bolusi/core. 06-media-pipeline §3.2 says
-// "Defined once in `@bolusi/core` as `mediaRefSchema` (Zod, `.strict()`)". That stated LOCATION
-// is impossible and is a known spec defect, not an oversight on our side: 08 §3.3's dependency
-// table grants `core` only `schemas` (+ `canonicalize`, `kysely` types) and grants `zod` to
-// `schemas` ALONE; `zod` is a devDependency of core; and core/src/module/strict-schema.ts states
-// flatly "@bolusi/core may not import zod". Core structurally cannot author a Zod schema. The
-// REQUIREMENT of §3.2 — defined once, Zod, `.strict()`, never per-module — is load-bearing and is
-// honoured here in full; only the package name moves. The 06 §3.2 text is still wrong and its
-// correction is TASK 72 (`ai-docs/tasks/72-mediarefschema-home-contradicts-boundary.md`), filed
-// separately because a spec change is never an implementation side effect (CLAUDE.md §4). If you
-// are reading §3.2 and this file disagrees with it, §3.2 is the known defect — not this. Nothing enforces the
-// core/zod edge today — `bolusi/boundaries` is a deny-list whose header says the §3.3 positive
-// allow-matrix is NOT YET IMPLEMENTED (owner: task 28) — so a `zod` import in core would compile,
-// lint green, and fail only as a missing runtime dep in core's published `dist`.
+// `mediaRef`, the shared payload fragment any module embeds when it attaches media. Defined once
+// here and never per module.
 import { z } from 'zod';
 
 import { zLocation } from './envelope.js';

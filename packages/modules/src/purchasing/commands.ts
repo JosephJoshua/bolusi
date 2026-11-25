@@ -162,7 +162,7 @@ async function orderLines(ctx: CommandContext, lines: z.output<typeof zLines>) {
       });
     }
     if (item.archived) {
-      throw PURCHASING_REFUSALS.refuse('partArchived', {
+      throw PURCHASING_REFUSALS.refuseOnDevice('partArchived', {
         details: { entityType: 'inventory_item', entityId: line.itemId },
       });
     }

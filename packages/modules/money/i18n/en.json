@@ -27,6 +27,7 @@
     "refundAboveCredit": "That’s more than the customer overpaid. Ask an owner.",
     "notCharged": "The bill isn’t recorded yet. Ask an owner to give the money back.",
     "refundAbovePaid": "That’s more than the customer paid.",
+    "paymentRefunded": "That money was already given back to the customer, so the payment can’t be cancelled.",
     "notThisStore": "This belongs to another store.",
     "accountKindChanged": "A payment method’s type can’t be changed.",
     "countNotFound": "This cash count wasn’t found.",
