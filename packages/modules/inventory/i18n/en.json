@@ -7,7 +7,12 @@
     "itemPutBack": "Part put back",
     "categoryAdded": "Category added",
     "categoryEdited": "Category changed",
-    "stockReceived": "Parts received"
+    "stockReceived": "Parts received",
+    "stockSent": "Parts sent to another store",
+    "transferSent": "Transfer sent",
+    "transferReceived": "Transfer received",
+    "transferCancelled": "Transfer cancelled",
+    "transferSettled": "Transfer settled"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -17,7 +22,18 @@
     "wrongUse": "The repair details don’t match. Try again.",
     "categoryNotFound": "This category doesn’t exist.",
     "categoryInvalid": "This category’s fields or name format aren’t right yet.",
-    "wrongSource": "The order details do not match."
+    "wrongSource": "The order details do not match.",
+    "transferNotFound": "This transfer is not in this store.",
+    "transferMismatch": "The transfer details do not match.",
+    "transferCancelled": "The sending store has cancelled this transfer.",
+    "sameStore": "Choose another store to send to.",
+    "notOnTransfer": "This part is not on the transfer.",
+    "moreThanSent": "That is more than was sent.",
+    "nothingToCancel": "This transfer can no longer be cancelled because some of it has arrived.",
+    "nothingToSettle": "That is more than is still missing.",
+    "reasonRequired": "Write the reason first.",
+    "numberNotThisDevice": "This transfer number is not from this device.",
+    "numberUsed": "This transfer number is already used."
   },
   "list": {
     "title": "Items",
@@ -113,7 +129,11 @@
     "counted": "Corrected to {count}",
     "taken": "Taken for {use}",
     "putBack": "Put back from {use}",
-    "received": "Received on {source}"
+    "received": "Received on {source}",
+    "transferOut": "Sent on {transfer}",
+    "transferIn": "Received from {transfer}",
+    "transferBack": "Back from {transfer}",
+    "transferArrivedLate": "Arrived after all, {transfer}"
   },
   "stepper": {
     "decrease": "Fewer",

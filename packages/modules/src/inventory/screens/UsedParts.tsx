@@ -8,18 +8,19 @@
  */
 import { t } from '@bolusi/i18n';
 import {
-  Icon,
-  QuantityStepper,
-  SearchField,
-  TextButton,
   border,
   color,
+  Icon,
+  numeric,
+  QuantityStepper,
   radius,
+  SearchField,
   size,
   space,
+  Text,
+  TextButton,
   touch,
   type,
-  Text,
   useRevealOnMount,
   ValueText,
 } from '@bolusi/ui';
@@ -404,6 +405,6 @@ const styles = StyleSheet.create({
   },
   choiceSelected: { backgroundColor: color.surfaceAlt },
   choicePressed: { backgroundColor: color.surfaceAlt },
-  stock: { ...type.bodySm, color: color.textMuted, fontVariant: ['tabular-nums'] },
+  stock: { ...type.bodySm, color: color.textMuted, ...numeric },
   stockOut: { color: color.danger },
 });

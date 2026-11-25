@@ -103,7 +103,9 @@ export const type = Object.freeze({
 } as const);
 
 /** Tabular numerals for money/counts (design-system §2). Applied alongside a `type` entry. */
-export const numeric = Object.freeze({ fontVariant: Object.freeze(['tabular-nums']) } as const);
+export const numeric: { readonly fontVariant: ['tabular-nums'] } = Object.freeze({
+  fontVariant: ['tabular-nums'],
+});
 
 /** 4-dp base grid; the scale is CLOSED — no in-between values (design-system §1.3). */
 export const space = Object.freeze({

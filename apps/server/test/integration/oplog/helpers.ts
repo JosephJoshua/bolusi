@@ -207,6 +207,10 @@ export function testEntityTypeOf(
   };
 }
 
+/** A test registry's `otherStoreOf`: the production declarations (a test-only type reaches no other store). */
+export const testOtherStoreOf: OpRegistry['otherStoreOf'] = (type, payload) =>
+  serverOpRegistry.otherStoreOf(type, payload);
+
 /** A test registry's `checkRule`: the production rules, so a type production knows is judged as in production. */
 export const testCheckRule: OpRegistry['checkRule'] = (op, ctx) =>
   serverOpRegistry.checkRule(op, ctx);
@@ -217,6 +221,7 @@ export const testRegistry: OpRegistry = {
   checkRule: testCheckRule,
   permissionOf: testPermissionOf((type) => type in SCHEMAS),
   entityTypeOf: testEntityTypeOf((type) => type in SCHEMAS),
+  otherStoreOf: testOtherStoreOf,
 
   resolve(type: string, schemaVersion: number) {
     const schema = SCHEMAS[type];

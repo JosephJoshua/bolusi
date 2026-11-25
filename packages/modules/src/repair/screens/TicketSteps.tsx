@@ -5,20 +5,21 @@
  */
 import { formatMoney, formatNumber } from '@bolusi/i18n';
 import {
-  ListRow,
-  PhotoSlot,
-  SegmentedControl,
-  TextInput,
-  Icon,
-  TextButton,
-  ToggleChip,
   color,
+  Icon,
+  ListRow,
+  numeric,
+  PhotoSlot,
   radius,
+  SegmentedControl,
   size,
   space,
-  type,
   Text,
+  TextButton,
+  TextInput,
   TileGrid,
+  ToggleChip,
+  type,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
@@ -1271,7 +1272,7 @@ const styles = StyleSheet.create({
     ...type.title,
     color: color.text,
     marginTop: space.xs,
-    fontVariant: ['tabular-nums'],
+    ...numeric,
   },
   proposalLabel: { ...type.caption, color: color.textMuted, marginTop: space.md },
   proposalReason: { ...type.bodySm, color: color.text },

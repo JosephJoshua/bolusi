@@ -100,7 +100,87 @@ export interface InventoryCategoriesTable {
   updatedAt: number;
 }
 
+/**
+ * One transfer: parts sent from one store (`storeId`, which mints its number) to another. What has
+ * arrived or been settled is never stored here: arrivals and settlements are their own entities, so
+ * the two stores recording offline never overwrite each other.
+ */
+export interface InventoryTransfersTable {
+  id: string;
+  tenantId: string;
+  /** The sending store. */
+  storeId: string;
+  toStoreId: string;
+  /** `TR-K7Q-0001`: minted by the sending device, as order numbers are. */
+  transferNumber: string;
+  note: string | null;
+  sentBy: string;
+  sentAt: number;
+  cancelledBy: string | null;
+  cancelledAt: number | null;
+  cancelReason: string | null;
+}
+
+/** One part sent: child rows of the transfer. */
+export interface InventoryTransferLinesTable {
+  transferId: string;
+  position: number;
+  tenantId: string;
+  itemId: string;
+  /** The part's name when it was sent. */
+  itemName: string;
+  qty: number;
+}
+
+/** One arrival of a transfer's parts at the receiving store (`storeId`). */
+export interface InventoryTransferArrivalsTable {
+  id: string;
+  tenantId: string;
+  storeId: string;
+  transferId: string;
+  note: string | null;
+  userId: string;
+  at: number;
+}
+
+export interface InventoryTransferArrivalLinesTable {
+  arrivalId: string;
+  position: number;
+  tenantId: string;
+  transferId: string;
+  itemId: string;
+  qty: number;
+}
+
+/** An owner of the sending store (`storeId`) settling parts that did not arrive, or did after all. */
+export interface InventoryTransferSettlementsTable {
+  id: string;
+  tenantId: string;
+  storeId: string;
+  transferId: string;
+  reason: string | null;
+  userId: string;
+  at: number;
+}
+
+export interface InventoryTransferSettlementLinesTable {
+  settlementId: string;
+  position: number;
+  tenantId: string;
+  transferId: string;
+  itemId: string;
+  /** `SettlementOutcome`. */
+  outcome: string;
+  qty: number;
+}
+
 export interface InventoryDatabase {
+  inventoryTransfers: InventoryTransfersTable;
+  inventoryTransferLines: InventoryTransferLinesTable;
+  inventoryTransferArrivals: InventoryTransferArrivalsTable;
+  inventoryTransferArrivalLines: InventoryTransferArrivalLinesTable;
+  inventoryTransferSettlements: InventoryTransferSettlementsTable;
+  inventoryTransferSettlementLines: InventoryTransferSettlementLinesTable;
   inventoryCategories: InventoryCategoriesTable;
   inventoryItemFacets: InventoryItemFacetsTable;
   inventoryItems: InventoryItemsTable;

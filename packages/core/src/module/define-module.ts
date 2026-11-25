@@ -139,6 +139,14 @@ export interface OperationDeclaration<DB> {
   /** Envelope scope (01 §6; 05 §2.1). Default `'store'`. */
   readonly scope?: OperationScope;
   /**
+   * A second store that also receives ops of this type, read from the payload: the store a
+   * transfer goes to sees it sent, the sending store sees it arrive. The op still belongs to its
+   * own store (permission, rules and writes are judged there); this only widens who pulls it. The
+   * server refuses an op naming its own store or a store outside the business. Absent for types
+   * only their own store sees.
+   */
+  readonly otherStore?: (payload: unknown) => string | null;
+  /**
    * The permission the op's author must hold, in the emitting device's store, for the server to
    * accept a pushed op of this type. A device checks it locally before writing; the server checks
    * it again against its own directory, so a tampered client cannot record what its user may not

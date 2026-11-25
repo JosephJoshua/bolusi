@@ -6,6 +6,7 @@ import {
   formatDateTime,
   formatMoney,
   formatPhone,
+  formatSignedMoney,
   translateOpType,
 } from '@bolusi/i18n';
 
@@ -444,7 +445,7 @@ export function paidRow(
   paidLabel: RepairKey,
 ): { readonly label: string; readonly amount: string } {
   return paid < 0
-    ? { label: tn('repair.price.givenBack'), amount: `+${formatMoney(-paid)}` }
+    ? { label: tn('repair.price.givenBack'), amount: formatSignedMoney(-paid) }
     : { label: tn(paidLabel), amount: formatMoney(-paid) };
 }
 

@@ -175,7 +175,14 @@ export async function runPull(
             // returns int8 as a string), so the comparison operand is typed `string`. pg serializes
             // 500 and '500' to the same wire value — this honours the derived type.
             .where('serverSeq', '>', String(request.cursor))
-            .where((eb) => eb.or([eb('storeId', '=', identity.storeId), eb('storeId', 'is', null)]))
+            .where((eb) =>
+              eb.or([
+                eb('storeId', '=', identity.storeId),
+                eb('storeId', 'is', null),
+                // An op another store sent this one (a transfer to it, or its arrival back home).
+                eb('otherStoreId', '=', identity.storeId),
+              ]),
+            )
             .$if(hidden.length > 0, (qb) => qb.where('type', 'not in', hidden))
             .$if(only !== undefined, (qb) => qb.where('type', 'in', only ?? []))
             .$if(backfill !== undefined, (qb) =>

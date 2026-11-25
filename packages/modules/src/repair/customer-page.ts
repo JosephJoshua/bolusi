@@ -4,7 +4,7 @@
 //
 // Written for the customer, not the counter: their phone is "HP-mu", the steps are what they wait
 // for ("Sedang diperbaiki", "Siap diambil"), and nothing names staff or internal states.
-import { formatDate, formatDateTime, formatMoney } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatSignedMoney } from '@bolusi/i18n';
 import type { PublicRepairStatus, RepairStatusStep } from '@bolusi/schemas';
 
 import { whatsAppNumber, whatsAppUrl } from '../shared/whatsapp.js';
@@ -76,10 +76,6 @@ export interface CustomerPageView {
   readonly updated: string;
 }
 
-function signed(amount: number): string {
-  return amount < 0 ? `−${formatMoney(-amount)}` : `+${formatMoney(amount)}`;
-}
-
 function statusHint(status: PublicRepairStatus): string | null {
   switch (status.status) {
     case 'received':
@@ -148,7 +144,7 @@ export function customerPageView(status: PublicRepairStatus): CustomerPageView {
       .reverse(),
     pendingPrices: status.pendingPrices.map((line) => ({
       label: line.description,
-      amount: signed(line.amount),
+      amount: formatSignedMoney(line.amount),
     })),
     money: moneyOf(status),
     warranty: status.repairTypes.map((type) =>
