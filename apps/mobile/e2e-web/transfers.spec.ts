@@ -2,15 +2,13 @@
  * Kiriman driven through the real phone screens in a browser, over the in-memory demo
  * (`packages/modules/src/inventory/transfers/demo.ts`): an owner receives parts sent here, sends
  * parts to another store, and settles one that came short and one that came over. A screenshot per
- * step into `artifacts/transfers/`, at phone, tablet and PC widths.
+ * step, at phone, tablet and PC widths and at both font sizes, each checked against the design guide.
  *
- * HONEST CEILING: a browser approximation. The real font scale and the hardware back are device QA.
+ * HONEST CEILING: a browser approximation. The hardware back and a real device font are device QA.
  */
-import path from 'node:path';
+import type { Page } from '@playwright/test';
 
-import { expect, test, type Page } from '@playwright/test';
-
-const ARTIFACTS = path.join(__dirname, 'artifacts', 'transfers');
+import { expect, shoot as check, test } from './qa';
 
 const SIZES = {
   phone: { width: 360, height: 640 },
@@ -19,9 +17,7 @@ const SIZES = {
   pc: { width: 1280, height: 800 },
 } as const;
 
-async function shoot(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), animations: 'disabled' });
-}
+const shoot = (page: Page, name: string) => check(page, 'transfers', name);
 
 const tap = (page: Page, testID: string) => page.getByTestId(testID).first().click();
 
