@@ -28,7 +28,7 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useSettledValue } from '../../screen-kit/index.js';
-import type { ScreenChrome } from '../../screen-kit/screens/views.js';
+import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { stockText } from '../labels.js';
 import { ti } from '../i18n.js';
@@ -44,7 +44,8 @@ export interface PartListProps {
   readonly onFilter: (filter: ListFilter) => void;
   readonly onOpenFilters: () => void;
   readonly onManageCategories: () => void;
-  readonly onBack: () => void;
+  /** The Barang place's title and the switch to its other sections. */
+  readonly place: PlaceHeader;
   readonly onOpenPart: (itemId: string) => void;
   readonly onAddPart: () => void;
   /**
@@ -67,7 +68,7 @@ export function PartList({
   onFilter,
   onOpenFilters,
   onManageCategories,
-  onBack,
+  place,
   onOpenPart,
   onAddPart,
   selectedId = null,
@@ -120,8 +121,9 @@ export function PartList({
           unauthorized: {
             title: t('core.errors.PERMISSION_DENIED'),
             hint: t('core.unauthorized.askOwner'),
-            backLabel: t('core.action.back'),
-            onBack,
+            // A new grant arrives by sync, so the way forward is checking this device is current.
+            backLabel: t('sync.status.screenTitle'),
+            onBack: place.onOpenSyncStatus,
           },
         };
       case 'error':
@@ -152,7 +154,7 @@ export function PartList({
         }
         return { kind: 'ready', items: query.data.rows };
     }
-  }, [query, searching, narrowed, filter, onBack]);
+  }, [query, searching, narrowed, filter, place.onOpenSyncStatus]);
 
   const loaded = query.status === 'ready' ? query.data : null;
   const belowZero = loaded?.belowZero ?? 0;
@@ -218,10 +220,7 @@ export function PartList({
 
   return (
     <AppShell
-      title={ti('inventory.list.title')}
-      titleVariant="detail"
-      onBack={onBack}
-      backLabel={t('core.action.back')}
+      title={place.title}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       bottomAction={
@@ -236,6 +235,7 @@ export function PartList({
       }
       testID={testID}
     >
+      {place.sections}
       <View style={styles.search}>
         <View style={styles.searchField}>
           <SearchField

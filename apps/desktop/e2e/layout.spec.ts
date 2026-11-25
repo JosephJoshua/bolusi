@@ -1,6 +1,8 @@
 // Every main PC screen at the sizes counters use, checked against the design guide's layout rules
 // (packages/test-support/src/layout-audit.ts): nothing cut off, overlapping or off the type scale,
 // one filled primary in view. Screenshots go to e2e/artifacts/layout/.
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import {
@@ -10,6 +12,10 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+
+// A fresh profile for this file, so a setting saved by an earlier run (the sidebar left expanded)
+// never changes the layout these tests measure. Restarts within the file keep it.
+const DATA_DIR = mkdtempSync(path.join(tmpdir(), 'bolusi-e2e-'));
 
 import { expectCleanLayout } from '@bolusi/test-support/layout-audit';
 import { desktopType, themeVariables } from '@bolusi/ui-web/theme';
@@ -49,7 +55,7 @@ for (const [width, height] of [
   [1920, 1080],
 ] as const) {
   test(`the main screens keep the layout rules at ${String(width)}×${String(height)}`, async () => {
-    const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1' };
+    const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1', BOLUSI_DESKTOP_DATA_DIR: DATA_DIR };
     const args = ['--no-sandbox'];
     app = await electron.launch(
       INSTALLED === undefined
@@ -59,6 +65,10 @@ for (const [width, height] of [
     page = await app.firstWindow();
     page.on('dialog', (dialog) => void dialog.dismiss().catch(() => undefined));
     await page.setViewportSize({ width, height });
+    await page.getByTestId('repair.desk.board').waitFor();
+    // The installed app ignores BOLUSI_DESKTOP_DATA_DIR: wipe its page settings (the sidebar) too.
+    await page.evaluate(() => window.localStorage.clear());
+    await page.reload();
     await page.getByTestId('repair.desk.board').waitFor();
     const size = `${String(width)}x${String(height)}`;
 
@@ -79,6 +89,23 @@ for (const [width, height] of [
         .getByRole('button', { name: place, exact: true })
         .first()
         .click();
+      await check(`${place.toLowerCase()}-${size}`);
+    }
+
+    // The owner's pages under Barang: Belanja and Kiriman, each with its first row open.
+    await page.getByTestId('desktop.person').click();
+    await page.getByRole('menuitem', { name: 'Andi Pratama' }).click();
+    await page.getByTestId('repair.desk.board').waitFor();
+    for (const [place, row] of [
+      ['Belanja', 'purchasing.desk.table'],
+      ['Kiriman', 'inventory.desk.transfers.table'],
+    ] as const) {
+      await page
+        .getByRole('navigation')
+        .getByRole('button', { name: place, exact: true })
+        .first()
+        .click();
+      await page.getByTestId(row).getByRole('row').nth(1).click();
       await check(`${place.toLowerCase()}-${size}`);
     }
   });

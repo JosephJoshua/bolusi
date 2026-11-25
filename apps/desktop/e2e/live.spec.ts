@@ -439,7 +439,7 @@ async function signInAs(name: string | null, pin: string): Promise<void> {
 
 test('the owner enters 300 parts at once from a pasted sheet, saved in the core and synced', async () => {
   await signInAs(null, '246802');
-  await counter.getByRole('button', { name: 'Barang', exact: true }).click();
+  await counter.getByTestId('nav.parts').click();
   await counter.getByTestId('inventory.desk.bulk').click();
   const sheet = counter.getByTestId('inventory.desk.bulk.grid.body');
   await sheet.focus();

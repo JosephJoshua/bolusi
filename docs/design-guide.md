@@ -111,7 +111,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 - `AppShell` keeps content and the bottom action in one centred column of at
   most `size.contentMax`; sheets rise at the same width. Never stretch a form,
   a button or a line of text across a tablet.
-- The place tabs (Servisan, Kas) show only on a place's top level, inside its
+- The place tabs (Servisan, Kas, Barang) show only on a place's top level, inside its
   screen's bottom dock under the action, so a sheet covers them. A screen with
   a back arrow (a servisan, intake, Serah terima, a Kas step) owns the bottom
   for its action alone. Expanded, the tabs stand down the left edge as a rail.
@@ -130,6 +130,22 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 - Check every changed screen at 360 x 640, 800 x 1280, 960 x 600 and
   1280 x 800, and at 1.3x font. A short landscape tablet is the tightest case:
   put things side by side rather than making the person scroll to a key.
+
+### Places and the way back
+
+The app is organised by the job a person does, not by table (agreed with the owner
+2026-11-25). Each place is one job: Servisan (intake to pickup), Kas (the drawer),
+Barang (Stok, and Belanja for whoever buys; transfers, supplier bills and returns
+join it). A person sees only the places they work in. Settings stay in the account
+menu. An owner's action list across places (Perlu dicek) is next.
+
+- A place with several sections shows them as a `SegmentedControl` under the title
+  on the phone (`PlaceHeader.sections`) and as a sidebar group on the PC (`NavGroup`).
+- Back goes one level up the way the person came, on both apps. On the phone the
+  header arrow and Android back do the same thing. On the PC, every page below a
+  place has a trail in its `PageHeader` (`trail`: "Servisan › Terima HP") and a
+  back arrow (`onBack`), which the mouse's back button and Alt+Left also press.
+- A record open beside its list is not a new level; a full-page task is.
 
 ## 5. No redundancy
 

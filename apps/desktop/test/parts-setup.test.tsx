@@ -53,7 +53,7 @@ async function switchTo(name: string): Promise<void> {
 }
 
 async function openParts(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name: 'Barang' }));
+  fireEvent.click(await screen.findByTestId('nav.parts'));
   await screen.findByTestId('inventory.desk.table');
 }
 

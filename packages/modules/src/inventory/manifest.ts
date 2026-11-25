@@ -7,6 +7,7 @@ import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolus
 
 import {
   inventoryCategoriesTable,
+  inventoryCostsTable,
   inventoryItemFacetsTable,
   inventoryItemFitsTable,
   inventoryItemsTable,
@@ -25,6 +26,8 @@ import {
   editCategoryInput,
   editItemHandler,
   editItemInput,
+  priceStockHandler,
+  priceStockInput,
   putBackPartHandler,
   takePartHandler,
   usePartInput,
@@ -38,10 +41,13 @@ import {
   findByCodeQuery,
   getItemQuery,
   itemsFittingQuery,
+  itemCostQuery,
+  useCostQuery,
   itemsInCategoryQuery,
   listCategoriesQuery,
   listItemsQuery,
   partsForUseQuery,
+  receivedStockQuery,
 } from './queries.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
@@ -127,6 +133,12 @@ export const INVENTORY_PERMISSIONS = {
     description:
       'Can settle parts a transfer from the store never delivered: back into stock, or written off with a reason.',
   },
+  [INVENTORY_PERMISSION.readCost]: {
+    scope: 'store',
+    isDangerous: false,
+    description:
+      "Can see what parts cost to buy and the store's average cost of each, and, with the receive permission, fix a buy price.",
+  },
 } as const;
 
 export function inventoryModuleManifest(targets: PartUseTargets, sources: StockSourceTargets) {
@@ -150,6 +162,7 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         [INVENTORY_TABLE.transferArrivalLines]: inventoryTransferArrivalLinesTable,
         [INVENTORY_TABLE.transferSettlements]: inventoryTransferSettlementsTable,
         [INVENTORY_TABLE.transferSettlementLines]: inventoryTransferSettlementLinesTable,
+        [INVENTORY_TABLE.costs]: inventoryCostsTable,
       },
     },
 
@@ -216,6 +229,11 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         input: settleTransferInput,
         handler: settleTransferHandler,
       },
+      priceStock: {
+        permission: INVENTORY_PERMISSION.receive,
+        input: priceStockInput,
+        handler: priceStockHandler,
+      },
     },
 
     queries: {
@@ -231,6 +249,9 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
       listTransfers: listTransfersQuery,
       getTransfer: getTransferQuery,
       nextTransferNumber: nextTransferNumberQuery,
+      receivedStock: receivedStockQuery,
+      itemCost: itemCostQuery,
+      useCost: useCostQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

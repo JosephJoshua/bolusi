@@ -14,6 +14,7 @@ import {
 } from './categories.js';
 import {
   INVENTORY_CATEGORY_ENTITY,
+  INVENTORY_COST_ENTITY,
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_OP,
   INVENTORY_ITEM_ENTITY,
@@ -22,6 +23,7 @@ import {
   MAX_MOVEMENT_QTY,
   MAX_ITEMS_PER_ADD,
   MAX_PART_FITS,
+  MAX_UNIT_COST,
   PART_USE_KINDS,
   type StockSourceKind,
 } from './constants.js';
@@ -34,6 +36,7 @@ import {
   listCategoriesQuery,
   type CategoryRow,
   type ItemDetailRow,
+  receivedStockQuery,
 } from './queries.js';
 import { zOptionalText } from '../shared/optional-text.js';
 
@@ -474,4 +477,40 @@ export function stockReceivedOp(
     entityId: ctx.newId(),
     payload: { itemId: received.itemId, qty: received.qty, source: received.source },
   });
+}
+
+/** What one piece of a received movement cost to buy, as the receiving module adds it beside it. */
+export function stockCostedOp(
+  ctx: CommandContext,
+  costed: { readonly movementId: string; readonly itemId: string; readonly unitCost: number },
+): OpDraft {
+  return ctx.op({
+    type: INVENTORY_OP.stockCosted,
+    entityType: INVENTORY_COST_ENTITY,
+    entityId: costed.movementId,
+    payload: { itemId: costed.itemId, unitCost: costed.unitCost },
+  });
+}
+
+export const priceStockInput = z
+  .object({
+    movementId: z.string().min(1),
+    unitCost: z.number().int().min(0).max(MAX_UNIT_COST),
+  })
+  .strict();
+export type PriceStockInput = z.input<typeof priceStockInput>;
+
+/** Fill in, or fix, what a piece of stock that arrived cost to buy. */
+export async function priceStockHandler(
+  input: z.output<typeof priceStockInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ movementId: string }>> {
+  const movement = (await ctx.query(receivedStockQuery, { movementId: input.movementId })).rows[0];
+  if (movement === undefined) {
+    throw new DomainError('VALIDATION_FAILED', { field: 'movementId', issue: 'not received here' });
+  }
+  return {
+    ops: [stockCostedOp(ctx, { ...input, itemId: movement.itemId })],
+    result: { movementId: input.movementId },
+  };
 }

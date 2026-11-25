@@ -116,7 +116,8 @@
   "nav": {
     "main": "Menu utama",
     "collapse": "Ciutkan menu",
-    "expand": "Lebarkan menu"
+    "expand": "Lebarkan menu",
+    "trail": "Lokasi halaman"
   },
   "update": {
     "ready": "Versi baru siap",

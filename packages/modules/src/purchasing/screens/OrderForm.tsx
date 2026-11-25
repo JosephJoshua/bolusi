@@ -2,32 +2,23 @@
  * OrderForm — a new order, or a draft being finished: the supplier, the parts and how many of each,
  * and a note for the supplier. "Pesan" places it at once; "Simpan draf" keeps it to finish later.
  * The draft is held by the surface, so picking a part or adding a supplier and coming back keeps it.
- *
- * PickPartStep — find a part on the business's list (by name, code or scan) to add to the order.
  */
-import { formatPhone, keepNumbersWhole, t } from '@bolusi/i18n';
+import { formatPhone, keepNumbersWhole } from '@bolusi/i18n';
 import {
-  border,
-  color,
   ListRow,
-  numeric,
   QuantityStepper,
-  radius,
-  SearchField,
-  space,
-  Text,
   TextButton,
   TextInput,
-  touch,
+  border,
+  color,
+  space,
   type,
+  Text,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { stockText } from '../../inventory/labels.js';
-import type { ItemRow } from '../../inventory/queries.js';
-import { useInventoryQuery, useInventoryRuntime } from '../../inventory/runtime.js';
-import { useActionRunner, useSettledValue, type DiscardGuard } from '../../screen-kit/index.js';
+import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import {
   FlowScreen,
@@ -217,124 +208,9 @@ export function OrderForm({
   );
 }
 
-export interface PickPartStepProps {
-  readonly chrome: ScreenChrome;
-  /** Parts already on the order, marked so a second tap reads as "one more". */
-  readonly onOrder: ReadonlySet<string>;
-  readonly onPick: (item: ItemRow) => void;
-  readonly onCancel: () => void;
-  readonly testID?: string | undefined;
-}
-
-const PICK_LIMIT = 30;
-
-export function PickPartStep({
-  chrome,
-  onOrder,
-  onPick,
-  onCancel,
-  testID = 'purchasing.pick',
-}: PickPartStepProps): React.JSX.Element {
-  const inventory = useInventoryRuntime();
-  const [text, setText] = useState('');
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const typed = text.trim();
-  const settled = useSettledValue(typed);
-  const searchText = typed === '' ? '' : settled;
-  const query = useInventoryQuery(
-    async (rt) =>
-      (await rt.query('listItems', { text: searchText, filter: 'active', limit: PICK_LIMIT })).rows,
-    `buyPick:${searchText}:${String(reloadNonce)}`,
-  );
-
-  /** A scanned code adds its part when it names exactly one; otherwise it is searched for. */
-  const scan = async (): Promise<void> => {
-    const code = (await inventory.scanCode?.())?.trim() ?? '';
-    if (code === '') return;
-    const found = await inventory
-      .query('findByCode', { code })
-      .then((page) => page.rows)
-      .catch(() => []);
-    const only = found.length === 1 ? found[0] : undefined;
-    if (only !== undefined && !only.archived) onPick(only);
-    else setText(code);
-  };
-
-  return (
-    <FlowScreen
-      chrome={chrome}
-      title={tp('purchasing.pick.title')}
-      onBack={onCancel}
-      busy={false}
-      errorCode={null}
-      onClearError={() => undefined}
-      testID={testID}
-    >
-      <SearchField
-        placeholder={tp('purchasing.pick.searchHint')}
-        accessibilityLabel={t('core.action.search')}
-        clearLabel={tp('purchasing.pick.clear')}
-        value={text}
-        onChangeText={setText}
-        testID={`${testID}.search`}
-      />
-      {inventory.scanCode === undefined ? null : (
-        <View style={styles.scan}>
-          <TextButton
-            label={tp('purchasing.pick.scan')}
-            icon="scan"
-            onPress={() => void scan()}
-            testID={`${testID}.scan`}
-          />
-        </View>
-      )}
-      <QueryView
-        query={query}
-        onBack={onCancel}
-        onRetry={() => setReloadNonce((n) => n + 1)}
-        testID={testID}
-      >
-        {(rows) =>
-          rows.length === 0 ? (
-            <Text style={[styles.muted, styles.empty]}>
-              {searchText === '' ? tp('purchasing.pick.empty') : tp('purchasing.pick.noMatches')}
-            </Text>
-          ) : (
-            <View style={styles.choices}>
-              {rows.map((row) => (
-                <Pressable
-                  key={row.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${row.name}, ${tp('purchasing.pick.stock', { count: stockText(row.onHand) })}`}
-                  onPress={() => onPick(row)}
-                  style={({ pressed }) => [styles.choice, pressed ? styles.pressed : null]}
-                  testID={`${testID}.choice.${row.id}`}
-                >
-                  <View style={styles.choiceText}>
-                    <Text style={styles.choiceName}>{row.name}</Text>
-                    {onOrder.has(row.id) ? (
-                      <Text style={styles.muted}>{tp('purchasing.pick.onOrder')}</Text>
-                    ) : row.code === null ? null : (
-                      <Text style={styles.muted}>{row.code}</Text>
-                    )}
-                  </View>
-                  <Text style={[styles.stock, row.onHand < 0 ? styles.stockOut : null]}>
-                    {tp('purchasing.pick.stock', { count: stockText(row.onHand) })}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )
-        }
-      </QueryView>
-    </FlowScreen>
-  );
-}
-
 const styles = StyleSheet.create({
   noteField: { marginTop: space.xl },
   muted: { ...type.bodySm, color: color.textMuted },
-  empty: { marginTop: space.lg },
   bleed: { marginHorizontal: -space.lg },
   line: {
     paddingVertical: space.md,
@@ -344,21 +220,4 @@ const styles = StyleSheet.create({
   },
   lineTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   lineName: { ...type.bodyBold, color: color.text, flex: 1 },
-  scan: { flexDirection: 'row', marginTop: space.xs, marginLeft: -space.sm },
-  choices: { marginTop: space.md },
-  choice: {
-    minHeight: touch.rowMin,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-    marginHorizontal: -space.md,
-    borderRadius: radius.sm,
-  },
-  pressed: { backgroundColor: color.surfaceAlt },
-  choiceText: { flex: 1 },
-  choiceName: { ...type.bodySm, fontWeight: '600', color: color.text },
-  stock: { ...type.bodySm, color: color.textMuted, ...numeric },
-  stockOut: { color: color.danger },
 });

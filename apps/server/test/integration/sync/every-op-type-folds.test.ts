@@ -246,6 +246,13 @@ function journey(world: ChainWorld): OpSpec[] {
           },
         },
       },
+      // What a piece of that delivery cost: keyed to the movement, read only with read_cost.
+      {
+        type: 'inventory.stock_costed',
+        entityType: 'inventory_cost',
+        entityId: id(0x604),
+        payload: { itemId: part, unitCost: 185_000 },
+      },
       orderOp('purchasing.order_drafted', dropped, {
         orderNumber: `PO-${formatTicketNumber(world.deviceId, 2)}`,
         supplierId: supplier,

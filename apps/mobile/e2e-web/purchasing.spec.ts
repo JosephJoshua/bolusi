@@ -1,7 +1,7 @@
 /**
  * Belanja driven through the real phone screens in a browser, over the in-memory demo
  * (`packages/modules/src/purchasing/demo.tsx`): an owner orders parts from a supplier and receives
- * them, and a technician is not offered it. A screenshot per flow into `artifacts/purchasing/`.
+ * them in the Barang tab, and a technician is offered only the stock. A screenshot per flow into `artifacts/purchasing/`.
  *
  * HONEST CEILING: a browser approximation. WhatsApp, the share sheet and the camera scan are device QA.
  */
@@ -13,10 +13,16 @@ const shoot = (page: Page, name: string) => check(page, 'purchasing', name);
 
 const tap = (page: Page, testID: string) => page.getByTestId(testID).first().click();
 
-async function openBuying(page: Page, role: 'owner' | 'technician'): Promise<void> {
+async function openItems(page: Page, role: 'owner' | 'technician'): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}`);
   await expect(page.getByTestId('repair.board')).toBeVisible();
-  await page.getByLabel('Menu akun').first().click();
+  await tap(page, 'shell-tabs.items');
+}
+
+/** Belanja: the second section of the Barang tab. */
+async function openBuying(page: Page): Promise<void> {
+  await openItems(page, 'owner');
+  await tap(page, 'items.sections.orders');
 }
 
 /** The order row whose text holds `text`. */
@@ -24,8 +30,7 @@ const rowWith = (page: Page, text: string) =>
   page.locator('[data-testid^="purchasing.orders.row."]').filter({ hasText: text }).first();
 
 test('an owner orders a part from a supplier and places it', async ({ page }) => {
-  await openBuying(page, 'owner');
-  await tap(page, 'shell-open-purchasing');
+  await openBuying(page);
   await expect(rowWith(page, 'Diterima sebagian')).toBeVisible();
 
   await tap(page, 'purchasing.orders.new');
@@ -45,8 +50,7 @@ test('an owner orders a part from a supplier and places it', async ({ page }) =>
 });
 
 test('receiving what came moves the order on and says the stock grew', async ({ page }) => {
-  await openBuying(page, 'owner');
-  await tap(page, 'shell-open-purchasing');
+  await openBuying(page);
   await rowWith(page, 'Diterima sebagian').click();
   await tap(page, 'purchasing.order.receive');
   // It starts at what is still to come, so a full delivery is one tap.
@@ -60,15 +64,14 @@ test('receiving what came moves the order on and says the stock grew', async ({ 
   await shoot(page, '04-received');
 });
 
-test('a technician is not offered Belanja', async ({ page }) => {
-  await openBuying(page, 'technician');
-  await expect(page.getByTestId('shell-open-settings')).toBeVisible();
-  await expect(page.getByTestId('shell-open-purchasing')).toHaveCount(0);
+test('a technician sees the stock in Barang but is not offered Belanja', async ({ page }) => {
+  await openItems(page, 'technician');
+  await expect(page.getByTestId('inventory.list')).toBeVisible();
+  await expect(page.getByTestId('items.sections')).toHaveCount(0);
 });
 
 test('a second tap on Pesan does not open Terima barang where Pesan was', async ({ page }) => {
-  await openBuying(page, 'owner');
-  await tap(page, 'shell-open-purchasing');
+  await openBuying(page);
   await rowWith(page, 'Draf').click();
   await tap(page, 'purchasing.order.place');
   const receive = page.getByTestId('purchasing.order.receive').first();

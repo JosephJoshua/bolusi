@@ -184,7 +184,7 @@ describe('counter app over demo data', () => {
     );
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('repair.desk.intake');
-    fireEvent.click(byTestId('repair.desk.intake.back'));
+    fireEvent.click(byTestId('page.back'));
     await screen.findByTestId('repair.desk.board');
     expect(byTestId('repair.desk.board.views.pickup').getAttribute('aria-selected')).toBe('true');
   });
@@ -409,7 +409,7 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
     await screen.findByTestId('repair.desk.intake.claim');
     // Nothing typed: leaving asks nothing, and a new intake starts blank.
-    fireEvent.click(byTestId('repair.desk.intake.back'));
+    fireEvent.click(byTestId('page.back'));
     await waitFor(() => expect(screen.queryByTestId('repair.desk.intake')).toBeNull());
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('repair.desk.intake');
@@ -764,7 +764,7 @@ describe('counter app over demo data', () => {
     expect(check.textContent).toMatch(
       /Uang diterima Rp\s?150\.000 untuk pembayaran Rp\s?15\.000\./,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Cek lagi' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Periksa kembali' }));
     await waitFor(() =>
       expect(screen.queryByTestId('repair.desk.handover.changeCheck')).toBeNull(),
     );
@@ -1064,7 +1064,7 @@ describe('counter app over demo data', () => {
 
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('repair.desk.intake');
-    fireEvent.click(byTestId('repair.desk.intake.back'));
+    fireEvent.click(byTestId('page.back'));
     await screen.findByTestId('repair.desk.board');
     expect(byTestId('repair.desk.filter.status').textContent).toContain('Tunggu sparepart');
   });

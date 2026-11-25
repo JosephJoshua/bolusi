@@ -21,8 +21,7 @@ const tap = (page: Page, testID: string) => page.getByTestId(testID).first().cli
 async function openCategories(page: Page): Promise<void> {
   await page.goto('/?screen=repair&state=owner');
   await expect(page.getByTestId('repair.board')).toBeVisible();
-  await page.getByLabel('Menu akun').first().click();
-  await tap(page, 'shell-open-parts');
+  await tap(page, 'shell-tabs.items');
   await tap(page, 'inventory.list.categories');
   await expect(page.getByTestId('inventory.categories.row.cat-lcd').first()).toBeVisible();
 }

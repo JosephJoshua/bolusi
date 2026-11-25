@@ -6,6 +6,7 @@
  */
 import { DomainError } from '@bolusi/core';
 
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import type { DemoInventoryRuntime } from '../inventory/demo.js';
 import { PURCHASING_PERMISSION, type OrderStatus } from './constants.js';
 import {
@@ -13,6 +14,7 @@ import {
   type OrderDetailRow,
   type OrderLineRow,
   type OrderRow,
+  type ReceiptCostRow,
   type ReceiptRow,
   type SupplierRow,
 } from './queries.js';
@@ -45,7 +47,7 @@ interface DemoOrder {
 }
 
 type Input = Record<string, unknown>;
-type Line = { itemId: string; qty: number };
+type Line = { itemId: string; qty: number; unitCost?: number | null };
 
 const DAY = 86_400_000;
 
@@ -74,7 +76,11 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
     { id: 'sup-3', name: 'Toko Abadi', phone: null, note: null, archived: false },
   ];
   const orders: DemoOrder[] = [];
-  const receipts: (ReceiptRow & { orderId: string })[] = [];
+  type DemoReceiptLine = ReceiptRow['lines'][number] & { movementId: string };
+  const receipts: (Omit<ReceiptRow, 'lines'> & {
+    orderId: string;
+    lines: DemoReceiptLine[];
+  })[] = [];
   let counter = 0;
   const nextNumber = (): string => `PO-W4M-${String((counter += 1)).padStart(4, '0')}`;
 
@@ -115,7 +121,13 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
     cancelledAt: order.cancelledAt,
     cancelReason: null,
     lines: linesOf(order),
-    receipts: receipts.filter((r) => r.orderId === order.id).sort((a, b) => b.at - a.at),
+    receipts: receipts
+      .filter((r) => r.orderId === order.id)
+      .sort((a, b) => b.at - a.at)
+      .map((receipt) => ({
+        ...receipt,
+        lines: receipt.lines.map(({ itemId, name, qty }) => ({ itemId, name, qty })),
+      })),
   });
   const find = (orderId: unknown): DemoOrder => {
     const order = orders.find((o) => o.id === orderId);
@@ -143,13 +155,18 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       userName: actor().name,
       note,
       lines: lines.map((line) => ({
-        ...line,
+        itemId: line.itemId,
+        qty: line.qty,
         name: order.lines.find((l) => l.itemId === line.itemId)?.name ?? '',
+        movementId: inventory.receiveDemoStock(
+          line.itemId,
+          line.qty,
+          { id, label: order.orderNumber },
+          line.unitCost ?? null,
+          at,
+        ),
       })),
     });
-    for (const line of lines) {
-      inventory.receiveDemoStock(line.itemId, line.qty, { id, label: order.orderNumber });
-    }
     return id;
   };
 
@@ -167,6 +184,26 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
         .map(row)
         .filter((o) => ['draft', 'ordered', 'partial'].includes(o.stage) === open)
         .sort((a, b) => b.createdAt - a.createdAt);
+      return Promise.resolve({ rows, nextCursor: null });
+    },
+    orderCosts: (input) => {
+      if (!actor().permissions.includes(INVENTORY_PERMISSION.readCost)) {
+        throw new DomainError('PERMISSION_DENIED', {});
+      }
+      const rows: ReceiptCostRow[] = receipts
+        .filter((r) => r.orderId === input['orderId'])
+        .sort((a, b) => b.at - a.at)
+        .flatMap((receipt) =>
+          receipt.lines.map((line) => ({
+            receiptId: receipt.id,
+            at: receipt.at,
+            movementId: line.movementId,
+            itemId: line.itemId,
+            name: line.name,
+            qty: line.qty,
+            unitCost: inventory.demoCostOf(line.movementId),
+          })),
+        );
       return Promise.resolve({ rows, nextCursor: null });
     },
     getOrder: (input) => {
@@ -287,7 +324,12 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       'ordered',
       8,
     );
-    receive(done, done.lines, now - 5 * DAY, null);
+    receive(
+      done,
+      done.lines.map((line, i) => ({ ...line, unitCost: i === 0 ? 185_000 : 45_000 })),
+      now - 5 * DAY,
+      null,
+    );
     const half = await make(
       'sup-1',
       [
@@ -302,7 +344,7 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
     receive(
       half,
       [
-        { itemId: half.lines[0]!.itemId, qty: 3 },
+        { itemId: half.lines[0]!.itemId, qty: 3, unitCost: 320_000 },
         { itemId: half.lines[2]!.itemId, qty: 1 },
       ],
       now - DAY,
