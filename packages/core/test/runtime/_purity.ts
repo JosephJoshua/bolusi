@@ -1,13 +1,8 @@
 // The handler purity harness (04-module-contract §5.2): poison every ambient effect a handler
 // could reach, for the duration of a call, then restore.
 //
-// HOME. Testing-guide §3.3 puts the shared determinism kit (PRNG, FakeClock, IdSource) in
-// `@bolusi/test-support`, and task 26 owns consolidating it there. This wrapper lives in
-// @bolusi/core's test tree for now because task 10's scope is the runtime, and because
-// test-support's sibling subtrees are being edited by other tasks concurrently. It is a
-// CANDIDATE FOR CONSOLIDATION into `@bolusi/test-support/determinism` alongside FakeClock —
-// tasks 14 and 26 need exactly this to prove their own handlers pure. Move it, do not copy it
-// (CLAUDE.md §2.8).
+// Another package that needs it imports it from here; move it to @bolusi/test-support rather than
+// copy it.
 //
 // RESTORATION IS THE HARD PART. These are process-wide globals: a poison that leaks past its
 // call breaks every later test in the worker, including ones that have nothing to do with this

@@ -5,6 +5,6 @@ export {
   usePurchasingRuntime,
   type PurchasingRuntime,
 } from '../runtime.js';
-export { PURCHASING_PERMISSION } from '../constants.js';
+export { PURCHASING_PERMISSION, opensPurchasing } from '../constants.js';
 export type { OrderFilter } from '../queries.js';
 export { OrdersPage, type OrdersPageProps } from './OrdersPage.js';

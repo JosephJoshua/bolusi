@@ -46,14 +46,14 @@
  *         animations … are enabled by default. Additionally, `onBackPressed` is not called and
  *         `KeyEvent.KEYCODE_BACK` is not dispatched anymore."
  *         (developer.android.com/about/versions/16/behavior-changes-16). Note the polarity: since
- *         Android 16 the manifest flag `android:enableOnBackInvokedCallback` is the temporary
+ *         Android 16 the manifest flag `android:enableOnBackInvokedCallback` is the interim
  *         OPT-OUT, not the opt-in it was on Android 13/14 — so the new dispatch model is the
  *         DEFAULT for a targetSdk-36 build, not a path someone has to switch on.
  *       - RN 0.86 therefore does NOT deliver `hardwareBackPress` from `onBackPressed` on such a
  *         build. `ReactActivity.java` registers an `androidx.activity.OnBackPressedCallback` on the
  *         activity's `OnBackPressedDispatcher`, gated on `AndroidVersion.isAtLeastTargetSdk36`, and
- *         says so in its own comment: "Due to enforced predictive back on targetSdk 36,
- *         'onBackPressed()' is disabled by default. Using a workaround to trigger it manually." The
+ *         says in its own comment that predictive back disables `onBackPressed()` on targetSdk 36,
+ *         so RN triggers it by hand. The
  *         JS array this file models sits BEHIND that single shim callback.
  *     What that costs us: the reverse-order rule WITHIN the JS array is unchanged (RN still iterates
  *     `_backPressSubscriptions` backwards), so the assertions above stay meaningful. What is NOT

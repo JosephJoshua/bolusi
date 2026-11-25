@@ -102,10 +102,9 @@ afterEach(async () => {
  * `UNKNOWN_TYPE`, the chain head never advances, and the platform op behind it fails `CHAIN_GAP`.
  * The test would go red for a reason that has nothing to do with the platform fold.
  *
- * That is not a workaround — it is this file's denominator, made concrete (T-14): registering the
- * platform module lights up `platform.*` and NOTHING else. Seeding the device at its post-genesis
- * head models the real sequence (a device enrolls in an earlier batch, then pushes) without
- * borrowing task 43's coverage.
+ * Registering the platform module lights up `platform.*` and nothing else, so the device is seeded
+ * at its post-genesis head: the real sequence, where a device enrolls in an earlier batch and then
+ * pushes.
  */
 async function setupWorld(seed: number): Promise<{ world: ChainWorld; builder: ChainBuilder }> {
   const world = makeWorld(seed, serverCryptoPort);

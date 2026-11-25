@@ -121,13 +121,7 @@ export interface InvariantCheck {
  * rule as ORDER ("`notes.note_body_edited` sorting after `notes.note_archived` in canonical
  * order"), and archive is terminal in v0, so the two formulations agree wherever the naive one is
  * right and only the ordered one is right where they differ. See `existsPrecedingOp`.
- *
- * NOTE — this check is inert until task 25 registers `notes`. It fires only for
- * `notes.note_body_edited`, which is `UNKNOWN_TYPE` today (SERVER_MODULES carries only
- * `platform`), so no op reaches it. Shipped now because 01 §8.2 names it as v0's one registered
- * check and task 17 owns the registry it lives in; task 25 makes it reachable by registering the
- * module and declaring `notes.note_body_edited`'s conflict key. Its coverage is the
- * `edit_after_archive` leg of this task's suite, which registers a notes-shaped module itself.
+
  */
 export const NOTES_EDIT_AFTER_ARCHIVE: InvariantCheck = {
   name: 'notes:edit_after_archive',

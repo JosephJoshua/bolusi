@@ -38,7 +38,7 @@ const controlId = (index: number): string =>
  * HISTORY (kept so the deletion is legible, not re-litigated): `POST /v1/media/:id/init` used to
  * answer `404` for an id another tenant held versus `200` for a free one — a cross-tenant existence
  * oracle over ids the caller was never shown, found by task 141a's sweep. It was pinned here as a
- * TEMPORARY, bidirectional entry (an endpoint-set pin would have stayed green if the difference
+ * bidirectional entry (an endpoint-set pin would have stayed green if the difference
  * merely changed character, so the EXACT violation text was pinned). D23 §2 ruled it be REMOVED, not
  * documented: media id uniqueness became `(tenant_id, id)`, so a foreign id is a free id in the
  * caller's own namespace and both cases answer `200` identically. The ruling turned on the numbers —

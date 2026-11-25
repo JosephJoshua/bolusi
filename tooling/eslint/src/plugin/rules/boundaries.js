@@ -27,10 +27,9 @@
 //   8. @bolusi/ui → @bolusi/schemas is TYPE-ONLY (sibling of rule 7): the design system reuses the
 //      canonical enum types but must stay platform-free and pull no zod, so only `import type` is
 //      allowed. Added task 193, which retired the forced literal mirror this exception replaced.
-// NOT YET IMPLEMENTED: the full §3.3 POSITIVE allow-matrix ("anything not listed is
-// forbidden" — e.g. schemas importing @bolusi/core would pass today). Owner: task 28
-// (security-sweep) hardens this rule to the full matrix, or earlier if a task adds a
-// new inter-package edge that the deny-list cannot see.
+// Which workspace may import which is the package.json graph itself: pnpm links only declared
+// dependencies, so an undeclared edge (schemas importing @bolusi/core) does not resolve. This rule
+// adds the finer locks that graph cannot express.
 
 const FORBIDDEN_EVERYWHERE = new Map([
   ['@hono/node-ws', 'deprecated — upgradeWebSocket comes from @hono/node-server 2.x (08 §2.6)'],
