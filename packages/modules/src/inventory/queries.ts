@@ -20,6 +20,7 @@ import {
   TAG_FACET,
   type MovementKind,
   type PartUseKind,
+  type StockSinkKind,
   type StockSourceKind,
 } from './constants.js';
 import type { InventoryDatabase } from './schema.js';
@@ -48,7 +49,7 @@ export interface MovementRow {
   readonly qty: number;
   readonly counted: number | null;
   /** What it was for (a part use) or where it came from (a stock source). */
-  readonly useKind: PartUseKind | StockSourceKind | null;
+  readonly useKind: PartUseKind | StockSourceKind | StockSinkKind | null;
   readonly useId: string | null;
   readonly useLabel: string | null;
   readonly note: string | null;
@@ -206,7 +207,7 @@ async function toMovements(
     kind: row.kind as MovementKind,
     qty: Number(row.qty),
     counted: row.counted === null ? null : Number(row.counted),
-    useKind: row.useKind as PartUseKind | StockSourceKind | null,
+    useKind: row.useKind as PartUseKind | StockSourceKind | StockSinkKind | null,
     useId: row.useId,
     useLabel: row.useLabel,
     note: row.note,

@@ -30,6 +30,7 @@ import type {
 import type { InventoryRuntime } from './runtime.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import { itemDocument } from './search.js';
+import { demoTransfers } from './transfers/demo.js';
 
 const I = INVENTORY_PERMISSION;
 
@@ -618,6 +619,20 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
     },
   };
 
+  // Parts sent between this store and the business's others: the seeded parts by shelf position.
+  const transfers = demoTransfers({
+    now,
+    actor,
+    require,
+    permissions: { transfer: I.transfer, receive: I.receive, settle: I.settleTransfer },
+    record,
+    item: find,
+    seedItems: [0, 11, 7, 18, 20, 13].map((at) => items[at]!.id),
+    newId,
+  });
+  Object.assign(queries, transfers.queries);
+  Object.assign(commands, transfers.commands);
+
   const runtime = {
     get userId() {
       return actor().userId;
@@ -647,6 +662,7 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
     searchModels: options.searchModels,
     // The preview has no camera: a scan reads the Redmi 9 battery's barcode, so the flow can be tried.
     scanCode: () => Promise.resolve(DEMO_SCANNED_CODE),
+    otherStores: transfers.otherStores,
     receiveDemoStock: (itemId: string, qty: number, source: { id: string; label: string }) => {
       record(itemId, 'received', qty, {
         useKind: 'purchase_receipt',
