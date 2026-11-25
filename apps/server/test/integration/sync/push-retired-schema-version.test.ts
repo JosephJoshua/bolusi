@@ -10,7 +10,13 @@ import { resolveDeps } from '../../../src/deps.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { grantRole, seedRepairTicket, seedWorld, testId } from '../oplog/helpers.js';
+import {
+  grantRole,
+  seedRepairTicket,
+  seedWorld,
+  testId,
+  provenIdentity,
+} from '../oplog/helpers.js';
 
 let db: Kysely<DB>;
 let closeDb: (() => Promise<void>) | undefined;
@@ -69,12 +75,8 @@ async function setupWorld(
   return { world, builder };
 }
 
-function push(world: ChainWorld, ops: Parameters<typeof processPushBatch>[2]) {
-  return processPushBatch(
-    productionDeps(),
-    { deviceId: world.deviceId, tenantId: world.tenantId },
-    ops,
-  );
+async function push(world: ChainWorld, ops: Parameters<typeof processPushBatch>[2]) {
+  return processPushBatch(productionDeps(), await provenIdentity(db, world), ops);
 }
 
 describe('a push signed at a retired schemaVersion', () => {

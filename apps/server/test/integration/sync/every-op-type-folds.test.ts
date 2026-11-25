@@ -21,7 +21,7 @@ import { resolveDeps, SERVER_MODULES } from '../../../src/deps.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { grantRole, seedUser, seedWorld } from '../oplog/helpers.js';
+import { grantRole, seedUser, seedWorld, provenIdentity } from '../oplog/helpers.js';
 
 /** A status link as a phone makes it: a nonce and the code it gives this servisan. */
 function statusLink(world: ChainWorld, ticketId: string): { code: string; nonce: string } {
@@ -899,11 +899,7 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
     .execute();
   const ops = [builder.genesis(), ...journey(world).map((spec) => builder.append(spec))];
 
-  const result = await processPushBatch(
-    productionDeps(),
-    { deviceId: world.deviceId, tenantId: world.tenantId },
-    ops,
-  );
+  const result = await processPushBatch(productionDeps(), await provenIdentity(db, world), ops);
 
   const refused = result.results
     .map((r, i) => ({ type: ops[i]!.type, ...r }))

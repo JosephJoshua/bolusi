@@ -75,18 +75,21 @@ function moneyManifest(sources: MoneyDocumentSources) {
         scope: 'store',
         // Money back beyond an overpayment, or a lower bill, is how cash goes missing.
         isDangerous: true,
+        decision: true,
         description: 'Can give customers money back and lower what a customer owes.',
         limit: 'refund',
       },
       [MONEY_PERMISSION.voidPayment]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: 'Can cancel a payment that was recorded by mistake.',
         limit: 'refund',
       },
       [MONEY_PERMISSION.moveCash]: {
         scope: 'store',
         isDangerous: true,
+        decision: false,
         description:
           'Can take cash out of the drawer (for the owner, an expense, a bank deposit) or put cash in.',
       },
@@ -98,22 +101,26 @@ function moneyManifest(sources: MoneyDocumentSources) {
       [MONEY_PERMISSION.adjustCash]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: "Can settle a difference between the counted cash and the store's records.",
       },
       [MONEY_PERMISSION.extendCredit]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: 'Can let a customer take their phone before paying in full, leaving a debt.',
         limit: 'credit',
       },
       [MONEY_PERMISSION.manageAccounts]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: "Can add and change the store's QRIS, card machine and bank accounts.",
       },
       [MONEY_PERMISSION.manageCentralAccounts]: {
         scope: 'tenant',
         isDangerous: true,
+        decision: true,
         description:
           'Can add and change the QRIS, card machine and bank accounts shared by stores.',
       },
