@@ -9,6 +9,7 @@ import noMediaColumnUpdate from './rules/no-media-column-update.js';
 import noOpTableUpdate from './rules/no-op-table-update.js';
 import permissionModulePrefix from './rules/permission-module-prefix.js';
 import reactOnlyInTsx from './rules/react-only-in-tsx.js';
+import refusalsInRules from './rules/refusals-in-rules.js';
 import runtimeEmissionAllowlist from './rules/runtime-emission-allowlist.js';
 const plugin = {
   meta: {
@@ -26,6 +27,7 @@ const plugin = {
     'no-op-table-update': noOpTableUpdate,
     'permission-module-prefix': permissionModulePrefix,
     'react-only-in-tsx': reactOnlyInTsx,
+    'refusals-in-rules': refusalsInRules,
     'no-clock-in-handlers': noClockInHandlers,
     'runtime-emission-allowlist': runtimeEmissionAllowlist,
   },

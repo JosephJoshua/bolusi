@@ -77,41 +77,45 @@ export class RuleRefusal extends DomainError {
   }
 }
 
-/** A module's closed set of refusal reasons, and the one way its rules refuse. */
-export interface Refusals<R extends string> {
-  readonly reasons: readonly R[];
+interface RefuseOptions {
+  readonly code?: DomainErrorCode;
+  readonly details?: DomainErrorDetails;
+  readonly message?: string;
+}
+
+/**
+ * A module's closed set of refusal reasons. Rules refuse with `refuse`, so the device and the server
+ * give the same verdict. A command refuses only with `refuseOnDevice`, for a reason declared
+ * device-only: a check the server cannot judge, such as a drawer figure it only estimates. Lint
+ * keeps `refuse` out of commands (`bolusi/refusals-in-rules`).
+ */
+export interface Refusals<R extends string, D extends string = never> {
+  readonly reasons: readonly (R | D)[];
   /**
    * Refuse with `reason`. `code` is the DomainError class a caller can branch on (default
    * INVALID_TRANSITION); the reason is what the person reads.
    */
-  refuse(
-    reason: R,
-    options?: {
-      readonly code?: DomainErrorCode;
-      readonly details?: DomainErrorDetails;
-      readonly message?: string;
-    },
-  ): RuleRefusal;
+  refuse(reason: R, options?: RefuseOptions): RuleRefusal;
+  refuseOnDevice(reason: D, options?: RefuseOptions): RuleRefusal;
 }
 
 /**
  * Declare a module's refusal reasons. List them in the manifest's `refusals`, and give each one copy
  * at `<module>.refusal.<reason>` in every shipped locale: a gate test fails on a reason with none.
  */
-export function defineRefusals<const R extends string>(
+export function defineRefusals<const R extends string, const D extends string = never>(
   moduleId: string,
   reasons: readonly R[],
-): Refusals<R> {
-  return {
-    reasons,
-    refuse: (reason, options = {}) =>
-      new RuleRefusal(
-        options.code ?? 'INVALID_TRANSITION',
-        `${moduleId}.refusal.${reason}`,
-        options.details,
-        options.message,
-      ),
-  };
+  deviceOnly: readonly D[] = [],
+): Refusals<R, D> {
+  const make = (reason: R | D, options: RefuseOptions = {}) =>
+    new RuleRefusal(
+      options.code ?? 'INVALID_TRANSITION',
+      `${moduleId}.refusal.${reason}`,
+      options.details,
+      options.message,
+    );
+  return { reasons: [...new Set([...reasons, ...deviceOnly])], refuse: make, refuseOnDevice: make };
 }
 
 /** The refusal copy key a thrown error carries, or null when it is not a rule's refusal. */

@@ -134,6 +134,10 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+  A command never refuses on its own (`bolusi/refusals-in-rules`): it calls a
+  check exported from `rules.ts`, or `refuseOnDevice` for a reason declared
+  device-only in `defineRefusals` (a check the server cannot judge, such as the
+  drawer figure).
 - Every op type also declares `read`: the permission a person needs to see its ops.
   Sync follows least privilege, the same rule for every person and role. A device is
   sent only the ops its read set covers (`sync/read-scope.ts`): a shared store device
