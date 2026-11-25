@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   seedControlSession,
@@ -99,7 +100,10 @@ test('device path + self-revoke: an enrolled device revokes itself; its very nex
 
   const res = await h.app.request(`http://srv.test/v1/devices/${self.deviceId}/revoke`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${self.token}`, 'X-Acting-User': p.ownerUserId },
+    headers: {
+      Authorization: `Bearer ${self.token}`,
+      ...(await asPerson(h, self.token, p.ownerUserId)),
+    },
   });
   expect(res.status).toBe(200);
 

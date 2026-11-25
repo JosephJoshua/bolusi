@@ -144,3 +144,29 @@ describe('the pin-verifier wire (api/02-auth §5.4)', () => {
     expect(doFetch).not.toHaveBeenCalled();
   });
 });
+
+describe('proving the acting person', () => {
+  test('the person session for the acting user goes with the POST, and none when there is none', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(200, { userId: 'user-b', applied: true }));
+    const asked: string[] = [];
+    const upload = createFetchPinVerifierUpload({
+      baseUrl: 'https://api.example.com',
+      deviceToken: () => Promise.resolve('bdt_secret'),
+      personSession: (userId) => {
+        asked.push(userId);
+        return Promise.resolve(userId === 'owner-a' ? 'bps_owner' : null);
+      },
+      fetchImpl: doFetch as unknown as typeof fetch,
+    });
+    await upload.upload('user-b', 'ref-1', VERIFIER, 'owner-a');
+    await upload.upload('user-b', 'ref-2', VERIFIER, 'user-b');
+
+    // Asked for the ACTOR (the resetting owner), never the target.
+    expect(asked).toEqual(['owner-a', 'user-b']);
+    const headers = doFetch.mock.calls.map(
+      (call) => (call as unknown as [string, RequestInit])[1].headers as Record<string, string>,
+    );
+    expect(headers[0]?.['X-Person-Session']).toBe('bps_owner');
+    expect(headers[1]).not.toHaveProperty('X-Person-Session');
+  });
+});

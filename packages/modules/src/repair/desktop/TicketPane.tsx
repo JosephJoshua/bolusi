@@ -55,6 +55,7 @@ import {
   canSetRepairTypes,
   canTakeParts,
   canUseParts,
+  takePartIsCorrection,
   claimIntakeDraft,
   CONTEXTUAL_ACTIONS,
   FINAL_ACTIONS,
@@ -104,7 +105,8 @@ import { tm } from '../../money/i18n.js';
 import { ReduceChargeDialog, RefundDialog } from '../../money/desktop/KasDialogs.js';
 import { MoneyRuntimeProvider } from '../../money/runtime.js';
 import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
-import { UsedPartsSection } from '../../inventory/desktop/UsedParts.js';
+import { TakePartDialog, UsedPartsSection } from '../../inventory/desktop/UsedParts.js';
+import { ti } from '../../inventory/i18n.js';
 import { InventoryRuntimeProvider } from '../../inventory/runtime.js';
 import { CatalogPhoto, DeviceSpecs, StatusChip, photoLabels, usePhotoState } from './parts.js';
 import {
@@ -132,7 +134,8 @@ type Step =
   | { readonly kind: 'print' }
   | { readonly kind: 'approval'; readonly requestId: string }
   | { readonly kind: 'refund' }
-  | { readonly kind: 'reduce' };
+  | { readonly kind: 'reduce' }
+  | { readonly kind: 'takePart' };
 
 export interface TicketPaneProps {
   readonly ticketId: string;
@@ -320,6 +323,43 @@ export function TicketPane({
       flagsUncollected(can) && uncollectedLimit.status === 'ready'
         ? uncollectedDays(row, uncollectedLimit.data.days, now())
         : null;
+    // The rarer moves, then corrections to a servisan that went home (money back, a part taken
+    // late): those are never a button of their own that reads as the next step.
+    const inventory = runtime.inventory;
+    const more = [
+      ...layout.more.map((action) => ({
+        key: action,
+        label: label(action),
+        onSelect: () => perform(action, row),
+      })),
+      ...(ticketMoneyActions(row, runtime.hasPermission).refund === 'correction'
+        ? [
+            {
+              key: 'refund',
+              label: tm('money.refund.title'),
+              onSelect: () => {
+                setDone(null);
+                setStep({ kind: 'refund' });
+              },
+            },
+          ]
+        : []),
+      ...(inventory !== undefined &&
+      inventory.hasPermission(INVENTORY_PERMISSION.read) &&
+      takePartIsCorrection(row) &&
+      canTakeParts(row, runtime.userId, inventory.hasPermission)
+        ? [
+            {
+              key: 'takePart',
+              label: ti('inventory.use.takeTitle'),
+              onSelect: () => {
+                setDone(null);
+                setStep({ kind: 'takePart' });
+              },
+            },
+          ]
+        : []),
+    ];
     return (
       <header className="relative isolate flex flex-col gap-4 border-b border-border px-6 pb-4 pt-4">
         {/* The open servisan glows once when another device changes it. */}
@@ -377,7 +417,7 @@ export function TicketPane({
         </div>
         {layout.next === null &&
         layout.alternative === null &&
-        layout.more.length === 0 &&
+        more.length === 0 &&
         printing === undefined &&
         messageKind === null &&
         claimAction === null ? null : (
@@ -434,7 +474,7 @@ export function TicketPane({
                   data-testid="repair.desk.ticket.action.print"
                 />
               )}
-              {layout.more.length === 0 ? null : (
+              {more.length === 0 ? null : (
                 <Menu
                   trigger={
                     <IconButton
@@ -444,11 +484,7 @@ export function TicketPane({
                       data-testid="repair.desk.ticket.more"
                     />
                   }
-                  items={layout.more.map((action) => ({
-                    key: action,
-                    label: label(action),
-                    onSelect: () => perform(action, row),
-                  }))}
+                  items={more}
                 />
               )}
             </div>
@@ -511,7 +547,7 @@ export function TicketPane({
           {row.outcome === 'cancelled' ? (
             <Fact
               // Once cut, the bill is what the customer pays, as the board's total says.
-              label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancel.fee')}
+              label={tn(row.reduced > 0 ? 'repair.price.billed' : 'repair.cancelFee.title')}
               value={cancelFeeText((row.cancelFee ?? 0) - row.reduced)}
               action={contextual('changeCancelFee', row)}
               testId="repair.desk.ticket.cancelFeeFact"
@@ -635,7 +671,7 @@ export function TicketPane({
           // owes, the same fee the board and the handover show (Rp 0 when none was set).
           <>
             <div className="flex items-baseline justify-between gap-4">
-              <p className="text-body font-semibold text-text">{tn('repair.cancel.fee')}</p>
+              <p className="text-body font-semibold text-text">{tn('repair.cancelFee.title')}</p>
               <p
                 className="tabular text-title font-bold text-text"
                 data-testid="repair.desk.ticket.cancelFee"
@@ -660,9 +696,9 @@ export function TicketPane({
             setStep({ kind: 'downPayment', mode });
           }}
         />
-        {moneyActions.refund || moneyActions.reduce ? (
+        {moneyActions.refund === 'due' || moneyActions.reduce ? (
           <div className="-ml-2 flex flex-wrap gap-2">
-            {moneyActions.refund ? (
+            {moneyActions.refund === 'due' ? (
               <Button
                 label={tm('money.refund.title')}
                 variant="text"
@@ -858,7 +894,9 @@ export function TicketPane({
           use={partUse(row)}
           device={{ brand: row.deviceBrand, model: row.deviceModel }}
           editable={canUseParts(row, runtime.userId, inventory.hasPermission)}
-          takeable={canTakeParts(row, runtime.userId, inventory.hasPermission)}
+          takeable={
+            !takePartIsCorrection(row) && canTakeParts(row, runtime.userId, inventory.hasPermission)
+          }
           flagUnreturned={row.outcome === 'cancelled'}
           onDone={setDone}
           testId="repair.desk.ticket.parts"
@@ -1016,6 +1054,21 @@ export function TicketPane({
           </MoneyRuntimeProvider>
         );
       }
+      case 'takePart':
+        if (runtime.inventory === undefined) return null;
+        return (
+          <InventoryRuntimeProvider runtime={runtime.inventory}>
+            <TakePartDialog
+              use={partUse(row)}
+              device={{ brand: row.deviceBrand, model: row.deviceModel }}
+              onClose={closeStep}
+              onDone={() => {
+                closeStep();
+                setDone(ti('inventory.done.taken'));
+              }}
+            />
+          </InventoryRuntimeProvider>
+        );
       case 'print':
         if (printing === undefined) return null;
         return (

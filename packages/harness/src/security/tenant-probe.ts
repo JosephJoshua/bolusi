@@ -13,6 +13,8 @@
 // `InMemoryTokenStore` (@bolusi/server/test-support), and the login lookup calls the SAME
 // `auth_find_login_credential` SECURITY DEFINER function the production `findLoginCredential`
 // calls — only the handle differs, exactly as `forTenant` does.
+import { createHash } from 'node:crypto';
+
 import { PGlite } from '@electric-sql/pglite';
 import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 
@@ -307,8 +309,17 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     storeId: ID.storeA2,
   });
 
+  // The prober's person, proven on its shared device by a server PIN check (auth/acting-user.ts):
+  // without it every control-plane call stops at "who is acting" before reaching the resource.
+  const personSession = 'bps_probe_tenant_a_user_1';
+  await sql`INSERT INTO person_sessions (id, tenant_id, device_id, user_id, token_hash, created_at, expires_at)
+            VALUES (${'01920000-0000-7000-8000-00000000f001'}, ${ID.tenantA}, ${ID.deviceA1}, ${ID.userA1},
+                    ${createHash('sha256').update(personSession).digest('hex')}, ${CREATED_AT},
+                    ${BigInt(CLOCK_BASE + 3_600_000)})`.execute(db);
+
   const ctx: ProbeContext = {
     tenantAAuth: `Bearer ${deviceToken}`,
+    tenantAPersonSession: personSession,
     tenantAControlAuth: `Bearer ${controlToken}`,
     tenantAUserId: ID.userA1,
     tenantADeviceId: ID.deviceA1,

@@ -558,3 +558,57 @@ describe('a change from a newer app holds the pull', () => {
     expect(screen.query('sync-update-check')).toBeNull();
   });
 });
+
+// QA round G (design guide §2, §8): one filled action, and no code at the counter.
+describe('what leads on Status data', () => {
+  const BAR = 'sync-status-screen.actionBar';
+  const inBar = (screen: ReturnType<typeof render>, testID: string): boolean =>
+    screen.query(BAR)?.queryAll((node) => node.props['testID'] === testID).length === 1;
+
+  function renderWith(over: Partial<SyncStatusInput>, expandedRejectedOpId: string | null = null) {
+    return render(
+      <SyncStatusScreen
+        input={input(over)}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onSyncNow={vi.fn()}
+        onOpenRejected={vi.fn()}
+        onRetryMedia={vi.fn()}
+        onMarkRejectedHandled={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onReenroll={vi.fn()}
+        expandedRejectedOpId={expandedRejectedOpId}
+      />,
+    );
+  }
+
+  test('with nothing waiting there is no filled action; "Kirim sekarang" is a quiet link', () => {
+    const screen = renderWith({});
+    expect(screen.query(BAR)).toBeNull();
+    expect(screen.get('sync-now.label').props['children']).toBe(t('sync.action.syncNow'));
+  });
+
+  test('with work waiting, "Kirim sekarang" leads in the bottom bar', () => {
+    const screen = renderWith({ pendingOperationCount: 2 });
+    expect(inBar(screen, 'sync-now')).toBe(true);
+  });
+
+  test('with refused changes, "Tandai sudah dicek" leads and "Kirim sekarang" steps back', () => {
+    const screen = renderWith({ rejected: REJECTED, pendingOperationCount: 2 });
+    expect(inBar(screen, 'sync-rejected-handled')).toBe(true);
+    expect(inBar(screen, 'sync-now')).toBe(false);
+    expect(screen.query('sync-now')).not.toBeNull();
+  });
+
+  test('a refused change keeps its code and the server words behind a link', () => {
+    const refused = [{ ...REJECTED[0]!, rejectionCode: 'RULE_VIOLATED', rejectionReason: 'x.y' }];
+    const screen = renderWith({ rejected: refused }, 'op-1');
+    expect(screen.query('sync-rejected-detail-op-1')).not.toBeNull();
+    expect(screen.query('sync-rejected-code-op-1')).toBeNull();
+    expect(screen.query('sync-rejected-reason-op-1')).toBeNull();
+
+    fire(screen.get('sync-rejected-technical-op-1'), 'onPress');
+    expect(textsIn(screen.get('sync-rejected-code-op-1')).join('')).toBe('RULE_VIOLATED');
+    expect(textsIn(screen.get('sync-rejected-reason-op-1')).join('')).toBe('x.y');
+  });
+});
