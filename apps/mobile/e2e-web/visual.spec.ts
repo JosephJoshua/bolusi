@@ -241,8 +241,7 @@ test('the running shell opens Settings from its header — the language escape h
   page,
 }) => {
   // The browser twin of `test/live-shell-settings.test.tsx`. `app/shell` is the FULL `App` over the
-  // demo seed, so this clicks the same node a thumb hits on a device. Until task 124 nothing in
-  // shipping source produced `route: 'settings'` and this click had no target to find.
+  // demo seed, so this clicks the same node a thumb hits on a device.
   await open(page, 'app', 'shell');
   await expect(page.getByTestId('settings-screen')).toHaveCount(0);
 

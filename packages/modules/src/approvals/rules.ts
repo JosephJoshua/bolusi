@@ -94,6 +94,11 @@ interface WaitingRequest {
   readonly requestedBy: string;
 }
 
+/** A request is answered or withdrawn only while it waits; a closed one changed under it. */
+export function requireWaiting(status: string): void {
+  if (status !== 'waiting') throw refuse(status === 'closed' ? 'changed' : 'alreadyAnswered');
+}
+
 async function loadWaiting(db: Db, kinds: ApprovalKinds, op: SignedOperation) {
   const row = await db
     .selectFrom('approvalRequests')
@@ -103,7 +108,7 @@ async function loadWaiting(db: Db, kinds: ApprovalKinds, op: SignedOperation) {
     .where('storeId', '=', storeOf(op))
     .executeTakeFirst();
   if (row === undefined) throw refuse('requestNotFound', { code: 'ENTITY_NOT_FOUND' });
-  if (row.status !== 'waiting') throw refuse('alreadyAnswered');
+  requireWaiting(row.status);
   const kind = kindOf(kinds, row.kind);
   return {
     kind,

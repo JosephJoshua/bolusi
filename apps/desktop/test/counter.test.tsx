@@ -6,11 +6,10 @@ import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import idApprovalsCatalog from '@bolusi/modules/approvals/i18n/id.json';
 import enApprovalsCatalog from '@bolusi/modules/approvals/i18n/en.json';
 import { registerApprovalsCatalog } from '@bolusi/modules/approvals/desktop';
-import { registerMoneyCatalog } from '@bolusi/modules/money/desktop';
+import { forgetShownQrs, registerMoneyCatalog } from '@bolusi/modules/money/desktop';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { forgetShownQrs } from '@bolusi/modules/money';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
