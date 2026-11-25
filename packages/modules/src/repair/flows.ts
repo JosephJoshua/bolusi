@@ -294,6 +294,21 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
   };
 }
 
+/** Which repair settings pages the person may open, on the phone and the PC alike. */
+export function repairSettingsAccess(abilities: RepairAbilities): {
+  readonly intakeOptions: boolean;
+  readonly cancelFees: boolean;
+  readonly uncollected: boolean;
+  readonly printSettings: boolean;
+} {
+  return {
+    intakeOptions: abilities.manageIntakeOptions || abilities.hideIntakeOptions,
+    cancelFees: abilities.setCancelFees,
+    uncollected: abilities.setUncollectedDays,
+    printSettings: abilities.setPrintSettings,
+  };
+}
+
 /** A servisan parts are drawn for: being worked on or waiting for a part, and still in the store. */
 export function partsInWork(ticket: {
   readonly outcome: string;
