@@ -432,6 +432,8 @@
       "stockManageHint": "Add and edit parts",
       "stockBuy": "Buy parts",
       "stockBuyHint": "Order from suppliers and receive the parts",
+      "stockCost": "See buy prices",
+      "stockCostHint": "Buy prices and the average cost of parts",
       "notes": "Notes",
       "notesHint": "Write and archive store notes",
       "syncProblems": "Sync problems",

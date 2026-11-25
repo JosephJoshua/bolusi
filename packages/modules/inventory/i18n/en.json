@@ -7,7 +7,8 @@
     "itemPutBack": "Part put back",
     "categoryAdded": "Category added",
     "categoryEdited": "Category changed",
-    "stockReceived": "Parts received"
+    "stockReceived": "Parts received",
+    "stockCosted": "Buy price recorded"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -17,7 +18,9 @@
     "wrongUse": "The repair details don’t match. Try again.",
     "categoryNotFound": "This category doesn’t exist.",
     "categoryInvalid": "This category’s fields or name format aren’t right yet.",
-    "wrongSource": "The order details do not match."
+    "wrongSource": "The order details do not match.",
+    "notReceived": "A buy price only goes on stock that arrived.",
+    "costNotYours": "You can’t change this buy price."
   },
   "list": {
     "title": "Items",
@@ -234,5 +237,15 @@
     },
     "results": "{count} items",
     "closePart": "Close item"
+  },
+  "cost": {
+    "title": "Buy price",
+    "average": "Average cost",
+    "perPiece": "{amount} each",
+    "noAverage": "No buy price yet",
+    "unpriced": "{count} deliveries have no buy price yet",
+    "receipt": "{qty} pcs · {label}",
+    "receiptNoLabel": "{qty} pcs",
+    "missing": "Not filled in"
   }
 }

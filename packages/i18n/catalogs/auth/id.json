@@ -432,6 +432,8 @@
       "stockManageHint": "Tambah dan ubah part",
       "stockBuy": "Belanja sparepart",
       "stockBuyHint": "Pesan ke supplier dan terima barangnya",
+      "stockCost": "Lihat harga beli",
+      "stockCostHint": "Harga beli dan modal rata-rata part",
       "notes": "Catatan",
       "notesHint": "Tulis dan arsipkan catatan toko",
       "syncProblems": "Masalah sinkron",

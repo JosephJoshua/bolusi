@@ -12,12 +12,14 @@ import {
   itemEditedApplier,
   itemPutBackApplier,
   itemTakenApplier,
+  stockCostedApplier,
   stockCountedApplier,
   stockReceivedApplier,
 } from './applier.js';
 import { MAX_FIELD_VALUE, zCategoryShape, zFieldValues } from './categories.js';
 import {
   INVENTORY_CATEGORY_ENTITY,
+  INVENTORY_COST_ENTITY,
   INVENTORY_MOVEMENT_ENTITY,
   INVENTORY_OP,
   MAX_PART_FITS,
@@ -26,6 +28,7 @@ import {
   MAX_COUNTED_QTY,
   MAX_ITEM_TAGS,
   MAX_MOVEMENT_QTY,
+  MAX_UNIT_COST,
   PART_USE_KINDS,
   STOCK_SOURCE_KINDS,
 } from './constants.js';
@@ -37,6 +40,7 @@ import {
   itemEditedRule,
   itemPutBackRule,
   itemTakenRule,
+  stockCostedRule,
   stockCountedRule,
   stockReceivedRule,
 } from './rules.js';
@@ -109,6 +113,11 @@ export const zStockSource = z
 /** Parts that arrived, and the receipt (or later, transfer) that brought them. */
 export const stockReceivedPayload = z
   .object({ itemId: zUuidV7, qty: zQty, source: zStockSource })
+  .strict();
+
+/** What a piece of a received movement cost to buy; the movement is the op's entity id. */
+export const stockCostedPayload = z
+  .object({ itemId: zUuidV7, unitCost: z.number().int().min(0).max(MAX_UNIT_COST) })
   .strict();
 
 /**
@@ -206,6 +215,18 @@ export function inventoryOperations(
       // Staff see stock arrive; what it cost travels apart, to owners only.
       read: INVENTORY_PERMISSION.read,
       entityType: INVENTORY_MOVEMENT_ENTITY,
+    },
+    [INVENTORY_OP.stockCosted]: {
+      schemaVersion: 1,
+      payload: stockCostedPayload,
+      reversal: 'Corrected by another inventory.stock_costed for the same movement.',
+      apply: stockCostedApplier,
+      rule: stockCostedRule,
+      // Whoever receives may price what they received; the rule asks more of anyone else.
+      permission: INVENTORY_PERMISSION.receive,
+      read: INVENTORY_PERMISSION.readCost,
+      // No conflict record: one would show a cost's change to people who may not read it.
+      entityType: INVENTORY_COST_ENTITY,
     },
   };
 }

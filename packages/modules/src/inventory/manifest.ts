@@ -7,6 +7,7 @@ import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolus
 
 import {
   inventoryCategoriesTable,
+  inventoryCostsTable,
   inventoryItemFacetsTable,
   inventoryItemFitsTable,
   inventoryItemsTable,
@@ -23,6 +24,8 @@ import {
   editCategoryInput,
   editItemHandler,
   editItemInput,
+  priceStockHandler,
+  priceStockInput,
   putBackPartHandler,
   takePartHandler,
   usePartInput,
@@ -36,10 +39,12 @@ import {
   findByCodeQuery,
   getItemQuery,
   itemsFittingQuery,
+  itemCostQuery,
   itemsInCategoryQuery,
   listCategoriesQuery,
   listItemsQuery,
   partsForUseQuery,
+  receivedStockQuery,
 } from './queries.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import type { InventoryDatabase } from './schema.js';
@@ -85,6 +90,12 @@ export const INVENTORY_PERMISSIONS = {
     isDangerous: false,
     description: "Can add parts that arrived on a supplier order to the store's stock.",
   },
+  [INVENTORY_PERMISSION.readCost]: {
+    scope: 'store',
+    isDangerous: false,
+    description:
+      "Can see what parts cost to buy and the store's average cost of each, and fix a buy price.",
+  },
 } as const;
 
 export function inventoryModuleManifest(targets: PartUseTargets, sources: StockSourceTargets) {
@@ -102,6 +113,7 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         [INVENTORY_TABLE.fits]: inventoryItemFitsTable,
         [INVENTORY_TABLE.facets]: inventoryItemFacetsTable,
         [INVENTORY_TABLE.categories]: inventoryCategoriesTable,
+        [INVENTORY_TABLE.costs]: inventoryCostsTable,
       },
     },
 
@@ -143,6 +155,11 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
         input: usePartInput,
         handler: putBackPartHandler,
       },
+      priceStock: {
+        permission: INVENTORY_PERMISSION.receive,
+        input: priceStockInput,
+        handler: priceStockHandler,
+      },
     },
 
     queries: {
@@ -155,6 +172,8 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
       facetValues: facetValuesQuery,
       findByCode: findByCodeQuery,
       itemsInCategory: itemsInCategoryQuery,
+      receivedStock: receivedStockQuery,
+      itemCost: itemCostQuery,
     },
   } as const satisfies ModuleManifest<InventoryDatabase>;
 }

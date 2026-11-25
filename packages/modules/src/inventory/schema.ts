@@ -54,6 +54,23 @@ export interface InventoryMovementsTable {
   at: number;
 }
 
+/**
+ * What one received movement cost a piece to buy. Its own table, read only by those who may see
+ * costs, so a store device can hold every stock move without what it cost.
+ */
+export interface InventoryCostsTable {
+  /** The `received` movement it prices. */
+  movementId: string;
+  tenantId: string;
+  storeId: string;
+  itemId: string;
+  /** Whole rupiah per piece. */
+  unitCost: number;
+  /** Who typed this price, and when. */
+  userId: string;
+  at: number;
+}
+
 /** One phone model a part fits, picked from the phone catalog (or typed when it is not there). */
 export interface InventoryItemFitsTable {
   itemId: string;
@@ -102,6 +119,7 @@ export interface InventoryCategoriesTable {
 
 export interface InventoryDatabase {
   inventoryCategories: InventoryCategoriesTable;
+  inventoryCosts: InventoryCostsTable;
   inventoryItemFacets: InventoryItemFacetsTable;
   inventoryItems: InventoryItemsTable;
   inventoryMovements: InventoryMovementsTable;

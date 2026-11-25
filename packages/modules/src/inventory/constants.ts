@@ -14,6 +14,11 @@ export const INVENTORY_ITEM_ENTITY = 'inventory_item' as const;
 export const INVENTORY_CATEGORY_ENTITY = 'inventory_category' as const;
 /** One stock movement in one store. */
 export const INVENTORY_MOVEMENT_ENTITY = 'inventory_movement' as const;
+/**
+ * What one received movement cost to buy, keyed by that movement's id. Its own entity and table,
+ * read only with `inventory.read_cost`, so a store device holds stock moves without their cost.
+ */
+export const INVENTORY_COST_ENTITY = 'inventory_cost' as const;
 
 export const INVENTORY_TABLE = {
   items: 'inventory_items',
@@ -21,6 +26,7 @@ export const INVENTORY_TABLE = {
   fits: 'inventory_item_fits',
   facets: 'inventory_item_facets',
   categories: 'inventory_categories',
+  costs: 'inventory_costs',
 } as const;
 
 /** The most phone models one part can list as fitting. */
@@ -46,6 +52,7 @@ export const INVENTORY_OP = {
   itemTaken: 'inventory.item_taken',
   itemPutBack: 'inventory.item_put_back',
   stockReceived: 'inventory.stock_received',
+  stockCosted: 'inventory.stock_costed',
 } as const;
 
 export const INVENTORY_PERMISSION = {
@@ -62,6 +69,11 @@ export const INVENTORY_PERMISSION = {
   correctUse: 'inventory.correct_use',
   /** Add parts that arrived from a supplier to the store's stock (with "Belanja sparepart"). */
   receive: 'inventory.receive',
+  /**
+   * "Lihat harga beli": what parts cost to buy and each store's average cost. Devices hold costs
+   * only where everyone they sync for may read them (least-privilege sync).
+   */
+  readCost: 'inventory.read_cost',
 } as const;
 
 /** What a movement was. */
@@ -86,3 +98,5 @@ export type StockSourceKind = (typeof STOCK_SOURCE_KINDS)[number];
 export const MAX_MOVEMENT_QTY = 10_000;
 /** The most a store can count of one part. */
 export const MAX_COUNTED_QTY = 1_000_000;
+/** The most one piece can cost to buy, in whole rupiah. Catches a mistyped run of zeros. */
+export const MAX_UNIT_COST = 1_000_000_000;

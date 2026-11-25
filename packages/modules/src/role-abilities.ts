@@ -87,6 +87,9 @@ export const ROLE_ABILITY_GROUPS = [
         permissionIds: [PURCHASING_PERMISSION.buy, I.receive],
         requires: ['stockView'],
       },
+      // "Lihat harga beli": buy prices and average costs. Off for every staff preset, so store
+      // devices hold no costs until an owner gives it to someone who works there.
+      { id: 'stockCost', permissionIds: [I.readCost], requires: ['stockView'] },
     ],
   },
   {

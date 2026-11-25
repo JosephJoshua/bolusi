@@ -7,7 +7,8 @@
     "itemPutBack": "Sparepart dikembalikan",
     "categoryAdded": "Kategori ditambahkan",
     "categoryEdited": "Kategori diubah",
-    "stockReceived": "Barang diterima"
+    "stockReceived": "Barang diterima",
+    "stockCosted": "Harga beli dicatat"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
@@ -17,7 +18,9 @@
     "wrongUse": "Data servisannya tidak cocok. Coba lagi.",
     "categoryNotFound": "Kategori ini tidak ada.",
     "categoryInvalid": "Isian atau format nama kategori ini belum benar.",
-    "wrongSource": "Data pesanannya tidak sesuai."
+    "wrongSource": "Data pesanannya tidak sesuai.",
+    "notReceived": "Harga beli hanya untuk barang yang sudah diterima.",
+    "costNotYours": "Kamu tidak bisa mengubah harga beli ini."
   },
   "list": {
     "title": "Barang",
@@ -234,5 +237,15 @@
     },
     "results": "{count} barang",
     "closePart": "Tutup barang"
+  },
+  "cost": {
+    "title": "Harga beli",
+    "average": "Modal rata-rata",
+    "perPiece": "{amount}/pcs",
+    "noAverage": "Belum ada harga beli",
+    "unpriced": "Harga beli {count} kiriman belum diisi",
+    "receipt": "{qty} pcs · {label}",
+    "receiptNoLabel": "{qty} pcs",
+    "missing": "Belum diisi"
   }
 }

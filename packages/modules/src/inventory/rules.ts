@@ -8,7 +8,12 @@ import { defineRefusals, type OpRule } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { categoryProblem, type CategoryShape } from './categories.js';
-import { INVENTORY_CATEGORY_ENTITY, INVENTORY_ITEM_ENTITY } from './constants.js';
+import {
+  INVENTORY_CATEGORY_ENTITY,
+  INVENTORY_ITEM_ENTITY,
+  INVENTORY_MOVEMENT_ENTITY,
+  INVENTORY_PERMISSION,
+} from './constants.js';
 import type { PartUseTargets } from './part-use.js';
 import type { InventoryDatabase } from './schema.js';
 import type { StockSourceTargets } from './stock-source.js';
@@ -26,6 +31,8 @@ export const INVENTORY_REFUSALS = defineRefusals('inventory', [
   'moreThanTaken',
   'wrongUse',
   'wrongSource',
+  'notReceived',
+  'costNotYours',
 ] as const);
 const { refuse } = INVENTORY_REFUSALS;
 
@@ -287,3 +294,43 @@ export function stockReceivedRule(sources: StockSourceTargets): Rule {
     }
   };
 }
+
+/**
+ * A price goes on stock that arrived in this store, for the part that arrived. The person who
+ * received it may price it once, at receiving or later; anyone else, or a second price (a fix),
+ * needs to see costs, so nobody overwrites a price they cannot read.
+ */
+export const stockCostedRule: Rule = async (op, ctx) => {
+  const payload = payloadOf<{ readonly itemId: string }>(op);
+  const movement = await ctx.db
+    .selectFrom('inventoryMovements')
+    .select(['kind', 'itemId', 'userId'])
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', op.storeId ?? '')
+    .executeTakeFirst();
+  if (
+    movement === undefined ||
+    movement.kind !== 'received' ||
+    movement.itemId !== payload.itemId
+  ) {
+    throw refuse('notReceived', {
+      code: 'ENTITY_NOT_FOUND',
+      details: { entityType: INVENTORY_MOVEMENT_ENTITY, entityId: op.entityId },
+    });
+  }
+  if (await ctx.holdsPermission(op.userId, INVENTORY_PERMISSION.readCost)) return;
+  // Judged where costs are held (the server, an owner's phone); a store device has none to find.
+  const priced = await ctx.db
+    .selectFrom('inventoryCosts')
+    .select('movementId')
+    .where('movementId', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .executeTakeFirst();
+  if (movement.userId !== op.userId || priced !== undefined) {
+    throw refuse('costNotYours', {
+      code: 'PERMISSION_DENIED',
+      details: { permissionId: INVENTORY_PERMISSION.readCost, issue: 'priced by someone else' },
+    });
+  }
+};

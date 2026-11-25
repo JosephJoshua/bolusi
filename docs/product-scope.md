@@ -486,9 +486,22 @@ Agreed with the owner on 2026-10-28; first part built 2026-10-31.
   order's state (Dipesan, Diterima sebagian, Diterima, Diterima lebih) is worked
   out from its deliveries, so two phones receiving offline never clash; more than
   ordered is kept and flagged for a stock correction.
-- **Next:** buy prices at receiving with a moving average cost per store, seen
-  only on owners' own phones (permission-scoped sync); supplier bills and
-  payments; transfers between stores; supplier returns.
+- **Buy prices (2026-11-25):** "Harga beli per pcs" can be typed per part when
+  receiving, or filled in or fixed later from the order's "Harga beli" section.
+  Only people with "Lihat harga beli" (owners by default, a role switch for
+  others) see prices: on the order, and on the part as "Modal rata-rata" with
+  its latest deliveries. Whoever receives may type the price once; fixing one
+  needs "Lihat harga beli", so nobody overwrites a price they cannot see.
+  Prices travel apart from stock moves, so store devices never hold them; an
+  owner on a store device reads them live after the PIN check ("Perlu internet"
+  offline), and a missing price shows as missing, never Rp 0.
+- **Average cost:** a moving weighted average per store and part, worked out
+  when read from the deliveries and stock moves in time order. A count keeps the
+  average; a delivery into empty or minus stock sets it to its price; a price
+  filled in later changes the average from that delivery on, including the cost
+  of parts already used on servisan.
+- **Next:** part cost on each servisan for owners; supplier bills and payments;
+  transfers between stores; supplier returns.
 
 ## Managers, limits, approvals and roles (2026-10-28)
 
