@@ -113,6 +113,7 @@ export function createSessionRepairRuntime(deps: {
   let repair: RepairRuntime | null = null;
   const inventory = createInventoryRuntime({
     runtime,
+    db: app.db.db,
     invalidation: app.invalidation,
     identity,
     searchModels: (text, limit) => catalogModelSearch(repair!)(text, limit),

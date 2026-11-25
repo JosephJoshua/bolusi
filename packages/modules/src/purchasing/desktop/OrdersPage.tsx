@@ -123,7 +123,8 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
             />
             <Button
               label={tp('purchasing.list.new')}
-              variant="primary"
+              // One filled button in view: with an open pane, its next step is the primary.
+              variant={selectedId === null ? 'primary' : 'secondary'}
               icon={Plus}
               shortcut="F2"
               onClick={() => setTask('new')}

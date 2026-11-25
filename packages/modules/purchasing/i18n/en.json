@@ -101,14 +101,7 @@
     "pickFirst": "Pick a supplier and the parts first."
   },
   "pick": {
-    "title": "Pick a part",
-    "searchHint": "Search a part name or code",
-    "clear": "Clear search",
-    "scan": "Scan",
-    "empty": "No parts on the list yet.",
-    "noMatches": "No parts found.",
-    "onOrder": "On the order, tap to add 1",
-    "stock": "Stock {count}"
+    "title": "Pick a part"
   },
   "receive": {
     "title": "Receive parts",
@@ -156,8 +149,6 @@
     "close": "Close order",
     "copied": "Message copied. Paste it into the supplier’s chat.",
     "copyFailed": "The message couldn’t be copied.",
-    "addPart": "Search for a part to add",
-    "noPartMatches": "No parts found.",
     "emptyHint": "Orders to suppliers show up here.",
     "suppliersHint": "Suppliers are shared by every store.",
     "currency": "Rp"
