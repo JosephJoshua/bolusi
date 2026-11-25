@@ -42,6 +42,11 @@ async function launch(flags: readonly string[] = FLAGS): Promise<void> {
   // reports one, and answering it itself fails. Taking it over leaves the page's question alone.
   page.on('dialog', (dialog) => void dialog.dismiss().catch(() => undefined));
   await page.getByTestId('repair.desk.board').waitFor();
+  // The installed app ignores BOLUSI_DESKTOP_DATA_DIR, so its page settings (the sidebar) are wiped
+  // here too: every test starts from the layout a fresh install shows.
+  await page.evaluate(() => window.localStorage.clear());
+  await page.reload();
+  await page.getByTestId('repair.desk.board').waitFor();
 }
 
 test.beforeEach(() => launch());

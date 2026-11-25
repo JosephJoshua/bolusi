@@ -66,6 +66,10 @@ for (const [width, height] of [
     page.on('dialog', (dialog) => void dialog.dismiss().catch(() => undefined));
     await page.setViewportSize({ width, height });
     await page.getByTestId('repair.desk.board').waitFor();
+    // The installed app ignores BOLUSI_DESKTOP_DATA_DIR: wipe its page settings (the sidebar) too.
+    await page.evaluate(() => window.localStorage.clear());
+    await page.reload();
+    await page.getByTestId('repair.desk.board').waitFor();
     const size = `${String(width)}x${String(height)}`;
 
     await check(`board-${size}`);
