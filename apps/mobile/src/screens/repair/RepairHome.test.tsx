@@ -1615,16 +1615,31 @@ describe('price and assignment details', () => {
     )) as { ticketId: string };
     const ticketId = opened.ticketId;
     const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    // Neither phone alone can get here: one cancels the DP while another, offline, hands it back.
+    const peer = await openRepairScreenHarness(5603, h);
+    let seq = 1;
+    for (const op of await h.ownOps()) await peer.deliverPulled(op, seq++);
+    const money = (
+      await peer.moneyQuery(
+        'documentMoney',
+        { kind: 'repair.ticket', id: ticketId },
+        peer.storeOwnerId,
+      )
+    ).rows[0] as { entries: { id: string; kind: string }[] };
+    const payment = money.entries.find((entry) => entry.kind === 'payment_received')!;
+    await peer.money(
+      'voidPayment',
+      { entryId: payment.id, reason: 'Salah catat' },
+      peer.storeOwnerId,
+    );
     await h.money(
       'refund',
       { document, account: 'cash', amount: 200_000, reason: 'Batal servis' },
       h.storeOwnerId,
     );
-    const money = (
-      await h.moneyQuery('documentMoney', { kind: 'repair.ticket', id: ticketId }, h.storeOwnerId)
-    ).rows[0] as { entries: { id: string; kind: string }[] };
-    const payment = money.entries.find((entry) => entry.kind === 'payment_received')!;
-    await h.money('voidPayment', { entryId: payment.id, reason: 'Salah catat' }, h.storeOwnerId);
+    const voided = (await peer.ownOps()).filter((op) => op.type === 'money.payment_voided');
+    for (const op of voided) await h.deliverPulled(op, seq++);
+    await peer.close();
 
     const screen = await mount(h, h.storeOwnerId);
     await press(screen, `repair.board.row.${ticketId}`);

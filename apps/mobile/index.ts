@@ -490,7 +490,7 @@ function createRepair(
  * "plain local storage") rather than a second file store (§2.8 — one implementation): it is unsigned
  * UI state, not a secret, so it does NOT belong behind the SecureStore keystore (which owns exactly the
  * two credentials of api/02-auth §3). `null` for an unenrolled device (no `deviceId`, no bearer) or an
- * absent EAS project id (`pushProjectId` is `null` until task 21 wires FCM/EAS) — either way `Root`
+ * absent EAS project id (`pushProjectId` is `null` without `EXPO_PUBLIC_PROJECT_ID`) — either way `Root`
  * simply does not register, and the boot is unaffected (push is best-effort, §1).
  */
 const PUSH_LAST_REGISTERED_KEY = 'bolusi.push_last_registered';

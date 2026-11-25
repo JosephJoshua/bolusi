@@ -375,7 +375,7 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
   };
 
   type Input = Record<string, unknown>;
-  const page = <T>(rows: readonly T[], nextCursor: string | null = null) => ({ rows, nextCursor });
+  const page = <T,>(rows: readonly T[], nextCursor: string | null = null) => ({ rows, nextCursor });
 
   const queries: Record<string, (input: Input) => unknown> = {
     listItems: (input) => {

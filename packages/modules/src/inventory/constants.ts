@@ -86,3 +86,8 @@ export type StockSourceKind = (typeof STOCK_SOURCE_KINDS)[number];
 export const MAX_MOVEMENT_QTY = 10_000;
 /** The most a store can count of one part. */
 export const MAX_COUNTED_QTY = 1_000_000;
+
+/** Who sees the parts list. */
+export function opensParts(reader: { hasPermission(permissionId: string): boolean }): boolean {
+  return reader.hasPermission(INVENTORY_PERMISSION.read);
+}

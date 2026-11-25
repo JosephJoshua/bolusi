@@ -39,12 +39,10 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { rejectedCount, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
-import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
+import { rejectedCount } from '../../screen-kit/index.js';
 import { TicketVideoSection } from './video.js';
 import {
   MESSAGE_ACTION_KEY,
-  customerMessageKind,
   customerMessageUrl,
   type CustomerMessageKind,
 } from '../customer-message.js';
@@ -52,7 +50,6 @@ import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import {
   discountsStanding,
   amountOwed,
-  arrangeTicketActions,
   balanceAfterDownPayment,
   balanceLabelKey,
   canSetRepairTypes,
@@ -63,38 +60,36 @@ import {
   CONTEXTUAL_ACTIONS,
   FINAL_ACTIONS,
   downPaymentAction,
-  downPaymentStale,
   paidLabelKey,
   partUse,
-  photoInSlot,
-  repairTypesStale,
-  photoThumbnailRef,
-  repairAbilities,
-  staleStep,
-  ticketActions,
   ticketMoneyActions,
   ticketMoneyTarget,
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
-  warrantyClaimAction,
-  workPhotos,
   type IntakeDraft,
   type TicketAction,
-  type StaleStep,
   type TicketStep,
   repairedDoneKey,
 } from '../flows.js';
-import { useClearAskedNotice } from '../asked-notice.js';
+import { useTicketPage } from '../ticket-page.js';
+import {
+  TICKET_DONE_KEY,
+  lineCaption,
+  openStepStale,
+  ticketActionLabel,
+  ticketMove,
+  ticketPageActions,
+  ticketPhotos,
+  type TicketPhoto,
+} from '../ticket-view.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { ApprovalDialog, ApprovalSection } from '../../approvals/desktop/ApprovalViews.js';
 import { ta } from '../../approvals/i18n.js';
-import type { ApprovalRow } from '../../approvals/queries.js';
 import { describeRepairApproval } from '../approval-copy.js';
 import {
   cancelFeeText,
-  actionKey,
   downPaymentTitleKey,
   historyEntry,
   LOCK_KIND_KEY,
@@ -103,15 +98,7 @@ import {
   paidRow,
   warrantyLine,
 } from '../labels.js';
-import {
-  readApprovals,
-  moneyRuntimeOf,
-  useRepairQuery,
-  useRepairRuntime,
-  useStoreDisplayName,
-  useUncollectedLimit,
-} from '../runtime.js';
-import type { ThumbnailRef } from '../../screen-kit/index.js';
+import { useRepairRuntime, useStoreDisplayName, useUncollectedLimit } from '../runtime.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import { tm } from '../../money/i18n.js';
@@ -138,16 +125,6 @@ import {
   WorkPhotosDialog,
 } from './steps.js';
 
-/** What an action that runs in place, or a step that lands, says afterwards. */
-const DONE_KEY: Partial<Record<TicketAction | 'before' | 'after', RepairKey>> = {
-  claim: 'repair.done.claim',
-  start: 'repair.done.start',
-  resume: 'repair.done.start',
-  reopen: 'repair.done.start',
-  before: 'repair.done.start',
-  handover: 'repair.desk.done.handover',
-};
-
 type Step =
   | { readonly kind: 'none' }
   | Exclude<TicketStep, { readonly kind: 'proposal' }>
@@ -159,12 +136,6 @@ type Step =
   | { readonly kind: 'refund' }
   | { readonly kind: 'reduce' }
   | { readonly kind: 'takePart' };
-
-interface LoadedTicket {
-  readonly ticket: TicketDetailRow | undefined;
-  readonly statuses: EntitySyncStatuses;
-  readonly approvals: readonly ApprovalRow[];
-}
 
 export interface TicketPaneProps {
   readonly ticketId: string;
@@ -196,56 +167,24 @@ export function TicketPane({
   onStartClaim,
   onOpenTicket,
 }: TicketPaneProps): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  // Money back to the customer and a lowered bill are the ledger's dialogs, over repair's port.
-  const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
-  const runner = useActionRunner();
+  const { runtime, can, money, runner, query, ticket, reload, done, setDone, runInPlace } =
+    useTicketPage(ticketId, 'desk.ticket');
   const printing = runtime.printing;
   const [step, setStep] = useState<Step>({ kind: 'none' });
-  // What just happened, in words: a repair step's, or an approval's.
-  const [done, setDone] = useState<string | null>(null);
   const say = (key: RepairKey | undefined): void => setDone(key === undefined ? null : tn(key));
-  const [reloadNonce, setReloadNonce] = useState(0);
-
-  const query = useRepairQuery<LoadedTicket>(
-    async (rt) => {
-      const page = await rt.query('getTicket', { ticketId });
-      return {
-        ticket: page.rows[0],
-        statuses: await rt.ticketSyncStatuses([ticketId]),
-        approvals: await readApprovals(rt, ticketId),
-      };
-    },
-    `desk.ticket:${ticketId}:${String(reloadNonce)}`,
-  );
-  useClearAskedNotice(
-    done,
-    () => setDone(null),
-    query.status === 'ready' ? query.data.approvals : undefined,
-  );
-  const ticket = query.status === 'ready' ? query.data.ticket : undefined;
   // An open step outlives a failed re-read: it keeps the last good ticket, so photos taken and
   // text typed in a dialog are not thrown away by a hiccup in the background.
   const lastTicket = useRef<TicketDetailRow | undefined>(undefined);
   if (ticket !== undefined) lastTicket.current = ticket;
   const stepTicket = ticket ?? lastTicket.current;
   const statuses = query.status === 'ready' ? (query.data.statuses[ticketId] ?? []) : [];
-  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId, now());
-  const stale: StaleStep | null =
-    step.kind === 'none' ||
-    step.kind === 'print' ||
-    step.kind === 'approval' ||
-    step.kind === 'refund' ||
-    step.kind === 'takePart' ||
-    step.kind === 'reduce' ||
-    ticket === undefined
-      ? null
-      : step.kind === 'downPayment'
-        ? downPaymentStale(ticket, can, step.mode)
-        : step.kind === 'repairTypes'
-          ? repairTypesStale(ticket, can)
-          : staleStep(step, ticket, can, runtime.userId, now());
+  const { actions, layout, messageKind, claimAction } = ticketPageActions(ticket, can, {
+    userId: runtime.userId,
+    now: now(),
+    statusSite: runtime.statusSite,
+    offersClaim: onStartClaim !== undefined,
+  });
+  const stale = openStepStale(step, ticket, can, runtime.userId, now());
 
   // The slip the customer takes away is offered as soon as there is one: after the intake, and after
   // the handover once the servisan reads as picked up (its slip prints what was handed over).
@@ -272,56 +211,14 @@ export function TicketPane({
 
   const perform = (action: TicketAction, row: TicketDetailRow): void => {
     setDone(null);
-    switch (action) {
-      case 'decidePrice': {
-        const line = row.quoteLines.find((candidate) => candidate.status === 'proposed');
-        if (line !== undefined) setStep({ kind: 'proposal', lineId: line.id, line });
-        return;
-      }
-      case 'start':
-      case 'resume':
-      case 'reopen':
-        // The first start needs a before photo; a resume keeps the ones already taken.
-        if (workPhotos(row, 'before').length === 0) setStep({ kind: 'before' });
-        else
-          void runner
-            .run(() => runtime.run('startWork', { ticketId }))
-            .then((result) => {
-              if (result !== undefined) say(DONE_KEY[action]);
-            });
-        return;
-      case 'claim':
-        void runner
-          .run(() => runtime.run('claimTicket', { ticketId }))
-          .then((result) => {
-            if (result !== undefined) say(DONE_KEY.claim);
-          });
-        return;
-      case 'markRepaired':
-        setStep({ kind: 'after' });
-        return;
-      case 'handover':
-      case 'waitForParts':
-      case 'cancel':
-      case 'undoHandover':
-      case 'changeCancelFee':
-      case 'correctDetails':
-      case 'assign':
-      case 'changePrice':
-      case 'proposePrice':
-        setStep({ kind: action });
-        return;
-    }
+    const move = ticketMove(action, row);
+    if (move === null) return;
+    if (move.kind === 'run') runInPlace(action, move.command);
+    else setStep(move.step);
   };
 
   const storeName = useStoreDisplayName();
   const uncollectedLimit = useUncollectedLimit();
-  const messageKind =
-    ticket === undefined ? null : customerMessageKind(ticket, can, runtime.statusSite);
-  const claimAction =
-    ticket === undefined || onStartClaim === undefined
-      ? null
-      : warrantyClaimAction(ticket, can, now());
   // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
   const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
     const url = customerMessageUrl(kind, row, storeName, runtime.statusSite);
@@ -331,15 +228,8 @@ export function TicketPane({
   };
 
   const label = (action: TicketAction): string =>
-    action === 'cancel' && !can.cancel
-      ? tn('repair.approval.askCancel')
-      : tn(actionKey(action, ticket?.technicianId ?? null));
+    ticketActionLabel(action, can, ticket?.technicianId ?? null);
 
-  // The next step leads; a correction stays beside what it corrects (the price, the technician).
-  const layout =
-    ticket === undefined
-      ? { next: null, alternative: null, more: [] }
-      : arrangeTicketActions(actions, ticket, runtime.userId);
   const contextual = (action: TicketAction, row: TicketDetailRow): ReactNode =>
     CONTEXTUAL_ACTIONS.has(action) && actions.includes(action) && layout.next !== action ? (
       // The short word beside a fact ("Ubah"), named in full on hover.
@@ -403,7 +293,7 @@ export function TicketPane({
       tabIndex={-1}
       className="flex min-h-0 flex-1 flex-col border-l border-border bg-surface focus:outline-none"
     >
-      <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
+      <QueryPanel query={query} onRetry={reload}>
         {(data) =>
           data.ticket === undefined ? (
             <StatePanel
@@ -1047,7 +937,7 @@ export function TicketPane({
             {...common}
             stage={step.kind}
             onDone={() =>
-              finishStep(step.kind === 'after' ? repairedDoneKey(row) : DONE_KEY[step.kind])
+              finishStep(step.kind === 'after' ? repairedDoneKey(row) : TICKET_DONE_KEY[step.kind])
             }
           />
         );
@@ -1196,7 +1086,7 @@ export function TicketPane({
             ticket={row}
             customerName={row.customerName}
             onDone={() => {
-              finishStep(DONE_KEY.handover);
+              finishStep(TICKET_DONE_KEY.handover);
               setPrintNext('returned');
             }}
           />
@@ -1298,59 +1188,6 @@ function ChipGroup({
   );
 }
 
-interface TicketPhoto {
-  readonly key: string;
-  readonly caption: string;
-  readonly group: string;
-  readonly ref: ThumbnailRef;
-}
-
-/** Every photo on the ticket in the order it was taken: at intake, before, after, at handover. */
-function ticketPhotos(row: TicketDetailRow): TicketPhoto[] {
-  const intake = row.intakePhotos.flatMap(({ slot, label }) => {
-    const photo = photoInSlot(row, slot);
-    return photo === null
-      ? []
-      : [
-          {
-            key: slot,
-            caption: optionLabel('photoAngles', { id: slot, label }),
-            group: tn('repair.photo.intake'),
-            photo,
-          },
-        ];
-  });
-  const work = (['before', 'after'] as const).flatMap((stage) =>
-    workPhotos(row, stage).map((photo, index) => ({
-      key: photo.slot,
-      caption: tn(stage === 'before' ? 'repair.photo.beforeN' : 'repair.photo.afterN', {
-        n: index + 1,
-      }),
-      group: tn(stage === 'before' ? 'repair.photo.before' : 'repair.photo.after'),
-      photo,
-    })),
-  );
-  const handover = HANDOVER_PHOTO_SLOTS.flatMap((slot) => {
-    const photo = photoInSlot(row, slot);
-    return photo === null
-      ? []
-      : [
-          {
-            key: slot,
-            caption: tn(
-              slot === 'signature' ? 'repair.handover.signature' : 'repair.photo.handover',
-            ),
-            group: tn('repair.photo.handover'),
-            photo,
-          },
-        ];
-  });
-  return [...intake, ...work, ...handover].map(({ photo, ...rest }) => ({
-    ...rest,
-    ref: photoThumbnailRef(photo),
-  }));
-}
-
 function TicketPhotos({ ticket }: { readonly ticket: TicketDetailRow }): React.JSX.Element | null {
   const photos = useMemo(() => ticketPhotos(ticket), [ticket]);
   // The open photo by key, so a photo syncing in ahead of it does not swap what is shown.
@@ -1384,7 +1221,7 @@ function TicketPhotos({ ticket }: { readonly ticket: TicketDetailRow }): React.J
       <PhotoViewer
         photos={photos.map((photo, index) => ({
           key: photo.key,
-          caption: photo.caption,
+          caption: photo.label,
           group: photo.group,
           state: index === open ? openState : { kind: 'loading' },
         }))}
@@ -1431,7 +1268,7 @@ function TicketPhotoTile({
   return (
     <PhotoTile
       state={state}
-      caption={photo.caption}
+      caption={photo.label}
       labels={photoLabels()}
       openLabel={tn('repair.photo.open')}
       onOpen={onOpen}
@@ -1439,19 +1276,6 @@ function TicketPhotoTile({
       testId={`repair.desk.ticket.photo.${photo.key}`}
     />
   );
-}
-
-function lineCaption(line: QuoteLineRow): string {
-  const status = tn(
-    line.status === 'proposed'
-      ? 'repair.price.status.proposed'
-      : line.status === 'declined'
-        ? 'repair.price.status.declined'
-        : line.customerAgreed === true
-          ? 'repair.price.status.agreed'
-          : 'repair.price.status.notAgreed',
-  );
-  return line.reason === null || line.reason === '' ? status : `${status} · ${line.reason}`;
 }
 
 /**

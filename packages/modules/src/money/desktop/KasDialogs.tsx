@@ -44,11 +44,10 @@ import {
   refundAmountError,
   refundHint,
   refundLimitText,
-  targetOf,
   useReduceCharge,
   useRefund,
-  type MoneyTarget,
 } from '../refund.js';
+import { targetOf, type MoneyTarget } from '../kas.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { AmountField, AmountLine, MoneyDialog } from './parts.js';
@@ -489,7 +488,7 @@ function targetText(target: MoneyTarget): string {
 
 /**
  * Money back to a customer, through a method they paid with. The counter gives back only an
- * overpayment; an owner any part of what was paid (refund.ts).
+ * overpayment; an owner any part of what was paid (refund.tsx).
  */
 export function RefundDialog({
   target,

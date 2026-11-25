@@ -8,7 +8,7 @@ import { DomainError, refusalKeyOf } from '@bolusi/core';
 
 import { MONEY_OP } from '../src/money/index.js';
 import type { MoneyEntryRow } from '../src/money/queries.js';
-import { REPAIR_DOCUMENT_KIND } from '../src/repair/index.js';
+import { REPAIR_DOCUMENT_KIND, REPAIR_PERMISSION } from '../src/repair/index.js';
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
@@ -615,6 +615,113 @@ describe('refunds and voids are guarded', () => {
     await ownerRefund();
     await expectRefused(ownerRefund(), 'VALIDATION_FAILED', 'refundAbovePaid');
     expect(await documentMoney(h, document)).toMatchObject({ paid: TOTAL - 400_000 });
+    await expectBalancedBooks(h);
+  });
+
+  test('a payment whose money went back stays, so the customer is never paid out twice', async () => {
+    h = await openRepairHarness(541);
+    const document = await openTicket(h);
+    const { entryIds } = (await h.money(
+      'receivePayments',
+      {
+        document,
+        payments: [
+          { account: 'cash', amount: 60_000 },
+          { account: 'cash', amount: 40_000 },
+        ],
+      },
+      h.cashierId,
+    )) as { entryIds: string[] };
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 30_000, reason: 'Batal sebagian' },
+      h.storeOwnerId,
+    );
+    // What came in still covers what went back.
+    await h.money('voidPayment', { entryId: entryIds[1]!, reason: 'Salah ketik' }, h.storeOwnerId);
+    // This one would leave more given back than paid in.
+    await expectRefused(
+      h.money('voidPayment', { entryId: entryIds[0]!, reason: 'Salah ketik' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'paymentRefunded',
+    );
+    expect(await documentMoney(h, document)).toMatchObject({ paid: 30_000 });
+    await expectBalancedBooks(h);
+  });
+
+  test('a refund through one method is not masked by a payment through another', async () => {
+    h = await openRepairHarness(543);
+    const document = await openTicket(h);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const { entryIds } = (await h.money(
+      'receivePayments',
+      {
+        document,
+        payments: [
+          { account: 'cash', amount: 60_000 },
+          { account: `account:${accountId}`, amount: 40_000 },
+        ],
+      },
+      h.cashierId,
+    )) as { entryIds: string[] };
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 30_000, reason: 'Batal sebagian' },
+      h.storeOwnerId,
+    );
+    // The cash went back, so the cash payment stays even though the QRIS one covers the amount.
+    await expectRefused(
+      h.money('voidPayment', { entryId: entryIds[0]!, reason: 'Salah ketik' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'paymentRefunded',
+    );
+    await h.money('voidPayment', { entryId: entryIds[1]!, reason: 'Salah ketik' }, h.storeOwnerId);
+    expect(await documentMoney(h, document)).toMatchObject({ paid: 30_000 });
+    await expectBalancedBooks(h);
+  });
+
+  test('the server refuses a DP correction after the DP went back, past the device check', async () => {
+    h = await openRepairHarness(542);
+    const document = await openTicket(h);
+    const { entryIds } = (await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 100_000 }] },
+      h.cashierId,
+    )) as { entryIds: string[] };
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 100_000, reason: 'Batal servis' },
+      h.storeOwnerId,
+    );
+    // What the DP correction writes when lowering it: the right amount, then the old payment void.
+    const { paymentOp, voidOp } = await import('../src/money/commands.js');
+    const ctx = h.runtime.commands.createContext(h.storeOwnerId);
+    const correction = h.runtime.commands.execute(
+      {
+        permission: REPAIR_PERMISSION.correctDownPayment,
+        input: { parse: (x: unknown) => x },
+        handler: (_input: unknown, c: typeof ctx) => ({
+          ops: [
+            paymentOp(c, document as never, {
+              account: 'cash',
+              amount: 50_000,
+              reference: null,
+              tendered: null,
+            }),
+            voidOp(c, entryIds[0]!, 'Salah ketik'),
+          ],
+          result: null,
+        }),
+      } as never,
+      {} as never,
+      ctx,
+    );
+    await expectRefused(correction, 'INVALID_TRANSITION', 'paymentRefunded');
+    expect(await documentMoney(h, document)).toMatchObject({ paid: 0 });
     await expectBalancedBooks(h);
   });
 

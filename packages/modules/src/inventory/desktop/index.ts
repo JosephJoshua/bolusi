@@ -6,7 +6,7 @@ export {
   type InventoryRuntime,
   type PhoneModelOption,
 } from '../runtime.js';
-export { INVENTORY_PERMISSION } from '../constants.js';
+export { INVENTORY_PERMISSION, opensParts } from '../constants.js';
 export { NO_FILTER, type ListFilter } from '../list-filter.js';
 export type { PartUse } from '../take-part.js';
 export { PartsPage, type PartsPageProps } from './PartsPage.js';

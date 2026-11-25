@@ -5,6 +5,8 @@
 // is never stored on the order: each receipt is its own entity, so two phones receiving the same
 // order offline never collide, and the order's state is read from its receipts.
 
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
+
 export const PURCHASING_MODULE_ID = 'purchasing' as const;
 
 /** One supplier, tenant-wide: every store orders from the same list. */
@@ -63,3 +65,14 @@ export const MAX_SUPPLIER_PHONE = 30;
 export const MAX_PURCHASING_NOTE = 500;
 /** As inventory's part name, so a line can carry any part's name. */
 export const MAX_LINE_NAME = 200;
+
+/** Who sees Belanja: whoever orders from suppliers, since an order picks from the parts list. */
+export function opensPurchasing(
+  inventory: { hasPermission(permissionId: string): boolean } | undefined,
+  purchasing: { hasPermission(permissionId: string): boolean } | undefined,
+): boolean {
+  return (
+    inventory?.hasPermission(INVENTORY_PERMISSION.read) === true &&
+    purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true
+  );
+}

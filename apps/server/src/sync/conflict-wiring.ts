@@ -161,8 +161,6 @@ export function buildConflictDetection(deps: ConflictDetectionWiringDeps): Detec
     now: deps.now,
     newId: deps.newId,
     registry,
-    // v0 registers exactly one Rule-2 check (01 §8.2). Inert until task 25 registers `notes` (its
-    // op type is UNKNOWN_TYPE today), but shipped so the check set is COMPLETE from the start.
     invariantChecks: [NOTES_EDIT_AFTER_ARCHIVE],
     systemIdentity,
   };
