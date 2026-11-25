@@ -34,6 +34,7 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
+import { useRepairTypesPick } from '../repair-types-pick.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
@@ -671,24 +672,11 @@ export function RepairTypesStep({
   readonly current: TicketDetailRow['repairTypes'];
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const settings = useIntakeOptionSettings();
-  const [picked, setPicked] = useState<readonly string[]>(() => current.map((type) => type.item));
-  const changed =
-    picked.length !== current.length || picked.some((id, i) => id !== current[i]!.item);
-  const submit = (): void => {
-    if (!changed) {
-      onCancel();
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setRepairTypes', { ticketId, repairTypes: [...picked] }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
-
+  const { runner, picked, setPicked, submit } = useRepairTypesPick(
+    { ticketId, current },
+    { onDone, onUnchanged: onCancel },
+  );
   return (
     <FlowScreen
       chrome={chrome}

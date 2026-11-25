@@ -61,6 +61,7 @@ import { ta } from '../../approvals/i18n.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
+import { useRepairTypesPick } from '../repair-types-pick.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
@@ -389,23 +390,11 @@ export function RepairTypesDialog({
   onDone,
   onClose,
 }: StepDialogProps & { readonly current: TicketDetailRow['repairTypes'] }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const settings = useIntakeOptionSettings();
-  const [picked, setPicked] = useState<readonly string[]>(() => current.map((type) => type.item));
-  const changed =
-    picked.length !== current.length || picked.some((id, i) => id !== current[i]!.item);
-  const submit = (): void => {
-    if (!changed) {
-      onClose();
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setRepairTypes', { ticketId, repairTypes: [...picked] }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, picked, setPicked, submit } = useRepairTypesPick(
+    { ticketId, current },
+    { onDone, onUnchanged: onClose },
+  );
   return (
     <StepDialog
       title={tn('repair.repairTypes.title')}
