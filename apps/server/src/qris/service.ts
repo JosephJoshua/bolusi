@@ -109,7 +109,7 @@ export interface QrisServiceDeps extends AnnounceDeps {
   readonly qris?: QrisConfig | undefined;
 }
 
-/** The sweep also lists unpaid charges across tenants (migration 0034's definer lookup). */
+/** The sweep also lists unpaid charges across tenants (migration 0035's definer lookup). */
 export interface QrisSweepDeps extends QrisServiceDeps {
   readonly authDirectory: Pick<AuthDirectory, 'findUnpaidQrisCharges'>;
 }
