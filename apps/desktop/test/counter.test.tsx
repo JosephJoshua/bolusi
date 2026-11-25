@@ -764,7 +764,7 @@ describe('counter app over demo data', () => {
     expect(check.textContent).toMatch(
       /Uang diterima Rp\s?150\.000 untuk pembayaran Rp\s?15\.000\./,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Periksa kembali' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cek lagi' }));
     await waitFor(() =>
       expect(screen.queryByTestId('repair.desk.handover.changeCheck')).toBeNull(),
     );
