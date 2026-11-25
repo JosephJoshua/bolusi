@@ -35,8 +35,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.xs,
+    flexShrink: 1,
   },
-  label: { ...type.bodySm, fontWeight: '600' },
+  // Wraps rather than cut when the room beside it runs out (a large font): labels never truncate.
+  label: { ...type.bodySm, fontWeight: '600', flexShrink: 1 },
 });
 
 const TONE = { primary: color.primary, danger: color.danger } as const;
