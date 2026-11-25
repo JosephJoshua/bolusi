@@ -8,6 +8,7 @@
 import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
 import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
 import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
+import { STORES_META_KEY, writeMeta } from '@bolusi/core';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('expo-secure-store', () => ({
@@ -62,6 +63,15 @@ const KEEPS_AND_BUYS = [
   PURCHASING_PERMISSION.buy,
 ];
 
+/** A manager: keeps the stock and sends parts to the business's other stores. */
+const SENDS = [
+  ...REPAIR_ONLY,
+  INVENTORY_PERMISSION.read,
+  INVENTORY_PERMISSION.receive,
+  INVENTORY_PERMISSION.transfer,
+];
+const OTHER_STORE = { id: '01920000-0000-7000-8000-00000000b0b0', name: 'Bolusi Sanggeng' };
+
 let fixture: Fixture | null = null;
 let screen: RenderResult | null = null;
 
@@ -89,6 +99,13 @@ async function signedIn(permissions: readonly string[]): Promise<RenderResult> {
   fixture = target;
   await enrolledDevice(target);
   await seedTwoUsers(target, 300, permissions);
+  // The business's stores as the identity bundle lists them: this one and another. Written after
+  // the seeded bundle, which sets its own list.
+  await writeMeta(
+    target.app.db.db,
+    STORES_META_KEY,
+    JSON.stringify([{ id: target.storeId, name: 'Bolusi Rufei' }, OTHER_STORE]),
+  );
   const mounted = await mountRoot(target, {
     createRepair: (app, runtime, identity, media, capture) =>
       createSessionRepairRuntime({
@@ -160,5 +177,48 @@ describe('the Barang tab', () => {
     expect(__emitHardwareBack()).toBe(true);
     await settle();
     expect(selected(shown, 'shell-tabs.repair')).toEqual({ selected: true });
+  });
+});
+
+describe('Kiriman', () => {
+  test('is a section only for whoever sends or receives parts between stores', async () => {
+    const shown = await signedIn(KEEPS_AND_BUYS);
+    await press(shown, 'shell-tabs.items');
+    expect(await waitUntil(() => shown.query('items.sections') !== null)).toBe(true);
+    expect(shown.query('items.sections.transfers')).toBeNull();
+  });
+
+  test('sends to another store: the form offers the other stores, and back asks before losing it', async () => {
+    const shown = await signedIn(SENDS);
+    await press(shown, 'shell-tabs.items');
+    await waitUntil(() => shown.query('items.sections.transfers') !== null);
+    await press(shown, 'items.sections.transfers');
+    expect(await waitUntil(() => shown.query('inventory.transfers') !== null)).toBe(true);
+    expect(await waitUntil(() => shown.query('inventory.transfers.list.empty') !== null)).toBe(
+      true,
+    );
+
+    await press(shown, 'inventory.transfers.new');
+    expect(
+      await waitUntil(() => shown.query(`inventory.send.store.${OTHER_STORE.id}`) !== null),
+    ).toBe(true);
+    // Only the other store: a store never sends to itself.
+    expect(shown.query(`inventory.send.store.${fixture!.storeId}`)).toBeNull();
+    expect(shown.query('shell-tabs')).toBeNull();
+    await press(shown, `inventory.send.store.${OTHER_STORE.id}`);
+
+    // Picking a part and coming back keeps the store picked.
+    await press(shown, 'inventory.send.addPart');
+    expect(shown.query('inventory.send.pick')).not.toBeNull();
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(selected(shown, `inventory.send.store.${OTHER_STORE.id}`)).toMatchObject({
+      selected: true,
+    });
+
+    // Back from a half-filled send asks first.
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(shown.query('inventory.send.discard')).not.toBeNull();
   });
 });

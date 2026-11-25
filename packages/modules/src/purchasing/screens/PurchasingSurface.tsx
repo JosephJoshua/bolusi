@@ -15,7 +15,8 @@ import { EMPTY_ORDER, addLine, draftChanged, draftOf, type OrderDraft } from '..
 import type { OrderDetailRow, OrderFilter, ReceiptCostRow, SupplierRow } from '../queries.js';
 import { PriceStep } from './OrderCosts.js';
 import { OrderDetail } from './OrderDetail.js';
-import { OrderForm, PickPartStep } from './OrderForm.js';
+import { PickPartStep } from '../../inventory/screens/PickPartStep.js';
+import { OrderForm } from './OrderForm.js';
 import { OrderList } from './OrderList.js';
 import { ReceiveStep } from './ReceiveStep.js';
 import { SupplierForm, SupplierList } from './SupplierScreens.js';
@@ -223,7 +224,9 @@ export function PurchasingSurface({
         return (
           <PickPartStep
             chrome={chrome}
-            onOrder={new Set(draft.lines.map((line) => line.itemId))}
+            title={tp('purchasing.pick.title')}
+            testID="purchasing.pick"
+            picked={new Set(draft.lines.map((line) => line.itemId))}
             onPick={(item) => {
               setDraft((now) => addLine(now, item));
               setView({ kind: 'form' });

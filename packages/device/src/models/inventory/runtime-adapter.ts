@@ -5,11 +5,13 @@
  */
 import {
   bindModulePort,
+  readStores,
   type CommandIdentity,
   type InvalidationBus,
   type ModuleRuntime,
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
+import type { Kysely } from 'kysely';
 import { inventoryModule } from '@bolusi/modules';
 import { INVENTORY_TABLE } from '@bolusi/modules/inventory';
 import type { InventoryRuntime } from '@bolusi/modules/inventory/screens';
@@ -18,6 +20,8 @@ export interface InventoryRuntimeDeps {
   readonly runtime: ModuleRuntime<ClientDatabase>;
   readonly invalidation: InvalidationBus;
   readonly identity: CommandIdentity;
+  /** Where the business's store names are kept (the identity bundle's copy). */
+  readonly db: Kysely<ClientDatabase>;
   /** The phone catalog search for the "fits" picker. */
   readonly searchModels?: InventoryRuntime['searchModels'];
   /** The camera's code scanner; absent where there is none. */
@@ -31,5 +35,7 @@ export function createInventoryRuntime(deps: InventoryRuntimeDeps): InventoryRun
       deps.invalidation.subscribeTables(Object.values(INVENTORY_TABLE), listener),
     searchModels: deps.searchModels,
     scanCode: deps.scanCode,
+    otherStores: async () =>
+      (await readStores(deps.db)).filter((store) => store.id !== deps.identity.storeId),
   };
 }

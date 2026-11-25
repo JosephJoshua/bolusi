@@ -5,11 +5,14 @@
 import { t } from '@bolusi/i18n';
 import {
   opensParts,
+  opensTransfers,
   InventoryRuntimeProvider,
   NO_FILTER,
   PartsSection,
+  TransfersPage,
   ti,
   type ListFilter,
+  type TransferFilter,
 } from '@bolusi/modules/inventory/desktop';
 import { KasPage, MoneyRuntimeProvider, opensKas, tm } from '@bolusi/modules/money/desktop';
 import { keptIntakeDraft, startedByOther } from '@bolusi/modules/repair';
@@ -39,7 +42,15 @@ import {
   SidebarToggle,
   type MenuItem,
 } from '@bolusi/ui-web';
-import { Banknote, ChevronDown, Package, Settings, ShoppingCart, Wrench } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Banknote,
+  ChevronDown,
+  Package,
+  Settings,
+  ShoppingCart,
+  Wrench,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { SettingsAccess } from './settings/access.js';
@@ -55,6 +66,7 @@ type Page =
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
   | { readonly kind: 'parts' }
   | { readonly kind: 'purchasing' }
+  | { readonly kind: 'transfers' }
   | { readonly kind: 'kas' }
   | { readonly kind: 'settings'; readonly section?: 'computer' | StoreBasicSetting }
   // The first-run setup of this PC (setup/DeviceSetupPage.tsx).
@@ -190,7 +202,12 @@ export function Counter({
   const purchasing = repair.purchasing;
   const showsPurchasing = opensPurchasing(inventory, purchasing);
   const [ordersFilter, setOrdersFilter] = useState<OrderFilter>('open');
-  // Stok and Belanja sit under Barang, which is no page of its own: its crumb only names the place.
+  // Kiriman, for whoever sends or receives parts between the business's stores.
+  const showsTransfers = showsParts && opensTransfers(inventory);
+  const [transfersFilter, setTransfersFilter] = useState<TransferFilter>('open');
+  // Barang has sections when there is more than the stock to show.
+  const itemSections = showsPurchasing || showsTransfers;
+  // Stok, Belanja and Kiriman sit under Barang, which is no page of its own: its crumb only names the place.
   const itemsTrail = [{ key: 'items', label: ti('inventory.list.title') }];
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
   const showsKas = opensKas(money);
@@ -284,7 +301,8 @@ export function Counter({
                 page.kind === 'intake' ||
                 (page.kind === 'kas' && !showsKas) ||
                 (page.kind === 'parts' && !showsParts) ||
-                (page.kind === 'purchasing' && !showsPurchasing),
+                (page.kind === 'purchasing' && !showsPurchasing) ||
+                (page.kind === 'transfers' && !showsTransfers),
               onSelect: () => go({ kind: 'board' }),
             },
             ...(showsKas
@@ -298,10 +316,11 @@ export function Counter({
                   },
                 ]
               : []),
-            // Barang: the stock, and Belanja beside it for whoever buys from suppliers.
+            // Barang: the stock, with Belanja for whoever buys from suppliers and Kiriman for
+            // whoever sends or receives parts between stores.
             ...(!showsParts
               ? []
-              : !showsPurchasing
+              : !itemSections
                 ? [
                     {
                       key: 'parts',
@@ -323,13 +342,28 @@ export function Counter({
                           active: page.kind === 'parts',
                           onSelect: () => go({ kind: 'parts' }),
                         },
-                        {
-                          key: 'purchasing',
-                          label: tp('purchasing.list.title'),
-                          icon: ShoppingCart,
-                          active: page.kind === 'purchasing',
-                          onSelect: () => go({ kind: 'purchasing' }),
-                        },
+                        ...(showsPurchasing
+                          ? [
+                              {
+                                key: 'purchasing',
+                                label: tp('purchasing.list.title'),
+                                icon: ShoppingCart,
+                                active: page.kind === 'purchasing',
+                                onSelect: () => go({ kind: 'purchasing' }),
+                              },
+                            ]
+                          : []),
+                        ...(showsTransfers
+                          ? [
+                              {
+                                key: 'transfers',
+                                label: ti('inventory.transfer.section'),
+                                icon: ArrowLeftRight,
+                                active: page.kind === 'transfers',
+                                onSelect: () => go({ kind: 'transfers' }),
+                              },
+                            ]
+                          : []),
                       ],
                     },
                   ]),
@@ -369,9 +403,7 @@ export function Counter({
             onFilterChange={setPartsFilter}
             onRegisterLeaveGuard={registerLeaveGuard}
             place={
-              showsPurchasing
-                ? { title: ti('inventory.place.stock'), trail: itemsTrail }
-                : undefined
+              itemSections ? { title: ti('inventory.place.stock'), trail: itemsTrail } : undefined
             }
           />
         </InventoryRuntimeProvider>
@@ -387,6 +419,14 @@ export function Counter({
               place={{ title: tp('purchasing.list.title'), trail: itemsTrail }}
             />
           </PurchasingRuntimeProvider>
+        </InventoryRuntimeProvider>
+      ) : page.kind === 'transfers' && showsTransfers && inventory !== undefined ? (
+        <InventoryRuntimeProvider runtime={inventory}>
+          <TransfersPage
+            filter={transfersFilter}
+            onFilterChange={setTransfersFilter}
+            place={{ title: ti('inventory.transfer.section'), trail: itemsTrail }}
+          />
         </InventoryRuntimeProvider>
       ) : page.kind === 'kas' && showsKas ? (
         <KasPage now={Date.now} />
