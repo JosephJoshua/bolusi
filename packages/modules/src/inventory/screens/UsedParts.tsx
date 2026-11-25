@@ -8,6 +8,7 @@
  */
 import { t } from '@bolusi/i18n';
 import {
+  AmountRow,
   border,
   color,
   Icon,
@@ -42,6 +43,7 @@ import {
   overStockHint,
   usePutBack,
   useTakePart,
+  useUseCost,
   useUsedParts,
   type PartUse,
 } from '../take-part.js';
@@ -73,55 +75,105 @@ export function UsedPartsSection({
   const { query, parts, hidden, retry } = useUsedParts(use, takeable);
   if (hidden) return null;
   return (
-    <Section
-      title={ti('inventory.use.title')}
-      action={
-        takeable ? (
-          <TextButton
-            label={ti('inventory.use.take')}
-            accessibilityLabel={ti('inventory.use.takeTitle')}
-            onPress={onTake}
-            testID={`${testID}.take`}
-          />
-        ) : undefined
-      }
-      testID={testID}
-    >
-      <QueryView query={query} onBack={() => undefined} onRetry={retry} testID={testID}>
-        {() =>
-          parts.length === 0 ? (
-            <Text style={styles.muted}>{ti('inventory.use.none')}</Text>
-          ) : (
-            <View>
-              {parts.map((part) => (
-                <View
-                  key={part.itemId}
-                  style={styles.usedRow}
-                  testID={`${testID}.part.${part.itemId}`}
-                >
-                  <View style={styles.usedText}>
-                    <Text style={styles.name}>{part.name}</Text>
-                    <Text style={styles.muted}>{ti('inventory.use.out', { count: part.out })}</Text>
-                    {flagUnreturned ? (
-                      <View style={styles.flag}>
-                        <Icon name="warning" size={size.iconChip} color={color.warning} />
-                        <Text style={styles.flagText}>{ti('inventory.use.notReturned')}</Text>
-                      </View>
+    <>
+      <Section
+        title={ti('inventory.use.title')}
+        action={
+          takeable ? (
+            <TextButton
+              label={ti('inventory.use.take')}
+              accessibilityLabel={ti('inventory.use.takeTitle')}
+              onPress={onTake}
+              testID={`${testID}.take`}
+            />
+          ) : undefined
+        }
+        testID={testID}
+      >
+        <QueryView query={query} onBack={() => undefined} onRetry={retry} testID={testID}>
+          {() =>
+            parts.length === 0 ? (
+              <Text style={styles.muted}>{ti('inventory.use.none')}</Text>
+            ) : (
+              <View>
+                {parts.map((part) => (
+                  <View
+                    key={part.itemId}
+                    style={styles.usedRow}
+                    testID={`${testID}.part.${part.itemId}`}
+                  >
+                    <View style={styles.usedText}>
+                      <Text style={styles.name}>{part.name}</Text>
+                      <Text style={styles.muted}>
+                        {ti('inventory.use.out', { count: part.out })}
+                      </Text>
+                      {flagUnreturned ? (
+                        <View style={styles.flag}>
+                          <Icon name="warning" size={size.iconChip} color={color.warning} />
+                          <Text style={styles.flagText}>{ti('inventory.use.notReturned')}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {editable ? (
+                      <TextButton
+                        label={ti('inventory.use.putBack')}
+                        accessibilityLabel={`${ti('inventory.use.putBack')} ${part.name}`}
+                        onPress={() => onPutBack(part)}
+                        testID={`${testID}.putBack.${part.itemId}`}
+                      />
                     ) : null}
                   </View>
-                  {editable ? (
-                    <TextButton
-                      label={ti('inventory.use.putBack')}
-                      accessibilityLabel={`${ti('inventory.use.putBack')} ${part.name}`}
-                      onPress={() => onPutBack(part)}
-                      testID={`${testID}.putBack.${part.itemId}`}
-                    />
-                  ) : null}
-                </View>
-              ))}
-            </View>
-          )
-        }
+                ))}
+              </View>
+            )
+          }
+        </QueryView>
+      </Section>
+      {parts.length === 0 ? null : <UseCostSection use={use} testID={`${testID}.cost`} />}
+    </>
+  );
+}
+
+/** What the parts on a use cost the store, for people who may see buy prices. */
+function UseCostSection({
+  use,
+  testID,
+}: {
+  readonly use: PartUse;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  const { shown, query, total, unpriced, retry } = useUseCost(use);
+  if (!shown) return null;
+  return (
+    <Section title={ti('inventory.useCost.title')} testID={testID}>
+      <QueryView query={query} onBack={() => undefined} onRetry={retry} testID={testID}>
+        {(rows) => (
+          <View>
+            {rows.map((row) => (
+              <AmountRow
+                key={row.itemId}
+                label={row.name}
+                detail={ti('inventory.useCost.line', { count: row.out })}
+                value={row.cost ?? ti('inventory.useCost.missing')}
+                tone={row.cost === null ? 'muted' : 'text'}
+                testID={`${testID}.${row.itemId}`}
+              />
+            ))}
+            {rows.length > 1 && unpriced === 0 ? (
+              <AmountRow
+                label={ti('inventory.useCost.total')}
+                value={total}
+                strong
+                testID={`${testID}.total`}
+              />
+            ) : null}
+            {unpriced === 0 ? null : (
+              <Text style={styles.costWarning} testID={`${testID}.unpriced`}>
+                {ti('inventory.useCost.unpriced', { count: unpriced })}
+              </Text>
+            )}
+          </View>
+        )}
       </QueryView>
     </Section>
   );
@@ -373,6 +425,7 @@ const styles = StyleSheet.create({
   // A text button lines its text up with the search field's edge, not its hit box.
   scan: { flexDirection: 'row', marginTop: space.xs, marginLeft: -space.sm },
   muted: { ...type.bodySm, color: color.textMuted },
+  costWarning: { ...type.bodySm, color: color.warning, marginTop: space.sm },
   empty: { marginTop: space.lg },
   name: { ...type.bodySm, fontWeight: '600', color: color.text },
   usedRow: {

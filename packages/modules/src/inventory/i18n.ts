@@ -357,6 +357,11 @@ export const INVENTORY_KEYS = [
   'inventory.transfer.desk.col.stage',
   'inventory.transfer.desk.col.date',
   'inventory.transfer.desk.close',
+  'inventory.useCost.title',
+  'inventory.useCost.line',
+  'inventory.useCost.missing',
+  'inventory.useCost.total',
+  'inventory.useCost.unpriced',
 ] as const;
 
 export type InventoryKey = (typeof INVENTORY_KEYS)[number];

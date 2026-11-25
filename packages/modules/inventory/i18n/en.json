@@ -432,5 +432,12 @@
     "noMatches": "No match. Try another word.",
     "stock": "Stock {count}",
     "onList": "Already picked"
+  },
+  "useCost": {
+    "title": "Parts cost",
+    "line": "{count} pcs",
+    "missing": "No price yet",
+    "total": "Total cost",
+    "unpriced": "{count} parts have no buy price yet"
   }
 }

@@ -500,8 +500,12 @@ Agreed with the owner on 2026-10-28; first part built 2026-10-31.
   average; a delivery into empty or minus stock sets it to its price; a price
   filled in later changes the average from that delivery on, including the cost
   of parts already used on servisan.
-- **Next:** part cost on each servisan for owners; then supplier bills and
-  returns (below).
+- **Cost of a servisan's parts:** under "Sparepart", people with "Lihat harga
+  beli" see "Modal sparepart": each part at the average when it was taken, less
+  any put back at the average then, and a total once every part has a price. A part without one shows
+  "Belum ada harga" and a warning, never Rp 0; it is read apart, so only that
+  section needs internet on a store device.
+- **Next:** supplier bills and returns (below).
 
 ## Transfers between stores (2026-11-25)
 

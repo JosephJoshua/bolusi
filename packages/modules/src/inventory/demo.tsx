@@ -18,12 +18,13 @@ import {
 import { INVENTORY_PERMISSION, TAG_FACET, type MovementKind } from './constants.js';
 import { compactModel } from '../shared/model-key.js';
 import { fitsLine } from './applier.js';
-import { foldCost } from './cost.js';
+import { costOnUse, foldCost } from './cost.js';
 import {
   COST_RECEIPTS_SHOWN,
   type CategoryRow,
   type FacetValueRow,
   type ItemCostRow,
+  type UseCostRow,
   type ItemDetailRow,
   type ItemFitRow,
   type ItemRow,
@@ -449,6 +450,22 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
           })),
       };
       return page([cost]);
+    },
+    useCost: (input) => {
+      require(I.readCost);
+      const useId = String(input['useId']);
+      const rows: UseCostRow[] = [
+        ...new Set(movements.filter((m) => m.useId === useId).map((m) => m.itemId)),
+      ]
+        .map((itemId) => {
+          const own = movements
+            .filter((m) => m.itemId === itemId)
+            .map((m) => ({ ...m, unitCost: costs.get(m.id) ?? null }));
+          return { itemId, name: find(itemId).name, ...costOnUse(own, foldCost(own), useId) };
+        })
+        .filter((row) => row.out > 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return page(rows);
     },
     countBelowZero: () =>
       page([{ count: items.filter((p) => !p.archived && onHand(p.id) < 0).length }]),
