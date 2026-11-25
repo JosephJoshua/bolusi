@@ -194,6 +194,15 @@ async function eraseThisPhone(): Promise<void> {
   await new SecureStoreKeyStore().wipe();
 }
 
+/** A restart is how a running phone gets erased: the start does it (foregroundBoot). */
+function restartAfterBlock(): void {
+  void expoUpdatesPort.reload().catch((error: unknown) =>
+    consoleDiagnostics.warn('restart after block failed', {
+      error: error instanceof Error ? error.message : String(error),
+    }),
+  );
+}
+
 /** The app's start: a blocked phone is erased here, before any screen shows its data. */
 const foregroundBoot = (): Promise<Bootstrapped> =>
   bootErasingBlocked({
@@ -399,6 +408,7 @@ function createEnrollment(
     // Same `APP_VERSION` the Settings block shows — empty in v0 (expo-constants unpinned, decision
     // deferred). Valid per the server's EnrollReq (`z.string().max(32)`); not faked (T-19).
     appVersion: APP_VERSION,
+    onBlocked: restartAfterBlock,
   };
   return createAppEnrollment(app, platform, onEnrolled);
 }
@@ -606,14 +616,7 @@ let rootProps: RootProps | null = null;
 function buildRootProps(): RootProps {
   return {
     checkForUpdate: expoUpdatesPort.isEnabled ? () => updateNow(expoUpdatesPort) : undefined,
-    // A restart is how a running phone gets erased: the start does it (foregroundBoot).
-    onDeviceBlocked: () => {
-      void expoUpdatesPort.reload().catch((error: unknown) =>
-        consoleDiagnostics.warn('restart after block failed', {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    },
+    onDeviceBlocked: restartAfterBlock,
     boot: foregroundBoot,
     createSync,
     createEnrollment,

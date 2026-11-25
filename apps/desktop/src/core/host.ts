@@ -801,6 +801,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         location: NO_LOCATION,
         platform: PLATFORM,
         appVersion: deps.appVersion,
+        onBlocked: deps.onBlocked,
       },
       (deviceId) => void adopt(deviceId),
     );
