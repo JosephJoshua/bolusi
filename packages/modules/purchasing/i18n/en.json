@@ -182,7 +182,7 @@
     "save": "Save bill",
     "supplier": "Supplier",
     "order": "Order {number}",
-    "supplierRef": "Supplier's invoice no.",
+    "supplierRef": "Supplier’s invoice no.",
     "billedOn": "Invoice date",
     "today": "Today",
     "yesterday": "Yesterday",
