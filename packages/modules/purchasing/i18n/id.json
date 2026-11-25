@@ -30,7 +30,8 @@
     "orderOtherSupplier": "Pesanan ini dari supplier lain.",
     "orderNotPlaced": "Pesanan ini masih draf, jadi belum bisa ditagih.",
     "billNumberNotThisDevice": "Nomor tagihan ini bukan dari perangkat ini.",
-    "billNumberUsed": "Nomor tagihan ini sudah dipakai."
+    "billNumberUsed": "Nomor tagihan ini sudah dipakai.",
+    "notaUsed": "Nota supplier ini sudah dicatat di tagihan lain."
   },
   "stage": {
     "draft": "Draf",

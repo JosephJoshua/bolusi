@@ -51,6 +51,7 @@ export const PURCHASING_REFUSALS = defineRefusals(
     'orderNotPlaced',
     'billNumberNotThisDevice',
     'billNumberUsed',
+    'notaUsed',
   ] as const,
   // A draft names a part archived since it was written. The order itself stays valid.
   ['partArchived'] as const,

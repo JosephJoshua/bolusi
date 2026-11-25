@@ -30,7 +30,8 @@
     "orderOtherSupplier": "This order is from another supplier.",
     "orderNotPlaced": "This order is still a draft, so it cannot be billed yet.",
     "billNumberNotThisDevice": "This bill number is not from this device.",
-    "billNumberUsed": "This bill number is already used."
+    "billNumberUsed": "This bill number is already used.",
+    "notaUsed": "This supplier’s nota is already recorded on another bill."
   },
   "stage": {
     "draft": "Draft",

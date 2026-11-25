@@ -4,9 +4,11 @@
 //   order is this store's, placed (a draft has nothing to bill yet), and from the same supplier.
 //   It may bill more or less than arrived: a nota can come before the parts, or bill only some.
 //   The screens show the difference; nothing here refuses it.
+// - A supplier's nota is on one standing bill only, compared whatever its case.
 // - A void bill stays as history and is never edited or voided again.
 // - A bill number is the recording device's own (shared/device-number.ts).
 import type { SignedOperation } from '@bolusi/schemas';
+import { sql } from 'kysely';
 
 import { PURCHASING_BILL_ENTITY, PURCHASING_ORDER_ENTITY } from '../constants.js';
 import {
@@ -54,9 +56,34 @@ async function requireOpenBill(db: Db, op: SignedOperation) {
   return bill;
 }
 
+/**
+ * A supplier's nota is billed once in a store: two owners entering it offline would pay it twice.
+ * Compared whatever its case, among standing bills other than this one.
+ */
+async function requireNewNota(db: Db, op: SignedOperation, payload: BillDetails): Promise<void> {
+  if (payload.supplierRef === null) return;
+  const same = await db
+    .selectFrom('purchasingBills')
+    .select('id')
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', op.storeId ?? '')
+    .where('supplierId', '=', payload.supplierId)
+    .where('status', '=', 'open')
+    .where('id', '!=', op.entityId)
+    .where(sql<string>`lower(supplier_ref)`, '=', payload.supplierRef.toLowerCase())
+    .executeTakeFirst();
+  if (same !== undefined) {
+    throw refuse('notaUsed', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'supplierRef', issue: 'already recorded' },
+    });
+  }
+}
+
 async function requireDetails(db: Db, op: SignedOperation): Promise<void> {
   const payload = payloadOf<BillDetails>(op);
   await requireSupplier(db, op, payload.supplierId);
+  await requireNewNota(db, op, payload);
   await requireItems(
     db,
     op,

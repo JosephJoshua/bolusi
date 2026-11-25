@@ -33,6 +33,7 @@ export const PURCHASING_KEYS = [
   'purchasing.refusal.orderNotPlaced',
   'purchasing.refusal.billNumberNotThisDevice',
   'purchasing.refusal.billNumberUsed',
+  'purchasing.refusal.notaUsed',
   'purchasing.opType.billRecorded',
   'purchasing.opType.billEdited',
   'purchasing.opType.billVoided',

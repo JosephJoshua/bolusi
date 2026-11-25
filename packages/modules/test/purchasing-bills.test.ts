@@ -354,6 +354,52 @@ describe('the server rules', () => {
       'purchasing.refusal.billNumberUsed',
     );
   });
+
+  test('a supplier nota recorded on another device while offline is refused at push', async () => {
+    const h = await harness(7311);
+    const supplierId = await addSupplier(h);
+    const glass = await addItem(h, 'Tempered glass');
+    await h.purchasing(
+      'recordBill',
+      {
+        supplierId,
+        supplierRef: 'INV-889',
+        billedOn: BILLED_ON,
+        lines: [{ itemId: glass, qty: 1, unitPrice: 1 }],
+      },
+      h.ownerId,
+    );
+    const recorded = (await h.ownOps()).find((op) => op.type === 'purchasing.bill_recorded')!;
+    const payload = recorded.payload as { billNumber: string; supplierRef: string };
+    const counter = Number(payload.billNumber.slice(7)) + 1;
+    // The same nota, typed in another case, on a second bill the command never checked.
+    const twice = {
+      ...recorded,
+      entityId: '01900000-0000-7000-8000-000000000311',
+      payload: {
+        ...payload,
+        supplierRef: 'inv-889',
+        billNumber: `${payload.billNumber.slice(0, 7)}${String(counter).padStart(4, '0')}`,
+      },
+    } as SignedOperation;
+    await expectRefused(h.checkRule(twice), 'VALIDATION_FAILED', 'purchasing.refusal.notaUsed');
+    // Its own bill, edited, keeps its nota.
+    const billId = recorded.entityId;
+    await expect(
+      h.purchasing(
+        'editBill',
+        {
+          billId,
+          supplierId,
+          supplierRef: 'INV-889',
+          billedOn: BILLED_ON,
+          note: 'cek',
+          lines: [{ itemId: glass, qty: 1, unitPrice: 1 }],
+        },
+        h.ownerId,
+      ),
+    ).resolves.toBeDefined();
+  });
 });
 
 describe('correcting and voiding', () => {

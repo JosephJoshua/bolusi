@@ -285,6 +285,7 @@ function journey(world: ChainWorld): OpSpec[] {
       billOp('purchasing.bill_recorded', id(0x611), {
         billNumber: `TG-${formatTicketNumber(world.deviceId, 2)}`,
         ...bill,
+        supplierRef: 'INV-890',
         orderId: null,
       }),
       billOp('purchasing.bill_voided', id(0x611), { reason: 'Nota dobel' }),
