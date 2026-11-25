@@ -1,6 +1,7 @@
 import boundaries from './rules/boundaries.js';
 import desktopProcesses from './rules/desktop-processes.js';
 import noClockInHandlers from './rules/no-clock-in-handlers.js';
+import noExcuseComments from './rules/no-excuse-comments.js';
 import noFloatMoney from './rules/no-float-money.js';
 import noHardcodedStrings from './rules/no-hardcoded-strings.js';
 import noLegacyUploadApi from './rules/no-legacy-upload-api.js';
@@ -17,6 +18,7 @@ const plugin = {
   rules: {
     boundaries,
     'desktop-processes': desktopProcesses,
+    'no-excuse-comments': noExcuseComments,
     'no-float-money': noFloatMoney,
     'no-hardcoded-strings': noHardcodedStrings,
     'no-legacy-upload-api': noLegacyUploadApi,

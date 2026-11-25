@@ -107,10 +107,8 @@ function isSelectable(locale: Locale): boolean {
  */
 export async function bootstrapI18n(store: LocaleStorePort): Promise<Locale> {
   const locale = await readDeviceLocale(store);
-  // The `logger` is what `I18nLogger`'s "the app wires the real client diagnostics log at init" was
-  // describing — and until task 112 no app passed one, so §6's missing-key/unknown-code warnings went
-  // to the no-op default and were unobservable on-device. Same object the command runtime binds as its
-  // denial-audit diagnostics sink (ports/diagnostics.ts): ONE client diagnostics channel (§2.8).
+  // Without a logger, missing-key and unknown-code warnings go to a no-op and are never seen on the
+  // device. It is the same sink the command runtime uses (ports/diagnostics.ts).
   initI18n({ locale, logger: consoleDiagnostics });
   // Module catalogs (`notes.*`, 07-i18n §3.3) are NOT in the statically-bundled reserved catalogs
   // `initI18n` loads — they must be merged at runtime, AFTER init (each init replaces the instance)

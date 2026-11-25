@@ -1,13 +1,9 @@
 // The mobile command-runtime composition's LIVENESS wiring (task 102; task 40's bound, ACTIVATED).
 //
-// Task 40 built + tested + falsified the mechanism in @bolusi/core: a `RuntimeTimerPort`-bounded
-// denial-audit emit so a never-settling client op-append (a stuck op-sqlite WAL lock) on the deny
-// path cannot wedge `execute()` forever. But that bound is OPTIONAL and OFF unless the composition
-// root injects a timer — and until task 102 `apps/mobile/src/bootstrap/runtime.ts` composed the
-// runtime WITHOUT one, so the shipping app still ran the pre-task-40 UNBOUNDED await. "Typed and
-// compiling is not running on the target" (CLAUDE.md §2.11): the mechanism protected nothing on the
-// device. This suite proves the WIRING — it drives the REAL `createAppRuntime` composition (NOT the
-// bare core fixture task 40 already used), so a green here means production is actually bounded.
+// @bolusi/core bounds the denial-audit emit with a `RuntimeTimerPort`, so a never-settling op
+// append (a stuck op-sqlite WAL lock) on the deny path cannot wedge `execute()` forever. The bound
+// is off unless the composition root injects a timer, so this suite drives the real
+// `createAppRuntime` composition: green here means the shipping app is bounded.
 //
 // FALSIFIED (§2.11): removing the `denialAuditTimer: systemTimer` line from `runtime.ts` makes the
 // hung emit unbounded again — the bound is never armed, the fake clock cannot free `execute()`, and

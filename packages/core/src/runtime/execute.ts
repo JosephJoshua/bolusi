@@ -163,13 +163,9 @@ export interface RuntimeEmissionDraft {
   /**
    * The emission's payload version.
    *
-   * NOT resolved from the 04 §3 operation registry the way `ctx.op()` is — deliberately, for now.
-   * The sanctioned types are appended by the runtime BEFORE any module could own them, and no
-   * v0 manifest declares them yet: `auth.*` op types arrive with the auth module (tasks 13/25),
-   * which will declare `auth.permission_denied` alongside the `auth_permission_denials` applier
-   * (02 §7). WHEN THAT LANDS, this field should resolve from the registry exactly as `ctx.op()`
-   * does, and this default deleted — otherwise the same op type has two answers about its version
-   * (CLAUDE.md §2.8). Flagged for tasks 13/25; not silently left as "fine".
+   * Not read from the operation registry the way `ctx.op()` is, so it defaults to 1 while the
+   * auth module declares the same types' versions too. Resolving it from the registry needs the
+   * runtime test fixtures to register the auth types first.
    */
   readonly schemaVersion?: number;
   readonly payload: Record<string, unknown>;
