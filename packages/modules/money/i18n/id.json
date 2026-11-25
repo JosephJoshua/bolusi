@@ -27,6 +27,7 @@
     "refundAboveCredit": "Uang yang dikembalikan lebih dari kelebihan bayar. Minta pemilik.",
     "notCharged": "Tagihannya belum dicatat. Minta pemilik untuk mengembalikan uang.",
     "refundAbovePaid": "Uang yang dikembalikan lebih dari yang dibayar pelanggan.",
+    "paymentRefunded": "Uang dari pembayaran ini sudah dikembalikan ke pelanggan, jadi tidak bisa dibatalkan.",
     "notThisStore": "Ini milik toko lain.",
     "accountKindChanged": "Jenis metode pembayaran tidak bisa diganti.",
     "countNotFound": "Hitungan kas ini tidak ditemukan.",

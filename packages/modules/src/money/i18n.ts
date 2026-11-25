@@ -95,6 +95,7 @@ export const MONEY_KEYS = [
   'money.refusal.refundAboveCredit',
   'money.refusal.notCharged',
   'money.refusal.refundAbovePaid',
+  'money.refusal.paymentRefunded',
   'money.refusal.tenderedTooLow',
   'money.refusal.overLimit',
   'money.refusal.moveAboveDrawer',
