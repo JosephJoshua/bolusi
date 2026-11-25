@@ -15,6 +15,7 @@ import {
   type BillDetailRow,
   type BillRow,
 } from '../src/purchasing/bills/queries.js';
+import { billCheckKey } from '../src/purchasing/bills/bill-form.js';
 import { registerPurchasingCatalog } from '../src/purchasing/i18n.js';
 import { openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
@@ -399,5 +400,21 @@ describe('correcting and voiding', () => {
     await record('C', BILLED_ON + 7 * DAY);
     const rows = (await h.purchasingQuery('listBills', {}, h.ownerId)).rows as BillRow[];
     expect(rows.map((row) => row.supplierRef)).toEqual(['C', 'B', 'A']);
+  });
+});
+
+describe('the check a bill asks for', () => {
+  const line = (qty: number, ordered: number | null, received: number | null) => ({
+    qty,
+    ordered,
+    received,
+    billedElsewhere: 0,
+  });
+  test('names only what is off: not arrived, not ordered, or both', () => {
+    expect(billCheckKey([line(2, 2, 2)])).toBeNull();
+    expect(billCheckKey([line(2, null, null)])).toBeNull();
+    expect(billCheckKey([line(3, 3, 1)])).toBe('purchasing.bill.checkArrived');
+    expect(billCheckKey([line(1, null, 0), line(2, 2, 2)])).toBe('purchasing.bill.checkOrdered');
+    expect(billCheckKey([line(3, 3, 1), line(1, null, 0)])).toBe('purchasing.bill.checkBoth');
   });
 });

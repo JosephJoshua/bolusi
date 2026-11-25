@@ -37,6 +37,7 @@ import {
   billDraftOf,
   billGap,
   billInput,
+  billCheckKey,
   billLineHint,
   draftTotal,
   dueOnOf,
@@ -260,6 +261,7 @@ function BillBody({
 }): React.JSX.Element {
   const open = bill.status === 'open';
   const hints = bill.lines.map(billLineHint);
+  const check = open ? billCheckKey(bill.lines) : null;
   return (
     <>
       <div className="flex flex-col gap-1">
@@ -287,11 +289,11 @@ function BillBody({
               .join(' · ')}
           </p>
         )}
-        {open && hints.some((hint) => hint !== null) ? (
+        {check === null ? null : (
           <p className="text-body text-warning" data-testid={`${testId}.check`}>
-            {tp('purchasing.bill.checkHint')}
+            {tp(check)}
           </p>
-        ) : null}
+        )}
       </div>
       <Section title={tp('purchasing.bill.lines')} testId={`${testId}.lines`}>
         <ul>
@@ -320,9 +322,11 @@ function BillBody({
           ))}
         </ul>
         <dl className="mt-2 flex flex-col gap-1">
-          <TotalLine label={tp('purchasing.bill.subtotal')} value={bill.total - bill.charges} />
           {bill.charges === 0 ? null : (
-            <TotalLine label={tp('purchasing.bill.charges')} value={bill.charges} />
+            <>
+              <TotalLine label={tp('purchasing.bill.subtotal')} value={bill.total - bill.charges} />
+              <TotalLine label={tp('purchasing.bill.charges')} value={bill.charges} />
+            </>
           )}
           <TotalLine
             label={tp('purchasing.bill.total')}

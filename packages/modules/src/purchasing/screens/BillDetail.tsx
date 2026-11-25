@@ -33,7 +33,7 @@ import {
 } from '../../screen-kit/screens/views.js';
 import { MAX_PURCHASING_NOTE } from '../constants.js';
 import { tp, type PurchasingKey } from '../i18n.js';
-import { billLineHint, dueText, notaText } from '../bills/bill-form.js';
+import { billCheckKey, billLineHint, dueText, notaText } from '../bills/bill-form.js';
 import type { BillDetailRow } from '../bills/queries.js';
 import { usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 
@@ -103,6 +103,7 @@ export function BillDetail({
     const open = row.status === 'open';
     const parts = row.total - row.charges;
     const hints = row.lines.map(billLineHint);
+    const check = open ? billCheckKey(row.lines) : null;
     return (
       <View testID={`${testID}.content`}>
         <Card testID={`${testID}.summary`}>
@@ -144,11 +145,11 @@ export function BillDetail({
           ) : null}
         </Card>
 
-        {open && hints.some((hint) => hint !== null) ? (
+        {check === null ? null : (
           <Text style={styles.warning} testID={`${testID}.check`}>
-            {tp('purchasing.bill.checkHint')}
+            {tp(check)}
           </Text>
-        ) : null}
+        )}
 
         <Section
           title={tp('purchasing.bill.lines')}
@@ -183,17 +184,19 @@ export function BillDetail({
             </View>
           ))}
           <View style={styles.totals}>
-            <AmountRow
-              label={tp('purchasing.bill.subtotal')}
-              value={parts}
-              testID={`${testID}.parts`}
-            />
             {row.charges === 0 ? null : (
-              <AmountRow
-                label={tp('purchasing.bill.charges')}
-                value={row.charges}
-                testID={`${testID}.charges`}
-              />
+              <>
+                <AmountRow
+                  label={tp('purchasing.bill.subtotal')}
+                  value={parts}
+                  testID={`${testID}.parts`}
+                />
+                <AmountRow
+                  label={tp('purchasing.bill.charges')}
+                  value={row.charges}
+                  testID={`${testID}.charges`}
+                />
+              </>
             )}
             <AmountRow
               label={tp('purchasing.bill.total')}

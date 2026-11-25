@@ -81,5 +81,19 @@ for (const [width, height] of [
         .click();
       await check(`${place.toLowerCase()}-${size}`);
     }
+
+    // The owner's supplier bills: the Tagihan list, and one bill open beside it.
+    await page.getByTestId('desktop.person').click();
+    await page.getByRole('menuitem', { name: 'Andi Pratama' }).click();
+    await page
+      .getByRole('navigation')
+      .getByRole('button', { name: 'Belanja', exact: true })
+      .click();
+    await page.getByTestId('purchasing.desk.views.bills').click();
+    await expect(page.getByTestId('purchasing.desk.bills')).toBeVisible();
+    await check(`bills-${size}`);
+    await page.getByTestId('purchasing.desk.bills').getByText('SJ-0912').first().click();
+    await expect(page.getByTestId('purchasing.desk.bill.check')).toBeVisible();
+    await check(`bill-${size}`);
   });
 }

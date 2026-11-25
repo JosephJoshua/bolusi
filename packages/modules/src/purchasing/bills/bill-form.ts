@@ -282,3 +282,15 @@ export function billLineHint(
     ? tp('purchasing.bill.notOrdered')
     : tp('purchasing.bill.notArrived', { count: check.count });
 }
+
+/** What the bill as a whole needs checked: parts not arrived, not ordered, or both; null when none. */
+export function billCheckKey(
+  lines: readonly Pick<BillLineRow, 'qty' | 'ordered' | 'received' | 'billedElsewhere'>[],
+): PurchasingKey | null {
+  const kinds = new Set(
+    lines.map((line) => billLineCheck(line)?.kind).filter((k) => k !== undefined),
+  );
+  if (kinds.size === 0) return null;
+  if (kinds.size > 1) return 'purchasing.bill.checkBoth';
+  return kinds.has('notOrdered') ? 'purchasing.bill.checkOrdered' : 'purchasing.bill.checkArrived';
+}
