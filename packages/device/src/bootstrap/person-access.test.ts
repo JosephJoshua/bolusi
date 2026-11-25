@@ -303,6 +303,7 @@ describe('what a person may read is only "here" once it is all here', () => {
       pull: () => Promise.reject(new Error('unused')),
       end: () => Promise.resolve(),
       sendPendingPins: () => Promise.resolve(),
+      openDecision: () => Promise.reject(new Error('unused')),
     });
     await h.access.begin(owner);
     await h.access.sync();
