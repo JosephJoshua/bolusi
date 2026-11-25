@@ -310,7 +310,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: size.control,
     marginBottom: space.sm,
+    gap: space.sm,
   },
-  sectionAction: { marginRight: -space.sm },
+  // Shares the row with the title and wraps inside it at a large font, never running off the edge.
+  sectionAction: { marginRight: -space.sm, flexShrink: 1 },
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
 });

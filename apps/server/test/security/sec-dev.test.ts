@@ -36,6 +36,7 @@ import { sha256Hex } from '../../src/crypto/index.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
   enroll,
+  asPerson,
   makeIdentityHarness,
   provision,
   seedControlSession,
@@ -192,7 +193,10 @@ test('revoked-device 401: every identity endpoint returns DEVICE_REVOKED for the
     headers: { Authorization: `Bearer ${control}` },
   });
 
-  const hdr = { Authorization: `Bearer ${device.token}`, 'X-Acting-User': p.ownerUserId };
+  const hdr = {
+    Authorization: `Bearer ${device.token}`,
+    ...(await asPerson(h, device.token, p.ownerUserId)),
+  };
   for (const path of ['/v1/devices', '/v1/devices/me', '/v1/devices/me/bundle']) {
     const res = await h.app.request(`http://srv.test${path}`, { headers: hdr });
     expect(res.status, `${path} should DEVICE_REVOKED`).toBe(401);

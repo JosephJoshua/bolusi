@@ -793,6 +793,7 @@ export const REPAIR_KEYS = [
   'repair.action.changeCancelFee',
   'repair.done.cancelFeeChanged',
   'repair.history.fee',
+  'repair.history.noFee',
   'repair.cancelFee.title',
   'repair.cancelFee.paid',
   'repair.cancelFee.unpaid',

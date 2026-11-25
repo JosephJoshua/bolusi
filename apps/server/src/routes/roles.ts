@@ -121,7 +121,7 @@ export function createRolesRouter(deps: ServerDeps) {
           const roleId = uuidv7(t);
 
           await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             await requireMainOwner(db, acting);
             const source = await loadEditableRole(db, body.copyFromRoleId);
             await requireFreeName(db, body.name, null);
@@ -169,7 +169,7 @@ export function createRolesRouter(deps: ServerDeps) {
           const tenantId = tenantIdFromContext(c);
 
           await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             await requireMainOwner(db, acting);
             const role = await loadEditableRole(db, roleId);
             const changes: Record<string, unknown> = {};
@@ -244,7 +244,7 @@ export function createRolesRouter(deps: ServerDeps) {
           const tenantId = tenantIdFromContext(c);
 
           await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             await requireMainOwner(db, acting);
             const role = await loadEditableRole(db, roleId);
             if (role.isSystemDefault) {

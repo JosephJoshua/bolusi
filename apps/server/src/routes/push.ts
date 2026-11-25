@@ -8,7 +8,7 @@
 // (forTenant/RLS), so a device can never register a token for another device or tenant.
 import { Hono } from 'hono';
 
-import { resolveActingUser } from '../auth/acting-user.js';
+import { provenActingUser } from '../auth/acting-user.js';
 import { isUniqueViolation } from '../db-errors.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
@@ -51,13 +51,16 @@ export function createPushRouter(deps: ServerDeps) {
 
       return withTenant(c, async (db) => {
         // Acting user is OPTIONAL for push (§2). Present → validate through the shared trust model
-        // (resolveActingUser: exists in THIS tenant + usable on this device, else ACTING_USER_INVALID)
-        // and stamp it. Absent → `user_id = null` (pre-login registration). "Last registrant wins"
+        // (exists in THIS tenant + usable on this device, else ACTING_USER_INVALID) and stamp it only
+        // when the device proves them (auth/acting-user.ts): an unproven name registers the token for
+        // nobody, so a copied device token cannot route an owner's alerts to itself. Absent → `user_id = null` (pre-login registration). "Last registrant wins"
         // (§2): the value written is whoever registered THIS time, filling a previously-null id on a
         // later authenticated registration.
         const claimed = c.req.header('X-Acting-User');
         const userId =
-          claimed !== undefined && claimed !== '' ? (await resolveActingUser(c, db)).userId : null;
+          claimed !== undefined && claimed !== ''
+            ? ((await provenActingUser(c, db, now))?.userId ?? null)
+            : null;
 
         // "Last registrant wins" (api/04-push §2): `expo_push_token` is a GLOBAL UNIQUE, so a token
         // can belong to at most one device. If ANOTHER device in this tenant already holds it,

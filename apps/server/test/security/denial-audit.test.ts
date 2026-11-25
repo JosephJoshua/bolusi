@@ -12,6 +12,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { DENIAL_ACTION } from '../../src/identity/denial-audit.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   roleIdOf,
@@ -112,7 +113,7 @@ test('every server permission/restriction denial lands one identity_audit `permi
   const device = await seedDevice(h, { tenantId, storeId: s1, enrolledBy: ownerId });
   const r4 = await h.app.request(`http://srv.test/v1/users/${ownerId}/pin-verifier`, {
     method: 'POST',
-    headers: { ...bearer(device.token), 'X-Acting-User': storeOwner },
+    headers: { ...bearer(device.token), ...(await asPerson(h, device.token, storeOwner)) },
     body: JSON.stringify({
       verifierRef: uuidv7(h.clock.now()),
       verifier: {

@@ -1,6 +1,6 @@
 // Search, inline actions, the timeline and the photo strip/viewer: what a person can do with each.
 import { act } from 'react';
-import { Keyboard } from 'react-native';
+import { Keyboard, StyleSheet } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
 import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
@@ -10,6 +10,7 @@ import { SearchField } from '../src/components/SearchField.js';
 import { Sheet } from '../src/components/Sheet.js';
 import { TextButton } from '../src/components/TextButton.js';
 import { Timeline } from '../src/components/Timeline.js';
+import { size } from '../src/tokens.js';
 import { fire, render, textsIn } from './render.js';
 
 describe('SearchField', () => {
@@ -54,6 +55,12 @@ describe('SearchField', () => {
 });
 
 describe('TextButton', () => {
+  test('a label wraps instead of being cut when the room runs out (large font)', () => {
+    const r = render(<TextButton testID="tb" label="Lihat semua (8)" onPress={vi.fn()} />);
+    expect(r.get('tb.label').props['numberOfLines']).toBeUndefined();
+    expect(StyleSheet.flatten(r.get('tb.label').props['style'])).toMatchObject({ flexShrink: 1 });
+  });
+
   test('a disabled one is announced and does not fire', () => {
     const r = render(<TextButton testID="tb" label="Ganti" onPress={vi.fn()} disabled />);
     expect(r.get('tb').props['accessibilityState']).toEqual({ disabled: true });
@@ -102,6 +109,24 @@ describe('PhotoStrip', () => {
     expect(r.get('ps.back').props['accessibilityLabel']).toBe('Buka foto Belakang');
     fire(r.get('ps.back'), 'onPress');
     expect(onOpen).toHaveBeenCalledWith(1);
+  });
+
+  test('a caption is never cut: it wraps, and the tile widens for it (large font, tablet column)', () => {
+    const r = render(
+      <PhotoStrip
+        testID="ps"
+        photos={[{ key: 'back', label: 'Belakang kiri bawah', image: null }]}
+        onOpen={vi.fn()}
+        openLabel="Buka foto"
+      />,
+    );
+    const caption = r
+      .get('ps.back')
+      .queryAll((node) => node.props['children'] === 'Belakang kiri bawah')[0]!;
+    expect(caption.props['numberOfLines']).toBeUndefined();
+    const tile = StyleSheet.flatten(r.get('ps.back').props['style']) as Record<string, unknown>;
+    expect(tile['width']).toBeUndefined();
+    expect(tile['minWidth']).toBe(size.photoStrip);
   });
 });
 
