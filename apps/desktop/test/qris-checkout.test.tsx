@@ -5,13 +5,9 @@
 import { initI18n } from '@bolusi/i18n';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
+import { QrisError, type PaymentAccountRow, type QrisPort } from '@bolusi/modules/money';
 import {
-  QrisError,
   forgetShownQrs,
-  type PaymentAccountRow,
-  type QrisPort,
-} from '@bolusi/modules/money';
-import {
   PaymentLines,
   QrisDialog,
   newPaymentLine,

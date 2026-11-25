@@ -78,7 +78,7 @@ import { zAccountRef } from '../money/operations.js';
 import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
 import { refundSplit } from '../money/rules.js';
 import { REPAIR_DOCUMENT_KIND, ticketCharge } from './money-document.js';
-import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
+import { REPAIR_REFUSALS, checkDownPayment, requireOpen, requireProposal } from './rules.js';
 import { STATUS_NONCE_BYTES, statusCodeFor, statusNonceFrom } from './status-link.js';
 import { formatTicketNumber } from './ticket-number.js';
 import {
@@ -633,7 +633,7 @@ export async function changeCancelFeeHandler(
   }
   const billed = money.charged - money.reduced;
   if (input.fee === billed) {
-    throw REPAIR_REFUSALS.refuse('nothingChanged', {
+    throw REPAIR_REFUSALS.refuseOnDevice('nothingChanged', {
       details: { field: 'fee', issue: 'the bill is already this' },
     });
   }
@@ -1120,11 +1120,7 @@ export async function recordDownPaymentHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  if (ticket.location === 'returned' || ticket.outcome === 'cancelled') {
-    throw REPAIR_REFUSALS.refuse(ticket.location === 'returned' ? 'returned' : 'cancelled', {
-      details: { entityType: REPAIR_TICKET_ENTITY, entityId: ticket.id },
-    });
-  }
+  requireOpen(ticket, REPAIR_OP.downPaymentReceived);
   checkDownPayment((ticket.downPayment ?? 0) + input.amount, ticket.quoteTotal);
   return {
     ops: [
@@ -1183,11 +1179,11 @@ export async function correctDownPaymentHandler(
   const details = { entityType: REPAIR_TICKET_ENTITY, entityId: ticket.id };
   // After pickup the DP is part of the bill the customer paid; and money already handed back
   // would be paid out a second time if the payments were simply re-recorded.
-  if (ticket.location === 'returned') throw REPAIR_REFUSALS.refuse('returned', { details });
+  if (ticket.location === 'returned') throw REPAIR_REFUSALS.refuseOnDevice('returned', { details });
   if ((ticket.downPayment ?? 0) === input.amount) throw nothingChanged('amount');
   const money = await ticketMoney(ctx, ticket.id);
   if (money.entries.some((entry) => entry.kind === 'refund_paid')) {
-    throw REPAIR_REFUSALS.refuse('downPaymentRefunded', { details });
+    throw REPAIR_REFUSALS.refuseOnDevice('downPaymentRefunded', { details });
   }
   const live = money.entries.filter(
     (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,

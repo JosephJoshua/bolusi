@@ -59,8 +59,8 @@ import {
   refundLimitText,
   useReduceCharge,
   useRefund,
-  type MoneyTarget,
 } from '../refund.js';
+import type { MoneyTarget } from '../kas.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { ChangeCheckSheet, PaymentLines } from './PaymentLines.js';
@@ -596,7 +596,7 @@ export function ReceiveDebtStep({
 
 /**
  * Money back to a customer, through a method they paid with. The counter gives back only an
- * overpayment; an owner any part of what was paid (refund.ts).
+ * overpayment; an owner any part of what was paid (refund.tsx).
  */
 export function RefundStep({
   chrome,

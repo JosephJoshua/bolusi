@@ -16,7 +16,7 @@ import {
 } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import type { ApprovalRow } from '../approvals/queries.js';
-import type { MoneyTarget } from '../money/refund.js';
+import type { MoneyTarget } from '../money/kas.js';
 import type { VideoMediaRef } from '../screen-kit/media.js';
 import type { CorrectTicketDetailsInput, OpenTicketInput } from './commands.js';
 import { imeiInvalid, phoneInvalid } from './contact.js';
@@ -294,6 +294,21 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
   };
 }
 
+/** Which repair settings pages the person may open, on the phone and the PC alike. */
+export function repairSettingsAccess(abilities: RepairAbilities): {
+  readonly intakeOptions: boolean;
+  readonly cancelFees: boolean;
+  readonly uncollected: boolean;
+  readonly printSettings: boolean;
+} {
+  return {
+    intakeOptions: abilities.manageIntakeOptions || abilities.hideIntakeOptions,
+    cancelFees: abilities.setCancelFees,
+    uncollected: abilities.setUncollectedDays,
+    printSettings: abilities.setPrintSettings,
+  };
+}
+
 /** A servisan parts are drawn for: being worked on or waiting for a part, and still in the store. */
 export function partsInWork(ticket: {
   readonly outcome: string;
@@ -514,7 +529,7 @@ export function ticketMoneyTarget(
 }
 
 /**
- * What may be done with a servisan's money once the phone went home (refund.ts has the details):
+ * What may be done with a servisan's money once the phone went home (refund.tsx has the details):
  * give back an overpayment (the counter) or any of what was paid (an owner), and an owner lowers
  * what is still owed.
  */

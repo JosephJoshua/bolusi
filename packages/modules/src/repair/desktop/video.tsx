@@ -1,6 +1,6 @@
 // The ownership video on the PC: at intake a tile that records it while there is none, then a play
 // and a record-again button; on the servisan the clip that was taken, with when, to play back. The
-// recording and the rules behind it are shared with the phone (`ownership-video.ts`).
+// recording and the rules behind it are shared with the phone (`ownership-video.tsx`).
 import { formatDateTime } from '@bolusi/i18n';
 import { Button, CaptureTile, Section } from '@bolusi/ui-web';
 import { Play, Video } from 'lucide-react';

@@ -1,5 +1,5 @@
 /**
- * QrisStep — the QR the customer scans to pay one line (qris-hooks.ts `useQrisCharge`), a full-screen
+ * QrisStep — the QR the customer scans to pay one line (qris-hooks.tsx `useQrisCharge`), a full-screen
  * step over the payment it came from: the amount big, the QR, and what is happening until Xendit
  * confirms the payment. Back closes it and keeps the QR: shown again for the same amount it is the
  * same one, since the customer may have scanned it. When the QR cannot be made (no connection,

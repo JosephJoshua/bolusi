@@ -1,7 +1,6 @@
-// Composition dependencies for the Hono app. Everything the middleware chain and stub routers
-// touch that is an I/O boundary or a not-yet-built collaborator is injected here — so tests swap
-// fakes (rate-limit stores, token verifier, forTenant, clock) and later tasks (13/16/…) drop in
-// real implementations without reshaping the skeleton.
+// Composition dependencies for the Hono app. Everything the middleware chain and routers touch
+// that is an I/O boundary is injected here, so tests swap fakes (rate-limit stores, token
+// verifier, forTenant, clock).
 import {
   forTenant as dbForTenant,
   readPhoneModelPhoto,
@@ -86,9 +85,7 @@ export const DEFAULT_DEVICE_RATE_LIMITS: DeviceRateLimits = {
   aggregatePerMinute: 600,
 };
 
-// PLACEHOLDER (flagged): api/00 §11 delegates the login per-IP numeric to api/02-auth — that
-// number lands with task 13. Until then a conservative pre-auth cap protects the login route;
-// it is a dep so task 13 sets the real value without touching the chain.
+// Login attempts per IP per minute, before any account is known.
 export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
 
 /**

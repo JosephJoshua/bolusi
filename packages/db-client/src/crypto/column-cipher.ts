@@ -58,8 +58,8 @@
 // different suffix, so they no longer match this cipher's marker and are passed through as opaque
 // envelope text instead of throwing. That is a CHANGE from the previous behaviour and it is not a
 // disclosure (the bytes stay ciphertext) — but it means the codec no longer detects a restored
-// foreign database on its own, which is exactly the boot-probe gap already filed as task 160. The
-// right place to catch that is at open, against a stored key tag; it is not this file's job.
+// foreign database on its own. Boot catches that instead, against a stored key tag
+// (`@bolusi/device` db-identity.ts).
 //
 // ── ONE KEY, RANDOM NONCE PER VALUE ─────────────────────────────────────────────────────────────
 // The key is the existing 32-byte SecureStore DB key (`SecureStoreDbKeyStore`, 10-db §12) — the same
