@@ -5,9 +5,14 @@ import { t } from '@bolusi/i18n';
 import { ConfirmDialog } from '@bolusi/ui-web';
 import { useEffect, useRef, useState } from 'react';
 
-/** Whether something being filled in is open: a dialog, which the page has nowhere else to keep. */
+/**
+ * Whether something being filled in is open: a dialog, which the page has nowhere else to keep, or
+ * a page that marks itself unsaved (a sheet of items being entered).
+ */
 function fillingIn(): boolean {
-  return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+  return (
+    document.querySelector('[role="dialog"], [role="alertdialog"], [data-unsaved="true"]') !== null
+  );
 }
 
 export function CloseGuard(): React.JSX.Element {

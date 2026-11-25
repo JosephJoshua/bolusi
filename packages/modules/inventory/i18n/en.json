@@ -235,7 +235,10 @@
     "moveDown": "Move down",
     "removeOption": "Remove choice {option}",
     "addToName": "Add {label} to the name",
-    "noOptions": "No choices yet. New ones can also be typed when filling in an item."
+    "noOptions": "No choices yet. New ones can also be typed when filling in an item.",
+    "kindLabel": "Field type",
+    "formatHintPc": "Add to the name:",
+    "optionsPlaceholder": "Type a choice, then Enter"
   },
   "desk": {
     "col": {
@@ -254,5 +257,43 @@
     },
     "results": "{count} items",
     "closePart": "Close item"
+  },
+  "bulk": {
+    "open": "Add many",
+    "title": "Add many items",
+    "col": {
+      "name": "Name",
+      "fits": "Fits phones",
+      "code": "Code",
+      "barcode": "Barcode",
+      "tags": "Labels",
+      "stock": "Stock"
+    },
+    "problem": {
+      "tooLong": "At most {max} characters.",
+      "tooMany": "At most {max}.",
+      "phoneUnknown": "{phones} is not in the phone list yet, so it is saved as typed.",
+      "phoneNear": "{phones} is not in the phone list yet. Did you mean {near}?",
+      "wholeNumber": "Write a whole number, such as 5.",
+      "nameOrFields": "Fill in the fields or type a name first."
+    },
+    "saved": "{count} items saved.",
+    "left": "{count} rows not saved yet; check the ones marked red.",
+    "blocked": "{count} incomplete",
+    "save": "Save {count} items",
+    "saving": "Saving {done} of {total}…",
+    "hint": {
+      "name": "Leave empty for the automatic name: {format}",
+      "fits": "Separate with commas, such as Redmi Note 10, Redmi Note 10S",
+      "list": "Separate with commas",
+      "sheet": "Type straight in, or copy from Excel and paste with Ctrl+V. Column headings are recognised."
+    },
+    "row": "Row {n}",
+    "deleteRow": "Delete row",
+    "where": "Row {n}, {column}",
+    "switchTitle": "Change category?",
+    "switchMessage": "Rows not saved yet will be removed.",
+    "switchConfirm": "Change",
+    "leaveMessage": "Rows not saved yet will be lost."
   }
 }
