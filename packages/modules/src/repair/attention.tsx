@@ -51,17 +51,17 @@ const ORDER_PAGES_MAX = 5;
 
 export async function readAttention(rt: RepairRuntime, now: number): Promise<Attention> {
   const waiting = (await readApprovals(rt)).filter((row) => row.canDecide);
-  const ids = [...new Set(waiting.map((row) => row.targetId))].slice(0, APPROVALS_VIEW_MAX);
-  const tickets =
-    ids.length === 0
-      ? []
-      : (
-          await rt.query('listTickets', {
-            filter: { ids },
-            sort: 'createdAt.desc',
-            limit: APPROVALS_VIEW_MAX,
-          })
-        ).rows;
+  // Every servisan a request is on, read a page of ids at a time.
+  const ids = [...new Set(waiting.map((row) => row.targetId))];
+  const tickets: TicketSummaryRow[] = [];
+  for (let at = 0; at < ids.length; at += APPROVALS_VIEW_MAX) {
+    const page = await rt.query('listTickets', {
+      filter: { ids: ids.slice(at, at + APPROVALS_VIEW_MAX) },
+      sort: 'createdAt.desc',
+      limit: APPROVALS_VIEW_MAX,
+    });
+    tickets.push(...page.rows);
+  }
   const byId = new Map(tickets.map((ticket) => [ticket.id, ticket]));
   // Oldest first: whoever asked first has waited longest.
   const requests = [...waiting]

@@ -1152,9 +1152,12 @@ describe('asking an owner instead', () => {
     expect(opensAttention(holding(REPAIR_PERMISSION.intake, REPAIR_PERMISSION.handover))).toBe(
       false,
     );
-    expect(opensAttention(holding(REPAIR_PERMISSION.discount))).toBe(true);
-    expect(opensAttention(holding(MONEY_PERMISSION.refund))).toBe(true);
-    expect(opensAttention(holding(REPAIR_PERMISSION.correctDownPayment))).toBe(true);
+    const reads = REPAIR_PERMISSION.read;
+    expect(opensAttention(holding(reads, REPAIR_PERMISSION.discount))).toBe(true);
+    expect(opensAttention(holding(reads, MONEY_PERMISSION.refund))).toBe(true);
+    expect(opensAttention(holding(reads, REPAIR_PERMISSION.correctDownPayment))).toBe(true);
+    // A money-only role that may void but not read servisan has nowhere to answer from.
+    expect(opensAttention(holding(MONEY_PERMISSION.voidPayment))).toBe(false);
   });
 });
 

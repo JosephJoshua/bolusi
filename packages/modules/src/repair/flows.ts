@@ -159,6 +159,8 @@ export const UNCOLLECTED_REFRESH_MS = 3_600_000;
  * are the decision permissions of every request kind (repair's and the ledger's).
  */
 export function opensAttention(reader: { hasPermission(permissionId: string): boolean }): boolean {
+  // Every request is on a servisan, answered from its page: no reading servisan, no page.
+  if (!reader.hasPermission(REPAIR_PERMISSION.read)) return false;
   return [
     REPAIR_PERMISSION.discount,
     REPAIR_PERMISSION.cancel,
