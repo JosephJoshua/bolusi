@@ -135,6 +135,7 @@ export const repairModuleManifest = {
     [REPAIR_PERMISSION.quoteChange]: {
       scope: 'store',
       isDangerous: true,
+      decision: false,
       description:
         "Can change a repair's price after intake and accept or decline technicians' proposals.",
     },

@@ -89,6 +89,7 @@ function moneyManifest(sources: MoneyDocumentSources) {
       [MONEY_PERMISSION.moveCash]: {
         scope: 'store',
         isDangerous: true,
+        decision: false,
         description:
           'Can take cash out of the drawer (for the owner, an expense, a bank deposit) or put cash in.',
       },
@@ -113,11 +114,13 @@ function moneyManifest(sources: MoneyDocumentSources) {
       [MONEY_PERMISSION.manageAccounts]: {
         scope: 'store',
         isDangerous: true,
+        decision: true,
         description: "Can add and change the store's QRIS, card machine and bank accounts.",
       },
       [MONEY_PERMISSION.manageCentralAccounts]: {
         scope: 'tenant',
         isDangerous: true,
+        decision: true,
         description:
           'Can add and change the QRIS, card machine and bank accounts shared by stores.',
       },

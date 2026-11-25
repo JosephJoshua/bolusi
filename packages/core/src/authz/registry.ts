@@ -267,6 +267,18 @@ export function assemblePermissionRegistry(
           `duplicate permission id ${id}: declared by both ${existing} and ${module.id} (02-permissions §3.2 rule 2)`,
         );
       }
+      // A limit is how far a manager may decide, so a limited permission is a decision; a dangerous
+      // one says whether it is, so no new owner power slips past the server's PIN check unasked.
+      if (declaration.limit !== undefined && declaration.decision !== true) {
+        throw new PermissionRegistryError(
+          `permission ${id} has a limit, so it is a decision: declare decision: true`,
+        );
+      }
+      if (declaration.isDangerous && declaration.decision === undefined) {
+        throw new PermissionRegistryError(
+          `permission ${id} is dangerous: declare whether it is a decision (decision: true or false)`,
+        );
+      }
       declaringModule.set(id, module.id);
       entries.set(id, {
         id,

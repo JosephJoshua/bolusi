@@ -275,6 +275,7 @@ function assertAuthOpCoverage(): void {
 assertAuthOpCoverage();
 
 // ── permissions (02-permissions §11.1, verbatim scopes / isDangerous / canonical EN) ─────────────
+// Every dangerous auth power is an owner's decision (authz/registry.ts `decision`).
 const store = (
   isDangerous: boolean,
   description: string,
@@ -283,12 +284,14 @@ const store = (
   scope: 'store',
   isDangerous,
   description,
+  ...(isDangerous ? { decision: true } : {}),
   ...extra,
 });
 const tenant = (isDangerous: boolean, description: string): PermissionDeclaration => ({
   scope: 'tenant',
   isDangerous,
   description,
+  ...(isDangerous ? { decision: true } : {}),
 });
 
 /** The manifest as authored (04 §1). */
