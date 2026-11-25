@@ -21,6 +21,7 @@ import {
   type,
   type ListState,
   Text,
+  ValueText,
 } from '@bolusi/ui';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -339,13 +340,13 @@ const PartListRow = memo(
         ]}
       >
         <View style={styles.rowText}>
-          <Text style={styles.name} numberOfLines={2}>
+          <ValueText lines={2} style={styles.name}>
             {row.name}
-          </Text>
+          </ValueText>
           {details === '' ? null : (
-            <Text style={styles.details} numberOfLines={1}>
+            <ValueText lines={1} style={styles.details}>
               {details}
-            </Text>
+            </ValueText>
           )}
         </View>
         <View style={styles.stock}>

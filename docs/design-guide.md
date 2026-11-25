@@ -226,7 +226,8 @@ Supported range: 360 dp wide phones and the system font up to 1.3×.
 
 ## 10. Review before showing anyone
 
-Run the app, take screenshots of every changed screen and state, and check:
+Run the app, take screenshots of every changed screen and state (the layout check in
+[QA](qa.md) catches cut, overlapping and split text for you), and check:
 
 1. Squint test: does the right thing lead? Is there exactly one primary?
 2. Is every size on the type ladder, every gap on the spacing scale?

@@ -108,14 +108,14 @@ describe('the drawer', () => {
     expect(text(screen, 'money.count.primary')).toContain('Cek hitungan');
     await press(screen, 'money.count.primary');
     // Checked: now it shows, and a count that is off may be counted once more, blind again.
-    expect(text(screen, 'money.count.expected')).toBe('Rp 100.000');
-    expect(text(screen, 'money.count.difference')).toBe('Kurang Rp 5.000');
+    expect(text(screen, 'money.count.expected')).toBe('Rp\u00A0100.000');
+    expect(text(screen, 'money.count.difference')).toBe('Kurang Rp\u00A05.000');
     await press(screen, 'money.count.recount');
     expect(screen.query('money.count.expected')).toBeNull();
     type(screen, 'money.count.counted', '95000');
     await settle();
     await press(screen, 'money.count.primary');
-    expect(text(screen, 'money.count.difference')).toBe('Kurang Rp 5.000');
+    expect(text(screen, 'money.count.difference')).toBe('Kurang Rp\u00A05.000');
     // Once only.
     expect(screen.query('money.count.recount')).toBeNull();
     expect(text(screen, 'money.count.primary')).toContain('Simpan hitungan');
@@ -132,20 +132,20 @@ describe('the drawer', () => {
     expect(screen.query('money.kas.blindHint')).toBeNull();
     // The counter sees the difference waiting, and cannot settle it.
     expect(text(screen, 'money.kas.differences')).toContain('Menunggu pemilik');
-    expect(text(screen, 'money.kas.differences')).toContain('Kurang Rp 5.000');
+    expect(text(screen, 'money.kas.differences')).toContain('Kurang Rp\u00A05.000');
   });
 
   test('an owner sees what should be in the drawer up front, and the difference as they type', async () => {
     h = await openRepairScreenHarness(5410);
     await float(h, 100_000);
     const screen = await mount(h, h.storeOwnerId);
-    expect(text(screen, 'money.kas.expected')).toBe('Rp 100.000');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp\u00A0100.000');
     expect(screen.query('money.kas.blindHint')).toBeNull();
     await press(screen, 'money.kas.count');
-    expect(text(screen, 'money.count.expected')).toBe('Rp 100.000');
+    expect(text(screen, 'money.count.expected')).toBe('Rp\u00A0100.000');
     type(screen, 'money.count.counted', '95000');
     await settle();
-    expect(text(screen, 'money.count.difference')).toBe('Kurang Rp 5.000');
+    expect(text(screen, 'money.count.difference')).toBe('Kurang Rp\u00A05.000');
     expect(text(screen, 'money.count.primary')).toContain('Simpan hitungan');
   });
 
@@ -162,14 +162,14 @@ describe('the drawer', () => {
       }
     ).counts[0]!.id;
     await press(screen, `money.kas.difference.${countId}`);
-    expect(text(screen, 'money.settle.difference')).toBe('Kurang Rp 5.000');
+    expect(text(screen, 'money.settle.difference')).toBe('Kurang Rp\u00A05.000');
     expect(screen.all('money.settle.primary')[0]!.props['disabled']).toBe(true);
     type(screen, 'money.settle.reason', 'Salah kembalian');
     await settle();
     await press(screen, 'money.settle.primary');
 
     expect(screen.query('money.kas.differences')).toBeNull();
-    expect(text(screen, 'money.kas.expected')).toBe('Rp 95.000');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp\u00A095.000');
   });
 
   test('a newer count while the owner reads closes the settle step to the older difference', async () => {
@@ -208,10 +208,10 @@ describe('the drawer', () => {
     await settle();
     await press(screen, 'money.move.primary');
 
-    expect(await drawerFigure(h)).toBe('Rp 80.000');
+    expect(await drawerFigure(h)).toBe('Rp\u00A080.000');
     expect(text(screen, 'money.kas.moves')).toContain('Biaya toko');
     expect(text(screen, 'money.kas.moves')).toContain('Bensin');
-    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp 20.000');
+    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp\u00A020.000');
   });
 
   test('cash out stops at what the drawer holds, for an owner', async () => {
@@ -223,11 +223,11 @@ describe('the drawer', () => {
     type(screen, 'money.move.reason', 'Setor ke pemilik');
     await settle();
     expect(screen.all('money.move.primary')[0]!.props['disabled']).toBe(true);
-    expect(text(screen, 'money.move.primaryHint')).toContain('Rp 700.000');
+    expect(text(screen, 'money.move.primaryHint')).toContain('Rp\u00A0700.000');
     type(screen, 'money.move.amount', '700000');
     await settle();
     await press(screen, 'money.move.primary');
-    expect(await drawerFigure(h)).toBe('Rp 0');
+    expect(await drawerFigure(h)).toBe('Rp\u00A00');
   });
 
   // QA: a refusal just above the drawer told a blind counter its figure, a try at a time.
@@ -306,7 +306,7 @@ describe('the drawer', () => {
     await settle();
     await press(screen, 'money.move.primary');
 
-    expect(await drawerFigure(h)).toBe('Rp 40.000');
+    expect(await drawerFigure(h)).toBe('Rp\u00A040.000');
     const deposit = await h.db
       .selectFrom('moneyEntries')
       .select(['account', 'amount'])
@@ -388,8 +388,8 @@ describe('the drawer', () => {
     const screen = await mount(h, h.cashierId);
     expect(text(screen, 'money.kas.moves')).toContain('Selisih kas diselesaikan');
     expect(text(screen, 'money.kas.moves')).toContain('Salah kembalian');
-    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp 5.000');
-    expect(await drawerFigure(h)).toBe('Rp 95.000');
+    expect(text(screen, 'money.kas.moves')).toContain('\u2212Rp\u00A05.000');
+    expect(await drawerFigure(h)).toBe('Rp\u00A095.000');
   });
 });
 
@@ -417,12 +417,12 @@ describe('what customers owe', () => {
     );
     const screen = await mount(h, h.cashierId);
     const owed = text(screen, `money.kas.owed.${ticketId}.value`);
-    expect(owed).toBe('Rp 750.000');
+    expect(owed).toBe('Rp\u00A0750.000');
     // The customer, not only the servisan number, is who the counter looks for.
     expect(text(screen, `money.kas.owed.${ticketId}`)).toMatch(/^Yohanis Wenda.*-\d{4}/);
 
     await press(screen, `money.kas.owed.${ticketId}`);
-    expect(text(screen, 'money.receive.owed')).toBe('Rp 750.000');
+    expect(text(screen, 'money.receive.owed')).toBe('Rp\u00A0750.000');
     expect(text(screen, 'money.receive')).toContain('Yohanis Wenda');
     // Part of it today.
     type(screen, 'money.receive.pay.line0.amount', '500000');
@@ -439,22 +439,22 @@ describe('what customers owe', () => {
     expect(second.props['accessibilityLabel']).toBe('Hapus pembayaran ini');
     await press(screen, 'money.receive.pay.line1.remove');
     expect(screen.query('money.receive.pay.line1.remove')).toBeNull();
-    // Handed over exactly: no "Kembalian Rp 0" (round 2 QA, F14); more shows the change.
+    // Handed over exactly: no "Kembalian Rp\u00A00" (round 2 QA, F14); more shows the change.
     type(screen, 'money.receive.pay.line0.tendered', '500000');
     await settle();
     expect(screen.query('money.receive.pay.line0.change')).toBeNull();
     type(screen, 'money.receive.pay.line0.tendered', '550000');
     await settle();
-    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp 50.000');
+    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp\u00A050.000');
     expect(screen.query('money.receive.pay.line0.changeBig')).toBeNull();
     // QA round F: a zero too many shows in the warning colour and asks before it is saved.
     type(screen, 'money.receive.pay.line0.tendered', '5000000');
     await settle();
-    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp 4.500.000');
+    expect(text(screen, 'money.receive.pay.line0.change')).toBe('Rp\u00A04.500.000');
     expect(text(screen, 'money.receive.pay.line0.changeBig')).toBe(
       'Kembalian besar. Cek lagi uang diterima.',
     );
-    expect(text(screen, 'money.receive.primary')).toContain('Terima Rp 500.000');
+    expect(text(screen, 'money.receive.primary')).toContain('Terima Rp\u00A0500.000');
     await press(screen, 'money.receive.primary');
     expect(text(screen, 'money.receive.changeCheck.title')).toBe(
       'Kembalian Rp\u00A04.500.000, sudah benar?',
@@ -467,10 +467,10 @@ describe('what customers owe', () => {
     await settle();
     await press(screen, 'money.receive.primary');
 
-    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 250.000');
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp\u00A0250.000');
     // The counter counts blind, so today's takings are not added up for them.
     expect(screen.query('money.kas.in')).toBeNull();
-    expect(await drawerFigure(h)).toBe('Rp 500.000');
+    expect(await drawerFigure(h)).toBe('Rp\u00A0500.000');
   });
 
   // Round 2 QA, F14: what went back read as a method's negative money in.
@@ -494,10 +494,10 @@ describe('what customers owe', () => {
       h.storeOwnerId,
     );
     const screen = await mount(h, h.storeOwnerId);
-    expect(text(screen, 'money.kas.in.cash.value')).toBe('Rp 200.000');
+    expect(text(screen, 'money.kas.in.cash.value')).toBe('Rp\u00A0200.000');
     expect(text(screen, 'money.kas.in.refunded')).toContain('Dikembalikan ke pelanggan');
-    expect(text(screen, 'money.kas.in.refunded.value')).toBe('\u2212Rp 50.000');
-    expect(text(screen, 'money.kas.in.total.value')).toBe('Rp 150.000');
+    expect(text(screen, 'money.kas.in.refunded.value')).toBe('\u2212Rp\u00A050.000');
+    expect(text(screen, 'money.kas.in.total.value')).toBe('Rp\u00A0150.000');
   });
 
   test('more than what is owed cannot be taken', async () => {
@@ -526,7 +526,7 @@ describe('what customers owe', () => {
     expect(screen.all('money.receive.primary')[0]!.props['disabled']).toBe(true);
     // Said once, under the payment: not again as the button's hint (round 2 QA, F14).
     expect(text(screen, 'money.receive.pay.overpaid')).toBe(
-      'Lebih Rp 50.000. Kurangi jumlahnya dulu.',
+      'Lebih Rp\u00A050.000. Kurangi jumlahnya dulu.',
     );
     expect(screen.query('money.receive.primaryHint')).toBeNull();
   });
@@ -578,26 +578,26 @@ describe('money back and lowered bills', () => {
       h.cashierId,
     );
     const screen = await mount(h, h.cashierId);
-    expect(text(screen, `money.kas.owedBack.${ticketId}.value`)).toBe('Rp 100.000');
+    expect(text(screen, `money.kas.owedBack.${ticketId}.value`)).toBe('Rp\u00A0100.000');
     const drawer = await drawerFigure(h);
-    expect(drawer).toBe('Rp 850.000');
+    expect(drawer).toBe('Rp\u00A0850.000');
 
     await press(screen, `money.kas.owedBack.${ticketId}`);
-    expect(text(screen, 'money.refund.credit')).toContain('Rp 100.000');
+    expect(text(screen, 'money.refund.credit')).toContain('Rp\u00A0100.000');
     // What was paid in all is the owner's to see and give back.
     expect(screen.all('money.refund.paid')).toEqual([]);
-    expect(text(screen, 'money.refund.primary')).toContain('Kembalikan Rp 100.000');
+    expect(text(screen, 'money.refund.primary')).toContain('Kembalikan Rp\u00A0100.000');
     expect(screen.all('money.refund.primary')[0]!.props['disabled']).toBe(true);
     type(screen, 'money.refund.amount', '150000');
     await settle();
-    expect(text(screen, 'money.refund')).toContain('Paling banyak Rp 100.000');
+    expect(text(screen, 'money.refund')).toContain('Paling banyak Rp\u00A0100.000');
     type(screen, 'money.refund.amount', '100000');
     type(screen, 'money.refund.reason', 'Bayar dua kali');
     await settle();
     await press(screen, 'money.refund.primary');
 
     expect(screen.all(`money.kas.owedBack.${ticketId}`)).toEqual([]);
-    expect(await drawerFigure(h)).toBe('Rp 750.000');
+    expect(await drawerFigure(h)).toBe('Rp\u00A0750.000');
   });
 
   test('an owner lowers a debt from taking its payment', async () => {
@@ -616,16 +616,16 @@ describe('money back and lowered bills', () => {
     await press(screen, 'money.receive.reduce');
     expect(screen.query('money.receive.discard')).not.toBeNull();
     await press(screen, 'money.receive.discard.confirm');
-    expect(text(screen, 'money.reduce.owed')).toContain('Rp 750.000');
+    expect(text(screen, 'money.reduce.owed')).toContain('Rp\u00A0750.000');
     type(screen, 'money.reduce.amount', '100000');
     await settle();
-    expect(text(screen, 'money.reduce.after')).toContain('Rp 650.000');
+    expect(text(screen, 'money.reduce.after')).toContain('Rp\u00A0650.000');
     expect(screen.all('money.reduce.primary')[0]!.props['disabled']).toBe(true);
     type(screen, 'money.reduce.reason', 'Pelanggan lama');
     await settle();
     await press(screen, 'money.reduce.primary');
 
-    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 650.000');
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp\u00A0650.000');
   });
 
   // Android QA (#90): a manager over their limit only learned it when the save was refused.
@@ -635,12 +635,12 @@ describe('money back and lowered bills', () => {
     const screen = await mount(h, h.managerId);
     await press(screen, `money.kas.owed.${ticketId}`);
     await press(screen, 'money.receive.reduce');
-    expect(text(screen, 'money.reduce.limit')).toContain('Rp 30.000');
+    expect(text(screen, 'money.reduce.limit')).toContain('Rp\u00A030.000');
     // Beyond what was charged it is refused, and "Sisa jadi" keeps the debt as it is.
     type(screen, 'money.reduce.amount', '800000');
     await settle();
-    expect(text(screen, 'money.reduce')).toContain('Paling banyak Rp 750.000.');
-    expect(text(screen, 'money.reduce.after')).toContain('Rp 750.000');
+    expect(text(screen, 'money.reduce')).toContain('Paling banyak Rp\u00A0750.000.');
+    expect(text(screen, 'money.reduce.after')).toContain('Rp\u00A0750.000');
     // Beyond the limit an owner is asked, from Kas as from the servisan (Android QA, #121).
     type(screen, 'money.reduce.amount', '40000');
     type(screen, 'money.reduce.reason', 'Pelanggan lama');
@@ -649,7 +649,7 @@ describe('money back and lowered bills', () => {
     expect(text(screen, 'money.reduce.primary')).toContain('Minta persetujuan');
     await press(screen, 'money.reduce.primary');
     expect(text(screen, 'money.kas.notice')).toContain('Permintaan dibuat.');
-    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 750.000');
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp\u00A0750.000');
     const [request] = (
       await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.storeOwnerId)
     ).rows;
@@ -674,7 +674,7 @@ describe('money back and lowered bills', () => {
     type(screen, 'money.reduce.reason', 'Pelanggan lama');
     await settle();
     await press(screen, 'money.reduce.primary');
-    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp 720.000');
+    expect(text(screen, `money.kas.owed.${ticketId}.value`)).toBe('Rp\u00A0720.000');
   });
 });
 
@@ -705,7 +705,7 @@ describe('Riwayat', () => {
     h = await openRepairScreenHarness(5412);
     const entryId = await paid(h);
     const screen = await mount(h, h.storeOwnerId);
-    expect(text(screen, 'money.kas.expected')).toBe('Rp 200.000');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp\u00A0200.000');
 
     await press(screen, 'money.kas.history');
     expect(text(screen, 'money.history.day')).toBe('Hari ini');
@@ -716,7 +716,7 @@ describe('Riwayat', () => {
     expect(text(screen, row)).toContain('Tunai');
 
     await press(screen, row);
-    expect(text(screen, 'money.void.amount')).toBe('Rp 200.000');
+    expect(text(screen, 'money.void.amount')).toBe('Rp\u00A0200.000');
     expect(screen.query('money.void.limit')).toBeNull();
     expect(screen.all('money.void.primary')[0]!.props['disabled']).toBe(true);
     type(screen, 'money.void.reason', 'Salah metode');
@@ -727,7 +727,7 @@ describe('Riwayat', () => {
     expect(text(screen, row)).toContain('Pembayaran dibatalkan');
     expect(text(screen, row)).toContain('Salah metode');
     await press(screen, 'money.history.back');
-    expect(text(screen, 'money.kas.expected')).toBe('Rp 0');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp\u00A00');
   });
 
   /** The waiting requests `userId` may answer or asked. */
@@ -742,8 +742,10 @@ describe('Riwayat', () => {
     await press(screen, 'money.kas.history');
     await press(screen, `money.history.entry.${entryId}`);
     // The manager's refund limit in the harness, which voids count against too.
-    expect(text(screen, 'money.void.limit')).toBe('Batas pembatalanmu Rp 30.000 per servisan.');
-    // Rp 200.000 is beyond it: said before any reason is typed, and it goes to an owner.
+    expect(text(screen, 'money.void.limit')).toBe(
+      'Batas pembatalanmu Rp\u00A030.000 per servisan.',
+    );
+    // Rp\u00A0200.000 is beyond it: said before any reason is typed, and it goes to an owner.
     await settle();
     expect(text(screen, 'money.void.asks')).toBe('Melebihi batasmu, jadi perlu persetujuan.');
     expect(text(screen, 'money.void.primary')).toBe('Minta persetujuan');
@@ -794,7 +796,7 @@ describe('Riwayat', () => {
     };
     const first = await pay(15_000);
     const second = await pay(20_000);
-    // Rp 15.000 cancelled already: Rp 20.000 more is Rp 35.000, beyond the manager's Rp 30.000.
+    // Rp\u00A015.000 cancelled already: Rp\u00A020.000 more is Rp\u00A035.000, beyond the manager's Rp\u00A030.000.
     await h.money('voidPayment', { entryId: first, reason: 'Salah metode' }, h.storeOwnerId);
     const screen = await mount(h, h.managerId);
     await press(screen, 'money.kas.history');

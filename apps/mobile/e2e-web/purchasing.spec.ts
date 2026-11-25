@@ -5,15 +5,11 @@
  *
  * HONEST CEILING: a browser approximation. WhatsApp, the share sheet and the camera scan are device QA.
  */
-import path from 'node:path';
+import type { Page } from '@playwright/test';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, shoot as check, test } from './qa';
 
-const ARTIFACTS = path.join(__dirname, 'artifacts', 'purchasing');
-
-async function shoot(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), animations: 'disabled' });
-}
+const shoot = (page: Page, name: string) => check(page, 'purchasing', name);
 
 const tap = (page: Page, testID: string) => page.getByTestId(testID).first().click();
 

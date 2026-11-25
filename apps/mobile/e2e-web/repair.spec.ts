@@ -8,9 +8,9 @@
  */
 import path from 'node:path';
 
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
-const ARTIFACTS = path.join(__dirname, 'artifacts', 'repair');
+import { expect, shoot as check, test } from './qa';
 
 type Role = 'owner' | 'counter' | 'technician' | 'storeOwner';
 
@@ -23,10 +23,8 @@ const tap = (page: Page, testID: string) => page.getByTestId(testID).first().cli
 const fill = (page: Page, testID: string, text: string) =>
   page.getByTestId(`${testID}.field`).fill(text);
 
-async function shoot(page: Page, name: string): Promise<void> {
-  // Finished CSS transitions, so a switch just flipped shows its end state, not a blend.
-  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), animations: 'disabled' });
-}
+const shoot = (page: Page, name: string) => check(page, 'repair', name);
+const ARTIFACTS = path.join(__dirname, 'artifacts', 'repair');
 
 /** Press a drag handle and move it, in small steps like a finger, onto another row's handle. */
 async function drag(

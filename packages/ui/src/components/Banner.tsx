@@ -91,9 +91,6 @@ export function selectBanner(causes: readonly BannerCause[]): SelectedBanner | n
   };
 }
 
-/** §3.6, revised: see the note at the render site — the real ID strings need three. */
-export const BANNER_MESSAGE_LINES = 3;
-
 const VARIANT = {
   info: { bg: color.infoBg, fg: color.info, icon: 'info' },
   warning: { bg: color.warningBg, fg: color.warning, icon: 'warning' },
@@ -215,17 +212,7 @@ export function Banner({
   const summary = (
     <>
       {leadingGlyph ?? <Icon name={icon} size={size.iconInline} color={fg} />}
-      <Text
-        testID={`${testID}.message`}
-        // THREE lines, not the two §3.6 originally specified — changed in the doc with this code,
-        // on evidence from the real catalog rather than lorem: `sync.banner.stale` in Indonesian is
-        // "Sudah lama tidak terhubung. Data di layar ini bisa jauh tertinggal." (67 chars), which
-        // already fills two lines of `bodySm` on a 360 dp screen and overflows them at the 1.3×
-        // font scale §6.5 requires us to survive. Two lines would truncate the sentence that tells
-        // a technician their data is stale — the one thing this product promises never to hide.
-        numberOfLines={BANNER_MESSAGE_LINES}
-        style={[styles.message, { color: fg }]}
-      >
+      <Text testID={`${testID}.message`} style={[styles.message, { color: fg }]}>
         {message}
       </Text>
 
@@ -267,9 +254,7 @@ export function Banner({
           onPress={onAction}
           style={styles.affordance}
         >
-          <Text numberOfLines={1} style={[styles.actionLabel, { color: fg }]}>
-            {actionLabel}
-          </Text>
+          <Text style={[styles.actionLabel, { color: fg }]}>{actionLabel}</Text>
         </Pressable>
       )}
 

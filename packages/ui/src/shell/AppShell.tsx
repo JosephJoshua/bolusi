@@ -204,7 +204,7 @@ function StampedTitle({
   const stamp = useStamp();
   return (
     <View style={styles.stampSlot}>
-      <AnimatedText testID={testID} numberOfLines={2} style={[style, stamp]}>
+      <AnimatedText testID={testID} style={[style, stamp]}>
         {title}
       </AnimatedText>
     </View>
@@ -283,10 +283,6 @@ export function AppShell({
             ) : (
               <Text
                 testID={`${testID}.title`}
-                // Labels never truncate (design guide): at a large font a long title takes a second
-                // line instead of losing its end ("Siapa yang ..."); the bar grows to hold it.
-                numberOfLines={2}
-                ellipsizeMode="tail"
                 style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
               >
                 {title}

@@ -1,5 +1,6 @@
 import boundaries from './rules/boundaries.js';
 import noClockInHandlers from './rules/no-clock-in-handlers.js';
+import noCutText from './rules/no-cut-text.js';
 import noFloatMoney from './rules/no-float-money.js';
 import noHardcodedStrings from './rules/no-hardcoded-strings.js';
 import noLegacyUploadApi from './rules/no-legacy-upload-api.js';
@@ -14,6 +15,7 @@ const plugin = {
   },
   rules: {
     boundaries,
+    'no-cut-text': noCutText,
     'no-float-money': noFloatMoney,
     'no-hardcoded-strings': noHardcodedStrings,
     'no-legacy-upload-api': noLegacyUploadApi,
