@@ -6,7 +6,10 @@
     "orderEdited": "Order edited",
     "orderPlaced": "Order placed",
     "orderCancelled": "Order cancelled",
-    "orderReceived": "Order parts received"
+    "orderReceived": "Order parts received",
+    "billRecorded": "Supplier bill recorded",
+    "billEdited": "Supplier bill changed",
+    "billVoided": "Supplier bill voided"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -21,7 +24,13 @@
     "nothingToCancel": "Everything on this order has arrived, so it can’t be cancelled.",
     "numberNotThisDevice": "This order number wasn’t made on this device.",
     "numberUsed": "This order number is already used.",
-    "partArchived": "A part on this order is archived. Remove it from the order first."
+    "partArchived": "A part on this order is archived. Remove it from the order first.",
+    "billNotFound": "This bill is not in this store.",
+    "billVoid": "This bill has been voided.",
+    "orderOtherSupplier": "This order is from another supplier.",
+    "orderNotPlaced": "This order is still a draft, so it cannot be billed yet.",
+    "billNumberNotThisDevice": "This bill number is not from this device.",
+    "billNumberUsed": "This bill number is already used."
   },
   "stage": {
     "draft": "Draft",

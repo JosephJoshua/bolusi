@@ -8,7 +8,7 @@
 //
 // Permissions are seeded and granted to the owners' system-default roles of existing tenants, and
 // the Manajer preset gets "Kirim sparepart antar toko" (send and receive), as provisioning gives new
-// tenants. Merge after 0035: the migrator refuses an earlier number later.
+// tenants.
 import { sql, type Kysely } from 'kysely';
 
 import { secureTenantTable } from '../src/schema/security.js';

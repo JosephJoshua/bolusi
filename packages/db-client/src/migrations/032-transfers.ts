@@ -1,4 +1,4 @@
-// Client migration 33 — parts sent between stores (inventory transfers).
+// Client migration 32 — parts sent between stores (inventory transfers).
 //
 // Mirrors server migration 0034. What a transfer has delivered or settled is the sum of its arrival
 // and settlement lines, never stored on the transfer, so the (transfer, part) indexes serve every

@@ -15,6 +15,8 @@ export const PURCHASING_SUPPLIER_ENTITY = 'purchasing_supplier' as const;
 export const PURCHASING_ORDER_ENTITY = 'purchasing_order' as const;
 /** One delivery received on an order. */
 export const PURCHASING_RECEIPT_ENTITY = 'purchasing_receipt' as const;
+/** One supplier bill ("Tagihan supplier"): what a store owes a supplier for one nota. */
+export const PURCHASING_BILL_ENTITY = 'purchasing_bill' as const;
 
 export const PURCHASING_TABLE = {
   suppliers: 'purchasing_suppliers',
@@ -22,6 +24,8 @@ export const PURCHASING_TABLE = {
   orderLines: 'purchasing_order_lines',
   receipts: 'purchasing_receipts',
   receiptLines: 'purchasing_receipt_lines',
+  bills: 'purchasing_bills',
+  billLines: 'purchasing_bill_lines',
 } as const;
 
 export const PURCHASING_OP = {
@@ -32,11 +36,19 @@ export const PURCHASING_OP = {
   orderPlaced: 'purchasing.order_placed',
   orderCancelled: 'purchasing.order_cancelled',
   orderReceived: 'purchasing.order_received',
+  billRecorded: 'purchasing.bill_recorded',
+  billEdited: 'purchasing.bill_edited',
+  billVoided: 'purchasing.bill_voided',
 } as const;
 
 export const PURCHASING_PERMISSION = {
   /** "Belanja sparepart": keep suppliers, order parts from them and receive what arrives. */
   buy: 'purchasing.buy',
+  /**
+   * "Tagihan supplier": record the suppliers' bills and read them. A bill carries buy prices, so
+   * it is held only where everyone a device syncs for may read it (least-privilege sync).
+   */
+  bills: 'purchasing.bills',
 } as const;
 
 /** What an order is, as recorded. Whether it has arrived is read from its receipts. */
@@ -65,6 +77,26 @@ export const MAX_SUPPLIER_PHONE = 30;
 export const MAX_PURCHASING_NOTE = 500;
 /** As inventory's part name, so a line can carry any part's name. */
 export const MAX_LINE_NAME = 200;
+/** The most one piece can cost on a bill, in whole rupiah. Catches a mistyped run of zeros. */
+export const MAX_UNIT_PRICE = 1_000_000_000;
+/** The most a bill's ongkir and other charges can add, in whole rupiah. */
+export const MAX_BILL_CHARGES = 1_000_000_000;
+/** The supplier's own number for its nota, as printed on it. */
+export const MAX_SUPPLIER_REF = 60;
+
+/** What a bill is, as recorded. What is still owed on it is read from its payments. */
+export const BILL_STATUSES = ['open', 'void'] as const;
+export type BillStatus = (typeof BILL_STATUSES)[number];
+
+/** Who sees the suppliers' bills: whoever buys and may read them. */
+export function opensBills(
+  purchasing: { hasPermission(permissionId: string): boolean } | undefined,
+): boolean {
+  return (
+    purchasing?.hasPermission(PURCHASING_PERMISSION.buy) === true &&
+    purchasing.hasPermission(PURCHASING_PERMISSION.bills)
+  );
+}
 
 /** Who sees Belanja: whoever orders from suppliers, since an order picks from the parts list. */
 export function opensPurchasing(

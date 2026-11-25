@@ -465,6 +465,38 @@ export interface ProjectionWatermarks {
   tenantId: string;
 }
 
+export interface PurchasingBillLines {
+  billId: string;
+  itemId: string;
+  itemName: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+  unitPrice: Int8;
+}
+
+export interface PurchasingBills {
+  billedOn: Int8;
+  billNumber: string;
+  charges: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  dueOn: Int8 | null;
+  id: string;
+  note: string | null;
+  orderId: string | null;
+  status: string;
+  storeId: string;
+  supplierId: string;
+  supplierRef: string | null;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+  voidedAt: Int8 | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
 export interface PurchasingOrderLines {
   itemId: string;
   itemName: string;
@@ -858,6 +890,8 @@ export interface DB {
   phoneModels: PhoneModels;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
+  purchasingBillLines: PurchasingBillLines;
+  purchasingBills: PurchasingBills;
   purchasingOrderLines: PurchasingOrderLines;
   purchasingOrders: PurchasingOrders;
   purchasingReceiptLines: PurchasingReceiptLines;

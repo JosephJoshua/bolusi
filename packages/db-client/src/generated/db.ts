@@ -384,6 +384,38 @@ export interface ProjectionWatermarks {
   moduleId: string | null;
 }
 
+export interface PurchasingBillLines {
+  billId: string;
+  itemId: string;
+  itemName: string;
+  position: number;
+  qty: number;
+  tenantId: string;
+  unitPrice: number;
+}
+
+export interface PurchasingBills {
+  billedOn: number;
+  billNumber: string;
+  charges: number;
+  createdAt: number;
+  createdBy: string;
+  dueOn: number | null;
+  id: string | null;
+  note: string | null;
+  orderId: string | null;
+  status: string;
+  storeId: string;
+  supplierId: string;
+  supplierRef: string | null;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+  voidedAt: number | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
 export interface PurchasingOrderLines {
   itemId: string;
   itemName: string;
@@ -694,6 +726,8 @@ export interface DB {
   pinAttemptState: PinAttemptState;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
+  purchasingBillLines: PurchasingBillLines;
+  purchasingBills: PurchasingBills;
   purchasingOrderLines: PurchasingOrderLines;
   purchasingOrders: PurchasingOrders;
   purchasingReceiptLines: PurchasingReceiptLines;

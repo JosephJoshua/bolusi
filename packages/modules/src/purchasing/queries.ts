@@ -114,7 +114,7 @@ function storeOrders(qctx: Qctx) {
 }
 
 /** Each order's lines with what has arrived on each, by order id. */
-async function linesOf(
+export async function linesOf(
   qctx: Qctx,
   orderIds: readonly string[],
 ): Promise<Map<string, OrderLineRow[]>> {

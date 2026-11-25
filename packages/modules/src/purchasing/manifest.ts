@@ -8,6 +8,17 @@ import {
   purchasingReceiptsTable,
   purchasingSuppliersTable,
 } from './applier.js';
+import { purchasingBillLinesTable, purchasingBillsTable } from './bills/applier.js';
+import {
+  editBillHandler,
+  editBillInput,
+  recordBillHandler,
+  recordBillInput,
+  voidBillHandler,
+  voidBillInput,
+} from './bills/commands.js';
+import { BILL_OPERATIONS } from './bills/operations.js';
+import { getBillQuery, listBillsQuery, nextBillNumberQuery } from './bills/queries.js';
 import {
   addSupplierHandler,
   addSupplierInput,
@@ -41,6 +52,12 @@ export const PURCHASING_PERMISSIONS = {
     description:
       "Can keep the business's suppliers, order parts from them for the store and receive what arrives.",
   },
+  [PURCHASING_PERMISSION.bills]: {
+    scope: 'store',
+    isDangerous: false,
+    description:
+      "Can record and read the suppliers' bills for the store, with what each part cost to buy.",
+  },
 } as const;
 
 const P = PURCHASING_PERMISSION;
@@ -48,7 +65,7 @@ const P = PURCHASING_PERMISSION;
 export const purchasingModuleManifest = {
   id: PURCHASING_MODULE_ID,
 
-  operations: PURCHASING_OPERATIONS,
+  operations: { ...PURCHASING_OPERATIONS, ...BILL_OPERATIONS },
   refusals: PURCHASING_REFUSALS.reasons,
 
   // DDL lives in the client and server migrations, as for inventory.
@@ -59,6 +76,8 @@ export const purchasingModuleManifest = {
       [PURCHASING_TABLE.orderLines]: purchasingOrderLinesTable,
       [PURCHASING_TABLE.receipts]: purchasingReceiptsTable,
       [PURCHASING_TABLE.receiptLines]: purchasingReceiptLinesTable,
+      [PURCHASING_TABLE.bills]: purchasingBillsTable,
+      [PURCHASING_TABLE.billLines]: purchasingBillLinesTable,
     },
   },
 
@@ -71,6 +90,9 @@ export const purchasingModuleManifest = {
     editOrder: { permission: P.buy, input: editOrderInput, handler: editOrderHandler },
     cancelOrder: { permission: P.buy, input: cancelOrderInput, handler: cancelOrderHandler },
     receiveOrder: { permission: P.buy, input: receiveOrderInput, handler: receiveOrderHandler },
+    recordBill: { permission: P.bills, input: recordBillInput, handler: recordBillHandler },
+    editBill: { permission: P.bills, input: editBillInput, handler: editBillHandler },
+    voidBill: { permission: P.bills, input: voidBillInput, handler: voidBillHandler },
   },
 
   queries: {
@@ -79,6 +101,9 @@ export const purchasingModuleManifest = {
     getOrder: getOrderQuery,
     orderItems: orderItemsQuery,
     nextOrderNumber: nextOrderNumberQuery,
+    listBills: listBillsQuery,
+    getBill: getBillQuery,
+    nextBillNumber: nextBillNumberQuery,
   },
 } as const satisfies ModuleManifest<PurchasingDatabase>;
 
