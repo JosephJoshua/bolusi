@@ -31,7 +31,6 @@ import { freeHandoverNeedsOwner } from '../rules.js';
 import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
 import { useActionRunner, useCapture, type ActionRunner } from '../../screen-kit/index.js';
 import {
-  REPAIR_APPROVAL_KIND,
   REPAIR_PERMISSION,
   WORK_PHOTOS_MAX,
   type SlipKind,
@@ -41,8 +40,6 @@ import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentForm } from '../down-payment-form.js';
 import {
   amountOwed,
-  askedBecauseKey,
-  asksApproval,
   balanceLabelKey,
   INTAKE_PROBLEM_KEY,
   ticketBalance,
@@ -54,7 +51,6 @@ import {
   type IntakeDraft,
   type IntakeProblem,
   printableSlips,
-  priceKinds,
   signedAmount,
   toggled,
   type PriceKind,
@@ -64,12 +60,12 @@ import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { ta } from '../../approvals/i18n.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useCancelTicket } from '../cancel-ticket.js';
+import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
   cancelFeeText,
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
-  discountLimitHint,
   optionLabel,
   refundLabel,
 } from '../labels.js';
@@ -985,43 +981,17 @@ export function PriceChangeDialog({
   /** Set where a discount may be asked of an owner (changing the price, not proposing it). */
   readonly onAsked?: (() => void) | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const holdsDiscount = runtime.hasPermission(REPAIR_PERMISSION.discount);
-  const kinds = priceKinds(holdsDiscount || onAsked !== undefined);
-  // A limited role (a manager) sees how far they may discount before it goes to an owner.
-  const discountLimit = runtime.limitOf(REPAIR_PERMISSION.discount);
   const [kind, setKind] = useState<PriceKind>('part');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number | null>(null);
   const [reason, setReason] = useState('');
-  const complete = description.trim() !== '' && amount !== null && reason.trim() !== '';
+  const form = usePriceChange(
+    { ticketId, mode, discounted },
+    { kind, description, amount, reason },
+    { onDone, onAsked },
+  );
   const testId = `repair.desk.price.${mode}`;
-  const asking =
-    onAsked !== undefined &&
-    kind === 'discount' &&
-    asksApproval(holdsDiscount, discountLimit, discounted + (amount ?? 0));
-
-  const submit = (customerAgreed: boolean): void => {
-    if (!complete || amount === null) return;
-    const line = { ticketId, kind, description, amount: signedAmount(kind, amount), reason };
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', {
-              kind: REPAIR_APPROVAL_KIND.discount,
-              input: { ...line, customerAgreed: false },
-              reason,
-            })
-          : mode === 'change'
-            ? runtime.run('changeQuote', { ...line, customerAgreed })
-            : runtime.run('proposeQuoteChange', line),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? (onAsked ?? onDone) : onDone)();
-      });
-  };
-  const blocked = !complete || stale !== null;
+  const blocked = !form.complete || stale !== null;
 
   const leave = useLeaveGuard(
     stale === null && (description.trim() !== '' || amount !== null || reason.trim() !== ''),
@@ -1030,45 +1000,45 @@ export function PriceChangeDialog({
   return (
     <>
       <StepDialog
-        title={tn('repair.price.editTitle')}
-        runner={runner}
+        title={form.title}
+        runner={form.runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         testId={testId}
         footer={
-          mode === 'change' && !asking ? (
+          form.deciding ? (
             <>
               <p id={`${testId}.question`} className="mr-auto text-body font-semibold text-text">
                 {tn('repair.price.alreadyAgreed')}
               </p>
               <Button
                 label={tn('repair.action.applyUnconfirmed')}
-                onClick={() => submit(false)}
+                onClick={() => form.submit(false)}
                 aria-describedby={`${testId}.question`}
-                disabled={blocked || runner.busy}
+                disabled={blocked || form.runner.busy}
                 data-testid={`${testId}.unconfirmed`}
               />
               <Button
                 label={tn('repair.action.agreedYes')}
                 variant="primary"
-                onClick={() => submit(true)}
+                onClick={() => form.submit(true)}
                 aria-describedby={`${testId}.question`}
-                busy={runner.busy}
+                busy={form.runner.busy}
                 disabled={blocked}
                 data-testid={`${testId}.agreed`}
               />
             </>
           ) : (
             <>
-              {complete ? null : (
+              {form.complete ? null : (
                 <p className="mr-auto text-small text-text-muted">{tn('repair.hint.priceLine')}</p>
               )}
               <CancelButton onClick={leave.requestClose} />
               <Button
-                label={asking ? ta('approvals.action.ask') : tn('repair.action.proposePrice')}
+                label={form.sendLabel}
                 variant="primary"
-                onClick={() => submit(true)}
-                busy={runner.busy}
+                onClick={() => form.submit(true)}
+                busy={form.runner.busy}
                 disabled={blocked}
                 data-testid={`${testId}.submit`}
               />
@@ -1079,7 +1049,7 @@ export function PriceChangeDialog({
         <div className="flex flex-col gap-4">
           <Segmented
             label={tn('repair.desk.priceKind')}
-            options={kinds.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
+            options={form.kinds.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
             value={kind}
             onChange={setKind}
             testId={`${testId}.kind`}
@@ -1112,14 +1082,14 @@ export function PriceChangeDialog({
             onChange={(event) => setReason(event.target.value)}
             data-testid={`${testId}.reason`}
           />
-          {kind !== 'discount' || !holdsDiscount || discountLimit === null ? null : (
+          {form.limitLine === null ? null : (
             <p className="text-small text-text-muted" data-testid={`${testId}.discountLimit`}>
-              {discountLimitHint(discountLimit, discounted)}
+              {form.limitLine}
             </p>
           )}
-          {asking ? (
+          {form.askedBecause !== null ? (
             <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
-              {tn(askedBecauseKey(holdsDiscount))}
+              {form.askedBecause}
             </p>
           ) : mode === 'change' ? (
             <p className="text-small text-text-muted">{tn('repair.price.waitsHint')}</p>
@@ -1147,22 +1117,8 @@ export function ProposalDialog({
   /** The agreed total now, so the change reads as what the customer will pay. */
   readonly total: number;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [note, setNote] = useState('');
-  // A line that lowers the price is an owner's to apply; anyone deciding may still decline it.
-  const mayApply = line.amount >= 0 || runtime.hasPermission(REPAIR_PERMISSION.discount);
-  const decide = (decision: 'agreed' | 'declined'): void => {
-    void runner
-      .run(() =>
-        decision === 'declined'
-          ? runtime.run('declineProposal', { ticketId, lineId: line.id, note })
-          : runtime.run('applyProposal', { ticketId, lineId: line.id, customerAgreed: true, note }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, mayApply, decide } = useDecideProposal({ ticketId, line }, note, onDone);
   const leave = useLeaveGuard(stale === null && note.trim() !== '', onClose);
   return (
     <>

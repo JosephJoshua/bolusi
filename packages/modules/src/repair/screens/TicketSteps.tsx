@@ -22,15 +22,10 @@ import {
   type,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import {
-  REPAIR_APPROVAL_KIND,
-  REPAIR_PERMISSION,
-  WORK_PHOTOS_MAX,
-  type WorkPhotoStage,
-} from '../constants.js';
+import { WORK_PHOTOS_MAX, type WorkPhotoStage } from '../constants.js';
 import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentForm } from '../down-payment-form.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
@@ -38,15 +33,13 @@ import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { useCancelTicket } from '../cancel-ticket.js';
+import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { PRICE_KIND_KEY, discountLimitHint, optionLabel } from '../labels.js';
+import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   acceptsRupiahText,
-  askedBecauseKey,
-  asksApproval,
   capturedThumbnailRef,
   parseRupiah,
-  priceKinds,
   signedAmount,
   toggled,
   type PriceKind,
@@ -54,7 +47,6 @@ import {
 } from '../flows.js';
 import { FlowScreen, PhotoThumb, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { ta } from '../../approvals/i18n.js';
 import { useIntakeOptionSettings, useRepairQuery, useRepairRuntime } from '../runtime.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
@@ -832,12 +824,6 @@ export { PRICE_KINDS, type PriceKind } from '../flows.js';
  * The kinds this user may add: a discount lowers the price, so only owners see it, unless the
  * user may ask one (`askable`).
  */
-export function usePriceKinds(askable = false): readonly PriceKind[] {
-  const runtime = useRepairRuntime();
-  const discount = askable || runtime.hasPermission(REPAIR_PERMISSION.discount);
-  return useMemo(() => priceKinds(discount), [discount]);
-}
-
 /**
  * A new price line after intake. The cashier changes the price directly, answering whether the
  * customer agreed as the save itself (as on a proposal, so it cannot be skipped by not noticing a
@@ -864,84 +850,52 @@ export function PriceChangeStep({
   readonly onAsked?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const kinds = usePriceKinds(onAsked !== undefined);
-  const holdsDiscount = runtime.hasPermission(REPAIR_PERMISSION.discount);
-  // A limited role (a manager) sees how far they may discount before it goes to an owner.
-  const discountLimit = runtime.limitOf(REPAIR_PERMISSION.discount);
   const [kind, setKind] = useState<PriceKind>('part');
   const [description, setDescription] = useState('');
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
   const amount = parseRupiah(amountText);
-  const complete = description.trim() !== '' && amount !== null && reason.trim() !== '';
+  const form = usePriceChange(
+    { ticketId, mode, discounted },
+    { kind, description, amount, reason },
+    { onDone, onAsked },
+  );
   const discard = useDiscardConfirm({
     dirty:
       stale === null && (description.trim() !== '' || amountText !== '' || reason.trim() !== ''),
     onRegisterDiscardGuard,
     testID,
   });
-  const asking =
-    onAsked !== undefined &&
-    kind === 'discount' &&
-    asksApproval(holdsDiscount, discountLimit, discounted + (amount ?? 0));
-  // Asking skips the customer's answer: it is asked once an owner approves.
-  const deciding = mode === 'change' && !asking;
-
-  const submit = (customerAgreed: boolean): void => {
-    if (!complete) return;
-    const line = { ticketId, kind, description, amount: signedAmount(kind, amount), reason };
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', {
-              kind: REPAIR_APPROVAL_KIND.discount,
-              input: { ...line, customerAgreed: false },
-              reason,
-            })
-          : mode === 'change'
-            ? runtime.run('changeQuote', { ...line, customerAgreed })
-            : runtime.run('proposeQuoteChange', line),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? (onAsked ?? onDone) : onDone)();
-      });
-  };
 
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(mode === 'change' ? 'repair.price.editTitle' : 'repair.action.proposePrice')}
+      title={form.title}
       onBack={() => discard.requestLeave(onCancel)}
       overlay={discard.overlay}
-      question={deciding ? tn('repair.price.alreadyAgreed') : undefined}
-      primaryLabel={
-        asking
-          ? ta('approvals.action.ask')
-          : tn(mode === 'change' ? 'repair.action.agreedYes' : 'repair.action.proposePrice')
-      }
-      onPrimary={() => submit(true)}
+      question={form.deciding ? tn('repair.price.alreadyAgreed') : undefined}
+      primaryLabel={form.deciding ? tn('repair.action.agreedYes') : form.sendLabel}
+      onPrimary={() => form.submit(true)}
       secondary={
-        deciding
+        form.deciding
           ? {
               label: tn('repair.action.applyUnconfirmed'),
-              onPress: () => submit(false),
-              disabled: !complete,
+              onPress: () => form.submit(false),
+              disabled: !form.complete,
               testID: `${testID}.unconfirmed`,
             }
           : undefined
       }
-      primaryDisabled={!complete}
+      primaryDisabled={!form.complete}
       primaryHint={tn('repair.hint.priceLine')}
-      busy={runner.busy}
-      errorCode={runner.errorCode}
+      busy={form.runner.busy}
+      errorCode={form.runner.errorCode}
       stale={stale}
-      onClearError={runner.clearError}
+      onClearError={form.runner.clearError}
       testID={testID}
     >
       <SegmentedControl
-        options={kinds.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
+        options={form.kinds.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
         value={kind}
         onChange={setKind}
         size="compact"
@@ -971,9 +925,9 @@ export function PriceChangeStep({
             {formatMoney(signedAmount(kind, amount))}
           </Text>
         )}
-        {kind !== 'discount' || !holdsDiscount || discountLimit === null ? null : (
+        {form.limitLine === null ? null : (
           <Text style={repairStyles.caption} testID={`${testID}.discountLimit`}>
-            {discountLimitHint(discountLimit, discounted)}
+            {form.limitLine}
           </Text>
         )}
       </View>
@@ -986,9 +940,9 @@ export function PriceChangeStep({
           testID={`${testID}.reason`}
         />
       </View>
-      {asking ? (
+      {form.askedBecause !== null ? (
         <Text style={[repairStyles.caption, repairStyles.gap]} testID={`${testID}.asks`}>
-          {tn(askedBecauseKey(holdsDiscount))}
+          {form.askedBecause}
         </Text>
       ) : mode === 'change' ? (
         // Agreement often comes later, by phone; saying so keeps "Belum" from reading as a dead end.
@@ -1021,33 +975,13 @@ export function ProposalStep({
   readonly total: number;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [note, setNote] = useState('');
+  const { runner, mayApply, decide } = useDecideProposal({ ticketId, line }, note, onDone);
   const discard = useDiscardConfirm({
     dirty: stale === null && note.trim() !== '',
     onRegisterDiscardGuard,
     testID,
   });
-  // A line that lowers the price is an owner's to apply; anyone deciding may still decline it.
-  const mayApply = line.amount >= 0 || runtime.hasPermission(REPAIR_PERMISSION.discount);
-
-  const decide = (decision: 'agreed' | 'declined'): void => {
-    void runner
-      .run(() =>
-        decision === 'declined'
-          ? runtime.run('declineProposal', { ticketId, lineId: line.id, note })
-          : runtime.run('applyProposal', {
-              ticketId,
-              lineId: line.id,
-              customerAgreed: true,
-              note,
-            }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <FlowScreen
