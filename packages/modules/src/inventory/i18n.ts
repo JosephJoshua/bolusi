@@ -208,7 +208,6 @@ export const INVENTORY_KEYS = [
   'inventory.bulk.problem.nameOrFields',
   'inventory.bulk.saved',
   'inventory.bulk.left',
-  'inventory.bulk.ready',
   'inventory.bulk.blocked',
   'inventory.bulk.save',
   'inventory.bulk.saving',

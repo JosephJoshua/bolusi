@@ -78,6 +78,8 @@ export interface EditableGridProps {
   readonly rowProblems?: ReadonlyMap<string, string> | undefined;
   /** Shown under the grid while the selected cell has nothing to say. */
   readonly hint?: ReactNode;
+  /** At the end of the line under the grid, such as how many rows still need fixing. */
+  readonly aside?: ReactNode;
   readonly disabled?: boolean | undefined;
   /** Changing it forgets the undo history, such as after the rows were saved and taken out. */
   readonly historyKey?: string | number | undefined;
@@ -155,6 +157,7 @@ export function EditableGrid({
   problems = NO_PROBLEMS,
   rowProblems = NO_ROW_PROBLEMS,
   hint,
+  aside,
   disabled = false,
   historyKey,
   labels,
@@ -242,6 +245,7 @@ export function EditableGrid({
     const row = rows[focus.row];
     if (column === undefined || row === undefined || column.readOnly === true) return;
     setSelection({ anchor: focus, focus });
+    revealColumn(focus.col);
     setHighlight(0);
     edit({
       row: focus.row,
@@ -570,8 +574,11 @@ export function EditableGrid({
           <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((item) => {
               const row = rows[item.index]!;
-              const rowProblem = rowProblems.get(row.id);
               const rowCells = problems.get(row.id);
+              // A row that cannot be saved says so at its number, which stays in sight however
+              // far the sheet is scrolled sideways.
+              const cellProblem = Object.values(rowCells ?? {}).find((p) => p.tone === 'danger');
+              const rowProblem = rowProblems.get(row.id) ?? cellProblem?.message;
               const spare = item.index === rowCount - 1;
               return (
                 <div
@@ -661,6 +668,7 @@ export function EditableGrid({
                               ? { anchor: current.anchor, focus: pos }
                               : { anchor: pos, focus: pos },
                           );
+                          revealColumn(col);
                           setDragging(true);
                         }}
                         onDoubleClick={() => {
@@ -769,7 +777,7 @@ export function EditableGrid({
         role="status"
         aria-live="polite"
         className={clsx(
-          'flex min-h-9 items-center gap-2 px-6 py-2 text-small',
+          'flex min-h-9 items-center gap-4 px-6 py-2 text-small',
           activeProblem?.tone === 'danger' || (activeProblem === undefined && activeRowProblem)
             ? 'text-danger'
             : activeProblem?.tone === 'warning'
@@ -778,33 +786,36 @@ export function EditableGrid({
         )}
         data-testid={testId === undefined ? undefined : `${testId}.status`}
       >
-        {activeProblem !== undefined ? (
-          <>
-            <AlertCircle
-              size={14}
-              aria-hidden
-              className={activeProblem.tone === 'danger' ? 'text-danger' : 'text-warning'}
-            />
-            <span>
-              <span className="font-semibold">
-                {labels.where(focus.row + 1, columns[focus.col]?.label ?? '')}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          {activeProblem !== undefined ? (
+            <>
+              <AlertCircle
+                size={14}
+                aria-hidden
+                className={activeProblem.tone === 'danger' ? 'text-danger' : 'text-warning'}
+              />
+              <span>
+                <span className="font-semibold">
+                  {labels.where(focus.row + 1, columns[focus.col]?.label ?? '')}
+                </span>
+                {': '}
+                {activeProblem.message}
               </span>
-              {': '}
-              {activeProblem.message}
-            </span>
-          </>
-        ) : activeRowProblem !== undefined ? (
-          <>
-            <AlertCircle size={14} aria-hidden />
-            <span>
-              <span className="font-semibold">{labels.row(focus.row + 1)}</span>
-              {': '}
-              {activeRowProblem}
-            </span>
-          </>
-        ) : (
-          hint
-        )}
+            </>
+          ) : activeRowProblem !== undefined ? (
+            <>
+              <AlertCircle size={14} aria-hidden />
+              <span>
+                <span className="font-semibold">{labels.row(focus.row + 1)}</span>
+                {': '}
+                {activeRowProblem}
+              </span>
+            </>
+          ) : (
+            hint
+          )}
+        </span>
+        {aside === undefined ? null : <span className="shrink-0">{aside}</span>}
       </p>
     </div>
   );

@@ -148,7 +148,7 @@ describe('many items at once on the PC', () => {
         'Baterai Nokia 3310 Original',
       ),
     );
-    expect(byTestId('inventory.desk.bulk.summary').textContent).toBe('2 siap disimpan');
+    expect(byTestId('inventory.desk.bulk.save').textContent).toBe('Simpan 2 barang');
     fireEvent.click(byTestId('inventory.desk.bulk.save'));
     expect(await screen.findByText('2 barang disimpan.')).toBeTruthy();
     // The saved rows leave the sheet; one empty row waits.

@@ -259,7 +259,6 @@
     },
     "saved": "{count} items saved.",
     "left": "{count} rows not saved yet; check the ones marked red.",
-    "ready": "{count} ready to save",
     "blocked": "{count} incomplete",
     "save": "Save {count} items",
     "saving": "Saving {done} of {total}…",

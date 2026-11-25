@@ -16,6 +16,7 @@ import {
   StatePanel,
   Switch,
   TextField,
+  controlClass,
   type ColumnDef,
 } from '@bolusi/ui-web';
 import { Archive, ArrowLeft, Plus, Tags, Wrench, X } from 'lucide-react';
@@ -223,6 +224,17 @@ export function CategoryDialog({
 
   const finish = (outcome: Awaited<ReturnType<typeof form.save>>): void => {
     if (outcome.status === 'saved') onDone(outcome.notice);
+    if (outcome.status !== 'blocked') return;
+    // The first thing to fix gets the keyboard, scrolled into sight in a long dialog.
+    const target =
+      problems.name !== null
+        ? `${testId}.name`
+        : outcome.field !== undefined
+          ? `${testId}.field.${outcome.field}.label`
+          : problems.format !== null
+            ? `${testId}.format`
+            : null;
+    if (target !== null) document.querySelector<HTMLElement>(`[data-testid="${target}"]`)?.focus();
   };
 
   return (
@@ -272,14 +284,20 @@ export function CategoryDialog({
                 label={ti('inventory.category.fields')}
                 className="divide-y divide-border"
                 testId={`${testId}.order`}
-                renderItem={(field, handle) => (
-                  <div className="flex items-start gap-2 px-3 py-3">
-                    <div className="pt-1">{handle}</div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-3">
-                      <div className="flex flex-wrap items-start gap-3">
-                        <div className="min-w-48 flex-1">
-                          <TextField
-                            label={ti('inventory.category.fieldLabel')}
+                renderItem={(field, handle) => {
+                  const problem =
+                    tried && problems.fields.has(field.id)
+                      ? ti(problems.fields.get(field.id)!)
+                      : undefined;
+                  return (
+                    // The kind's choices name themselves, so the row carries no labels above it.
+                    <div className="flex items-start gap-2 px-3 py-3">
+                      <div className="pt-0.5">{handle}</div>
+                      <div className="flex min-w-0 flex-1 flex-col gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <input
+                            aria-label={ti('inventory.category.fieldLabel')}
+                            aria-invalid={problem !== undefined || undefined}
                             placeholder={ti('inventory.category.fieldLabelPlaceholder')}
                             value={field.label}
                             onChange={(event) =>
@@ -288,19 +306,10 @@ export function CategoryDialog({
                               })
                             }
                             maxLength={MAX_FIELD_LABEL}
-                            error={
-                              tried && problems.fields.has(field.id)
-                                ? ti(problems.fields.get(field.id)!)
-                                : undefined
-                            }
                             autoFocus={focusField === field.id}
+                            className={`${controlClass(problem !== undefined)} h-9 min-w-48 flex-1 font-semibold`}
                             data-testid={`${testId}.field.${field.id}.label`}
                           />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="flex min-h-6 items-center text-small font-semibold text-text">
-                            {ti('inventory.category.kindLabel')}
-                          </span>
                           <Segmented
                             options={FIELD_KINDS.map((kind) => ({
                               value: kind,
@@ -313,16 +322,19 @@ export function CategoryDialog({
                             testId={`${testId}.field.${field.id}.kind`}
                           />
                         </div>
+                        {problem === undefined ? null : (
+                          <p role="alert" className="-mt-2 text-small text-danger">
+                            {problem}
+                          </p>
+                        )}
+                        {field.kind === 'one' || field.kind === 'many' ? (
+                          <OptionsEditor
+                            options={field.options}
+                            onChange={(options) => form.updateField(field.id, { options })}
+                            testId={`${testId}.field.${field.id}.options`}
+                          />
+                        ) : null}
                       </div>
-                      {field.kind === 'one' || field.kind === 'many' ? (
-                        <OptionsEditor
-                          options={field.options}
-                          onChange={(options) => form.updateField(field.id, { options })}
-                          testId={`${testId}.field.${field.id}.options`}
-                        />
-                      ) : null}
-                    </div>
-                    <div className="pt-7">
                       <IconButton
                         icon={X}
                         label={`${ti('inventory.category.removeField')} ${field.label}`.trim()}
@@ -330,8 +342,8 @@ export function CategoryDialog({
                         data-testid={`${testId}.field.${field.id}.remove`}
                       />
                     </div>
-                  </div>
-                )}
+                  );
+                }}
               />
             </div>
           )}
@@ -454,9 +466,9 @@ function OptionsEditor({
   };
   return (
     <div className="flex flex-col gap-1" data-testid={testId}>
-      <span className="text-small font-semibold text-text">{ti('inventory.category.options')}</span>
+      <span className="text-small text-text-muted">{ti('inventory.category.options')}</span>
       <div
-        className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-surface p-2"
+        className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-surface p-1.5"
         onClick={(event) => {
           if (event.target === event.currentTarget) inputRef.current?.focus();
         }}

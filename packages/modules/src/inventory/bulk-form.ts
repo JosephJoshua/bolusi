@@ -54,6 +54,8 @@ export interface BulkEntry {
   readonly progress: BulkProgress | null;
   /** What the last save did. */
   readonly notice: string | null;
+  /** How many rows the last save left on the sheet to fix. */
+  readonly left: number;
   readonly clearNotice: () => void;
   /** Changes when saved rows leave the sheet, so the sheet's undo forgets them. */
   readonly saves: number;
@@ -85,6 +87,7 @@ export function useBulkEntry(): BulkEntry {
   const [refused, setRefused] = useState<ReadonlyMap<string, string>>(new Map());
   const [progress, setProgress] = useState<BulkProgress | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [left, setLeft] = useState(0);
   const [saves, setSaves] = useState(0);
   const [fits, setFits] = useState<ReadonlyMap<string, FitMatch>>(new Map());
   const asked = useRef(new Set<string>());
@@ -181,7 +184,11 @@ export function useBulkEntry(): BulkEntry {
     const now = readAll(true, latest);
     const ready = rows.map((row, i) => ({ row, read: now[i]! })).filter(({ read: r }) => r.ready);
     const waiting = now.filter((r) => r.filled && !r.ready).length;
-    if (ready.length === 0) return;
+    if (ready.length === 0) {
+      setLeft(waiting);
+      if (waiting > 0) setNotice(ti('inventory.bulk.left', { count: waiting }));
+      return;
+    }
     setProgress({ done: 0, total: ready.length });
     const saved = new Set<string>();
     const failed = new Map<string, string>();
@@ -217,6 +224,7 @@ export function useBulkEntry(): BulkEntry {
     setProgress(null);
     // The rows left are the ones to fix; nothing to say about them until saving is tried again.
     setStrict(failed.size > 0 || waiting > 0);
+    setLeft(waiting + failed.size);
     setNotice(
       [
         saved.size > 0 ? ti('inventory.bulk.saved', { count: saved.size }) : '',
@@ -262,6 +270,7 @@ export function useBulkEntry(): BulkEntry {
     canCount,
     progress,
     notice,
+    left,
     clearNotice: () => setNotice(null),
     saves,
     save,

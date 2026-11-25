@@ -92,7 +92,12 @@ export function BulkAddPage({ onBack, onRegisterLeaveGuard }: BulkAddPageProps):
               ? ti('inventory.bulk.hint.list')
               : undefined,
       ...(column.kind === 'name' && category !== null
-        ? { placeholder: (row: { id: string }) => byId.get(row.id)?.builtName }
+        ? {
+            placeholder: (row: { id: string }) => {
+              const r = byId.get(row.id);
+              return r?.filled === true ? r.builtName : undefined;
+            },
+          }
         : {}),
     };
   });
@@ -105,7 +110,10 @@ export function BulkAddPage({ onBack, onRegisterLeaveGuard }: BulkAddPageProps):
     return map;
   }, [rows, read]);
 
-  const blocked = entry.filled - entry.ready;
+  // Rows marked red; a row still being typed is not counted until saving is tried.
+  const blocked = read.filter(
+    (r) => r.filled && Object.values(r.problems).some((p) => p.tone === 'danger'),
+  ).length;
   const pick = (value: string): void => {
     const id = value === NONE ? null : value;
     if (dirty) setPendingCategory(id);
@@ -169,26 +177,12 @@ export function BulkAddPage({ onBack, onRegisterLeaveGuard }: BulkAddPageProps):
               </option>
             ))}
           </select>
-          {entry.filled === 0 ? null : (
-            <p
-              className="truncate text-body text-text-muted"
-              role="status"
-              data-testid={`${testId}.summary`}
-            >
-              {[
-                ti('inventory.bulk.ready', { count: formatNumber(entry.ready) }),
-                blocked > 0 ? ti('inventory.bulk.blocked', { count: formatNumber(blocked) }) : '',
-              ]
-                .filter((s) => s !== '')
-                .join(' · ')}
-            </p>
-          )}
         </div>
       </PageHeader>
       {entry.notice === null ? null : (
         <div className="px-6 pb-3">
           <Banner
-            tone={entry.refused.size > 0 ? 'warning' : 'success'}
+            tone={entry.left > 0 ? 'warning' : 'success'}
             message={entry.notice}
             onDismiss={entry.clearNotice}
             dismissLabel={t('core.action.close')}
@@ -207,6 +201,13 @@ export function BulkAddPage({ onBack, onRegisterLeaveGuard }: BulkAddPageProps):
         disabled={saving}
         historyKey={entry.saves}
         hint={ti('inventory.bulk.hint.sheet')}
+        aside={
+          blocked > 0 ? (
+            <span className="font-semibold text-danger" data-testid={`${testId}.blocked`}>
+              {ti('inventory.bulk.blocked', { count: formatNumber(blocked) })}
+            </span>
+          ) : undefined
+        }
         labels={{
           row: (n) => ti('inventory.bulk.row', { n }),
           deleteRow: ti('inventory.bulk.deleteRow'),

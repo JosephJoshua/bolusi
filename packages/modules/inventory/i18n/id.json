@@ -259,7 +259,6 @@
     },
     "saved": "{count} barang disimpan.",
     "left": "{count} baris belum disimpan, cek yang ditandai merah.",
-    "ready": "{count} siap disimpan",
     "blocked": "{count} belum lengkap",
     "save": "Simpan {count} barang",
     "saving": "Menyimpan {done} dari {total}…",
