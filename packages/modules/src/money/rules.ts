@@ -304,6 +304,32 @@ async function documentPaidIn(
   return Number(row?.total ?? 0);
 }
 
+/** What went back and what still counts as paid on a document, through one account if named. */
+async function givenBackAndPaidIn(
+  db: Db,
+  storeId: string,
+  document: { kind: string; id: string },
+  account: string | undefined,
+): Promise<{ refunded: number; paidIn: number }> {
+  const rows = await db
+    .selectFrom('moneyEntries')
+    .select(['kind', sql<string | number>`COALESCE(SUM(amount), 0)`.as('total')])
+    .where('storeId', '=', storeId)
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .where((eb) =>
+      eb.or([
+        eb('kind', '=', 'refund_paid'),
+        eb.and([eb('kind', '=', 'payment_received'), eb('voidedBy', 'is', null)]),
+      ]),
+    )
+    .$if(account !== undefined, (qb) => qb.where('account', '=', account!))
+    .groupBy('kind')
+    .execute();
+  const total = (kind: string) => Number(rows.find((row) => row.kind === kind)?.total ?? 0);
+  return { refunded: total('refund_paid'), paidIn: total('payment_received') };
+}
+
 /** Whether this store took a payment that still counts for the document through the account. */
 async function paidThroughOnDocument(
   db: Db,
@@ -608,16 +634,18 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (entry.voidedBy !== null) {
       throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
     }
-    // As with a refund, the book never shows more given back than came in: a payment whose money
-    // was already handed back stays, or re-recording it would pay the customer out twice.
+    // As with a refund, the book never shows more given back than came in, on the document and
+    // through the payment's own account: a payment whose money was already handed back stays, or
+    // re-recording it would pay the customer out twice and leave that account short.
     if (entry.documentKind !== null && entry.documentId !== null) {
       const document = { kind: entry.documentKind, id: entry.documentId };
-      const refunded = await documentTotal(db, storeOf(op), document, 'refund_paid');
-      const paidIn = await documentPaidIn(db, storeOf(op), document);
-      if (refunded > paidIn - Number(entry.amount)) {
-        throw refuse('paymentRefunded', {
-          details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
-        });
+      for (const account of [undefined, entry.account ?? CASH_ACCOUNT]) {
+        const { refunded, paidIn } = await givenBackAndPaidIn(db, storeOf(op), document, account);
+        if (refunded > paidIn - Number(entry.amount)) {
+          throw refuse('paymentRefunded', {
+            details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+          });
+        }
       }
     }
     const takenOff = await voidCounted(

@@ -649,6 +649,41 @@ describe('refunds and voids are guarded', () => {
     await expectBalancedBooks(h);
   });
 
+  test('a refund through one method is not masked by a payment through another', async () => {
+    h = await openRepairHarness(543);
+    const document = await openTicket(h);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'qris', name: 'QRIS toko' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const { entryIds } = (await h.money(
+      'receivePayments',
+      {
+        document,
+        payments: [
+          { account: 'cash', amount: 60_000 },
+          { account: `account:${accountId}`, amount: 40_000 },
+        ],
+      },
+      h.cashierId,
+    )) as { entryIds: string[] };
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 30_000, reason: 'Batal sebagian' },
+      h.storeOwnerId,
+    );
+    // The cash went back, so the cash payment stays even though the QRIS one covers the amount.
+    await expectRefused(
+      h.money('voidPayment', { entryId: entryIds[0]!, reason: 'Salah ketik' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'paymentRefunded',
+    );
+    await h.money('voidPayment', { entryId: entryIds[1]!, reason: 'Salah ketik' }, h.storeOwnerId);
+    expect(await documentMoney(h, document)).toMatchObject({ paid: 30_000 });
+    await expectBalancedBooks(h);
+  });
+
   test('the server refuses a DP correction after the DP went back, past the device check', async () => {
     h = await openRepairHarness(542);
     const document = await openTicket(h);
