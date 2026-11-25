@@ -14,7 +14,6 @@ import {
   completeReq,
   statusReq,
   uploadFull,
-  type DeviceContext,
   type InitBody,
   type MediaHarness,
 } from '../../helpers/media.js';
