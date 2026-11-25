@@ -123,6 +123,7 @@ export function session(over: Partial<SessionView> = {}): SessionView {
     canManageStaff: true,
     canSetLimits: true,
     canRenameDevice: true,
+    canBlockDevices: true,
     tenantAdmin: true,
     permissions: [],
     colleaguePermissions: {},

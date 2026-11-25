@@ -85,7 +85,9 @@ export function resolveShellInputs(
       : 'revoked'
     : app.deviceId !== null
       ? 'active'
-      : 'unenrolled';
+      : app.wipedAfterBlock
+        ? 'revoked'
+        : 'unenrolled';
   const firstSync = sync !== null ? sync.firstSync() : null;
   const manual = sync !== null ? sync.manualSync() : undefined;
   return {

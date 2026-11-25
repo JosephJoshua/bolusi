@@ -859,3 +859,53 @@ test('a new PIN ends the person sessions the old one opened, except where it was
   expect(rows.find((row) => row.deviceId === here.deviceId)?.revokedAt).toBeNull();
   expect(rows.find((row) => row.deviceId === there.deviceId)?.revokedAt).not.toBeNull();
 });
+
+// ── Deactivation blocks their own phone (owner decision 2026-11-25, thread "Wipe blocked devices") ─
+test('deactivating someone blocks their personal phone, and only theirs, so it erases itself', async () => {
+  const { tenantId, s1, ownerId } = await tenant();
+  const control = await seedControlSession(h, { tenantId, userId: ownerId });
+  const ani = await seedUser(h, { tenantId, name: 'Ani', storeIds: [s1], roleKeys: ['staff'] });
+  const budi = await seedUser(h, { tenantId, name: 'Budi', storeIds: [s1], roleKeys: ['staff'] });
+  const aniPhone = await seedDevice(h, { tenantId, storeId: s1 });
+  const budiPhone = await seedDevice(h, { tenantId, storeId: s1 });
+  const counter = await seedDevice(h, { tenantId, storeId: s1 });
+  await h.idb.db
+    .updateTable('devices')
+    .set({ personalUserId: ani })
+    .where('id', '=', aniPhone.deviceId)
+    .execute();
+  await h.idb.db
+    .updateTable('devices')
+    .set({ personalUserId: budi })
+    .where('id', '=', budiPhone.deviceId)
+    .execute();
+
+  const fired: string[] = [];
+  h.hooks.register(({ deviceId }) => {
+    fired.push(deviceId);
+  });
+
+  const res = await h.app.request(`http://srv.test/v1/users/${ani}/deactivate`, {
+    method: 'POST',
+    headers: bearer(control),
+  });
+  expect(res.status).toBe(200);
+
+  const status = async (id: string) =>
+    await h.idb.db
+      .selectFrom('devices')
+      .select(['status', 'revokedBy'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+  expect(await status(aniPhone.deviceId)).toEqual({ status: 'revoked', revokedBy: ownerId });
+  expect((await status(budiPhone.deviceId)).status).toBe('active');
+  expect((await status(counter.deviceId)).status).toBe('active');
+  expect(fired).toEqual([aniPhone.deviceId]);
+
+  // The blocked phone's next request is refused as blocked: its start then erases it.
+  const me = await h.app.request('http://srv.test/v1/devices/me', {
+    headers: { Authorization: `Bearer ${aniPhone.token}` },
+  });
+  expect(me.status).toBe(401);
+  expect(((await me.json()) as { error: { code: string } }).error.code).toBe('DEVICE_REVOKED');
+});

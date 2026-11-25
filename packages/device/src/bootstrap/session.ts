@@ -156,6 +156,11 @@ export interface AppSessionSnapshot {
    */
   readonly canRenameDevice: boolean;
   /**
+   * Does the ACTIVE user hold `auth.device_revoke` here? Gates Settings › Perangkat, where a lost
+   * device is blocked and erased: the server decides each block.
+   */
+  readonly canBlockDevices: boolean;
+  /**
    * Is the ACTIVE user a tenant admin (tenant-wide `auth.role_manage`, the main owner)? Only they are
    * offered owner roles and other owners to manage; the server enforces the same rule.
    */
@@ -427,6 +432,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         canSetLimits: actingUserHolds(AUTH_PERMISSION.limitManage),
         canDecideConflicts: actingUserHolds(PLATFORM_PERMISSION.conflictAcknowledge),
         canRenameDevice: actingUserHolds(AUTH_PERMISSION.deviceEnroll),
+        canBlockDevices: actingUserHolds(AUTH_PERMISSION.deviceRevoke),
         tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };
     },

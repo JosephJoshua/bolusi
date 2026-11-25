@@ -177,3 +177,78 @@ describe('proving the acting owner', () => {
     });
   });
 });
+
+describe('the device list wire', () => {
+  test('lists as the owner, leaves out the server signer, and maps the fields', async () => {
+    const doFetch = vi.fn(async () =>
+      jsonResponse(200, {
+        devices: [
+          {
+            deviceId: 'd-1',
+            deviceName: 'HP Ani',
+            storeId: 's-1',
+            status: 'revoked',
+            kind: 'member',
+            personalUserId: 'u-ani',
+            lastSyncAt: 10,
+            lastSeenAt: 11,
+            revokedAt: 12,
+          },
+          {
+            deviceId: 'd-sys',
+            deviceName: null,
+            storeId: null,
+            status: 'active',
+            kind: 'system',
+            personalUserId: null,
+            lastSyncAt: null,
+            lastSeenAt: null,
+            revokedAt: null,
+          },
+        ],
+      }),
+    );
+    const devices = await admin(doFetch as unknown as typeof fetch).listDevices({
+      actingUserId: 'u-owner',
+    });
+    expect(sent(doFetch)).toMatchObject({
+      url: 'https://api.example.com/v1/devices',
+      method: 'GET',
+      headers: { Authorization: 'Bearer bdt_secret', 'X-Acting-User': 'u-owner' },
+      body: undefined,
+    });
+    expect(devices).toEqual([
+      {
+        id: 'd-1',
+        name: 'HP Ani',
+        storeId: 's-1',
+        blocked: true,
+        blockedAt: 12,
+        personalUserId: 'u-ani',
+        lastSyncAt: 10,
+        lastSeenAt: 11,
+      },
+    ]);
+  });
+
+  test('an answer without a list is unexpected, not an empty store', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(200, {}));
+    const error = await admin(doFetch as unknown as typeof fetch)
+      .listDevices({ actingUserId: 'u-owner' })
+      .catch((e: unknown) => e);
+    expect(staffAdminFailure(error)).toBe('unexpected');
+  });
+
+  test('block posts the revoke for that device, as the owner', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(200, { deviceId: 'd-1', status: 'revoked' }));
+    await admin(doFetch as unknown as typeof fetch).blockDevice({
+      actingUserId: 'u-owner',
+      deviceId: 'd-1',
+    });
+    expect(sent(doFetch)).toMatchObject({
+      url: 'https://api.example.com/v1/devices/d-1/revoke',
+      method: 'POST',
+      headers: { 'X-Acting-User': 'u-owner' },
+    });
+  });
+});

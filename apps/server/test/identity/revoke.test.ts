@@ -181,3 +181,36 @@ test('two revocations of one device: exactly ONE owns the transition', async () 
     .execute();
   expect(audits).toHaveLength(1);
 });
+
+test("the server's own signer cannot be blocked: 404, and it stays active", async () => {
+  const { p } = await setup();
+  const systemId = uuidv7(h.clock.now());
+  await h.idb.db
+    .insertInto('devices')
+    .values({
+      id: systemId,
+      tenantId: p.tenantId,
+      storeId: null,
+      kind: 'system',
+      name: 'server',
+      signingKeyPublic: `pk-${systemId}`,
+      tokenHash: null,
+      enrolledAt: BigInt(h.clock.now()),
+      enrolledBy: null,
+      status: 'active',
+    })
+    .execute();
+  const control = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
+
+  const res = await h.app.request(`http://srv.test/v1/devices/${systemId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${control}` },
+  });
+  expect(res.status).toBe(404);
+  const row = await h.idb.db
+    .selectFrom('devices')
+    .select('status')
+    .where('id', '=', systemId)
+    .executeTakeFirstOrThrow();
+  expect(row.status).toBe('active');
+});

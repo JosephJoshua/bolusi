@@ -30,7 +30,7 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
 
   const call = async (
     actingUserId: string,
-    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     body?: unknown,
   ): Promise<unknown> => {
@@ -58,6 +58,29 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
   };
 
   return {
+    async listDevices({ actingUserId }) {
+      const json = (await call(actingUserId, 'GET', '/v1/devices')) as {
+        readonly devices?: unknown;
+      } | null;
+      if (!Array.isArray(json?.devices)) throw new StaffAdminError('unexpected');
+      return (json.devices as readonly ListedDevice[])
+        .filter((device) => device.kind !== 'system')
+        .map((device) => ({
+          id: device.deviceId,
+          name: device.deviceName,
+          storeId: device.storeId,
+          blocked: device.status === 'revoked',
+          blockedAt: device.revokedAt,
+          personalUserId: device.personalUserId ?? null,
+          lastSyncAt: device.lastSyncAt,
+          lastSeenAt: device.lastSeenAt,
+        }));
+    },
+
+    async blockDevice({ actingUserId, deviceId }) {
+      await call(actingUserId, 'POST', `/v1/devices/${deviceId}/revoke`);
+    },
+
     async create({ actingUserId, storeId, name, roleIds }) {
       const json = (await call(actingUserId, 'POST', '/v1/users', {
         name,
@@ -116,6 +139,19 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
       await call(actingUserId, 'DELETE', `/v1/roles/${roleId}`);
     },
   };
+}
+
+/** A row of `GET /v1/devices` (api/02-auth §7.1), the fields the device list reads. */
+interface ListedDevice {
+  readonly deviceId: string;
+  readonly deviceName: string | null;
+  readonly storeId: string | null;
+  readonly status: string;
+  readonly kind?: string;
+  readonly personalUserId?: string | null;
+  readonly lastSyncAt: number | null;
+  readonly lastSeenAt: number | null;
+  readonly revokedAt: number | null;
 }
 
 /** The api/00 §7 error envelope's code, mapped to what the owner can do about it. */
