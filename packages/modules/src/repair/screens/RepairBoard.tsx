@@ -26,7 +26,7 @@ import {
   type,
   ValueText,
 } from '@bolusi/ui';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -40,7 +40,6 @@ import {
 
 import { tn } from '../i18n.js';
 import {
-  APPROVALS_VIEW_MAX,
   BOARD_EMPTY_KEY,
   boardFilter,
   amountOwed,
@@ -98,8 +97,7 @@ interface LoadedBoard {
   /** The store's not-collected limit in days, and the time the board was read against it. */
   readonly uncollectedLimit: number;
   readonly readAt: number;
-  /** Servisan waiting on this user's approval, and those with any waiting request they see. */
-  readonly approvalIds: readonly string[];
+  /** Servisan with a waiting request this user sees (asked, or theirs to answer in Perlu dicek). */
   readonly approvalWaiting: ReadonlySet<string>;
   /** Phones waiting for pickup, for the tab and an empty active queue; null when not counted. */
   readonly pickup: number | null;
@@ -122,7 +120,7 @@ export function RepairBoard({
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
   // A kept view this user may not see (a colleague took the phone over) is not offered.
   const kept =
-    heldView !== null && heldView !== undefined && boardViews(can, 1).includes(heldView)
+    heldView !== null && heldView !== undefined && boardViews(can).includes(heldView)
       ? heldView
       : null;
   const [ownView, setOwnView] = useState<BoardView>(() => kept ?? defaultBoardView(can));
@@ -152,27 +150,11 @@ export function RepairBoard({
       const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
       const readAt = now();
       const requests = await readApprovals(rt);
-      const approvalIds = [
-        ...new Set(requests.filter((row) => row.canDecide).map((row) => row.targetId)),
-      ];
       const approvalWaiting = new Set(requests.map((row) => row.targetId));
       if (searching) {
         rows = [
           ...(await rt.query('searchTickets', { text: searchText, limit: SEARCH_LIMIT })).rows,
         ];
-      } else if (view === 'approvals') {
-        // A short list, read whole; it empties as requests are answered.
-        if (approvalIds.length > 0) {
-          rows = [
-            ...(
-              await rt.query('listTickets', {
-                filter: boardFilter(view, rt.userId, 0, approvalIds),
-                sort: boardSort(view),
-                limit: APPROVALS_VIEW_MAX,
-              })
-            ).rows,
-          ];
-        }
       } else {
         // Every page the user has scrolled to, re-read on each refresh so the live board stays whole.
         let cursor: string | null = null;
@@ -208,7 +190,6 @@ export function RepairBoard({
         hasMore,
         uncollectedLimit,
         readAt,
-        approvalIds,
         approvalWaiting,
         pickup,
       };
@@ -270,13 +251,7 @@ export function RepairBoard({
 
   const loaded = query.status === 'ready' ? query.data : null;
   const statuses = loaded?.statuses;
-  const waitingApprovals = loaded?.approvalIds.length ?? 0;
   const approvalWaiting = loaded?.approvalWaiting;
-  // Every request answered: the approvals view goes, and the board returns to its usual queue.
-  const viewGone = loaded !== null && view === 'approvals' && waitingApprovals === 0;
-  useEffect(() => {
-    if (viewGone) setView(defaultBoardView(can));
-  }, [viewGone, can, setView]);
   const showCancel = !searching && view === 'cancelled';
   // The counter and owners call the customer about a phone left too long; technicians need not.
   const flagUncollected = flagsUncollected(can);
@@ -355,9 +330,8 @@ export function RepairBoard({
       {searching ? null : (
         <View style={styles.views}>
           <SegmentedControl
-            options={boardViews(can, waitingApprovals).map((value) => {
+            options={boardViews(can).map((value) => {
               const label = boardViewLabel(value, {
-                approvals: waitingApprovals,
                 pickup: loaded?.pickup ?? null,
               });
               return { value, label: tn(label.key, { count: label.count }) };

@@ -7,7 +7,6 @@
  */
 import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
 import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
-import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('expo-secure-store', () => ({
@@ -39,6 +38,7 @@ import { __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.
 import {
   bootFixture,
   closeClientDb,
+  COUNTER_REPAIR_PERMISSIONS,
   enrolledDevice,
   fireOn,
   mountRoot,
@@ -51,7 +51,7 @@ import {
   type Fixture,
 } from './live-shell-support.js';
 
-const REPAIR_ONLY = [...NOTES_PERMISSIONS, ...Object.values(REPAIR_PERMISSION)];
+const REPAIR_ONLY = [...NOTES_PERMISSIONS, ...COUNTER_REPAIR_PERMISSIONS];
 /** A technician: reads the stock, adds nothing to it, buys nothing. */
 const READS_STOCK = [...REPAIR_ONLY, INVENTORY_PERMISSION.read];
 /** A store owner: keeps the stock and buys from suppliers. */
@@ -61,6 +61,8 @@ const KEEPS_AND_BUYS = [
   INVENTORY_PERMISSION.manageItems,
   PURCHASING_PERMISSION.buy,
 ];
+/** An owner who also sets up the categories. */
+const SETS_UP = [...KEEPS_AND_BUYS, INVENTORY_PERMISSION.manageCategories];
 
 let fixture: Fixture | null = null;
 let screen: RenderResult | null = null;
@@ -84,11 +86,14 @@ async function press(target: RenderResult, testID: string): Promise<void> {
 }
 
 /** Boot the live shell with the repair surface and sign in, holding `permissions`. */
-async function signedIn(permissions: readonly string[]): Promise<RenderResult> {
+async function signedIn(
+  permissions: readonly string[],
+  scope: 'store' | 'tenant' = 'store',
+): Promise<RenderResult> {
   const target = await bootFixture();
   fixture = target;
   await enrolledDevice(target);
-  await seedTwoUsers(target, 300, permissions);
+  await seedTwoUsers(target, 300, permissions, scope);
   const mounted = await mountRoot(target, {
     createRepair: (app, runtime, identity, media, capture) =>
       createSessionRepairRuntime({
@@ -160,5 +165,28 @@ describe('the Barang tab', () => {
     expect(__emitHardwareBack()).toBe(true);
     await settle();
     expect(selected(shown, 'shell-tabs.repair')).toEqual({ selected: true });
+  });
+
+  test('keeps category setup out of the chip row: it opens from the filters and backs out to them', async () => {
+    const shown = await signedIn(SETS_UP, 'tenant');
+    await press(shown, 'shell-tabs.items');
+    await waitUntil(() => shown.query('inventory.list.filter') !== null);
+    expect(shown.query('inventory.list.categories')).toBeNull();
+    await press(shown, 'inventory.list.filter');
+    expect(shown.query('inventory.filterStep')).not.toBeNull();
+    await press(shown, 'inventory.filterStep.categories');
+    expect(shown.query('inventory.categories')).not.toBeNull();
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(shown.query('inventory.filterStep')).not.toBeNull();
+  });
+
+  test('offers no category setup to whoever may not set it up', async () => {
+    const shown = await signedIn(KEEPS_AND_BUYS);
+    await press(shown, 'shell-tabs.items');
+    await waitUntil(() => shown.query('inventory.list.filter') !== null);
+    await press(shown, 'inventory.list.filter');
+    expect(shown.query('inventory.filterStep')).not.toBeNull();
+    expect(shown.query('inventory.filterStep.categories')).toBeNull();
   });
 });

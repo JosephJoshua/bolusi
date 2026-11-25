@@ -25,10 +25,12 @@ import { Linking, Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'r
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
-import { RepairHome } from './src/screens/repair/RepairHome.js';
+import { RepairHome, type RepairOpenTarget } from './src/screens/repair/RepairHome.js';
+import { AttentionHome, type AttentionTarget } from './src/screens/repair/AttentionHome.js';
 import { KasHome } from './src/screens/money/KasHome.js';
 import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
-import { ItemsHome } from './src/screens/inventory/ItemsHome.js';
+import { ItemsHome, type ItemsOpenTarget } from './src/screens/inventory/ItemsHome.js';
+import type { PlaceOpen } from '@bolusi/modules/screen-kit';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import { placeTabsShow, type SurfaceNav } from './src/navigation/surface.js';
@@ -114,6 +116,7 @@ import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
   keptIntakeDraft,
+  opensAttention,
   parseIntakeDraft,
   parseRepairDraft,
   repairAbilities,
@@ -349,10 +352,12 @@ export default function App(props: AppProps): React.JSX.Element {
   // The avatar's menu (switch user, settings), open over the home surface.
   const [accountMenu, setAccountMenu] = useState(false);
   // The home tab (Servisan or Kas) is the person's own: whoever signs in next starts on Servisan.
-  const [homeTab, setHomeTab] = useState<{ readonly userId: string; readonly tab: HomeTab }>({
-    userId: '',
-    tab: 'repair',
-  });
+  const [homeTab, setHomeTab] = useState<{
+    readonly userId: string;
+    readonly tab: HomeTab;
+    /** The place that opened this one, which back returns to. */
+    readonly returnTo: HomeTab | null;
+  }>({ userId: '', tab: 'repair', returnTo: null });
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
    * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
@@ -906,20 +911,40 @@ export default function App(props: AppProps): React.JSX.Element {
   // Barang is a tab for whoever may read the store's items; Belanja sits inside it for buyers.
   const itemsRuntime = props.repair?.inventory;
   const showsItems = itemsRuntime !== undefined && opensParts(itemsRuntime);
+  // Perlu dicek leads for whoever answers requests: it is where their day starts.
+  const showsAttention = props.repair !== undefined && opensAttention(props.repair);
   const homeTabs: readonly HomeTab[] = [
+    ...(showsAttention ? (['attention'] as const) : []),
     'repair',
     ...(showsKas ? (['kas'] as const) : []),
     ...(showsItems ? (['items'] as const) : []),
   ];
-  // A tab taken away (a grant changed) or another person's pick falls back to Servisan.
+  // A tab taken away (a grant changed) or another person's pick falls back to the first place.
+  const startTab: HomeTab = homeTabs[0] ?? 'repair';
   const tab: HomeTab =
     currentUser !== null && homeTab.userId === currentUser.id && homeTabs.includes(homeTab.tab)
       ? homeTab.tab
-      : 'repair';
+      : startTab;
   const selectTab = useCallback(
-    (next: HomeTab): void => setHomeTab({ userId: currentUser?.id ?? '', tab: next }),
+    (next: HomeTab, returnTo: HomeTab | null = null): void =>
+      setHomeTab({ userId: currentUser?.id ?? '', tab: next, returnTo }),
     [currentUser],
   );
+  // Back from a place another one opened goes back to that one (Perlu dicek); else the first place.
+  const backTab: HomeTab =
+    homeTab.returnTo !== null && homeTabs.includes(homeTab.returnTo) ? homeTab.returnTo : startTab;
+  // What Perlu dicek asked the other places to show, each ask a new nonce.
+  const askNonce = useRef(0);
+  const [repairOpen, setRepairOpen] = useState<PlaceOpen<RepairOpenTarget> | null>(null);
+  const [itemsOpen, setItemsOpen] = useState<PlaceOpen<ItemsOpenTarget> | null>(null);
+  // An ask is taken up by the place in the same commit (a child's effect runs before this one), so
+  // it is dropped at once: a later remount (a lock, another person) must not open it again.
+  useEffect(() => {
+    if (repairOpen !== null) setRepairOpen(null);
+  }, [repairOpen]);
+  useEffect(() => {
+    if (itemsOpen !== null) setItemsOpen(null);
+  }, [itemsOpen]);
   // Barang mounts on its first visit and then stays, like Servisan; it unmounts with the session.
   const [itemsOpenedBy, setItemsOpenedBy] = useState<string | null>(null);
   if (tab === 'items' && currentUser !== null && itemsOpenedBy !== currentUser.id) {
@@ -932,23 +957,42 @@ export default function App(props: AppProps): React.JSX.Element {
    * leaving home still asks about a half-done intake on the hidden Servisan, after showing it.
    */
   const repairNavRef = useRef<SurfaceNav | null>(null);
-  const placeNavRef = useRef<Readonly<Record<Exclude<HomeTab, 'repair'>, SurfaceNav | null>>>({
+  const placeNavRef = useRef<Readonly<Record<'kas' | 'items', SurfaceNav | null>>>({
     kas: null,
     items: null,
   });
   const tabRef = useRef<HomeTab>(tab);
+  const backTabRef = useRef<HomeTab>(backTab);
+  backTabRef.current = backTab;
   const selectTabRef = useRef(selectTab);
   selectTabRef.current = selectTab;
   const syncHomeNav = useCallback((): void => {
     const shown = tabRef.current;
-    registerSurfaceNav(
+    const placeNav = (): SurfaceNav | null =>
       shown === 'repair'
         ? repairNavRef.current
+        : shown === 'attention'
+          ? null
+          : placeNavRef.current[shown];
+    // The first place at its own top level: back leaves the app, as on any home screen.
+    if (shown === backTabRef.current || (shown === 'repair' && repairNavRef.current !== null)) {
+      registerSurfaceNav(placeNav());
+      return;
+    }
+    registerSurfaceNav(
+      shown === 'repair'
+        ? {
+            handleBack: () => {
+              selectTabRef.current(backTabRef.current);
+              return true;
+            },
+            requestLeave: (proceed) => proceed(),
+          }
         : {
             handleBack: () => {
-              const place = placeNavRef.current[shown];
+              const place = placeNav();
               if (place !== null) return place.handleBack();
-              selectTabRef.current('repair');
+              selectTabRef.current(backTabRef.current);
               return true;
             },
             requestLeave: (proceed) => {
@@ -962,7 +1006,7 @@ export default function App(props: AppProps): React.JSX.Element {
                 repair.requestLeave(proceed);
               };
               // A half-typed step on this tab asks first, then the intake behind it.
-              const place = placeNavRef.current[shown];
+              const place = placeNav();
               if (place === null) toServisan();
               else place.requestLeave(toServisan);
             },
@@ -1003,7 +1047,28 @@ export default function App(props: AppProps): React.JSX.Element {
   useEffect(() => {
     tabRef.current = tab;
     syncHomeNav();
-  }, [tab, syncHomeNav]);
+  }, [tab, backTab, syncHomeNav]);
+  /** A row of Perlu dicek: the place that does that work, showing it, with back returning here. */
+  const openFromAttention = useCallback(
+    (target: AttentionTarget): void => {
+      if (target.place === 'syncStatus') {
+        openSyncStatus();
+        return;
+      }
+      askNonce.current += 1;
+      const nonce = askNonce.current;
+      if (target.place === 'repair') setRepairOpen({ nonce, target: target.open });
+      else setItemsOpen({ nonce, target: target.open });
+      selectTab(target.place, 'attention');
+    },
+    [openSyncStatus, selectTab],
+  );
+  // Out of a servisan Perlu dicek opened: back to Perlu dicek, if that is where the person came from.
+  const returnToRef = useRef<HomeTab | null>(null);
+  returnToRef.current = homeTab.returnTo;
+  const returnFromRepair = useCallback((): void => {
+    if (returnToRef.current !== null) selectTabRef.current(returnToRef.current);
+  }, []);
 
   // The shell's edge-to-edge insets, resolved once per render and applied at BOTH `bolusi-app-shell`
   // returns below — so the capture zone and the main zone can never drift on the top inset. The top
@@ -1674,6 +1739,8 @@ export default function App(props: AppProps): React.JSX.Element {
                     onOpenSyncStatus={openSyncStatus}
                     syncChip={homeSyncChip}
                     avatar={homeAvatar}
+                    open={repairOpen}
+                    onReturn={returnFromRepair}
                   />
                 );
                 if (homeTabs.length === 1) return repairHome;
@@ -1681,7 +1748,13 @@ export default function App(props: AppProps): React.JSX.Element {
                 // look at the drawer. Barang stays mounted once opened, so its filter and a
                 // half-written order survive too. Kas holds nothing worth keeping.
                 const tabsShow =
-                  tab === 'repair' ? repairTabs : tab === 'kas' ? kasTabs : itemsTabs;
+                  tab === 'attention'
+                    ? true
+                    : tab === 'repair'
+                      ? repairTabs
+                      : tab === 'kas'
+                        ? kasTabs
+                        : itemsTabs;
                 const tabs = tabsShow ? (
                   <TabBar
                     tabs={homeTabs.map(homeTabItem)}
@@ -1698,6 +1771,21 @@ export default function App(props: AppProps): React.JSX.Element {
                 return (
                   <View style={tabsAsRail ? ROW : FILL}>
                     {tabsAsRail ? tabs : null}
+                    {tab === 'attention' ? (
+                      <View style={FILL}>
+                        <ShellTabsProvider tabs={bottomTabs('attention')}>
+                          <AttentionHome
+                            runtime={props.repair}
+                            now={props.clock ?? systemClock.now}
+                            refused={props.sync.rejected.length}
+                            syncChip={homeSyncChip}
+                            avatar={homeAvatar}
+                            onOpen={openFromAttention}
+                            onOpenSyncStatus={openSyncStatus}
+                          />
+                        </ShellTabsProvider>
+                      </View>
+                    ) : null}
                     <View style={tab === 'repair' ? FILL : HIDDEN}>
                       <ShellTabsProvider tabs={bottomTabs('repair')}>
                         {repairHome}
@@ -1726,6 +1814,7 @@ export default function App(props: AppProps): React.JSX.Element {
                             avatar={homeAvatar}
                             onOpenSyncStatus={openSyncStatus}
                             onRegisterSurfaceNav={registerItemsNav}
+                            open={itemsOpen}
                           />
                         </ShellTabsProvider>
                       </View>
@@ -1881,11 +1970,13 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 }
 
 /** The home surface's tabs, shown when the person may see Kas. */
-type HomeTab = 'repair' | 'kas' | 'items';
+type HomeTab = 'attention' | 'repair' | 'kas' | 'items';
 
 /** A place's tab: its name, read at render so it follows the language, and its icon. */
 function homeTabItem(key: HomeTab): TabBarTab<HomeTab> {
   switch (key) {
+    case 'attention':
+      return { key, label: tn('repair.attention.title'), icon: 'attention' };
     case 'repair':
       return { key, label: tn('repair.board.title'), icon: 'repair' };
     case 'kas':

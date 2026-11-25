@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/renderer/App.js';
 import type * as CaptureDialogs from '../src/renderer/capture-dialogs.js';
 import type * as Capture from '../src/renderer/capture.js';
+import { onBoard } from './desk.js';
 
 // jsdom has no webcam: a photo or signature asked for is taken at once. The dialogs have their own tests.
 vi.mock('../src/renderer/capture-dialogs.js', async (importOriginal) => {
@@ -94,6 +95,7 @@ function pick(line: string, method = 'Tunai'): void {
 const text = (id: string): string => byTestId(id).textContent!.replace(/\s/g, '');
 
 async function openTicket(name: string): Promise<void> {
+  await onBoard();
   fireEvent.click(await screen.findByText(name));
   await screen.findByTestId('repair.desk.ticket.customer');
 }
@@ -108,6 +110,7 @@ async function openMore(item: string): Promise<void> {
 }
 
 async function showView(view: string): Promise<void> {
+  await onBoard();
   const tab = await screen.findByTestId(`repair.desk.board.views.${view}`);
   fireEvent.mouseDown(tab, { button: 0 });
   fireEvent.click(tab);
@@ -185,7 +188,7 @@ describe('counter app over demo data', () => {
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('repair.desk.intake');
     fireEvent.click(byTestId('page.back'));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(byTestId('repair.desk.board.views.pickup').getAttribute('aria-selected')).toBe('true');
   });
 
@@ -266,6 +269,7 @@ describe('counter app over demo data', () => {
 
   it('takes every missing intake photo in a row', async () => {
     renderApp();
+    await onBoard();
     fireEvent.click(await screen.findByTestId('repair.desk.board.newIntake'));
     const tiles = await screen.findAllByTestId(/^repair\.desk\.intake\.photo\.(?!all)/);
     await act(async () => {
@@ -322,7 +326,7 @@ describe('counter app over demo data', () => {
     // Someone else and back: the page is gone, as after a lock, and the claim comes back.
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Siti Rahayu' }));
     await reopened();
@@ -452,32 +456,27 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.approvals').textContent).toContain('Menunggu');
   });
 
-  it('leads an owner’s board with what waits on them, and approves it from the servisan', async () => {
+  it('opens an owner on Perlu dicek, which opens the request on its answer', async () => {
     renderApp();
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
-    // The demo's counter asked for a discount on Yohanis Wenda's servisan.
-    expect((await screen.findByTestId('repair.desk.board.views.approvals')).textContent).toBe(
-      'Persetujuan (1)',
-    );
-    await showView('approvals');
-    // Only the servisan waiting on them is listed.
-    await waitFor(() => expect(screen.queryByText('Benny Kambu')).toBeNull());
-    await openTicket('Yohanis Wenda');
-    const section = byTestId('repair.desk.ticket.approvals');
-    expect(section.textContent).toContain('Diskon');
-    fireEvent.click(within(section).getByRole('button', { name: 'Putuskan' }));
+    // The demo's counter asked for a discount on Yohanis Wenda's servisan: it waits on the owner.
+    const requests = await screen.findByTestId('repair.desk.attention.requests');
+    expect(within(requests).getByText(/Yohanis Wenda/)).toBeTruthy();
+    expect(screen.queryByText(/Benny Kambu/)).toBeNull();
+    // The board has no queue of its own for it any more.
+    expect(screen.queryByTestId('repair.desk.board')).toBeNull();
+    fireEvent.click(within(requests).getByText(/Yohanis Wenda/));
+    // The servisan opens beside it, straight on the answer.
     const dialog = await screen.findByTestId('repair.desk.approval');
     expect(within(dialog).getByTestId('repair.desk.approval.amount').textContent).toBe(
       '−Rp\u00A025.000',
     );
     fireEvent.click(within(dialog).getByTestId('repair.desk.approval.approve'));
     await screen.findByText('Disetujui dan sudah dicatat.');
-    // Approved, it waits on the customer like any price change; nothing waits on the owner now.
     expect(byTestId('repair.desk.ticket.price').textContent).toContain('Diskon pelanggan tetap');
-    await waitFor(() =>
-      expect(screen.queryByTestId('repair.desk.board.views.approvals')).toBeNull(),
-    );
+    // Nothing waits on the owner now.
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.attention.requests')).toBeNull());
   });
 
   it('corrects a mistyped number after saving, and the history says what it was', async () => {
@@ -1063,7 +1062,7 @@ describe('counter app over demo data', () => {
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('repair.desk.intake');
     fireEvent.click(byTestId('page.back'));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(byTestId('repair.desk.filter.status').textContent).toContain('Tunggu sparepart');
   });
 });
@@ -1072,12 +1071,12 @@ describe('money after pickup on the servisan', () => {
   async function switchTo(name: string): Promise<void> {
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
     fireEvent.click(await screen.findByRole('menuitem', { name }));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
   }
 
   it('lets an owner give part of a paid bill back, and the bill shows it came off', async () => {
     renderApp();
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     await showView('returned');
     await openTicket('Yakob Tabuni');
     // The counter gives back only an overpayment; this bill was paid exactly.
@@ -1104,7 +1103,7 @@ describe('money after pickup on the servisan', () => {
   // Android QA round B: beyond the limit the manager was only told "Melebihi batasmu".
   it('lets a manager ask an owner to give back beyond their limit', async () => {
     renderApp();
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     await switchTo('Maria Kogoya');
     await showView('returned');
     await openTicket('Yakob Tabuni');

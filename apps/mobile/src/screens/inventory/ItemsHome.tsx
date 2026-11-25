@@ -17,7 +17,14 @@ import {
   tp,
   type PurchasingRuntime,
 } from '@bolusi/modules/purchasing/screens';
-import type { DiscardGuard, PlaceStep } from '@bolusi/modules/screen-kit';
+import type { PartFilter } from '@bolusi/modules/inventory';
+import type { OrderFilter } from '@bolusi/modules/purchasing';
+import {
+  usePlaceOpen,
+  type DiscardGuard,
+  type PlaceOpen,
+  type PlaceStep,
+} from '@bolusi/modules/screen-kit';
 import { SegmentedControl, space } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -25,6 +32,11 @@ import { StyleSheet, View } from 'react-native';
 import type { SurfaceNav } from '../../navigation/surface.js';
 
 type Section = 'stock' | 'orders';
+
+/** What another place may open here: one stock view, or the orders. */
+export type ItemsOpenTarget =
+  | { readonly section: 'stock'; readonly stock: PartFilter }
+  | { readonly section: 'orders'; readonly orders: OrderFilter };
 
 export interface ItemsHomeProps {
   readonly inventory: InventoryRuntime;
@@ -35,6 +47,8 @@ export interface ItemsHomeProps {
   readonly onOpenSyncStatus: () => void;
   /** Published while a section has something open; null on its list. */
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
+  /** Another place asks to show something here; a new nonce is a new ask. */
+  readonly open?: PlaceOpen<ItemsOpenTarget> | null | undefined;
 }
 
 export function ItemsHome({
@@ -44,6 +58,7 @@ export function ItemsHome({
   avatar,
   onOpenSyncStatus,
   onRegisterSurfaceNav,
+  open = null,
 }: ItemsHomeProps): React.JSX.Element {
   const buys = opensPurchasing(inventory, purchasing);
   const [picked, setPicked] = useState<Section>('stock');
@@ -68,6 +83,23 @@ export function ItemsHome({
   const registerOrdersGuard = useCallback((guard: DiscardGuard | null) => {
     guards.current.orders = guard;
   }, []);
+
+  // An ask turns to its section and hands the section what to show.
+  usePlaceOpen(open, (target) => setPicked(target.section));
+  const showStock = useMemo(
+    () =>
+      open !== null && open.target.section === 'stock'
+        ? { nonce: open.nonce, target: open.target.stock }
+        : null,
+    [open],
+  );
+  const showOrders = useMemo(
+    () =>
+      open !== null && open.target.section === 'orders'
+        ? { nonce: open.nonce, target: open.target.orders }
+        : null,
+    [open],
+  );
 
   const step = steps[section];
   useEffect(() => {
@@ -118,6 +150,7 @@ export function ItemsHome({
           place={place}
           onRegisterPlaceStep={registerStockStep}
           onRegisterDiscardGuard={registerStockGuard}
+          showStock={showStock}
         />
       </View>
       {buys && purchasing !== undefined ? (
@@ -128,6 +161,7 @@ export function ItemsHome({
               place={place}
               onRegisterPlaceStep={registerOrdersStep}
               onRegisterDiscardGuard={registerOrdersGuard}
+              showOrders={showOrders}
             />
           </View>
         </PurchasingRuntimeProvider>

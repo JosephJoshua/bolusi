@@ -152,6 +152,8 @@ export interface TicketDetailProps {
    * counter. Read once, when the screen opens.
    */
   readonly printFirst?: boolean | undefined;
+  /** Opened from Perlu dicek on one of its requests: opens on that request's answer. Read once. */
+  readonly answerRequestId?: string | undefined;
   readonly chrome: RepairChrome;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
@@ -176,6 +178,7 @@ export interface TicketDetailProps {
 export function TicketDetail({
   ticketId,
   printFirst = false,
+  answerRequestId,
   chrome,
   now,
   onBack,
@@ -192,7 +195,11 @@ export function TicketDetail({
   const { runtime, can, money, runner, query, ticket, reload, done, setDone, runInPlace } =
     useTicketPage(ticketId, 'ticket');
   const [step, setStep] = useState<Step>(() =>
-    printFirst && runtime.printing !== undefined ? { kind: 'print' } : { kind: 'none' },
+    answerRequestId !== undefined
+      ? { kind: 'approval', requestId: answerRequestId }
+      : printFirst && runtime.printing !== undefined
+        ? { kind: 'print' }
+        : { kind: 'none' },
   );
   const [passcodeShown, setPasscodeShown] = useState(false);
   const [messageFailed, setMessageFailed] = useState(false);

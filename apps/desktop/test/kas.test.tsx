@@ -16,6 +16,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
+import { onBoard } from './desk.js';
 
 beforeEach(() => {
   // The demo's payments are a few hours old, so "today" must not have just begun: run at noon.
@@ -50,7 +51,7 @@ async function openKas(as?: string): Promise<void> {
       <App />
     </TooltipProvider>,
   );
-  await screen.findByTestId('repair.desk.board');
+  await onBoard();
   if (as !== undefined) await switchTo(as);
   fireEvent.click(await screen.findByRole('button', { name: 'Kas' }));
   await screen.findByTestId('money.desk.kas.drawer');
@@ -59,7 +60,7 @@ async function openKas(as?: string): Promise<void> {
 async function switchTo(name: string): Promise<void> {
   fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name }));
-  await screen.findByTestId('repair.desk.board');
+  await onBoard();
 }
 
 async function countDrawer(amount: string): Promise<void> {
@@ -79,7 +80,7 @@ describe('Kas on the PC', () => {
         <App />
       </TooltipProvider>,
     );
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(screen.getByRole('button', { name: 'Kas' })).toBeTruthy();
     await switchTo('Budi Santoso');
     expect(screen.queryByRole('button', { name: 'Kas' })).toBeNull();
@@ -440,7 +441,7 @@ describe('payment methods in PC Settings', () => {
         <App />
       </TooltipProvider>,
     );
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     await switchTo(as);
     fireEvent.click(screen.getByRole('button', { name: 'Pengaturan' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Metode pembayaran' }));
@@ -453,7 +454,7 @@ describe('payment methods in PC Settings', () => {
         <App />
       </TooltipProvider>,
     );
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     fireEvent.click(screen.getByRole('button', { name: 'Pengaturan' }));
     await screen.findByTestId('desktop.settings');
     expect(screen.queryByRole('button', { name: 'Metode pembayaran' })).toBeNull();

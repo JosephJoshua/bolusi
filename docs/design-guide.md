@@ -111,7 +111,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 - `AppShell` keeps content and the bottom action in one centred column of at
   most `size.contentMax`; sheets rise at the same width. Never stretch a form,
   a button or a line of text across a tablet.
-- The place tabs (Servisan, Kas, Barang) show only on a place's top level, inside its
+- The place tabs (Perlu dicek, Servisan, Kas, Barang) show only on a place's top level, inside its
   screen's bottom dock under the action, so a sheet covers them. A screen with
   a back arrow (a servisan, intake, Serah terima, a Kas step) owns the bottom
   for its action alone. Expanded, the tabs stand down the left edge as a rail.
@@ -136,12 +136,16 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 The app is organised by the job a person does, not by table (agreed with the owner
 2026-11-25). Each place is one job: Servisan (intake to pickup), Kas (the drawer),
 Barang (Stok, and Belanja for whoever buys; transfers, supplier bills and returns
-join it). A person sees only the places they work in. Settings stay in the account
-menu. An owner's action list across places (Perlu dicek) is next.
+join it). Whoever answers requests (owners, Manajer) opens on Perlu dicek: each
+request waiting on them, opening straight on its answer, and counts of what else waits
+(phones not collected, stock below zero, orders partly in, their refused changes), each
+opening the list where it is worked off. Requests have no queue on the board. A person
+sees only the places they work in. Settings stay in the account menu.
 
 - A place with several sections shows them as a `SegmentedControl` under the title
   on the phone (`PlaceHeader.sections`) and as a sidebar group on the PC (`NavGroup`).
-- Back goes one level up the way the person came, on both apps. On the phone the
+- Back goes one level up the way the person came, on both apps. A record another
+  place opened (a servisan from Perlu dicek) goes back to that place. On the phone the
   header arrow and Android back do the same thing. On the PC, every page below a
   place has a trail in its `PageHeader` (`trail`: "Servisan › Terima HP") and a
   back arrow (`onBack`), which the mouse's back button and Alt+Left also press.

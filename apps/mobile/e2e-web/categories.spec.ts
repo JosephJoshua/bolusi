@@ -10,6 +10,8 @@ import path from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { toServisan } from './shell.js';
+
 const ARTIFACTS = path.join(__dirname, 'artifacts', 'categories');
 
 async function shoot(page: Page, name: string): Promise<void> {
@@ -20,9 +22,11 @@ const tap = (page: Page, testID: string) => page.getByTestId(testID).first().cli
 
 async function openCategories(page: Page): Promise<void> {
   await page.goto('/?screen=repair&state=owner');
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
   await tap(page, 'shell-tabs.items');
-  await tap(page, 'inventory.list.categories');
+  // Category setup is with the filters, not in the chip row.
+  await tap(page, 'inventory.list.filter');
+  await tap(page, 'inventory.filterStep.categories');
   await expect(page.getByTestId('inventory.categories.row.cat-lcd').first()).toBeVisible();
 }
 

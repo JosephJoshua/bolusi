@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreView } from '../src/renderer/use-core.js';
 
 import { ALL, FakeCore, OWNER, ready, session, signedIn, TECH } from './fake-core.js';
+import { onBoard } from './desk.js';
 
 let core: FakeCore;
 
@@ -225,6 +226,11 @@ describe('the PC over the offline core', () => {
     );
     core.answers['repair.ticketSyncStatuses'] = () => ({ 't-1': ['rejected', 'rejected'] });
     renderApp();
+    // Perlu dicek counts them first, for the owner signed in.
+    expect((await screen.findByTestId('repair.desk.attention.list.refused')).textContent).toBe(
+      'Perubahan Anda ditolak (2)',
+    );
+    await onBoard();
     fireEvent.click(await screen.findByText('Yohanis Wenda'));
     await screen.findByText('2 perubahan ditolak server.');
     fireEvent.click(screen.getByRole('button', { name: 'Cek status sinkron' }));
@@ -249,6 +255,7 @@ describe('the PC over the offline core', () => {
       '314159',
     ]);
     // The runtime takes the person's grants from the core (this was once lost, hiding the button).
+    await onBoard();
     await screen.findByTestId('repair.desk.board.newIntake');
     // Every repair call names who it is for; the core refuses it for anyone else.
     const query = core.calls.find((call) => call.method === 'repair.query');
@@ -265,6 +272,7 @@ describe('the PC over the offline core', () => {
     await waitFor(() => expect(core.methods()).toContain('session.refresh'));
     fireEvent.click(screen.getByText('Andi Pratama'));
     for (const key of '314159') fireEvent.keyDown(window, { key });
+    await onBoard();
     fireEvent.click(await screen.findByTestId('repair.desk.board.newIntake'));
     await screen.findByTestId('repair.desk.intake');
     await waitFor(() =>
@@ -281,7 +289,7 @@ describe('the PC over the offline core', () => {
       ready({ session: session(signedIn(TECH, [REPAIR_PERMISSION.read, REPAIR_PERMISSION.work])) }),
     );
     renderApp();
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(screen.queryByTestId('repair.desk.board.newIntake')).toBeNull();
   });
 
@@ -327,6 +335,7 @@ describe('the PC over the offline core', () => {
   it('keeps a half-done intake on the PC, naming who started it, for whoever signs in next', async () => {
     core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
     renderApp();
+    await onBoard();
     await screen.findByTestId('repair.desk.board.newIntake');
     fireEvent.keyDown(window, { key: 'F2' });
     fireEvent.change(await screen.findByTestId('repair.desk.intake.name'), {
@@ -351,6 +360,7 @@ describe('the PC over the offline core', () => {
     // A colleague: it waits on the board, and carrying on says whose it was.
     core.session({ active: null, locked: true, permissions: [] });
     core.session({ ...signedIn(TECH, ALL), locked: false, deviceDrafts: { repair: kept } });
+    await onBoard();
     const resume = await screen.findByTestId('repair.desk.board.newIntake');
     expect(resume.textContent).toContain('Lanjutkan servisan baru');
     fireEvent.click(resume);
@@ -394,7 +404,7 @@ describe('the PC over the offline core', () => {
       ready({ session: session({ ...signedIn(TECH, ALL), workspace: draft as never }) }),
     );
     renderApp();
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(screen.queryByTestId('repair.desk.intake')).toBeNull();
   });
 });
@@ -420,7 +430,7 @@ describe('setting up a newly registered PC', () => {
     expect(screen.getByTestId('desktop.setup.done.photos').textContent).toContain('HP toko');
     expect(core.methods()).not.toContain('device.finishSetup');
     fireEvent.click(screen.getByTestId('desktop.setup.start'));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(core.methods()).toContain('device.finishSetup');
   });
 
@@ -430,7 +440,7 @@ describe('setting up a newly registered PC', () => {
     );
     renderApp();
     fireEvent.click(await screen.findByTestId('desktop.setup.later'));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(core.methods()).toContain('device.finishSetup');
     core.set({ setupFor: null });
     fireEvent.click(screen.getByTestId('nav.settings'));
@@ -458,7 +468,7 @@ describe('setting up a newly registered PC', () => {
       ready({ setupFor: OWNER.id, session: session({ ...signedIn(TECH, ALL) }) }),
     );
     renderApp();
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
     expect(screen.queryByTestId('desktop.setup.printer')).toBeNull();
   });
 });

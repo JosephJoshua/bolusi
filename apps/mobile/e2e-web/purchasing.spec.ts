@@ -8,6 +8,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
+import { toServisan } from './shell.js';
 
 const shoot = (page: Page, name: string) => check(page, 'purchasing', name);
 
@@ -15,7 +16,7 @@ const tap = (page: Page, testID: string) => page.getByTestId(testID).first().cli
 
 async function openItems(page: Page, role: 'owner' | 'technician'): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}`);
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
   await tap(page, 'shell-tabs.items');
 }
 

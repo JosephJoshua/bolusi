@@ -304,7 +304,7 @@ test('a new phone opens on its setup: permissions, paper with a test page, then 
   await expect(page.getByTestId('setup.permissions')).toHaveCount(0);
 
   // Settings opens it again.
-  await page.getByTestId('ui.avatarButton').click();
+  await page.getByTestId('ui.avatarButton').locator('visible=true').first().click();
   await page.getByTestId('shell-open-settings').click();
   await page.getByTestId('settings-setup').scrollIntoViewIfNeeded();
   await expect(page.getByTestId('settings-setup')).toBeVisible();

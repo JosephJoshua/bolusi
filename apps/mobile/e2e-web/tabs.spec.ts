@@ -8,6 +8,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
+import { toServisan } from './shell.js';
 
 const PHONE = { width: 360, height: 760 };
 const SIDEWAYS = { width: 1280, height: 800 };
@@ -17,7 +18,7 @@ const shoot = (page: Page, name: string) => check(page, 'tabs', name);
 
 async function open(page: Page, frame = ''): Promise<void> {
   await page.goto(`/?screen=repair&state=owner${frame}`);
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
 }
 
 test('on a phone the tabs sit in the board dock, and leave a servisan page to its own action', async ({

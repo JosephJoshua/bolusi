@@ -59,7 +59,6 @@ import type {
 // ── board ─────────────────────────────────────────────────────────────────────────────────────
 
 export const BOARD_VIEWS = [
-  'approvals',
   'active',
   'mine',
   'unassigned',
@@ -72,7 +71,6 @@ export type BoardView = (typeof BOARD_VIEWS)[number];
 
 /** What an empty view says: what is not there, never a generic "no data". */
 export const BOARD_EMPTY_KEY = {
-  approvals: 'repair.board.empty.approvals',
   active: 'repair.board.empty.active',
   mine: 'repair.board.empty.mine',
   unassigned: 'repair.board.empty.unassigned',
@@ -83,7 +81,6 @@ export const BOARD_EMPTY_KEY = {
 } as const satisfies Record<BoardView, RepairKey>;
 
 const BOARD_VIEW_KEY = {
-  approvals: 'repair.board.view.approvals',
   active: 'repair.board.view.active',
   mine: 'repair.board.view.mine',
   unassigned: 'repair.board.view.unassigned',
@@ -95,8 +92,6 @@ const BOARD_VIEW_KEY = {
 
 /** How many servisan wait in the views that carry a count on their tab. */
 export interface BoardCounts {
-  /** Servisan waiting on this user's approval. */
-  readonly approvals: number;
   /** Phones done or cancelled and still in the store; null when this user is not told. */
   readonly pickup: number | null;
 }
@@ -109,7 +104,6 @@ export function boardViewLabel(
   view: BoardView,
   counts: BoardCounts,
 ): { readonly key: RepairKey; readonly count: number } {
-  if (view === 'approvals') return { key: BOARD_VIEW_KEY.approvals, count: counts.approvals };
   if (view === 'pickup' && counts.pickup !== null && counts.pickup > 0)
     return { key: 'repair.board.view.pickupCount', count: counts.pickup };
   return { key: BOARD_VIEW_KEY[view], count: 0 };
@@ -134,12 +128,11 @@ export function pointsToPickup(
 
 /**
  * The views this user gets: every cancel, with who and what it charged, is for owners only; phones
- * nobody collected are for the counter and owners, who call the customer. Servisan with requests
- * this user can approve lead while there are any (`waitingApprovals`).
+ * nobody collected are for the counter and owners, who call the customer. Requests waiting on an
+ * answer are Perlu dicek's, not a queue here.
  */
-export function boardViews(can: RepairAbilities, waitingApprovals = 0): readonly BoardView[] {
+export function boardViews(can: RepairAbilities): readonly BoardView[] {
   return BOARD_VIEWS.filter((view) => {
-    if (view === 'approvals') return waitingApprovals > 0;
     if (view === 'cancelled') return can.cancel;
     if (view === 'uncollected') return flagsUncollected(can);
     return true;
@@ -160,6 +153,21 @@ const IN_PROGRESS = IN_PROGRESS_OUTCOMES;
 const DAY_MS = 86_400_000;
 /** How often an open screen re-reads which phones are not collected, as days pass with no change. */
 export const UNCOLLECTED_REFRESH_MS = 3_600_000;
+
+/**
+ * Who has Perlu dicek: whoever may answer a request, since those are what it is first for. These
+ * are the decision permissions of every request kind (repair's and the ledger's).
+ */
+export function opensAttention(reader: { hasPermission(permissionId: string): boolean }): boolean {
+  return [
+    REPAIR_PERMISSION.discount,
+    REPAIR_PERMISSION.cancel,
+    REPAIR_PERMISSION.correctDownPayment,
+    MONEY_PERMISSION.refund,
+    MONEY_PERMISSION.voidPayment,
+    MONEY_PERMISSION.extendCredit,
+  ].some((id) => reader.hasPermission(id));
+}
 
 /** Phones nobody collected are flagged to the counter and owners, who call the customer. */
 export function flagsUncollected(can: Pick<RepairAbilities, 'intake' | 'cancel'>): boolean {
@@ -185,23 +193,19 @@ export function uncollectedDays(
   return Math.floor((now - ticket.readyAt) / DAY_MS);
 }
 
-/** The most servisan the approvals view lists at once (`listTickets` takes up to 100 ids). */
+/** The most servisan Perlu dicek lists requests for at once (`listTickets` takes up to 100 ids). */
 export const APPROVALS_VIEW_MAX = 100;
 
 /**
  * The `listTickets` filter behind each board view. `readyBefore` is the not-collected cut-off
- * (`uncollectedBefore`), and `approvalIds` the servisan waiting on this user's approval; each is
- * read by its own view only. The approvals view is offered only while it has some.
+ * (`uncollectedBefore`), read by that view only.
  */
 export function boardFilter(
   view: BoardView,
   userId: string,
   readyBefore: number,
-  approvalIds: readonly string[] = [],
 ): ListTicketsInput['filter'] {
   switch (view) {
-    case 'approvals':
-      return { ids: approvalIds.slice(0, APPROVALS_VIEW_MAX) };
     case 'active':
       return { outcomes: [...IN_PROGRESS], location: 'in_store' };
     case 'mine':
