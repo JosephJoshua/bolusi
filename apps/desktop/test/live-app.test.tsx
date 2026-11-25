@@ -125,7 +125,7 @@ describe('the PC over the offline core', () => {
   it('shows a blocked PC the registration again, whatever session was open', () => {
     core = new FakeCore(ready({ device: 'revoked', session: session(signedIn(OWNER, ALL)) }));
     renderApp();
-    expect(screen.getByTestId('enrol.credentials').textContent).toContain('diblokir');
+    expect(screen.getByTestId('enrol.credentials').textContent).toContain('memblokir');
     expect(screen.queryByTestId('desktop.shell')).toBeNull();
   });
 

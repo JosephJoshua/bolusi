@@ -321,11 +321,29 @@ export function staffAdminFailure(error: unknown): StaffAdminFailure {
   return error instanceof StaffAdminError ? error.reason : 'unexpected';
 }
 
+/** A phone or PC registered to the business, as the server lists it for an owner. */
+export interface RegisteredDevice {
+  readonly id: string;
+  /** The name its owner gave it; null for a device registered before names existed. */
+  readonly name: string | null;
+  readonly storeId: string | null;
+  readonly blocked: boolean;
+  readonly blockedAt: number | null;
+  /** The person it was set up for (their own phone), or null for a device the store shares. */
+  readonly personalUserId: string | null;
+  readonly lastSyncAt: number | null;
+  readonly lastSeenAt: number | null;
+}
+
 /**
  * The server calls, made as `actingUserId` from this device (api/02-auth §5.4). Each resolves once
  * the server applied the change and REJECTS with a {@link StaffAdminError}.
  */
 export interface StaffAdminPort {
+  /** The devices registered at the stores the person may see devices of (`auth.device_read`). */
+  listDevices(input: { readonly actingUserId: string }): Promise<readonly RegisteredDevice[]>;
+  /** Block a device for good: it can no longer sync, and erases itself when it next connects. */
+  blockDevice(input: { readonly actingUserId: string; readonly deviceId: string }): Promise<void>;
   create(input: {
     readonly actingUserId: string;
     readonly storeId: string;
