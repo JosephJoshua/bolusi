@@ -4,7 +4,12 @@ import { compareCanonicalOrder, isAheadOfServer } from '@bolusi/core';
 import { buildPinVerifierRow, type TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
-import { resolveActingUser } from '../auth/acting-user.js';
+import {
+  claimedActingUser,
+  provenActingUser,
+  resolveActingUser,
+  type ActingUser,
+} from '../auth/acting-user.js';
 import { endPersonSessionsOf } from '../auth/person-sessions.js';
 import {
   countActiveTenantAdmins,
@@ -82,6 +87,48 @@ function assertPlausibleAsOf(
   if (deviceId !== undefined && asOf.deviceId !== deviceId) {
     throw issue('deviceId', 'asOf.deviceId must be the posting device');
   }
+}
+
+/** How long after enrolment the enrolling owner may still send their first PIN unproven. */
+export const FIRST_PIN_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The one PIN a device may send for a person it cannot prove (auth/acting-user.ts): the first PIN of
+ * the owner who enrolled this shared device, made just after enrolment, while the server has no PIN
+ * for them to check. The same rule the device keeps (core pin-flows.ts `setFirstPin`). Anyone
+ * else's PIN, a first PIN once one exists, or one long after enrolment needs the person proven; a
+ * personal device proves its own person anyway, and nobody else.
+ */
+async function firstPinActor(
+  c: Parameters<typeof claimedActingUser>[0],
+  db: TenantDb,
+  targetUserId: string,
+  deviceId: string,
+  now: number,
+): Promise<ActingUser> {
+  const claimed = await claimedActingUser(c, db);
+  if (claimed !== null && claimed.userId === targetUserId) {
+    const device = await db
+      .selectFrom('devices')
+      .select(['enrolledBy', 'enrolledAt', 'personalUserId'])
+      .where('id', '=', deviceId)
+      .executeTakeFirst();
+    const existing = await db
+      .selectFrom('userPinVerifiers')
+      .select('userId')
+      .where('userId', '=', targetUserId)
+      .executeTakeFirst();
+    if (
+      device !== undefined &&
+      device.personalUserId === null &&
+      device.enrolledBy === targetUserId &&
+      now - Number(device.enrolledAt) <= FIRST_PIN_WINDOW_MS &&
+      existing === undefined
+    ) {
+      return claimed;
+    }
+  }
+  throw new IdentityError('ACTING_USER_INVALID');
 }
 
 async function targetStoreIds(db: TenantDb, userId: string): Promise<string[]> {
@@ -204,7 +251,7 @@ export function createUsersRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
           const userId = await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
 
             // Store-boundary (§5.4.3): the creator must hold auth.user_create in EVERY target store,
             // and each store must exist in this tenant.
@@ -306,7 +353,7 @@ export function createUsersRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
           await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             const target = await db
               .selectFrom('users')
               .select(['id'])
@@ -408,7 +455,7 @@ export function createUsersRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
           await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             const target = await db
               .selectFrom('users')
               .select(['id', 'status'])
@@ -464,7 +511,7 @@ export function createUsersRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
           await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             const target = await db
               .selectFrom('users')
               .select(['id'])
@@ -514,7 +561,9 @@ export function createUsersRouter(deps: ServerDeps) {
           if (device === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
 
           const applied = await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting =
+              (await provenActingUser(c, db, t)) ??
+              (await firstPinActor(c, db, targetUserId, device.deviceId, t));
             const target = await db
               .selectFrom('users')
               .select(['id'])

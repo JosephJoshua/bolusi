@@ -9,6 +9,7 @@ import { createPersonAccess, type PersonStoreLike } from './person-access.js';
 import type { PersonTransportPort } from './transport.js';
 
 const COSTS = 'inventory.cost_read';
+const SESSION_TTL = 8 * 60 * 60 * 1000;
 const REPAIR = 'repair.read';
 
 const registry = {
@@ -32,6 +33,8 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
   let pinPending = false;
   let pinsSent = 0;
   let pinsStuck = false;
+  let now = 0;
+  let onSendPins: (() => Promise<unknown>) | null = null;
   const offline = (): SyncTransportError =>
     new SyncTransportError('offline', { code: null, status: null });
   const transport: PersonTransportPort = {
@@ -41,7 +44,11 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
       if (openFails !== null) {
         return Promise.reject(new SyncTransportError('no', { code: openFails, status: 401 }));
       }
-      return Promise.resolve({ token: `bps_${opens.length}`, expiresAt: 0, readSet: [COSTS] });
+      return Promise.resolve({
+        token: `bps_${opens.length}`,
+        expiresAt: now + SESSION_TTL,
+        readSet: serverReads.length === 0 ? [] : [COSTS],
+      });
     },
     pull(): Promise<PullResponse> {
       return Promise.reject(new Error('the fake store pulls through its own port'));
@@ -50,10 +57,10 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
       ended.push(token);
       return Promise.resolve();
     },
-    sendPendingPins() {
+    async sendPendingPins() {
       pinsSent += 1;
+      await onSendPins?.();
       if (!pinsStuck) pinPending = false;
-      return Promise.resolve();
     },
   };
   const deviceReads = new DeviceReads(registry, readSet);
@@ -67,7 +74,7 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     invalidation: new InvalidationBus(),
     deviceReads,
     crypto: {} as never,
-    clock: { now: () => 0 },
+    clock: { now: () => now },
     knowsOp: () => true,
     pinPending: () => Promise.resolve(pinPending),
     openStore(reads) {
@@ -110,6 +117,8 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     pinChangeQueued: (queued: boolean) => (pinPending = queued),
     pinsStuck: (stuck: boolean) => (pinsStuck = stuck),
     pinsSent: () => pinsSent,
+    advance: (ms: number) => (now += ms),
+    onSendPins: (fn: () => Promise<unknown>) => (onSendPins = fn),
   };
 }
 
@@ -376,5 +385,84 @@ describe('what the device holds itself can change under a signed-in person', () 
     h.deviceReads.set([REPAIR]);
     await h.access.sync();
     expect(h.opens).toEqual([]);
+  });
+});
+
+describe('proving the signed-in person to the server on an online call', () => {
+  const staff = { userId: 'staff-1', pin: '135790', mayRead: holding(REPAIR) };
+
+  test('a person with nothing extra to read gets a session opened with the PIN in memory', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin(staff);
+    await h.access.sync();
+    expect(h.opens).toEqual([]);
+
+    expect(await h.access.sessionFor('staff-1')).toBe('bps_1');
+    expect(h.opens).toEqual([{ userId: 'staff-1', pin: '135790' }]);
+    // Kept while they stay: the next call sends the same session.
+    expect(await h.access.sessionFor('staff-1')).toBe('bps_1');
+    expect(h.opens).toHaveLength(1);
+    expect(h.opened).toEqual([]);
+  });
+
+  test('a person whose reads are already open sends that session', async () => {
+    const h = harness();
+    await h.access.begin(owner);
+    await h.access.sync();
+    expect(await h.access.sessionFor('owner-1')).toBe('bps_1');
+    expect(h.opens).toHaveLength(1);
+  });
+
+  test('nobody else is ever proven: another user, nobody signed in, or after sign-out', async () => {
+    const h = harness();
+    expect(await h.access.sessionFor('owner-1')).toBeNull();
+    await h.access.begin(staff);
+    await h.access.sync();
+    expect(await h.access.sessionFor('owner-1')).toBeNull();
+    expect(h.opens).toEqual([]);
+
+    expect(await h.access.sessionFor('staff-1')).toBe('bps_1');
+    await h.access.end();
+    expect(h.ended).toEqual(['bps_1']);
+    expect(await h.access.sessionFor('staff-1')).toBeNull();
+  });
+
+  test('offline or a PIN the server refuses gives no proof, and a later call tries again', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin(staff);
+    await h.access.sync();
+    h.goOffline();
+    expect(await h.access.sessionFor('staff-1')).toBeNull();
+    h.goOnline();
+    h.failOpen('AUTH_INVALID_CREDENTIALS');
+    expect(await h.access.sessionFor('staff-1')).toBeNull();
+    h.failOpen(null);
+    expect(await h.access.sessionFor('staff-1')).toBe('bps_3');
+  });
+
+  test('a session the server no longer takes is opened again', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    await h.access.begin(staff);
+    await h.access.sync();
+    expect(await h.access.sessionFor('staff-1')).toBe('bps_1');
+    h.advance(SESSION_TTL - 60_000);
+    expect(await h.access.sessionFor('staff-1')).toBe('bps_2');
+    expect(h.ended).toEqual(['bps_1']);
+  });
+
+  test('a PIN change sent while the reads open uses one session, not two', async () => {
+    const h = harness();
+    h.pinChangeQueued(true);
+    const sendPins = h.access;
+    await sendPins.begin(owner);
+    // The pending PIN goes through the upload, which asks for the session first.
+    h.onSendPins(() => sendPins.sessionFor('owner-1'));
+    await h.access.sync();
+    expect(h.opens).toHaveLength(1);
+    expect(h.access.status()).toBe('open');
+    expect(h.access.readHere(COSTS)).toBe(true);
   });
 });

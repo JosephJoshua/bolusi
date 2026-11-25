@@ -545,7 +545,11 @@ export function createSyncClientForApp(
     deviceToken: config.loadDeviceToken,
     ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
   };
-  const uploadPin = createFetchPinVerifierUpload(deviceLeg);
+  const uploadPin = createFetchPinVerifierUpload({
+    ...deviceLeg,
+    // Who changed a PIN is taken only on their server-checked session (person-access.ts).
+    personSession: (userId) => app.person.sessionFor(userId),
+  });
   app.person.bindTransport({
     ...createFetchPersonTransport(deviceLeg),
     // The same queue the bundle check sends: a send twice is one change on the server.

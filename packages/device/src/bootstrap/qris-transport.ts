@@ -6,6 +6,7 @@
 //
 // No queue: a QR is for the customer at the counter now, so a network fault is `offline` right
 // away and the counter takes the payment by hand.
+import { PERSON_SESSION_HEADER } from '@bolusi/schemas';
 import { QrisError, type QrisFailure, type QrisPort } from '@bolusi/modules/money';
 import {
   zQrisCharge,
@@ -19,6 +20,12 @@ export interface QrisTransportConfig {
   readonly baseUrl: string;
   /** The `bdt_` device token, read at call time, never cached. */
   readonly deviceToken: () => Promise<string | null>;
+  /**
+   * The signed-in person's session, which the server opened after checking their PIN (device
+   * person-access.ts `sessionFor`): a shared device must send it to act as them. Null when there is
+   * none; the server then takes nobody it cannot prove (it still takes a personal phone's person).
+   */
+  readonly personSession?: (actingUserId: string) => Promise<string | null>;
   /** Injected for tests; defaults to the global. */
   readonly fetchImpl?: typeof fetch;
 }
@@ -49,6 +56,7 @@ export function createFetchQris(config: QrisTransportConfig): (actingUserId: str
       body?: unknown,
     ): Promise<unknown> => {
       const token = await config.deviceToken();
+      const proof = (await config.personSession?.(actingUserId)) ?? null;
       if (token === null) throw new QrisError('unexpected');
       let response: Response;
       const abort = new AbortController();
@@ -61,6 +69,7 @@ export function createFetchQris(config: QrisTransportConfig): (actingUserId: str
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
             'X-Acting-User': actingUserId,
+            ...(proof === null ? {} : { [PERSON_SESSION_HEADER]: proof }),
           },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });

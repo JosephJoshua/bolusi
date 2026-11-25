@@ -7,6 +7,7 @@
 //
 // No queue: staff changes are online only, so a network fault is `offline` right away and the owner
 // tries again, rather than a change that lands hours later on a device they no longer watch.
+import { PERSON_SESSION_HEADER } from '@bolusi/schemas';
 import { StaffAdminError, type StaffAdminFailure, type StaffAdminPort } from '@bolusi/core';
 
 export interface StaffTransportConfig {
@@ -14,6 +15,12 @@ export interface StaffTransportConfig {
   readonly baseUrl: string;
   /** The `bdt_` device token, read at call time, never cached. */
   readonly deviceToken: () => Promise<string | null>;
+  /**
+   * The signed-in person's session, which the server opened after checking their PIN (device
+   * person-access.ts `sessionFor`): a shared device must send it to act as them. Null when there is
+   * none; the server then takes nobody it cannot prove (it still takes a personal phone's person).
+   */
+  readonly personSession?: (actingUserId: string) => Promise<string | null>;
   /** Injected for tests; defaults to the global. */
   readonly fetchImpl?: typeof fetch;
 }
@@ -28,6 +35,7 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
     body?: unknown,
   ): Promise<unknown> => {
     const token = await config.deviceToken();
+    const proof = (await config.personSession?.(actingUserId)) ?? null;
     if (token === null) throw new StaffAdminError('unexpected');
     let response: Response;
     try {
@@ -37,6 +45,7 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
           'X-Acting-User': actingUserId,
+          ...(proof === null ? {} : { [PERSON_SESSION_HEADER]: proof }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });

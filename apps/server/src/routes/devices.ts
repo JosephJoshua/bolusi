@@ -63,7 +63,7 @@ export function createDevicesRouter(deps: ServerDeps) {
         withIdentityErrors(c, async () => {
           const t = deps.now();
           return withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             const device = c.get('device');
             if (device !== undefined) await touchLastSeen(db, device.deviceId, t);
 
@@ -455,7 +455,7 @@ export function createDevicesRouter(deps: ServerDeps) {
           const { deviceName } = c.req.valid('json');
           const t = deps.now();
           return withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             await requirePermission(db, {
               userId: acting.userId,
               tenantId: acting.tenantId,
@@ -497,7 +497,7 @@ export function createDevicesRouter(deps: ServerDeps) {
           const t = deps.now();
           const tenantId = tenantIdFromContext(c);
           const outcome = await withTenant(c, async (db) => {
-            const acting = await resolveActingUser(c, db);
+            const acting = await resolveActingUser(c, db, deps.now());
             const target = await db
               .selectFrom('devices')
               .select(['id', 'storeId'])

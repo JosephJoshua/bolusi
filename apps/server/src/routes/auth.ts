@@ -143,7 +143,7 @@ export function createAuthRouter(deps: ServerDeps) {
         const body = c.req.valid('json');
         const t = deps.now();
         return withTenant(c, async (db) => {
-          const acting = await resolveActingUser(c, db);
+          const acting = await resolveActingUser(c, db, deps.now());
           // §9: 5 / user / day.
           enforce(
             deps.identityRateStore.hit(

@@ -154,3 +154,26 @@ describe('failures', () => {
     expect(doFetch).not.toHaveBeenCalled();
   });
 });
+
+describe('proving the acting owner', () => {
+  test('the owner’s person session goes with the call', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(201, { userId: 'u-new' }));
+    const asked: string[] = [];
+    await createFetchStaffAdmin({
+      baseUrl: 'https://api.example.com',
+      deviceToken: () => Promise.resolve('bdt_secret'),
+      personSession: (userId) => {
+        asked.push(userId);
+        return Promise.resolve('bps_owner');
+      },
+      fetchImpl: doFetch as unknown as typeof fetch,
+    }).create({ actingUserId: 'u-owner', storeId: 's-1', name: 'Rina', roleIds: [] });
+    expect(asked).toEqual(['u-owner']);
+    expect(sent(doFetch).headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer bdt_secret',
+      'X-Acting-User': 'u-owner',
+      'X-Person-Session': 'bps_owner',
+    });
+  });
+});

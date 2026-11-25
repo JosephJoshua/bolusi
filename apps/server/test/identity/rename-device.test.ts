@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   seedControlSession,
@@ -35,7 +36,7 @@ async function rename(token: string, body: unknown, actingUser?: string): Promis
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
-  if (actingUser !== undefined) headers['X-Acting-User'] = actingUser;
+  if (actingUser !== undefined) Object.assign(headers, await asPerson(h, token, actingUser));
   return await h.app.request('http://srv.test/v1/devices/me', {
     method: 'PATCH',
     headers,

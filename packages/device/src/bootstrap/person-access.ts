@@ -93,6 +93,13 @@ export interface PersonAccess {
   applyAppended(op: SignedOperation): Promise<void>;
   /** A change the server refused: take it back out of the person's store too. */
   refuse(op: Pick<SignedOperation, 'id' | 'type' | 'entityType' | 'entityId'>): Promise<void>;
+  /**
+   * A person session for `userId`, the signed-in person, which the server opened after checking their
+   * PIN itself: what a shared device sends to act as them on an online call (server
+   * auth/acting-user.ts). Opened on demand with the PIN kept in memory; null when someone else is
+   * signed in, the PIN is gone, or the server could not be reached or refused it.
+   */
+  sessionFor(userId: string): Promise<string | null>;
   status(): PersonAccessStatus;
   /** The signed-in person this access is for, or null. */
   userId(): string | null;
@@ -105,6 +112,8 @@ interface Person {
   /** Kept in memory until the server has checked it, or until they leave if it never needs to. */
   pin: string | null;
   token: string | null;
+  /** When the server stops taking `token` (its clock, so read with a margin). */
+  tokenExpiresAt: number;
   store: PersonStoreLike | null;
   /** The store pulled to the end at least once: its reads are here. */
   complete: boolean;
@@ -112,6 +121,9 @@ interface Person {
   reopen: readonly string[] | null;
   status: PersonAccessStatus;
 }
+
+/** Opened again this long before the server's expiry, so a device clock a little behind still works. */
+const SESSION_EXPIRY_MARGIN_MS = 5 * 60 * 1000;
 
 export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
   let transport: PersonTransportPort | null = null;
@@ -179,14 +191,16 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
         await port.sendPendingPins();
         if (await pinPending(target.userId)) return;
       }
-      if (person !== target || target.pin === null) return;
+      // Sending it may itself have opened the session (`sessionFor` proves the upload).
+      if (person !== target || target.pin === null || target.token !== null) return;
       const opened = await port.open({ userId: target.userId, pin: target.pin });
       target.pin = null;
-      if (person !== target) {
+      if (person !== target || target.token !== null) {
         void port.end(opened.token).catch(() => undefined);
         return;
       }
       target.token = opened.token;
+      target.tokenExpiresAt = opened.expiresAt;
       await openStore(target, opened.readSet);
       setStatus(target, 'open');
     }
@@ -284,6 +298,7 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
         mayRead,
         pin,
         token: null,
+        tokenExpiresAt: 0,
         store: null,
         complete: false,
         reopen: null,
@@ -367,6 +382,43 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
 
     async refuse(op) {
       await person?.store?.refuse(op);
+    },
+
+    async sessionFor(userId) {
+      const target = person;
+      const port = transport;
+      if (target === null || target.userId !== userId || port === null) return null;
+      if (target.token !== null) {
+        // A store's own pull finds out when its session ends; without one, an expired token is
+        // opened again here, while the PIN is still in memory.
+        const live = target.tokenExpiresAt - SESSION_EXPIRY_MARGIN_MS > deps.clock.now();
+        if (live || target.store !== null || target.pin === null) return target.token;
+        void port.end(target.token).catch(() => undefined);
+        target.token = null;
+      }
+      if (target.pin === null) return null;
+      let opened: Awaited<ReturnType<PersonTransportPort['open']>>;
+      try {
+        // The sign-in PIN in memory is the one the server knows until a change made here reaches
+        // it, and that upload is itself proven by this session, so it opens first.
+        opened = await port.open({ userId, pin: target.pin });
+      } catch {
+        return null;
+      }
+      if (person !== target || target.token !== null) {
+        void port.end(opened.token).catch(() => undefined);
+        return person === target ? target.token : null;
+      }
+      // The PIN stays in memory, as when nothing extra was asked for, so an extra that appears
+      // later still opens; the token now proves them.
+      target.token = opened.token;
+      target.tokenExpiresAt = opened.expiresAt;
+      if (opened.readSet.length > 0 && target.store === null) {
+        target.reopen = opened.readSet;
+        setStatus(target, 'open');
+        void access.sync();
+      }
+      return opened.token;
     },
 
     status: () => person?.status ?? 'none',

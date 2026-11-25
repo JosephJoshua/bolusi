@@ -232,11 +232,21 @@ const backgroundMedia: BackgroundHost = createBackgroundHost({
 expoBackgroundTaskPlatform.defineTask(SYNC_BACKGROUND_TASK, () => backgroundSync.runPass());
 expoBackgroundTaskPlatform.defineTask(MEDIA_DRAIN_TASK, () => backgroundMedia.runPass());
 
+/**
+ * The foreground app, whose signed-in person the online calls act as. The server takes that person
+ * only on proof it checked their PIN itself (server auth/acting-user.ts), so each call asks for their
+ * person session; the headless background passes make no such calls.
+ */
+let foregroundApp: Bootstrapped | null = null;
+const personSession = (userId: string): Promise<string | null> =>
+  foregroundApp?.person.sessionFor(userId) ?? Promise.resolve(null);
+
 function createSync(
   app: Bootstrapped,
   onBundleRefreshed?: () => void | Promise<void>,
   onBundleChecked?: () => void | Promise<void>,
 ): SyncClient | null {
+  foregroundApp = app;
   return buildSync(app, { background: true, onBundleRefreshed, onBundleChecked });
 }
 
@@ -475,7 +485,11 @@ function createRepair(
     print: expoPrintPlatform,
     scanCode,
     // QRIS through Xendit: online-only server calls as the signed-in person, on the device bearer.
-    qris: createFetchQris({ baseUrl: apiBaseUrl(), deviceToken: () => keystore.loadDeviceToken() }),
+    qris: createFetchQris({
+      baseUrl: apiBaseUrl(),
+      deviceToken: () => keystore.loadDeviceToken(),
+      personSession: (userId) => app.person.sessionFor(userId),
+    }),
     statusSite: apiBaseUrl(),
   });
 }
@@ -506,6 +520,7 @@ function createPushRegistration(
     baseUrl: apiBaseUrl(),
     deviceId: app.deviceId,
     deviceToken: () => keystore.loadDeviceToken(),
+    personSession: (userId) => app.person.sessionFor(userId),
   });
   return {
     projectId,
@@ -601,12 +616,14 @@ function buildRootProps(): RootProps {
     uploadPinVerifier: createFetchPinVerifierUpload({
       baseUrl: apiBaseUrl(),
       deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+      personSession,
     }),
     // THE OWNER'S STAFF CALLS (owner decision 2026-10-27): online-only `POST/PATCH /v1/users…` as the
     // signed-in owner, on the same per-call device bearer.
     staffAdmin: createFetchStaffAdmin({
       baseUrl: apiBaseUrl(),
       deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+      personSession,
     }),
     // THE IDLE LOCK'S PLATFORM INPUTS (api/02-auth §6.4; task 133). `appStatePort` is the same native
     // `AppState` binding the sync triggers take (§2.8) and is bound here for the same reason NetInfo

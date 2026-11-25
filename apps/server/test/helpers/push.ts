@@ -255,11 +255,12 @@ const BASE = 'http://push.test';
 
 export function registerReq(
   body: unknown,
-  opts: { auth?: string; actingUser?: string } = {},
+  opts: { auth?: string; actingUser?: string; personSession?: string } = {},
 ): Request {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (opts.auth !== undefined) headers['Authorization'] = opts.auth;
   if (opts.actingUser !== undefined) headers['X-Acting-User'] = opts.actingUser;
+  if (opts.personSession !== undefined) headers['X-Person-Session'] = opts.personSession;
   return new Request(`${BASE}/v1/push/tokens`, {
     method: 'POST',
     headers,
