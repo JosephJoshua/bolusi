@@ -177,29 +177,57 @@ scrolls away instead of covering rows at a large font. Sync state is a quiet chi
 
 ## 8. Indonesian copy
 
-Write like Gojek or Tokopedia product copy: short, everyday, friendly, exact.
+Natural, formal Indonesian, as a good bank or marketplace app writes it:
+short, exact, polite, never stiff. All copy lives in the `id.json` catalogs
+(`packages/i18n/catalogs/*`, `packages/modules/*/i18n`); the phone, the PC,
+the status page and the printed slips read from them. Reuse a key before
+adding one, and use the glossary below for every term.
 
-- Address the user as "kamu". Name the customer "pelanggan", the device "HP".
-- A repair order is a **servisan** (noun); "servis" is the verb. Others:
-  teknisi, sparepart, jasa, keluhan, kelengkapan, estimasi selesai.
+- Address the user as "Anda", and leave the pronoun out when the sentence
+  works without it ("Melebihi batas Anda", "PIN berhasil diganti").
+- Standard words, not chat words: jika (not kalau), agar (biar), gunakan
+  (pakai), ingin (mau), belum dapat or tidak dapat (nggak bisa), saja (aja).
+  Write "HP pelanggan" or "HP tersebut" rather than piling up "-nya".
 - Say what happened or what to do, in plain words: "Belum dikonfirmasi
-  pelanggan: Rp 180.000", not "Usulan belum diputuskan". Prefer
-  "konfirmasi", "ajukan", "diajukan teknisi", "ditolak pelanggan".
+  pelanggan: Rp 180.000", not "Usulan belum diputuskan".
 - Buttons are verbs or direct answers: "Mulai kerjakan", "Serahkan HP",
   "Setuju" / "Tidak setuju". No "OK", no "Submit", no "Proses".
-- Validation tells the next step, ending in "dulu" where natural: "Tulis
-  alasannya dulu." Errors say what failed and what to try: "Fotonya belum bisa
-  disimpan. Coba lagi nanti."
-- Consequences are stated before irreversible steps: "Servisan dihentikan dan
-  biaya perbaikan tidak ditagih."
-- No translated-English structure ("Apakah Anda yakin…", passive bureaucratic
-  phrases), no jargon from the code (op, entity, sync conflict).
-- Read every string aloud as a counter person would say it to a customer. If
-  it sounds like a form, rewrite it.
-- **Short, and said once.** Be clear in one short sentence, not a paragraph.
-  Never say again what the title, a label or the button on the same screen
-  already says ("Daftarkan HP ini" as both title and button; "Terdaftar" in the
-  title and the line under it). A lead line that only restates the title goes.
+- Validation names the next step: "Tulis alasan terlebih dahulu." Errors say
+  what failed and what to try: "Foto belum dapat disimpan. Coba lagi."
+- State the consequence before an irreversible step, in one sentence:
+  "Servisan dihentikan dan biaya perbaikan tidak ditagih."
+- No translated-English structure ("Apakah Anda yakin…"), no bureaucratic
+  phrasing, no code jargon (op, entity, sync conflict).
+- **One message, said once.** One short sentence per element; two only when
+  the second tells the person what to do. No paragraph explains the screen.
+  Never repeat what the title, a label or the button already says.
+
+### Glossary
+
+Use the established Indonesian word where one exists; keep the shop's own
+words where staff really say them. Do not coin forms like "tersinkron".
+
+| Concept                         | Use                                            | Not                                          |
+| ------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| Repair order (noun) / to repair | servisan / servis, diperbaiki                  | tiket, order                                 |
+| Phone                           | HP                                             | ponsel, perangkat (for the customer's phone) |
+| The app's devices               | perangkat; HP toko; komputer                   | device, PC                                   |
+| Customer / owner / staff        | pelanggan / pemilik / karyawan                 | user, owner                                  |
+| Role (Kasir, Teknisi, Manajer)  | jabatan                                        | tugas, role                                  |
+| Parts                           | sparepart                                      | part, suku cadang                            |
+| Supplier                        | supplier                                       | pemasok                                      |
+| Purchase order                  | pesanan                                        | order, PO                                    |
+| Deposit / receipt slip          | DP / nota                                      | uang muka, struk                             |
+| Cash drawer and its records     | Kas, laci kas                                  | cash                                         |
+| Handover                        | Serah terima, serahkan                         | pengambilan                                  |
+| Refund                          | pengembalian dana; button "Kembalikan uang"    | refund                                       |
+| Sync                            | disinkronkan, belum disinkronkan, sinkronkan   | tersinkron, terkirim                         |
+| Upload                          | dikirim, mengirim foto                         | upload, unggah                               |
+| Offline / online                | tanpa internet, belum terhubung internet       | offline, online                              |
+| Form field                      | kolom                                          | isian, field                                 |
+| Webcam                          | kamera (webcam only to tell two cameras apart) |                                              |
+| Sign in                         | masuk; PIN                                     | login                                        |
+| Customer greeting (WhatsApp)    | "Halo {name},"                                 | Kak, Yth.                                    |
 
 ## 9. Accessibility floor
 
@@ -235,10 +263,10 @@ Run the app, take screenshots of every changed screen and state, and check:
    ellipsized? Anything touching with no space between?
 5. Any redundant label, chevron, title, or full-width secondary button?
 6. Are paired choices equal, and risky or destructive ones set apart?
-7. Does each Indonesian string sound natural spoken aloud? Is it short, and
-   is nothing on the screen said twice?
+7. Does each Indonesian string read as natural, formal Indonesian and use
+   the glossary terms? Is it short, and is nothing on the screen said twice?
 8. Loading, empty, error, offline and success states all present?
-9. Would this look at home next to Gojek, Tokopedia or a good banking app?
+9. Would this look at home next to Tokopedia, Traveloka or a good banking app?
 
 Share the screenshots with the owner along with what was verified on a real
 device vs only in the browser.

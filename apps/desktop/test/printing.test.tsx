@@ -315,7 +315,7 @@ describe('updates', () => {
     // Installing restarts the app, so the notice opens a menu rather than installing on a click.
     fireEvent.pointerDown(notice, { button: 0, pointerType: 'mouse' });
     expect(updates.install).not.toHaveBeenCalled();
-    expect(screen.getByText('Terpasang sendiri saat aplikasi ditutup.')).toBeTruthy();
+    expect(screen.getByText('Akan dipasang otomatis saat aplikasi ditutup.')).toBeTruthy();
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Pasang sekarang' }));
     expect(updates.install).toHaveBeenCalledTimes(1);
     await openSettings();

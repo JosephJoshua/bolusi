@@ -38,7 +38,7 @@
     "staffPinsSummary": "Buka kunci atau buat PIN baru",
     "staffPinsLocked": "{count} PIN terkunci",
     "notificationsSummary": "Atur di pengaturan HP",
-    "notifyConflict": "Data yang perlu keputusan pemilik",
+    "notifyConflict": "Data yang perlu diputuskan pemilik",
     "notifyDevice": "Masalah perangkat toko",
     "deviceName": "Nama HP",
     "store": "Toko",
@@ -55,59 +55,59 @@
     "askOwner": "Minta pemilik toko untuk memberi akses."
   },
   "notOnDevice": {
-    "hint": "Data ini tidak disimpan di perangkat ini. Akan muncul begitu tersambung."
+    "hint": "Data ini tidak disimpan di perangkat ini dan akan muncul saat terhubung internet."
   },
   "opType": {
     "unknown": "Perubahan"
   },
   "errors": {
-    "INVALID_TRANSITION": "Tindakan ini sudah tidak bisa dilakukan karena datanya berubah. Periksa lagi datanya.",
-    "PERMISSION_DENIED": "Akun kamu tidak punya izin untuk ini.",
-    "VALIDATION_FAILED": "Ada isian yang belum benar. Periksa lagi.",
+    "INVALID_TRANSITION": "Data ini sudah berubah, jadi tindakan ini tidak dapat dilakukan. Periksa kembali.",
+    "PERMISSION_DENIED": "Akun Anda tidak memiliki izin untuk ini.",
+    "VALIDATION_FAILED": "Ada kolom yang belum benar. Periksa kembali.",
     "ENTITY_NOT_FOUND": "Data tidak ditemukan.",
-    "NOT_AUTHENTICATED": "Masuk dulu untuk melanjutkan.",
-    "DEVICE_NOT_ENROLLED": "Perangkat ini belum terdaftar. Daftarkan dulu.",
-    "USER_DEACTIVATED": "Akun kamu sudah dinonaktifkan. Hubungi pemilik toko.",
+    "NOT_AUTHENTICATED": "Masuk terlebih dahulu untuk melanjutkan.",
+    "DEVICE_NOT_ENROLLED": "Perangkat ini belum terdaftar. Daftarkan terlebih dahulu.",
+    "USER_DEACTIVATED": "Akun Anda sudah dinonaktifkan. Hubungi pemilik toko.",
     "PIN_RATE_LIMITED": "Terlalu banyak PIN salah. Tunggu sebentar, lalu coba lagi.",
-    "PIN_LOCKED": "PIN terkunci. Minta pemilik toko membukanya atau membuatkan PIN baru.",
-    "LAST_ADMIN_PROTECTED": "Tidak bisa. Harus selalu ada minimal satu pemilik utama yang aktif.",
-    "ROLE_IN_USE": "Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.",
-    "CLOCK_AHEAD": "Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.",
+    "PIN_LOCKED": "PIN terkunci. Minta pemilik toko membuka atau membuatkan PIN baru.",
+    "LAST_ADMIN_PROTECTED": "Harus selalu ada minimal satu pemilik utama yang aktif.",
+    "ROLE_IN_USE": "Jabatan ini masih dipakai karyawan, jadi belum dapat dihapus.",
+    "CLOCK_AHEAD": "Jam di perangkat ini terlalu cepat. Aktifkan tanggal & jam otomatis, lalu coba lagi.",
     "NOT_ON_DEVICE": "Perlu internet untuk membuka ini.",
     "IDEMPOTENCY_CONFLICT": "Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.",
     "RATE_LIMITED": "Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.",
     "UNEXPECTED": "Terjadi kesalahan. Coba lagi.",
-    "NETWORK": "Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini.",
+    "NETWORK": "Koneksi bermasalah. Perubahan Anda tetap tersimpan di perangkat ini.",
     "MEDIA_NOT_FOUND": "Foto belum ada di server. Aplikasi akan mencoba lagi.",
-    "MEDIA_IMMUTABLE": "Foto yang sudah tersinkron tidak bisa diganti. Ambil foto baru kalau perlu koreksi.",
+    "MEDIA_IMMUTABLE": "Foto yang sudah disinkronkan tidak dapat diganti. Ambil foto baru jika perlu.",
     "INIT_MISMATCH": "Data foto ini tidak cocok dengan yang ada di server. Ambil foto baru.",
     "MEDIA_TOO_LARGE": "Foto ini terlalu besar untuk dikirim. Laporkan masalah ini.",
     "CHUNK_TOO_LARGE": "Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.",
     "UNSUPPORTED_ENCODING": "Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.",
-    "MIME_UNSUPPORTED": "Jenis berkas ini tidak bisa dikirim. Laporkan masalah ini.",
+    "MIME_UNSUPPORTED": "Jenis berkas ini tidak dapat dikirim. Laporkan masalah ini.",
     "CHUNK_INDEX_INVALID": "Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.",
     "CHUNK_SIZE_INVALID": "Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.",
     "CHUNKS_MISSING": "Sebagian foto belum sampai. Aplikasi akan mengirim sisanya.",
     "HASH_MISMATCH": "Foto rusak saat dikirim. Aplikasi akan mencoba lagi.",
     "MIME_MISMATCH": "Berkas foto tidak cocok dengan jenisnya. Ambil foto baru.",
     "STORAGE_ERROR": "Server gagal menyimpan foto. Aplikasi akan mencoba lagi.",
-    "LOCAL_CORRUPT": "Foto ini rusak di perangkat dan tidak bisa dikirim. Ambil foto baru.",
-    "AUTH_TOKEN_MISSING": "Masuk lagi untuk melanjutkan pengiriman foto.",
-    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.",
-    "APP_UPDATE_REQUIRED": "Perbarui aplikasi dulu agar data terbaru bisa masuk."
+    "LOCAL_CORRUPT": "Foto ini rusak dan tidak dapat dikirim. Ambil foto baru.",
+    "AUTH_TOKEN_MISSING": "Masuk kembali untuk melanjutkan pengiriman foto.",
+    "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk kembali untuk melanjutkan pengiriman foto.",
+    "APP_UPDATE_REQUIRED": "Perbarui aplikasi agar data terbaru dapat diterima."
   },
   "rejection": {
-    "BAD_SIGNATURE": "Gagal diverifikasi server. Kabari pemilik toko.",
-    "CHAIN_BROKEN": "Riwayat di perangkat ini rusak, pengiriman berhenti. Segera kabari pemilik toko.",
-    "CHAIN_GAP": "Ada yang tertinggal. Dikirim ulang otomatis.",
-    "CHAIN_HALTED": "Menunggu perubahan sebelumnya beres.",
-    "CLOCK_AHEAD": "Jam perangkat ini terlalu cepat saat perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.",
+    "BAD_SIGNATURE": "Gagal diverifikasi server. Beri tahu pemilik toko.",
+    "CHAIN_BROKEN": "Riwayat di perangkat ini rusak dan pengiriman dihentikan. Segera beri tahu pemilik toko.",
+    "CHAIN_GAP": "Ada perubahan yang tertinggal dan akan dikirim ulang otomatis.",
+    "CHAIN_HALTED": "Menunggu perubahan sebelumnya selesai.",
+    "CLOCK_AHEAD": "Jam perangkat ini terlalu cepat saat perubahan dibuat. Aktifkan tanggal & jam otomatis, lalu ulangi.",
     "DEVICE_REVOKED": "Perangkat ini sudah diblokir. Daftarkan ulang.",
-    "PERMISSION_DENIED": "Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.",
-    "RULE_VIOLATED": "Datanya sudah berubah di perangkat lain. Cek lagi, lalu ulangi kalau masih perlu.",
-    "SCHEMA_INVALID": "Server tidak mengenali perubahan ini. Kabari pemilik toko.",
-    "SCOPE_VIOLATION": "Bukan untuk toko ini. Kabari pemilik toko.",
-    "UNKNOWN_TYPE": "Perbarui aplikasi supaya bisa dikirim."
+    "PERMISSION_DENIED": "Pembuat perubahan ini tidak memiliki izin. Minta orang yang berwenang untuk mengulanginya.",
+    "RULE_VIOLATED": "Data sudah berubah di perangkat lain. Periksa kembali, lalu ulangi jika masih perlu.",
+    "SCHEMA_INVALID": "Server tidak mengenali perubahan ini. Beri tahu pemilik toko.",
+    "SCOPE_VIOLATION": "Perubahan ini bukan untuk toko ini. Beri tahu pemilik toko.",
+    "UNKNOWN_TYPE": "Perbarui aplikasi agar perubahan ini dapat dikirim."
   },
   "account": {
     "menu": "Menu akun",
@@ -120,70 +120,70 @@
   },
   "update": {
     "ready": "Versi baru siap",
-    "later": "Terpasang sendiri saat aplikasi ditutup.",
+    "later": "Akan dipasang otomatis saat aplikasi ditutup.",
     "install": "Pasang sekarang"
   },
   "camera": {
     "shoot": "Ambil foto",
     "retake": "Ulangi",
-    "use": "Pakai foto",
+    "use": "Gunakan foto",
     "switchCamera": "Ganti kamera",
     "starting": "Menyalakan kamera…",
-    "none": "Kamera tidak ditemukan. Pasang webcam, lalu coba lagi.",
+    "none": "Kamera tidak ditemukan. Pasang kamera, lalu coba lagi.",
     "denied": "Kamera belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Kamera, lalu coba lagi.",
-    "failed": "Kamera belum bisa menyala. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.",
-    "saveFailed": "Fotonya belum bisa disimpan. Coba lagi.",
-    "fromFile": "Pilih file foto"
+    "failed": "Kamera tidak dapat dinyalakan. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.",
+    "saveFailed": "Foto belum dapat disimpan. Coba lagi.",
+    "fromFile": "Pilih berkas foto"
   },
   "signature": {
-    "hint": "Minta pelanggan tanda tangan di kotak ini.",
+    "hint": "Minta pelanggan menandatangani di kotak ini.",
     "clear": "Hapus",
     "use": "Simpan tanda tangan",
-    "saveFailed": "Tanda tangannya belum bisa disimpan. Coba lagi."
+    "saveFailed": "Tanda tangan belum dapat disimpan. Coba lagi."
   },
   "handoff": {
-    "usePhone": "Pakai HP",
-    "useWebcam": "Pakai webcam",
+    "usePhone": "Gunakan HP",
+    "useWebcam": "Gunakan webcam",
     "useScreen": "Tanda tangan di layar",
     "scanHint": "Pindai kode ini dengan kamera HP.",
     "qrLabel": "Kode QR untuk HP",
     "orOpen": "Atau buka di HP:",
     "waiting": "Menunggu HP…",
-    "offline": "Komputer ini belum tersambung ke internet. Sambungkan dulu, lalu coba lagi.",
-    "failed": "HP belum bisa disambungkan. Coba lagi.",
+    "offline": "Komputer ini belum terhubung internet. Hubungkan terlebih dahulu, lalu coba lagi.",
+    "failed": "HP belum dapat dihubungkan. Coba lagi.",
     "expired": "Sambungan ke HP sudah berakhir. Buat kode baru.",
     "page": {
       "photoHint": "Ambil foto, lalu kirim ke komputer.",
       "send": "Kirim ke komputer",
       "sending": "Mengirim…",
       "sent": "Terkirim.",
-      "failed": "Belum terkirim. Pastikan HP tersambung ke internet, lalu coba lagi.",
+      "failed": "Belum terkirim. Pastikan HP terhubung internet, lalu coba lagi.",
       "expired": "Kode ini sudah kedaluwarsa. Pindai kode baru dari komputer.",
-      "unreadable": "Fotonya tidak bisa dibaca. Ambil lagi.",
-      "waiting": "HP sudah tersambung. Langkah berikutnya muncul di sini.",
+      "unreadable": "Foto tidak dapat dibaca. Ambil ulang.",
+      "waiting": "HP sudah terhubung. Langkah berikutnya akan muncul di sini.",
       "rotate": "Putar HP ke posisi mendatar.",
       "rotateNow": "Putar layar",
       "withdrawn": "Dibatalkan di komputer.",
       "videoDenied": "Kamera atau mikrofon belum diizinkan. Izinkan untuk situs ini di browser, lalu coba lagi.",
-      "videoUnsupported": "Browser ini belum bisa merekam video. Buka kodenya di Chrome atau Safari."
+      "videoUnsupported": "Browser ini tidak dapat merekam video. Buka kode ini di Chrome atau Safari."
     },
     "newCode": "Ganti HP",
-    "photoOnPhone": "Ambil fotonya di HP",
-    "signOnPhone": "Minta pelanggan tanda tangan di HP",
+    "photoOnPhone": "Ambil foto di HP",
+    "signOnPhone": "Minta pelanggan menandatangani di HP",
     "waitingSend": "Menunggu kiriman dari HP…",
-    "videoOnPhone": "Rekam videonya di HP"
+    "videoOnPhone": "Rekam video di HP"
   },
   "video": {
     "denied": "Kamera atau mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi, lalu coba lagi.",
-    "saveFailed": "Videonya belum bisa disimpan. Coba lagi.",
+    "saveFailed": "Video belum dapat disimpan. Coba lagi.",
     "loading": "Memuat video…",
-    "failed": "Videonya belum bisa diputar. Coba lagi.",
-    "noMicrophone": "Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi."
+    "failed": "Video belum dapat diputar. Coba lagi.",
+    "noMicrophone": "Mikrofon tidak ditemukan. Pasang mikrofon atau webcam bermikrofon, lalu coba lagi."
   },
   "closeWindow": {
     "title": "Tutup Bolusi?",
-    "message": "Yang sedang diisi belum tersimpan dan akan hilang.",
+    "message": "Data yang belum disimpan akan hilang.",
     "confirm": "Tutup",
-    "keep": "Lanjut isi"
+    "keep": "Lanjutkan mengisi"
   }
 }

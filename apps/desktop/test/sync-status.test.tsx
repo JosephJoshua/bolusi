@@ -97,7 +97,7 @@ test('a "Kirim sekarang" that did not get through says so in the panel', () => {
     </TooltipProvider>,
   );
   expect(screen.getByTestId('desktop.sync.manualError').textContent).toBe(
-    'Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini.',
+    'Koneksi bermasalah. Perubahan Anda tetap tersimpan di perangkat ini.',
   );
 });
 

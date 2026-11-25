@@ -49,7 +49,7 @@ interface Row {
 
 const MATRIX: readonly Row[] = [
   // Switcher — the four §5 states + the data-backed happy path + the idle lock.
-  { screen: 'switcher', state: 'loading', testId: 'switcher-screen', text: 'Siapa yang pakai?' },
+  { screen: 'switcher', state: 'loading', testId: 'switcher-screen', text: 'Pilih pengguna' },
   { screen: 'switcher', state: 'empty', testId: 'switcher-empty' },
   { screen: 'switcher', state: 'error', testId: 'switcher-error' },
   { screen: 'switcher', state: 'unauthorized', testId: 'switcher-unauthorized' },
@@ -76,23 +76,23 @@ const MATRIX: readonly Row[] = [
   // Sync-status — healthy / saved-here / photos-pending / offline / actively-syncing / needs-attention.
   { screen: 'sync-status', state: 'allSent', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'savedHere', testId: 'sync-counter-ops' },
-  // task 147: ops sent, 3 photos queued. The headline reads "Foto & video belum tersinkron" (Photos and videos not synced
-  // yet), NOT "Semua sudah tersinkron" — the exact string the browser lane now witnesses over the counter.
+  // task 147: ops sent, 3 photos queued. The headline reads "Foto & video belum disinkronkan" (Photos and videos not synced
+  // yet), NOT "Semua sudah disinkronkan" — the exact string the browser lane now witnesses over the counter.
   {
     screen: 'sync-status',
     state: 'photosPending',
     testId: 'sync-counter-media',
-    text: 'Foto\u00a0&\u00a0video belum tersinkron',
+    text: 'Foto\u00a0&\u00a0video belum disinkronkan',
   },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
   // task 144 item 5: the loop actively pushing — the fifth chip state, previously never screenshotted.
-  // Keyed on the syncing-specific headline ("Sedang menyinkronkan"), so a title regression (the 126/147
+  // Keyed on the syncing-specific headline ("Menyinkronkan"), so a title regression (the 126/147
   // bug class) reds this row rather than passing on a bare testID.
   {
     screen: 'sync-status',
     state: 'syncing',
     testId: 'sync-reassurance',
-    text: 'Sedang menyinkronkan',
+    text: 'Menyinkronkan',
   },
   { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
   {
@@ -120,7 +120,7 @@ const MATRIX: readonly Row[] = [
     screen: 'enrollment',
     state: 'reenrolWithChanges',
     testId: 'enroll-unsynced',
-    text: 'Perubahan yang belum tersinkron',
+    text: 'Perubahan yang belum disinkronkan',
   },
 
   // Capture (media) — camera is a labelled placeholder, never a faked photo.

@@ -1,48 +1,48 @@
 {
   "chip": {
-    "pending": "Belum tersinkron",
+    "pending": "Belum disinkronkan",
     "rejected": "Ditolak"
   },
   "status": {
-    "upToDate": "Datanya aman di server.",
-    "syncing": "Datanya sedang disimpan ke server.",
-    "pending": "{count} perubahan belum tersinkron",
-    "pendingMedia": "{count} foto & video belum tersinkron",
-    "photosPending": "Perubahan sudah tersinkron. Foto\u00a0&\u00a0videonya menyusul.",
-    "attentionReassurance": "Cek daftarnya di bawah.",
-    "offline": "Perubahan tersimpan di HP ini dan disinkronkan saat ada koneksi.",
+    "upToDate": "Semua data aman di server.",
+    "syncing": "Data sedang disimpan ke server.",
+    "pending": "{count} perubahan belum disinkronkan",
+    "pendingMedia": "{count} foto & video belum disinkronkan",
+    "photosPending": "Perubahan sudah disinkronkan. Foto & video menyusul.",
+    "attentionReassurance": "Periksa daftar di bawah.",
+    "offline": "Perubahan disimpan di HP ini dan disinkronkan saat ada internet.",
     "reconnected": "Terhubung kembali",
     "lastSynced": "Terakhir terhubung {relative}",
-    "titleSynced": "Semua sudah tersinkron",
-    "titlePending": "Ada yang belum tersinkron",
-    "titleSyncing": "Sedang menyinkronkan",
-    "titleOffline": "Tidak ada koneksi",
-    "titleAttention": "Ada yang perlu dicek",
-    "titlePhotosPending": "Foto\u00a0&\u00a0video belum tersinkron",
+    "titleSynced": "Semua sudah disinkronkan",
+    "titlePending": "Ada yang belum disinkronkan",
+    "titleSyncing": "Menyinkronkan",
+    "titleOffline": "Tidak ada internet",
+    "titleAttention": "Ada yang perlu diperiksa",
+    "titlePhotosPending": "Foto & video belum disinkronkan",
     "screenTitle": "Status data",
-    "savedHere": "{count} perubahan tersimpan di HP ini dan akan disinkronkan otomatis.",
+    "savedHere": "{count} perubahan disimpan di HP ini dan akan disinkronkan otomatis.",
     "changesLabel": "Perubahan",
-    "photosLabel": "Foto\u00a0&\u00a0video",
-    "waitingCount": "{count} belum tersinkron"
+    "photosLabel": "Foto & video",
+    "waitingCount": "{count} belum disinkronkan"
   },
   "banner": {
-    "warning": "Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.",
-    "stale": "Sudah lama tidak terhubung. Data di layar ini bisa jauh tertinggal."
+    "warning": "Terakhir terhubung {relative}. Data mungkin belum terbaru.",
+    "stale": "Sudah lama tidak terhubung. Data di layar ini mungkin jauh tertinggal."
   },
   "rejected": {
     "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
     "title": "Ditolak server ({count})",
-    "explain": "Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.",
+    "explain": "Perubahan ini tidak berlaku. Lihat alasan di setiap perubahan.",
     "opMeta": "{opType} · {time}",
     "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Detail teknis",
-    "noReason": "Server tidak mengirim keterangan.",
+    "noReason": "Server tidak memberikan alasan.",
     "more": "Tampilkan {count} lainnya",
-    "handled": "Tandai sudah dicek"
+    "handled": "Tandai sudah diperiksa"
   },
   "quarantine": {
     "title": "Perubahan ditahan",
-    "body": "Beberapa perubahan dari HP lain gagal diperiksa, jadi belum tampil. Kabari pemilik toko."
+    "body": "Beberapa perubahan dari HP lain gagal diperiksa dan belum ditampilkan. Beri tahu pemilik toko."
   },
   "action": {
     "syncNow": "Sinkronkan sekarang",
@@ -51,29 +51,29 @@
   "firstSync": {
     "title": "Menyiapkan data toko",
     "progress": "Riwayat sampai {date} · {percent}%",
-    "banner": "Menyiapkan data toko ({percent}%). Kamu tetap bisa bekerja.",
+    "banner": "Menyiapkan data toko ({percent}%). Anda tetap dapat bekerja.",
     "chip": "Menyiapkan data toko {percent}%",
-    "explain": "HP baru mengunduh riwayat toko. Kalau terputus, lanjut dari yang terakhir."
+    "explain": "HP ini sedang mengunduh riwayat toko. Jika terputus, unduhan dilanjutkan dari bagian terakhir."
   },
   "media": {
     "failedTitle": "Foto gagal dikirim",
-    "failedBody": "{count} foto belum bisa dikirim. Fotonya aman di HP ini.",
+    "failedBody": "{count} foto belum dapat dikirim. Foto tetap aman di HP ini.",
     "retry": "Kirim ulang foto"
   },
   "pc": {
-    "savedHere": "{count} perubahan tersimpan di komputer ini dan akan disinkronkan otomatis.",
-    "offline": "Perubahan tersimpan di komputer ini dan disinkronkan saat ada koneksi.",
-    "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini.",
-    "rejectedExplain": "Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.",
+    "savedHere": "{count} perubahan disimpan di komputer ini dan akan disinkronkan otomatis.",
+    "offline": "Perubahan disimpan di komputer ini dan disinkronkan saat ada internet.",
+    "mediaFailed": "{count} foto belum dapat dikirim. Foto tetap aman di komputer ini.",
+    "rejectedExplain": "Perubahan ini tidak berlaku. Lihat alasan di setiap perubahan.",
     "rejectedBanner": "{count} perubahan ditolak server."
   },
   "updateNeeded": {
     "title": "Perbarui aplikasi",
-    "body": "Perangkat lain sudah pakai versi baru. Data baru dari perangkat lain tertahan sampai aplikasi ini diperbarui. Perubahan dari sini tetap tersinkron.",
-    "check": "Cek pembaruan",
-    "checking": "Mengecek pembaruan…",
+    "body": "Perangkat lain sudah memakai versi baru. Perbarui aplikasi ini untuk menerima data terbarunya.",
+    "check": "Periksa pembaruan",
+    "checking": "Memeriksa pembaruan…",
     "none": "Belum ada pembaruan untuk HP ini. Coba lagi nanti.",
-    "failed": "Tidak bisa cek pembaruan. Periksa koneksi, lalu coba lagi.",
+    "failed": "Pembaruan tidak dapat diperiksa. Periksa internet, lalu coba lagi.",
     "lastArrived": "Data baru terakhir masuk {relative}"
   }
 }

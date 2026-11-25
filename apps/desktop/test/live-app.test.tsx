@@ -53,7 +53,7 @@ describe('the PC over the offline core', () => {
     renderApp();
     expect(screen.getByTestId('boot')).toBeTruthy();
     core.set({ phase: 'failed', bootError: 'SQLITE_CORRUPT' });
-    expect(screen.getByTestId('boot.failed').textContent).toContain('belum bisa dibuka');
+    expect(screen.getByTestId('boot.failed').textContent).toContain('belum dapat dibuka');
     // The reason is for support, not for the counter.
     expect(screen.getByTestId('boot.failed').textContent).not.toContain('SQLITE');
   });
@@ -171,7 +171,7 @@ describe('the PC over the offline core', () => {
     // Sending cannot help, so registering again is the one action offered.
     expect(screen.queryByTestId('desktop.sync.now')).toBeNull();
     expect(screen.getByTestId('desktop.sync.dialog').textContent).toContain(
-      'Server tidak mengenali komputer ini lagi',
+      'Server tidak lagi mengenali komputer ini',
     );
     fireEvent.click(screen.getByTestId('desktop.sync.reenrol'));
     expect(await screen.findByTestId('enrol.credentials')).toBeTruthy();
@@ -305,7 +305,7 @@ describe('the PC over the offline core', () => {
     renderApp();
     await screen.findByTestId('desktop.shell');
     core.session({ active: null, locked: true, lockReason: 'manual_lock', permissions: [] });
-    expect(screen.getByTestId('switcher').textContent).toContain('Siapa yang pakai?');
+    expect(screen.getByTestId('switcher').textContent).toContain('Pilih pengguna');
     expect(screen.queryByTestId('switcher.back')).toBeNull();
     expect(screen.queryByTestId('desktop.shell')).toBeNull();
   });
