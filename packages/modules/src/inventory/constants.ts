@@ -155,3 +155,12 @@ export const MAX_COUNTED_QTY = 1_000_000;
 export function opensParts(reader: { hasPermission(permissionId: string): boolean }): boolean {
   return reader.hasPermission(INVENTORY_PERMISSION.read);
 }
+
+/** Who sees "Kiriman": whoever reads the stock and sends parts to another store or receives them. */
+export function opensTransfers(reader: { hasPermission(permissionId: string): boolean }): boolean {
+  return (
+    reader.hasPermission(INVENTORY_PERMISSION.read) &&
+    (reader.hasPermission(INVENTORY_PERMISSION.transfer) ||
+      reader.hasPermission(INVENTORY_PERMISSION.receive))
+  );
+}

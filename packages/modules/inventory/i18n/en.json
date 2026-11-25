@@ -257,5 +257,126 @@
     },
     "results": "{count} items",
     "closePart": "Close item"
+  },
+  "transfer": {
+    "section": "Transfers",
+    "list": {
+      "new": "Send to another store",
+      "open": "Open",
+      "all": "All",
+      "emptyOpen": "No open transfers.",
+      "emptyAll": "No transfers between stores yet.",
+      "to": "To {store}",
+      "from": "From {store}",
+      "parts": "{count} parts",
+      "progress": "{arrived} of {sent} arrived",
+      "pick": "Pick a transfer to see it.",
+      "otherStore": "Another store"
+    },
+    "stage": {
+      "sent": "On the way",
+      "partial": "Partly arrived",
+      "done": "Done",
+      "cancelled": "Cancelled",
+      "over": "Needs a check"
+    },
+    "detail": {
+      "route": "{from} to {to}",
+      "sent": "Sent {date} by {name}",
+      "sentAt": "Sent {date}",
+      "cancelled": "Cancelled {date} by {name}",
+      "lines": "Parts",
+      "arrivedOf": "{arrived} of {sent} arrived",
+      "missing": "{count} not arrived",
+      "extra": "{count} extra",
+      "notSent": "Never left",
+      "overHint": "More is recorded as arrived than was sent. The sending store’s owner needs to settle it.",
+      "missingHint": "The sending store’s owner can put what has not arrived back into stock or write it off.",
+      "history": "History",
+      "arrival": "Received",
+      "line": "{name} × {qty}"
+    },
+    "outcome": {
+      "back": "Back in stock",
+      "lost": "Written off",
+      "found": "Arrived after all",
+      "arrived": "Arrived after all"
+    },
+    "action": {
+      "receive": "Receive",
+      "settle": "Settle",
+      "cancel": "Cancel transfer"
+    },
+    "cancel": {
+      "title": "Cancel this transfer?",
+      "message": "Every part goes back into this store’s stock."
+    },
+    "form": {
+      "title": "Send parts",
+      "store": "To store",
+      "noStores": "This business has no other store yet.",
+      "lines": "Parts",
+      "addPart": "Add part",
+      "noParts": "No parts yet.",
+      "remove": "Remove",
+      "qty": "Quantity",
+      "note": "Note (optional)",
+      "send": "Send",
+      "pickFirst": "Pick the store and the parts first.",
+      "stockLeaves": "This store’s stock goes down at once."
+    },
+    "receive": {
+      "title": "Receive transfer",
+      "hint": "Enter what actually arrived.",
+      "arrived": "Arrived",
+      "save": "Add to stock",
+      "nothing": "Enter what arrived first.",
+      "note": "Note (optional)"
+    },
+    "settle": {
+      "title": "Settle transfer",
+      "hintMissing": "For what has not arrived: put it back into this store’s stock or write it off.",
+      "hintOver": "What the other store recorded as arrived comes off this store’s stock.",
+      "back": "Back to stock",
+      "lost": "Lost",
+      "arrived": "Arrived after all",
+      "open": "{count} not arrived",
+      "over": "{count} extra",
+      "reason": "Why it was lost",
+      "save": "Save",
+      "nothing": "Enter a quantity first.",
+      "tooMany": "More than has not arrived.",
+      "needReason": "Write the reason first."
+    },
+    "done": {
+      "sent": "Parts sent.",
+      "received": "Added to stock.",
+      "cancelled": "Transfer cancelled.",
+      "settled": "Transfer settled."
+    },
+    "discard": {
+      "title": "Leave without sending?",
+      "message": "What you filled in will be lost."
+    },
+    "desk": {
+      "col": {
+        "number": "Number",
+        "store": "Store",
+        "progress": "Arrived",
+        "stage": "Status",
+        "date": "Date"
+      },
+      "close": "Close transfer"
+    }
+  },
+  "pick": {
+    "title": "Pick a part",
+    "searchHint": "Search name or code",
+    "clear": "Clear search",
+    "scan": "Scan",
+    "empty": "No items on the list yet.",
+    "noMatches": "No match. Try another word.",
+    "stock": "Stock {count}",
+    "onList": "Already picked"
   }
 }
