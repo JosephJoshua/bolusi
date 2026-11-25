@@ -100,6 +100,8 @@ export interface PersonAccess {
    * signed in, the PIN is gone, or the server could not be reached or refused it.
    */
   sessionFor(userId: string): Promise<string | null>;
+  /** The signed-in person changed their own PIN here: sessions opened from now on can use it. */
+  pinChanged(userId: string, newPin: string): void;
   status(): PersonAccessStatus;
   /** The signed-in person this access is for, or null. */
   userId(): string | null;
@@ -111,6 +113,8 @@ interface Person {
   readonly mayRead: (permissionId: string) => boolean;
   /** Kept in memory until the server has checked it, or until they leave if it never needs to. */
   pin: string | null;
+  /** A PIN they changed to here: the server takes it once the change reaches it. */
+  nextPin: string | null;
   token: string | null;
   /** When the server stops taking `token` (its clock, so read with a margin). */
   tokenExpiresAt: number;
@@ -183,6 +187,33 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
     }
   };
 
+  /**
+   * Open a session with the PIN in memory. After a PIN change here the server knows the old one
+   * until the change reaches it, and the new one from then on: the old is tried first, then the new.
+   */
+  const openSession = async (
+    target: Person,
+    port: PersonTransportPort,
+    pin: string,
+  ): ReturnType<PersonTransportPort['open']> => {
+    try {
+      return await port.open({ userId: target.userId, pin });
+    } catch (error) {
+      const next = target.nextPin;
+      if (
+        next === null ||
+        !(error instanceof SyncTransportError) ||
+        error.code !== 'AUTH_INVALID_CREDENTIALS'
+      ) {
+        throw error;
+      }
+      const opened = await port.open({ userId: target.userId, pin: next });
+      if (target.pin !== null) target.pin = next;
+      target.nextPin = null;
+      return opened;
+    }
+  };
+
   const once = async (target: Person, port: PersonTransportPort): Promise<void> => {
     if (target.token === null) {
       if (target.pin === null) return;
@@ -193,8 +224,9 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       }
       // Sending it may itself have opened the session (`sessionFor` proves the upload).
       if (person !== target || target.pin === null || target.token !== null) return;
-      const opened = await port.open({ userId: target.userId, pin: target.pin });
+      const opened = await openSession(target, port, target.pin);
       target.pin = null;
+      target.nextPin = null;
       if (person !== target || target.token !== null) {
         void port.end(opened.token).catch(() => undefined);
         return;
@@ -297,6 +329,7 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
         userId,
         mayRead,
         pin,
+        nextPin: null,
         token: null,
         tokenExpiresAt: 0,
         store: null,
@@ -401,7 +434,7 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       try {
         // The sign-in PIN in memory is the one the server knows until a change made here reaches
         // it, and that upload is itself proven by this session, so it opens first.
-        opened = await port.open({ userId, pin: target.pin });
+        opened = await openSession(target, port, target.pin);
       } catch {
         return null;
       }
@@ -419,6 +452,15 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
         void access.sync();
       }
       return opened.token;
+    },
+
+    pinChanged(userId, newPin) {
+      if (person === null || person.userId !== userId) return;
+      if (person.pin === null) {
+        // Already checked: the next check is a sign-in, with whatever PIN they type.
+        return;
+      }
+      person.nextPin = newPin;
     },
 
     status: () => person?.status ?? 'none',

@@ -34,6 +34,7 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
   let pinsSent = 0;
   let pinsStuck = false;
   let now = 0;
+  let serverPin: string | null = null;
   let onSendPins: (() => Promise<unknown>) | null = null;
   const offline = (): SyncTransportError =>
     new SyncTransportError('offline', { code: null, status: null });
@@ -41,6 +42,11 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     open(request) {
       opens.push(request);
       if (!online) return Promise.reject(offline());
+      if (serverPin !== null && request.pin !== serverPin) {
+        return Promise.reject(
+          new SyncTransportError('no', { code: 'AUTH_INVALID_CREDENTIALS', status: 401 }),
+        );
+      }
       if (openFails !== null) {
         return Promise.reject(new SyncTransportError('no', { code: openFails, status: 401 }));
       }
@@ -118,6 +124,7 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     pinsStuck: (stuck: boolean) => (pinsStuck = stuck),
     pinsSent: () => pinsSent,
     advance: (ms: number) => (now += ms),
+    serverKnowsPin: (pin: string) => (serverPin = pin),
     onSendPins: (fn: () => Promise<unknown>) => (onSendPins = fn),
   };
 }
@@ -464,5 +471,37 @@ describe('proving the signed-in person to the server on an online call', () => {
     expect(h.opens).toHaveLength(1);
     expect(h.access.status()).toBe('open');
     expect(h.access.readHere(COSTS)).toBe(true);
+  });
+
+  test('after a PIN change here, a session opens with the new PIN once the server has it', async () => {
+    const h = harness();
+    h.serverGrants([]);
+    h.serverKnowsPin('135790');
+    await h.access.begin(staff);
+    await h.access.sync();
+    h.access.pinChanged('staff-1', '975310');
+    // Before the change reaches the server, the old PIN still proves them (the change's own upload).
+    expect(await h.access.sessionFor('staff-1')).toBe('bps_1');
+
+    h.serverKnowsPin('975310');
+    h.advance(SESSION_TTL);
+    expect(await h.access.sessionFor('staff-1')).not.toBeNull();
+    expect(h.opens.map((o) => o.pin)).toEqual(['135790', '135790', '975310']);
+    // From then on only the new PIN is sent.
+    h.advance(SESSION_TTL);
+    await h.access.sessionFor('staff-1');
+    expect(h.opens.at(-1)?.pin).toBe('975310');
+    expect(h.opens).toHaveLength(4);
+  });
+
+  test('a PIN change for someone else, or nobody signed in, is ignored', async () => {
+    const h = harness();
+    h.access.pinChanged('staff-1', '975310');
+    await h.access.begin(staff);
+    h.access.pinChanged('owner-1', '000000');
+    h.serverGrants([]);
+    await h.access.sync();
+    await h.access.sessionFor('staff-1');
+    expect(h.opens.map((o) => o.pin)).toEqual(['135790']);
   });
 });
