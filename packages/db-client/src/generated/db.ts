@@ -344,6 +344,89 @@ export interface Operations {
   userId: string;
 }
 
+export interface PayAdjustments {
+  amount: number;
+  createdAt: number;
+  createdBy: string;
+  id: string | null;
+  reason: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+}
+
+export interface PayAdvances {
+  account: string;
+  amount: number;
+  createdAt: number;
+  createdBy: string;
+  id: string | null;
+  installment: number;
+  reason: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+  voidedAt: number | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface PayPayouts {
+  account: string;
+  commission: number;
+  createdAt: number;
+  createdBy: string;
+  deduction: number;
+  id: string | null;
+  month: string;
+  note: string | null;
+  paid: number;
+  repaymentId: string | null;
+  salary: number;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+  voidedAt: number | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface PayRepayments {
+  amount: number;
+  createdAt: number;
+  createdBy: string;
+  id: string | null;
+  note: string | null;
+  payoutId: string | null;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+  via: string;
+  voidedAt: number | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface PayStoreRates {
+  commissionPercent: number | null;
+  id: string | null;
+  setAt: number;
+  setBy: string;
+  storeId: string;
+  tenantId: string;
+}
+
+export interface PayTerms {
+  commissionPercent: number | null;
+  id: string | null;
+  salary: number;
+  setAt: number;
+  setBy: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+}
+
 export interface PendingPinVerifiers {
   actorUserId: string;
   algo: string;
@@ -732,6 +815,12 @@ export interface DB {
   moneyLines: MoneyLines;
   notes: Notes;
   operations: Operations;
+  payAdjustments: PayAdjustments;
+  payAdvances: PayAdvances;
+  payPayouts: PayPayouts;
+  payRepayments: PayRepayments;
+  payStoreRates: PayStoreRates;
+  payTerms: PayTerms;
   pendingPinVerifiers: PendingPinVerifiers;
   phoneModels: PhoneModels;
   pinAttemptState: PinAttemptState;

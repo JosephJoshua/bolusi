@@ -87,13 +87,20 @@ describe('the staff wire', () => {
       actingUserId: 'u-owner',
       storeId: 's-1',
       roleId: 'r-m',
-      limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+      limits: { priceDrop: 50_000, refund: 0, credit: 100_000, advance: 0 },
     });
     expect(sent(doFetch)).toMatchObject({
       url: 'https://api.example.com/v1/role-limits',
       method: 'PUT',
       headers: { 'X-Acting-User': 'u-owner' },
-      body: { storeId: 's-1', roleId: 'r-m', priceDrop: 50_000, refund: 0, credit: 100_000 },
+      body: {
+        storeId: 's-1',
+        roleId: 'r-m',
+        priceDrop: 50_000,
+        refund: 0,
+        credit: 100_000,
+        advance: 0,
+      },
     });
   });
 

@@ -110,6 +110,7 @@ export function createRoleLimitsRouter(deps: ServerDeps) {
             priceDrop: body.priceDrop,
             refund: body.refund,
             credit: body.credit,
+            advance: body.advance,
           },
           at: t,
         });

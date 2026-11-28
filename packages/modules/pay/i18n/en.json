@@ -1,0 +1,37 @@
+{
+  "opType": {
+    "termsSet": "Salary and commission set",
+    "storeCommissionSet": "Store commission set",
+    "advanceGranted": "Kasbon given",
+    "advanceSettled": "Kasbon repaid",
+    "repaymentVoided": "Kasbon repayment cancelled",
+    "advanceVoided": "Kasbon cancelled",
+    "salaryPaid": "Pay given",
+    "payoutVoided": "Pay cancelled",
+    "commissionAdjusted": "Commission changed by hand"
+  },
+  "refusal": {
+    "notStaff": "This person does not work at this store.",
+    "self": "Nobody can give themselves a kasbon or pay themselves.",
+    "alreadyRecorded": "This was already recorded.",
+    "accountNotUsable": "Use the drawer or one of this store’s bank accounts.",
+    "installmentAboveAmount": "The monthly installment cannot be more than the kasbon.",
+    "aboveBalance": "This is more than the kasbon still owed.",
+    "advanceNotFound": "This kasbon is not in this store.",
+    "advanceSettled": "Part of this kasbon was already repaid, so it can no longer be cancelled.",
+    "repaymentNotFound": "This repayment is not in this store.",
+    "repaymentNotAsPayout": "An installment off pay goes only with its payout.",
+    "payoutNotFound": "This payout is not in this store.",
+    "alreadyVoided": "This was already cancelled.",
+    "drawerSettled": "The drawer was closed and settled after this, so it can no longer be cancelled.",
+    "monthPaid": "This month is already paid.",
+    "monthOutOfRange": "Pay is only for this month or one of the two before it.",
+    "salaryAboveTerms": "The salary is more than the salary set for this person.",
+    "commissionAboveOwed": "The commission is not what is owed. Open the pay again to see the latest figure.",
+    "paidNotTotal": "The amount paid must be salary plus commission minus the installment.",
+    "zeroAdjustment": "Enter an amount other than zero.",
+    "writeOffOwners": "Only an owner can write off a kasbon.",
+    "otherStore": "This setting belongs to another store.",
+    "overLimit": "Above your kasbon limit. Ask a store owner to approve it."
+  }
+}

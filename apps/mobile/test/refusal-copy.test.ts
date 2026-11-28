@@ -29,6 +29,7 @@ test('the modules with rules are the ones expected (the denominator)', () => {
     'inventory',
     'money',
     'notes',
+    'pay',
     'platform',
     'purchasing',
     'repair',

@@ -10,19 +10,11 @@ import type {
   SearchSource,
 } from '@bolusi/core';
 
+import { chunks } from '../shared/chunks.js';
 import { REPAIR_CUSTOMER_ENTITY, REPAIR_TABLE, REPAIR_TICKET_ENTITY } from './constants.js';
 import type { RepairDatabase } from './schema.js';
 
 type Db = ReadonlyProjectionDb<RepairDatabase>;
-
-/** SQLite caps bound parameters; a big sync can change thousands of entities at once. */
-const CHUNK = 500;
-
-function chunks<T>(values: readonly T[]): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < values.length; i += CHUNK) out.push(values.slice(i, i + CHUNK));
-  return out;
-}
 
 function ticketRows(db: Db, scope: SearchScope) {
   return db

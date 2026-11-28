@@ -224,7 +224,13 @@ describe('parseLimitAmounts', () => {
       priceDrop: 1_000,
       refund: 0,
       credit: 0,
+      advance: 0,
     });
-    expect(parseLimitAmounts('garbage')).toStrictEqual({ priceDrop: 0, refund: 0, credit: 0 });
+    expect(parseLimitAmounts('garbage')).toStrictEqual({
+      priceDrop: 0,
+      refund: 0,
+      credit: 0,
+      advance: 0,
+    });
   });
 });

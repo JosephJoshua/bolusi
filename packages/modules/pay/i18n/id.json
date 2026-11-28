@@ -1,0 +1,37 @@
+{
+  "opType": {
+    "termsSet": "Gaji dan komisi diatur",
+    "storeCommissionSet": "Komisi toko diatur",
+    "advanceGranted": "Kasbon diberikan",
+    "advanceSettled": "Kasbon dibayar",
+    "repaymentVoided": "Pembayaran kasbon dibatalkan",
+    "advanceVoided": "Kasbon dibatalkan",
+    "salaryPaid": "Gaji dibayar",
+    "payoutVoided": "Pembayaran gaji dibatalkan",
+    "commissionAdjusted": "Komisi diubah manual"
+  },
+  "refusal": {
+    "notStaff": "Orang ini tidak bekerja di toko ini.",
+    "self": "Tidak dapat memberi kasbon atau membayar gaji untuk diri sendiri.",
+    "alreadyRecorded": "Ini sudah tercatat.",
+    "accountNotUsable": "Gunakan laci kas atau rekening bank toko ini.",
+    "installmentAboveAmount": "Cicilan per bulan tidak boleh lebih dari kasbonnya.",
+    "aboveBalance": "Jumlah ini melebihi sisa kasbon.",
+    "advanceNotFound": "Kasbon ini tidak ada di toko ini.",
+    "advanceSettled": "Sebagian kasbon ini sudah dibayar, jadi tidak dapat dibatalkan lagi.",
+    "repaymentNotFound": "Pembayaran ini tidak ada di toko ini.",
+    "repaymentNotAsPayout": "Potongan gaji hanya tercatat bersama pembayaran gajinya.",
+    "payoutNotFound": "Pembayaran gaji ini tidak ada di toko ini.",
+    "alreadyVoided": "Ini sudah dibatalkan.",
+    "drawerSettled": "Kas sudah ditutup dan dicocokkan setelah ini, jadi tidak dapat dibatalkan lagi.",
+    "monthPaid": "Gaji bulan ini sudah dibayar.",
+    "monthOutOfRange": "Gaji hanya dapat dibayar untuk bulan ini atau dua bulan sebelumnya.",
+    "salaryAboveTerms": "Gaji melebihi gaji yang diatur untuk orang ini.",
+    "commissionAboveOwed": "Komisi tidak sesuai. Buka lagi pembayaran gaji untuk melihat angka terbaru.",
+    "paidNotTotal": "Jumlah dibayar harus gaji ditambah komisi dikurangi cicilan.",
+    "zeroAdjustment": "Masukkan jumlah selain nol.",
+    "writeOffOwners": "Hanya pemilik yang dapat menghapus kasbon.",
+    "otherStore": "Pengaturan ini milik toko lain.",
+    "overLimit": "Melebihi batas kasbon Anda. Minta persetujuan pemilik toko."
+  }
+}

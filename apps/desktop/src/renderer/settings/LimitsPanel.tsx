@@ -32,10 +32,10 @@ function draftOf(roles: readonly LimitRole[]): Draft {
 
 function complete(values: Draft[string] | undefined): LimitAmounts | null {
   if (values === undefined) return null;
-  const { priceDrop, refund, credit } = values;
-  return priceDrop === null || refund === null || credit === null
+  const { priceDrop, refund, credit, advance } = values;
+  return priceDrop === null || refund === null || credit === null || advance === null
     ? null
-    : { priceDrop, refund, credit };
+    : { priceDrop, refund, credit, advance };
 }
 
 export function LimitsPanel({

@@ -32,6 +32,7 @@ export const APPROVALS_KEYS = [
   'approvals.kind.moneyVoidPayment',
   'approvals.kind.moneyRefund',
   'approvals.kind.moneyReduceCharge',
+  'approvals.kind.payAdvance',
   'approvals.status.waiting',
   'approvals.status.approved',
   'approvals.status.rejected',

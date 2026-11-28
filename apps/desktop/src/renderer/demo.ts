@@ -176,7 +176,7 @@ const DEMO_ROLES: StaffDirectory['roles'] = [
     custom: false,
     permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.manager)),
     ownerRole: false,
-    limits: { priceDrop: 50_000, refund: 30_000, credit: 100_000 },
+    limits: { priceDrop: 50_000, refund: 30_000, credit: 100_000, advance: 1_000_000 },
   },
   {
     id: 'r-store_owner',
@@ -280,7 +280,8 @@ export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
             id: roleId,
             key: name,
             custom: true,
-            limits: source.limits === null ? null : { priceDrop: 0, refund: 0, credit: 0 },
+            limits:
+              source.limits === null ? null : { priceDrop: 0, refund: 0, credit: 0, advance: 0 },
           },
         ],
       };
@@ -303,7 +304,7 @@ export function demoStaffFor(person: DemoPerson): StaffControls | undefined {
                   ? {}
                   : {
                       limits: change.limited
-                        ? (role.limits ?? { priceDrop: 0, refund: 0, credit: 0 })
+                        ? (role.limits ?? { priceDrop: 0, refund: 0, credit: 0, advance: 0 })
                         : null,
                     }),
               },

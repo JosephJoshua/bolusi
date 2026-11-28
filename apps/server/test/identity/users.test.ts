@@ -746,6 +746,7 @@ test('moving a store owner to another store takes their owner powers at the old 
       priceDrop: 9_000_000,
       refund: 9_000_000,
       credit: 9_000_000,
+      advance: 9_000_000,
     }),
   });
   expect(limits.status).toBe(403);

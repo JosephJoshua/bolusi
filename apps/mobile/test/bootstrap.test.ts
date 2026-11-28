@@ -387,7 +387,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
     // T-14, and the reason this test is written this way: `registerModules([])` SUCCEEDS and returns
     // a registry that folds nothing and answers `undefined` to every lookup. A bootstrap looping
     // over it reports green having registered nothing. So assert the COUNT.
-    expect(CLIENT_MODULES).toHaveLength(8);
+    expect(CLIENT_MODULES).toHaveLength(9);
     expect(app.registry.modules.map((m) => m.id)).toStrictEqual([
       'platform',
       'notes',
@@ -396,6 +396,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'purchasing',
       'money',
       'approvals',
+      'pay',
       'auth',
     ]);
 
@@ -410,7 +411,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(58);
+    expect(app.registry.permissions.size).toBe(63);
     expect(app.registry.permissions.ids()).toStrictEqual([
       'approvals.use',
       'auth.audit_view',
@@ -450,6 +451,11 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'notes.create',
       'notes.edit',
       'notes.read',
+      'pay.advances',
+      'pay.manage',
+      'pay.own',
+      'pay.pay',
+      'pay.read',
       'platform.conflict_acknowledge',
       'platform.conflict_view',
       'platform.set_locale',

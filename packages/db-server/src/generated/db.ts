@@ -406,6 +406,89 @@ export interface Operations {
   userId: string;
 }
 
+export interface PayAdjustments {
+  amount: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  reason: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+}
+
+export interface PayAdvances {
+  account: string;
+  amount: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  installment: Int8;
+  reason: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+  voidedAt: Int8 | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface PayPayouts {
+  account: string;
+  commission: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  deduction: Int8;
+  id: string;
+  month: string;
+  note: string | null;
+  paid: Int8;
+  repaymentId: string | null;
+  salary: Int8;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+  voidedAt: Int8 | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface PayRepayments {
+  amount: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  note: string | null;
+  payoutId: string | null;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+  via: string;
+  voidedAt: Int8 | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface PayStoreRates {
+  commissionPercent: number | null;
+  id: string;
+  setAt: Int8;
+  setBy: string;
+  storeId: string;
+  tenantId: string;
+}
+
+export interface PayTerms {
+  commissionPercent: number | null;
+  id: string;
+  salary: Int8;
+  setAt: Int8;
+  setBy: string;
+  storeId: string;
+  tenantId: string;
+  userId: string;
+}
+
 export interface Permissions {
   action: string;
   description: string;
@@ -908,6 +991,12 @@ export interface DB {
   moneyLines: MoneyLines;
   notes: Notes;
   operations: Operations;
+  payAdjustments: PayAdjustments;
+  payAdvances: PayAdvances;
+  payPayouts: PayPayouts;
+  payRepayments: PayRepayments;
+  payStoreRates: PayStoreRates;
+  payTerms: PayTerms;
   permissions: Permissions;
   personSessions: PersonSessions;
   phoneCatalogBrands: PhoneCatalogBrands;

@@ -16,12 +16,20 @@ import {
 
 describe('limit amounts', () => {
   test('typed money reads as whole rupiah, and empty stays empty', () => {
-    expect(parseLimits({ priceDrop: 'Rp 50.000', refund: '0', credit: '100000' })).toEqual({
+    expect(
+      parseLimits({
+        priceDrop: 'Rp 50.000',
+        refund: '0',
+        credit: '100000',
+        advance: 'Rp 1.000.000',
+      }),
+    ).toEqual({
       priceDrop: 50_000,
       refund: 0,
       credit: 100_000,
+      advance: 1_000_000,
     });
-    expect(parseLimits({ priceDrop: '', refund: '0', credit: '0' })).toBeNull();
+    expect(parseLimits({ priceDrop: '0', refund: '0', credit: '0', advance: '' })).toBeNull();
   });
 
   test('a keystroke past what the server takes is not kept', () => {
@@ -31,7 +39,7 @@ describe('limit amounts', () => {
   });
 
   test('the form starts from the saved amounts and compares against them', () => {
-    const saved = { priceDrop: 50_000, refund: 0, credit: 100_000 };
+    const saved = { priceDrop: 50_000, refund: 0, credit: 100_000, advance: 0 };
     expect(parseLimits(limitsText(saved))).toEqual(saved);
     expect(sameLimits(saved, { ...saved })).toBe(true);
     expect(sameLimits(saved, { ...saved, refund: 1 })).toBe(false);

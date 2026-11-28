@@ -383,7 +383,7 @@ describe('Settings on the PC', () => {
           custom: false,
           permissionIds: [],
           ownerRole: false,
-          limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+          limits: { priceDrop: 50_000, refund: 0, credit: 100_000, advance: 0 },
         },
       ],
     };
@@ -408,7 +408,7 @@ describe('Settings on the PC', () => {
     const credit = byTestId('desktop.settings.limits.manager.credit');
     fireEvent.change(credit, { target: { value: '' } });
     fireEvent.click(byTestId('desktop.settings.limits.save'));
-    expect(byTestId('desktop.settings.limits').textContent).toContain('Isi ketiga batas');
+    expect(byTestId('desktop.settings.limits').textContent).toContain('Isi semua batas');
     expect(callsTo('staff.setLimits')).toEqual([]);
 
     fireEvent.change(credit, { target: { value: '100.000' } });
@@ -421,7 +421,7 @@ describe('Settings on the PC', () => {
     expect(callsTo('staff.setLimits').at(-1)).toEqual([
       OWNER.id,
       'r-manager',
-      { priceDrop: 50_000, refund: 25_000, credit: 100_000 },
+      { priceDrop: 50_000, refund: 25_000, credit: 100_000, advance: 0 },
     ]);
   });
 

@@ -68,7 +68,7 @@ describe('createStaffControls', () => {
       active: false,
     });
 
-    const limits = { priceDrop: 50_000, refund: 0, credit: 100_000 };
+    const limits = { priceDrop: 50_000, refund: 0, credit: 100_000, advance: 0 };
     await controls.onSetLimits('r-manager', limits);
     expect(admin.setLimits).toHaveBeenCalledWith({
       actingUserId: 'u-owner',

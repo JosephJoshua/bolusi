@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { NOTES_KEYS } from '@bolusi/modules/notes/screens';
 import { APPROVALS_KEYS } from '@bolusi/modules/approvals/screens';
 import { MONEY_KEYS } from '@bolusi/modules/money/screens';
+import { PAY_KEYS } from '@bolusi/modules/pay/screens';
 import { PURCHASING_KEYS } from '@bolusi/modules/purchasing/screens';
 import { REPAIR_KEYS } from '@bolusi/modules/repair/screens';
 import { describe, expect, test } from 'vitest';
@@ -44,6 +45,7 @@ const MODULES = [
   { module: 'money', keys: MONEY_KEYS },
   { module: 'approvals', keys: APPROVALS_KEYS },
   { module: 'purchasing', keys: PURCHASING_KEYS },
+  { module: 'pay', keys: PAY_KEYS },
 ] as const;
 
 describe.each(MODULES)('the $module catalog matches its typed key surface', ({ module, keys }) => {

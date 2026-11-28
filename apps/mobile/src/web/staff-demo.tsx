@@ -41,7 +41,7 @@ const ROLES: readonly StaffRole[] = [
     custom: false,
     permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES.manager)),
     ownerRole: false,
-    limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+    limits: { priceDrop: 50_000, refund: 0, credit: 100_000, advance: 1_000_000 },
   },
   {
     id: 'r-store',
@@ -227,7 +227,7 @@ export function LimitsDemo({
               new Set([...PRESET_ROLE_ABILITIES.cashier, 'repairDiscount']),
             ),
             ownerRole: false,
-            limits: { priceDrop: 25_000, refund: 0, credit: 0 },
+            limits: { priceDrop: 25_000, refund: 0, credit: 0, advance: 0 },
           },
         ]
       : ROLES,
@@ -268,7 +268,7 @@ export function RolesDemo({ offline = false }: { readonly offline?: boolean }): 
           new Set([...PRESET_ROLE_ABILITIES.cashier, 'repairDiscount']),
         ),
         ownerRole: false,
-        limits: { priceDrop: 0, refund: 0, credit: 0 },
+        limits: { priceDrop: 0, refund: 0, credit: 0, advance: 0 },
       },
       ...ROLES.slice(3),
     ],
@@ -306,7 +306,11 @@ export function RolesDemo({ offline = false }: { readonly offline?: boolean }): 
                     : { permissionIds: change.permissionIds }),
                   ...(change.limited === undefined
                     ? {}
-                    : { limits: change.limited ? { priceDrop: 0, refund: 0, credit: 0 } : null }),
+                    : {
+                        limits: change.limited
+                          ? { priceDrop: 0, refund: 0, credit: 0, advance: 0 }
+                          : null,
+                      }),
                 },
           ),
         };

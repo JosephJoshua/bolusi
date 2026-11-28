@@ -21,7 +21,7 @@ const MANAGER: StaffRole = {
   custom: false,
   permissionIds: [],
   ownerRole: false,
-  limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+  limits: { priceDrop: 50_000, refund: 0, credit: 100_000, advance: 0 },
 };
 const ROLES: StaffRole[] = [
   {
@@ -97,6 +97,7 @@ describe('one limited role', () => {
       priceDrop: 50_000,
       refund: 25_000,
       credit: 100_000,
+      advance: 0,
     });
     expect(textsIn(screen.get('limits-notice')).join(' ')).toContain(
       t('auth.limits.saved', { role: t('role.manager.name') }),
