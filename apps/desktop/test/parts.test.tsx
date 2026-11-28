@@ -127,6 +127,24 @@ describe('parts on the PC', () => {
     expect(byTestId('inventory.desk.part.history').textContent).toContain('Dikoreksi menjadi 7');
   });
 
+  it('asks why when a correction lowers the stock', async () => {
+    await renderApp(OWNER);
+    await openParts();
+    fireEvent.change(byTestId('inventory.desk.search'), { target: { value: '6941059648208' } });
+    fireEvent.submit(byTestId('inventory.desk.search').closest('form')!);
+    await screen.findByTestId('inventory.desk.part');
+    fireEvent.click(await screen.findByTestId('inventory.desk.part.count'));
+    await screen.findByTestId('inventory.desk.count');
+    fireEvent.change(byTestId('inventory.desk.count.counted'), { target: { value: '0' } });
+    fireEvent.click(byTestId('inventory.desk.count.submit'));
+    expect(await screen.findByText('Tulis alasan stok berkurang.')).toBeTruthy();
+    expect(screen.queryByTestId('inventory.desk.count')).not.toBeNull();
+    fireEvent.change(byTestId('inventory.desk.count.note'), { target: { value: 'Pecah semua' } });
+    fireEvent.click(byTestId('inventory.desk.count.submit'));
+    await waitFor(() => expect(screen.queryByTestId('inventory.desk.count')).toBeNull());
+    await waitFor(() => expect(byTestId('inventory.desk.part.stock').textContent).toBe('0'));
+  });
+
   it('adds an item with its stock and opens it beside the list', async () => {
     await renderApp(OWNER);
     await openParts();

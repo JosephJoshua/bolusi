@@ -112,6 +112,8 @@
     "counted": "Jumlah di rak",
     "recorded": "Tercatat {count}",
     "note": "Catatan (opsional)",
+    "reason": "Alasan stok berkurang",
+    "reasonMissing": "Tulis alasan stok berkurang.",
     "save": "Simpan koreksi",
     "more": "Lebih {count}",
     "less": "Kurang {count}",

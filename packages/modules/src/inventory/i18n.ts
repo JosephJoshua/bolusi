@@ -110,6 +110,8 @@ export const INVENTORY_KEYS = [
   'inventory.count.more',
   'inventory.count.less',
   'inventory.count.same',
+  'inventory.count.reason',
+  'inventory.count.reasonMissing',
   'inventory.detail.stockHere',
   'inventory.detail.code',
   'inventory.detail.fits',
