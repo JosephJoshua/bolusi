@@ -26,14 +26,9 @@ import { type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
-import {
-  CASH_ACCOUNT,
-  CASH_MOVE_KINDS,
-  MAX_REASON,
-  MAX_REFERENCE,
-  MONEY_PERMISSION,
-} from '../constants.js';
+import { CASH_ACCOUNT, MAX_REASON, MAX_REFERENCE, MONEY_PERMISSION } from '../constants.js';
 import { ta } from '../../approvals/i18n.js';
+import { drawerLabel } from '../drawers.js';
 import { tm } from '../i18n.js';
 import { CASH_MOVE_LABEL, differenceText, RECOUNT_CASH, type NamedBalance } from '../kas.js';
 import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
@@ -236,6 +231,7 @@ export function MoveCashStep({
   const move = useCashMove(onDone);
   const { runner, kind, setKind, setAccount, digits, setDigits } = move;
   const { reason, setReason, banks, depositAccount, missing, missingValues, submit } = move;
+  const { kinds, targets, to } = move;
   const leave = useStepLeave(
     move.dirty,
     { chrome, onDone, onCancel, onRegisterDiscardGuard },
@@ -258,9 +254,9 @@ export function MoveCashStep({
       testID={testID}
     >
       <Text style={styles.fieldLabel}>{tm('money.move.kind')}</Text>
-      {/* Four fixed choices: wrapped, so every one stays in view. */}
+      {/* A few fixed choices: wrapped, so every one stays in view. */}
       <View style={styles.wrap} testID={`${testID}.kinds`}>
-        {CASH_MOVE_KINDS.map((option) => (
+        {kinds.map((option) => (
           <ToggleChip
             key={option}
             label={tm(CASH_MOVE_LABEL[option])}
@@ -281,6 +277,22 @@ export function MoveCashStep({
                 selected={depositAccount?.id === row.id}
                 onToggle={() => setAccount(`account:${row.id}`)}
                 testID={`${testID}.account.${row.id}`}
+              />
+            ))}
+          </ChipRow>
+        </View>
+      ) : null}
+      {kind === 'transfer' ? (
+        <View style={styles.gap}>
+          <Text style={styles.fieldLabel}>{tm('money.move.to')}</Text>
+          <ChipRow testID={`${testID}.targets`}>
+            {targets.map((row) => (
+              <ToggleChip
+                key={row.ref}
+                label={drawerLabel(row)}
+                selected={to?.ref === row.ref}
+                onToggle={() => setAccount(row.ref)}
+                testID={`${testID}.target.${row.ref}`}
               />
             ))}
           </ChipRow>

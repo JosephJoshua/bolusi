@@ -24,6 +24,7 @@ import {
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { bootstrap, type Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
 import { readDeviceInfo, renameDevice } from '@bolusi/device/bootstrap/device-info';
+import { drawerChoiceStorage } from '@bolusi/device/bootstrap/drawer-choice';
 import {
   createEnrollTransport,
   createLoginTransport,
@@ -1046,6 +1047,16 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'money.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).money.run)(knownName(moneyModule.commands, name), input),
     'money.stores': (userId: string) => repairFor(userId).money.stores(),
+    'money.roles': (userId: string) => repairFor(userId).money.roles(),
+    // The drawer this PC takes cash into: the PC's own setting, whoever is signed in.
+    'money.drawer.read': async (userId: string) => {
+      repairFor(userId);
+      return app === null ? null : drawerChoiceStorage(app.db.db).read();
+    },
+    'money.drawer.write': async (userId: string, drawer: string) => {
+      repairFor(userId);
+      if (app !== null) await drawerChoiceStorage(app.db.db).write(drawer);
+    },
     // QRIS through Xendit: server calls as the same person, made from here like the staff calls.
     'money.qris.connections': (userId: string) => qrisOf(userId).connections(),
     'money.qris.connect': (userId: string, accountId: string, secretKey: string) =>

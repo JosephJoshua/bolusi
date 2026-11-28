@@ -23,6 +23,7 @@ import {
   Section,
   StatePanel,
   Tabs,
+  ToggleChip,
   type ColumnDef,
 } from '@bolusi/ui-web';
 import { ArrowDownUp, ChevronLeft, ChevronRight, Inbox, ReceiptText } from 'lucide-react';
@@ -32,6 +33,7 @@ import { QueryPanel } from '../../screen-kit/desktop/index.js';
 
 import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
 import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
+import { drawerLabel } from '../drawers.js';
 import { tm } from '../i18n.js';
 import { ta } from '../../approvals/i18n.js';
 import {
@@ -238,6 +240,25 @@ function Today({
     >
       <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-6 @[900px]:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-6">
+          {/* The drawer this PC takes cash into; switched here when this person uses several. */}
+          {day.cash.several ? (
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label={tm('money.drawer.pick')}
+              data-testid={`${testId}.drawers`}
+            >
+              {day.cash.drawers.map((row) => (
+                <ToggleChip
+                  key={row.ref}
+                  label={drawerLabel(row)}
+                  selected={day.cash.current?.ref === row.ref}
+                  onToggle={() => day.cash.choose(row.ref)}
+                  testId={`${testId}.drawer.${row.ref}`}
+                />
+              ))}
+            </div>
+          ) : null}
           <QueryPanel query={drawerQuery} onRetry={day.retry}>
             {() =>
               drawer === null ? null : (
@@ -327,7 +348,7 @@ function Today({
                     {moneyIn.methods.map((method) => (
                       <Line
                         key={method.account}
-                        label={accountLabel(method.account, accounts)}
+                        label={accountLabel(method.account, accounts, day.drawers)}
                         value={formatMoney(method.amount)}
                         testId={`${testId}.in.${method.account}`}
                       />
@@ -526,11 +547,12 @@ function History({
         historyLine(
           entry,
           loaded?.accounts ?? [],
+          loaded?.drawers ?? [],
           entry.documentId === null ? null : (loaded?.customers.get(entry.documentId) ?? null),
         ),
       ]),
     );
-    const lineOf = (entry: MoneyEntryRow) => lines.get(entry.id) ?? historyLine(entry, []);
+    const lineOf = (entry: MoneyEntryRow) => lines.get(entry.id) ?? historyLine(entry, [], []);
     // An owner said no to this person's ask: said on the record, which can be asked about again.
     const turnedDownOf = (entry: MoneyEntryRow) =>
       entry.voidedAt === null && !asks.waiting.has(entry.id)

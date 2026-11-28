@@ -19,6 +19,7 @@ import type {
   CashCountRow,
   CashDrawer,
   DocumentMoney,
+  DrawerRow,
   MoneyEntryRow,
   OpenBalanceRow,
   PaymentAccountRow,
@@ -36,6 +37,11 @@ export interface DemoMoneyOptions {
   readonly nameOf?: ((userId: string) => string | null) | undefined;
   /** Whether they give back beyond an overpayment (an owner); the counter by default. */
   readonly mayRefund?: (() => boolean) | undefined;
+  /**
+   * The store's drawers besides the main one, by name, with whether this person uses each: a store
+   * with an accessories counter. None by default, which reads as a store with one drawer.
+   */
+  readonly drawers?: readonly { readonly id: string; readonly name: string }[] | undefined;
   /** A finished servisan the customer took home unpaid. */
   readonly debt?:
     { readonly id: string; readonly label: string; readonly amount: number } | undefined;
@@ -85,6 +91,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     documentKind: null,
     documentId: null,
     documentLabel: null,
+    drawer: null,
     createdBy: 'u-siti',
     createdAt: now,
     voidedBy: null,
@@ -143,20 +150,35 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
     );
   }
 
-  /** The drawer's change from one entry. */
-  const cashEffect = (e: Stored): number => {
-    if (e.kind === 'payment_received' && e.account === CASH_ACCOUNT && e.voidedAt === null) {
+  const drawerRows: DrawerRow[] = [
+    { ref: CASH_ACCOUNT, name: null, main: true, roleIds: [], active: true, usable: true },
+    ...(options.drawers ?? []).map((row) => ({
+      ref: `account:${row.id}`,
+      name: row.name,
+      main: false,
+      roleIds: [],
+      active: true,
+      usable: true,
+    })),
+  ];
+  const inDrawer = (e: Stored): string => e.drawer ?? CASH_ACCOUNT;
+  /** One drawer's change from one entry. */
+  const cashEffect = (e: Stored, drawer: string): number => {
+    if (e.kind === 'payment_received' && e.account === drawer && e.voidedAt === null) {
       return e.amount;
     }
-    if (e.kind === 'refund_paid' && e.account === CASH_ACCOUNT) return -e.amount;
+    if (e.kind === 'refund_paid' && e.account === drawer) return -e.amount;
     // A cancelled cash move counts nowhere, as the ledger dates its reversal with it.
     if (e.kind === 'cash_moved' && e.voidedAt === null) {
+      if (e.subKind === 'transfer' && e.account === drawer) return e.amount;
+      if (inDrawer(e) !== drawer) return 0;
       return movesOut(e.subKind as CashMoveKind) ? -e.amount : e.amount;
     }
-    if (e.kind === 'cash_adjusted') return e.amount;
+    if (e.kind === 'cash_adjusted' && inDrawer(e) === drawer) return e.amount;
     return 0;
   };
-  const cashNow = (): number => entries.reduce((sum, e) => sum + cashEffect(e), 0);
+  const cashNow = (drawer: string): number =>
+    entries.reduce((sum, e) => sum + cashEffect(e, drawer), 0);
   /** As `countExpected`: a correction that settled an earlier count stands at that count. */
   const countExpected = (count: Stored): number =>
     entries
@@ -164,15 +186,15 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
         const settles = e.kind === 'cash_adjusted' ? byId(e.relatedEntryId) : undefined;
         return settles === undefined ? e.createdAt < count.createdAt : earlier(settles, count);
       })
-      .reduce((sum, e) => sum + cashEffect(e), 0);
+      .reduce((sum, e) => sum + cashEffect(e, inDrawer(count)), 0);
   const byId = (id: string | null): Stored | undefined =>
     id === null ? undefined : entries.find((e) => e.id === id);
   const earlier = (a: Stored, b: Stored): boolean =>
     a.createdAt < b.createdAt || (a.createdAt === b.createdAt && a.id < b.id);
 
-  const drawer = (): CashDrawer => {
+  const drawer = (ref: string): CashDrawer => {
     const counts: CashCountRow[] = entries
-      .filter((e) => e.kind === 'cash_counted')
+      .filter((e) => e.kind === 'cash_counted' && inDrawer(e) === ref)
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((count) => {
         const expected = countExpected(count);
@@ -189,7 +211,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
             .reduce((sum, e) => sum + e.amount, 0),
         };
       });
-    return { expected: cashNow(), counts };
+    return { expected: cashNow(ref), counts };
   };
 
   const openBalances = (): OpenBalanceRow[] => {
@@ -278,7 +300,9 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
         case 'paymentAccounts':
           return page(accounts.filter((row) => input['includeInactive'] === true || row.active));
         case 'cashDrawer':
-          return page([drawer()]);
+          return page([drawer(String(input['drawer'] ?? CASH_ACCOUNT))]);
+        case 'drawers':
+          return page(drawerRows.filter((row) => input['includeInactive'] === true || row.active));
         case 'openBalances':
           return page(openBalances());
         case 'voidCount': {
@@ -320,6 +344,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
             amount: Number(input['amount']),
             reason: String(input['reason']),
             account: (input['account'] as string | null) ?? null,
+            drawer: String(input['drawer'] ?? CASH_ACCOUNT),
           });
           return Promise.resolve({ entryId });
         }
@@ -328,15 +353,18 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
             kind: 'cash_counted',
             amount: Number(input['counted']),
             reason: String(input['note'] ?? ''),
+            drawer: String(input['drawer'] ?? CASH_ACCOUNT),
           });
           return Promise.resolve({ entryId });
         }
         case 'adjustCash': {
+          const countId = (input['countId'] as string | null) ?? null;
           const entryId = add({
             kind: 'cash_adjusted',
             amount: Number(input['amount']),
             reason: String(input['reason']),
-            relatedEntryId: (input['countId'] as string | null) ?? null,
+            relatedEntryId: countId,
+            drawer: byId(countId)?.drawer ?? CASH_ACCOUNT,
           });
           return Promise.resolve({ entryId });
         }
@@ -430,6 +458,22 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
           accounts.sort((a, b) => a.name.localeCompare(b.name));
           notify();
           return Promise.resolve({ accountId });
+        }
+        case 'saveDrawer': {
+          const ref = (input['drawer'] as string | undefined) ?? `account:d-${String((ids += 1))}`;
+          const at = drawerRows.findIndex((row) => row.ref === ref);
+          const saved: DrawerRow = {
+            ref,
+            name: String(input['name']),
+            main: ref === CASH_ACCOUNT,
+            roleIds: (input['roleIds'] as string[] | undefined) ?? [],
+            active: input['active'] !== false,
+            usable: true,
+          };
+          if (at === -1) drawerRows.push(saved);
+          else drawerRows[at] = saved;
+          notify();
+          return Promise.resolve({ drawer: ref });
         }
         case 'voidPayment':
         case 'voidCashMove': {

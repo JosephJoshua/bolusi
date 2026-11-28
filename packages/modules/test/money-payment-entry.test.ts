@@ -31,14 +31,14 @@ const OTHER = '01920000-0000-7000-8000-0000000000a2';
 describe('paymentEntry', () => {
   test('pays through the method picked while the store offers it', () => {
     const line = newPaymentLine('a', 100_000, `account:${QRIS.id}`);
-    const entry = paymentEntry(100_000, [line], [QRIS]);
+    const entry = paymentEntry(100_000, [line], [QRIS], CASH_ACCOUNT);
     expect(entry.complete).toBe(true);
     expect(entry.payments).toMatchObject([{ account: `account:${QRIS.id}`, amount: 100_000 }]);
   });
 
   test('a method switched off since it was picked needs picking again, never the drawer', () => {
     const line = newPaymentLine('a', 100_000, `account:${QRIS.id}`);
-    const entry = paymentEntry(100_000, [line], []);
+    const entry = paymentEntry(100_000, [line], [], CASH_ACCOUNT);
     expect(entry.complete).toBe(false);
     expect(entry.payments).toEqual([]);
     expect(entry.problems).toEqual({ a: 'method' });
@@ -46,10 +46,10 @@ describe('paymentEntry', () => {
 
   test('while a QR the customer can still pay is open, nothing is taken another way', () => {
     const line = { ...newPaymentLine('a', 100_000, CASH_ACCOUNT), tendered: '100000' };
-    const blocked = paymentEntry(100_000, [line], [QRIS], new Set(), 1);
+    const blocked = paymentEntry(100_000, [line], [QRIS], CASH_ACCOUNT, new Set(), 1);
     expect(blocked).toMatchObject({ blocked: true, complete: false, payments: [] });
     expect(blocked.problems).toEqual({});
-    expect(paymentEntry(100_000, [line], [QRIS], new Set(), 0)).toMatchObject({
+    expect(paymentEntry(100_000, [line], [QRIS], CASH_ACCOUNT, new Set(), 0)).toMatchObject({
       blocked: false,
       complete: true,
     });
@@ -58,7 +58,7 @@ describe('paymentEntry', () => {
 
 describe('the method is picked by the counter, never guessed', () => {
   test('where the store takes more than cash, a new line waits for its method', () => {
-    const entry = paymentEntry(100_000, [newPaymentLine('a', 100_000)], [QRIS]);
+    const entry = paymentEntry(100_000, [newPaymentLine('a', 100_000)], [QRIS], CASH_ACCOUNT);
     expect(entry.complete).toBe(false);
     expect(entry.payments).toEqual([]);
     expect(entry.problems).toEqual({ a: 'pick' });
@@ -66,8 +66,19 @@ describe('the method is picked by the counter, never guessed', () => {
     expect(entry.remaining).toBe(0);
   });
 
+  test("cash goes into this device's drawer, other methods through their own account", () => {
+    const cash = { ...newPaymentLine('a', 60_000, CASH_ACCOUNT), tendered: '100000' };
+    const qr = { ...newPaymentLine('b', 40_000, `account:${QRIS.id}`), manual: true };
+    const entry = paymentEntry(100_000, [cash, qr], [QRIS], 'account:laci');
+    expect(entry.payments.map((p) => p.account)).toEqual(['account:laci', `account:${QRIS.id}`]);
+    expect(chosenMethod(CASH_ACCOUNT, '123', [QRIS], 'account:laci')).toEqual({
+      account: 'account:laci',
+      reference: null,
+    });
+  });
+
   test('where cash is all the store takes, a new line is cash', () => {
-    const entry = paymentEntry(100_000, [newPaymentLine('a', 100_000)], []);
+    const entry = paymentEntry(100_000, [newPaymentLine('a', 100_000)], [], CASH_ACCOUNT);
     expect(entry.complete).toBe(true);
     expect(entry.payments).toMatchObject([{ account: CASH_ACCOUNT, amount: 100_000 }]);
   });
@@ -77,7 +88,7 @@ describe('the method is picked by the counter, never guessed', () => {
     expect(methodMissing(NO_METHOD, [])).toBe(false);
     expect(methodMissing(CASH_ACCOUNT, [QRIS])).toBe(false);
     expect(methodMissing(`account:${QRIS.id}`, [{ ...QRIS, id: OTHER }])).toBe(true);
-    expect(chosenMethod(NO_METHOD, '', []).account).toBe(CASH_ACCOUNT);
+    expect(chosenMethod(NO_METHOD, '', [], CASH_ACCOUNT).account).toBe(CASH_ACCOUNT);
     expect(offeredAccount(`account:${QRIS.id}`, [QRIS])).toBe(`account:${QRIS.id}`);
   });
 });

@@ -13,6 +13,7 @@ import { tm } from './i18n.js';
 import { newPaymentLine, type PaymentLine } from './payment-entry.js';
 import { pendingQrPayments, useQrisCheckout, type QrisCheckout } from './qris-hooks.js';
 import type { PaymentAccountRow } from './queries.js';
+import { useCashDrawer } from './drawers.js';
 import { useMoneyQuery, useMoneyRuntime } from './runtime.js';
 import type { ReceivePaymentsInput } from './commands.js';
 
@@ -37,6 +38,7 @@ export interface DebtReceipt extends DebtPayment {
 
 export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
   const runtime = useMoneyRuntime();
+  const cash = useCashDrawer();
   const document = useMemo(
     () => ({ kind: balance.documentKind, id: balance.documentId, label: balance.documentLabel }),
     [balance.documentKind, balance.documentId, balance.documentLabel],
@@ -72,7 +74,14 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
   });
   const accountRows: readonly PaymentAccountRow[] =
     accounts.status === 'ready' ? accounts.data : [];
-  const payment = debtPayment(owed, qris.lines, accountRows, qris.qrAccounts, qris.blocking);
+  const payment = debtPayment(
+    owed,
+    qris.lines,
+    accountRows,
+    cash.ref,
+    qris.qrAccounts,
+    qris.blocking,
+  );
   const ready = accounts.status === 'ready' && payment.taken !== null && payment.taken.complete;
   const paidByQr = qris.received > 0 && qris.lines.length === 0;
   const input =

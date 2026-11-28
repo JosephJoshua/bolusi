@@ -20,11 +20,13 @@ import {
   Text,
   type,
   Rows,
+  ToggleChip,
 } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
+import { drawerLabel } from '../drawers.js';
 import { tm } from '../i18n.js';
 import { accountLabel, dayStart, differenceText, type NamedBalance } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
@@ -66,6 +68,8 @@ export function KasBoard({
 }: KasBoardProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const {
+    cash,
+    drawers,
     drawerQuery: drawer,
     drawer: drawerData,
     accounts: accountRows,
@@ -119,6 +123,20 @@ export function KasBoard({
         testID={`${testID}.columns`}
         start={
           <>
+            {/* The drawer this phone takes cash into; switched here when this person uses several. */}
+            {cash.several ? (
+              <View style={styles.drawers} testID={`${testID}.drawers`}>
+                {cash.drawers.map((row) => (
+                  <ToggleChip
+                    key={row.ref}
+                    label={drawerLabel(row)}
+                    selected={cash.current?.ref === row.ref}
+                    onToggle={() => cash.choose(row.ref)}
+                    testID={`${testID}.drawer.${row.ref}`}
+                  />
+                ))}
+              </View>
+            ) : null}
             {drawer.status === 'loading' ? (
               <LoadingState variant="spinner" />
             ) : drawerData === null ? null : (
@@ -223,7 +241,7 @@ export function KasBoard({
                       {moneyIn.methods.map((method) => (
                         <AmountRow
                           key={method.account}
-                          label={accountLabel(method.account, accountRows)}
+                          label={accountLabel(method.account, accountRows, drawers)}
                           value={method.amount}
                           testID={`${testID}.in.${method.account}`}
                         />
@@ -325,5 +343,6 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
+  drawers: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   drawerAction: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
 });

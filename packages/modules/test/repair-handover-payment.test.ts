@@ -604,7 +604,7 @@ describe('money after the phone went home', () => {
       refund: 'due',
       reduce: false,
     });
-    const methods = refundMethods(await documentMoney(h, ticketId), [], false);
+    const methods = refundMethods(await documentMoney(h, ticketId), [], [], false);
     expect(methods).toMatchObject([{ account: 'cash', limit: 100_000 }]);
 
     // Beyond the overpayment is the owner's to give back.
@@ -648,7 +648,7 @@ describe('money after the phone went home', () => {
     const without = (permission: string) =>
       permission !== 'money.receive' && h!.hasPermission(h!.ownerId, permission);
     expect(ticketMoneyActions(paid, without)).toEqual({ refund: null, reduce: false });
-    expect(refundMethods(await documentMoney(h, ticketId), [], true)).toMatchObject([
+    expect(refundMethods(await documentMoney(h, ticketId), [], [], true)).toMatchObject([
       { account: 'cash', limit: TOTAL },
     ]);
 

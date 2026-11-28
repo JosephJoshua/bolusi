@@ -166,11 +166,19 @@ describe('the intake input', () => {
     const h = await harness(7408);
     const video = h.video(1);
     const base = { ...emptyIntakeDraft(), ownershipVideo: video };
-    const kept = toOpenTicketInput({ ...base, repairTypes: ['unlock'] }, DEFAULT_INTAKE_OPTIONS, 0);
+    const kept = toOpenTicketInput(
+      { ...base, repairTypes: ['unlock'] },
+      DEFAULT_INTAKE_OPTIONS,
+      0,
+      [],
+      'cash',
+    );
     const dropped = toOpenTicketInput(
       { ...base, repairTypes: ['screen'] },
       DEFAULT_INTAKE_OPTIONS,
       0,
+      [],
+      'cash',
     );
     expect(kept.ownershipVideo).toEqual(video);
     expect(dropped.ownershipVideo).toBeNull();

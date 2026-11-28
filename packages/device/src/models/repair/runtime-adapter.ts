@@ -7,6 +7,7 @@ import {
   bindModulePort,
   listSwitcherUsers,
   OP_SYNC_STATUS_TABLE,
+  readStaffDirectory,
   readStores,
   type CommandIdentity,
   type InvalidationBus,
@@ -15,7 +16,12 @@ import {
 import type { ClientDatabase } from '@bolusi/db-client';
 import { approvalsModule, moneyModule } from '@bolusi/modules';
 import { APPROVALS_TABLE } from '@bolusi/modules/approvals';
-import { MONEY_ENTRY_ENTITY, MONEY_TABLE, type QrisPort } from '@bolusi/modules/money';
+import {
+  createDrawerChoice,
+  MONEY_ENTRY_ENTITY,
+  MONEY_TABLE,
+  type QrisPort,
+} from '@bolusi/modules/money';
 import {
   PHONE_MODELS_TABLE,
   REPAIR_DOCUMENT_KIND,
@@ -32,6 +38,8 @@ import {
   readEntitySyncStatuses,
   readLinkedRefusals,
 } from '../../bootstrap/entity-sync-statuses.js';
+import { drawerChoiceStorage } from '../../bootstrap/drawer-choice.js';
+import { roleName } from '../staff/roles.js';
 import { consoleDiagnostics } from '../../ports/diagnostics.js';
 
 /** The native half: capture, signing, verified thumbnails and sharing a photo. */
@@ -115,6 +123,11 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
     money: {
       ...bindModulePort(moneyModule, deps.runtime, deps.identity),
       stores: () => readStores(deps.db),
+      roles: async () =>
+        (await readStaffDirectory(deps.db)).roles
+          .filter((role) => !role.ownerRole)
+          .map((role) => ({ id: role.id, name: roleName(role) })),
+      drawerChoice: createDrawerChoice(drawerChoiceStorage(deps.db)),
       ...(deps.qris === undefined ? {} : { qris: deps.qris }),
     },
     approvals: bindModulePort(approvalsModule, deps.runtime, deps.identity),

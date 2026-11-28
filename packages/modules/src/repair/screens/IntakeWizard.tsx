@@ -49,7 +49,12 @@ import {
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
 import { usePhotoBrowser } from './photos.js';
 import { useOwnershipVideo } from '../ownership-video.js';
-import { useIntakeOptionSettings, usePaymentAccounts, useRepairRuntime } from '../runtime.js';
+import {
+  useIntakeOptionSettings,
+  usePaymentAccounts,
+  useRepairCashDrawer,
+  useRepairRuntime,
+} from '../runtime.js';
 
 import {
   ConditionStep,
@@ -123,6 +128,7 @@ export function IntakeWizard({
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
+  const cash = useRepairCashDrawer();
   const problems = stepProblems(draft, step, options, accounts);
   const dirty = intakeDirty(draft);
   const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
@@ -242,7 +248,9 @@ export function IntakeWizard({
     }
     if (loadedAccounts === null) return;
     void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
+      .run(() =>
+        runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts, cash.ref)),
+      )
       .then((opened) => {
         if (opened === undefined) return;
         onDraftChange?.(null);

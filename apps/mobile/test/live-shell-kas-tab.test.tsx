@@ -194,7 +194,7 @@ describe('payment methods in Settings', () => {
     const shown = await signedIn([...COUNTER, MONEY_PERMISSION.manageAccounts]);
     await openSettings(shown);
     await press(shown, 'settings-payment-methods');
-    expect(await waitUntil(() => shown.query('money.methods.cash') !== null)).toBe(true);
+    expect(await waitUntil(() => shown.query('money.methods.drawer.cash') !== null)).toBe(true);
 
     expect(__emitHardwareBack()).toBe(true);
     await settle();

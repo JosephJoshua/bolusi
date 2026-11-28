@@ -12,7 +12,13 @@ import {
 import type { MoneyDocument } from './documents.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, rupiah, type PaymentEntry, type PaymentLine } from './payment-entry.js';
-import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
+import type {
+  CashCountRow,
+  DrawerRow,
+  MoneyEntryRow,
+  OpenBalanceRow,
+  PaymentAccountRow,
+} from './queries.js';
 
 /** Local midnight of the day `now` falls in: "today" is the store's day, not UTC's. */
 export function dayStart(now: number): number {
@@ -22,8 +28,17 @@ export function dayStart(now: number): number {
 }
 
 /** A method's name, also for one switched off since: past money keeps the name it came in by. */
-export function accountLabel(account: string, accounts: readonly PaymentAccountRow[]): string {
-  if (account === CASH_ACCOUNT) return tm('money.method.cash');
+export function accountLabel(
+  account: string,
+  accounts: readonly PaymentAccountRow[],
+  drawers: readonly DrawerRow[],
+): string {
+  // Cash names its drawer only where the store keeps more than one.
+  const drawer = drawers.find((row) => row.ref === account);
+  if (drawer !== undefined && drawers.length > 1) {
+    return tm('money.method.cashIn', { drawer: drawer.name ?? tm('money.drawer.main') });
+  }
+  if (account === CASH_ACCOUNT || drawer !== undefined) return tm('money.method.cash');
   return accounts.find((row) => `account:${row.id}` === account)?.name ?? account;
 }
 
@@ -110,17 +125,23 @@ export interface DrawerMove {
  * Today's cash moved in or out, with an owner's corrections, so the moves explain the drawer's
  * figure next to what came in.
  */
-export function drawerMoves(entries: readonly MoneyEntryRow[]): DrawerMove[] {
+export function drawerMoves(entries: readonly MoneyEntryRow[], drawer: string): DrawerMove[] {
   const moves: DrawerMove[] = [];
   for (const entry of entries) {
+    const here = (entry.drawer ?? CASH_ACCOUNT) === drawer;
     if (entry.kind === 'cash_moved') {
       const kind = (entry.subKind ?? 'expense') as CashMoveKind;
-      moves.push({
-        entry,
-        label: CASH_MOVE_LABEL[kind],
-        delta: movesOut(kind) ? -entry.amount : entry.amount,
-      });
-    } else if (entry.kind === 'cash_adjusted') {
+      // A transfer leaves one drawer and lands in the other: each reads it from its own side.
+      if (kind === 'transfer' && entry.account === drawer) {
+        moves.push({ entry, label: 'money.moveKind.transferIn', delta: entry.amount });
+      } else if (here) {
+        moves.push({
+          entry,
+          label: CASH_MOVE_LABEL[kind],
+          delta: movesOut(kind) ? -entry.amount : entry.amount,
+        });
+      }
+    } else if (entry.kind === 'cash_adjusted' && here) {
       moves.push({ entry, label: 'money.kas.adjusted', delta: entry.amount });
     }
   }
@@ -234,10 +255,11 @@ export interface HistoryLine {
 export function historyLine(
   entry: MoneyEntryRow,
   accounts: readonly PaymentAccountRow[],
+  drawers: readonly DrawerRow[],
   customer: string | null = null,
 ): HistoryLine {
   // The drawer's own moves read as the board lists them.
-  const move = drawerMoves([entry])[0];
+  const move = drawerMoves([entry], entry.drawer ?? CASH_ACCOUNT)[0];
   const voided = entry.voidedAt !== null;
   // A cancelled payment says so in its title, so its line gives just the reason.
   const voidedPayment = voided && entry.kind === 'payment_received';
@@ -248,7 +270,13 @@ export function historyLine(
     entry.account === null ||
     !['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind)
       ? null
-      : accountLabel(entry.account, accounts);
+      : accountLabel(entry.account, accounts, drawers);
+  // A move, count or settlement names its drawer where the store keeps more than one; a transfer
+  // names both.
+  const inDrawer =
+    entry.drawer === null || drawers.length < 2
+      ? null
+      : accountLabel(entry.drawer, accounts, drawers);
   const signed =
     move !== undefined
       ? move.delta
@@ -260,6 +288,7 @@ export function historyLine(
     details: [
       customer,
       entry.documentLabel,
+      inDrawer,
       method,
       voidedPayment
         ? entry.voidReason
@@ -386,6 +415,8 @@ export function cashMoveCheck(move: {
   readonly drawer: number | null;
   /** Counts blind (`seesExpected`): never checked against the drawer, which would give it away. */
   readonly blind?: boolean | undefined;
+  /** A transfer's other drawer, once picked. */
+  readonly to?: string | null | undefined;
 }): CashMoveCheck {
   const banks = move.accounts.filter((row) => row.kind === 'transfer');
   const depositAccount =
@@ -414,7 +445,9 @@ export function cashMoveCheck(move: {
         ? 'money.move.hintReason'
         : move.kind === 'deposit' && depositAccount === null
           ? 'money.move.noAccount'
-          : null;
+          : move.kind === 'transfer' && (move.to ?? null) === null
+            ? 'money.move.hintTo'
+            : null;
   return { banks, depositAccount, missing };
 }
 
@@ -433,13 +466,14 @@ export function debtPayment(
   owed: number,
   lines: readonly PaymentLine[],
   accounts: readonly PaymentAccountRow[],
+  drawer: string,
   qrAccounts?: ReadonlySet<string>,
   openQrs = 0,
 ): DebtPayment {
-  const entry = paymentEntry(owed, lines, accounts, qrAccounts, openQrs);
+  const entry = paymentEntry(owed, lines, accounts, drawer, qrAccounts, openQrs);
   const taken =
     entry.paid > 0 && entry.overpaid === 0
-      ? paymentEntry(entry.paid, lines, accounts, qrAccounts, openQrs)
+      ? paymentEntry(entry.paid, lines, accounts, drawer, qrAccounts, openQrs)
       : null;
   return { entry, taken };
 }

@@ -12,14 +12,18 @@ import {
   settleState,
   type CashCountForm,
 } from './kas.js';
-import type { CashMoveKind } from './constants.js';
+import { CASH_MOVE_KINDS, type CashMoveKind } from './constants.js';
+import { useCashDrawer } from './drawers.js';
 import { rupiah } from './payment-entry.js';
 import type { CashCountRow } from './queries.js';
 import { useMoneyQuery, useMoneyRuntime, type MoneyRuntime } from './runtime.js';
 
-/** The drawer as the ledger has it: what should be in it, and its counts. */
-export function useDrawer() {
-  return useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
+/** This device's drawer as the ledger has it: what should be in it, and its counts. */
+export function useDrawer(drawer: string) {
+  return useMoneyQuery(
+    async (rt) => (await rt.query('cashDrawer', { drawer })).rows[0] ?? { expected: 0, counts: [] },
+    `drawer:${drawer}`,
+  );
 }
 
 /** A Kasir counts blind: what should be in the drawer is not shown to them. */
@@ -34,7 +38,8 @@ function countsBlind(runtime: MoneyRuntime): boolean {
 export function useCashCount(onDone: () => void) {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
-  const drawer = useDrawer();
+  const cash = useCashDrawer();
+  const drawer = useDrawer(cash.ref);
   const [form, setForm] = useState<CashCountForm>(NEW_CASH_COUNT);
   const [note, setNote] = useState('');
   const view = cashCountView(
@@ -52,13 +57,14 @@ export function useCashCount(onDone: () => void) {
     }
     if (noteMissing) return;
     void runner
-      .run(() => runtime.run('countCash', { counted: amount, note }))
+      .run(() => runtime.run('countCash', { counted: amount, note, drawer: cash.ref }))
       .then((result) => {
         if (result !== undefined) onDone();
       });
   };
   return {
     runner,
+    cash,
     drawer,
     form,
     setForm,
@@ -80,9 +86,17 @@ export function useCashMove(onDone: () => void) {
     async (rt) => (await rt.query('paymentAccounts', {})).rows,
     'accounts',
   );
-  const drawer = useDrawer();
+  const cash = useCashDrawer();
+  const drawer = useDrawer(cash.ref);
   const [kind, setKind] = useState<CashMoveKind>('withdrawal');
   const [account, setAccount] = useState<string | null>(null);
+  // Pindah kas, to another drawer this person uses: offered only where there is one.
+  const targets = cash.drawers.filter((row) => row.ref !== cash.ref);
+  const kinds = CASH_MOVE_KINDS.filter((option) => option !== 'transfer' || targets.length > 0);
+  const to =
+    kind === 'transfer'
+      ? (targets.find((row) => row.ref === account) ?? (targets.length === 1 ? targets[0]! : null))
+      : null;
   const [digits, setDigits] = useState('');
   const [reason, setReason] = useState('');
   const amount = rupiah(digits);
@@ -94,6 +108,7 @@ export function useCashMove(onDone: () => void) {
     accounts: accounts.status === 'ready' ? accounts.data : [],
     drawer: drawer.status === 'ready' ? drawer.data.expected : null,
     blind: countsBlind(runtime),
+    to: to?.ref ?? null,
   });
   const { depositAccount, missing } = check;
   const submit = (): void => {
@@ -104,7 +119,13 @@ export function useCashMove(onDone: () => void) {
           kind,
           amount,
           reason,
-          account: depositAccount === null ? null : `account:${depositAccount.id}`,
+          account:
+            kind === 'transfer'
+              ? (to?.ref ?? null)
+              : depositAccount === null
+                ? null
+                : `account:${depositAccount.id}`,
+          drawer: cash.ref,
         }),
       )
       .then((result) => {
@@ -114,7 +135,11 @@ export function useCashMove(onDone: () => void) {
   return {
     runner,
     accounts,
+    cash,
     drawer,
+    kinds,
+    targets,
+    to,
     kind,
     setKind,
     account,
@@ -134,7 +159,8 @@ export function useCashMove(onDone: () => void) {
 export function useSettleCount(count: CashCountRow, onDone: () => void) {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
-  const drawer = useDrawer();
+  const cash = useCashDrawer();
+  const drawer = useDrawer(cash.ref);
   const [reason, setReason] = useState('');
   const { live, open } = settleState(drawer.status === 'ready' ? drawer.data.counts : null, count);
   const submit = (): void => {

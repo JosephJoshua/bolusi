@@ -17,6 +17,7 @@ import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { CASH_ACCOUNT, HANDOVER_REFUND_REASON, MONEY_PERMISSION } from '../money/constants.js';
 import { demoMoneyLedger, demoQris } from '../money/demo.js';
+import { memoryDrawerChoice } from '../money/drawer-choice.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
@@ -213,6 +214,13 @@ const DEMO_STORES = [
   { id: '01920000-0000-7000-8000-0000000005a1', name: 'Bolusi Jayapura' },
   { id: '01920000-0000-7000-8000-0000000005a2', name: 'Bolusi Sorong' },
   { id: '01920000-0000-7000-8000-0000000005a3', name: 'Bolusi Manokwari' },
+];
+
+/** The roles a drawer can be limited to, as the staff list names them. */
+const DEMO_ROLES = [
+  { id: 'role-kasir', name: 'Kasir' },
+  { id: 'role-teknisi', name: 'Teknisi' },
+  { id: 'role-manajer', name: 'Manajer' },
 ];
 
 /** The `window` key of the colleague hook `demoRepairRuntime` installs (browser tests only). */
@@ -1610,6 +1618,7 @@ export function demoRepairRuntime(
 
   // A repaired phone that went home unpaid: the Kas unpaid list names its customer.
   const unpaid = tickets.find((t) => t.id === 't-9');
+  const drawerChoice = memoryDrawerChoice();
   const ledger = demoMoneyLedger(
     {
       now,
@@ -1938,6 +1947,8 @@ export function demoRepairRuntime(
       limitOf: (id: string) => demoLimitOf(actor, permitted, id),
       newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
       stores: () => Promise.resolve(DEMO_STORES),
+      roles: () => Promise.resolve(DEMO_ROLES),
+      drawerChoice,
       get userId() {
         return actor.userId;
       },

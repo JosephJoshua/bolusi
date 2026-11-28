@@ -354,6 +354,8 @@ describe('the counter’s claim button and intake', () => {
       { ...draft, repairTypes: ['screen'] },
       DEFAULT_INTAKE_OPTIONS,
       returnedAt + DAY,
+      [],
+      'cash',
     );
     expect(input.claimOf).toBe(home.id);
     // The IMEI is the claimed phone's, whatever an old draft's device field says.
@@ -365,6 +367,8 @@ describe('the counter’s claim button and intake', () => {
       },
       DEFAULT_INTAKE_OPTIONS,
       returnedAt + DAY,
+      [],
+      'cash',
     );
     expect(kept.device.imei).toBe('356789104455667');
     expect(input.claimOf).toBe(home.id);

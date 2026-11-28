@@ -161,6 +161,8 @@ export interface MoneyEntryRow {
   readonly documentKind: string | null;
   readonly documentId: string | null;
   readonly documentLabel: string | null;
+  /** The drawer a cash move, count or settlement is about; null for every other record. */
+  readonly drawer: string | null;
   readonly createdBy: string;
   /** Who recorded it, from the device's staff list; null for someone it does not know. */
   readonly createdByName: string | null;
@@ -195,6 +197,7 @@ function entryRow(row: Record<string, unknown>, names: ReadonlyMap<string, strin
     documentKind: (row['documentKind'] as string | null) ?? null,
     documentId: (row['documentId'] as string | null) ?? null,
     documentLabel: (row['documentLabel'] as string | null) ?? null,
+    drawer: (row['drawer'] as string | null) ?? null,
     createdBy: row['createdBy'] as string,
     createdByName: names.get(row['createdBy'] as string) ?? null,
     createdAt: Number(row['createdAt']),

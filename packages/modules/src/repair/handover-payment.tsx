@@ -22,7 +22,7 @@ import type { PaymentAccountRow } from '../money/queries.js';
 import type { ReturnDeviceInput } from './commands.js';
 import { REPAIR_APPROVAL_KIND } from './constants.js';
 import { payLaterAccess, type PayLaterAccess } from './flows.js';
-import { readApprovals, useRepairQuery, useRepairRuntime } from './runtime.js';
+import { readApprovals, useRepairCashDrawer, useRepairQuery, useRepairRuntime } from './runtime.js';
 import { tn, type RepairKey } from './i18n.js';
 
 export interface HandoverPayment {
@@ -114,7 +114,15 @@ export function useHandoverPayment(
     untouched: typedLines === null,
   });
   const { lines } = qris;
-  const entry = paymentEntry(due - qris.pending, lines, accounts, qris.qrAccounts, qris.blocking);
+  const cash = useRepairCashDrawer();
+  const entry = paymentEntry(
+    due - qris.pending,
+    lines,
+    accounts,
+    cash.ref,
+    qris.qrAccounts,
+    qris.blocking,
+  );
   const unpaid = access.kind !== 'none' && payLater && due > 0;
   const allowed = access.kind === 'own' || access.kind === 'permitted';
   const waiting = qris.pending > 0;

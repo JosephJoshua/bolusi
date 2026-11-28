@@ -27,6 +27,7 @@ import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/scree
 
 import { MAX_REASON } from '../constants.js';
 import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
+import { useStoreDrawers } from '../drawers.js';
 import { tm } from '../i18n.js';
 import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidAbilities, voidable } from '../kas.js';
@@ -120,7 +121,7 @@ export function KasHistory({
         onRetry={() => setNonce((n) => n + 1)}
         testID={testID}
       >
-        {({ rows, more, customers, accounts }) =>
+        {({ rows, more, customers, accounts, drawers }) =>
           rows.length === 0 ? (
             <EmptyState title={tm(historyEmptyKey(day, today))} testID={`${testID}.empty`} />
           ) : (
@@ -130,6 +131,7 @@ export function KasHistory({
                   const line = historyLine(
                     entry,
                     accounts,
+                    drawers,
                     entry.documentId === null ? null : (customers.get(entry.documentId) ?? null),
                   );
                   const standing = entry.voidedAt === null;
@@ -217,9 +219,11 @@ export function VoidPaymentStep({
     onRegisterDiscardGuard,
     testID,
   });
+  const drawers = useStoreDrawers();
   const method = accountLabel(
     entry.account ?? '',
     accounts.status === 'ready' ? accounts.data : [],
+    drawers,
   );
 
   return (

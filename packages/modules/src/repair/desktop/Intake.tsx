@@ -77,6 +77,7 @@ import {
 import {
   useIntakeOptionSettings,
   usePaymentAccounts,
+  useRepairCashDrawer,
   useRepairQuery,
   useRepairRuntime,
 } from '../runtime.js';
@@ -183,6 +184,7 @@ export function IntakePage({
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
+  const cash = useRepairCashDrawer();
   const problemsBy = useMemo(
     () =>
       Object.fromEntries(
@@ -227,7 +229,9 @@ export function IntakePage({
       return;
     }
     void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
+      .run(() =>
+        runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts, cash.ref)),
+      )
       .then((opened) => {
         if (opened === undefined) return;
         onDraftChange?.(null);

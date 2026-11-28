@@ -146,7 +146,8 @@ export function paidByQr(line: PaymentLine, qrAccounts: ReadonlySet<string>): bo
 }
 
 /**
- * `qrAccounts` are the methods (`account:<id>`) connected to Xendit here: their lines count toward
+ * `drawer` is the cash drawer this device takes cash into (`CashDrawer.ref`): a cash line is booked
+ * there. `qrAccounts` are the methods (`account:<id>`) connected to Xendit here: their lines count toward
  * what is paid, so the rest adds up, but stay incomplete until the customer pays the QR.
  * `openQrs` is how many QRs for the bill the customer can still pay (`QrisCheckout.blocking`).
  */
@@ -154,6 +155,7 @@ export function paymentEntry(
   due: number,
   lines: readonly PaymentLine[],
   accounts: readonly PaymentAccountRow[],
+  drawer: string,
   qrAccounts: ReadonlySet<string> = NO_QR_ACCOUNTS,
   openQrs = 0,
 ): PaymentEntry {
@@ -195,7 +197,7 @@ export function paymentEntry(
     }
     if (tendered !== null) change += tendered - amount;
     payments.push({
-      account,
+      account: kind === 'cash' ? drawer : account,
       amount,
       reference: reference === '' ? null : reference,
       tendered,
@@ -276,16 +278,19 @@ export function paymentMethods(accounts: readonly PaymentAccountRow[]): PaymentM
   ];
 }
 
-/** A single payment's method as it is sent: the offered account, and a reference unless cash. */
+/**
+ * A single payment's method as it is sent: the offered account, and a reference unless cash. Cash
+ * goes into `drawer`, the one this device takes cash into.
+ */
 export function chosenMethod(
   account: string,
   reference: string,
   accounts: readonly PaymentAccountRow[],
+  drawer: string,
 ): { readonly account: string; readonly reference: string | null } {
   const offered = offeredAccount(account, accounts);
   const trimmed = reference.trim();
-  return {
-    account: offered,
-    reference: offered === CASH_ACCOUNT || trimmed === '' ? null : trimmed,
-  };
+  return offered === CASH_ACCOUNT
+    ? { account: drawer, reference: null }
+    : { account: offered, reference: trimmed === '' ? null : trimmed };
 }

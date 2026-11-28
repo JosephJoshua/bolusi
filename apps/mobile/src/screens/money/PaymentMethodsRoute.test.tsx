@@ -5,6 +5,7 @@ import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog, type MoneyRuntime } from '@bolusi/modules/money/screens';
 import { servisanCustomers } from '@bolusi/modules/repair/screens';
 import { STORES_META_KEY, writeMeta } from '@bolusi/core';
+import { sql } from 'kysely';
 import { afterEach, expect, test } from 'vitest';
 
 import {
@@ -71,7 +72,7 @@ async function accounts(harness: RepairHarness, userId: string, includeInactive 
 test('a store owner adds a method the counter can then take payments with', async () => {
   h = await openRepairScreenHarness(5501);
   const screen = await mount(h, h.storeOwnerId);
-  expect(text(screen, 'money.methods.cash')).toContain('Tunai');
+  expect(text(screen, 'money.methods.drawer.cash')).toContain('Laci utama');
   expect(screen.query('money.methods.empty')).not.toBeNull();
 
   await press(screen, 'money.methods.primary');
@@ -88,6 +89,38 @@ test('a store owner adds a method the counter can then take payments with', asyn
   const [edc] = await accounts(h, h.cashierId);
   expect(edc).toMatchObject({ name: 'EDC Mandiri', kind: 'edc', active: true, central: false });
   expect(text(screen, `money.methods.row.${edc!.id}`)).toContain('EDC');
+});
+
+test('a store owner adds a drawer only the Manajer uses; the cashier cannot use it', async () => {
+  h = await openRepairScreenHarness(5506);
+  // The roles a drawer is limited to come from the staff list, the owners' left out.
+  await sql`
+    INSERT INTO roles_directory (id, name, scope_type, permission_ids) VALUES
+      ('role-manager', 'manager', 'store', '[]'),
+      ('role-cashier', 'cashier', 'store', '[]')
+  `.execute(h.db);
+  const screen = await mount(h, h.storeOwnerId);
+  expect(text(screen, 'money.methods.drawer.cash')).toContain('Semua jabatan');
+
+  await press(screen, 'money.methods.addDrawer');
+  type(screen, 'money.drawerForm.name', 'Laci aksesoris');
+  await press(screen, 'money.drawerForm.scope.some');
+  // Limited to no role at all is refused before it is sent.
+  await press(screen, 'money.drawerForm.primary');
+  expect(screen.query('money.drawerForm.roleError')).not.toBeNull();
+  await press(screen, 'money.drawerForm.role.role-manager');
+  await press(screen, 'money.drawerForm.primary');
+  expect(screen.query('money.drawerForm')).toBeNull();
+
+  const forCashier = (await h.moneyQuery('drawers', {}, h.cashierId)).rows as {
+    ref: string;
+    name: string | null;
+    usable: boolean;
+    roleIds: string[];
+  }[];
+  const added = forCashier.find((row) => row.name === 'Laci aksesoris')!;
+  expect(added).toMatchObject({ usable: false, roleIds: ['role-manager'] });
+  expect(text(screen, `money.methods.drawer.${added.ref}`)).toContain('Manajer');
 });
 
 test('a method switched off is kept, last and marked, and no longer offered', async () => {
