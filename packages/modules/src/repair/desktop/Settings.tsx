@@ -24,10 +24,7 @@ import {
 import { CircleCheck, ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
-import { parseUncollectedDays } from '../constants.js';
 import { repairAbilities, type RepairAbilities } from '../flows.js';
-import { rebaseForm } from '../form-rebase.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
   READY_UNKNOWN,
@@ -47,12 +44,11 @@ import {
 } from '../options-editor.js';
 import { useOptionsEditor } from '../options-editor-form.js';
 import {
-  printSettingsForm,
-  printSettingsInput,
-  samePrintSettingsField,
-  samePrintSettingsForm,
-  type PrintSettingsForm,
-} from '../print-settings-form.js';
+  useCancelFeesForm,
+  usePrintSettingsForm,
+  useUncollectedDaysForm,
+} from '../settings-forms.js';
+import { type PrintSettingsForm } from '../print-settings-form.js';
 import type { CancelFees, PrintSettings } from '../queries.js';
 import {
   useCancelFees,
@@ -91,21 +87,6 @@ function useReportDirty(dirty: boolean, onDirtyChange: RepairSettingsProps['onDi
     report.current?.(dirty);
   }, [dirty]);
   useEffect(() => () => report.current?.(false), []);
-}
-
-/**
- * Runs `onChange` when the live read brings new saved settings (another device's save, or this
- * page's own coming back), so an open form follows them: see `rebaseForm`.
- */
-function useFollowSaved<T>(saved: T, onChange: (next: T) => void): void {
-  const seen = useRef(saved);
-  const latest = useRef(onChange);
-  latest.current = onChange;
-  useEffect(() => {
-    if (seen.current === saved) return;
-    seen.current = saved;
-    latest.current(saved);
-  }, [saved]);
 }
 
 /**
@@ -530,47 +511,17 @@ function FeesForm({
   readonly saved: CancelFees;
   readonly onDirtyChange: RepairSettingsProps['onDirtyChange'];
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [baseline, setBaseline] = useState(saved);
-  const [fees, setFees] = useState<{ beforeWork: number | null; afterWork: number | null }>(saved);
-  const [attempted, setAttempted] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const dirty = fees.beforeWork !== baseline.beforeWork || fees.afterWork !== baseline.afterWork;
+  const form = useCancelFeesForm(saved);
+  const { runner, fees, dirty } = form;
   useReportDirty(dirty, onDirtyChange);
-  useFollowSaved(saved, (next) => {
-    setFees((current) => rebaseForm(current, baseline, next));
-    setBaseline(next);
-  });
   const testId = 'repair.desk.fees';
-
-  const save = (): void => {
-    if (!dirty || runner.busy) return;
-    const { beforeWork, afterWork } = fees;
-    if (beforeWork === null || afterWork === null) {
-      setAttempted(true);
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setCancelFees', { beforeWork, afterWork }))
-      .then((result) => {
-        if (result === undefined) return;
-        setBaseline(result);
-        setFees(result);
-        setAttempted(false);
-        setNotice(tn('repair.fees.saved'));
-      });
-  };
 
   const field = (key: 'beforeWork' | 'afterWork', label: RepairKey): React.JSX.Element => (
     <MoneyField
       label={tn(label)}
       value={fees[key]}
-      onChange={(value) => {
-        setNotice(null);
-        setFees((current) => ({ ...current, [key]: value }));
-      }}
-      error={attempted && fees[key] === null ? tn('repair.fees.hint') : undefined}
+      onChange={(value) => form.setFee(key, value)}
+      error={form.attempted && fees[key] === null ? tn('repair.fees.hint') : undefined}
       data-testid={`${testId}.${key}`}
     />
   );
@@ -588,12 +539,9 @@ function FeesForm({
         <SaveBar
           dirty={dirty}
           busy={runner.busy}
-          saved={notice}
-          onSave={save}
-          onDiscard={() => {
-            setAttempted(false);
-            setFees(baseline);
-          }}
+          saved={form.notice}
+          onSave={() => form.save()}
+          onDiscard={form.discard}
           saveLabel={tn('repair.fees.save')}
           testId={testId}
         />
@@ -627,37 +575,10 @@ function UncollectedForm({
   readonly saved: number;
   readonly onDirtyChange: RepairSettingsProps['onDirtyChange'];
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [baseline, setBaseline] = useState(saved);
-  const [text, setText] = useState(String(saved));
-  const [attempted, setAttempted] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const days = parseUncollectedDays(text);
-  const dirty = text !== String(baseline);
+  const form = useUncollectedDaysForm(saved);
+  const { runner, dirty } = form;
   useReportDirty(dirty, onDirtyChange);
-  useFollowSaved(saved, (next) => {
-    if (!dirty) setText(String(next));
-    setBaseline(next);
-  });
   const testId = 'repair.desk.uncollected';
-
-  const save = (): void => {
-    if (!dirty || runner.busy) return;
-    if (days === null) {
-      setAttempted(true);
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setUncollectedDays', { days }))
-      .then((result) => {
-        if (result === undefined) return;
-        setBaseline(result.days);
-        setText(String(result.days));
-        setAttempted(false);
-        setNotice(tn('repair.uncollected.saved'));
-      });
-  };
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -666,13 +587,10 @@ function UncollectedForm({
           <TextField
             label={tn('repair.uncollected.days')}
             hint={tn('repair.uncollected.hint')}
-            value={text}
-            onChange={(event) => {
-              setNotice(null);
-              setText(event.target.value.replace(/\D/g, '').slice(0, 3));
-            }}
+            value={form.text}
+            onChange={(event) => form.setText(event.target.value)}
             inputMode="numeric"
-            error={attempted && days === null ? tn('repair.uncollected.hint') : undefined}
+            error={form.attempted && form.days === null ? tn('repair.uncollected.hint') : undefined}
             data-testid={`${testId}.days`}
           />
         </div>
@@ -682,12 +600,9 @@ function UncollectedForm({
         <SaveBar
           dirty={dirty}
           busy={runner.busy}
-          saved={notice}
-          onSave={save}
-          onDiscard={() => {
-            setAttempted(false);
-            setText(String(baseline));
-          }}
+          saved={form.notice}
+          onSave={() => form.save()}
+          onDiscard={form.discard}
           saveLabel={tn('repair.uncollected.save')}
           testId={testId}
         />
@@ -721,58 +636,23 @@ function SlipForm({
   readonly saved: PrintSettings;
   readonly onDirtyChange: RepairSettingsProps['onDirtyChange'];
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [baseline, setBaseline] = useState<PrintSettingsForm>(() => printSettingsForm(saved));
-  const [form, setForm] = useState<PrintSettingsForm>(baseline);
-  const [notice, setNotice] = useState<string | null>(null);
-  const dirty = !samePrintSettingsForm(form, baseline);
+  const settings = usePrintSettingsForm(saved);
+  const { runner, form, edit, dirty } = settings;
   useReportDirty(dirty, onDirtyChange);
-  useFollowSaved(saved, (next) => {
-    const nextForm = printSettingsForm(next);
-    setForm((current) => rebaseForm(current, baseline, nextForm, samePrintSettingsField));
-    setBaseline(nextForm);
-  });
   const storeName = usePrintStoreName();
   const testId = 'repair.desk.slip';
-
-  const edit = (patch: Partial<PrintSettingsForm>): void => {
-    setNotice(null);
-    setForm((current) => ({ ...current, ...patch }));
-  };
-
-  const pickLogo = (): void => {
-    const pick = runtime.pickPhoto;
-    if (pick === undefined) return;
-    void runner
-      .run(() => pick({ title: tn('repair.printSettings.logoTitle') }))
-      .then((picked) => {
-        if (picked !== undefined && picked !== null) edit({ logo: picked.mediaRef });
-      });
-  };
-
-  const save = (): void => {
-    if (!dirty || runner.busy) return;
-    void runner
-      .run(() => runtime.run('setPrintSettings', printSettingsInput(form)))
-      .then((result) => {
-        if (result === undefined) return;
-        setBaseline(form);
-        setNotice(tn('repair.printSettings.saved'));
-      });
-  };
 
   return (
     <div className="flex flex-1 flex-col gap-6">
       <Card>
         <Section title={tn('repair.printSettings.header')} testId={`${testId}.header`}>
-          {runtime.pickPhoto === undefined && form.logo === null ? null : (
+          {!settings.canPickLogo && form.logo === null ? null : (
             <div className="flex flex-col gap-3">
               <LogoRow
                 logo={form.logo}
-                canPick={runtime.pickPhoto !== undefined}
+                canPick={settings.canPickLogo}
                 disabled={runner.busy}
-                onPick={pickLogo}
+                onPick={settings.pickLogo}
                 onRemove={() => edit({ logo: null, logoOnDotMatrix: false })}
                 testId={`${testId}.logo`}
               />
@@ -849,9 +729,9 @@ function SlipForm({
         <SaveBar
           dirty={dirty}
           busy={runner.busy}
-          saved={notice}
-          onSave={save}
-          onDiscard={() => setForm(baseline)}
+          saved={settings.notice}
+          onSave={() => settings.save()}
+          onDiscard={settings.discard}
           saveLabel={tn('repair.printSettings.save')}
           testId={testId}
         />
