@@ -76,23 +76,42 @@ edge cases and questions. Their old priority labels are not release commitments.
 | AI assistant             | Natural-language queries, read-only default, permission-bound actions with previews and explicit confirmation, appropriate reversals, bulk work, knowledge/memory, proactive insights and cost controls. Language/provider choices and the amount of automation remain proposals. | [Agent mode](product-reference/PRD-004-agent-mode.md)                 |
 | Owner reporting          | Store health and comparisons; repair, inventory, financial and staff reports; drill-down to transactions; understandable stale/offline data; potential anomaly review and exports. Predefined business questions, rather than a custom BI system.                                 | [Reporting](product-reference/PRD-005-owner-reporting.md)             |
 | Retail and wholesale POS | Fast scan/search checkout, customer-tier and volume pricing, controlled discounts, split payments, B2B credit, receipts, voids/returns, shift reconciliation and shareable wholesale catalog ordering. Repair payment stays in the repair journey.                                | [POS](product-reference/PRD-006-pos.md)                               |
-| Attendance               | Employee records, clock-in/out with photo/location, schedules/lateness, presence, corrections, leave and history. Payroll is a separate undecided scope; attendance export was a preferred smaller option.                                                                        | [Attendance](product-reference/PRD-007-hr-attendance.md)              |
+| Attendance               | Employee records, clock-in/out with photo/location, schedules/lateness, presence, corrections, leave and history. Payroll is a separate later module (see below).                                                                                                                 | [Attendance](product-reference/PRD-007-hr-attendance.md)              |
 | Wholesale delivery       | Runs/manifests, address capture, driver assignment/navigation, proof of delivery, cash collection, failures and end-of-run goods/cash reconciliation. Deliver wholesale goods, not repaired phones.                                                                               | [Delivery](product-reference/PRD-008-delivery.md)                     |
 | Location and evidence    | Shared location/geofence services for attendance, delivery and evidence; honest accuracy and stale-location handling; delivery-run tracking, appropriate alerts and retention/privacy choices. Location is evidence to assess, not an automatic fraud verdict.                    | [GPS and evidence](product-reference/PRD-009-gps-antifraud.md)        |
 | Internal chat            | Conversations attached to repair/business records, organization-based groups, offline send, notifications and search; polls were an idea to validate. Employees only; assess whether a narrow record thread offers enough value over WhatsApp.                                    | [Chat](product-reference/PRD-010-chat.md)                             |
 | Identity and access      | Individual attribution on shared devices, owner-configurable granular permissions, scoped roles, device enrollment/revocation, multi-store access and strict tenant isolation. V1 includes owner-facing permission administration and approval rules.                             | [Auth and permissions](product-reference/PRD-011-auth-permissions.md) |
 | Platform and growth      | Durable offline actions, sync/conflict visibility, media, printing, translations, notifications and eventual onboarding. Extend existing foundations when a selected business workflow needs it.                                                                                  | [Platform](product-reference/PRD-012-platform-core.md)                |
 
+## Later modules the owner wants (2026-11-28)
+
+The owner expects to need these after the repair release. None is scheduled or
+scoped yet; each gets the normal grilling before implementation.
+
+- **Pulsa, data packages and e-wallet top-ups:** small, frequent sales that
+  usually run through a separate provider balance.
+- **Customer records and follow-ups:** repair history per customer, warranty
+  reminders and loyalty.
+- **Expenses and payroll:** rent, electricity and other expenses, salaries, and
+  technician commission per servisan.
+- **Bookkeeping:** profit and loss per store and tax exports. It must be
+  complete, not a cut-down "simple" version, yet usable by staff and owners
+  who know no accounting: plain language, no debit/credit jargon, guided steps
+  and sensible defaults. The accounting stays underneath, generated from
+  business actions.
+
+Buying and reselling used phones is not wanted.
+
 ## Boundaries and conditional ideas
 
 Previously excluded ideas remain excluded unless the owner explicitly revisits
-them: vouchers, store credit, loyalty points, voice input/messages, delivery of
+them: vouchers, store credit, voice input/messages, delivery of
 repaired phones, facial recognition/behavioral analysis and custom BI/query
 builders. Their absence is deliberate, not an invitation to fill gaps.
 
-Payroll and tax/e-Faktur/PPN are undecided later possibilities, not first-release
-requirements. Reassess actual business needs and current rules if they are ever
-selected; old research figures are not current guidance. Agent mode is deferred
+Payroll and tax exports are wanted later (see above), not first-release
+requirements; e-Faktur/PPN detail is still undecided. Check current rules when
+they are scoped; old research figures are not current guidance. Agent mode is deferred
 to V2, not permanently rejected.
 
 Cross-store sync/store switching must be addressed when chosen workflows need

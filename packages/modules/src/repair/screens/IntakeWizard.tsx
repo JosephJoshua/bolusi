@@ -5,6 +5,7 @@
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
 
+import { useIntakeDraft } from '../intake-draft.js';
 import {
   ConfirmSheet,
   StepHeader,
@@ -31,7 +32,6 @@ import {
   INTAKE_STEPS,
   capturedThumbnailRef,
   claimWarrantyEnded,
-  emptyIntakeDraft,
   intakeDirty,
   intakeNeedsVideo,
   nextMissingPhoto,
@@ -48,7 +48,7 @@ import {
 } from '../intake-options.js';
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
 import { usePhotoBrowser } from './photos.js';
-import { useOwnershipVideo, useRestoredVideoCheck } from '../ownership-video.js';
+import { useOwnershipVideo } from '../ownership-video.js';
 import { useIntakeOptionSettings, usePaymentAccounts, useRepairRuntime } from '../runtime.js';
 
 import {
@@ -97,65 +97,14 @@ export function IntakeWizard({
 }: IntakeWizardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [draft, setDraft] = useState<IntakeDraft>(() => {
-    const start = restoredDraft ?? emptyIntakeDraft();
-    return start.ticketId === undefined ? { ...start, ticketId: runtime.newId() } : start;
-  });
   const [showProblems, setShowProblems] = useState(false);
-  const [restoredOnce] = useState(restoredDraft ?? null);
-  const [photosExpired, setPhotosExpired] = useState(false);
-  const [videoExpired, setVideoExpired] = useState(false);
-  useRestoredVideoCheck(restoredOnce, () => {
-    setDraft((d) => ({ ...d, ownershipVideo: null }));
-    setVideoExpired(true);
-  });
-
-  // A draft kept across a lock can outlive its photos: a capture no saved ticket refers to is
-  // deleted a day after it was taken (06 §7). Restored photos that no longer load are dropped, so
-  // the photo walk asks for them again instead of opening a ticket whose evidence is gone.
-  useEffect(() => {
-    if (restoredOnce === null) return;
-    let live = true;
-    const checks = Object.values(restoredOnce.photos).map(async (ref) => {
-      if (ref === undefined) return null;
-      const state = await runtime
-        .loadThumbnail(capturedThumbnailRef(ref))
-        .catch(() => ({ kind: 'unavailable' }) as const);
-      return state.kind === 'ready' ? null : ref.mediaId;
-    });
-    void Promise.all(checks).then((results) => {
-      const gone = new Set(results.filter((id): id is string => id !== null));
-      if (!live || gone.size === 0) return;
-      setDraft((d) => ({
-        ...d,
-        photos: Object.fromEntries(
-          Object.entries(d.photos).filter(([, ref]) => ref === undefined || !gone.has(ref.mediaId)),
-        ),
-      }));
-      setPhotosExpired(true);
-    });
-    return () => {
-      live = false;
-    };
-  }, [restoredOnce, runtime]);
-  // The app can die between opening the ticket and clearing the draft. A restored draft whose ticket
-  // exists is that case: show the ticket instead of offering to open it again.
-  useEffect(() => {
-    const ticketId = restoredOnce?.ticketId;
-    if (ticketId === undefined) return;
-    let live = true;
-    runtime.query('getTicket', { ticketId }).then(
-      () => {
-        if (!live) return;
-        onDraftChange?.(null);
-        onOpened(ticketId);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [restoredOnce, runtime, onDraftChange, onOpened]);
+  const { draft, setDraft, photosExpired, videoExpired } = useIntakeDraft(
+    restoredDraft,
+    (ticketId) => {
+      onDraftChange?.(null);
+      onOpened(ticketId);
+    },
+  );
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
 
   // The store's lists, live: an owner's change that syncs in mid-intake shows at once, and the draft
