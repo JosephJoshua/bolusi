@@ -7,7 +7,8 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
-import type { CancelFees, PrintSettings } from './queries.js';
+import type { CancelFees, PrintSettings, TicketSummaryRow } from './queries.js';
+import { PAST_REPAIRS_LIMIT, otherRepairs } from './customer-repairs.js';
 import type { ApprovalsPort } from '../approvals/runtime.js';
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import type { ApprovalRow } from '../approvals/queries.js';
@@ -220,6 +221,21 @@ export function useUncollectedLimit(reloadKey = 0): QueryState<{ readonly days: 
   return useRepairQuery(
     async (rt) => (await rt.query('uncollectedDays', {})).rows[0]!,
     `uncollectedDays:${String(reloadKey)}`,
+  );
+}
+
+/** The customer's other servisan in this store, newest first. */
+export function useCustomerRepairs(
+  customerId: string,
+  ticketId: string,
+): QueryState<readonly TicketSummaryRow[]> {
+  return useRepairQuery(
+    async (rt) =>
+      otherRepairs(
+        (await rt.query('listTickets', { filter: { customerId }, limit: PAST_REPAIRS_LIMIT })).rows,
+        ticketId,
+      ),
+    `customerRepairs:${customerId}:${ticketId}`,
   );
 }
 

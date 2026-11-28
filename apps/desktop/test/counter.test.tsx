@@ -146,7 +146,8 @@ describe('counter app over demo data', () => {
     await waitFor(() =>
       expect(byTestId('repair.desk.board.results').textContent).toMatch(/ditemukan/),
     );
-    expect(screen.getByText('Yohanis Wenda')).toBeTruthy();
+    // Both of his servisan: the phone in the shop and the one he took home months ago.
+    expect(screen.getAllByText('Yohanis Wenda')).toHaveLength(2);
     expect(screen.queryByText('Benny Kambu')).toBeNull();
   });
 
@@ -587,6 +588,23 @@ describe('counter app over demo data', () => {
     expect(imei.tagName).not.toBe('INPUT');
     expect(imei.querySelector('input')).toBeNull();
     expect(imei.textContent).toContain('356789104455660');
+  });
+
+  it('lists the customer’s other servisan, and opens one from there', async () => {
+    renderApp();
+    await openTicket('Yohanis Wenda');
+    const past = await screen.findByTestId('repair.desk.ticket.pastRepairs');
+    expect(past.textContent).toContain('Oppo A57');
+    expect(past.textContent).toContain('K7Q\u20110001');
+    expect(past.textContent).toContain('Baterai cepat habis');
+    // Only his: the board's other customers never show here.
+    expect(within(past).getAllByRole('listitem')).toHaveLength(1);
+    fireEvent.click(byTestId('repair.desk.ticket.pastRepairs.open.t-10'));
+    await waitFor(() => expect(byTestId('repair.desk.ticket.device').textContent).toContain('A57'));
+    // From the old one, the newer servisan is the other one.
+    expect((await screen.findByTestId('repair.desk.ticket.pastRepairs')).textContent).toContain(
+      'Galaxy A14',
+    );
   });
 
   it('suggests catalog models as the model is typed and fills in the brand', async () => {

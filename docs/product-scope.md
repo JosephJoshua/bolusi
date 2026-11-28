@@ -319,6 +319,26 @@ Agreed with the owner after reviewing what the repair release still lacks.
   person checks it and presses send; there is no WhatsApp API. The counter PC opens
   `wa.me` links outside the app and no other link.
 
+## Reminders and a customer's past repairs (2026-11-28)
+
+Agreed with the owner. Nothing is ever sent automatically: the app writes the
+WhatsApp message and a person presses send. All of it works offline.
+
+- **Pickup reminders:** a finished or cancelled phone still in the store is due
+  a reminder at 3, 14 and 30 days after it was ready (the owner can change the
+  days), then falls to the "Belum diambil" flag. The board lists the phones due
+  ("Perlu dikabari").
+- **A tap records the reminder:** pressing the WhatsApp button records who
+  reminded and when, with no extra step. It cannot know whether send was
+  pressed, which the owner accepted. The servisan says how often and when the
+  customer was told, and the phone leaves the list until its next reminder.
+- **After pickup, only a review ask:** a store can ask customers for a review a
+  few days after pickup, with a check that the phone works. Off until the owner
+  sets the review link. No "warranty ends soon" message.
+- **Past repairs:** each servisan lists the customer's other servisan in the
+  store (when, phone, number, status, complaint and amount), each a tap away.
+  Full customer records wait for the customer module.
+
 ## Approval PIN (2026-11-25)
 
 Agreed with the owner. A sign-in PIN's verifier sits on every shared device so

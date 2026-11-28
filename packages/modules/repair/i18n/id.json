@@ -845,6 +845,10 @@
     "replaceConfirm": "Mulai klaim",
     "sameDevice": "Klaim hanya untuk HP ini."
   },
+  "pastRepairs": {
+    "title": "Servisan lain pelanggan ini",
+    "showAll": "Tampilkan semua ({count})"
+  },
   "handoverCheck": {
     "customerTried": "Sudah dicoba pelanggan",
     "repairWorks": "Bagian yang diperbaiki berfungsi"

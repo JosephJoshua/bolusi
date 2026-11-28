@@ -41,6 +41,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { rejectedCount } from '../../screen-kit/index.js';
 import { TicketVideoSection } from './video.js';
+import { PastRepairs } from './PastRepairs.js';
 import {
   MESSAGE_ACTION_KEY,
   customerMessageUrl,
@@ -571,6 +572,13 @@ export function TicketPane({
         <TicketVideoSection ticket={row} runner={runner} testId="repair.desk.ticket.video" />
         {renderCondition(row)}
         <DeviceSpecs brand={row.deviceBrand} model={row.deviceModel} repairs={can.work} />
+
+        <PastRepairs
+          customerId={row.customerId}
+          ticketId={row.id}
+          onOpenTicket={onOpenTicket}
+          testId="repair.desk.ticket.pastRepairs"
+        />
 
         <Section title={tn('repair.ticket.history')} testId="repair.desk.ticket.history">
           <Timeline entries={[...row.events].reverse().map(historyEntry)} />

@@ -76,6 +76,10 @@ for (const [width, height] of [
     await page.getByText('Maria Kogoya').click();
     await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();
     await check(`ticket-${size}`);
+    // A regular: his servisan lists the one he brought in months ago.
+    await page.getByText('Yohanis Wenda').first().click();
+    await page.getByTestId('repair.desk.ticket.pastRepairs').scrollIntoViewIfNeeded();
+    await check(`ticket-past-repairs-${size}`);
     await page.keyboard.press('Escape');
 
     await page.keyboard.press('F2');

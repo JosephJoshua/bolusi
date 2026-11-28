@@ -298,6 +298,8 @@ function ticket(spec: {
   id: string;
   number: string;
   customer: string;
+  /** Another servisan's customer, for one who came back; else a customer of its own. */
+  customerId?: string;
   phone: string | null;
   brand: string;
   model: string;
@@ -325,7 +327,7 @@ function ticket(spec: {
   return {
     id: spec.id,
     ticketNumber: spec.number,
-    customerId: `c-${spec.id}`,
+    customerId: spec.customerId ?? `c-${spec.id}`,
     customerName: spec.customer,
     customerPhone: spec.phone,
     deviceBrand: spec.brand,
@@ -605,6 +607,28 @@ function seedTickets(): TicketDetailRow[] {
       // Picked up this morning: recent enough that an owner can still take the handover back.
       returnedHoursAgo: 2,
       extraPhotos: [photoRow('before:m12'), photoRow('after:m13')],
+    }),
+    // Yohanis came in three months ago with another phone: a regular, as his servisan shows.
+    ticket({
+      id: 't-10',
+      number: 'K7Q-0001',
+      customer: 'Yohanis Wenda',
+      customerId: 'c-t-1',
+      phone: '0812-4455-6677',
+      brand: 'Oppo',
+      model: 'A57',
+      color: 'Hijau',
+      complaint: 'Baterai cepat habis',
+      outcome: 'repaired',
+      technicianId: 'u-budi',
+      lines: [line('part', 'Baterai A57', 250_000), line('labour', 'Ganti baterai', 50_000)],
+      repairTypes: ['battery'],
+      hoursAgo: 90 * 24,
+      readyHoursAgo: 89 * 24,
+      location: 'returned',
+      returnedBy: 'u-siti',
+      returnedHoursAgo: 88 * 24,
+      extraPhotos: [photoRow('before:m14'), photoRow('after:m15')],
     }),
   ].map(withTotals);
 }
@@ -993,6 +1017,7 @@ export function demoRepairRuntime(
         (outcomes === undefined || outcomes.includes(t.outcome)) &&
         (f['location'] === undefined || t.location === f['location']) &&
         (ids === undefined || ids.includes(t.id)) &&
+        (f['customerId'] === undefined || t.customerId === f['customerId']) &&
         (f['technicianId'] === undefined || t.technicianId === f['technicianId']) &&
         (technicianIds === undefined
           ? f['unassigned'] !== true || t.technicianId === null
