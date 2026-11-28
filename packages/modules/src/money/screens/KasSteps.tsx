@@ -4,6 +4,7 @@
  * what they still owe on a phone they already took home, money going back to a customer, and an
  * owner lowering a bill.
  */
+import { useCashCount, useCashMove, useSettleCount } from '../cash-forms.js';
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import {
   ChipRow,
@@ -17,7 +18,7 @@ import {
   ToggleChip,
   type,
 } from '@bolusi/ui';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
@@ -30,22 +31,10 @@ import {
   MAX_REASON,
   MAX_REFERENCE,
   MONEY_PERMISSION,
-  type CashMoveKind,
 } from '../constants.js';
 import { ta } from '../../approvals/i18n.js';
 import { tm } from '../i18n.js';
-import {
-  CASH_MOVE_LABEL,
-  cashCountView,
-  cashMoveCheck,
-  differenceText,
-  NEW_CASH_COUNT,
-  RECOUNT_CASH,
-  seesExpected,
-  settleState,
-  type CashCountForm,
-  type NamedBalance,
-} from '../kas.js';
+import { CASH_MOVE_LABEL, differenceText, RECOUNT_CASH, type NamedBalance } from '../kas.js';
 import { useChangeCheck } from '../change-check.js';
 import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
 import { canSimulateQris } from '../qris.js';
@@ -62,7 +51,7 @@ import {
   useRefund,
 } from '../refund.js';
 import type { MoneyTarget } from '../kas.js';
-import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
+import { useMoneyRuntime } from '../runtime.js';
 
 import { ChangeCheckSheet, PaymentLines } from './PaymentLines.js';
 import { QrisStep, useQrStepBack } from './QrisStep.js';
@@ -159,37 +148,9 @@ export function CountCashStep({
   testID = 'money.count',
   onRegisterDiscardGuard,
 }: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
-  const [form, setForm] = useState<CashCountForm>(NEW_CASH_COUNT);
-  const [note, setNote] = useState('');
-  const leave = useStepLeave(
-    form.counted !== '' || note.trim() !== '',
-    { chrome, onDone, onCancel, onRegisterDiscardGuard },
-    testID,
-  );
-  const blind = !seesExpected(
-    (id) => runtime.hasPermission(id),
-    (id) => runtime.limitOf(id),
-  );
-  const view = cashCountView(form, drawer.status === 'ready' ? drawer.data.expected : null, blind);
-  const { amount } = view;
-  const noteMissing = view.noteRequired && note.trim() === '';
-
-  const submit = (): void => {
-    if (amount === null) return;
-    if (view.next === 'check') {
-      setForm({ ...form, checked: true });
-      return;
-    }
-    if (noteMissing) return;
-    void runner
-      .run(() => runtime.run('countCash', { counted: amount, note }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, form, setForm, note, setNote, view, amount, noteMissing, submit, dirty } =
+    useCashCount(onDone);
+  const leave = useStepLeave(dirty, { chrome, onDone, onCancel, onRegisterDiscardGuard }, testID);
 
   return (
     <FlowScreen
@@ -273,51 +234,14 @@ export function MoveCashStep({
   testID = 'money.move',
   onRegisterDiscardGuard,
 }: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const accounts = useMoneyQuery(
-    async (rt) => (await rt.query('paymentAccounts', {})).rows,
-    'accounts',
-  );
-  const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
-  const [kind, setKind] = useState<CashMoveKind>('withdrawal');
-  const [account, setAccount] = useState<string | null>(null);
-  const [digits, setDigits] = useState('');
-  const [reason, setReason] = useState('');
+  const move = useCashMove(onDone);
+  const { runner, kind, setKind, setAccount, digits, setDigits } = move;
+  const { reason, setReason, banks, depositAccount, missing, missingValues, submit } = move;
   const leave = useStepLeave(
-    digits !== '' || reason.trim() !== '',
+    move.dirty,
     { chrome, onDone, onCancel, onRegisterDiscardGuard },
     testID,
   );
-  const amount = rupiah(digits);
-  const { banks, depositAccount, missing, missingValues } = cashMoveCheck({
-    kind,
-    account,
-    amount,
-    reason,
-    accounts: accounts.status === 'ready' ? accounts.data : [],
-    drawer: drawer.status === 'ready' ? drawer.data.expected : null,
-    blind: !seesExpected(
-      (id) => runtime.hasPermission(id),
-      (id) => runtime.limitOf(id),
-    ),
-  });
-
-  const submit = (): void => {
-    if (missing !== null || amount === null) return;
-    void runner
-      .run(() =>
-        runtime.run('moveCash', {
-          kind,
-          amount,
-          reason,
-          account: depositAccount === null ? null : `account:${depositAccount.id}`,
-        }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <FlowScreen
@@ -398,26 +322,12 @@ export function SettleCountStep({
   readonly count: CashCountRow;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
-  const [reason, setReason] = useState('');
+  const { runner, reason, setReason, live, open, counter, submit } = useSettleCount(count, onDone);
   const leave = useStepLeave(
     reason.trim() !== '',
     { chrome, onDone, onCancel, onRegisterDiscardGuard },
     testID,
   );
-  const { live, open } = settleState(drawer.status === 'ready' ? drawer.data.counts : null, count);
-  const counter = runtime.nameOf(live.countedBy);
-
-  const submit = (): void => {
-    if (reason.trim() === '' || !open) return;
-    void runner
-      .run(() => runtime.run('adjustCash', { amount: live.difference, countId: live.id, reason }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <FlowScreen

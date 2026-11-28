@@ -1,6 +1,7 @@
 // The tasks the Kas page opens on the counter PC, each a dialog over it: Tutup kas, cash out of or
 // into the drawer, an owner settling a counted difference, a customer paying a debt, money going
 // back to a customer, an owner lowering a bill and an owner cancelling a payment. The rules are the phone's (kas.ts and the commands); only the layout differs.
+import { useCashCount, useCashMove, useSettleCount } from '../cash-forms.js';
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
 import { useState } from 'react';
@@ -13,7 +14,6 @@ import {
   MAX_REASON,
   MAX_REFERENCE,
   MONEY_PERMISSION,
-  type CashMoveKind,
 } from '../constants.js';
 import { tm } from '../i18n.js';
 import { useEntryCustomer, useVoidAsk, voidRequest } from '../void-ask.js';
@@ -21,14 +21,8 @@ import { ta } from '../../approvals/i18n.js';
 import {
   CASH_MOVE_LABEL,
   accountLabel,
-  cashCountView,
-  cashMoveCheck,
   differenceText,
-  NEW_CASH_COUNT,
   RECOUNT_CASH,
-  seesExpected,
-  settleState,
-  type CashCountForm,
   type NamedBalance,
   voidKind,
 } from '../kas.js';
@@ -48,7 +42,7 @@ import {
   useRefund,
 } from '../refund.js';
 import { targetOf, type MoneyTarget } from '../kas.js';
-import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
+import { useMoneyRuntime } from '../runtime.js';
 
 import { AmountField, AmountLine, MoneyDialog } from './parts.js';
 import { ChangeCheckDialog, PaymentLines } from './PaymentLines.js';
@@ -58,10 +52,6 @@ interface TaskProps {
   /** The task landed. */
   readonly onDone: () => void;
   readonly onClose: () => void;
-}
-
-function useDrawer() {
-  return useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
 }
 
 function ReasonField({
@@ -91,33 +81,9 @@ function ReasonField({
 
 /** Count the drawer; the difference shows before saving and is kept for an owner to settle. */
 export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const drawer = useDrawer();
-  const [form, setForm] = useState<CashCountForm>(NEW_CASH_COUNT);
-  const [note, setNote] = useState('');
-  const blind = !seesExpected(
-    (id) => runtime.hasPermission(id),
-    (id) => runtime.limitOf(id),
-  );
-  const view = cashCountView(form, drawer.status === 'ready' ? drawer.data.expected : null, blind);
-  const { amount } = view;
-  const noteMissing = view.noteRequired && note.trim() === '';
+  const { runner, form, setForm, note, setNote, view, amount, noteMissing, submit } =
+    useCashCount(onDone);
   const testId = 'money.desk.count';
-
-  const submit = (): void => {
-    if (amount === null) return;
-    if (view.next === 'check') {
-      setForm({ ...form, checked: true });
-      return;
-    }
-    if (noteMissing) return;
-    void runner
-      .run(() => runtime.run('countCash', { counted: amount, note }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <MoneyDialog
@@ -190,47 +156,10 @@ export function CountCashDialog({ onDone, onClose }: TaskProps): React.JSX.Eleme
 
 /** Cash taken out of the drawer or put in, with a reason; a bank deposit names its account. */
 export function MoveCashDialog({ onDone, onClose }: TaskProps): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const accounts = useMoneyQuery(
-    async (rt) => (await rt.query('paymentAccounts', {})).rows,
-    'accounts',
-  );
-  const drawer = useDrawer();
-  const [kind, setKind] = useState<CashMoveKind>('withdrawal');
-  const [account, setAccount] = useState<string | null>(null);
-  const [digits, setDigits] = useState('');
-  const [reason, setReason] = useState('');
-  const amount = rupiah(digits);
-  const { banks, depositAccount, missing, missingValues } = cashMoveCheck({
-    kind,
-    account,
-    amount,
-    reason,
-    accounts: accounts.status === 'ready' ? accounts.data : [],
-    drawer: drawer.status === 'ready' ? drawer.data.expected : null,
-    blind: !seesExpected(
-      (id) => runtime.hasPermission(id),
-      (id) => runtime.limitOf(id),
-    ),
-  });
+  const move = useCashMove(onDone);
+  const { runner, kind, setKind, setAccount, digits, setDigits } = move;
+  const { reason, setReason, banks, depositAccount, missing, missingValues, submit } = move;
   const testId = 'money.desk.move';
-
-  const submit = (): void => {
-    if (missing !== null || amount === null) return;
-    void runner
-      .run(() =>
-        runtime.run('moveCash', {
-          kind,
-          amount,
-          reason,
-          account: depositAccount === null ? null : `account:${depositAccount.id}`,
-        }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <MoneyDialog
@@ -310,22 +239,8 @@ export function SettleCountDialog({
   onDone,
   onClose,
 }: TaskProps & { readonly count: CashCountRow }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const drawer = useDrawer();
-  const [reason, setReason] = useState('');
-  const { live, open } = settleState(drawer.status === 'ready' ? drawer.data.counts : null, count);
-  const counter = runtime.nameOf(live.countedBy);
+  const { runner, reason, setReason, live, open, counter, submit } = useSettleCount(count, onDone);
   const testId = 'money.desk.settle';
-
-  const submit = (): void => {
-    if (reason.trim() === '' || !open) return;
-    void runner
-      .run(() => runtime.run('adjustCash', { amount: live.difference, countId: live.id, reason }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <MoneyDialog
