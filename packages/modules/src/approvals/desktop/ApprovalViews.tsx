@@ -4,19 +4,17 @@
 import { formatDateTime, formatMoney, t } from '@bolusi/i18n';
 import { Button, Chip, ConfirmDialog, Dialog, Section, TextField } from '@bolusi/ui-web';
 import { CircleCheck, CircleX, Clock, Undo2, type LucideIcon } from 'lucide-react';
-import { useState } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useApprovalDecision } from '../decide.js';
 import { ActionError } from '../../screen-kit/desktop/index.js';
 import {
-  approvalBeyondLimit,
   APPROVAL_STATUS_TONE,
   approvalActionable,
   approvalByLine,
   approvalStatusLabel,
   type ApprovalDescription,
 } from '../copy.js';
-import { approvalKindKey, ta, type ApprovalsKey } from '../i18n.js';
+import { approvalKindKey, ta } from '../i18n.js';
 import type { ApprovalRow } from '../queries.js';
 import type { ApprovalsPort } from '../runtime.js';
 
@@ -110,28 +108,17 @@ export function ApprovalDialog({
   readonly onClose: () => void;
   readonly testId?: string | undefined;
 }): React.JSX.Element {
-  const runner = useActionRunner();
-  const [note, setNote] = useState('');
-  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
-  const decides = request.canDecide && request.status === 'waiting';
-  const beyond = decides ? approvalBeyondLimit(request, port.limitOf) : null;
-  const withdraws = request.mine && request.status === 'waiting';
-
-  const act = (
-    command: 'approveRequest' | 'rejectRequest' | 'withdrawRequest',
-    notice: ApprovalsKey,
-  ): void => {
-    void runner
-      .run(() =>
-        command === 'withdrawRequest'
-          ? port.run(command, { requestId: request.id })
-          : port.run(command, { requestId: request.id, note: note.trim() === '' ? null : note }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone(ta(notice));
-      });
-  };
-
+  const {
+    runner,
+    note,
+    setNote,
+    confirmWithdraw,
+    setConfirmWithdraw,
+    decides,
+    beyond,
+    withdraws,
+    act,
+  } = useApprovalDecision(port, request, onDone);
   return (
     <>
       <Dialog

@@ -19,20 +19,18 @@ import {
   useBleed,
 } from '@bolusi/ui';
 import { t } from '@bolusi/i18n';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useApprovalDecision } from '../decide.js';
 import { FlowScreen, Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import {
   APPROVAL_STATUS_TONE,
   approvalActionable,
-  approvalBeyondLimit,
   approvalByLine,
   approvalStatusLabel,
   type ApprovalDescription,
 } from '../copy.js';
-import { approvalKindKey, ta, type ApprovalsKey } from '../i18n.js';
+import { approvalKindKey, ta } from '../i18n.js';
 import type { ApprovalRow } from '../queries.js';
 import type { ApprovalsPort } from '../runtime.js';
 
@@ -127,27 +125,8 @@ export function ApprovalStep({
   readonly onCancel: () => void;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runner = useActionRunner();
-  const [note, setNote] = useState('');
-  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
-  const decides = request.canDecide && request.status === 'waiting';
-  const beyond = decides ? approvalBeyondLimit(request, port.limitOf) : null;
-
-  const act = (
-    command: 'approveRequest' | 'rejectRequest' | 'withdrawRequest',
-    notice: ApprovalsKey,
-  ): void => {
-    void runner
-      .run(() =>
-        command === 'withdrawRequest'
-          ? port.run(command, { requestId: request.id })
-          : port.run(command, { requestId: request.id, note: note.trim() === '' ? null : note }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone(ta(notice));
-      });
-  };
-
+  const { runner, note, setNote, confirmWithdraw, setConfirmWithdraw, decides, beyond, act } =
+    useApprovalDecision(port, request, onDone);
   return (
     <FlowScreen
       chrome={chrome}
