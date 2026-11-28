@@ -258,14 +258,8 @@
       "stock": "Stok"
     },
     "filter": {
-      "category": "Kategori",
-      "clear": "Hapus filter",
-      "reset": "Hapus semua filter",
-      "search": "Cari",
-      "noMatches": "Tidak ada yang cocok",
-      "chosen": "{count} dipilih"
+      "category": "Kategori"
     },
-    "results": "{count} barang",
     "closePart": "Tutup barang"
   },
   "cost": {

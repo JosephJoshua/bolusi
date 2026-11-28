@@ -37,6 +37,7 @@ import { inventoryOperations } from './operations.js';
 import type { PartUseTargets } from './part-use.js';
 import {
   countBelowZeroQuery,
+  countItemsQuery,
   facetValuesQuery,
   findByCodeQuery,
   getItemQuery,
@@ -239,6 +240,7 @@ export function inventoryModuleManifest(targets: PartUseTargets, sources: StockS
     queries: {
       listItems: listItemsQuery,
       countBelowZero: countBelowZeroQuery,
+      countItems: countItemsQuery,
       getItem: getItemQuery,
       partsForUse: partsForUseQuery,
       itemsFitting: itemsFittingQuery,

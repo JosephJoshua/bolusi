@@ -187,5 +187,32 @@
     "message": "Data yang belum disimpan akan hilang.",
     "confirm": "Tutup",
     "keep": "Lanjutkan mengisi"
+  },
+  "table": {
+    "columns": "Kolom",
+    "range": "{from}–{to} dari {total}",
+    "perPage": "{size} per halaman",
+    "previous": "Halaman sebelumnya",
+    "next": "Halaman berikutnya",
+    "page": "Halaman {page}",
+    "pages": "Halaman",
+    "filter": {
+      "clear": "Hapus filter",
+      "reset": "Hapus semua filter",
+      "search": "Cari",
+      "noMatches": "Tidak ada yang cocok",
+      "chosen": "{count} dipilih",
+      "from": "Dari",
+      "to": "Sampai",
+      "range": "{from} – {to}",
+      "since": "Sejak {from}",
+      "until": "Sampai {to}",
+      "today": "Hari ini",
+      "last7": "7 hari terakhir",
+      "last30": "30 hari terakhir",
+      "thisMonth": "Bulan ini",
+      "empty": "Tidak ada yang cocok dengan filter"
+    },
+    "noMatches": "Tidak ada yang cocok dengan pencarian"
   }
 }

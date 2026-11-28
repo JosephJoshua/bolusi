@@ -9,7 +9,13 @@ export {
 export { INVENTORY_PERMISSION, opensParts, opensTransfers } from '../constants.js';
 export { NO_FILTER, type ListFilter } from '../list-filter.js';
 export type { PartUse } from '../take-part.js';
-export { PartsPage, type PartsPageProps } from './PartsPage.js';
+export {
+  PART_SORTABLE,
+  PartsPage,
+  partsView,
+  type PartsPageProps,
+  type PartsView,
+} from './PartsPage.js';
 export { PartsSection, type PartsSectionProps } from './PartsSection.js';
 export { TransfersPage, type TransfersPageProps } from './TransfersPage.js';
 export type { TransferFilter } from '../transfers/queries.js';

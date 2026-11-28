@@ -268,6 +268,33 @@ describe('putting parts back', () => {
 });
 
 describe('the parts list and counts', () => {
+  test('the table sorts by name or stock across every page and counts every match', async () => {
+    const h = await harness(91);
+    await addItem(h, 'LCD Oppo A5s', 3);
+    await addItem(h, 'Baterai Redmi 9', 10);
+    await addItem(h, 'Battery iPhone 11', 0);
+    const names = async (input: Record<string, unknown>) =>
+      (await h.queryInventory('listItems', input, h.ownerId)).rows.map(
+        (row) => (row as { name: string }).name,
+      );
+    expect(await names({ sort: 'stock.desc' })).toEqual([
+      'Baterai Redmi 9',
+      'LCD Oppo A5s',
+      'Battery iPhone 11',
+    ]);
+    expect(await names({ sort: 'name.desc', limit: 1, offset: 1 })).toEqual(['Battery iPhone 11']);
+    // A search sorted by a column orders every match, not only the best ones.
+    expect(await names({ text: 'batre', sort: 'stock.asc' })).toEqual([
+      'Battery iPhone 11',
+      'Baterai Redmi 9',
+    ]);
+    const count = async (input: Record<string, unknown>) =>
+      (await h.queryInventory('countItems', input, h.ownerId)).rows[0].count as number;
+    expect(await count({})).toBe(3);
+    expect(await count({ text: 'batre' })).toBe(2);
+    expect(await count({ filter: 'outOfStock' })).toBe(1);
+  });
+
   test('only owners add parts and count stock', async () => {
     const h = await harness(6301);
     for (const userId of [h.cashierId, h.technicianId]) {

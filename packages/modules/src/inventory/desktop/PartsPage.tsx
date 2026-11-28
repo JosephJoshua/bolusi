@@ -1,15 +1,13 @@
 // The parts page on the counter PC: the business's items with this store's stock, search first,
 // with the selected item open beside it. Typing ranks every item by fuzzy match on its name, codes,
 // field values, tags and the phones it fits; without text the table runs by name and loads more as
-// it scrolls, so thousands of items stay quick. A USB scanner types a code and presses Enter, which
+// pages, so thousands of items stay quick. Headers sort by name or stock across every page. A USB scanner types a code and presses Enter, which
 // opens the item it names. Owners get the "Stok minus" and archived views to sort out.
-import { formatNumber, t } from '@bolusi/i18n';
+import { t } from '@bolusi/i18n';
 import {
   Button,
   ChoiceList,
-  DataTable,
   FilterPopover,
-  OptionsFilter,
   OverflowText,
   PageHeader,
   type Crumb,
@@ -18,11 +16,13 @@ import {
   Tabs,
   type ColumnDef,
 } from '@bolusi/ui-web';
-import { FilterX, Package, Plus, SearchX, Table2, Tags } from 'lucide-react';
+import { Package, Plus, Table2, Tags } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSettledValue } from '../../screen-kit/index.js';
 import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
+import { ChoiceFacet, TableFrame } from '../../screen-kit/desktop/table.js';
+import { changeView, pageWindow, tableView, type TableView } from '../../screen-kit/table-view.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { ti } from '../i18n.js';
 import { stockText } from '../labels.js';
@@ -35,12 +35,17 @@ import {
   useFilterChoices,
   type ListFilter,
 } from '../list-filter.js';
-import { NO_CATEGORY, type CategoryRow, type ItemRow, type PartFilter } from '../queries.js';
+import {
+  NO_CATEGORY,
+  type CategoryRow,
+  type ItemRow,
+  type ItemSort,
+  type PartFilter,
+} from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 import { PartDialog } from './dialogs.js';
 import { PartPane } from './PartPane.js';
 
-const PAGE = 100;
 const NO_CATEGORIES: readonly CategoryRow[] = [];
 const ALL = 'all';
 
@@ -50,26 +55,34 @@ export interface PartsPageProps {
    * title and the place above it. Without it the page is its place's only page.
    */
   readonly place?: { readonly title: string; readonly trail: readonly Crumb[] } | undefined;
-  /** The list's filter, owned by the app so it survives a trip to another page. */
-  readonly filter: ListFilter;
-  readonly onFilterChange: (filter: ListFilter) => void;
+  /** The list's search, filter, sort and page, owned by the app so they survive a trip elsewhere. */
+  readonly view: PartsView;
+  readonly onViewChange: (view: PartsView) => void;
   /** The categories page, for whoever sets categories up. */
   readonly onOpenCategories?: (() => void) | undefined;
   /** The sheet for entering many items at once. */
   readonly onBulkAdd?: (() => void) | undefined;
 }
 
+/** The columns the parts table sorts by. */
+export const PART_SORTABLE = ['name', 'stock'] as const;
+export type PartsView = TableView<ListFilter, (typeof PART_SORTABLE)[number]>;
+
+export function partsView(): PartsView {
+  return tableView(NO_FILTER);
+}
+
 interface LoadedParts {
   /** The search and filter these rows answer, so rows from the last one are never acted on. */
   readonly scope: string;
   readonly rows: readonly ItemRow[];
-  readonly hasMore: boolean;
+  readonly total: number;
   readonly belowZero: number;
 }
 
 export function PartsPage({
-  filter,
-  onFilterChange,
+  view,
+  onViewChange,
   place,
   onOpenCategories,
   onBulkAdd,
@@ -77,8 +90,8 @@ export function PartsPage({
   const runtime = useInventoryRuntime();
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const canSetUp = runtime.hasPermission(INVENTORY_PERMISSION.manageCategories);
-  const [text, setText] = useState('');
-  const [pages, setPages] = useState(1);
+  const filter = view.facets;
+  const text = view.text;
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -89,18 +102,17 @@ export function PartsPage({
   const typed = text.trim();
   const settled = useSettledValue(typed);
   const searchText = typed === '' ? '' : settled;
-  const searching = searchText !== '';
   // A view this person may no longer pick (their grants changed) reads as the usual one, in the
   // tabs and in the query alike.
   const views = stockViews(runtime.hasPermission);
   const shownFilter: ListFilter = views.includes(filter.stock)
     ? filter
     : { ...filter, stock: NO_FILTER.stock };
-  const scope = JSON.stringify([searchText, shownFilter]);
-  const update = (patch: Partial<ListFilter>): void => {
-    setPages(1);
-    onFilterChange({ ...filter, ...patch });
-  };
+  const sort: ItemSort | null =
+    view.sort === null ? null : `${view.sort.column}.${view.sort.descending ? 'desc' : 'asc'}`;
+  const scope = JSON.stringify([searchText, shownFilter, sort, view.page, view.pageSize]);
+  const update = (patch: Partial<ListFilter>): void =>
+    onViewChange(changeView(view, { facets: { ...filter, ...patch } }));
   const choices = useFilterChoices(filter.categoryId);
 
   const categories = useInventoryQuery<readonly CategoryRow[]>(
@@ -109,25 +121,18 @@ export function PartsPage({
   );
   const query = useInventoryQuery<LoadedParts>(
     async (rt) => {
-      // Every page scrolled to, re-read on each refresh so the live list stays whole.
-      let rows: ItemRow[] = [];
-      let next: string | null = '0';
-      for (let n = 0; n < pages && next !== null; n += 1) {
-        const page: { readonly rows: readonly ItemRow[]; readonly nextCursor: string | null } =
-          await rt.query(
-            'listItems',
-            listInput(shownFilter, searchText, { limit: PAGE, offset: Number(next) }),
-          );
-        rows = [...rows, ...page.rows];
-        next = page.nextCursor;
-      }
+      const { limit, offset, ...narrowing } = listInput(shownFilter, searchText, pageWindow(view));
+      const [page, count] = await Promise.all([
+        rt.query('listItems', { ...narrowing, limit, offset, sort }),
+        rt.query('countItems', narrowing),
+      ]);
       // Only those who sort out stock below zero see its count.
       const belowZero = canManage
         ? ((await rt.query('countBelowZero', {})).rows[0]?.count ?? 0)
         : 0;
-      return { scope, rows, hasMore: next !== null, belowZero };
+      return { scope, rows: page.rows, total: count.rows[0]?.count ?? 0, belowZero };
     },
-    `desk.parts:${scope}:${String(pages)}:${String(reloadNonce)}`,
+    `desk.parts:${scope}:${String(reloadNonce)}`,
   );
   const loaded = query.status === 'ready' ? query.data : null;
   const stale = loaded !== null && loaded.scope !== scope;
@@ -179,25 +184,15 @@ export function PartsPage({
   }, [shownCategories]);
   const fieldsNarrowed =
     filter.tags.length > 0 || Object.values(filter.values).some((v) => v.length > 0);
-  const empty =
+  const resetFilters = (): void => update({ categoryId: null, tags: [], values: {} });
+  const problem =
     query.status === 'unauthorized' || query.status === 'error' ? (
       <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
         {() => null}
       </QueryPanel>
-    ) : filter.categoryId !== null || fieldsNarrowed ? (
-      <StatePanel
-        icon={FilterX}
-        title={ti('inventory.list.noFilterMatches')}
-        action={
-          <Button
-            label={ti('inventory.desk.filter.reset')}
-            onClick={() => update({ categoryId: null, tags: [], values: {} })}
-          />
-        }
-      />
-    ) : searching ? (
-      <StatePanel icon={SearchX} title={ti('inventory.list.noMatches')} />
-    ) : shownFilter.stock !== 'active' ? (
+    ) : undefined;
+  const empty =
+    shownFilter.stock !== 'active' ? (
       <StatePanel icon={Package} title={ti(EMPTY_VIEW_KEY[shownFilter.stock])} />
     ) : (
       <StatePanel
@@ -217,90 +212,55 @@ export function PartsPage({
       />
     );
 
-  const filterLabels = {
-    clear: ti('inventory.desk.filter.clear'),
-    search: ti('inventory.desk.filter.search'),
-    noMatches: ti('inventory.desk.filter.noMatches'),
-  };
-  const chosen = (count: number): string => ti('inventory.desk.filter.chosen', { count });
   const categoryOptions = [
     { value: ALL, label: ti('inventory.list.allCategories') },
     ...shownCategories.map((c) => ({ value: c.id, label: c.name })),
     { value: NO_CATEGORY, label: ti('inventory.list.noCategory') },
   ];
-  const toolbar = (
-    <div className="flex h-12 items-center gap-2 px-6" data-testid="inventory.desk.filters">
-      {/* One row that scrolls sideways when the pane leaves it little room, never a second row. */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [scrollbar-width:none]">
-        {shownCategories.length === 0 ? null : (
-          <FilterPopover
-            label={ti('inventory.desk.filter.category')}
-            summary={
-              filter.categoryId === null
-                ? null
-                : (categoryOptions.find((o) => o.value === filter.categoryId)?.label ?? null)
-            }
-            clearLabel={filterLabels.clear}
-            onClear={() => update({ categoryId: null, values: {} })}
-            testId="inventory.desk.filter.category"
-          >
-            <ChoiceList
-              options={categoryOptions}
-              value={filter.categoryId ?? ALL}
-              // Field values belong to a category's fields, so they go with it.
-              onChange={(value) => update({ categoryId: value === ALL ? null : value, values: {} })}
-              label={ti('inventory.desk.filter.category')}
-              testId="inventory.desk.filter.category.list"
-            />
-          </FilterPopover>
-        )}
-        {choices.fields.map(({ field, values }) => (
-          <OptionsFilter
-            key={field.id}
-            label={field.label}
-            options={values.map((value) => ({ value, label: value }))}
-            selected={filter.values[field.id] ?? []}
-            onChange={(selected) => update({ values: { ...filter.values, [field.id]: selected } })}
-            summarize={chosen}
-            labels={filterLabels}
-            testId={`inventory.desk.filter.field.${field.id}`}
-          />
-        ))}
-        {choices.tags.length === 0 ? null : (
-          <OptionsFilter
-            label={ti('inventory.filterStep.tags')}
-            options={choices.tags.map((value) => ({ value, label: value }))}
-            selected={filter.tags}
-            onChange={(tags) => update({ tags })}
-            summarize={chosen}
-            labels={filterLabels}
-            testId="inventory.desk.filter.tags"
-          />
-        )}
-        {filter.categoryId !== null || fieldsNarrowed ? (
-          <Button
-            variant="text"
-            size="sm"
-            label={ti('inventory.desk.filter.reset')}
-            onClick={() => update({ categoryId: null, tags: [], values: {} })}
-            data-testid="inventory.desk.filter.reset"
-          />
-        ) : null}
-      </div>
-      {searching ? (
-        <p
-          role="status"
-          className="shrink-0 whitespace-nowrap text-body text-text-muted"
-          data-testid="inventory.desk.results"
+  const facetFilters = (
+    <>
+      {shownCategories.length === 0 ? null : (
+        <FilterPopover
+          label={ti('inventory.desk.filter.category')}
+          summary={
+            filter.categoryId === null
+              ? null
+              : (categoryOptions.find((o) => o.value === filter.categoryId)?.label ?? null)
+          }
+          clearLabel={t('core.table.filter.clear')}
+          onClear={() => update({ categoryId: null, values: {} })}
+          testId="inventory.desk.filter.category"
         >
-          {loaded === null || stale
-            ? ''
-            : ti('inventory.desk.results', {
-                count: `${formatNumber(loaded.rows.length)}${loaded.hasMore ? '+' : ''}`,
-              })}
-        </p>
-      ) : null}
-    </div>
+          <ChoiceList
+            options={categoryOptions}
+            value={filter.categoryId ?? ALL}
+            // Field values belong to a category's fields, so they go with it.
+            onChange={(value) => update({ categoryId: value === ALL ? null : value, values: {} })}
+            label={ti('inventory.desk.filter.category')}
+            testId="inventory.desk.filter.category.list"
+          />
+        </FilterPopover>
+      )}
+      {choices.fields.map(({ field, values }) => (
+        <ChoiceFacet
+          key={field.id}
+          label={field.label}
+          options={values.map((value) => ({ value, label: value }))}
+          selected={filter.values[field.id] ?? []}
+          onChange={(selected) => update({ values: { ...filter.values, [field.id]: selected } })}
+          testId={`inventory.desk.filter.field.${field.id}`}
+        />
+      ))}
+      {choices.tags.length === 0 ? null : (
+        <ChoiceFacet
+          label={ti('inventory.filterStep.tags')}
+          options={choices.tags.map((value) => ({ value, label: value }))}
+          selected={filter.tags}
+          onChange={(tags) => update({ tags })}
+          testId="inventory.desk.filter.tags"
+        />
+      )}
+    </>
   );
 
   return (
@@ -352,10 +312,7 @@ export function PartsPage({
           <SearchField
             ref={searchRef}
             value={text}
-            onChange={(next) => {
-              setPages(1);
-              setText(next);
-            }}
+            onChange={(next) => onViewChange(changeView(view, { text: next }))}
             placeholder={ti('inventory.list.searchHint')}
             label={t('core.action.search')}
             clearLabel={ti('inventory.list.clearSearch')}
@@ -390,27 +347,25 @@ export function PartsPage({
                 testId="inventory.desk.views"
               />
             </div>
-            {toolbar}
-            <DataTable
+            <TableFrame
+              view={view}
+              onViewChange={onViewChange}
               rows={loaded?.rows ?? []}
-              columns={columns}
-              getRowId={(row) => row.id}
-              selectedId={selectedId}
-              onSelect={(row) => {
-                if (!stale) open(row.id);
-              }}
-              onActivate={() => {
-                if (!stale) paneRef.current?.querySelector<HTMLElement>('section')?.focus();
-              }}
-              bodyRef={tableRef}
-              // Pages load as the table scrolls, so the headers do not sort what is loaded so far.
-              sortable={false}
-              scrollKey={scope}
-              onEndReached={() => {
-                if (loaded?.hasMore === true && !stale) setPages((n) => n + 1);
-              }}
+              total={loaded?.total ?? null}
+              stale={stale}
               loading={query.status === 'loading'}
+              columns={columns}
+              lockedColumns={LOCKED_COLUMNS}
+              getRowId={(row) => row.id}
+              filters={facetFilters}
+              filtered={filter.categoryId !== null || fieldsNarrowed}
+              onResetFilters={resetFilters}
+              selectedId={selectedId}
+              onSelect={(row) => open(row.id)}
+              onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
+              bodyRef={tableRef}
               empty={empty}
+              problem={problem}
               label={ti('inventory.list.title')}
               testId="inventory.desk.table"
             />
@@ -451,6 +406,9 @@ export function PartsPage({
   );
 }
 
+/** Which item it is: never hidden. */
+const LOCKED_COLUMNS: readonly string[] = ['name'];
+
 type Column = ColumnDef<ItemRow, unknown>;
 
 function partColumns(categoryName: (id: string) => string | undefined): Column[] {
@@ -474,6 +432,7 @@ function partColumns(categoryName: (id: string) => string | undefined): Column[]
       accessorFn: (row) => (row.categoryId === null ? '' : (categoryName(row.categoryId) ?? '')),
       header: ti('inventory.desk.col.category'),
       meta: { track: 'minmax(120px, 1fr)', fold: 2 },
+      enableSorting: false,
       cell: ({ getValue }) => (
         <span className="text-body text-text">{String(getValue()) || '–'}</span>
       ),
@@ -483,6 +442,7 @@ function partColumns(categoryName: (id: string) => string | undefined): Column[]
       accessorFn: (row) => row.fits ?? '',
       header: ti('inventory.desk.col.fits'),
       meta: { track: 'minmax(240px, 2fr)', fold: 1 },
+      enableSorting: false,
       cell: ({ row: { original: row } }) =>
         row.fits === null ? (
           <span className="text-body text-text-muted">–</span>

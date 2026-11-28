@@ -31,6 +31,23 @@ export type {
 } from './media.js';
 export { useLiveQuery, type LiveSource, type QueryState } from './live.js';
 export { FRESH_ACTION_MS, TYPING_PAUSE_MS, useJustReplaced, useSettledValue } from './settled.js';
+export {
+  changeView,
+  compareValues,
+  DEFAULT_PAGE_SIZE,
+  pageCount,
+  PAGE_SIZES,
+  pageWindow,
+  sortBy,
+  tableView,
+  TableViewProvider,
+  useTableView,
+  viewRows,
+  type ColumnSort,
+  type TableView,
+  type TableViewStore,
+  type ViewRows,
+} from './table-view.js';
 export { useTick } from './tick.js';
 export {
   UNDO_WINDOW_MS,

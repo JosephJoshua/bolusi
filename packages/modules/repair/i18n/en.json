@@ -650,31 +650,7 @@
       "status": "Status",
       "technician": "Technician",
       "received": "Received",
-      "brand": "Brand",
-      "clear": "Clear filter",
-      "reset": "Clear all filters",
-      "search": "Search",
-      "noMatches": "Nothing matches",
-      "chosen": "{count} selected",
-      "from": "From",
-      "to": "To",
-      "range": "{from} – {to}",
-      "since": "Since {from}",
-      "until": "Until {to}",
-      "today": "Today",
-      "last7": "Last 7 days",
-      "last30": "Last 30 days",
-      "thisMonth": "This month",
-      "empty": "No repairs match the filters"
-    },
-    "table": {
-      "columns": "Columns",
-      "range": "{from}–{to} of {total}",
-      "perPage": "{size} per page",
-      "previous": "Previous page",
-      "next": "Next page",
-      "page": "Page {page}",
-      "pages": "Pages"
+      "brand": "Brand"
     },
     "settings": {
       "discard": "Discard changes",

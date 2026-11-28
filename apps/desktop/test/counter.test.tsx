@@ -1036,17 +1036,18 @@ describe('counter app over demo data', () => {
   it('filters, sorts and pages the queue, and keeps the choice across an intake', async () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
-    const range = (): string => byTestId('repair.desk.board.pagination.range').textContent ?? '';
+    const range = (): string =>
+      byTestId('repair.desk.board.table.pagination.range').textContent ?? '';
     await waitFor(() => expect(range()).toMatch(/^1–\d+ dari \d+$/));
     const all = Number(range().split(' dari ')[1]!.replace(/\./g, ''));
 
-    fireEvent.pointerDown(byTestId('repair.desk.board.pagination.size'), {
+    fireEvent.pointerDown(byTestId('repair.desk.board.table.pagination.size'), {
       button: 0,
       pointerType: 'mouse',
     });
     fireEvent.click(await screen.findByRole('menuitem', { name: '25 per halaman' }));
     await waitFor(() => expect(range()).toBe(`1–25 dari ${String(all)}`));
-    fireEvent.click(byTestId('repair.desk.board.pagination.page.2'));
+    fireEvent.click(byTestId('repair.desk.board.table.pagination.page.2'));
     await waitFor(() => expect(range()).toMatch(/^26–/));
 
     // A status narrows the queue, starts again from page 1, and every row shows it.

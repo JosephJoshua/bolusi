@@ -2,7 +2,9 @@
 // and queries the phone screens use. Only the desktop app imports this entry.
 export {
   RepairBoardPage,
+  BOARD_SORTABLE,
   boardFilters,
+  onQueue,
   type BoardFilters,
   type RepairBoardPageProps,
 } from './Board.js';

@@ -4,29 +4,23 @@
 // one queue. Either way the toolbar's filters narrow it, a header sorts it and the footer pages it.
 // Keyboard first: "/" searches, arrows move, Enter moves into the open servisan, Esc closes it, F2
 // starts intake.
-import { FuzzyIndex } from '@bolusi/core';
-import { formatDate, formatMoney, formatNumber, formatPhone, formatTime, t } from '@bolusi/i18n';
+import { formatDate, formatMoney, formatPhone, formatTime, t } from '@bolusi/i18n';
 import {
   Button,
-  ColumnsMenu,
-  DataTable,
-  DayRangeFilter,
   FilterToggle,
-  OptionsFilter,
   PageHeader,
-  Pagination,
   SearchField,
   StatePanel,
   Tabs,
   Tooltip,
   type ColumnDef,
-  type DayRangeValue,
-  type FilterOption,
 } from '@bolusi/ui-web';
-import { ClipboardList, CloudOff, FilterX, Plus, SearchX, TriangleAlert } from 'lucide-react';
+import { ClipboardList, CloudOff, Plus, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { statusesFor, useTick, type EntitySyncStatuses } from '../../screen-kit/index.js';
+import { ChoiceFacet, DayFacet, TableFrame } from '../../screen-kit/desktop/table.js';
+import { changeView, pageWindow, tableView, type TableView } from '../../screen-kit/table-view.js';
 import {
   amountOwed,
   BOARD_EMPTY_KEY,
@@ -53,18 +47,16 @@ import { statusLabel } from '../labels.js';
 import { readApprovals, useRepairQuery, useRepairRuntime } from '../runtime.js';
 import {
   NO_FACETS,
-  RECEIVED_PRESETS,
   UNASSIGNED,
   facetCount,
   facetsFor,
   matchesFacets,
   statusChoices,
-  presetRange,
   sortRows,
   tableFilter,
   tableSort,
   technicianChoice,
-  type ColumnSort,
+  SORTABLE_COLUMNS,
   type SortableColumn,
   type TicketFacets,
 } from '../table.js';
@@ -74,7 +66,7 @@ import { StatusChip, TwoLines } from './parts.js';
 import { TicketPane } from './TicketPane.js';
 
 /** Search is ranked, so its best matches are the ones worth filtering and paging. */
-const SEARCH_LIMIT = 100;
+const SEARCH_LIMIT = 500;
 
 export interface RepairBoardPageProps {
   /** The repair open beside the table, owned by the app so a new intake can open its ticket. */
@@ -99,30 +91,22 @@ export interface RepairBoardPageProps {
   readonly now?: (() => number) | undefined;
 }
 
-export interface BoardFilters {
+export interface BoardFilters extends TableView<TicketFacets, SortableColumn> {
+  /** The queue shown while nothing is typed. */
   readonly view: BoardView;
-  readonly text: string;
-  readonly facets: TicketFacets;
-  readonly sort: ColumnSort | null;
-  /** From 1. */
-  readonly page: number;
-  readonly pageSize: number;
-  readonly hiddenColumns: readonly string[];
 }
-
-const PAGE_SIZES = [25, 50, 100] as const;
 
 /** A board on its usual queue, or on `view`, with nothing else narrowed. */
 export function boardFilters(can: RepairAbilities, view?: BoardView): BoardFilters {
-  return {
-    view: view ?? defaultBoardView(can),
-    text: '',
-    facets: NO_FACETS,
-    sort: null,
-    page: 1,
-    pageSize: 50,
-    hiddenColumns: [],
-  };
+  return { ...tableView(NO_FACETS), view: view ?? defaultBoardView(can) };
+}
+
+/** The columns a remembered sort may name. */
+export const BOARD_SORTABLE: readonly string[] = SORTABLE_COLUMNS;
+
+/** The board moved to a queue with nothing typed or picked, keeping how the person set up the table. */
+export function onQueue(filters: BoardFilters, view: BoardView): BoardFilters {
+  return changeView(filters, { view, text: '', facets: NO_FACETS });
 }
 
 interface LoadedBoard {
@@ -139,15 +123,6 @@ interface LoadedBoard {
   readonly approvalWaiting: ReadonlySet<string>;
   /** Phones waiting for pickup, for the tab and an empty active queue; null when not counted. */
   readonly pickup: number | null;
-}
-
-/** The filter options matching typed text, best first, with the app's typo-tolerant search. */
-function fuzzyOptions(options: readonly FilterOption[], text: string): FilterOption[] {
-  const index = new FuzzyIndex(
-    options.map((option, rank) => ({ id: option.value, text: [option.label], rank: -rank })),
-  );
-  const byValue = new Map(options.map((option) => [option.value, option]));
-  return index.search(text, options.length).map((hit) => byValue.get(hit.id)!);
 }
 
 export function RepairBoardPage({
@@ -167,10 +142,9 @@ export function RepairBoardPage({
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
   const state = filters ?? boardFilters(can);
-  const { view, text, facets, sort, page, pageSize, hiddenColumns } = state;
+  const { view, text, facets, sort, page, pageSize } = state;
   /** Any change but a page turn starts again from the first page. */
-  const update = (patch: Partial<BoardFilters>): void =>
-    onFiltersChange({ ...state, page: 1, ...patch });
+  const update = (patch: Partial<BoardFilters>): void => onFiltersChange(changeView(state, patch));
   const setFacets = (patch: Partial<TicketFacets>): void =>
     update({ facets: { ...facets, ...patch } });
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -210,7 +184,8 @@ export function RepairBoardPage({
           sort,
         );
         total = kept.length;
-        rows = kept.slice((page - 1) * pageSize, page * pageSize);
+        const { offset, limit } = pageWindow(state);
+        rows = kept.slice(offset, offset + limit);
       } else {
         const filter = tableFilter(
           view,
@@ -222,8 +197,7 @@ export function RepairBoardPage({
           rt.query('listTickets', {
             filter,
             sort: tableSort(view, sort),
-            offset: (page - 1) * pageSize,
-            limit: pageSize,
+            ...pageWindow(state),
           }),
           // Counted exactly as listed: the cancel-date order also leaves out undated cancels.
           rt.query('countTickets', {
@@ -258,13 +232,6 @@ export function RepairBoardPage({
   // The last page's rows stay up while the next one reads, so the table does not flash; they
   // cannot be opened meanwhile, and the count waits for the new rows.
   const stale = loaded !== null && loaded.scope !== scope;
-
-  // A page past the end (rows synced away, or a narrower filter elsewhere) falls back to the last.
-  const pageCount = loaded === null ? 1 : Math.max(1, Math.ceil(loaded.total / pageSize));
-  useEffect(() => {
-    if (!stale && loaded !== null && page > pageCount)
-      onFiltersChange({ ...state, page: pageCount });
-  });
 
   const options = useRepairQuery(
     async (rt) => {
@@ -320,164 +287,92 @@ export function RepairBoardPage({
       }),
     [loaded, showCancel, searching, can],
   );
-  const filtered = facetCount(facets) > 0;
 
-  const empty =
+  // Search and filters that leave nothing say so in the frame; a queue says what it lacks.
+  const problem =
     query.status === 'unauthorized' || query.status === 'error' ? (
       <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
         {() => null}
       </QueryPanel>
-    ) : filtered ? (
-      <StatePanel
-        icon={FilterX}
-        title={tn('repair.desk.filter.empty')}
-        action={
-          <Button
-            label={tn('repair.desk.filter.reset')}
-            onClick={() => update({ facets: NO_FACETS })}
-          />
-        }
-      />
-    ) : searching ? (
-      <StatePanel icon={SearchX} title={tn('repair.board.noMatches')} />
-    ) : (
-      <StatePanel
-        icon={ClipboardList}
-        title={tn(BOARD_EMPTY_KEY[view])}
-        {...(pointsToPickup(view, searching, loaded?.pickup ?? null)
-          ? {
-              // Nothing being worked on, but customers are due: the way to them, not a dead end.
-              action: (
-                <Button
-                  label={tn('repair.board.pickupWaiting', { count: loaded?.pickup ?? 0 })}
-                  onClick={() => update({ view: 'pickup', facets: facetsFor('pickup', facets) })}
-                  data-testid="repair.desk.board.toPickup"
-                />
-              ),
-            }
-          : view === 'active'
-            ? { hint: tn('repair.board.emptyHint') }
-            : {})}
-      />
-    );
+    ) : undefined;
+  const empty = (
+    <StatePanel
+      icon={ClipboardList}
+      title={tn(BOARD_EMPTY_KEY[view])}
+      {...(pointsToPickup(view, searching, loaded?.pickup ?? null)
+        ? {
+            // Nothing being worked on, but customers are due: the way to them, not a dead end.
+            action: (
+              <Button
+                label={tn('repair.board.pickupWaiting', { count: loaded?.pickup ?? 0 })}
+                onClick={() => update({ view: 'pickup', facets: facetsFor('pickup', facets) })}
+                data-testid="repair.desk.board.toPickup"
+              />
+            ),
+          }
+        : view === 'active'
+          ? { hint: tn('repair.board.emptyHint') }
+          : {})}
+    />
+  );
 
-  const filterLabels = {
-    clear: tn('repair.desk.filter.clear'),
-    search: tn('repair.desk.filter.search'),
-    noMatches: tn('repair.desk.filter.noMatches'),
-  };
-  const chosen = (count: number): string => tn('repair.desk.filter.chosen', { count });
   const statusOptions = statusChoices(searching ? 'search' : view);
   const now = clock();
-  const toolbar = (
-    <div
-      className="@container flex h-12 items-center gap-2 px-6"
-      data-testid="repair.desk.board.filters"
-    >
-      {/* One row that scrolls sideways when the pane leaves it little room, never a second row.
-          The right edge fades, so a filter running under it reads as more to scroll to. */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] [scrollbar-width:none]">
-        {statusOptions.length > 0 ? (
-          <OptionsFilter
-            label={tn('repair.desk.filter.status')}
-            options={statusOptions.map((status) => ({ value: status, label: statusLabel(status) }))}
-            selected={facets.statuses}
-            onChange={(statuses) => setFacets({ statuses: statuses as TicketStatus[] })}
-            summarize={chosen}
-            labels={filterLabels}
-            testId="repair.desk.filter.status"
-          />
-        ) : null}
-        {searching || technicianChoice(view) ? (
-          <OptionsFilter
-            label={tn('repair.desk.filter.technician')}
-            options={[
-              { value: UNASSIGNED, label: tn('repair.ticket.unassigned') },
-              ...(options.status === 'ready' ? options.data.technicians : []).map((person) => ({
-                value: person.id,
-                label: person.name,
-              })),
-            ]}
-            selected={facets.technicians}
-            onChange={(technicians) => setFacets({ technicians })}
-            summarize={chosen}
-            labels={filterLabels}
-            match={fuzzyOptions}
-            testId="repair.desk.filter.technician"
-          />
-        ) : null}
-        <DayRangeFilter
-          label={tn('repair.desk.filter.received')}
-          value={facets.received}
-          presets={RECEIVED_PRESETS.map((preset) => ({
-            key: preset,
-            label: tn(`repair.desk.filter.${preset}`),
-            range: presetRange(preset, now),
-          }))}
-          onChange={(received) => setFacets({ received })}
-          summarize={(range) => dayRangeText(range)}
-          labels={{
-            clear: filterLabels.clear,
-            from: tn('repair.desk.filter.from'),
-            to: tn('repair.desk.filter.to'),
-          }}
-          testId="repair.desk.filter.received"
+  const facetFilters = (
+    <>
+      {statusOptions.length > 0 ? (
+        <ChoiceFacet
+          label={tn('repair.desk.filter.status')}
+          options={statusOptions.map((status) => ({ value: status, label: statusLabel(status) }))}
+          selected={facets.statuses}
+          onChange={(statuses) => setFacets({ statuses: statuses as TicketStatus[] })}
+          testId="repair.desk.filter.status"
         />
-        <OptionsFilter
-          label={tn('repair.desk.filter.brand')}
-          // Keyed by the brand in lower case, the way the query compares brands, so a later
-          // "SAMSUNG" spelling never unticks a chosen "Samsung".
-          options={(options.status === 'ready' ? options.data.brands : []).map((row) => ({
-            value: row.brand.toLowerCase(),
-            label: row.brand,
-            count: row.count,
-          }))}
-          selected={facets.brands}
-          onChange={(brands) => setFacets({ brands })}
-          summarize={chosen}
-          labels={filterLabels}
-          match={fuzzyOptions}
-          testId="repair.desk.filter.brand"
+      ) : null}
+      {searching || technicianChoice(view) ? (
+        <ChoiceFacet
+          label={tn('repair.desk.filter.technician')}
+          options={[
+            { value: UNASSIGNED, label: tn('repair.ticket.unassigned') },
+            ...(options.status === 'ready' ? options.data.technicians : []).map((person) => ({
+              value: person.id,
+              label: person.name,
+            })),
+          ]}
+          selected={facets.technicians}
+          onChange={(technicians) => setFacets({ technicians })}
+          testId="repair.desk.filter.technician"
         />
-        <FilterToggle
-          label={tn('repair.board.priceChangeWaiting')}
-          icon={TriangleAlert}
-          pressed={facets.priceWaiting}
-          onChange={(priceWaiting) => setFacets({ priceWaiting })}
-          collapse
-          testId="repair.desk.filter.priceWaiting"
-        />
-        {filtered ? (
-          <Button
-            variant="text"
-            size="sm"
-            label={tn('repair.desk.filter.reset')}
-            onClick={() => update({ facets: NO_FACETS })}
-            data-testid="repair.desk.filter.reset"
-          />
-        ) : null}
-      </div>
-      <div className="shrink-0">
-        <ColumnsMenu
-          label={tn('repair.desk.table.columns')}
-          columns={columns.map((column) => ({
-            id: column.id!,
-            label: String(column.header),
-            visible: !hiddenColumns.includes(column.id!),
-            locked: LOCKED_COLUMNS.includes(column.id!),
-          }))}
-          onToggle={(id, visible) =>
-            onFiltersChange({
-              ...state,
-              hiddenColumns: visible
-                ? hiddenColumns.filter((other) => other !== id)
-                : [...hiddenColumns, id],
-            })
-          }
-          testId="repair.desk.table.columns"
-        />
-      </div>
-    </div>
+      ) : null}
+      <DayFacet
+        label={tn('repair.desk.filter.received')}
+        value={facets.received}
+        onChange={(received) => setFacets({ received })}
+        now={now}
+        testId="repair.desk.filter.received"
+      />
+      <ChoiceFacet
+        label={tn('repair.desk.filter.brand')}
+        // Keyed by the brand in lower case, the way the query compares brands, so a later
+        // "SAMSUNG" spelling never unticks a chosen "Samsung".
+        options={(options.status === 'ready' ? options.data.brands : []).map((row) => ({
+          value: row.brand.toLowerCase(),
+          label: row.brand,
+          count: row.count,
+        }))}
+        selected={facets.brands}
+        onChange={(brands) => setFacets({ brands })}
+        testId="repair.desk.filter.brand"
+      />
+      <FilterToggle
+        label={tn('repair.board.priceChangeWaiting')}
+        icon={TriangleAlert}
+        pressed={facets.priceWaiting}
+        onChange={(priceWaiting) => setFacets({ priceWaiting })}
+        collapse
+        testId="repair.desk.filter.priceWaiting"
+      />
+    </>
   );
 
   return (
@@ -578,63 +473,29 @@ export function RepairBoardPage({
                 />
               )}
             </div>
-            {toolbar}
-            <DataTable
+            <TableFrame
+              view={state}
+              onViewChange={onFiltersChange}
               rows={loaded?.rows ?? []}
-              columns={columns}
-              getRowId={(row) => row.id}
-              hiddenColumns={hiddenColumns}
-              selectedId={selectedTicketId}
-              onSelect={(row) => {
-                if (!stale) onSelectTicket(row.id);
-              }}
-              // Enter (or a double click) moves the keyboard into the open servisan.
-              onActivate={() => {
-                if (!stale) paneRef.current?.querySelector<HTMLElement>('section')?.focus();
-              }}
-              bodyRef={tableRef}
-              // The query sorts, across every page; the headers only choose the order.
-              manualSorting
-              sorting={sort === null ? [] : [{ id: sort.column, desc: sort.descending }]}
-              onSortingChange={(next) => {
-                const first = next[0];
-                update({
-                  sort:
-                    first === undefined
-                      ? null
-                      : { column: first.id as SortableColumn, descending: first.desc },
-                });
-              }}
-              scrollKey={scope}
+              total={loaded === null || stale ? (loaded?.total ?? null) : loaded.total}
+              stale={stale}
               loading={query.status === 'loading'}
+              columns={columns}
+              lockedColumns={LOCKED_COLUMNS}
+              getRowId={(row) => row.id}
+              filters={facetFilters}
+              filtered={facetCount(facets) > 0}
+              onResetFilters={() => update({ facets: NO_FACETS })}
+              selectedId={selectedTicketId}
+              onSelect={(row) => onSelectTicket(row.id)}
+              // Enter (or a double click) moves the keyboard into the open servisan.
+              onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
+              bodyRef={tableRef}
               empty={empty}
+              problem={problem}
               label={tn('repair.board.title')}
               testId="repair.desk.board.table"
             />
-            {loaded === null || loaded.total === 0 ? null : (
-              <Pagination
-                page={Math.min(page, pageCount)}
-                pageSize={pageSize}
-                total={loaded.total}
-                pageSizes={PAGE_SIZES}
-                onPageChange={(next) => onFiltersChange({ ...state, page: next })}
-                onPageSizeChange={(size) => update({ pageSize: size })}
-                labels={{
-                  range: (from, to, total) =>
-                    tn('repair.desk.table.range', {
-                      from: formatNumber(from),
-                      to: formatNumber(to),
-                      total: formatNumber(total),
-                    }),
-                  perPage: (size) => tn('repair.desk.table.perPage', { size }),
-                  previous: tn('repair.desk.table.previous'),
-                  next: tn('repair.desk.table.next'),
-                  page: (n) => tn('repair.desk.table.page', { page: n }),
-                  label: tn('repair.desk.table.pages'),
-                }}
-                testId="repair.desk.board.pagination"
-              />
-            )}
           </div>
           {selectedTicketId === null ? null : (
             <div
@@ -664,19 +525,6 @@ export function RepairBoardPage({
 
 /** Columns the table cannot do without: which servisan it is, and whose. */
 const LOCKED_COLUMNS: readonly string[] = ['number', 'customer'];
-
-function dayRangeText(range: DayRangeValue): string {
-  const day = (value: string): string => {
-    const [year, month, date] = value.split('-').map(Number) as [number, number, number];
-    return formatDate(new Date(year, month - 1, date).getTime());
-  };
-  if (range.from !== null && range.to !== null) {
-    return tn('repair.desk.filter.range', { from: day(range.from), to: day(range.to) });
-  }
-  return range.from !== null
-    ? tn('repair.desk.filter.since', { from: day(range.from) })
-    : tn('repair.desk.filter.until', { to: day(range.to!) });
-}
 
 type Column = ColumnDef<TicketSummaryRow, unknown>;
 

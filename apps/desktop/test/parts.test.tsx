@@ -68,7 +68,6 @@ async function showView(view: string): Promise<void> {
 
 async function search(text: string): Promise<void> {
   fireEvent.change(byTestId('inventory.desk.search'), { target: { value: text } });
-  await waitFor(() => expect(byTestId('inventory.desk.results').textContent).not.toBe(''));
 }
 
 describe('parts on the PC', () => {
@@ -166,7 +165,9 @@ describe('parts on the PC', () => {
     expect(byTestId('inventory.desk.part.stock').textContent).toBe('3');
     expect(screen.getByText('Barang ditambahkan.')).toBeTruthy();
     await search('lem t7000');
-    expect(within(byTestId('inventory.desk.table')).getByText('Lem T7000 50 ml')).toBeTruthy();
+    expect(
+      await within(byTestId('inventory.desk.table')).findByText('Lem T7000 50 ml'),
+    ).toBeTruthy();
   });
 
   it('builds a name from a category and keeps it for "Tambah lagi"', async () => {

@@ -133,7 +133,7 @@ for (const [width, height] of [
       expect(await views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1)).toBe(true);
       await expect(page.getByTestId('repair.desk.board.views.active')).toBeInViewport({ ratio: 1 });
       // Every filter shows whole: none runs under the toolbar's faded edge.
-      const filters = page.getByTestId('repair.desk.board.filters').locator('> div').first();
+      const filters = page.getByTestId('repair.desk.board.table.filters').locator('> div').first();
       expect(await filters.evaluate((row) => row.scrollWidth <= row.clientWidth + 1)).toBe(true);
       if (paneOpen) {
         // The servisan sits beside the table, never over part of it (its pane shows the total).
@@ -149,7 +149,9 @@ for (const [width, height] of [
       expect(
         await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight),
       ).toBe(true);
-      await expect(page.getByTestId('repair.desk.board.pagination')).toBeInViewport({ ratio: 1 });
+      await expect(page.getByTestId('repair.desk.board.table.pagination')).toBeInViewport({
+        ratio: 1,
+      });
     };
     await fits(false);
     await page.getByText('Maria Kogoya').click();
@@ -213,7 +215,7 @@ test('an owner sees every queue beside an open servisan on a 1366×768 screen', 
   }
   // Nor is a filter cut off at the toolbar's edge.
   await expect(page.getByTestId('repair.desk.filter.priceWaiting')).toBeInViewport({ ratio: 1 });
-  const toolbar = (await page.getByTestId('repair.desk.board.filters').boundingBox())!;
+  const toolbar = (await page.getByTestId('repair.desk.board.table.filters').boundingBox())!;
   const price = (await page.getByTestId('repair.desk.filter.priceWaiting').boundingBox())!;
   expect(price.x + price.width).toBeLessThanOrEqual(toolbar.x + toolbar.width);
 });

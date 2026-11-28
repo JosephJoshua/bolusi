@@ -8,14 +8,22 @@ import {
   opensTransfers,
   InventoryRuntimeProvider,
   NO_FILTER,
+  PART_SORTABLE,
   PartsSection,
+  partsView,
+  type PartsView,
   TransfersPage,
   ti,
-  type ListFilter,
   type TransferFilter,
 } from '@bolusi/modules/inventory/desktop';
 import { KasPage, MoneyRuntimeProvider, opensKas, tm } from '@bolusi/modules/money/desktop';
 import { keptIntakeDraft, startedByOther } from '@bolusi/modules/repair';
+import {
+  changeView,
+  TableViewProvider,
+  useTableView,
+  type TableViewStore,
+} from '@bolusi/modules/screen-kit';
 import {
   OrdersPage,
   opensPurchasing,
@@ -27,7 +35,9 @@ import {
   AttentionPage,
   IntakePage,
   RepairBoardPage,
+  BOARD_SORTABLE,
   boardFilters,
+  onQueue,
   moneyRuntimeOf,
   opensAttention,
   repairAbilities,
@@ -124,21 +134,7 @@ export interface CounterPerson {
   readonly role: string;
 }
 
-export function Counter({
-  storeName,
-  person,
-  nameOf,
-  menuHeader,
-  menuItems,
-  sync,
-  onOpenSyncStatus,
-  refused = 0,
-  settings = {},
-  restoredDraft,
-  onDraftChange,
-  setupPending = false,
-  onSetupDone,
-}: {
+interface CounterProps {
   readonly storeName: string;
   readonly person: CounterPerson;
   /** A colleague's name, for who counted the drawer; null for someone this PC does not know. */
@@ -161,7 +157,37 @@ export function Counter({
   readonly setupPending?: boolean;
   /** The setup was finished or put off; absent where there is none to record (the demo). */
   readonly onSetupDone?: (() => void) | undefined;
-}): React.JSX.Element {
+}
+
+/** Tables remember how each person likes them (sort, rows per page, columns) on this PC. */
+const TABLE_STORE: TableViewStore = {
+  read: (key) => window.localStorage.getItem(`bolusi.${key}`),
+  write: (key, value) => window.localStorage.setItem(`bolusi.${key}`, value),
+};
+
+export function Counter(props: CounterProps): React.JSX.Element {
+  return (
+    <TableViewProvider personId={props.person.userId} store={TABLE_STORE}>
+      <CounterPages {...props} />
+    </TableViewProvider>
+  );
+}
+
+function CounterPages({
+  storeName,
+  person,
+  nameOf,
+  menuHeader,
+  menuItems,
+  sync,
+  onOpenSyncStatus,
+  refused = 0,
+  settings = {},
+  restoredDraft,
+  onDraftChange,
+  setupPending = false,
+  onSetupDone,
+}: CounterProps): React.JSX.Element {
   // Someone who left an intake half done comes back to it, as on the phone. One a colleague left
   // waits on the board instead, for whoever picks it up.
   const startedBy = startedByOther(restoredDraft, person.userId);
@@ -204,14 +230,20 @@ export function Counter({
     } else setClaimAsked(claim);
   };
   // The queue and search the person was on are still there when they come back from an intake.
-  const [filters, setFilters] = useState<BoardFilters | null>(null);
+  const [filters, setFilters] = useTableView<BoardFilters>(
+    'repair.board',
+    () => boardFilters(repairAbilities(repair.hasPermission)),
+    { sortable: BOARD_SORTABLE },
+  );
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
   // The ledger as Kas and the payment settings read it: repair's money port, live on its feed.
   const money = useMemo(() => moneyRuntimeOf(repair, nameOf), [repair, nameOf]);
   // Parts, for whoever may read the list; their filter is still there when they come back.
   const inventory = repair.inventory;
   const showsParts = inventory !== undefined && opensParts(inventory);
-  const [partsFilter, setPartsFilter] = useState<ListFilter>(NO_FILTER);
+  const [partsList, setPartsList] = useTableView<PartsView>('inventory.parts', partsView, {
+    sortable: PART_SORTABLE,
+  });
   // Belanja, for whoever orders from suppliers; it picks parts from the same list.
   const purchasing = repair.purchasing;
   const showsPurchasing = opensPurchasing(inventory, purchasing);
@@ -257,11 +289,13 @@ export function Counter({
   const openFromAttention = (list: AttentionCount): void => {
     switch (list) {
       case 'uncollected':
-        setFilters(boardFilters(repairAbilities(repair.hasPermission), 'uncollected'));
+        setFilters(onQueue(filters, 'uncollected'));
         go({ kind: 'board' });
         return;
       case 'belowZero':
-        setPartsFilter({ ...NO_FILTER, stock: 'belowZero' });
+        setPartsList(
+          changeView(partsList, { text: '', facets: { ...NO_FILTER, stock: 'belowZero' } }),
+        );
         go({ kind: 'parts' });
         return;
       case 'partlyReceived':
@@ -445,8 +479,8 @@ export function Counter({
       ) : page.kind === 'parts' && showsParts && inventory !== undefined ? (
         <InventoryRuntimeProvider runtime={inventory}>
           <PartsSection
-            filter={partsFilter}
-            onFilterChange={setPartsFilter}
+            view={partsList}
+            onViewChange={setPartsList}
             onRegisterLeaveGuard={registerLeaveGuard}
             place={
               itemSections ? { title: ti('inventory.place.stock'), trail: itemsTrail } : undefined

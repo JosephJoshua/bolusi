@@ -258,7 +258,11 @@ export const NO_CATEGORY = 'none' as const;
 
 const zFacetValues = z.array(z.string().trim().min(1).max(60)).max(50);
 
-export const listItemsInput = z
+/** The orders a parts table can ask for; without one, by name (or by best match when searching). */
+export const ITEM_SORTS = ['name.asc', 'name.desc', 'stock.asc', 'stock.desc'] as const;
+export type ItemSort = (typeof ITEM_SORTS)[number];
+
+const itemsNarrowing = z
   .object({
     text: z.string().trim().max(200).default(''),
     filter: z.enum(PART_FILTERS).default('active'),
@@ -269,11 +273,19 @@ export const listItemsInput = z
     values: z.record(z.string().min(1).max(40), zFacetValues).default({}),
     /** Only spareparts: items in a sparepart category, or in none (the take step). */
     partsOnly: z.boolean().default(false),
+  })
+  .strict();
+
+export const listItemsInput = itemsNarrowing
+  .extend({
+    sort: z.enum(ITEM_SORTS).nullable().default(null),
     limit: z.number().int().min(1).max(200).default(50),
     offset: z.number().int().min(0).default(0),
   })
   .strict();
 export type ListPartsInput = z.input<typeof listItemsInput>;
+export const countItemsInput = itemsNarrowing;
+export type CountItemsInput = z.input<typeof countItemsInput>;
 
 type ItemQuery = ReturnType<typeof partsWithStock>;
 
@@ -308,7 +320,7 @@ function onlyParts(query: ItemQuery): ItemQuery {
   );
 }
 
-function filtered(qctx: Qctx, input: z.output<typeof listItemsInput>): ItemQuery {
+function filtered(qctx: Qctx, input: z.output<typeof itemsNarrowing>): ItemQuery {
   let query = partsWithStock(qctx);
   query =
     input.filter === 'archived'
@@ -329,40 +341,76 @@ function filtered(qctx: Qctx, input: z.output<typeof listItemsInput>): ItemQuery
   return query;
 }
 
+/** Sorts parts in memory the way `ITEM_SORTS` orders them in the query. */
+function sortParts(rows: readonly ItemRow[], sort: ItemSort): ItemRow[] {
+  const [column, direction] = sort.split('.') as ['name' | 'stock', 'asc' | 'desc'];
+  const sign = direction === 'desc' ? -1 : 1;
+  return [...rows].sort(
+    (a, b) =>
+      sign *
+      (column === 'name'
+        ? a.name.localeCompare(b.name, 'id', { sensitivity: 'base', numeric: true })
+        : a.onHand - b.onHand),
+  );
+}
+
 /**
- * Parts by name, or by fuzzy match when `text` is given (best match first). `nextCursor` is the
- * next offset while more remain.
+ * Every part matching `text` that the filters keep, best match first. Ranked by the shared fuzzy
+ * index; the filters then narrow the hits it ranked. Hits they drop leave gaps, so the window widens
+ * until it holds `wanted` (or everything, for a count).
+ */
+async function rankedParts(
+  qctx: Qctx,
+  input: z.output<typeof itemsNarrowing>,
+  wanted: number,
+): Promise<ItemRow[]> {
+  const index = await searchIndexFor(qctx, itemSearchSource);
+  const query = filtered(qctx, input);
+  let window = Math.min(wanted, MAX_SEARCH_WINDOW);
+  for (;;) {
+    const ids = index.search(input.text, window).map((hit) => hit.id);
+    if (ids.length === 0) return [];
+    const found = new Map(
+      (await query.where('p.id', 'in', ids).execute()).map((row) => [row.id, toPart(row)]),
+    );
+    const ranked = ids.map((id) => found.get(id)).filter((row) => row !== undefined);
+    if (ranked.length >= wanted || ids.length < window || window >= MAX_SEARCH_WINDOW) {
+      return ranked;
+    }
+    window = Math.min(window * 4, MAX_SEARCH_WINDOW);
+  }
+}
+
+/**
+ * A page of parts: by name (or `sort`), or by fuzzy match when `text` is given (best match first,
+ * or sorted by `sort` among the matches). `nextCursor` is the next offset while more remain.
  */
 export async function listItemsHandler(
   input: z.output<typeof listItemsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<ItemRow>> {
-  const query = filtered(qctx, input);
-
   if (input.text !== '') {
-    // Ranked by the shared fuzzy index; the filters then narrow the hits it ranked. Hits they drop
-    // leave gaps, so the window widens until it holds the page and one more.
-    const index = await searchIndexFor(qctx, itemSearchSource);
-    const wanted = input.offset + input.limit + 1;
-    let window = wanted;
-    let ranked: ItemRow[] = [];
-    for (;;) {
-      const ids = index.search(input.text, window).map((hit) => hit.id);
-      if (ids.length === 0) return { rows: [], nextCursor: null };
-      const found = new Map(
-        (await query.where('p.id', 'in', ids).execute()).map((row) => [row.id, toPart(row)]),
-      );
-      ranked = ids.map((id) => found.get(id)).filter((row) => row !== undefined);
-      if (ranked.length >= wanted || ids.length < window || window >= MAX_SEARCH_WINDOW) break;
-      window = Math.min(window * 4, MAX_SEARCH_WINDOW);
-    }
-    const page = ranked.slice(input.offset, input.offset + input.limit);
-    const more = ranked.length > input.offset + input.limit;
+    // A sorted search needs every match before it can say which come first.
+    const ranked = await rankedParts(
+      qctx,
+      input,
+      input.sort === null ? input.offset + input.limit + 1 : MAX_SEARCH_WINDOW,
+    );
+    const ordered = input.sort === null ? ranked : sortParts(ranked, input.sort);
+    const page = ordered.slice(input.offset, input.offset + input.limit);
+    const more = ordered.length > input.offset + input.limit;
     return { rows: page, nextCursor: more ? String(input.offset + input.limit) : null };
   }
 
-  const rows = await query
-    .orderBy(sql`lower(p.name)`)
+  const [column, direction] = (input.sort ?? 'name.asc').split('.') as [
+    'name' | 'stock',
+    'asc' | 'desc',
+  ];
+  const rows = await filtered(qctx, input)
+    .orderBy(
+      column === 'name' ? sql`lower(p.name)` : sql`coalesce(${sql.ref('s.onHand')}, 0)`,
+      direction,
+    )
     .orderBy('p.id')
     .limit(input.limit + 1)
     .offset(input.offset)
@@ -379,6 +427,31 @@ export const listItemsQuery = {
   permission: INVENTORY_PERMISSION.read,
   input: listItemsInput,
   handler: listItemsHandler,
+} as const;
+
+// ── countItems ─────────────────────────────────────────────────────────────────────────────────
+
+/** How many parts `listItems` lists for the same search and filters, across every page. */
+export async function countItemsHandler(
+  input: z.output<typeof countItemsInput>,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly count: number }>> {
+  if (input.text !== '') {
+    const ranked = await rankedParts(qctx, input, MAX_SEARCH_WINDOW);
+    return { rows: [{ count: ranked.length }], nextCursor: null };
+  }
+  const row = await qctx.db
+    .selectFrom(filtered(qctx, input).as('f'))
+    .select((eb) => eb.fn.countAll<number | string>().as('count'))
+    .executeTakeFirst();
+  return { rows: [{ count: Number(row?.count ?? 0) }], nextCursor: null };
+}
+
+export const countItemsQuery = {
+  name: 'countItems',
+  permission: INVENTORY_PERMISSION.read,
+  input: countItemsInput,
+  handler: countItemsHandler,
 } as const;
 
 // ── countBelowZero ─────────────────────────────────────────────────────────────────────────────

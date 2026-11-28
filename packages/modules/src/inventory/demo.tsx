@@ -389,45 +389,59 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
   type Input = Record<string, unknown>;
   const page = <T,>(rows: readonly T[], nextCursor: string | null = null) => ({ rows, nextCursor });
 
+  /** What `listItems` and `countItems` list for the same search and filters, in order. */
+  const matchingItems = (input: Input): ItemRow[] => {
+    const text = String(input['text'] ?? '').trim();
+    const filter = (input['filter'] as string | undefined) ?? 'active';
+    const categoryId = (input['categoryId'] as string | null | undefined) ?? null;
+    const tags = (input['tags'] as string[] | undefined) ?? [];
+    const values = (input['values'] as Record<string, string[]> | undefined) ?? {};
+    const inCategory = (item: DemoItem): boolean =>
+      categoryId === null ||
+      (categoryId === 'none' ? item.categoryId === null : item.categoryId === categoryId);
+    const shown = items
+      .filter((p) => (filter === 'archived' ? p.archived : !p.archived))
+      .filter(inCategory)
+      .filter((p) => input['partsOnly'] !== true || isPart(p))
+      .filter((p) => tags.every((tag) => has(p, TAG_FACET, [tag])))
+      .filter((p) =>
+        Object.entries(values).every(
+          ([facet, wanted]) => wanted.length === 0 || has(p, facet, wanted),
+        ),
+      )
+      .map((p) => ({ item: p, row: row(p) }))
+      .filter(({ row: r }) => filter !== 'belowZero' || r.onHand < 0)
+      .filter(({ row: r }) => filter !== 'outOfStock' || r.onHand <= 0);
+    // The same typo-tolerant search the app runs, best match first.
+    const matching =
+      text === ''
+        ? shown.map(({ row: r }) => r).sort((a, b) => a.name.localeCompare(b.name))
+        : new FuzzyIndex(
+            shown.map(({ item, row: r }) =>
+              itemDocument({ ...r, barcode: item.barcode, values: item.values, tags: item.tags }),
+            ),
+          )
+            .search(text, shown.length)
+            .map((hit) => shown.find(({ row: r }) => r.id === hit.id)!.row);
+    const sort = (input['sort'] as string | null | undefined) ?? null;
+    if (sort === null) return matching;
+    const [column, direction] = sort.split('.');
+    const sign = direction === 'desc' ? -1 : 1;
+    return [...matching].sort(
+      (a, b) =>
+        sign * (column === 'stock' ? a.onHand - b.onHand : a.name.localeCompare(b.name, 'id')),
+    );
+  };
+
   const queries: Record<string, (input: Input) => unknown> = {
     listItems: (input) => {
-      const text = String(input['text'] ?? '').trim();
-      const filter = (input['filter'] as string | undefined) ?? 'active';
-      const categoryId = (input['categoryId'] as string | null | undefined) ?? null;
-      const tags = (input['tags'] as string[] | undefined) ?? [];
-      const values = (input['values'] as Record<string, string[]> | undefined) ?? {};
       const limit = Number(input['limit'] ?? 50);
       const offset = Number(input['offset'] ?? 0);
-      const inCategory = (item: DemoItem): boolean =>
-        categoryId === null ||
-        (categoryId === 'none' ? item.categoryId === null : item.categoryId === categoryId);
-      const shown = items
-        .filter((p) => (filter === 'archived' ? p.archived : !p.archived))
-        .filter(inCategory)
-        .filter((p) => input['partsOnly'] !== true || isPart(p))
-        .filter((p) => tags.every((tag) => has(p, TAG_FACET, [tag])))
-        .filter((p) =>
-          Object.entries(values).every(
-            ([facet, wanted]) => wanted.length === 0 || has(p, facet, wanted),
-          ),
-        )
-        .map((p) => ({ item: p, row: row(p) }))
-        .filter(({ row: r }) => filter !== 'belowZero' || r.onHand < 0)
-        .filter(({ row: r }) => filter !== 'outOfStock' || r.onHand <= 0);
-      // The same typo-tolerant search the app runs, best match first.
-      const matching =
-        text === ''
-          ? shown.map(({ row: r }) => r).sort((a, b) => a.name.localeCompare(b.name))
-          : new FuzzyIndex(
-              shown.map(({ item, row: r }) =>
-                itemDocument({ ...r, barcode: item.barcode, values: item.values, tags: item.tags }),
-              ),
-            )
-              .search(text, shown.length)
-              .map((hit) => shown.find(({ row: r }) => r.id === hit.id)!.row);
+      const matching = matchingItems(input);
       const more = matching.length > offset + limit;
       return page(matching.slice(offset, offset + limit), more ? String(offset + limit) : null);
     },
+    countItems: (input) => page([{ count: matchingItems(input).length }]),
     itemCost: (input) => {
       require(I.readCost);
       const own = movements

@@ -258,14 +258,8 @@
       "stock": "Stock"
     },
     "filter": {
-      "category": "Category",
-      "clear": "Clear filter",
-      "reset": "Clear all filters",
-      "search": "Search",
-      "noMatches": "No matches",
-      "chosen": "{count} chosen"
+      "category": "Category"
     },
-    "results": "{count} items",
     "closePart": "Close item"
   },
   "cost": {
