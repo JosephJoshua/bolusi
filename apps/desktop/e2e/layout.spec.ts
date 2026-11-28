@@ -108,5 +108,22 @@ for (const [width, height] of [
       await page.getByTestId(row).getByRole('row').nth(1).click();
       await check(`${place.toLowerCase()}-${size}`);
     }
+
+    // The owner's supplier bills: the Tagihan list, and one bill open beside it.
+    await page
+      .getByRole('navigation')
+      .getByRole('button', { name: 'Belanja', exact: true })
+      .first()
+      .click();
+    await page.getByTestId('purchasing.desk.views.bills').click();
+    await expect(page.getByTestId('purchasing.desk.bills')).toBeVisible();
+    await check(`bills-${size}`);
+    await page
+      .getByTestId('purchasing.desk.bills')
+      .getByText(/SJ.0912/)
+      .first()
+      .click();
+    await expect(page.getByTestId('purchasing.desk.bill.check')).toBeVisible();
+    await check(`bill-${size}`);
   });
 }

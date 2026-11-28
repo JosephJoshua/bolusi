@@ -185,7 +185,8 @@ function journey(world: ChainWorld): OpSpec[] {
     ];
   };
   /** A supplier, an order drafted, edited and placed, a delivery and the stock it brings in; then
-   *  a second order cancelled. Uses the part above. */
+   *  a second order cancelled; a bill recorded on the first and corrected, and one voided. Uses the
+   *  part above. */
   const purchasing = (): OpSpec[] => {
     const supplier = id(0x600);
     const order = id(0x601);
@@ -198,6 +199,22 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId,
       payload,
     });
+    const billOp = (type: string, entityId: string, payload: Record<string, unknown>): OpSpec => ({
+      type,
+      entityType: 'purchasing_bill',
+      entityId,
+      payload,
+    });
+    const bill = {
+      supplierId: supplier,
+      orderId: order,
+      supplierRef: 'INV-889',
+      billedOn: 1_726_000_000_000,
+      dueOn: 1_727_000_000_000,
+      charges: 25_000,
+      note: null,
+      lines: [{ itemId: part, name: 'LCD Samsung A14', qty: 2, unitPrice: 350_000 }],
+    };
     return [
       {
         type: 'purchasing.supplier_added',
@@ -260,6 +277,18 @@ function journey(world: ChainWorld): OpSpec[] {
         lines,
       }),
       orderOp('purchasing.order_cancelled', dropped, { reason: 'Salah supplier' }),
+      billOp('purchasing.bill_recorded', id(0x610), {
+        billNumber: `TG-${formatTicketNumber(world.deviceId, 1)}`,
+        ...bill,
+      }),
+      billOp('purchasing.bill_edited', id(0x610), { ...bill, charges: 15_000, dueOn: null }),
+      billOp('purchasing.bill_recorded', id(0x611), {
+        billNumber: `TG-${formatTicketNumber(world.deviceId, 2)}`,
+        ...bill,
+        supplierRef: 'INV-890',
+        orderId: null,
+      }),
+      billOp('purchasing.bill_voided', id(0x611), { reason: 'Nota dobel' }),
     ];
   };
   /** A transfer sent and cancelled, one sent and settled back, and one from the other store that
