@@ -61,7 +61,7 @@ test('a new category needs a format that names only its fields', async ({ page }
     .fill('Speaker {Posisi} {Warna}');
   await tap(page, 'inventory.categoryForm.primary');
   await expect(
-    page.getByText('Format menyebut isian yang tidak ada: Warna.').first(),
+    page.getByText('Format menyebut kolom yang tidak ada: Warna.').first(),
   ).toBeVisible();
   await shoot(page, 'format-problem');
   await page.getByTestId('inventory.categoryForm.format.field').first().fill('Speaker {Posisi}');

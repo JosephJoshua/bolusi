@@ -112,7 +112,7 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   // "Pola" chosen with nothing drawn does not move on as if there were no lock.
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.device.lock.pattern.hint')).toHaveText(
-    'Isi kunci layarnya, atau pilih Tidak ada.',
+    'Isi kunci layar, atau pilih Tidak ada.',
   );
   await drawPattern(page, 'repair.intake.device.lock.pattern', [1, 2]);
   await expect(page.getByTestId('repair.intake.device.lock')).toContainText('minimal 4 titik');
@@ -302,7 +302,7 @@ test('handover takes the rest of the bill, then the photo and the signature', as
   // QA round F: a zero too many shows in the warning colour and asks before the handover saves.
   await fill(page, 'repair.handover.pay.line0.tendered', '150000');
   await expect(page.getByTestId('repair.handover.pay.line0.changeBig')).toHaveText(
-    'Kembalian besar. Cek lagi uang diterima.',
+    'Kembalian besar. Periksa kembali uang diterima.',
   );
   await shoot(page, 'handover-change-big');
   await tap(page, 'repair.handover.primary');
@@ -420,7 +420,7 @@ test('a cancelled servisan gives back the DP less its fee, with nothing to pay',
   const qris = page.getByTestId(
     'repair.handover.refund.account:01920000-0000-7000-8000-00000000a001',
   );
-  await expect(qris).toContainText('Kembalikan lewat QRIS BCA');
+  await expect(qris).toContainText('Kembalikan melalui QRIS BCA');
   await expect(qris).toContainText('Rp 30.000');
   await expect(page.getByTestId('repair.handover.payment')).toHaveCount(0);
   await shoot(page, 'handover-cancelled-refund');
@@ -933,7 +933,7 @@ test('a down payment at intake shows what is left to pay, and opens with the tic
   await fill(page, 'repair.intake.price.amount.0', '650000');
   // More than the price is refused where it is typed.
   await fill(page, 'repair.intake.price.downPaymentInput', '700000');
-  await expect(page.getByText('DP-nya lebih besar dari total biaya.').first()).toBeVisible();
+  await expect(page.getByText('DP lebih besar dari total biaya.').first()).toBeVisible();
   await fill(page, 'repair.intake.price.downPaymentInput', '200000');
   await expect(page.getByTestId('repair.intake.price.balance')).toHaveText('Rp 450.000');
   await shoot(page, 'dp-intake-price');
@@ -984,7 +984,7 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await tap(page, 'repair.ticket.downPayment.correct');
   // The recorded amount is shown above; the field waits for the correct one.
   await expect(page.getByTestId('repair.downPayment.amount.field')).toHaveValue('');
-  await expect(page.getByText('Isi DP yang benar dulu.')).toBeVisible();
+  await expect(page.getByText('Isi DP yang benar terlebih dahulu.')).toBeVisible();
   await fill(page, 'repair.downPayment.amount', '50000');
   await expect(page.getByText('Jumlahnya masih sama.')).toBeVisible();
   await fill(page, 'repair.downPayment.amount', '30000');
@@ -1115,7 +1115,7 @@ test('the counter sees a phone nobody collected and messages the customer on Wha
   const url = await openedWhatsApp(page);
   expect(`${url.host}${url.pathname}`).toBe('wa.me/6281344556677');
   expect(url.searchParams.get('text')).toContain(
-    'Halo Kak Markus, HP Oppo A57 sudah selesai diservis dan bisa diambil',
+    'Halo Markus, HP Oppo A57 sudah selesai diperbaiki dan dapat diambil',
   );
   expect(url.searchParams.get('text')).toContain('No. servisan: K7Q-0006');
 });
@@ -1127,7 +1127,7 @@ test('the counter asks the customer about a price change on WhatsApp', async ({ 
   await shoot(page, 'message-price-change');
   const text = (await openedWhatsApp(page)).searchParams.get('text') ?? '';
   expect(text).toContain('- Baterai: Rp');
-  expect(text).toContain('Boleh kami lanjutkan, Kak?');
+  expect(text).toContain('Bolehkah kami melanjutkan?');
 });
 
 test('a technician gets neither the not-collected list nor the message button', async ({

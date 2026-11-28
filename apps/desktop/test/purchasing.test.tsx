@@ -84,7 +84,7 @@ async function placeOrder(supplier: string, qty: string): Promise<void> {
   await screen.findByTestId('purchasing.desk.form');
   expect(byTestId('purchasing.desk.form.submit')).toHaveProperty('disabled', true);
   expect(byTestId('purchasing.desk.form.hint').textContent).toBe(
-    'Pilih supplier dan barangnya dulu.',
+    'Pilih supplier dan barang terlebih dahulu.',
   );
   fireEvent.click(await screen.findByRole('radio', { name: new RegExp(supplier) }));
   // A USB scanner types the barcode and presses Enter: that adds the part it names.
@@ -118,7 +118,7 @@ describe('Belanja on the PC', () => {
     );
     expect(byTestId('purchasing.desk.order.stage').textContent).toBe('Dipesan');
     expect(
-      within(pane).getByText('Pesanan dipesan. Kirim ke supplier lewat WhatsApp.'),
+      within(pane).getByText('Pesanan dipesan. Kirim ke supplier melalui WhatsApp.'),
     ).toBeTruthy();
     expect(within(pane).getByText('5 pcs')).toBeTruthy();
   });
@@ -136,7 +136,7 @@ describe('Belanja on the PC', () => {
     await waitFor(() =>
       expect(byTestId('purchasing.desk.order.stage').textContent).toBe('Diterima'),
     );
-    expect(screen.getByText('Barang diterima. Stok sudah bertambah.')).toBeTruthy();
+    expect(screen.getByText('Barang diterima dan stok bertambah.')).toBeTruthy();
     expect(byTestId('purchasing.desk.order.receipts').textContent).toContain('Andi Pratama');
 
     // Done orders move to Selesai.

@@ -153,7 +153,7 @@ describe('sending', () => {
     const item = (await a.queryInventory('getItem', { itemId: lcd }, a.storeOwnerId)).rows[0];
     const latest = item.movements[0];
     expect(latest.qty).toBe(-5);
-    expect(movementTitle(latest)).toBe(`Dikirim lewat ${transferNumber}`);
+    expect(movementTitle(latest)).toBe(`Dikirim melalui ${transferNumber}`);
   });
 
   test('a cashier without "Kirim sparepart antar toko" cannot send', async () => {

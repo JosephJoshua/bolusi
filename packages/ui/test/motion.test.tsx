@@ -158,7 +158,7 @@ describe('sync chip motion', () => {
     pending: 'Menunggu',
     syncing: 'Menyinkronkan',
     offline: 'Offline',
-    attention: 'Perlu dicek',
+    attention: 'Perlu diperiksa',
   };
   const iconWrap = (r: ReturnType<typeof render>, state: string) =>
     r.container.queryAll(

@@ -200,7 +200,7 @@ describe('handover slip', () => {
       handoverSlip(cancelled, { ...ctx, handedOverByName: null, signature: null }),
     );
     expect(text).toMatch(/Dikembalikan tunai\s+Rp 50\.000/);
-    expect(text).toMatch(/Dikembalikan lewat QRIS toko\s+Rp 100\.000/);
+    expect(text).toMatch(/Dikembalikan melalui QRIS toko\s+Rp 100\.000/);
   });
 
   it('takes what an owner lowered off the bill, so a reprint after a refund owes nothing', () => {

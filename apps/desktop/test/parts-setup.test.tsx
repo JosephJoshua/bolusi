@@ -119,7 +119,7 @@ describe('categories on the PC', () => {
       target: { value: 'Speaker {Posisi} {Warna}' },
     });
     fireEvent.click(byTestId('inventory.desk.category.submit'));
-    expect(await screen.findByText('Format menyebut isian yang tidak ada: Warna.')).toBeTruthy();
+    expect(await screen.findByText('Format menyebut kolom yang tidak ada: Warna.')).toBeTruthy();
     fireEvent.change(byTestId('inventory.desk.category.format'), {
       target: { value: 'Speaker {Posisi}' },
     });
@@ -140,7 +140,7 @@ describe('categories on the PC', () => {
     fireEvent.click(byTestId('inventory.desk.category.addField'));
     const label = await screen.findByPlaceholderText('Contoh: Kualitas');
     expect(label.getAttribute('aria-invalid')).toBeNull();
-    expect(screen.queryByText('Isi nama isiannya.')).toBeNull();
+    expect(screen.queryByText('Isi nama kolom.')).toBeNull();
     fireEvent.click(byTestId('inventory.desk.category.submit'));
     await waitFor(() => expect(label.getAttribute('aria-invalid')).toBe('true'));
   });

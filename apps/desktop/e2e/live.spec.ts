@@ -350,7 +350,7 @@ test('the same phone records the ownership video for a PC without a webcam', asy
   const section = pc.getByTestId('repair.desk.intake.video');
   await section.getByTestId('repair.desk.intake.video.clip.record').click();
   // Still paired: the step goes to the phone, with what the clip must say.
-  await expect(pc.getByTestId('desktop.handoff.onPhone')).toContainText('Rekam videonya di HP');
+  await expect(pc.getByTestId('desktop.handoff.onPhone')).toContainText('Rekam video di HP');
   await expect(phone.locator('#clip-hint')).toContainText('bahwa HP ini miliknya');
   await phone.locator('#rec-start').click();
   await expect(phone.locator('#clock-text')).toContainText('/ 1:00');

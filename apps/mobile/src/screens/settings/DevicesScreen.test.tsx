@@ -65,7 +65,7 @@ describe('DevicesScreen', () => {
     expect(onBlock).not.toHaveBeenCalled();
     const sheet = textsIn(screen.get('devices-confirm'));
     expect(sheet).toContain(t('auth.devices.blockTitle', { name: 'HP Ani' }));
-    expect(sheet.join(' ')).toMatch(/belum terkirim/);
+    expect(sheet.join(' ')).toMatch(/belum disinkronkan/);
 
     press('devices-confirm.confirm');
     await flush();

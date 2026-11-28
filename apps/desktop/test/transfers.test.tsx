@@ -107,7 +107,7 @@ describe('Kiriman on the PC', () => {
     await screen.findByTestId('inventory.desk.send');
     expect(byTestId('inventory.desk.send.submit')).toHaveProperty('disabled', true);
     expect(byTestId('inventory.desk.send.hint').textContent).toBe(
-      'Pilih toko tujuan dan sparepartnya dulu.',
+      'Pilih toko tujuan dan sparepart terlebih dahulu.',
     );
     fireEvent.click(await screen.findByRole('radio', { name: 'Toko Jayapura' }));
     const search = byTestId('inventory.desk.send.part.search');
@@ -141,7 +141,9 @@ describe('Kiriman on the PC', () => {
     const lost = within(dialog).getByLabelText('Hilang');
     fireEvent.change(back, { target: { value: '0' } });
     fireEvent.change(lost, { target: { value: '1' } });
-    expect(byTestId('inventory.desk.settle.hint').textContent).toBe('Tulis alasannya dulu.');
+    expect(byTestId('inventory.desk.settle.hint').textContent).toBe(
+      'Tulis alasan terlebih dahulu.',
+    );
     expect(byTestId('inventory.desk.settle.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('inventory.desk.settle.reason'), {
       target: { value: 'Jatuh di jalan.' },

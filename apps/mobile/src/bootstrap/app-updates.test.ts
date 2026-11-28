@@ -95,7 +95,7 @@ describe('over-the-air updates on a phone', () => {
   });
 });
 
-describe('"Cek pembaruan"', () => {
+describe('"Periksa pembaruan"', () => {
   const port = (pendingAfterDownload: boolean, pendingAtStart = false) => {
     let pending = pendingAtStart;
     return {
