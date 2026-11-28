@@ -4,24 +4,12 @@
  * and the servisan's history keeps what it was.
  */
 import { TextInput, Text } from '@bolusi/ui';
-import { useState } from 'react';
 import { View } from 'react-native';
 
-import { useActionRunner } from '../../screen-kit/index.js';
-import {
-  INTAKE_PROBLEM_KEY,
-  correctionDraft,
-  correctionOptions,
-  correctionProblems,
-  toCorrectionInput,
-  type IntakeDraft,
-  type IntakeProblem,
-} from '../flows.js';
+import { useCorrectDetails } from '../correct-details.js';
 import { tn } from '../i18n.js';
-import { storeIntakeOptions } from '../intake-options.js';
 import { INTAKE_STEP_KEY } from '../labels.js';
 import type { TicketDetailRow } from '../queries.js';
-import { useIntakeOptionSettings, useRepairRuntime } from '../runtime.js';
 import { useDiscardConfirm } from './discard.js';
 import { AccessoriesSection, CustomerStep, DeviceStep } from './IntakeSteps.js';
 import { FlowScreen, QueryView, Section, repairStyles } from './parts.js';
@@ -39,46 +27,13 @@ export function CorrectDetailsStep({
   readonly ticket: TicketDetailRow;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const settings = useIntakeOptionSettings();
-  const [initial] = useState(() => correctionDraft(ticket));
-  const [draft, setDraft] = useState(initial);
-  const [reason, setReason] = useState('');
-  const [showProblems, setShowProblems] = useState(false);
-  const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
-  const options =
-    settings.status === 'ready'
-      ? correctionOptions(storeIntakeOptions(settings.data), ticket)
-      : null;
-  const problems = options === null ? [] : correctionProblems(draft, options);
-  const problemText = (problem: IntakeProblem): string | undefined =>
-    showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
-  const changed = JSON.stringify(draft) !== JSON.stringify(initial);
+  const form = useCorrectDetails(ticket, { onDone, onUnchanged: onCancel });
+  const { runner, settings, draft, update, reason, setReason, options, problemText, submit } = form;
   const discard = useDiscardConfirm({
-    dirty: stale === null && (changed || reason.trim() !== ''),
+    dirty: stale === null && form.dirty,
     onRegisterDiscardGuard,
     testID,
   });
-
-  const submit = (): void => {
-    if (options === null) return;
-    if (problems.length > 0) {
-      setShowProblems(true);
-      return;
-    }
-    if (!changed) {
-      onCancel();
-      return;
-    }
-    void runner
-      .run(() =>
-        runtime.run('correctTicketDetails', toCorrectionInput(ticket, draft, options, reason)),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <FlowScreen

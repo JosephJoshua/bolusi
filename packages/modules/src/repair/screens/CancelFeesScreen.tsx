@@ -8,14 +8,15 @@ import { ConfirmSheet, TextInput, Text } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 
 import { acceptsRupiahText, parseRupiah } from '../flows.js';
 import type { CancelFees } from '../queries.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
-import { useCancelFees, useRepairRuntime } from '../runtime.js';
+import { useCancelFees } from '../runtime.js';
+import { useCancelFeesForm } from '../settings-forms.js';
 
 export interface CancelFeesScreenProps {
   readonly chrome: RepairChrome;
@@ -52,9 +53,8 @@ export function CancelFeesScreen({
   );
 }
 
-/** Typed digits as rupiah; an emptied field stays empty rather than snapping back to "Rp 0". */
-function moneyText(digits: string): string {
-  const amount = parseRupiah(digits);
+/** A fee as rupiah; an emptied field stays empty rather than snapping back to "Rp 0". */
+function moneyText(amount: number | null): string {
   return amount === null ? '' : formatMoney(amount);
 }
 
@@ -77,40 +77,14 @@ function FeesForm({
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   readonly testID: string;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [text, setText] = useState<Record<keyof CancelFees, string>>(() => ({
-    beforeWork: String(saved.beforeWork),
-    afterWork: String(saved.afterWork),
-  }));
-  const [baseline, setBaseline] = useState(saved);
-  const [notice, setNotice] = useState<string | null>(null);
+  const form = useCancelFeesForm(saved);
+  const { runner, fees, dirty } = form;
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
-
-  const beforeWork = parseRupiah(text.beforeWork);
-  const afterWork = parseRupiah(text.afterWork);
-  const complete = beforeWork !== null && afterWork !== null;
-  const dirty = beforeWork !== baseline.beforeWork || afterWork !== baseline.afterWork;
 
   useEffect(() => {
     onRegisterDiscardGuard?.(dirty ? (proceed) => setPendingLeave(() => proceed) : null);
     return () => onRegisterDiscardGuard?.(null);
   }, [dirty, onRegisterDiscardGuard]);
-
-  const save = (): void => {
-    if (beforeWork === null || afterWork === null) return;
-    if (!dirty) {
-      onClose();
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setCancelFees', { beforeWork, afterWork }))
-      .then((result) => {
-        if (result === undefined) return;
-        setBaseline(result);
-        setNotice(tn('repair.fees.saved'));
-      });
-  };
 
   return (
     <FlowScreen
@@ -118,14 +92,14 @@ function FeesForm({
       title={tn('repair.fees.title')}
       onBack={() => (dirty ? setPendingLeave(() => onClose) : onClose())}
       primaryLabel={tn('repair.fees.save')}
-      onPrimary={save}
-      primaryDisabled={!complete}
+      onPrimary={() => form.save(onClose)}
+      primaryDisabled={!form.complete}
       primaryHint={tn('repair.fees.hint')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
-      notice={notice}
-      onClearNotice={() => setNotice(null)}
+      notice={form.notice}
+      onClearNotice={form.clearNotice}
       overlay={
         pendingLeave === null ? null : (
           <ConfirmSheet
@@ -151,11 +125,10 @@ function FeesForm({
           <TextInput
             label={tn(label)}
             // Shown as money while typing ("Rp 50.000"), so there is no second line to read back.
-            value={moneyText(text[key])}
+            value={moneyText(fees[key])}
             onChangeText={(next) => {
               if (!acceptsRupiahText(next)) return;
-              setNotice(null);
-              setText((current) => ({ ...current, [key]: next.replace(/\D/g, '') }));
+              form.setFee(key, parseRupiah(next.replace(/\D/g, '')));
             }}
             keyboardType="number-pad"
             selectTextOnFocus
