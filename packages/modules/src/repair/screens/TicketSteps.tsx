@@ -21,7 +21,6 @@ import {
   ToggleChip,
   type,
 } from '@bolusi/ui';
-import type { MediaRef } from '@bolusi/schemas';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -35,9 +34,10 @@ import { groupedRupiah } from '../../shared/rupiah.js';
 
 import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
+import { useUndoHandover, useWaitForParts, useWorkPhotos } from '../work-steps.js';
 import { useRepairTypesPick } from '../repair-types-pick.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
-import { tn, type RepairKey } from '../i18n.js';
+import { tn } from '../i18n.js';
 import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   acceptsRupiahText,
@@ -66,23 +66,6 @@ export interface StepProps {
 
 // ── work photos ───────────────────────────────────────────────────────────────────────────────
 
-const STAGE_COPY: Readonly<
-  Record<WorkPhotoStage, { title: RepairKey; hint: RepairKey; shot: RepairKey; submit: RepairKey }>
-> = {
-  before: {
-    title: 'repair.work.beforeTitle',
-    hint: 'repair.work.beforeHint',
-    shot: 'repair.work.beforeShot',
-    submit: 'repair.action.start',
-  },
-  after: {
-    title: 'repair.work.afterTitle',
-    hint: 'repair.work.afterHint',
-    shot: 'repair.work.afterShot',
-    submit: 'repair.action.markRepaired',
-  },
-};
-
 /**
  * Before photos to start work, or after photos (and a note) to mark it repaired. At least one photo
  * is required either way (owner decision, 2026-10-25).
@@ -102,12 +85,14 @@ export function WorkPhotosStep({
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [photos, setPhotos] = useState<readonly MediaRef[]>([]);
-  const [note, setNote] = useState('');
-  const copy = STAGE_COPY[stage];
+  const { photos, setPhotos, note, setNote, copy, dirty, submit } = useWorkPhotos(
+    ticketId,
+    stage,
+    onDone,
+  );
   const discard = useDiscardConfirm({
     // Nothing to keep once the step cannot finish: leaving it goes straight back.
-    dirty: stale === null && (photos.length > 0 || note.trim() !== ''),
+    dirty: stale === null && dirty,
     onRegisterDiscardGuard,
     testID,
   });
@@ -118,18 +103,6 @@ export function WorkPhotosStep({
       .then((captured) => {
         if (captured !== undefined && captured !== null)
           setPhotos((current) => [...current, captured.mediaRef]);
-      });
-  };
-
-  const submit = (): void => {
-    void runner
-      .run(() =>
-        stage === 'before'
-          ? runtime.run('startWork', { ticketId, beforePhotos: [...photos] })
-          : runtime.run('markRepaired', { ticketId, afterPhotos: [...photos], note }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
       });
   };
 
@@ -198,22 +171,12 @@ export function WaitForPartsStep({
   onRegisterDiscardGuard,
   testID = 'repair.note.waitForParts',
 }: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [text, setText] = useState('');
+  const { runner, note: text, setNote: setText, submit } = useWaitForParts(ticketId, onDone);
   const discard = useDiscardConfirm({
     dirty: stale === null && text.trim() !== '',
     onRegisterDiscardGuard,
     testID,
   });
-
-  const submit = (): void => {
-    void runner
-      .run(() => runtime.run('markWaitingForParts', { ticketId, note: text }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
 
   return (
     <FlowScreen
@@ -393,23 +356,13 @@ export function UndoHandoverStep({
   onRegisterDiscardGuard,
   testID = 'repair.undoHandover',
 }: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reason, setReason] = useState('');
-  const complete = reason.trim() !== '';
+  const { runner, reason, setReason, complete, submit } = useUndoHandover(ticketId, onDone);
   const discard = useDiscardConfirm({
     dirty: stale === null && complete,
     onRegisterDiscardGuard,
     testID,
   });
-  const submit = (): void => {
-    if (!complete) return;
-    void runner
-      .run(() => runtime.run('undoHandover', { ticketId, reason }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+
   return (
     <FlowScreen
       chrome={chrome}

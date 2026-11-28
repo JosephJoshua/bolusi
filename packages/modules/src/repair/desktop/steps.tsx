@@ -54,6 +54,7 @@ import { ta } from '../../approvals/i18n.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
+import { useUndoHandover, useWaitForParts, useWorkPhotos } from '../work-steps.js';
 import { useRepairTypesPick } from '../repair-types-pick.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
@@ -167,23 +168,6 @@ function useLeaveGuard(dirty: boolean, onClose: () => void) {
 
 // ── work photos ─────────────────────────────────────────────────────────────────────────────
 
-const STAGE_COPY: Readonly<
-  Record<WorkPhotoStage, { title: RepairKey; hint: RepairKey; shot: RepairKey; submit: RepairKey }>
-> = {
-  before: {
-    title: 'repair.work.beforeTitle',
-    hint: 'repair.work.beforeHint',
-    shot: 'repair.work.beforeShot',
-    submit: 'repair.action.start',
-  },
-  after: {
-    title: 'repair.work.afterTitle',
-    hint: 'repair.work.afterHint',
-    shot: 'repair.work.afterShot',
-    submit: 'repair.action.markRepaired',
-  },
-};
-
 function CapturedTile({
   label,
   photo,
@@ -218,10 +202,12 @@ export function WorkPhotosDialog({
 }: StepDialogProps & { readonly stage: WorkPhotoStage }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [photos, setPhotos] = useState<readonly MediaRef[]>([]);
-  const [note, setNote] = useState('');
-  const copy = STAGE_COPY[stage];
-  const leave = useLeaveGuard(stale === null && (photos.length > 0 || note.trim() !== ''), onClose);
+  const { photos, setPhotos, note, setNote, copy, dirty, submit } = useWorkPhotos(
+    ticketId,
+    stage,
+    onDone,
+  );
+  const leave = useLeaveGuard(stale === null && dirty, onClose);
   const testId = `repair.desk.work.${stage}`;
 
   const media = useCapture(runner);
@@ -235,17 +221,6 @@ export function WorkPhotosDialog({
             ? current.map((photo, i) => (i === index ? captured.mediaRef : photo))
             : [...current, captured.mediaRef],
         );
-      });
-  };
-  const submit = (): void => {
-    void runner
-      .run(() =>
-        stage === 'before'
-          ? runtime.run('startWork', { ticketId, beforePhotos: [...photos] })
-          : runtime.run('markRepaired', { ticketId, afterPhotos: [...photos], note }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
       });
   };
 
@@ -320,16 +295,7 @@ export function WaitForPartsDialog({
   onDone,
   onClose,
 }: StepDialogProps): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [note, setNote] = useState('');
-  const submit = (): void => {
-    void runner
-      .run(() => runtime.run('markWaitingForParts', { ticketId, note }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, note, setNote, submit } = useWaitForParts(ticketId, onDone);
   const leave = useLeaveGuard(stale === null && note.trim() !== '', onClose);
   return (
     <>
@@ -569,18 +535,7 @@ export function UndoHandoverDialog({
   onDone,
   onClose,
 }: StepDialogProps): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reason, setReason] = useState('');
-  const complete = reason.trim() !== '';
-  const submit = (): void => {
-    if (!complete) return;
-    void runner
-      .run(() => runtime.run('undoHandover', { ticketId, reason }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, reason, setReason, complete, submit } = useUndoHandover(ticketId, onDone);
   const leave = useLeaveGuard(stale === null && complete, onClose);
   return (
     <>
