@@ -64,7 +64,15 @@ export const REPAIR_OP = {
   statusLinkMade: 'repair.status_link_made',
   storePrintSettingsChanged: 'repair.store_print_settings_changed',
   storeUncollectedDaysChanged: 'repair.store_uncollected_days_changed',
+  /**
+   * Batalkan, right after a slip: the person takes back their own last status or technician change
+   * on a servisan, while nothing else has happened to it since.
+   */
+  changeReverted: 'repair.change_reverted',
 } as const;
+
+/** How long after a slip it may still be taken back; the toast offers it for less. */
+export const REPAIR_UNDO_GRACE_MS = 2 * 60_000;
 
 /**
  * Store-scoped permissions. The split follows the agreed roles: the cashier does intake, quotes,

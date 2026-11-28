@@ -33,7 +33,12 @@ import { useStamp } from '../motion.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
 import { RevealProvider, useKeyboardLift, useRevealingScroll } from './keyboard.js';
 import { ScrollLockContext } from './scroll-lock.js';
-import { ShellTabsProvider, useShellTabs } from './shell-tabs.js';
+import {
+  ShellTabsProvider,
+  ShellToastProvider,
+  useShellTabs,
+  useShellToast,
+} from './shell-tabs.js';
 
 export interface AppShellProps {
   /** Already-localized screen title. */
@@ -176,6 +181,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
   },
   actionBar: { padding: space.lg },
+  toastSlot: { paddingHorizontal: space.lg, paddingTop: space.md },
   // The tabs under it give the action its bottom breathing room.
   actionBarAboveTabs: { paddingBottom: space.sm },
   /**
@@ -249,119 +255,127 @@ export function AppShell({
   // Over an open keyboard the tabs would only squeeze the screen: they come back when it closes.
   const placeTabs = useShellTabs();
   const tabs = keyboard.lift === 0 ? placeTabs : null;
+  const toast = useShellToast();
   return (
     <ScrollLockContext.Provider value={scrollLock}>
-      {/* This shell draws the tabs; a shell nested inside draws none. */}
+      {/* This shell draws the tabs and the toast; a shell nested inside draws neither. */}
       <ShellTabsProvider tabs={null}>
-        {/* The keyboard covers the screen rather than shrinking it (keyboard.tsx), so the shell lifts
+        <ShellToastProvider toast={null}>
+          {/* The keyboard covers the screen rather than shrinking it (keyboard.tsx), so the shell lifts
           its content and bottom action above it. Measured in the window, so it adds nothing on a
           platform where the window did shrink. */}
-        <View
-          ref={keyboard.ref}
-          testID={testID}
-          style={[styles.root, keyboard.lift === 0 ? null : { paddingBottom: keyboard.lift }]}
-        >
-          <View testID={`${testID}.header`} style={styles.header}>
-            {onBack === undefined ? null : (
-              <Pressable
-                testID={`${testID}.back`}
-                accessibilityRole="button"
-                accessibilityLabel={backLabel}
-                onPress={onBack}
-                style={styles.back}
-              >
-                <Icon name="back" size={size.iconInline} color={color.text} />
-              </Pressable>
-            )}
+          <View
+            ref={keyboard.ref}
+            testID={testID}
+            style={[styles.root, keyboard.lift === 0 ? null : { paddingBottom: keyboard.lift }]}
+          >
+            <View testID={`${testID}.header`} style={styles.header}>
+              {onBack === undefined ? null : (
+                <Pressable
+                  testID={`${testID}.back`}
+                  accessibilityRole="button"
+                  accessibilityLabel={backLabel}
+                  onPress={onBack}
+                  style={styles.back}
+                >
+                  <Icon name="back" size={size.iconInline} color={color.text} />
+                </Pressable>
+              )}
 
-            {stampTitle ? (
-              <StampedTitle
-                title={title}
-                style={titleVariant === 'root' ? styles.stampRoot : styles.stampDetail}
-                testID={`${testID}.title`}
-              />
-            ) : (
-              <Text
-                testID={`${testID}.title`}
-                style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
-              >
-                {title}
-              </Text>
-            )}
+              {stampTitle ? (
+                <StampedTitle
+                  title={title}
+                  style={titleVariant === 'root' ? styles.stampRoot : styles.stampDetail}
+                  testID={`${testID}.title`}
+                />
+              ) : (
+                <Text
+                  testID={`${testID}.title`}
+                  style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
+                >
+                  {title}
+                </Text>
+              )}
 
-            <View testID={`${testID}.headerRight`} style={styles.headerRight}>
-              {syncChip}
-              {avatar}
+              <View testID={`${testID}.headerRight`} style={styles.headerRight}>
+                {syncChip}
+                {avatar}
+              </View>
             </View>
-          </View>
 
-          {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
-          {/* A page that does not scroll has nothing to scroll it away with: it sits under the slot. */}
-          {scrollable || pageBanner === undefined ? null : (
-            <View testID={`${testID}.pageBanner`}>{pageBanner}</View>
-          )}
+            {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
+            {/* A page that does not scroll has nothing to scroll it away with: it sits under the slot. */}
+            {scrollable || pageBanner === undefined ? null : (
+              <View testID={`${testID}.pageBanner`}>{pageBanner}</View>
+            )}
 
-          {/*
+            {/*
         The content slot. Plain View by default; a ScrollView only when the screen opts in (task 206
         — see the `scrollable` prop docs for why this is not the default). The slot keeps ONE testID
         either way so navigation and the Maestro flows do not care which shape it took.
       */}
-          {scrollable ? (
-            <ScrollView
-              key={scrollKey}
-              ref={reveal.scrollRef}
-              testID={`${testID}.content`}
-              style={styles.content}
-              contentContainerStyle={styles.scrollContainer}
-              // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
-              // would read as the whole screen coming loose.
-              bounces={false}
-              keyboardShouldPersistTaps="handled"
-              // A drag inside the content (reordering a list) holds the page still until it ends.
-              scrollEnabled={locks === 0}
-              onLayout={reveal.onLayout}
-              onScroll={reveal.onScroll}
-              scrollEventThrottle={16}
-            >
-              {pageBanner === undefined ? null : (
-                <View testID={`${testID}.pageBanner`}>{pageBanner}</View>
-              )}
-              {/* What a focused field is measured against when it is scrolled into sight. */}
-              <View
-                ref={reveal.contentRef}
-                collapsable={false}
-                style={[styles.contentInner, styles.column, wide ? styles.columnWide : null]}
-                testID={`${testID}.contentInner`}
+            {scrollable ? (
+              <ScrollView
+                key={scrollKey}
+                ref={reveal.scrollRef}
+                testID={`${testID}.content`}
+                style={styles.content}
+                contentContainerStyle={styles.scrollContainer}
+                // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
+                // would read as the whole screen coming loose.
+                bounces={false}
+                keyboardShouldPersistTaps="handled"
+                // A drag inside the content (reordering a list) holds the page still until it ends.
+                scrollEnabled={locks === 0}
+                onLayout={reveal.onLayout}
+                onScroll={reveal.onScroll}
+                scrollEventThrottle={16}
               >
-                <RevealProvider port={reveal.port}>{children}</RevealProvider>
-              </View>
-            </ScrollView>
-          ) : (
-            <View testID={`${testID}.content`} style={styles.contentFixed}>
-              <View style={[styles.column, styles.columnFill, wide ? styles.columnWide : null]}>
-                {children}
-              </View>
-            </View>
-          )}
-
-          {bottomAction === undefined && tabs === null ? null : (
-            <View testID={`${testID}.dock`} style={styles.dock}>
-              {bottomAction === undefined ? null : (
+                {pageBanner === undefined ? null : (
+                  <View testID={`${testID}.pageBanner`}>{pageBanner}</View>
+                )}
+                {/* What a focused field is measured against when it is scrolled into sight. */}
                 <View
-                  testID={`${testID}.actionBar`}
-                  style={[styles.actionBar, tabs === null ? null : styles.actionBarAboveTabs]}
+                  ref={reveal.contentRef}
+                  collapsable={false}
+                  style={[styles.contentInner, styles.column, wide ? styles.columnWide : null]}
+                  testID={`${testID}.contentInner`}
                 >
-                  <View style={styles.column}>{bottomAction}</View>
+                  <RevealProvider port={reveal.port}>{children}</RevealProvider>
                 </View>
-              )}
-              {tabs}
-            </View>
-          )}
+              </ScrollView>
+            ) : (
+              <View testID={`${testID}.content`} style={styles.contentFixed}>
+                <View style={[styles.column, styles.columnFill, wide ? styles.columnWide : null]}>
+                  {children}
+                </View>
+              </View>
+            )}
 
-          {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
+            {bottomAction === undefined && tabs === null && toast === null ? null : (
+              <View testID={`${testID}.dock`} style={styles.dock}>
+                {toast === null ? null : (
+                  <View testID={`${testID}.toast`} style={styles.toastSlot}>
+                    <View style={styles.column}>{toast}</View>
+                  </View>
+                )}
+                {bottomAction === undefined ? null : (
+                  <View
+                    testID={`${testID}.actionBar`}
+                    style={[styles.actionBar, tabs === null ? null : styles.actionBarAboveTabs]}
+                  >
+                    <View style={styles.column}>{bottomAction}</View>
+                  </View>
+                )}
+                {tabs}
+              </View>
+            )}
+
+            {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
           the header, the action bar and the tabs the way a modal must. */}
-          {overlay}
-        </View>
+            {overlay}
+          </View>
+        </ShellToastProvider>
       </ShellTabsProvider>
     </ScrollLockContext.Provider>
   );
