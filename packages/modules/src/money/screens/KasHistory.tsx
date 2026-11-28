@@ -3,6 +3,7 @@
  * happened and cancel a payment recorded by mistake. Cancelling keeps the record, struck through
  * with its reason; the books reverse it (money/applier.ts).
  */
+import { useVoidPayment } from '../void-ask.js';
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
 import {
   Amount,
@@ -20,7 +21,7 @@ import {
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
@@ -28,16 +29,10 @@ import { MAX_REASON } from '../constants.js';
 import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { tm } from '../i18n.js';
 import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
-import { accountLabel, dayStart, historyLine, voidAbilities, voidable, voidKind } from '../kas.js';
+import { accountLabel, dayStart, historyLine, voidAbilities, voidable } from '../kas.js';
 import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
-import {
-  useVoidAsk,
-  useEntryCustomer,
-  useOnVoidDecided,
-  useVoidRequests,
-  voidRequest,
-} from '../void-ask.js';
+import { useOnVoidDecided, useVoidRequests } from '../void-ask.js';
 import { approvalByLine } from '../../approvals/copy.js';
 import { ta } from '../../approvals/i18n.js';
 
@@ -203,19 +198,14 @@ export function VoidPaymentStep({
   onRegisterDiscardGuard,
   testID = 'money.void',
 }: VoidPaymentStepProps): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
+  const { runner, reason, setReason, kind, ask, customer, blocked, submit } = useVoidPayment(
+    entry,
+    { onDone, onAsked },
+  );
   const accounts = useMoneyQuery(
     async (rt) => (await rt.query('paymentAccounts', { includeInactive: true })).rows,
     'accounts',
   );
-  const [reason, setReason] = useState('');
-  const kind = voidKind(entry);
-  // A limited role (a manager) sees its limit up front; beyond it, or without the decision, an
-  // owner is asked instead.
-  const ask = useVoidAsk(entry);
-  const customer = useEntryCustomer(entry);
-  const blocked = ask.asking && !ask.mayAsk;
   const discard = useDiscardConfirm({
     dirty: reason.trim() !== '',
     copy: {
@@ -231,19 +221,6 @@ export function VoidPaymentStep({
     entry.account ?? '',
     accounts.status === 'ready' ? accounts.data : [],
   );
-
-  const submit = (): void => {
-    if (reason.trim() === '' || blocked || ask.pending) return;
-    void runner
-      .run<unknown>(() =>
-        ask.asking
-          ? runtime.approvals.run('requestApproval', voidRequest(entry, reason))
-          : runtime.run(kind.command, { entryId: entry.id, reason }),
-      )
-      .then((result) => {
-        if (result !== undefined) (ask.asking ? onAsked : onDone)();
-      });
-  };
 
   return (
     <FlowScreen

@@ -28,6 +28,7 @@ import {
   Text,
   ValueText,
   Rows,
+  RevealWhen,
 } from '@bolusi/ui';
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -173,9 +174,15 @@ export function CategoryForm({
     testID,
   });
 
+  // The first thing to fix, brought into sight once laid out (a field row opens first).
+  const [jump, setJump] = useState<{ readonly to: string } | null>(null);
+  const jumpTo = (to: string): { readonly to: string } | null => (jump?.to === to ? jump : null);
+
   const finish = (outcome: CategorySaveOutcome): void => {
     if (outcome.status === 'saved') onDone(outcome.notice);
-    else if (outcome.status === 'blocked' && outcome.field !== undefined) setOpen(outcome.field);
+    if (outcome.status !== 'blocked') return;
+    if (outcome.at === 'field') setOpen(outcome.field);
+    setJump({ to: outcome.at === 'field' ? `field:${outcome.field}` : outcome.at });
   };
   const save = (): void => void form.save().then(finish);
   const run = (archived: boolean): void => void form.setArchived(archived).then(finish);
@@ -216,15 +223,17 @@ export function CategoryForm({
       testID={testID}
     >
       <View style={styles.groups}>
-        <TextInput
-          label={ti('inventory.category.name')}
-          placeholder={ti('inventory.category.namePlaceholder')}
-          value={draft.name}
-          onChangeText={(name) => form.set({ name })}
-          maxLength={MAX_CATEGORY_NAME}
-          errorMessage={tried && problems.name !== null ? ti(problems.name) : undefined}
-          testID={`${testID}.name`}
-        />
+        <RevealWhen token={jumpTo('name')}>
+          <TextInput
+            label={ti('inventory.category.name')}
+            placeholder={ti('inventory.category.namePlaceholder')}
+            value={draft.name}
+            onChangeText={(name) => form.set({ name })}
+            maxLength={MAX_CATEGORY_NAME}
+            errorMessage={tried && problems.name !== null ? ti(problems.name) : undefined}
+            testID={`${testID}.name`}
+          />
+        </RevealWhen>
         <SwitchRow
           label={ti('inventory.category.isPart')}
           caption={ti('inventory.category.isPartCaption')}
@@ -232,7 +241,7 @@ export function CategoryForm({
           onValueChange={(isPart) => form.set({ isPart })}
           testID={`${testID}.isPart`}
         />
-        <View>
+        <RevealWhen token={jumpTo('list')}>
           <Text style={styles.groupTitle}>{ti('inventory.category.fields')}</Text>
           <Text style={styles.hint}>{ti('inventory.category.fieldsHint')}</Text>
           {draft.fields.length === 0 ? null : (
@@ -246,16 +255,18 @@ export function CategoryForm({
                 moveDownLabel={ti('inventory.category.moveDown')}
                 testID={`${testID}.order`}
                 renderItem={(field, handle) => (
-                  <FieldRow
-                    field={field}
-                    expanded={open === field.id}
-                    handle={open === field.id ? null : handle}
-                    problem={tried ? problems.fields.get(field.id) : undefined}
-                    onToggle={() => setOpen((id) => (id === field.id ? null : field.id))}
-                    onChange={(patch) => form.updateField(field.id, patch)}
-                    onRemove={() => removeField(field.id)}
-                    testID={`${testID}.field.${field.id}`}
-                  />
+                  <RevealWhen token={jumpTo(`field:${field.id}`)}>
+                    <FieldRow
+                      field={field}
+                      expanded={open === field.id}
+                      handle={open === field.id ? null : handle}
+                      problem={tried ? problems.fields.get(field.id) : undefined}
+                      onToggle={() => setOpen((id) => (id === field.id ? null : field.id))}
+                      onChange={(patch) => form.updateField(field.id, patch)}
+                      onRemove={() => removeField(field.id)}
+                      testID={`${testID}.field.${field.id}`}
+                    />
+                  </RevealWhen>
                 )}
               />
             </View>
@@ -277,8 +288,8 @@ export function CategoryForm({
                 </Text>
               ))
             : null}
-        </View>
-        <View>
+        </RevealWhen>
+        <RevealWhen token={jumpTo('format')}>
           <TextInput
             label={ti('inventory.category.format')}
             value={format}
@@ -316,7 +327,7 @@ export function CategoryForm({
               </Text>
             </View>
           )}
-        </View>
+        </RevealWhen>
         {category === undefined ? null : (
           <View style={styles.inlineAction}>
             {category.archived ? (
