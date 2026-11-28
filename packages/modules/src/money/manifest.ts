@@ -31,6 +31,7 @@ import {
 import { MONEY_MODULE_ID, MONEY_PERMISSION, MONEY_TABLE } from './constants.js';
 import type { MoneyDocumentSources } from './documents.js';
 import { createMoneyOperations } from './operations.js';
+import type { MoneyPayoutSources } from './payouts.js';
 import {
   cashDrawerQuery,
   createVoidCountQuery,
@@ -42,11 +43,11 @@ import {
 import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
 
-function moneyManifest(sources: MoneyDocumentSources) {
+function moneyManifest(sources: MoneyDocumentSources, payouts: MoneyPayoutSources) {
   return {
     id: MONEY_MODULE_ID,
 
-    operations: createMoneyOperations(sources),
+    operations: createMoneyOperations(sources, payouts),
     refusals: MONEY_REFUSALS.reasons,
 
     // DDL lives in the client and server migrations, as for repair.
@@ -193,7 +194,10 @@ function moneyManifest(sources: MoneyDocumentSources) {
 export type MoneyModuleManifest = ReturnType<typeof moneyManifest>;
 export type MoneyModule = ModuleDefinition<MoneyDatabase, MoneyModuleManifest>;
 
-/** The `money` module, checking charges against these document sources. */
-export function createMoneyModule(sources: MoneyDocumentSources): MoneyModule {
-  return defineModule<MoneyDatabase, MoneyModuleManifest>(moneyManifest(sources));
+/** The `money` module, checking charges against these document sources and payouts against these. */
+export function createMoneyModule(
+  sources: MoneyDocumentSources,
+  payouts: MoneyPayoutSources,
+): MoneyModule {
+  return defineModule<MoneyDatabase, MoneyModuleManifest>(moneyManifest(sources, payouts));
 }

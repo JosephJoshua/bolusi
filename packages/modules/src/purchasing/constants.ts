@@ -17,6 +17,8 @@ export const PURCHASING_ORDER_ENTITY = 'purchasing_order' as const;
 export const PURCHASING_RECEIPT_ENTITY = 'purchasing_receipt' as const;
 /** One supplier bill ("Tagihan supplier"): what a store owes a supplier for one nota. */
 export const PURCHASING_BILL_ENTITY = 'purchasing_bill' as const;
+/** One payment a store made to a supplier, for a bill or ahead of one. */
+export const PURCHASING_PAYMENT_ENTITY = 'purchasing_payment' as const;
 
 export const PURCHASING_TABLE = {
   suppliers: 'purchasing_suppliers',
@@ -26,6 +28,7 @@ export const PURCHASING_TABLE = {
   receiptLines: 'purchasing_receipt_lines',
   bills: 'purchasing_bills',
   billLines: 'purchasing_bill_lines',
+  payments: 'purchasing_payments',
 } as const;
 
 export const PURCHASING_OP = {
@@ -39,6 +42,8 @@ export const PURCHASING_OP = {
   billRecorded: 'purchasing.bill_recorded',
   billEdited: 'purchasing.bill_edited',
   billVoided: 'purchasing.bill_voided',
+  supplierPaid: 'purchasing.supplier_paid',
+  supplierPaymentVoided: 'purchasing.supplier_payment_voided',
 } as const;
 
 export const PURCHASING_PERMISSION = {
@@ -49,6 +54,8 @@ export const PURCHASING_PERMISSION = {
    * it is held only where everyone a device syncs for may read it (least-privilege sync).
    */
   bills: 'purchasing.bills',
+  /** "Bayar supplier": pay suppliers from the drawer, a store bank account or the owner's money. */
+  paySuppliers: 'purchasing.pay_suppliers',
 } as const;
 
 /** What an order is, as recorded. Whether it has arrived is read from its receipts. */
@@ -83,6 +90,18 @@ export const MAX_UNIT_PRICE = 1_000_000_000;
 export const MAX_BILL_CHARGES = 1_000_000_000;
 /** The supplier's own number for its nota, as printed on it. */
 export const MAX_SUPPLIER_REF = 60;
+
+/** The most one supplier payment can be, in whole rupiah (as money's largest record). */
+export const MAX_PAYMENT = 1_000_000_000_000;
+/** A bank transfer's reference, as money's. */
+export const MAX_PAYMENT_REFERENCE = 100;
+
+/**
+ * Where a supplier payment comes from: the store's drawer (`cash`), one of its bank accounts
+ * (`account:<id>`, a money transfer account), or the owner's own pocket (`owner`), which no store
+ * book holds.
+ */
+export const OWNER_FUNDS = 'owner' as const;
 
 /** What a bill is, as recorded. What is still owed on it is read from its payments. */
 export const BILL_STATUSES = ['open', 'void'] as const;

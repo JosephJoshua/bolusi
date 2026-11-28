@@ -125,5 +125,19 @@ for (const [width, height] of [
       .click();
     await expect(page.getByTestId('purchasing.desk.bill.check')).toBeVisible();
     await check(`bill-${size}`);
+    // An overdue bill, partly paid, and the dialog that pays the rest.
+    await page.getByTestId('purchasing.desk.billFilter.overdue').click();
+    await page
+      .getByTestId('purchasing.desk.bills')
+      .getByText(/INV\/MP\/2611(?!-)/)
+      .first()
+      .click();
+    await expect(page.getByTestId('purchasing.desk.bill.payments')).toBeVisible();
+    await check(`bill-paid-part-${size}`);
+    await page.getByTestId('purchasing.desk.bill.pay').click();
+    await expect(page.getByTestId('purchasing.desk.pay')).toBeVisible();
+    await page.getByTestId('purchasing.desk.pay.source.bank').click();
+    await check(`pay-${size}`);
+    await page.keyboard.press('Escape');
   });
 }

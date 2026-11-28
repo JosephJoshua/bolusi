@@ -10,7 +10,9 @@
     "cashMoved": "Cash in/out",
     "cashCounted": "Cash counted",
     "cashAdjusted": "Cash difference settled",
-    "cashMoveVoided": "Cash record cancelled"
+    "cashMoveVoided": "Cash record cancelled",
+    "supplierPaid": "Supplier payment",
+    "supplierPaymentVoided": "Supplier payment cancelled"
   },
   "refusal": {
     "alreadyRecorded": "This record already exists.",
@@ -38,7 +40,8 @@
     "overLimit": "Over your limit. Ask a store owner.",
     "moveAboveDrawer": "Not enough cash in the drawer.",
     "cashMoveNotFound": "This cash record isn’t in this store.",
-    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more."
+    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more.",
+    "payoutNotFound": "Cash leaves the drawer only as the owner’s supplier payment records it."
   },
   "method": {
     "cash": "Cash"
@@ -97,7 +100,8 @@
     "adjusted": "Cash difference settled",
     "receive": "Take payment",
     "settle": "Settle",
-    "nothingOwed": "Every customer has paid."
+    "nothingOwed": "Every customer has paid.",
+    "supplierPaid": "Supplier payment"
   },
   "moveKind": {
     "withdrawal": "To the owner",

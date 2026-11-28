@@ -1,7 +1,7 @@
 /**
  * BillDetail — one supplier bill: whose nota it is, when it is due, each part at its price and
- * how it compares with its order, and the total with the ongkir. It is corrected or voided from
- * here.
+ * how it compares with its order, the total with the ongkir, and what is paid and left. It is
+ * paid, corrected or voided from here, and a payment made by mistake is cancelled here.
  *
  * VoidBillStep — void a bill entered by mistake, with the reason. It stays in the history.
  */
@@ -10,6 +10,7 @@ import {
   AmountRow,
   AppShell,
   Banner,
+  Button,
   border,
   Card,
   Chip,
@@ -32,10 +33,13 @@ import {
   Section,
   type ScreenChrome,
 } from '../../screen-kit/screens/views.js';
-import { MAX_PURCHASING_NOTE } from '../constants.js';
+import { MAX_PURCHASING_NOTE, PURCHASING_PERMISSION } from '../constants.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { billCheckKey, billLineHint, dueText, notaText } from '../bills/bill-form.js';
 import type { BillDetailRow } from '../bills/queries.js';
+import { dayStart } from '../../money/kas.js';
+import { billStanding, paymentLine } from '../payments/pay-form.js';
+import type { PaymentRow } from '../payments/queries.js';
 import { usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 
 export interface BillDetailProps {
@@ -44,6 +48,8 @@ export interface BillDetailProps {
   readonly onBack: () => void;
   readonly onEdit: (bill: BillDetailRow) => void;
   readonly onVoid: (bill: BillDetailRow) => void;
+  readonly onPay: (bill: BillDetailRow) => void;
+  readonly onVoidPayment: (bill: BillDetailRow, payment: PaymentRow) => void;
   readonly notice: PurchasingKey | null;
   readonly onClearNotice: () => void;
   readonly hideBack?: boolean | undefined;
@@ -56,11 +62,15 @@ export function BillDetail({
   onBack,
   onEdit,
   onVoid,
+  onPay,
+  onVoidPayment,
   notice,
   onClearNotice,
   hideBack = false,
   testID = 'purchasing.bill',
 }: BillDetailProps): React.JSX.Element {
+  const runtime = usePurchasingRuntime();
+  const pays = runtime.hasPermission(PURCHASING_PERMISSION.paySuppliers);
   const [reloadNonce, setReloadNonce] = useState(0);
   const query = usePurchasingQuery(
     async (rt) => (await rt.query('getBill', { billId })).rows[0],
@@ -77,6 +87,15 @@ export function BillDetail({
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
+      bottomAction={
+        bill !== undefined && bill.status === 'open' && bill.balance > 0 && pays ? (
+          <Button
+            label={tp('purchasing.pay.action')}
+            onPress={() => onPay(bill)}
+            testID={`${testID}.pay`}
+          />
+        ) : undefined
+      }
       banner={
         notice === null ? undefined : (
           <Banner
@@ -116,17 +135,24 @@ export function BillDetail({
         <Card testID={`${testID}.summary`}>
           <View style={styles.summaryTop}>
             <Text style={styles.number}>{row.billNumber}</Text>
-            {open ? null : (
+            {!open ? (
               <Chip
                 label={tp('purchasing.bill.statusVoid')}
                 icon="remove"
                 tone="neutral"
                 testID={`${testID}.void`}
               />
-            )}
+            ) : row.balance === 0 ? (
+              <Chip
+                label={tp('purchasing.bill.settled')}
+                icon="check"
+                tone="success"
+                testID={`${testID}.settled`}
+              />
+            ) : null}
           </View>
           <Text style={styles.meta}>{notaText(row)}</Text>
-          <Text style={styles.meta}>{dueText(row)}</Text>
+          <DueLine bill={row} testID={`${testID}.due`} />
           {row.orderNumber === null ? null : (
             <Text style={styles.meta}>
               {tp('purchasing.bill.order', { number: row.orderNumber })}
@@ -208,12 +234,80 @@ export function BillDetail({
             <AmountRow
               label={tp('purchasing.bill.total')}
               value={row.total}
-              strong
+              strong={!open || row.paid === 0}
               tone={open ? 'text' : 'struck'}
               testID={`${testID}.total`}
             />
+            {open && row.paid > 0 ? (
+              <>
+                <AmountRow
+                  label={tp('purchasing.bill.paid')}
+                  value={row.paid}
+                  testID={`${testID}.paid`}
+                />
+                <AmountRow
+                  label={tp('purchasing.bill.balance')}
+                  value={row.balance}
+                  strong
+                  testID={`${testID}.balance`}
+                />
+              </>
+            ) : null}
           </View>
         </Section>
+
+        {row.payments.length === 0 && row.fromCredit === 0 ? null : (
+          <Section title={tp('purchasing.pay.payments')} testID={`${testID}.payments`}>
+            {row.payments.map((payment) => {
+              const cancelled = payment.voidedAt !== null;
+              return (
+                <View
+                  key={payment.id}
+                  style={styles.line}
+                  testID={`${testID}.payment.${payment.id}`}
+                >
+                  <View style={styles.lineText}>
+                    <Text style={styles.lineName}>{paymentLine(payment)}</Text>
+                    {cancelled ? (
+                      <Text style={styles.linePrice}>
+                        {tp('purchasing.pay.voided', { reason: payment.voidReason ?? '' })}
+                      </Text>
+                    ) : pays && open ? (
+                      <View style={styles.paymentAction}>
+                        <TextButton
+                          label={tp('purchasing.pay.void')}
+                          accessibilityLabel={tp('purchasing.pay.voidLabel', {
+                            amount: formatMoney(payment.amount),
+                            date: formatDate(payment.createdAt),
+                          })}
+                          tone="danger"
+                          onPress={() => onVoidPayment(row, payment)}
+                          testID={`${testID}.payment.${payment.id}.void`}
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={[styles.lineAmount, cancelled ? styles.struck : null]}>
+                    {formatMoney(payment.amount)}
+                  </Text>
+                </View>
+              );
+            })}
+            {row.fromCredit === 0 ? null : (
+              <View style={styles.line} testID={`${testID}.fromCredit`}>
+                <Text style={[styles.lineName, styles.lineText]}>
+                  {tp('purchasing.bill.fromCredit')}
+                </Text>
+                <Text style={styles.lineAmount}>{formatMoney(row.fromCredit)}</Text>
+              </View>
+            )}
+          </Section>
+        )}
+        {open && row.supplierCredit > 0 ? (
+          <Text style={styles.meta} testID={`${testID}.credit`}>
+            {tp('purchasing.bill.credit', { amount: formatMoney(row.supplierCredit) })}
+          </Text>
+        ) : null}
 
         <Text style={styles.recorded}>
           {row.createdByName === null
@@ -298,6 +392,22 @@ export function VoidBillStep({
   );
 }
 
+/** When the bill falls due, as a warning once that day has passed and it is still owed. */
+function DueLine({
+  bill,
+  testID,
+}: {
+  readonly bill: BillDetailRow;
+  readonly testID: string;
+}): React.JSX.Element {
+  const late = billStanding(bill, dayStart(Date.now())).late;
+  return (
+    <Text style={late === null ? styles.meta : [styles.meta, styles.late]} testID={testID}>
+      {late ?? dueText(bill)}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create({
   summaryTop: {
     flexDirection: 'row',
@@ -311,6 +421,7 @@ const styles = StyleSheet.create({
   value: { ...type.bodyBold, color: color.text },
   note: { ...type.body, color: color.text, marginTop: space.sm },
   warning: { ...type.bodySm, color: color.warning, marginTop: space.md },
+  late: { color: color.warning, fontWeight: '600' },
   line: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -324,6 +435,8 @@ const styles = StyleSheet.create({
   linePrice: { ...type.bodySm, color: color.textMuted, ...numeric },
   lineHint: { ...type.bodySm, color: color.warning },
   lineAmount: { ...type.body, color: color.text, ...numeric },
+  struck: { color: color.textMuted, textDecorationLine: 'line-through' },
+  paymentAction: { alignItems: 'flex-start', marginLeft: -space.sm },
   totals: { marginTop: space.sm },
   recorded: { ...type.caption, color: color.textMuted, marginTop: space.lg },
   voidAction: { marginTop: space['2xl'], alignItems: 'flex-start', marginLeft: -space.sm },

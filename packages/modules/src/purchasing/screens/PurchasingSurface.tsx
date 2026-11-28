@@ -23,8 +23,10 @@ import {
   type BelanjaTab,
   type BillDraft,
 } from '../bills/bill-form.js';
-import type { BillDetailRow } from '../bills/queries.js';
+import type { BillDetailRow, BillListFilter } from '../bills/queries.js';
+import type { PaymentRow } from '../payments/queries.js';
 import { BillDetail, VoidBillStep } from './BillDetail.js';
+import { PayStep, VoidPaymentStep } from './PayStep.js';
 import { BillForm } from './BillForm.js';
 import { PriceStep } from './OrderCosts.js';
 import { OrderDetail } from './OrderDetail.js';
@@ -55,6 +57,12 @@ type View =
   | { readonly kind: 'billForm' }
   | { readonly kind: 'billPick' }
   | { readonly kind: 'billVoid'; readonly bill: BillDetailRow }
+  | { readonly kind: 'billPay'; readonly bill: BillDetailRow }
+  | {
+      readonly kind: 'paymentVoid';
+      readonly bill: BillDetailRow;
+      readonly payment: PaymentRow;
+    }
   | { readonly kind: 'form' }
   | { readonly kind: 'pick' }
   | { readonly kind: 'formSupplier' }
@@ -78,6 +86,7 @@ export function PurchasingSurface({
 }: PurchasingSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [filter, setFilter] = useState<BelanjaTab>('open');
+  const [billFilter, setBillFilter] = useState<BillListFilter>('unpaid');
   const [notice, setNotice] = useState<PurchasingKey | null>(null);
   const [supplierNotice, setSupplierNotice] = useState<string | null>(null);
   const [writing, setWriting] = useState<Writing | null>(null);
@@ -140,6 +149,8 @@ export function PurchasingSurface({
           setView({ kind: 'billForm' });
           return;
         case 'billVoid':
+        case 'billPay':
+        case 'paymentVoid':
           setView({ kind: 'bill', billId: view.bill.id });
           return;
         case 'form': {
@@ -196,6 +207,8 @@ export function PurchasingSurface({
       chrome={chrome}
       filter={filter}
       onFilter={setFilter}
+      billFilter={billFilter}
+      onBillFilter={setBillFilter}
       place={place}
       onOpenOrder={(orderId) => {
         if (orderId !== openId) openOrder(orderId);
@@ -238,6 +251,8 @@ export function PurchasingSurface({
         onBack={() => setView({ kind: 'list' })}
         onEdit={(bill) => writeBill({ billId: bill.id, from: billDraftOf(bill, Date.now()) })}
         onVoid={(bill) => setView({ kind: 'billVoid', bill })}
+        onPay={(bill) => setView({ kind: 'billPay', bill })}
+        onVoidPayment={(bill, payment) => setView({ kind: 'paymentVoid', bill, payment })}
         notice={notice}
         onClearNotice={() => setNotice(null)}
       />
@@ -308,6 +323,27 @@ export function PurchasingSurface({
             bill={view.bill}
             onDone={() => openBill(view.bill.id, 'purchasing.done.billVoided')}
             onCancel={() => setView({ kind: 'bill', billId: view.bill.id })}
+          />
+        );
+      case 'billPay':
+        return (
+          <PayStep
+            chrome={chrome}
+            bill={view.bill}
+            onDone={() => openBill(view.bill.id, 'purchasing.done.paid')}
+            onCancel={() => setView({ kind: 'bill', billId: view.bill.id })}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+      case 'paymentVoid':
+        return (
+          <VoidPaymentStep
+            chrome={chrome}
+            bill={view.bill}
+            payment={view.payment}
+            onDone={() => openBill(view.bill.id, 'purchasing.done.paymentVoided')}
+            onCancel={() => setView({ kind: 'bill', billId: view.bill.id })}
+            onRegisterDiscardGuard={registerGuard}
           />
         );
       case 'receive':

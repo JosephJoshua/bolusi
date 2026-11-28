@@ -9,7 +9,9 @@ import { DomainError } from '@bolusi/core';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import type { DemoInventoryRuntime } from '../inventory/demo.js';
 import { PURCHASING_PERMISSION, type BillStatus, type OrderStatus } from './constants.js';
-import { billTotal, type BillDetailRow, type BillRow } from './bills/queries.js';
+import { billOverdue, billTotal, type BillDetailRow, type BillRow } from './bills/queries.js';
+import { allocate } from './payments/balances.js';
+import { sourceKindOf, type PaymentRow, type PaymentSourceRow } from './payments/queries.js';
 import {
   orderStage,
   type OrderDetailRow,
@@ -64,6 +66,22 @@ interface DemoBill {
   lines: { itemId: string; name: string; qty: number; unitPrice: number }[];
 }
 
+interface DemoPayment {
+  id: string;
+  supplierId: string;
+  billId: string | null;
+  amount: number;
+  source: string;
+  reference: string | null;
+  note: string | null;
+  createdAt: number;
+  voidedAt: number | null;
+  voidReason: string | null;
+}
+
+/** The preview store's one bank account, as money's demo would list it. */
+const DEMO_BANK = { source: 'account:00000000-0000-4000-8000-00000000b4c1', name: 'BCA Toko' };
+
 type Input = Record<string, unknown>;
 type Line = { itemId: string; qty: number; unitCost?: number | null };
 
@@ -103,6 +121,7 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
   const nextNumber = (): string => `PO-W4M-${String((counter += 1)).padStart(4, '0')}`;
 
   const bills: DemoBill[] = [];
+  const payments: DemoPayment[] = [];
   let billCounter = 0;
   const nextBillNumber = (): string => `TG-W4M-${String((billCounter += 1)).padStart(4, '0')}`;
 
@@ -162,7 +181,32 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
   const named = async (lines: readonly Line[]) =>
     Promise.all(lines.map(async (line) => ({ ...line, name: await itemName(line.itemId) })));
 
-  const billRow = (bill: DemoBill): BillRow => ({
+  const balances = () =>
+    allocate(
+      bills
+        .filter((b) => b.status === 'open')
+        .map((b) => ({ ...b, total: billTotal(b.lines, b.charges) })),
+      payments.filter((p) => p.voidedAt === null),
+    );
+  const paymentRow = (payment: DemoPayment): PaymentRow => ({
+    ...payment,
+    sourceKind: sourceKindOf(payment.source),
+    accountName: payment.source === DEMO_BANK.source ? DEMO_BANK.name : null,
+    createdBy: actor().userId,
+    createdByName: actor().name,
+    voidedByName: payment.voidedAt === null ? null : actor().name,
+  });
+  const billRow = (bill: DemoBill): BillRow => {
+    const total = billTotal(bill.lines, bill.charges);
+    const paid = bill.status === 'open' ? (balances().paid.get(bill.id) ?? 0) : 0;
+    return {
+      ...billFields0(bill),
+      total,
+      paid,
+      balance: bill.status === 'open' ? total - paid : 0,
+    };
+  };
+  const billFields0 = (bill: DemoBill) => ({
     id: bill.id,
     billNumber: bill.billNumber,
     supplierId: bill.supplierId,
@@ -173,7 +217,6 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
     billedOn: bill.billedOn,
     dueOn: bill.dueOn,
     status: bill.status,
-    total: billTotal(bill.lines, bill.charges),
   });
   const billDetail = (bill: DemoBill): BillDetailRow => {
     const order = orders.find((o) => o.id === bill.orderId);
@@ -205,6 +248,9 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
             .reduce((sum, l) => sum + l.qty, 0),
         };
       }),
+      payments: payments.filter((p) => p.billId === bill.id).map(paymentRow),
+      fromCredit: bill.status === 'open' ? (balances().fromCredit.get(bill.id) ?? 0) : 0,
+      supplierCredit: balances().credit.get(bill.supplierId) ?? 0,
     };
   };
   const findBill = (billId: unknown): DemoBill => {
@@ -295,8 +341,10 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       return Promise.resolve({ rows, nextCursor: null });
     },
     listBills: (input) => {
+      const filter = input['filter'] ?? 'open';
+      const today = Number(input['today'] ?? 0);
       const rows = bills
-        .filter((b) => input['filter'] !== 'open' || b.status === 'open')
+        .filter((b) => filter === 'all' || b.status === 'open')
         .filter(
           (b) =>
             input['orderId'] === undefined ||
@@ -304,8 +352,32 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
             b.orderId === input['orderId'],
         )
         .sort((a, b) => b.billedOn - a.billedOn || b.createdAt - a.createdAt)
-        .map(billRow);
+        .map(billRow)
+        .filter(
+          (row) =>
+            (filter !== 'unpaid' || row.balance > 0) &&
+            (filter !== 'overdue' || billOverdue(row, today)),
+        );
       return Promise.resolve({ rows, nextCursor: null });
+    },
+    paymentSources: () =>
+      Promise.resolve({
+        rows: [
+          { source: 'cash', kind: 'cash', name: null },
+          { source: DEMO_BANK.source, kind: 'bank', name: DEMO_BANK.name },
+          { source: 'owner', kind: 'owner', name: null },
+        ] satisfies PaymentSourceRow[],
+        nextCursor: null,
+      }),
+    supplierCredit: (input) => {
+      const all = balances();
+      const owed = bills
+        .filter((b) => b.status === 'open' && b.supplierId === input['supplierId'])
+        .reduce((sum, b) => sum + billTotal(b.lines, b.charges) - (all.paid.get(b.id) ?? 0), 0);
+      return Promise.resolve({
+        rows: [{ credit: all.credit.get(String(input['supplierId'])) ?? 0, owed }],
+        nextCursor: null,
+      });
     },
     getBill: (input) => {
       const bill = bills.find((b) => b.id === input['billId']);
@@ -427,6 +499,35 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       Object.assign(bill, fields);
       return { billId: bill.id };
     },
+    paySupplier: (input) => {
+      const billId = (input['billId'] as string | null | undefined) ?? null;
+      if (billId !== null) findBill(billId);
+      const reference = typeof input['reference'] === 'string' ? input['reference'].trim() : '';
+      const note = typeof input['note'] === 'string' ? input['note'].trim() : '';
+      const payment: DemoPayment = {
+        id: newId('pay'),
+        supplierId: String(input['supplierId']),
+        billId,
+        amount: Number(input['amount']),
+        source: String(input['source']),
+        reference: reference === '' ? null : reference,
+        note: note === '' ? null : note,
+        createdAt: clock(),
+        voidedAt: null,
+        voidReason: null,
+      };
+      payments.push(payment);
+      return Promise.resolve({ paymentId: payment.id });
+    },
+    voidSupplierPayment: (input) => {
+      const payment = payments.find((p) => p.id === input['paymentId'] && p.voidedAt === null);
+      if (payment === undefined) {
+        throw new DomainError('ENTITY_NOT_FOUND', { entityId: String(input['paymentId']) });
+      }
+      payment.voidedAt = clock();
+      payment.voidReason = String(input['reason']).trim();
+      return Promise.resolve({ paymentId: payment.id });
+    },
     voidBill: (input) => {
       const bill = findBill(input['billId']);
       bill.status = 'void';
@@ -539,7 +640,7 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       orderId: done.id,
       supplierRef: 'INV/MP/2611',
       billedOn: day(5),
-      dueOn: day(5) + 30 * DAY,
+      dueOn: day(5) + 3 * DAY,
       charges: 45_000,
       note: null,
       lines: priced(done, [185_000, 65_000]),
@@ -577,6 +678,25 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       },
       'void',
     );
+    // Payments: the done order's nota, now overdue, partly paid by transfer; the cash buy paid from
+    // the drawer.
+    const pay = (billIndex: number, amount: number, source: string, daysAgo: number) => {
+      const target = bills[billIndex]!;
+      payments.push({
+        id: newId('pay'),
+        supplierId: target.supplierId,
+        billId: target.id,
+        amount,
+        source,
+        reference: source === DEMO_BANK.source ? 'TRF 2611 0912' : null,
+        note: null,
+        createdAt: day(daysAgo) + 14 * 3_600_000,
+        voidedAt: null,
+        voidReason: null,
+      });
+    };
+    pay(0, 200_000, DEMO_BANK.source, 4);
+    pay(2, 150_000, 'cash', 1);
     await make(
       'sup-3',
       [
@@ -595,9 +715,12 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
     },
     query: async (name: string, input: Input) => {
       await seeded;
-      const reads = ['listBills', 'getBill'].includes(name)
-        ? PURCHASING_PERMISSION.bills
-        : PURCHASING_PERMISSION.buy;
+      const reads =
+        name === 'paymentSources'
+          ? PURCHASING_PERMISSION.paySuppliers
+          : ['listBills', 'getBill', 'supplierCredit'].includes(name)
+            ? PURCHASING_PERMISSION.bills
+            : PURCHASING_PERMISSION.buy;
       if (!actor().permissions.includes(reads)) {
         throw new DomainError('PERMISSION_DENIED', {});
       }

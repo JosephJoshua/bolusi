@@ -11,6 +11,8 @@ import { userNames } from '../../shared/user-names.js';
 import { PURCHASING_PERMISSION, type BillStatus } from '../constants.js';
 import { linesOf, orderItemsHandler, orderItemsInput } from '../queries.js';
 import type { PurchasingDatabase } from '../schema.js';
+import { storeBalances, type Balances } from '../payments/balances.js';
+import { paymentRows, type PaymentRow } from '../payments/queries.js';
 
 type Qctx = QueryContext<PurchasingDatabase>;
 
@@ -27,6 +29,10 @@ export interface BillRow {
   readonly status: BillStatus;
   /** Its parts plus its charges, whole rupiah. */
   readonly total: number;
+  /** What its payments and the supplier's credit have paid of it; 0 for a void bill. */
+  readonly paid: number;
+  /** What is still owed on it: `total - paid`, 0 once paid and for a void bill. */
+  readonly balance: number;
 }
 
 export interface BillLineRow {
@@ -54,6 +60,12 @@ export interface BillDetailRow extends BillRow {
   readonly voidedByName: string | null;
   readonly voidReason: string | null;
   readonly lines: readonly BillLineRow[];
+  /** The payments made for it, cancelled ones too, oldest first. */
+  readonly payments: readonly PaymentRow[];
+  /** What of `paid` came from the supplier's credit (paid ahead, or beyond another bill). */
+  readonly fromCredit: number;
+  /** The supplier's credit left once every bill of theirs here is paid. */
+  readonly supplierCredit: number;
 }
 
 /**
@@ -120,7 +132,8 @@ async function billLines(qctx: Qctx, billIds: readonly string[]) {
     .execute();
 }
 
-function toRow(raw: RawBill, total: number): BillRow {
+function toRow(raw: RawBill, total: number, balances: Balances): BillRow {
+  const paid = raw.status === 'open' ? (balances.paid.get(raw.id) ?? 0) : 0;
   return {
     id: raw.id,
     billNumber: raw.billNumber,
@@ -133,61 +146,86 @@ function toRow(raw: RawBill, total: number): BillRow {
     dueOn: raw.dueOn === null ? null : Number(raw.dueOn),
     status: raw.status as BillStatus,
     total,
+    paid,
+    balance: raw.status === 'open' ? total - paid : 0,
   };
+}
+
+/** Whether a bill is past its due date with something still owed, as of the day `today` starts. */
+export function billOverdue(bill: Pick<BillRow, 'dueOn' | 'balance'>, today: number): boolean {
+  return bill.balance > 0 && bill.dueOn !== null && bill.dueOn < today;
 }
 
 // ── listBills ──────────────────────────────────────────────────────────────────────────────────
 
-export const BILL_FILTERS = ['open', 'all'] as const;
+/**
+ * `unpaid`: standing bills still owed on ("Belum lunas"); `overdue`: those past their due date
+ * ("Jatuh tempo"); `open`: every standing bill; `all` adds the void ones.
+ */
+export const BILL_FILTERS = ['unpaid', 'overdue', 'open', 'all'] as const;
 export type BillFilter = (typeof BILL_FILTERS)[number];
+/** The filters the Tagihan list offers a person (`open` is for an order's own bills). */
+export type BillListFilter = Exclude<BillFilter, 'open'>;
 
 export const listBillsInput = z
   .object({
-    /** `open`: standing bills; `all` adds the void ones. */
     filter: z.enum(BILL_FILTERS).default('open'),
     /** Only one order's bills. */
     orderId: z.string().min(1).nullable().default(null),
+    /** The start of the device's day, which `overdue` counts from. */
+    today: z.number().int().min(0).default(0),
     limit: z.number().int().min(1).max(500).default(100),
     offset: z.number().int().min(0).default(0),
   })
   .strict();
 export type ListBillsInput = z.input<typeof listBillsInput>;
 
-/** Open bills by when they fall due (the soonest first, no date last); all of them newest first. */
+/**
+ * Standing bills by when they fall due (the soonest first, no date last); all of them newest
+ * first. What is owed is read from the payments, so `unpaid` and `overdue` page after reading it.
+ */
 export async function listBillsHandler(
   input: z.output<typeof listBillsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<BillRow>> {
+  const owing = input.filter === 'unpaid' || input.filter === 'overdue';
   let query = storeBills(qctx);
-  if (input.filter === 'open') query = query.where('b.status', '=', 'open');
+  if (input.filter !== 'all') query = query.where('b.status', '=', 'open');
   if (input.orderId !== null) query = query.where('b.orderId', '=', input.orderId);
-  const raws = await (
-    input.filter === 'open'
-      ? query
+  if (input.filter === 'overdue') query = query.where('b.dueOn', '<', input.today);
+  const ordered =
+    input.filter === 'all'
+      ? query.orderBy('b.billedOn', 'desc').orderBy('b.createdAt', 'desc')
+      : query
           .orderBy(sql`CASE WHEN b.due_on IS NULL THEN 1 ELSE 0 END`)
           .orderBy('b.dueOn')
-          .orderBy('b.billedOn')
-      : query.orderBy('b.billedOn', 'desc').orderBy('b.createdAt', 'desc')
-  )
-    // One past the page says whether another follows.
-    .limit(input.limit + 1)
-    .offset(input.offset)
+          .orderBy('b.billedOn');
+  // One past the page says whether another follows.
+  const raws = await (owing ? ordered : ordered.limit(input.limit + 1).offset(input.offset))
+    .orderBy('b.id')
     .execute();
-  const more = raws.length > input.limit;
-  if (more) raws.pop();
-  const lines = await billLines(
-    qctx,
-    raws.map((raw) => raw.id),
-  );
-  const rows = raws.map((raw) =>
+  const balances = await storeBalances(qctx, [...new Set(raws.map((raw) => raw.supplierId))]);
+  const totals = new Map(balances.bills.map((bill) => [bill.id, bill.total]));
+  const voidIds = raws.filter((raw) => raw.status !== 'open').map((raw) => raw.id);
+  const voidLines = await billLines(qctx, voidIds);
+  let rows = raws.map((raw) =>
     toRow(
       raw,
-      billTotal(
-        lines.filter((line) => line.billId === raw.id),
-        Number(raw.charges),
-      ),
+      totals.get(raw.id) ??
+        billTotal(
+          voidLines.filter((line) => line.billId === raw.id),
+          Number(raw.charges),
+        ),
+      balances,
     ),
   );
+  if (owing) {
+    rows = rows
+      .filter((row) => row.balance > 0)
+      .slice(input.offset, input.offset + input.limit + 1);
+  }
+  const more = rows.length > input.limit;
+  if (more) rows.pop();
   return { rows, nextCursor: more ? String(input.offset + input.limit) : null };
 }
 
@@ -232,8 +270,9 @@ export async function getBillHandler(
     [raw.createdBy, raw.voidedBy].filter((id): id is string => id !== null),
   );
   const charges = Number(raw.charges);
+  const balances = await storeBalances(qctx, [raw.supplierId]);
   const row: BillDetailRow = {
-    ...toRow(raw, billTotal(lines, charges)),
+    ...toRow(raw, billTotal(lines, charges), balances),
     charges,
     note: raw.note,
     createdBy: raw.createdBy,
@@ -255,6 +294,9 @@ export async function getBillHandler(
         billedElsewhere: elsewhere.get(line.itemId) ?? 0,
       };
     }),
+    payments: await paymentRows(qctx, { billId: raw.id }),
+    fromCredit: raw.status === 'open' ? (balances.fromCredit.get(raw.id) ?? 0) : 0,
+    supplierCredit: balances.credit.get(raw.supplierId) ?? 0,
   };
   return { rows: [row], nextCursor: null };
 }

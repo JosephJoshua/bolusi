@@ -13,6 +13,7 @@ import {
   cashMoveVoidedApplier,
   entryRecordedApplier,
   paymentVoidedApplier,
+  supplierPaymentVoidedApplier,
 } from './applier.js';
 import {
   CASH_MOVE_KINDS,
@@ -26,9 +27,11 @@ import {
   MONEY_PERMISSION,
   PAYMENT_ACCOUNT_KINDS,
   REVENUE_ACCOUNTS,
+  SYSTEM_ACCOUNT,
 } from './constants.js';
 import { zDocument, type MoneyDocument, type MoneyDocumentSources } from './documents.js';
 import { accountSavedRule, centralAccountSavedRule, createMoneyRules } from './rules.js';
+import type { MoneyPayoutSources } from './payouts.js';
 import type { MoneyDatabase } from './schema.js';
 
 export const zAmount = zMoneyIdr.min(1).max(MAX_AMOUNT);
@@ -115,12 +118,19 @@ export const cashAdjustedPayload = z
   })
   .strict();
 
+/** Where a payout is paid from: the drawer, a bank account, or the owner's own money. */
+export const zPayoutAccount = z.union([zAccountRef, z.literal(SYSTEM_ACCOUNT.ownerCapital)]);
+
+/** Money paid to a supplier, under the supplier payment's own id (payouts.ts). */
+export const supplierPaidPayload = z.object({ amount: zAmount, account: zPayoutAccount }).strict();
+
 const NOT_REVERSIBLE = 'Not reversible: money moved. A mistake is corrected by a new record.';
 
 export function createMoneyOperations(
   sources: MoneyDocumentSources,
+  payouts: MoneyPayoutSources,
 ): Record<string, OperationDeclaration<MoneyDatabase>> {
-  const rules = createMoneyRules(sources);
+  const rules = createMoneyRules(sources, payouts);
   // Money taken or given back for a document changes how that document looks: a servisan's row
   // shows what is still owed.
   const concerns: OperationConcerns = (op) => {
@@ -239,6 +249,27 @@ export function createMoneyOperations(
       rule: rules.cashAdjustedRule,
       permission: MONEY_PERMISSION.adjustCash,
       read: MONEY_PERMISSION.read,
+    },
+    // Paying a supplier is the owner's decision, made on the supplier payment; the rule holds this
+    // to exactly that payment, so moving the store's money is all this op's own permission says.
+    [MONEY_OP.supplierPaid]: {
+      ...entry,
+      schemaVersion: 1,
+      payload: supplierPaidPayload,
+      reversal: 'Cancelled with its supplier payment by money.supplier_payment_voided.',
+      rule: rules.supplierPaidRule,
+      permission: MONEY_PERMISSION.moveCash,
+      read: MONEY_PERMISSION.read,
+    },
+    [MONEY_OP.supplierPaymentVoided]: {
+      schemaVersion: 1,
+      payload: paymentVoidedPayload,
+      reversal: 'Not reversible: pay the supplier again if the payment was real.',
+      apply: supplierPaymentVoidedApplier,
+      rule: rules.supplierPaymentVoidedRule,
+      permission: MONEY_PERMISSION.moveCash,
+      read: MONEY_PERMISSION.read,
+      entityType: MONEY_ENTRY_ENTITY,
     },
   };
 }

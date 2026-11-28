@@ -10,7 +10,9 @@
     "cashMoved": "Kas keluar/masuk",
     "cashCounted": "Tutup kas",
     "cashAdjusted": "Selisih kas diselesaikan",
-    "cashMoveVoided": "Catatan kas dibatalkan"
+    "cashMoveVoided": "Catatan kas dibatalkan",
+    "supplierPaid": "Bayar supplier",
+    "supplierPaymentVoided": "Pembayaran supplier dibatalkan"
   },
   "refusal": {
     "alreadyRecorded": "Catatan ini sudah ada.",
@@ -38,7 +40,8 @@
     "overLimit": "Melebihi batas Anda. Minta persetujuan pemilik toko.",
     "moveAboveDrawer": "Uang di laci tidak cukup.",
     "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
-    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan."
+    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan.",
+    "payoutNotFound": "Kas hanya dapat dikeluarkan sesuai pembayaran supplier yang dicatat pemilik."
   },
   "method": {
     "cash": "Tunai"
@@ -97,7 +100,8 @@
     "adjusted": "Selisih kas diselesaikan",
     "receive": "Terima",
     "settle": "Selesaikan",
-    "nothingOwed": "Semua pelanggan sudah lunas."
+    "nothingOwed": "Semua pelanggan sudah lunas.",
+    "supplierPaid": "Bayar supplier"
   },
   "moveKind": {
     "withdrawal": "Setor ke pemilik",

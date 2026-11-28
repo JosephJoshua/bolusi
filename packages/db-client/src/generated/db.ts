@@ -453,6 +453,23 @@ export interface PurchasingOrders {
   updatedAt: number;
 }
 
+export interface PurchasingPayments {
+  amount: number;
+  billId: string | null;
+  createdAt: number;
+  createdBy: string;
+  id: string | null;
+  note: string | null;
+  reference: string | null;
+  source: string;
+  storeId: string;
+  supplierId: string;
+  tenantId: string;
+  voidedAt: number | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
 export interface PurchasingReceiptLines {
   itemId: string;
   orderId: string;
@@ -741,6 +758,7 @@ export interface DB {
   purchasingBills: PurchasingBills;
   purchasingOrderLines: PurchasingOrderLines;
   purchasingOrders: PurchasingOrders;
+  purchasingPayments: PurchasingPayments;
   purchasingReceiptLines: PurchasingReceiptLines;
   purchasingReceipts: PurchasingReceipts;
   purchasingSuppliers: PurchasingSuppliers;

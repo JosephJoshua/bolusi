@@ -55,6 +55,8 @@ export function postingsFor(input: PostingInput): Posting[] {
       return amount >= 0
         ? [dr(CASH_ACCOUNT, amount), cr(SYSTEM_ACCOUNT.cashOverShort, amount)]
         : [dr(SYSTEM_ACCOUNT.cashOverShort, -amount), cr(CASH_ACCOUNT, -amount)];
+    case 'supplier_paid':
+      return [dr(SYSTEM_ACCOUNT.payable, amount), cr(account ?? CASH_ACCOUNT, amount)];
   }
 }
 

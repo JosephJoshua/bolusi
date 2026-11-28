@@ -62,7 +62,7 @@ export const paymentAccountsInput = z
   })
   .strict();
 
-async function paymentAccountsHandler(
+export async function paymentAccountsHandler(
   input: z.output<typeof paymentAccountsInput>,
   qctx: Qctx,
 ): Promise<QueryPage<PaymentAccountRow>> {

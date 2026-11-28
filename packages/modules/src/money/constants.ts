@@ -38,6 +38,14 @@ export const MONEY_OP = {
   cashCounted: 'money.cash_counted',
   /** An owner settles a counted difference, so the drawer's book matches the cash again. */
   cashAdjusted: 'money.cash_adjusted',
+  /**
+   * Money paid to a supplier from the drawer, a bank account or the owner's own money. Recorded
+   * only with the owner's supplier payment it pays out (purchasing), under the same id: the payment
+   * says what it was for, this takes it off the account it was paid from.
+   */
+  supplierPaid: 'money.supplier_paid',
+  /** That payment cancelled with its supplier payment. */
+  supplierPaymentVoided: 'money.supplier_payment_voided',
 } as const;
 export type MoneyOpType = (typeof MONEY_OP)[keyof typeof MONEY_OP];
 
@@ -87,6 +95,9 @@ export function paymentAccountIdOf(ref: string): string | null {
  * is a sum: positive while the customer owes, negative while they have paid ahead (a DP).
  * The stock and purchasing accounts are reserved for that module, which posts through here too.
  */
+/** Entry kinds that pay money out for another module's record (payouts.ts). */
+export const PAYOUT_KINDS = ['supplier_paid'] as const;
+
 export const SYSTEM_ACCOUNT = {
   receivable: 'receivable',
   serviceRevenue: 'service_revenue',
@@ -156,6 +167,7 @@ export const ENTRY_KINDS = [
   'cash_moved',
   'cash_counted',
   'cash_adjusted',
+  'supplier_paid',
 ] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 

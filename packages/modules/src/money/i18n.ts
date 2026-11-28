@@ -271,6 +271,10 @@ export const MONEY_KEYS = [
   'money.void.cashSave',
   'money.void.cashExplain',
   'money.history.voidCashLabel',
+  'money.kas.supplierPaid',
+  'money.opType.supplierPaid',
+  'money.opType.supplierPaymentVoided',
+  'money.refusal.payoutNotFound',
 ] as const;
 
 export type MoneyKey = (typeof MONEY_KEYS)[number];
