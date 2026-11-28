@@ -394,6 +394,28 @@ book for repairs and starts the store's money ledger.
   views for now (money in by method, the drawer, the unpaid list); accountant
   screens come later. POS and accounting record and read money the same way.
 
+## Kas as the shared money ledger (2026-11-28)
+
+- **All money is money.** Kas records every movement whatever its source: repair
+  payments, POS sales, pulsa, supplier payments, commission payouts, expenses.
+  Each module posts into the money ledger and declares its own income and cost
+  accounts; nothing in Kas is repair-specific. There is no stopgap "Penjualan
+  lain": every module ships before release, so selling goods is POS.
+- **Several drawers per store** ("Laci servis", "Laci aksesoris"). Each drawer
+  lists the roles that use it, checked by the server on every payment, refund,
+  count and cash move; owners use every drawer. A store with one drawer works as
+  before. Each device remembers its drawer and the person can switch it.
+- **Pindah kas** moves cash between two drawers of the store and needs access to
+  both, so a POS cashier cannot push money into the repair drawer. Cash between
+  stores stays an owner's.
+- **Tutup kas per drawer**, daily, with the same blind count; an owner settles
+  each drawer's difference on its own.
+- **Money out by category** (owner-editable: Listrik, Makan, Transport...), and a
+  "Uang masuk lain" with its own categories for owners and Manajer only.
+- **One view of where money sits:** every drawer and every bank, QRIS and EDC
+  account, with one history filterable by source and method. Staff see only
+  their own drawer, blind.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.
