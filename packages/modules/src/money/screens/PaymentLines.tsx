@@ -83,11 +83,40 @@ export function PaymentLines({
           {tm('money.qris.received', { amount: formatMoney(qris.received) })}
         </Text>
       ) : null}
-      {qris !== undefined && qris.unresolved.length > 0 ? (
-        <Text style={styles.unresolved} testID={`${testID}.qrisUnresolved`}>
-          {unresolvedText(qris.unresolved)}
-        </Text>
-      ) : null}
+      {qris?.unresolved.map((stray, index) => (
+        <View
+          key={stray.charge.id}
+          style={styles.stray}
+          testID={`${testID}.qrisUnresolved${index === 0 ? '' : String(index)}`}
+        >
+          <Text style={styles.unresolved}>{unresolvedText(stray.charge.amount)}</Text>
+          {stray.cancelFailed ? (
+            <Text style={styles.problem}>{tm('money.qris.cancelFailed')}</Text>
+          ) : null}
+          <View style={styles.strayActions}>
+            <TextButton
+              label={tm(
+                stray.cancelling
+                  ? 'money.qris.cancelling'
+                  : stray.cancelFailed
+                    ? 'money.qris.retry'
+                    : 'money.qris.cancelQr',
+              )}
+              tone="danger"
+              disabled={stray.cancelling}
+              onPress={() => qris.cancel(stray.charge.id)}
+              testID={`${testID}.cancelQr${index === 0 ? '' : String(index)}`}
+            />
+            {stray.cancelFailed ? (
+              <TextButton
+                label={tm('money.qris.letGo')}
+                onPress={() => qris.letGo(stray.charge.id)}
+                testID={`${testID}.letGo${index === 0 ? '' : String(index)}`}
+              />
+            ) : null}
+          </View>
+        </View>
+      ))}
       {lines.map((line, index) => {
         const id = `${testID}.line${String(index)}`;
         const account = pickedAccount(line.account, accounts);
@@ -287,6 +316,9 @@ const styles = StyleSheet.create({
   qrNote: { ...type.bodySm, color: color.textMuted },
   received: { ...type.bodySm, color: color.success },
   unresolved: { ...type.bodySm, color: color.warning },
+  stray: { gap: space.xs },
+  // The text, not the hit box, lines up with the line above.
+  strayActions: { flexDirection: 'row', flexWrap: 'wrap', marginLeft: -space.sm },
   remaining: { marginTop: -space.md },
   remainingText: { ...type.bodySm, color: color.textMuted },
   overpaid: { ...type.bodySm, color: color.danger, marginTop: -space.md },

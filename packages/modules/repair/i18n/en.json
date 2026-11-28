@@ -372,7 +372,8 @@
     "downPaymentLimit": "You can take up to {amount} off the money taken in.",
     "cancelLimit": "You can cut the fee by up to {amount}.",
     "downPaymentWithEarlier": "With earlier DP changes, that’s {amount} in total.",
-    "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
+    "handoverQris": "Waiting for the QRIS payment. Check the internet is on.",
+    "handoverQrOpen": "Cancel the unpaid QR first."
   },
   "discardPhotos": {
     "title": "Leave without saving?",

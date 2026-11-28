@@ -372,7 +372,8 @@
     "downPaymentLimit": "Anda dapat mengurangi uang masuk sampai {amount}.",
     "cancelLimit": "Anda dapat memotong biaya sampai {amount}.",
     "downPaymentWithEarlier": "Bersama perubahan DP sebelumnya, totalnya {amount}.",
-    "handoverQris": "Tunggu pembayaran QRIS masuk. Pastikan internet aktif."
+    "handoverQris": "Tunggu pembayaran QRIS masuk. Pastikan internet aktif.",
+    "handoverQrOpen": "Batalkan QR yang belum dibayar terlebih dahulu."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",

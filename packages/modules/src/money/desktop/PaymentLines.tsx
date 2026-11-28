@@ -66,11 +66,46 @@ export function PaymentLines({
           {tm('money.qris.received', { amount: formatMoney(qris.received) })}
         </p>
       ) : null}
-      {qris !== undefined && qris.unresolved.length > 0 ? (
-        <p className="text-body text-warning" data-testid={`${testId}.qrisUnresolved`}>
-          {unresolvedText(qris.unresolved)}
-        </p>
-      ) : null}
+      {qris?.unresolved.map((stray, index) => {
+        const suffix = index === 0 ? '' : String(index);
+        return (
+          <div
+            key={stray.charge.id}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1"
+            data-testid={`${testId}.qrisUnresolved${suffix}`}
+          >
+            <p className="text-body text-warning">{unresolvedText(stray.charge.amount)}</p>
+            {stray.cancelFailed ? (
+              <p className="text-small text-danger">{tm('money.qris.cancelFailed')}</p>
+            ) : null}
+            <div className="flex gap-2">
+              <Button
+                label={tm(
+                  stray.cancelling
+                    ? 'money.qris.cancelling'
+                    : stray.cancelFailed
+                      ? 'money.qris.retry'
+                      : 'money.qris.cancelQr',
+                )}
+                variant="dangerText"
+                size="sm"
+                busy={stray.cancelling}
+                onClick={() => qris.cancel(stray.charge.id)}
+                data-testid={`${testId}.cancelQr${suffix}`}
+              />
+              {stray.cancelFailed ? (
+                <Button
+                  label={tm('money.qris.letGo')}
+                  variant="text"
+                  size="sm"
+                  onClick={() => qris.letGo(stray.charge.id)}
+                  data-testid={`${testId}.letGo${suffix}`}
+                />
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
       {lines.map((line, index) => {
         const id = `${testId}.line${String(index)}`;
         const account = pickedAccount(line.account, accounts);
