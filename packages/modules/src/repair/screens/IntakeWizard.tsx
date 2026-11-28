@@ -5,7 +5,7 @@
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
 
-import { useIntakeDraft } from '../intake-draft.js';
+import { useIntakeDraft, useOpenTicket } from '../intake-draft.js';
 import {
   ConfirmSheet,
   StepHeader,
@@ -36,7 +36,6 @@ import {
   intakeNeedsVideo,
   nextMissingPhoto,
   stepProblems,
-  toOpenTicketInput,
   type IntakeDraft,
   INTAKE_PROBLEM_KEY,
   type IntakeProblem,
@@ -223,6 +222,10 @@ export function IntakeWizard({
     draft.ownershipVideo === null &&
     recordVideo !== undefined;
 
+  const openTicket = useOpenTicket(runner, now, (ticketId) => {
+    onDraftChange?.(null);
+    onOpened(ticketId);
+  });
   const next = (): void => {
     if (missingPhoto !== null) {
       takePhoto(missingPhoto);
@@ -241,13 +244,7 @@ export function IntakeWizard({
       return;
     }
     if (loadedAccounts === null) return;
-    void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
-      .then((opened) => {
-        if (opened === undefined) return;
-        onDraftChange?.(null);
-        onOpened(opened.ticketId);
-      });
+    openTicket(draft, options, accounts);
   };
 
   const back = (): void => (stepIndex === 0 ? requestLeave(onCancel) : goTo(stepIndex - 1));

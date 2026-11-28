@@ -17,13 +17,13 @@ import {
 import { Archive, SearchX, TriangleAlert, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
+import { useArchiveItem } from '../item-actions.js';
 import { ti } from '../i18n.js';
 import { itemFacts } from '../item-facts.js';
 import { movementTitle, signedQty, stockText } from '../labels.js';
-import { itemDetails, type ItemDetailRow } from '../queries.js';
+import { type ItemDetailRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 import { CountDialog, PartDialog } from './dialogs.js';
 import { PartCostSection } from './PartCost.js';
@@ -48,10 +48,13 @@ export function PartPane({
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const canCount = runtime.hasPermission(INVENTORY_PERMISSION.count);
   const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
-  const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [task, setTask] = useState<Task>('none');
   const [done, setDone] = useState<string | null>(null);
+  const archive = useArchiveItem((archived) =>
+    setDone(ti(archived ? 'inventory.done.archived' : 'inventory.done.restored')),
+  );
+  const { runner } = archive;
   const say = (message: string | null): void => {
     onClearNotice();
     setDone(message);
@@ -67,12 +70,7 @@ export function PartPane({
   const setArchived = (row: ItemDetailRow, archived: boolean): void => {
     setTask('none');
     say(null);
-    void runner
-      .run(() => runtime.run('editItem', { itemId: row.id, archived, ...itemDetails(row) }))
-      .then((result) => {
-        if (result !== undefined)
-          setDone(ti(archived ? 'inventory.done.archived' : 'inventory.done.restored'));
-      });
+    archive.setArchived(row, archived);
   };
 
   const banner =
