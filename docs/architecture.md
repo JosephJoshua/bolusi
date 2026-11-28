@@ -242,6 +242,17 @@ tenant's system device, with the charge id as its entry id, so one QR records at
 most one payment. Devices pull it like any other payment. Test-mode payments
 carry a `test:` reference.
 
+A QR lives 10 minutes, and a bill has at most one open QR: the server refuses a
+second (`QRIS_CHARGE_OPEN`), and while one is open the counter takes no other
+method. Xendit cannot withdraw a dynamic QR, so "Batalkan QR" is the server's own
+mark; a QR paid after it is still recorded and shows as an overpayment to give
+back. The server also sweeps every unpaid QR with Xendit every 30 seconds (a
+definer lookup across tenants, like token auth), so a payment is recorded even
+with no webhook and no device asking. Where a connected QRIS method exists it is
+the default on a new payment line. `test/integration/xendit-live.test.ts` runs
+the flow against Xendit's test mode when `XENDIT_TEST_SECRET_KEY` holds a test
+key.
+
 ## Limits to carry into repair work
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
@@ -327,5 +338,6 @@ Signers are cached, so restart after changing keys. See
 `apps/server/src/sync/system-key-store.ts` and the provisioning CLI.
 
 `PAYMENT_SECRETS_KEY` (32 bytes, base64) and `PUBLIC_URL` together turn on QRIS
-through Xendit; it also needs `SYSTEM_KEY_DIR`. Losing the secrets key means
+through Xendit (production: `PUBLIC_URL=https://api.bolusi.id`, or wherever the
+server is reachable under bolusi.id); it also needs `SYSTEM_KEY_DIR`. Losing the secrets key means
 reconnecting every Xendit account.

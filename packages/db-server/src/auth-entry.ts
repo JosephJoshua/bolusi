@@ -19,6 +19,7 @@ import {
   loginCredentialQuery,
   mapControlSessionRow,
   statusLinkQuery,
+  unpaidQrisChargesQuery,
 } from './auth-lookup-queries.js';
 
 import { getDb } from './db.js';
@@ -92,4 +93,22 @@ export interface StatusLinkRecord {
 export async function findStatusLink(code: string): Promise<StatusLinkRecord | undefined> {
   const { rows } = await statusLinkQuery(code).execute(getDb());
   return rows.length === 1 ? rows[0] : undefined;
+}
+
+/** A QRIS charge still unpaid (migration 0037): its tenant and id, nothing else. */
+export interface UnpaidQrisChargeRecord {
+  readonly tenantId: string;
+  readonly chargeId: string;
+}
+
+/**
+ * The unpaid QRIS charges whose QR expires after `expiresAfter`, not yet settled (`settleMs`), for the server's own check with
+ * Xendit (qris/service.ts sweep). Cross-tenant, definer-gated; at most 500.
+ */
+export async function findUnpaidQrisCharges(
+  expiresAfter: number,
+  settleMs: number,
+): Promise<readonly UnpaidQrisChargeRecord[]> {
+  const { rows } = await unpaidQrisChargesQuery(expiresAfter, settleMs).execute(getDb());
+  return rows;
 }

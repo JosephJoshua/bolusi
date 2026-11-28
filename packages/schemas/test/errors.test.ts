@@ -41,6 +41,7 @@ describe('HTTP error-code registry (api/00 §7)', () => {
         'QRIS_NOT_CONNECTED',
         'QRIS_KEY_REFUSED',
         'QRIS_AMOUNT_REFUSED',
+        'QRIS_CHARGE_OPEN',
         'CHANGE_REFUSED',
         'PERSON_SESSION_INVALID',
       ].sort(),

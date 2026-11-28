@@ -221,6 +221,8 @@
     "example": "For example: {name}",
     "saved": "Category saved.",
     "savedRenamed": "Category saved. {count} item names were updated.",
+    "archivedNotice": "Category archived.",
+    "restoredNotice": "Category restored.",
     "archive": "Archive category",
     "archiveTitle": "Archive this category?",
     "archiveMessage": "Its items stay, but the category can’t be picked any more.",

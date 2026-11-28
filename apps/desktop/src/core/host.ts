@@ -1036,6 +1036,9 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'money.qris.createCharge': (userId: string, body: QrisChargeBody) =>
       qrisOf(userId).createCharge(body),
     'money.qris.charge': (userId: string, id: string) => qrisOf(userId).charge(id),
+    'money.qris.openCharges': (userId: string, documentId: string) =>
+      qrisOf(userId).openCharges(documentId),
+    'money.qris.cancel': (userId: string, id: string) => qrisOf(userId).cancel(id),
     'money.qris.simulate': (userId: string, id: string) => qrisOf(userId).simulate(id),
     // Approval requests on servisan (a discount or a cancel asked of an owner), for the same person.
     'approvals.query': (userId: string, name: string, input: unknown) =>

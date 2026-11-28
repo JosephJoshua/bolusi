@@ -2,7 +2,8 @@
  * QrisDialog — the PC's QR for one payment line, the phone's QrisStep over the same
  * `useQrisCharge`: the amount, the QR the customer scans off the counter screen, and what is
  * happening until Xendit confirms the payment. Closing keeps the QR for that line; when it cannot be
- * made or it expired, the counter can take the payment by hand instead.
+ * made or it expired, the counter can take the payment by hand instead. "Batalkan QR" gives up on it
+ * to take the bill another way.
  */
 import { formatMoney, formatTime } from '@bolusi/i18n';
 import type { QrisCharge } from '@bolusi/schemas';
@@ -20,6 +21,8 @@ export interface QrisDialogProps {
   readonly onPaid: (charge: QrisCharge) => void;
   readonly onRenew: () => void;
   readonly onTakeByHand: () => void;
+  /** Give up on the QR, to take the bill another way. */
+  readonly onCancel: () => void;
   readonly onClose: () => void;
   readonly testId?: string | undefined;
 }
@@ -34,6 +37,7 @@ export function QrisDialog({
   onPaid,
   onRenew,
   onTakeByHand,
+  onCancel,
   onClose,
   testId = 'money.desk.qris',
 }: QrisDialogProps): React.JSX.Element {
@@ -66,6 +70,16 @@ export function QrisDialog({
           onClick={onRenew}
           data-testid={`${testId}.renew`}
         />
+      </>
+    ) : state.kind === 'waiting' ? (
+      <>
+        <Button
+          label={tm('money.qris.cancelQr')}
+          variant="dangerText"
+          onClick={onCancel}
+          data-testid={`${testId}.cancelQr`}
+        />
+        <Button label={tm('money.qris.close')} onClick={onClose} data-testid={`${testId}.close`} />
       </>
     ) : state.kind === 'failed' ? (
       <>
@@ -166,6 +180,13 @@ export function QrisDialog({
             title={tm('money.qris.paid')}
             hint={tm('money.qris.paidMessage', { amount: formatMoney(state.charge.amount) })}
             testId={`${testId}.paid`}
+          />
+        ) : state.kind === 'cancelled' ? (
+          <StatePanel
+            icon={Clock}
+            title={tm('money.qris.cancelled')}
+            hint={tm('money.qris.cancelledMessage')}
+            testId={`${testId}.cancelled`}
           />
         ) : state.kind === 'expired' ? (
           <StatePanel
