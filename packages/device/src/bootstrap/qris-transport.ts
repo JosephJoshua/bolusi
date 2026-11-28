@@ -12,6 +12,7 @@ import {
   zQrisCharge,
   zQrisConnection,
   zQrisConnectionsResponse,
+  zQrisOpenChargesResponse,
   type QrisChargeBody,
 } from '@bolusi/schemas';
 
@@ -104,6 +105,13 @@ export function createFetchQris(config: QrisTransportConfig): (actingUserId: str
         parsed(zQrisCharge, await call('POST', '/charges', body)),
       charge: async (id) =>
         parsed(zQrisCharge, await call('GET', `/charges/${encodeURIComponent(id)}`)),
+      openCharges: async (documentId) =>
+        parsed(
+          zQrisOpenChargesResponse,
+          await call('GET', `/charges?documentId=${encodeURIComponent(documentId)}`),
+        ).charges,
+      cancel: async (id) =>
+        parsed(zQrisCharge, await call('POST', `/charges/${encodeURIComponent(id)}/cancel`)),
       simulate: async (id) =>
         parsed(zQrisCharge, await call('POST', `/charges/${encodeURIComponent(id)}/simulate`)),
     };
@@ -114,6 +122,7 @@ const BY_CODE: Readonly<Record<string, QrisFailure>> = {
   QRIS_NOT_CONNECTED: 'notConnected',
   QRIS_KEY_REFUSED: 'keyRefused',
   QRIS_AMOUNT_REFUSED: 'amountRefused',
+  QRIS_CHARGE_OPEN: 'chargeOpen',
   QRIS_UNAVAILABLE: 'unavailable',
   CHANGE_REFUSED: 'refused',
 };

@@ -1459,6 +1459,7 @@ export function HandoverDialog({
           onPaid={payment.qris.paid}
           onRenew={payment.qris.renew}
           onTakeByHand={payment.qris.takeByHand}
+          onCancel={payment.qris.cancelOpen}
           onClose={payment.qris.close}
           testId="repair.desk.handover.qris"
         />

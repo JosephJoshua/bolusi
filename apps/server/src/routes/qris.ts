@@ -4,7 +4,9 @@
 //   PUT    /v1/money/qris/accounts/:accountId   connect one with its Xendit secret key
 //   DELETE /v1/money/qris/accounts/:accountId   back to QRIS by hand
 //   POST   /v1/money/qris/charges               a QR for one payment
+//   GET    /v1/money/qris/charges?documentId=   the bill's QRs that can still be paid
 //   GET    /v1/money/qris/charges/:id           paid yet?
+//   POST   /v1/money/qris/charges/:id/cancel    give up on it, to take the bill another way
 //   POST   /v1/money/qris/charges/:id/simulate  test mode: pay it
 //
 // And Xendit, outside /v1 with no bearer token:
@@ -22,10 +24,12 @@ import { z } from 'zod';
 import {
   zQrisChargeBody,
   zQrisConnectBody,
+  zQrisOpenChargesQuery,
   zUuid,
   type QrisCharge,
   type QrisConnection,
   type QrisConnectionsResponse,
+  type QrisOpenChargesResponse,
 } from '@bolusi/schemas';
 
 import { resolveActingUser, type ActingUser } from '../auth/acting-user.js';
@@ -36,12 +40,14 @@ import { IdentityError } from '../identity/errors.js';
 import { InMemoryRateLimitStore, perIpRateLimit } from '../middleware/rate-limit.js';
 import { zJson } from '../middleware/validator-hook.js';
 import {
+  cancelCharge,
   chargeStatus,
   connectAccount,
   createCharge,
   disconnectAccount,
   handleCallback,
   listConnections,
+  openCharges,
   simulateCharge,
 } from '../qris/service.js';
 import { tenantIdFromContext } from '../tenant.js';
@@ -98,10 +104,26 @@ export function createQrisRouter(deps: ServerDeps) {
       const body: QrisCharge = await createCharge(deps, user, device, c.req.valid('json'));
       return c.json(body);
     })
+    .get('/charges', async (c) => {
+      deviceOf(c);
+      const query = zQrisOpenChargesQuery.safeParse(c.req.query());
+      if (!query.success) throw new ApiError('VALIDATION_FAILED');
+      const user = await acting(c);
+      const body: QrisOpenChargesResponse = {
+        charges: await openCharges(deps, user, query.data.documentId),
+      };
+      return c.json(body);
+    })
     .get('/charges/:id', async (c) => {
       deviceOf(c);
       const user = await acting(c);
       const body: QrisCharge = await chargeStatus(deps, user, idParam(c, 'id'));
+      return c.json(body);
+    })
+    .post('/charges/:id/cancel', async (c) => {
+      deviceOf(c);
+      const user = await acting(c);
+      const body: QrisCharge = await cancelCharge(deps, user, idParam(c, 'id'));
       return c.json(body);
     })
     .post('/charges/:id/simulate', async (c) => {

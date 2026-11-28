@@ -5,6 +5,17 @@
 // A QR payment is recorded by the server, not by this device, and reaches it by sync a moment
 // later. Until then the screen subtracts it from what is due (`pending`), so nobody takes the same
 // money twice, and a step that checks the ledger (the handover) waits for it.
+//
+// ONE WAY AT A TIME. While the bill has a QR the customer can still pay, shown on this device or
+// another one of the store (`openCharges`), the payment cannot be taken any other way (`blocking`,
+// which the screens hand to `paymentEntry`): the counter cancels the QR first. Xendit cannot
+// withdraw a QR, so cancelling asks the server, which asks Xendit whether it was already paid. With
+// no connection the counter may still let it go on this device; a payment that comes anyway is
+// recorded and shows in Kas as money to give back.
+//
+// The default: a new line on a bill starts on the store's QRIS through Xendit when one is
+// connected and reachable (Joseph, 2026-11-25). Such a line can only be completed by the customer
+// paying its QR, so a cash payment is never booked to it for want of a tap.
 import { formatMoney } from '@bolusi/i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -18,11 +29,13 @@ import {
 
 import type { MoneyDocument } from './documents.js';
 import { tm } from './i18n.js';
-import { rupiah, type PaymentLine } from './payment-entry.js';
+import { NO_METHOD, rupiah, type PaymentLine } from './payment-entry.js';
 import { qrisFailure, type QrisFailure, type QrisPort } from './qris.js';
 
 /** How often an open QR asks whether it is paid; the server reads Xendit at most every 4 s. */
 export const QRIS_POLL_MS = 3_000;
+/** How often an open payment screen asks for QRs shown for its bill on other devices. */
+export const QRIS_OPEN_POLL_MS = 5_000;
 
 const ACCOUNT_PREFIX = 'account:';
 
@@ -42,9 +55,15 @@ interface Shown {
 const shownQrs = new Map<string, Shown>();
 const listeners = new Set<() => void>();
 
-/** Remember a QR's latest status; a paid one never goes back to waiting. */
+/** Statuses a QR does not leave: paid stays paid, cancelled only turns paid. */
+function settledRank(status: QrisCharge['status']): number {
+  return status === 'paid' ? 2 : status === 'cancelled' ? 1 : 0;
+}
+
+/** Remember a QR's latest status; a paid one never goes back to waiting, a cancelled one only pays. */
 function remember(documentId: string, charge: QrisCharge): void {
-  if (shownQrs.get(charge.id)?.charge.status === 'paid') return;
+  const known = shownQrs.get(charge.id)?.charge.status;
+  if (known !== undefined && settledRank(known) > settledRank(charge.status)) return;
   shownQrs.set(charge.id, { documentId, charge });
   for (const listener of listeners) listener();
 }
@@ -62,15 +81,12 @@ export function forgetShownQrs(): void {
   for (const listener of listeners) listener();
 }
 
-/** Paid by QR for the document but not yet in this device's ledger (`recorded`, by entry id). */
-/** The warning for QRs shown earlier and not paid yet; null when there are none. */
-export function unresolvedText(unresolved: readonly number[]): string | null {
-  if (unresolved.length === 0) return null;
-  return unresolved.length === 1
-    ? tm('money.qris.unresolved', { amount: formatMoney(unresolved[0]!) })
-    : tm('money.qris.unresolvedMany', { count: unresolved.length });
+/** What a QR shown earlier, not paid and not on a line now, says above the payment. */
+export function unresolvedText(amount: number): string {
+  return tm('money.qris.unresolved', { amount: formatMoney(amount) });
 }
 
+/** Paid by QR for the document but not yet in this device's ledger (`recorded`, by entry id). */
 export function pendingQrPayments(
   documentId: string | undefined,
   recorded: ReadonlySet<string> | null,
@@ -102,6 +118,19 @@ export interface QrisCheckoutInput {
   /** The ids of the payments this device's ledger holds for the document; null while they load. */
   readonly recorded: ReadonlySet<string> | null;
   readonly newId: () => string;
+  /**
+   * The lines are still the screen's own first line, untouched by the counter: it starts on the
+   * store's QRIS through Xendit when one is connected here.
+   */
+  readonly untouched?: boolean | undefined;
+}
+
+/** A QR shown earlier that is still payable and not on a line, with what cancelling it is doing. */
+export interface StrayQr {
+  readonly charge: QrisCharge;
+  readonly cancelling: boolean;
+  /** Cancelling did not get through: offline, or the server did not answer. */
+  readonly cancelFailed: boolean;
 }
 
 export interface OpenQr {
@@ -120,10 +149,22 @@ export interface QrisCheckout {
   /** Paid by QR for this document since the app started, synced in or not. */
   readonly received: number;
   /**
-   * QRs shown earlier that are still payable but no longer on a line (they may yet be paid), each
-   * by its amount: they are separate QRs, so never summed into one figure.
+   * QRs shown earlier (here or on another device of the store) that are still payable but not on a
+   * line: each is cancelled on its own, never summed into one figure.
    */
-  readonly unresolved: readonly number[];
+  readonly unresolved: readonly StrayQr[];
+  /**
+   * How many QRs for the bill the customer can still pay, on a line or not: while there is one, the
+   * payment cannot be taken another way (pass it to `paymentEntry`).
+   */
+  readonly blocking: number;
+  /** Cancel a QR shown earlier, to take the bill another way. */
+  readonly cancel: (id: string) => void;
+  /**
+   * Let a QR go on this device only, when cancelling could not reach the server: a payment that
+   * still comes is recorded as money to give back.
+   */
+  readonly letGo: (id: string) => void;
   readonly open: OpenQr | null;
   /** Show the line's QR: the one already made for its amount, or a new one. */
   readonly show: (key: string) => void;
@@ -132,6 +173,8 @@ export interface QrisCheckout {
   readonly close: () => void;
   /** The open QR was paid. */
   readonly paid: (charge: QrisCharge) => void;
+  /** Cancel the QR open now and close it. */
+  readonly cancelOpen: () => void;
   /** Take the open line by hand instead (no connection, Xendit not answering). */
   readonly takeByHand: () => void;
   /** Back to the QR for a line taken by hand. */
@@ -151,25 +194,67 @@ export function useQrisCheckout({
   setLines,
   recorded,
   newId,
+  untouched = false,
 }: QrisCheckoutInput): QrisCheckout {
   const connections = useQrisConnections(port);
   const [open, setOpen] = useState<OpenQr | null>(null);
+  const [cancelling, setCancelling] = useState<ReadonlySet<string>>(new Set());
+  const [cancelFailed, setCancelFailed] = useState<ReadonlySet<string>>(new Set());
+  const [openNonce, setOpenNonce] = useState(0);
   useShownQrs();
   const documentId = document?.id;
   const shown = shownFor(documentId);
   const paidIds = new Set(shown.filter((c) => c.status === 'paid').map((c) => c.id));
   const done = (id: string): boolean => paidIds.has(id) || recorded?.has(id) === true;
+  // Neither paid nor given up on: the customer may yet pay it.
+  const gone = (id: string): boolean =>
+    done(id) || shown.some((c) => c.id === id && c.status !== 'waiting');
 
-  const qrAccounts = useMemo(
-    () =>
-      new Set(
-        (connections.status === 'ready' ? connections.connections : []).map(
-          (connection) => `${ACCOUNT_PREFIX}${connection.accountId}`,
-        ),
-      ),
+  // A QR another device of the store showed for this bill, or this one before a restart. Asked
+  // again every QRIS_OPEN_POLL_MS while the screen is open, so a QR shown elsewhere meanwhile blocks
+  // other methods here too; only where Xendit is connected, since no QR exists otherwise.
+  const followsQrs =
+    connections.status === 'ready' && connections.connections.length > 0 && port !== undefined;
+  useEffect(() => {
+    if (!followsQrs || port === undefined || documentId === undefined) return;
+    let live = true;
+    const ask = () => {
+      port.openCharges(documentId).then(
+        (charges) => {
+          if (!live) return;
+          for (const charge of charges) remember(documentId, charge);
+        },
+        () => undefined,
+      );
+    };
+    ask();
+    const timer = setInterval(ask, QRIS_OPEN_POLL_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [followsQrs, port, documentId, openNonce]);
+
+  const connected = useMemo(
+    () => (connections.status === 'ready' ? connections.connections : []),
     [connections],
   );
-  const visible = lines.filter((line) => line.qr === undefined || !done(line.qr.id));
+  const qrAccounts = useMemo(
+    () => new Set(connected.map((connection) => `${ACCOUNT_PREFIX}${connection.accountId}`)),
+    [connected],
+  );
+  const defaultAccount =
+    connected.length === 0 ? null : `${ACCOUNT_PREFIX}${connected[0]!.accountId}`;
+  const withDefault =
+    untouched && defaultAccount !== null
+      ? lines.map((line) =>
+          line.account === NO_METHOD ? { ...line, account: defaultAccount } : line,
+        )
+      : lines;
+  const visible = withDefault
+    .filter((line) => line.qr === undefined || !done(line.qr.id))
+    // A line whose QR was cancelled or expired keeps its method; a new QR is made when shown again.
+    .map((line) => (line.qr !== undefined && gone(line.qr.id) ? { ...line, qr: undefined } : line));
   const pending = pendingQrPayments(documentId, recorded);
   const received = shown
     .filter((charge) => charge.status === 'paid')
@@ -177,8 +262,15 @@ export function useQrisCheckout({
   const onLines = new Set(visible.map((line) => line.qr?.id));
   // Shown and still payable, but not on screen now: checked on while this screen is open (the open
   // one checks itself). Payable until the server says it expired, whatever this device's clock says.
-  const unseen = shown.filter((c) => c.status === 'waiting' && c.id !== open?.body.id);
-  const unresolved = unseen.filter((c) => !onLines.has(c.id)).map((c) => c.amount);
+  const waiting = shown.filter((c) => c.status === 'waiting');
+  const unseen = waiting.filter((c) => c.id !== open?.body.id);
+  const unresolved = unseen
+    .filter((c) => !onLines.has(c.id))
+    .map((charge) => ({
+      charge,
+      cancelling: cancelling.has(charge.id),
+      cancelFailed: cancelFailed.has(charge.id),
+    }));
   const strayKey = unseen.map((c) => c.id).join(',');
   useEffect(() => {
     if (port === undefined || documentId === undefined || strayKey === '') return;
@@ -199,19 +291,52 @@ export function useQrisCheckout({
     if (document === null || amount === null || amount < QRIS_MIN_AMOUNT) return;
     if (!line.account.startsWith(ACCOUNT_PREFIX)) return;
     // The same QR again for the same amount: a customer may already have scanned it.
-    const qr = !fresh && line.qr?.amount === amount ? line.qr : { id: newId(), amount };
-    setLines(visible.map((other) => (other.key === line.key ? { ...other, qr } : other)));
-    setOpen({
-      key: line.key,
-      body: {
-        id: qr.id,
-        accountId: line.account.slice(ACCOUNT_PREFIX.length),
-        document,
-        amount,
-      },
-    });
+    const same = !fresh && line.qr?.amount === amount;
+    const qr = same && line.qr !== undefined ? line.qr : { id: newId(), amount };
+    const show = (): void => {
+      setLines(visible.map((other) => (other.key === line.key ? { ...other, qr } : other)));
+      setOpen({
+        key: line.key,
+        body: {
+          id: qr.id,
+          accountId: line.account.slice(ACCOUNT_PREFIX.length),
+          document,
+          amount,
+        },
+      });
+    };
+    // The amount changed under a QR the customer could still pay: that one is cancelled first,
+    // since the bill never has two payable QRs.
+    const stale = same ? undefined : line.qr;
+    if (stale !== undefined && waiting.some((c) => c.id === stale.id)) {
+      cancel(stale.id, show);
+    } else {
+      show();
+    }
   };
   const lineOf = (key: string | undefined) => visible.find((line) => line.key === key);
+  const toggle = (set: ReadonlySet<string>, id: string, on: boolean): ReadonlySet<string> => {
+    const next = new Set(set);
+    if (on) next.add(id);
+    else next.delete(id);
+    return next;
+  };
+  const cancel = (id: string, then?: () => void): void => {
+    if (port === undefined || documentId === undefined || cancelling.has(id)) return;
+    setCancelling((set) => toggle(set, id, true));
+    setCancelFailed((set) => toggle(set, id, false));
+    port
+      .cancel(id)
+      .then(
+        (charge) => {
+          remember(documentId, charge);
+          // Paid after all: the payment is in, and nothing more is taken for it.
+          if (charge.status !== 'paid') then?.();
+        },
+        () => setCancelFailed((set) => toggle(set, id, true)),
+      )
+      .finally(() => setCancelling((set) => toggle(set, id, false)));
+  };
   const patch = (key: string, change: Partial<PaymentLine>): void =>
     setLines(visible.map((line) => (line.key === key ? { ...line, ...change } : line)));
 
@@ -221,6 +346,17 @@ export function useQrisCheckout({
     pending,
     received,
     unresolved,
+    blocking: waiting.length,
+    cancel: (id) => cancel(id),
+    letGo: (id) => {
+      const known = shownQrs.get(id);
+      if (known === undefined || known.charge.status !== 'waiting') return;
+      remember(known.documentId, {
+        ...known.charge,
+        status: 'cancelled',
+        cancelledAt: known.charge.cancelledAt ?? Date.now(),
+      });
+    },
     open,
     show: (key) => {
       const line = lineOf(key);
@@ -230,13 +366,24 @@ export function useQrisCheckout({
       const line = lineOf(open?.key);
       if (line !== undefined) openFor(line, true);
     },
-    close: () => setOpen(null),
+    // Closing a QR step looks again at the bill's open QRs: making one may have found another
+    // device's QR open for the bill.
+    close: () => {
+      setOpen(null);
+      setOpenNonce((n) => n + 1);
+    },
     paid: (charge) => {
       if (documentId !== undefined) remember(documentId, charge);
     },
+    cancelOpen: () => {
+      if (open !== null) cancel(open.body.id);
+      setOpen(null);
+    },
+
     takeByHand: () => {
       if (open !== null) patch(open.key, { manual: true, qr: undefined });
       setOpen(null);
+      setOpenNonce((n) => n + 1);
     },
     useQr: (key) => patch(key, { manual: false, reference: '' }),
   };
@@ -254,6 +401,8 @@ export type QrisChargeState =
     }
   | { readonly kind: 'paid'; readonly charge: QrisCharge }
   | { readonly kind: 'expired'; readonly charge: QrisCharge }
+  /** Cancelled at the counter, here or on another device. */
+  | { readonly kind: 'cancelled'; readonly charge: QrisCharge }
   | { readonly kind: 'failed'; readonly reason: QrisFailure };
 
 export interface QrisChargeView {
@@ -315,9 +464,9 @@ export function useQrisCharge(
           reported = true;
           onPaidRef.current(charge);
         }
-      } else if (charge.status === 'expired') {
+      } else if (charge.status === 'expired' || charge.status === 'cancelled') {
         settled = true;
-        setState({ kind: 'expired', charge });
+        setState({ kind: charge.status, charge });
       } else {
         setState({ kind: 'waiting', charge, reconnecting: false });
         check();

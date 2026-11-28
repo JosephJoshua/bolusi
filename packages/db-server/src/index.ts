@@ -30,7 +30,9 @@ export {
   findControlSessionByTokenHash,
   findLoginCredential,
   findStatusLink,
+  findUnpaidQrisCharges,
   type DeviceAuthRecord,
+  type UnpaidQrisChargeRecord,
   type StatusLinkRecord,
   type ControlSessionAuthRecord,
   type LoginCredentialRecord,
@@ -49,6 +51,7 @@ export {
   loginCredentialQuery,
   mapControlSessionRow,
   statusLinkQuery,
+  unpaidQrisChargesQuery,
 } from './auth-lookup-queries.js';
 
 // Task 47 — the SERVER projection watermark store (10-db §8, 04 §4.3), moved here from

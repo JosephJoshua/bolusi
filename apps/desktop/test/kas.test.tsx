@@ -200,13 +200,12 @@ describe('Kas on the PC', () => {
     fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
       target: { value: '200000' },
     });
-    // The store takes more than cash, so nothing is picked for the counter (round 2 QA, A11).
-    expect(byTestId('money.desk.receive.pay.line0.pick').textContent).toBe(
-      'Pilih metode pembayaran terlebih dahulu.',
-    );
+    // The store's QRIS through Xendit is the default, and only its QR can pay that line: nothing is
+    // booked to the drawer for want of a tap (round 2 QA, A11; Joseph 2026-11-25).
+    expect(byTestId('money.desk.receive.pay.line0.showQr')).toBeTruthy();
     expect(byTestId('money.desk.receive.submit')).toHaveProperty('disabled', true);
     pick('money.desk.receive.pay.line0');
-    expect(screen.queryByTestId('money.desk.receive.pay.line0.pick')).toBeNull();
+    expect(screen.queryByTestId('money.desk.receive.pay.line0.showQr')).toBeNull();
     // QA round F: 2.000.000 handed over for 200.000 is asked about; the counter says it is right.
     fireEvent.change(byTestId('money.desk.receive.pay.line0.tendered'), {
       target: { value: '2000000' },
