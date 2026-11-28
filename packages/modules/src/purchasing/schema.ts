@@ -68,10 +68,59 @@ export interface PurchasingReceiptLinesTable {
   qty: number;
 }
 
+/**
+ * A supplier's bill for one nota, in one store: its own record, entered before the parts come
+ * (paid ahead, or the nota came first) or after. It is compared with its order's deliveries when
+ * read, never blocked by them. Its total is its lines plus its charges.
+ */
+export interface PurchasingBillsTable {
+  id: string;
+  tenantId: string;
+  storeId: string;
+  /** `TG-K7Q-0001`: minted by the device that recorded it, as order numbers are. */
+  billNumber: string;
+  supplierId: string;
+  /** The order it bills, when there is one. */
+  orderId: string | null;
+  /** The supplier's own number for the nota, as printed. */
+  supplierRef: string | null;
+  /** The nota's date, as ms epoch at the start of that day on the device. */
+  billedOn: number;
+  /** When it must be paid by ("tempo"), or null for no set date. */
+  dueOn: number | null;
+  /** Ongkir and other charges on the nota beyond its parts, whole rupiah. */
+  charges: number;
+  note: string | null;
+  /** `BillStatus`. */
+  status: string;
+  createdBy: string;
+  createdAt: number;
+  updatedBy: string;
+  updatedAt: number;
+  voidedBy: string | null;
+  voidedAt: number | null;
+  voidReason: string | null;
+}
+
+/** One part on a bill: child rows of the bill, rewritten when it is edited. */
+export interface PurchasingBillLinesTable {
+  billId: string;
+  position: number;
+  tenantId: string;
+  itemId: string;
+  /** The part's name as the bill was entered. */
+  itemName: string;
+  qty: number;
+  /** Whole rupiah per piece. */
+  unitPrice: number;
+}
+
 export interface PurchasingDatabase {
   purchasingSuppliers: PurchasingSuppliersTable;
   purchasingOrders: PurchasingOrdersTable;
   purchasingOrderLines: PurchasingOrderLinesTable;
   purchasingReceipts: PurchasingReceiptsTable;
   purchasingReceiptLines: PurchasingReceiptLinesTable;
+  purchasingBills: PurchasingBillsTable;
+  purchasingBillLines: PurchasingBillLinesTable;
 }

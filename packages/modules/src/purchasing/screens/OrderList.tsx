@@ -2,9 +2,10 @@
  * OrderList — this store's orders to suppliers: the ones still running (drafts, and orders waiting
  * on parts) or the ones done. Each row says who it is from, how far it has arrived and its stage.
  */
-import { formatDate, t, translateErrorCode } from '@bolusi/i18n';
+import { formatDate, formatMoney, t, translateErrorCode } from '@bolusi/i18n';
 import {
   ActionChip,
+  Amount,
   AppShell,
   Button,
   Chip,
@@ -24,21 +25,31 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
+import { opensBills } from '../constants.js';
 import { tp } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
-import type { OrderFilter, OrderRow } from '../queries.js';
-import { loadOrderPages, usePurchasingQuery } from '../runtime.js';
+import type { OrderRow } from '../queries.js';
+import { dueText, notaText, type BelanjaTab } from '../bills/bill-form.js';
+import type { BillRow } from '../bills/queries.js';
+import {
+  loadBillPages,
+  loadOrderPages,
+  usePurchasingQuery,
+  usePurchasingRuntime,
+} from '../runtime.js';
 
 const PAGE = 50;
 
 export interface OrderListProps {
   readonly chrome: ScreenChrome;
-  readonly filter: OrderFilter;
-  readonly onFilter: (filter: OrderFilter) => void;
+  readonly filter: BelanjaTab;
+  readonly onFilter: (filter: BelanjaTab) => void;
   /** The Barang place's title and the switch to its other sections. */
   readonly place: PlaceHeader;
   readonly onOpenOrder: (orderId: string) => void;
   readonly onNewOrder: () => void;
+  readonly onOpenBill: (billId: string) => void;
+  readonly onNewBill: () => void;
   readonly onOpenSuppliers: () => void;
   /**
    * The order open beside the list on a wide screen: its row is marked, and a new order steps back
@@ -55,20 +66,35 @@ export function OrderList({
   place,
   onOpenOrder,
   onNewOrder,
+  onOpenBill,
+  onNewBill,
   onOpenSuppliers,
   selectedId = null,
   testID = 'purchasing.orders',
 }: OrderListProps): React.JSX.Element {
+  const runtime = usePurchasingRuntime();
+  const bills = opensBills(runtime) && filter === 'bills';
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
   const query = usePurchasingQuery(
-    async (rt) => {
-      return loadOrderPages(rt, filter, pages, PAGE);
+    async (rt): Promise<{ readonly rows: readonly ListedRow[]; readonly hasMore: boolean }> => {
+      if (bills) {
+        const page = await loadBillPages(rt, pages, PAGE);
+        return {
+          rows: page.rows.map((row) => ({ kind: 'bill' as const, row })),
+          hasMore: page.hasMore,
+        };
+      }
+      const page = await loadOrderPages(rt, filter === 'bills' ? 'open' : filter, pages, PAGE);
+      return {
+        rows: page.rows.map((row) => ({ kind: 'order' as const, row })),
+        hasMore: page.hasMore,
+      };
     },
-    `orders:${filter}:${String(pages)}:${String(reloadNonce)}`,
+    `orders:${filter}:${String(bills)}:${String(pages)}:${String(reloadNonce)}`,
   );
 
-  const listState = useMemo((): ListState<OrderRow> => {
+  const listState = useMemo((): ListState<ListedRow> => {
     switch (query.status) {
       case 'loading':
         return { kind: 'loading' };
@@ -99,29 +125,44 @@ export function OrderList({
               kind: 'empty',
               empty: {
                 title: tp(
-                  filter === 'open' ? 'purchasing.list.emptyOpen' : 'purchasing.list.emptyDone',
+                  bills
+                    ? 'purchasing.bill.listEmpty'
+                    : filter === 'done'
+                      ? 'purchasing.list.emptyDone'
+                      : 'purchasing.list.emptyOpen',
                 ),
               },
             }
           : { kind: 'ready', items: query.data.rows };
     }
-  }, [query, filter, place.onOpenSyncStatus]);
+  }, [query, filter, bills, place.onOpenSyncStatus]);
 
   const openRef = useRef(onOpenOrder);
   openRef.current = onOpenOrder;
   const open = useCallback((id: string) => openRef.current(id), []);
+  const openBillRef = useRef(onOpenBill);
+  openBillRef.current = onOpenBill;
+  const openBill = useCallback((id: string) => openBillRef.current(id), []);
   const renderRow = useCallback(
-    (row: OrderRow) => (
-      <OrderListRow
-        row={row}
-        selected={row.id === selectedId}
-        onOpen={open}
-        testID={`${testID}.row.${row.id}`}
-      />
-    ),
-    [open, selectedId, testID],
+    (listed: ListedRow) =>
+      listed.kind === 'order' ? (
+        <OrderListRow
+          row={listed.row}
+          selected={listed.row.id === selectedId}
+          onOpen={open}
+          testID={`${testID}.row.${listed.row.id}`}
+        />
+      ) : (
+        <BillListRow
+          row={listed.row}
+          selected={listed.row.id === selectedId}
+          onOpen={openBill}
+          testID={`${testID}.bill.${listed.row.id}`}
+        />
+      ),
+    [open, openBill, selectedId, testID],
   );
-  const pick = (next: OrderFilter): void => {
+  const pick = (next: BelanjaTab): void => {
     setPages(1);
     onFilter(next);
   };
@@ -135,10 +176,10 @@ export function OrderList({
         // Offline with the orders not on this device, a new one could not pick a supplier either.
         query.status === 'error' && query.code === 'NOT_ON_DEVICE' ? undefined : (
           <Button
-            label={tp('purchasing.list.new')}
+            label={tp(bills ? 'purchasing.bill.new' : 'purchasing.list.new')}
             variant={selectedId === null ? 'primary' : 'secondary'}
-            onPress={onNewOrder}
-            testID={`${testID}.new`}
+            onPress={bills ? onNewBill : onNewOrder}
+            testID={bills ? `${testID}.newBill` : `${testID}.new`}
           />
         )
       }
@@ -159,6 +200,14 @@ export function OrderList({
             onToggle={() => pick('done')}
             testID={`${testID}.filter.done`}
           />
+          {opensBills(runtime) ? (
+            <ToggleChip
+              label={tp('purchasing.bill.tab')}
+              selected={bills}
+              onToggle={() => pick('bills')}
+              testID={`${testID}.filter.bills`}
+            />
+          ) : null}
           <ActionChip
             label={tp('purchasing.supplier.listTitle')}
             icon="store"
@@ -170,7 +219,7 @@ export function OrderList({
       <List
         key={filter}
         state={listState}
-        keyExtractor={(row) => row.id}
+        keyExtractor={(listed) => listed.row.id}
         onEndReached={
           query.status === 'ready' && query.data.hasMore ? () => setPages((n) => n + 1) : undefined
         }
@@ -180,6 +229,10 @@ export function OrderList({
     </AppShell>
   );
 }
+
+type ListedRow =
+  | { readonly kind: 'order'; readonly row: OrderRow }
+  | { readonly kind: 'bill'; readonly row: BillRow };
 
 /** "Dipesan · 2 dari 5 diterima": how far an order has come, in one line. */
 export function orderProgress(row: OrderRow): string {
@@ -234,7 +287,60 @@ const OrderListRow = memo(function OrderListRow({
   );
 });
 
+interface BillListRowProps {
+  readonly row: BillRow;
+  readonly selected: boolean;
+  readonly onOpen: (billId: string) => void;
+  readonly testID: string;
+}
+
+/** A bill in the list: whose, its total, its nota and when it is due. */
+const BillListRow = memo(function BillListRow({
+  row,
+  selected,
+  onOpen,
+  testID,
+}: BillListRowProps): React.JSX.Element {
+  const voided = row.status === 'void';
+  const meta = `${row.billNumber} · ${notaText(row)}`;
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={[
+        row.supplierName,
+        formatMoney(row.total),
+        voided ? tp('purchasing.bill.statusVoid') : dueText(row),
+        meta,
+      ].join(', ')}
+      accessibilityState={{ selected }}
+      onPress={() => onOpen(row.id)}
+      android_ripple={{ color: color.surfaceAlt }}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? color.surfaceAlt : selected ? color.infoBg : color.surface },
+      ]}
+    >
+      <View style={styles.rowTop}>
+        <ValueText lines={2} style={styles.name}>
+          {row.supplierName}
+        </ValueText>
+        <Amount value={row.total} tone={voided ? 'struck' : 'text'} />
+      </View>
+      {voided ? (
+        <View style={styles.chipLine}>
+          <Chip label={tp('purchasing.bill.statusVoid')} icon="remove" tone="neutral" />
+        </View>
+      ) : (
+        <Text style={styles.details}>{dueText(row)}</Text>
+      )}
+      <Text style={styles.meta}>{meta}</Text>
+    </Pressable>
+  );
+});
+
 const styles = StyleSheet.create({
+  chipLine: { flexDirection: 'row' },
   chips: { marginBottom: space.xs },
   row: {
     minHeight: touch.rowMin,
