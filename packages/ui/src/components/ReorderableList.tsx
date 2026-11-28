@@ -8,6 +8,8 @@
  * scrolling AppShell the page holds still while a row is dragged (`useScrollLock`). The handle also
  * offers "move up" and "move down" as accessibility actions, so screen-reader and switch users can
  * reorder without dragging.
+ *
+ * The list draws the hairline between rows (none under the last), so a row draws no divider.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, PanResponder, StyleSheet, View } from 'react-native';
@@ -37,6 +39,8 @@ export interface ReorderableListProps<T> {
 const SETTLE_MS = 150;
 
 const styles = StyleSheet.create({
+  // On the row, not between rows, so it slides with the row while dragged.
+  divided: { borderTopWidth: border.hairline, borderTopColor: color.border },
   lifted: { zIndex: 1 },
   liftedOutline: {
     position: 'absolute',
@@ -224,6 +228,7 @@ export function ReorderableList<T>({
             testID={`${testID}.item.${key}`}
             onLayout={(event) => heights.set(key, event.nativeEvent.layout.height)}
             style={[
+              index === 0 ? null : styles.divided,
               lifted ? styles.lifted : null,
               { transform: [{ translateY: lifted ? drag : offsetOf(key) }] },
             ]}

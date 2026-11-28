@@ -10,7 +10,14 @@ import {
   resolveActingUser,
   type ActingUser,
 } from '../auth/acting-user.js';
-import { endPersonSessionsOf } from '../auth/person-sessions.js';
+import {
+  approvalPinMatches,
+  clearApprovalPin,
+  requireUsableApprovalPin,
+  storeApprovalPin,
+} from '../auth/approval-pins.js';
+import { endPersonSessionsOf, usableOnDevice } from '../auth/person-sessions.js';
+import { verifyPassword } from '../crypto/index.js';
 import {
   countActiveTenantAdmins,
   hasPermission,
@@ -36,8 +43,12 @@ import {
   CreateUserReq,
   PutPinVerifierReq,
   UpdateUserReq,
+  zClearApprovalPinRequest,
+  zSetApprovalPinRequest,
   type CanonicalRef,
+  type SetApprovalPinRequest,
 } from '@bolusi/schemas';
+import { randomBytes } from 'node:crypto';
 import { zJson } from '../middleware/validator-hook.js';
 import { announceDirectoryChange } from '../realtime/announce.js';
 import { createWithTenant, tenantIdFromContext } from '../tenant.js';
@@ -684,7 +695,169 @@ export function createUsersRouter(deps: ServerDeps) {
           return c.json({ userId: targetUserId, applied });
         }),
       )
+
+      // ---- PUT /v1/users/:userId/approval-pin: one's own, with its proof (auth/approval-pins.ts) ----
+      .put('/:userId/approval-pin', zJson(zSetApprovalPinRequest), (c) =>
+        withIdentityErrors(c, async () => {
+          const targetUserId = c.req.param('userId');
+          if (!LOWERCASE_UUID.test(targetUserId)) throw new ApiError('NOT_FOUND');
+          const body = c.req.valid('json');
+          const t = deps.now();
+          const tenantId = tenantIdFromContext(c);
+          const device = c.get('device');
+          if (device === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
+          await withTenant(c, async (db) => {
+            const acting = await provenActingUser(c, db, t);
+            if (acting === null) throw new IdentityError('ACTING_USER_INVALID');
+            // Nobody sets another's: an owner confirms one, or clears a forgotten one.
+            if (acting.userId !== targetUserId) throw new ApiError('PERMISSION_DENIED');
+            await requireApprovalPinProof(deps, db, {
+              tenantId,
+              device,
+              userId: targetUserId,
+              proof: body.proof,
+              now: t,
+            });
+            await requireUsableApprovalPin(db, deps.serverCrypto, targetUserId, body.pin);
+            await storeApprovalPin(db, deps.serverCrypto, {
+              tenantId,
+              userId: targetUserId,
+              pin: body.pin,
+              setBy: body.proof?.kind === 'owner' ? body.proof.userId : targetUserId,
+              now: t,
+              salt: randomBytes(16),
+            });
+            // Decisions proven with the old one end with it.
+            await endPersonSessionsOf(db, { userId: targetUserId, now: t, decisionsOnly: true });
+            await appendAudit(db, tenantId, {
+              actorUserId: acting.userId,
+              action: 'approval_pin.set',
+              entityType: 'approval_pin',
+              entityId: targetUserId,
+              after: {
+                proof: body.proof?.kind ?? 'own_phone',
+                ...(body.proof?.kind === 'owner' ? { confirmedBy: body.proof.userId } : {}),
+              },
+              at: t,
+            });
+          });
+          return c.json({ userId: targetUserId });
+        }),
+      )
+
+      // ---- POST /v1/users/:userId/approval-pin/clear: an owner clears a forgotten one ----
+      .post('/:userId/approval-pin/clear', zJson(zClearApprovalPinRequest), (c) =>
+        withIdentityErrors(c, async () => {
+          const targetUserId = c.req.param('userId');
+          if (!LOWERCASE_UUID.test(targetUserId)) throw new ApiError('NOT_FOUND');
+          const body = c.req.valid('json');
+          const t = deps.now();
+          const tenantId = tenantIdFromContext(c);
+          await withTenant(c, async (db) => {
+            const acting = await provenActingUser(c, db, t);
+            if (acting === null) throw new IdentityError('ACTING_USER_INVALID');
+            if (acting.userId === targetUserId) throw new ApiError('PERMISSION_DENIED');
+            const target = await db
+              .selectFrom('users')
+              .select('id')
+              .where('id', '=', targetUserId)
+              .executeTakeFirst();
+            if (target === undefined) throw new ApiError('NOT_FOUND');
+            await requirePermissionInStores(
+              db,
+              { userId: acting.userId, tenantId, permissionId: PERM.userResetPin },
+              await targetStoreIds(db, targetUserId),
+            );
+            // Another owner's is the main owner's to clear, as their sign-in PIN is.
+            if (!(await mayManageOwnerPin(db, tenantId, acting.userId, targetUserId))) {
+              throw new PermissionDeniedError({
+                actorUserId: acting.userId,
+                permissionId: PERM.userResetPin,
+                scopeStoreId: acting.deviceStoreId,
+                reason: 'restriction_violated',
+              });
+            }
+            // A decision, so proven as one: by the owner's own approval PIN.
+            if (!(await approvalPinMatches(deps, db, acting.userId, body.pin, t))) {
+              throw new ApiError('AUTH_INVALID_CREDENTIALS');
+            }
+            await clearApprovalPin(db, targetUserId);
+            await endPersonSessionsOf(db, { userId: targetUserId, now: t, decisionsOnly: true });
+            await appendAudit(db, tenantId, {
+              actorUserId: acting.userId,
+              action: 'approval_pin.cleared',
+              entityType: 'approval_pin',
+              entityId: targetUserId,
+              at: t,
+            });
+          });
+          return c.json({ userId: targetUserId });
+        }),
+      )
   );
+}
+
+/**
+ * What setting one's own approval PIN takes, beyond being signed in (auth/approval-pins.ts): the
+ * person's own phone, the current approval PIN, the account password, or an owner's approval PIN
+ * confirming it. Throws AUTH_INVALID_CREDENTIALS when the proof fails, PERMISSION_DENIED when there
+ * is none or the confirming owner may not confirm it.
+ */
+async function requireApprovalPinProof(
+  deps: ServerDeps,
+  db: TenantDb,
+  params: {
+    tenantId: string;
+    device: { readonly deviceId: string; readonly storeId: string | null };
+    userId: string;
+    proof: SetApprovalPinRequest['proof'];
+    now: number;
+  },
+): Promise<void> {
+  const { proof, userId, now } = params;
+  if (proof === undefined) {
+    const row = await db
+      .selectFrom('devices')
+      .select('personalUserId')
+      .where('id', '=', params.device.deviceId)
+      .executeTakeFirst();
+    if (row?.personalUserId !== userId) throw new ApiError('PERMISSION_DENIED');
+    return;
+  }
+  if (proof.kind === 'current') {
+    if (!(await approvalPinMatches(deps, db, userId, proof.pin, now))) {
+      throw new ApiError('AUTH_INVALID_CREDENTIALS');
+    }
+    return;
+  }
+  if (proof.kind === 'password') {
+    const { limit, windowMs } = IDENTITY_LIMITS.passwordPerUserDay;
+    const key = `approval-password:${userId}`;
+    enforce(deps.identityRateStore.hit(key, limit, windowMs, now));
+    const row = await db
+      .selectFrom('users')
+      .select('passwordVerifier')
+      .where('id', '=', userId)
+      .executeTakeFirst();
+    const verifier = row?.passwordVerifier ?? null;
+    if (verifier === null || !(await verifyPassword(proof.password, verifier))) {
+      throw new ApiError('AUTH_INVALID_CREDENTIALS');
+    }
+    deps.identityRateStore.refund(key, windowMs, now);
+    return;
+  }
+  // An owner confirms it on the spot: one who works here, with owner powers over this person.
+  if (
+    proof.userId === userId ||
+    !(await usableOnDevice(db, params.device, proof.userId)) ||
+    !(await holdsOwnerPowers(db, proof.userId)) ||
+    !(await mayManageOwnerPin(db, params.tenantId, proof.userId, userId))
+  ) {
+    throw new ApiError('PERMISSION_DENIED');
+  }
+  if (!(await approvalPinMatches(deps, db, proof.userId, proof.pin, now))) {
+    throw new ApiError('AUTH_INVALID_CREDENTIALS');
+  }
 }
 
 /** Upsert a user's PIN verifier row from a validated PinVerifier. */

@@ -20,7 +20,6 @@ import {
   SwitchRow,
   TextButton,
   TextInput,
-  border,
   color,
   radius,
   space,
@@ -28,6 +27,7 @@ import {
   type,
   Text,
   ValueText,
+  Rows,
   RevealWhen,
 } from '@bolusi/ui';
 import { useState, type ReactNode } from 'react';
@@ -115,7 +115,7 @@ export function CategoryList({
               testID={`${testID}.empty`}
             />
           ) : (
-            <View style={styles.list}>
+            <Rows style={styles.list}>
               {/* Archived ones last: they are kept for the items still in them. */}
               {[...rows.filter((c) => !c.archived), ...rows.filter((c) => c.archived)].map(
                 (category) => (
@@ -129,7 +129,7 @@ export function CategoryList({
                   />
                 ),
               )}
-            </View>
+            </Rows>
           )
         }
       </QueryView>
@@ -527,13 +527,9 @@ const styles = StyleSheet.create({
   rows: {
     marginTop: space.sm,
     marginHorizontal: -space.lg,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
   },
   row: {
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
     backgroundColor: color.surface,
   },
   collapsed: { minHeight: touch.rowMin, flexDirection: 'row', alignItems: 'center' },

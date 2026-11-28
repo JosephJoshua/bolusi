@@ -11,7 +11,6 @@ import {
   AppShell,
   Banner,
   Button,
-  border,
   Card,
   Chip,
   color,
@@ -22,6 +21,7 @@ import {
   TextButton,
   TextInput,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -197,110 +197,118 @@ export function BillDetail({
           }
           testID={`${testID}.lines`}
         >
-          {row.lines.map((line, i) => (
-            <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-              <View style={styles.lineText}>
-                <Text style={styles.lineName}>{line.name}</Text>
-                <Text style={styles.linePrice}>
-                  {tp('purchasing.bill.linePrice', {
-                    qty: line.qty,
-                    price: formatMoney(line.unitPrice),
-                  })}
-                </Text>
-                {hints[i] === null ? null : (
-                  <Text style={styles.lineHint} testID={`${testID}.line.${line.itemId}.hint`}>
-                    {hints[i]}
+          <Rows>
+            {row.lines.map((line, i) => (
+              <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
+                <View style={styles.lineText}>
+                  <Text style={styles.lineName}>{line.name}</Text>
+                  <Text style={styles.linePrice}>
+                    {tp('purchasing.bill.linePrice', {
+                      qty: line.qty,
+                      price: formatMoney(line.unitPrice),
+                    })}
                   </Text>
-                )}
+                  {hints[i] === null ? null : (
+                    <Text style={styles.lineHint} testID={`${testID}.line.${line.itemId}.hint`}>
+                      {hints[i]}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.lineAmount}>{formatMoney(line.amount)}</Text>
               </View>
-              <Text style={styles.lineAmount}>{formatMoney(line.amount)}</Text>
-            </View>
-          ))}
-          <View style={styles.totals}>
-            {row.charges === 0 ? null : (
-              <>
-                <AmountRow
-                  label={tp('purchasing.bill.subtotal')}
-                  value={parts}
-                  testID={`${testID}.parts`}
-                />
-                <AmountRow
-                  label={tp('purchasing.bill.charges')}
-                  value={row.charges}
-                  testID={`${testID}.charges`}
-                />
-              </>
-            )}
-            <AmountRow
-              label={tp('purchasing.bill.total')}
-              value={row.total}
-              strong={!open || row.paid === 0}
-              tone={open ? 'text' : 'struck'}
-              testID={`${testID}.total`}
-            />
-            {open && row.paid > 0 ? (
-              <>
-                <AmountRow
-                  label={tp('purchasing.bill.paid')}
-                  value={row.paid}
-                  testID={`${testID}.paid`}
-                />
-                <AmountRow
-                  label={tp('purchasing.bill.balance')}
-                  value={row.balance}
-                  strong
-                  testID={`${testID}.balance`}
-                />
-              </>
-            ) : null}
-          </View>
+            ))}
+            <Rows style={styles.totals}>
+              {row.charges === 0
+                ? null
+                : [
+                    <AmountRow
+                      label={tp('purchasing.bill.subtotal')}
+                      value={parts}
+                      testID={`${testID}.parts`}
+                      key="parts"
+                    />,
+                    <AmountRow
+                      key="charges"
+                      label={tp('purchasing.bill.charges')}
+                      value={row.charges}
+                      testID={`${testID}.charges`}
+                    />,
+                  ]}
+              <AmountRow
+                label={tp('purchasing.bill.total')}
+                value={row.total}
+                strong={!open || row.paid === 0}
+                tone={open ? 'text' : 'struck'}
+                testID={`${testID}.total`}
+              />
+              {open && row.paid > 0
+                ? [
+                    <AmountRow
+                      key="paid"
+                      label={tp('purchasing.bill.paid')}
+                      value={row.paid}
+                      testID={`${testID}.paid`}
+                    />,
+                    <AmountRow
+                      key="balance"
+                      label={tp('purchasing.bill.balance')}
+                      value={row.balance}
+                      strong
+                      testID={`${testID}.balance`}
+                    />,
+                  ]
+                : null}
+            </Rows>
+          </Rows>
         </Section>
 
         {row.payments.length === 0 && row.fromCredit === 0 ? null : (
           <Section title={tp('purchasing.pay.payments')} testID={`${testID}.payments`}>
-            {row.payments.map((payment) => {
-              const cancelled = payment.voidedAt !== null;
-              return (
-                <View
-                  key={payment.id}
-                  style={styles.line}
-                  testID={`${testID}.payment.${payment.id}`}
-                >
-                  <View style={styles.lineText}>
-                    <Text style={styles.lineName}>{paymentLine(payment)}</Text>
-                    {cancelled ? (
-                      <Text style={styles.linePrice}>
-                        {tp('purchasing.pay.voided', { reason: payment.voidReason ?? '' })}
-                      </Text>
-                    ) : pays && open ? (
-                      <View style={styles.paymentAction}>
-                        <TextButton
-                          label={tp('purchasing.pay.void')}
-                          accessibilityLabel={tp('purchasing.pay.voidLabel', {
-                            amount: formatMoney(payment.amount),
-                            date: formatDate(payment.createdAt),
-                          })}
-                          tone="danger"
-                          onPress={() => onVoidPayment(row, payment)}
-                          testID={`${testID}.payment.${payment.id}.void`}
-                        />
-                      </View>
-                    ) : null}
+            <Rows>
+              {row.payments.map((payment) => {
+                const cancelled = payment.voidedAt !== null;
+                return (
+                  <View
+                    key={payment.id}
+                    style={styles.line}
+                    testID={`${testID}.payment.${payment.id}`}
+                  >
+                    <View style={styles.lineText}>
+                      <Text style={styles.lineName}>{paymentLine(payment)}</Text>
+                      {cancelled ? (
+                        <Text style={styles.linePrice}>
+                          {tp('purchasing.pay.voided', { reason: payment.voidReason ?? '' })}
+                        </Text>
+                      ) : pays && open ? (
+                        <View style={styles.paymentAction}>
+                          <TextButton
+                            label={tp('purchasing.pay.void')}
+                            accessibilityLabel={tp('purchasing.pay.voidLabel', {
+                              amount: formatMoney(payment.amount),
+                              date: formatDate(payment.createdAt),
+                            })}
+                            tone="danger"
+                            onPress={() => onVoidPayment(row, payment)}
+                            testID={`${testID}.payment.${payment.id}.void`}
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={[styles.lineAmount, cancelled ? styles.struck : null]}>
+                      {formatMoney(payment.amount)}
+                    </Text>
                   </View>
-                  <Text style={[styles.lineAmount, cancelled ? styles.struck : null]}>
-                    {formatMoney(payment.amount)}
+                );
+              })}
+              {row.fromCredit === 0 ? null : (
+                <View style={styles.line} testID={`${testID}.fromCredit`}>
+                  <Text style={[styles.lineName, styles.lineText]}>
+                    {tp('purchasing.bill.fromCredit')}
                   </Text>
+                  <Text style={styles.lineAmount}>{formatMoney(row.fromCredit)}</Text>
                 </View>
-              );
-            })}
-            {row.fromCredit === 0 ? null : (
-              <View style={styles.line} testID={`${testID}.fromCredit`}>
-                <Text style={[styles.lineName, styles.lineText]}>
-                  {tp('purchasing.bill.fromCredit')}
-                </Text>
-                <Text style={styles.lineAmount}>{formatMoney(row.fromCredit)}</Text>
-              </View>
-            )}
+              )}
+            </Rows>
           </Section>
         )}
         {open && row.supplierCredit > 0 ? (
@@ -427,8 +435,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: space.md,
     paddingVertical: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineText: { flex: 1, gap: space.xs },
   lineName: { ...type.body, color: color.text },

@@ -8,7 +8,12 @@
 // No queue: staff changes are online only, so a network fault is `offline` right away and the owner
 // tries again, rather than a change that lands hours later on a device they no longer watch.
 import { PERSON_SESSION_HEADER } from '@bolusi/schemas';
-import { StaffAdminError, type StaffAdminFailure, type StaffAdminPort } from '@bolusi/core';
+import {
+  ApprovalPinError,
+  StaffAdminError,
+  type StaffAdminFailure,
+  type StaffAdminPort,
+} from '@bolusi/core';
 
 export interface StaffTransportConfig {
   /** Base URL of the server, no trailing slash. */
@@ -33,6 +38,8 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
     method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     body?: unknown,
+    refused: (response: Response) => Promise<Error> = async (response) =>
+      new StaffAdminError(await failureOf(response)),
   ): Promise<unknown> => {
     const token = await config.deviceToken();
     const proof = (await config.personSession?.(actingUserId)) ?? null;
@@ -53,7 +60,7 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
       // fetch rejects only when no answer came back: no connection, DNS, a dropped socket.
       throw new StaffAdminError('offline');
     }
-    if (!response.ok) throw new StaffAdminError(await failureOf(response));
+    if (!response.ok) throw await refused(response);
     return response.json().catch(() => null);
   };
 
@@ -138,6 +145,26 @@ export function createFetchStaffAdmin(config: StaffTransportConfig): StaffAdminP
     async deleteRole({ actingUserId, roleId }) {
       await call(actingUserId, 'DELETE', `/v1/roles/${roleId}`);
     },
+
+    async setApprovalPin({ actingUserId, pin, proof }) {
+      await call(
+        actingUserId,
+        'PUT',
+        `/v1/users/${actingUserId}/approval-pin`,
+        { pin, ...(proof === undefined ? {} : { proof }) },
+        approvalRefusal,
+      );
+    },
+
+    async clearApprovalPin({ actingUserId, targetUserId, pin }) {
+      await call(
+        actingUserId,
+        'POST',
+        `/v1/users/${targetUserId}/approval-pin/clear`,
+        { pin },
+        approvalRefusal,
+      );
+    },
   };
 }
 
@@ -152,6 +179,21 @@ interface ListedDevice {
   readonly lastSyncAt: number | null;
   readonly lastSeenAt: number | null;
   readonly revokedAt: number | null;
+}
+
+/** An approval PIN call's refusal: a wrong proof or an unusable PIN, else as any staff change. */
+async function approvalRefusal(response: Response): Promise<Error> {
+  const code = await codeOf(response.clone());
+  if (code === 'AUTH_INVALID_CREDENTIALS') return new ApprovalPinError('wrongProof');
+  if (code === 'APPROVAL_PIN_WEAK') return new ApprovalPinError('weakPin');
+  return new ApprovalPinError(await failureOf(response));
+}
+
+async function codeOf(response: Response): Promise<unknown> {
+  const json = (await response.json().catch(() => null)) as {
+    readonly error?: { readonly code?: unknown };
+  } | null;
+  return json?.error?.code;
 }
 
 /** The api/00 §7 error envelope's code, mapped to what the owner can do about it. */

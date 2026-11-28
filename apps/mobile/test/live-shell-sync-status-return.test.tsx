@@ -5,7 +5,6 @@
  *
  * Drives the real `Root` with the real repair runtime over the live shell's database.
  */
-import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -38,6 +37,7 @@ import { __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.
 import {
   bootFixture,
   closeClientDb,
+  COUNTER_REPAIR_PERMISSIONS,
   enrolledDevice,
   fireOn,
   homeShown,
@@ -51,7 +51,7 @@ import {
   type Fixture,
 } from './live-shell-support.js';
 
-const COUNTER_PERMISSIONS = [...NOTES_PERMISSIONS, ...Object.values(REPAIR_PERMISSION)];
+const COUNTER_PERMISSIONS = [...NOTES_PERMISSIONS, ...COUNTER_REPAIR_PERMISSIONS];
 const REASON = 'Baterai kembung, pelanggan setuju lewat telepon';
 
 let fixture: Fixture | null = null;

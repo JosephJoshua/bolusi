@@ -8,6 +8,7 @@ import noHardcodedStrings from './rules/no-hardcoded-strings.js';
 import noLegacyUploadApi from './rules/no-legacy-upload-api.js';
 import noMediaColumnUpdate from './rules/no-media-column-update.js';
 import noOpTableUpdate from './rules/no-op-table-update.js';
+import noRowDivider from './rules/no-row-divider.js';
 import numericToken from './rules/numeric-token.js';
 import permissionModulePrefix from './rules/permission-module-prefix.js';
 import reactOnlyInTsx from './rules/react-only-in-tsx.js';
@@ -28,6 +29,7 @@ const plugin = {
     'no-legacy-upload-api': noLegacyUploadApi,
     'no-media-column-update': noMediaColumnUpdate,
     'no-op-table-update': noOpTableUpdate,
+    'no-row-divider': noRowDivider,
     'numeric-token': numericToken,
     'permission-module-prefix': permissionModulePrefix,
     'react-only-in-tsx': reactOnlyInTsx,

@@ -13,7 +13,6 @@ import {
   DayRangeFilter,
   FilterToggle,
   OptionsFilter,
-  OverflowText,
   PageHeader,
   Pagination,
   SearchField,
@@ -71,7 +70,7 @@ import {
 } from '../table.js';
 
 import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
-import { StatusChip } from './parts.js';
+import { StatusChip, TwoLines } from './parts.js';
 import { TicketPane } from './TicketPane.js';
 
 /** Search is ranked, so its best matches are the ones worth filtering and paging. */
@@ -113,9 +112,10 @@ export interface BoardFilters {
 
 const PAGE_SIZES = [25, 50, 100] as const;
 
-function defaultFilters(can: RepairAbilities): BoardFilters {
+/** A board on its usual queue, or on `view`, with nothing else narrowed. */
+export function boardFilters(can: RepairAbilities, view?: BoardView): BoardFilters {
   return {
-    view: defaultBoardView(can),
+    view: view ?? defaultBoardView(can),
     text: '',
     facets: NO_FACETS,
     sort: null,
@@ -135,8 +135,7 @@ interface LoadedBoard {
   /** The store's not-collected limit in days, and the time the rows were read against it. */
   readonly uncollectedLimit: number;
   readonly readAt: number;
-  /** Servisan waiting on this user's approval, and those with any waiting request they see. */
-  readonly approvalIds: readonly string[];
+  /** Servisan with a waiting request this user sees (asked, or theirs to answer in Perlu dicek). */
   readonly approvalWaiting: ReadonlySet<string>;
   /** Phones waiting for pickup, for the tab and an empty active queue; null when not counted. */
   readonly pickup: number | null;
@@ -167,7 +166,7 @@ export function RepairBoardPage({
 }: RepairBoardPageProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
-  const state = filters ?? defaultFilters(can);
+  const state = filters ?? boardFilters(can);
   const { view, text, facets, sort, page, pageSize, hiddenColumns } = state;
   /** Any change but a page turn starts again from the first page. */
   const update = (patch: Partial<BoardFilters>): void =>
@@ -201,9 +200,6 @@ export function RepairBoardPage({
       const uncollectedLimit = (await rt.query('uncollectedDays', {})).rows[0]!.days;
       const readAt = clock();
       const requests = await readApprovals(rt);
-      const approvalIds = [
-        ...new Set(requests.filter((row) => row.canDecide).map((row) => row.targetId)),
-      ];
       const approvalWaiting = new Set(requests.map((row) => row.targetId));
       if (searching) {
         // Search ranks across every ticket; the filters, sort and pages then apply to its matches.
@@ -215,17 +211,12 @@ export function RepairBoardPage({
         );
         total = kept.length;
         rows = kept.slice((page - 1) * pageSize, page * pageSize);
-      } else if (view === 'approvals' && approvalIds.length === 0) {
-        // Every request answered: nothing to list, and the view goes.
-        rows = [];
-        total = 0;
       } else {
         const filter = tableFilter(
           view,
           rt.userId,
           uncollectedBefore(uncollectedLimit, readAt),
           facets,
-          approvalIds,
         );
         const [list, count] = await Promise.all([
           rt.query('listTickets', {
@@ -258,7 +249,6 @@ export function RepairBoardPage({
         statuses,
         uncollectedLimit,
         readAt,
-        approvalIds,
         approvalWaiting,
       };
     },
@@ -274,12 +264,6 @@ export function RepairBoardPage({
   useEffect(() => {
     if (!stale && loaded !== null && page > pageCount)
       onFiltersChange({ ...state, page: pageCount });
-  });
-  const waitingApprovals = loaded?.approvalIds.length ?? 0;
-  // Every request answered: the approvals view goes, and the board returns to its usual queue.
-  useEffect(() => {
-    if (!stale && loaded !== null && view === 'approvals' && waitingApprovals === 0)
-      onFiltersChange({ ...state, view: defaultFilters(can).view, page: 1 });
   });
 
   const options = useRepairQuery(
@@ -573,9 +557,8 @@ export function RepairBoardPage({
                 </p>
               ) : (
                 <Tabs
-                  items={boardViews(can, waitingApprovals).map((value) => {
+                  items={boardViews(can).map((value) => {
                     const label = boardViewLabel(value, {
-                      approvals: waitingApprovals,
                       pickup: loaded?.pickup ?? null,
                     });
                     return { value, label: tn(label.key, { count: label.count }) };
@@ -853,24 +836,4 @@ function boardColumns({
       ),
     },
   ];
-}
-
-function TwoLines({
-  first,
-  second,
-  strong = false,
-}: {
-  readonly first: string;
-  readonly second: string;
-  readonly strong?: boolean;
-}): React.JSX.Element {
-  return (
-    <span className="block min-w-0">
-      <OverflowText
-        text={first}
-        className={`text-body ${strong ? 'font-semibold' : ''} text-text`}
-      />
-      {second === '' ? null : <OverflowText text={second} className="text-small text-text-muted" />}
-    </span>
-  );
 }

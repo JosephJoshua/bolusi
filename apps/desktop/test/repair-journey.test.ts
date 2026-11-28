@@ -248,6 +248,15 @@ async function signature(device: Device): Promise<MediaRef> {
   return outcome.mediaRef;
 }
 
+/** The owner's approval PIN, which only the server checks: it proves their decisions on the PC. */
+const OWNER_APPROVAL = '864209';
+
+/** Open a decision session for the person signed in on `device`, as the approval prompt does. */
+async function approve(device: Device): Promise<string> {
+  const userId = (await device.state()).session!.active!.userId;
+  return device.call<string>('session.openDecision', userId, OWNER_APPROVAL);
+}
+
 async function switchTo(device: Device, userId: string, pin: string): Promise<void> {
   await device.call('session.lock');
   await signIn(device, userId, pin);
@@ -327,6 +336,11 @@ describe('one servisan from intake to handover, offline in between', () => {
     owner = lane.ownerUserId;
     await signIn(counter, owner, lane.pin);
     await settle(counter);
+    // Off their own phone, the owner sets it with their account password.
+    await counter.call('approvalPin.set', owner, OWNER_APPROVAL, {
+      kind: 'password',
+      password: lane.oneTimePassword,
+    });
     const staff = await counter.call<{ roles: { id: string; key: string }[] }>('staff.list', owner);
     const roleId = (key: string) => staff.roles.find((role) => role.key === key)!.id;
     ({ userId: cashier } = await counter.call<{ userId: string }>('staff.create', owner, {
@@ -586,6 +600,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     await tech('markRepaired', { ticketId, afterPhotos: [await photo(bench)] });
     // ...while the owner, at the counter, cancels it at the customer's request.
     await switchTo(counter, owner, lane.pin);
+    expect(await approve(counter)).toBe('opened');
     await act(counter, 'repair')('cancelTicket', {
       ticketId,
       reason: 'Pelanggan batal',
@@ -667,8 +682,8 @@ describe('one servisan from intake to handover, offline in between', () => {
   }, 300_000);
 
   test('an owner signed in on the counter with no internet cannot cancel there', async () => {
-    // Owner decision 2026-11-25: on a shared device a cancel needs the owner's PIN checked by the
-    // server, so a copied PC cannot cancel in their name. Offline, it is asked of the owner's phone.
+    // Owner decision 2026-11-25: on a shared device a cancel needs the owner's approval PIN, which
+    // only the server checks, so a copied PC cannot cancel in their name. Signing in proves none.
     await switchTo(counter, cashier, CASHIER_PIN);
     const photos = [];
     for (const slot of ['front', 'back', 'left', 'right', 'top', 'bottom']) {
@@ -687,15 +702,21 @@ describe('one servisan from intake to handover, offline in between', () => {
     })) as { ticketId: string };
     await settle(counter);
 
-    await counter.setOnline(false);
+    // Online and signed in, but no approval PIN given yet.
     await switchTo(counter, owner, lane.pin);
     await expect(
       act(counter, 'repair')('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }),
     ).rejects.toThrow(/decisionNeedsPin/);
+    // Offline, it cannot be checked.
+    await counter.setOnline(false);
+    expect(await approve(counter)).toBe('offline');
+    await expect(
+      act(counter, 'repair')('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }),
+    ).rejects.toThrow(/decisionNeedsPin/);
 
-    // Back online, the server checks the PIN at the next sign-in and the cancel goes through.
+    // Back online, the server checks the approval PIN and the cancel goes through.
     await counter.setOnline(true);
-    await switchTo(counter, owner, lane.pin);
+    expect(await approve(counter)).toBe('opened');
     await act(counter, 'repair')('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 });
     await settle(counter);
     await expectNothingRefused(counter);

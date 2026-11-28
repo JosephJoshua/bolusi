@@ -1,8 +1,15 @@
 // What the window shows: opening the data, registering the PC, choosing who is here and their PIN,
 // then the counter. Which one is a pure function of the core's state (the phone's `resolveZone`), so
 // a lock or a blocked PC can never leave someone's work on screen.
-import { derivePinAuthState, type HeldPhone, type StaffDirectory } from '@bolusi/core';
+import {
+  derivePinAuthState,
+  retryAfterDecision,
+  type HeldPhone,
+  type StaffDirectory,
+} from '@bolusi/core';
+import type { DecisionOpening } from '@bolusi/device/bootstrap/person-access';
 import type { PinOutcome } from '@bolusi/device/bootstrap/session';
+import { proofKindsFor, type ProofKind } from '@bolusi/device/models/approval-pin/model';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import type { DeviceList } from '@bolusi/device/models/devices/model';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
@@ -12,7 +19,11 @@ import { resolveZone } from '@bolusi/device/navigation/zone';
 import { withDraft, type UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import { getLocale, setLocale, t, translateRoleKey } from '@bolusi/i18n';
 import { REPAIR_MODULE_ID, parseIntakeDraft } from '@bolusi/modules/repair';
-import { RepairRuntimeProvider, type IntakeDraft } from '@bolusi/modules/repair/desktop';
+import {
+  RepairRuntimeProvider,
+  type IntakeDraft,
+  type RepairRuntime,
+} from '@bolusi/modules/repair/desktop';
 import { dataArriving } from '@bolusi/device/models/sync-status/model';
 import { setDataArriving, Spinner, StatePanel } from '@bolusi/ui-web';
 import { CircleAlert, Lock, Users } from 'lucide-react';
@@ -29,12 +40,14 @@ import { createCaptureDialogs, type CaptureDialogs } from './capture-dialogs.js'
 import { CloseGuard } from './close-guard.js';
 import { windowHandoff } from './phone-handoff.js';
 import type { PcCapture } from './capture.js';
+import { useDecisionPrompt, type ApprovalPinPort, type ConfirmingOwner } from './approval-pin.js';
 import { createCoreRepairRuntime } from './core-runtime.js';
 import type { SettingsAccess } from './settings/access.js';
 import { Counter } from './Counter.js';
 import {
   DEMO_PEOPLE,
   DEMO_STORE_NAME,
+  demoApprovalPinFor,
   demoRuntimeFor,
   demoDevicesFor,
   demoStaffFor,
@@ -335,6 +348,15 @@ function LiveCounter({
     colleaguePermissions: session.colleaguePermissions,
     limits: session.limits,
   });
+  const users = session.users;
+  const approval = useApprovalPin(client, session, userId);
+  const decision = useDecisionPrompt({
+    person: { userId, name: user?.name ?? '' },
+    ...approval,
+  });
+  // Read at the ask, so the runtime is not rebuilt each time the prompt renders.
+  const askDecision = useRef(decision.ask);
+  askDecision.current = decision.ask;
   const runtime = useMemo(
     () =>
       createCoreRepairRuntime({
@@ -347,12 +369,12 @@ function LiveCounter({
         storeName,
         capture,
         statusSite: state.statusSite,
+        askDecision: () => askDecision.current(),
       }),
     [client, grants, userId, storeName, capture, state.statusSite],
   );
 
-  const settings = useSettingsAccess(client, state, session, userId);
-  const users = session.users;
+  const settings = useSettingsAccess(client, state, session, userId, approval);
   const nameOf = useCallback(
     (id: string) => users?.find((other) => other.id === id)?.name ?? null,
     [users],
@@ -423,14 +445,55 @@ function LiveCounter({
           )
         }
         onOpenSyncStatus={() => setSyncOpen(true)}
+        refused={state.sync?.rejected.length ?? 0}
         settings={settings}
         restoredDraft={restoredDraft}
         onDraftChange={onDraftChange}
         setupPending={state.setupFor === userId}
         onSetupDone={() => void client.call('device.finishSetup').catch(() => undefined)}
       />
+      {decision.prompt}
     </RepairRuntimeProvider>
   );
+}
+
+/**
+ * The signed-in person's approval PIN on this PC, a shared device: opening a decision session with
+ * it, and setting it with a proof (their password as the main owner, else an owner here confirming).
+ */
+function useApprovalPin(
+  client: Client,
+  session: SessionView,
+  userId: string,
+): {
+  readonly port: ApprovalPinPort;
+  readonly proofKinds: readonly ProofKind[];
+  readonly owners: readonly ConfirmingOwner[];
+} {
+  const { tenantAdmin, users } = session;
+  const port = useMemo(
+    (): ApprovalPinPort => ({
+      open: (pin) => client.call<DecisionOpening>('session.openDecision', userId, pin),
+      set: (pin, proof) => client.call<void>('approvalPin.set', userId, pin, proof),
+    }),
+    [client, userId],
+  );
+  const owners = useMemo(
+    () =>
+      (users ?? [])
+        .filter((other) => other.id !== userId && other.roleKeys.some(isOwnerRole))
+        .map((other) => ({ userId: other.id, name: other.name })),
+    [users, userId],
+  );
+  const proofKinds = useMemo(
+    () => proofKindsFor({ personalDevice: false, tenantAdmin, mayHaveOne: true }),
+    [tenantAdmin],
+  );
+  return { port, proofKinds, owners };
+}
+
+function isOwnerRole(roleKey: string): boolean {
+  return roleKey === 'main_owner' || roleKey === 'store_owner';
 }
 
 /**
@@ -443,6 +506,7 @@ function useSettingsAccess(
   state: CoreState,
   session: SessionView,
   userId: string,
+  approval: SettingsAccess['approvalPin'],
 ): SettingsAccess {
   const {
     canUnlock,
@@ -452,6 +516,7 @@ function useSettingsAccess(
     canRenameDevice,
     canBlockDevices,
     tenantAdmin,
+    makesDecisions,
     pinRows,
   } = session;
   // Colleagues whose PIN is locked here, from the same lockout machine as the PIN pad.
@@ -501,8 +566,11 @@ function useSettingsAccess(
           }
         : undefined,
       chooseLocale: (locale) => call<void>('device.setLocale', locale),
+      approvalPin: makesDecisions ? approval : undefined,
     };
   }, [
+    approval,
+    makesDecisions,
     client,
     userId,
     canUnlock,
@@ -526,11 +594,34 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
   const [person, setPerson] = useState<DemoPerson>(DEMO_PEOPLE[0]!);
   // One intake for the whole PC, as the core keeps it: whoever is here may carry on with it.
   const [draft, setDraft] = useState<IntakeDraft | null>(null);
-  const runtime = useMemo(() => demoRuntimeFor(person, capture), [person, capture]);
+  const approval = useMemo(() => demoApprovalPinFor(person), [person]);
+  const decision = useDecisionPrompt({
+    person: { userId: person.userId, name: person.name },
+    port: approval?.port ?? NO_APPROVAL_PIN,
+    proofKinds: approval?.proofKinds ?? [],
+    owners: approval?.owners ?? [],
+  });
+  const askDecision = useRef(decision.ask);
+  askDecision.current = decision.ask;
+  const runtime = useMemo((): RepairRuntime => {
+    const demo = demoRuntimeFor(person, capture);
+    if (approval === undefined) return demo;
+    // Owners' and managers' decisions ask for the approval PIN, as on the real PC.
+    const run = ((name: string, input: unknown) =>
+      retryAfterDecision(
+        async () => {
+          approval.guard(name);
+          return demo.run(name as never, input as never);
+        },
+        () => askDecision.current(),
+      )) as RepairRuntime['run'];
+    return { ...demo, run };
+  }, [person, capture, approval]);
   // The demo has no core to keep the language: it switches the window, until the next load.
   const [, setDemoLocale] = useState(getLocale);
   const settings = useMemo(
     (): SettingsAccess => ({
+      approvalPin: approval,
       staff: demoStaffFor(person),
       devices: demoDevicesFor(person),
       chooseLocale: (next) => {
@@ -539,7 +630,7 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
         return Promise.resolve();
       },
     }),
-    [person],
+    [person, approval],
   );
   return (
     <RepairRuntimeProvider runtime={runtime}>
@@ -566,6 +657,13 @@ function DemoApp({ capture }: { readonly capture: PcCapture }): React.JSX.Elemen
         onDraftChange={setDraft}
         settings={settings}
       />
+      {decision.prompt}
     </RepairRuntimeProvider>
   );
 }
+
+/** For someone with no approval PIN to give: the prompt never opens for them. */
+const NO_APPROVAL_PIN: ApprovalPinPort = {
+  open: () => Promise.resolve('failed'),
+  set: () => Promise.resolve(),
+};

@@ -20,6 +20,7 @@ import {
   type,
   Text,
   TileGrid,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { Keyboard, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -159,26 +160,28 @@ export function CustomerStep({
       </View>
       {offered.length > 0 ? (
         <Section title={tn('repair.customer.existing')} testID={`${testID}.matches`}>
-          {offered.map((row) => (
-            <ListRow
-              key={row.id}
-              primaryText={row.name}
-              secondaryText={
-                row.phone === null ? undefined : keepNumbersWhole(formatPhone(row.phone))
-              }
-              onPress={() =>
-                update({
-                  customer: {
-                    kind: 'existing',
-                    customerId: row.id,
-                    name: row.name,
-                    phone: row.phone,
-                  },
-                })
-              }
-              testID={`${testID}.match.${row.id}`}
-            />
-          ))}
+          <Rows>
+            {offered.map((row) => (
+              <ListRow
+                key={row.id}
+                primaryText={row.name}
+                secondaryText={
+                  row.phone === null ? undefined : keepNumbersWhole(formatPhone(row.phone))
+                }
+                onPress={() =>
+                  update({
+                    customer: {
+                      kind: 'existing',
+                      customerId: row.id,
+                      name: row.name,
+                      phone: row.phone,
+                    },
+                  })
+                }
+                testID={`${testID}.match.${row.id}`}
+              />
+            ))}
+          </Rows>
         </Section>
       ) : null}
     </View>
@@ -237,7 +240,7 @@ export function DeviceStep({
             testID={`${testID}.model`}
           />
           {suggestions.length > 0 ? (
-            <View style={styles.modelList} testID={`${testID}.models`}>
+            <Rows style={styles.modelList} testID={`${testID}.models`}>
               {suggestions.map((row) => (
                 <ListRow
                   key={row.key}
@@ -253,7 +256,7 @@ export function DeviceStep({
                   testID={`${testID}.model.${row.key}`}
                 />
               ))}
-            </View>
+            </Rows>
           ) : null}
         </>
       )}

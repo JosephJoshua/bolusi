@@ -29,6 +29,7 @@ import {
   space,
   type,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -160,7 +161,7 @@ function PreviewHome(): React.JSX.Element {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{copy.signInAs}</Text>
-        <View style={styles.card}>
+        <Rows style={styles.card}>
           {ROLE_ORDER.map((role) => {
             const person = DEMO_REPAIR_ROLES[role];
             return (
@@ -175,7 +176,7 @@ function PreviewHome(): React.JSX.Element {
               />
             );
           })}
-        </View>
+        </Rows>
         <Text style={styles.caption}>{copy.note}</Text>
       </View>
 

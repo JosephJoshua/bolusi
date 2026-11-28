@@ -28,13 +28,13 @@ import {
   StepHeader,
   TextInput,
   ToggleChip,
-  border,
   color,
   radius,
   size,
   space,
   type,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
@@ -173,7 +173,7 @@ function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Elem
         </View>
       ) : (
         // Edge to edge, like every list; the chosen store is checked (§6.3: never colour alone).
-        <View style={styles.stores} accessibilityRole="radiogroup">
+        <Rows style={styles.stores} accessibilityRole="radiogroup">
           {stores.map((store) => (
             <ListRow
               key={store.id}
@@ -185,7 +185,7 @@ function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Elem
               testID={`enroll-store-${store.id}`}
             />
           ))}
-        </View>
+        </Rows>
       )}
       <PhoneOwner state={state} onChange={onChange} />
       <View style={styles.section}>
@@ -266,7 +266,7 @@ function UnsyncedChanges({ state }: { readonly state: EnrollmentState }): React.
     <View style={styles.section} testID="enroll-unsynced">
       <Text style={styles.sectionTitle}>{t('auth.enroll.unsyncedTitle')}</Text>
       <Text style={styles.sectionText}>{t('auth.enroll.unsyncedBody')}</Text>
-      <View style={styles.stores}>
+      <Rows style={styles.stores}>
         {authors.map((author) => (
           <ListRow
             key={author.userId}
@@ -280,7 +280,7 @@ function UnsyncedChanges({ state }: { readonly state: EnrollmentState }): React.
             testID={`enroll-unsynced-${author.userId}`}
           />
         ))}
-      </View>
+      </Rows>
     </View>
   );
 }
@@ -408,8 +408,6 @@ const styles = StyleSheet.create({
   gap: { marginTop: space.md },
   stores: {
     marginHorizontal: -space.lg,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
   },
   section: { marginTop: space.xl },
   sectionTitle: { ...type.bodyBold, color: color.text },

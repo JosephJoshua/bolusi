@@ -9,11 +9,16 @@
 import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DiscardGuard, PlaceStep } from '../../screen-kit/index.js';
+import {
+  usePlaceOpen,
+  type DiscardGuard,
+  type PlaceOpen,
+  type PlaceStep,
+} from '../../screen-kit/index.js';
 import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { EMPTY_ORDER, addLine, draftChanged, draftOf, type OrderDraft } from '../order-form.js';
-import type { OrderDetailRow, ReceiptCostRow, SupplierRow } from '../queries.js';
+import type { OrderDetailRow, OrderFilter, ReceiptCostRow, SupplierRow } from '../queries.js';
 import {
   EMPTY_BILL,
   addBillLine,
@@ -76,6 +81,8 @@ export interface PurchasingSurfaceProps {
   readonly place: PlaceHeader;
   readonly onRegisterPlaceStep?: ((step: PlaceStep | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
+  /** Another place asks for the orders list (Perlu dicek: orders partly received). */
+  readonly showOrders?: PlaceOpen<OrderFilter> | null | undefined;
 }
 
 export function PurchasingSurface({
@@ -83,6 +90,7 @@ export function PurchasingSurface({
   place,
   onRegisterPlaceStep,
   onRegisterDiscardGuard,
+  showOrders,
 }: PurchasingSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [filter, setFilter] = useState<BelanjaTab>('open');
@@ -110,6 +118,12 @@ export function PurchasingSurface({
     setWriting(null);
     setView(to);
   }, [writing]);
+
+  // Asked for the list: an order being written stays open, as nothing typed is thrown away unasked.
+  usePlaceOpen(showOrders, (next) => {
+    setFilter(next);
+    if (writing === null && billWriting === null) setView({ kind: 'list' });
+  });
 
   const closeBillForm = useCallback((): void => {
     const to: View =

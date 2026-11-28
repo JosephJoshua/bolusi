@@ -16,6 +16,7 @@ import {
   TextButton,
   TextInput,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -124,33 +125,35 @@ export function KasHistory({
             <EmptyState title={tm(historyEmptyKey(day, today))} testID={`${testID}.empty`} />
           ) : (
             <View>
-              {rows.map((entry) => {
-                const line = historyLine(
-                  entry,
-                  accounts,
-                  entry.documentId === null ? null : (customers.get(entry.documentId) ?? null),
-                );
-                const standing = entry.voidedAt === null;
-                const asked = standing && asks.waiting.has(entry.id);
-                const turnedDown = standing ? asks.rejected.get(entry.id) : undefined;
-                return (
-                  <AmountRow
-                    key={entry.id}
-                    label={tm(line.label)}
-                    detail={[
-                      formatTime(entry.createdAt),
-                      ...line.details,
-                      ...(asked ? [tm('money.void.waiting')] : []),
-                      ...(!asked && turnedDown !== undefined ? [approvalByLine(turnedDown)] : []),
-                    ].join(' · ')}
-                    value={line.amount}
-                    tone={line.voided ? 'struck' : 'text'}
-                    onPress={!asked && voidable(entry, can) ? () => onVoid(entry) : undefined}
-                    freshId={entry.id}
-                    testID={`${testID}.entry.${entry.id}`}
-                  />
-                );
-              })}
+              <Rows>
+                {rows.map((entry) => {
+                  const line = historyLine(
+                    entry,
+                    accounts,
+                    entry.documentId === null ? null : (customers.get(entry.documentId) ?? null),
+                  );
+                  const standing = entry.voidedAt === null;
+                  const asked = standing && asks.waiting.has(entry.id);
+                  const turnedDown = standing ? asks.rejected.get(entry.id) : undefined;
+                  return (
+                    <AmountRow
+                      key={entry.id}
+                      label={tm(line.label)}
+                      detail={[
+                        formatTime(entry.createdAt),
+                        ...line.details,
+                        ...(asked ? [tm('money.void.waiting')] : []),
+                        ...(!asked && turnedDown !== undefined ? [approvalByLine(turnedDown)] : []),
+                      ].join(' · ')}
+                      value={line.amount}
+                      tone={line.voided ? 'struck' : 'text'}
+                      onPress={!asked && voidable(entry, can) ? () => onVoid(entry) : undefined}
+                      freshId={entry.id}
+                      testID={`${testID}.entry.${entry.id}`}
+                    />
+                  );
+                })}
+              </Rows>
               {more ? (
                 <View style={styles.more}>
                   <Button

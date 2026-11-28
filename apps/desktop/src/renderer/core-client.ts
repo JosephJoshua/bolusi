@@ -2,10 +2,12 @@
 // the shared rpc over it. Errors come back as the core's own classes, so `DomainError` and
 // `RuleRefusal` checks in the screens work as they do on the phone, where everything is one process.
 import {
+  ApprovalPinError,
   DomainError,
   isDomainErrorCode,
   RuleRefusal,
   StaffAdminError,
+  type ApprovalPinFailure,
   type DomainErrorDetails,
   type StaffAdminFailure,
 } from '@bolusi/core';
@@ -22,13 +24,22 @@ export type CoreConnection =
   | { readonly mode: 'demo' }
   | { readonly mode: 'unavailable' };
 
-const STAFF_FAILURES: readonly StaffAdminFailure[] = [
-  'offline',
-  'denied',
-  'lastOwner',
-  'rateLimited',
-  'unexpected',
-];
+// Every failure, so a new one crosses the window boundary as itself (the type refuses a gap).
+const STAFF_FAILURES = Object.keys({
+  offline: true,
+  denied: true,
+  lastOwner: true,
+  rateLimited: true,
+  unexpected: true,
+} satisfies Record<StaffAdminFailure, true>) as readonly StaffAdminFailure[];
+
+const APPROVAL_FAILURES: readonly ApprovalPinFailure[] = [
+  ...STAFF_FAILURES,
+  ...Object.keys({ wrongProof: true, weakPin: true } satisfies Record<
+    Exclude<ApprovalPinFailure, StaffAdminFailure>,
+    true
+  >),
+] as readonly ApprovalPinFailure[];
 
 /** Rebuild the error the core threw, as its own class when it is a domain, staff or QRIS error. */
 export function reviveCoreError(wire: WireError): Error {
@@ -38,6 +49,14 @@ export function reviveCoreError(wire: WireError): Error {
     return new StaffAdminError(
       STAFF_FAILURES.includes(reason as StaffAdminFailure)
         ? (reason as StaffAdminFailure)
+        : 'unexpected',
+    );
+  }
+  // A refused approval PIN says whether the proof was wrong or the PIN itself unusable.
+  if (wire.name === 'ApprovalPinError') {
+    return new ApprovalPinError(
+      APPROVAL_FAILURES.includes(reason as ApprovalPinFailure)
+        ? (reason as ApprovalPinFailure)
         : 'unexpected',
     );
   }
