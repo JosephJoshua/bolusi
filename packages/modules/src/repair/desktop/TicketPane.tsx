@@ -285,7 +285,7 @@ export function TicketPane({
       />
     ) : done !== null ? (
       <Banner
-        tone="success"
+        tone="info"
         message={done}
         onDismiss={() => setDone(null)}
         dismissLabel={t('core.action.close')}

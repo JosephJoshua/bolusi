@@ -44,7 +44,9 @@ test('an owner orders a part from a supplier and places it', async ({ page }) =>
   await shoot(page, '01-form');
   await page.getByText('Pesan', { exact: true }).last().click();
 
-  await expect(page.getByTestId('purchasing.order.notice')).toContainText('Pesanan dipesan.');
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
+    'Pesanan dipesan.',
+  );
   await expect(page.getByTestId('purchasing.order.stage')).toContainText('Dipesan');
   await expect(page.getByTestId('purchasing.order.send')).toBeVisible();
   await shoot(page, '02-placed');
@@ -59,7 +61,9 @@ test('receiving what came moves the order on and says the stock grew', async ({ 
   await shoot(page, '03-receive');
   await page.getByText('Simpan', { exact: true }).last().click();
 
-  await expect(page.getByTestId('purchasing.order.notice')).toContainText('stok bertambah.');
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
+    'stok bertambah.',
+  );
   await expect(page.getByTestId('purchasing.order.stage')).toContainText('Diterima');
   await expect(page.getByTestId('purchasing.order.receive')).toHaveCount(0);
   await shoot(page, '04-received');

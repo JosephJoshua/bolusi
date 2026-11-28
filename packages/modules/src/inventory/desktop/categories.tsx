@@ -2,6 +2,7 @@
 // rules as the phone (`useCategoryForm`): each lists the fields its items fill in and a name format
 // built from them, and says whether its items are spareparts a servisan can take. The page lists
 // them; a dialog adds or edits one, every field open at once since a PC has the room.
+import { useDoneNote } from '../../screen-kit/index.js';
 import { t } from '@bolusi/i18n';
 import {
   Banner,
@@ -47,7 +48,7 @@ export function CategoriesPage({ onBack }: CategoriesPageProps): React.JSX.Eleme
   const [nonce, setNonce] = useState(0);
   // null: no dialog; 'new': adding one; otherwise the category being edited.
   const [open, setOpen] = useState<CategoryRow | 'new' | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const query = useInventoryQuery<readonly CategoryRow[]>(
     async (rt) => (await rt.query('listCategories', { includeArchived: true })).rows,
     `desk.categories:${String(nonce)}`,

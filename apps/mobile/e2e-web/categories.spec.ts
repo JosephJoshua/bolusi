@@ -41,7 +41,12 @@ test('renaming a field carries its place in the name format', async ({ page }) =
   );
   await shoot(page, 'edit-field');
   await tap(page, 'inventory.categoryForm.primary');
-  await expect(page.getByText(/^Kategori disimpan\./).first()).toBeVisible();
+  await expect(
+    page
+      .getByText(/^Kategori disimpan\./)
+      .filter({ visible: true })
+      .first(),
+  ).toBeVisible();
 });
 
 test('a new category needs a format that names only its fields', async ({ page }) => {
@@ -75,7 +80,9 @@ test('a new category needs a format that names only its fields', async ({ page }
   await shoot(page, 'format-problem');
   await page.getByTestId('inventory.categoryForm.format.field').first().fill('Speaker {Posisi}');
   await tap(page, 'inventory.categoryForm.primary');
-  await expect(page.getByText('Kategori disimpan.').first()).toBeVisible();
+  await expect(
+    page.getByText('Kategori disimpan.').filter({ visible: true }).first(),
+  ).toBeVisible();
   await expect(page.getByText('Speaker').first()).toBeVisible();
 });
 
@@ -84,8 +91,12 @@ test('archiving and restoring a category say so', async ({ page }) => {
   await tap(page, 'inventory.categories.row.cat-bat');
   await tap(page, 'inventory.categoryForm.archive');
   await tap(page, 'inventory.categoryForm.archiveSheet.confirm');
-  await expect(page.getByText('Kategori diarsipkan.').first()).toBeVisible();
+  await expect(
+    page.getByText('Kategori diarsipkan.').filter({ visible: true }).first(),
+  ).toBeVisible();
   await tap(page, 'inventory.categories.row.cat-bat');
   await tap(page, 'inventory.categoryForm.restore');
-  await expect(page.getByText('Kategori aktif kembali.').first()).toBeVisible();
+  await expect(
+    page.getByText('Kategori aktif kembali.').filter({ visible: true }).first(),
+  ).toBeVisible();
 });

@@ -21,7 +21,7 @@ import {
 import { FilterX, Package, Plus, SearchX, Table2, Tags } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { useSettledValue } from '../../screen-kit/index.js';
+import { useDoneNote, useSettledValue } from '../../screen-kit/index.js';
 import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
 import { ti } from '../i18n.js';
@@ -82,7 +82,7 @@ export function PartsPage({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const searchRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);

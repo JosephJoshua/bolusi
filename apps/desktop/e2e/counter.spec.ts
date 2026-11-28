@@ -81,12 +81,12 @@ test('a wrong Tunggu sparepart is taken back from the Batalkan toast, over the o
   await page.getByTestId('repair.desk.ticket.action.waitForParts').click();
   await page.getByTestId('repair.desk.waitForParts.note').fill('Baterai');
   await page.getByTestId('repair.desk.waitForParts.submit').click();
-  const toast = page.getByTestId('undo.toast');
+  const toast = page.getByTestId('toast');
   await expect(toast).toContainText('Ditandai tunggu sparepart.');
   // It sits over the page without covering the servisan's next step.
   await expect(page.getByTestId('repair.desk.ticket.action.resume')).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: join(import.meta.dirname, 'artifacts', 'undo', 'offered.png') });
-  await page.getByTestId('undo.toast.action').click();
+  await page.getByTestId('toast.action').click();
   await expect(toast).toBeHidden();
   await expect(page.getByTestId('repair.desk.ticket.action.waitForParts')).toBeVisible();
 });

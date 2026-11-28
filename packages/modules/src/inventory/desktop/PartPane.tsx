@@ -1,6 +1,7 @@
 // One item beside the parts list: what this store has, what it is (its category and fields, codes,
 // phones and tags) and every movement here. Owners correct its stock, edit it or take it off the
 // list; the history stays either way. Live like the phone's: a sync redraws it.
+import { useDoneNote } from '../../screen-kit/index.js';
 import { formatDateTime, t } from '@bolusi/i18n';
 import {
   Banner,
@@ -50,7 +51,7 @@ export function PartPane({
   const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [task, setTask] = useState<Task>('none');
-  const [done, setDone] = useState<string | null>(null);
+  const { note: done, say: setDone } = useDoneNote();
   const archive = useArchiveItem((archived) =>
     setDone(ti(archived ? 'inventory.done.archived' : 'inventory.done.restored')),
   );

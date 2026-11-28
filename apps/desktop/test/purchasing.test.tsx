@@ -117,9 +117,9 @@ describe('Belanja on the PC', () => {
       expect(byTestId('purchasing.desk.order.supplier').textContent).toBe('Mitra Ponsel Jayapura'),
     );
     expect(byTestId('purchasing.desk.order.stage').textContent).toBe('Dipesan');
-    expect(
-      within(pane).getByText('Pesanan dipesan. Kirim ke supplier melalui WhatsApp.'),
-    ).toBeTruthy();
+    expect(byTestId('toast').textContent).toContain(
+      'Pesanan dipesan. Kirim ke supplier melalui WhatsApp.',
+    );
     expect(within(pane).getByText('5 pcs')).toBeTruthy();
   });
 

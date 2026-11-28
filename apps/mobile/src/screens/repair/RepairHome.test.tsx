@@ -6,7 +6,7 @@ import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
-import { UndoProvider } from '@bolusi/modules/screen-kit';
+import { ToastProvider } from '@bolusi/modules/screen-kit';
 import {
   emptyIntakeDraft,
   INTAKE_PHOTO_SLOTS,
@@ -41,7 +41,7 @@ import {
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
-import { UndoHost } from '../../shell/UndoHost.js';
+import { ToastHost } from '../../shell/ToastHost.js';
 
 import { RepairHome } from './RepairHome.js';
 
@@ -402,8 +402,8 @@ describe('technician work', () => {
     ensureRepairCatalog();
     registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
     const screen = render(
-      <UndoProvider>
-        <UndoHost>
+      <ToastProvider>
+        <ToastHost>
           <RepairHome
             runtime={repairRuntimeFor(h, h.technicianId)}
             now={() => NOW}
@@ -411,8 +411,8 @@ describe('technician work', () => {
             avatar={null}
             onOpenSyncStatus={vi.fn()}
           />
-        </UndoHost>
-      </UndoProvider>,
+        </ToastHost>
+      </ToastProvider>,
     );
     await settle();
     await press(screen, 'repair.board.views.unassigned');
@@ -422,14 +422,14 @@ describe('technician work', () => {
     await press(screen, 'repair.work.before.primary');
     // The toast says what happened, in place of the banner, with Batalkan beside it.
     expect(screen.query('repair.ticket.done')).toBeNull();
-    expect(text(screen, 'undo.toast.message')).toBe(tn('repair.done.start'));
+    expect(text(screen, 'toast.message')).toBe(tn('repair.done.start'));
     expect((await ticketRow(h, ticketId)).outcome).toBe('in_repair');
 
-    await press(screen, 'undo.toast.action');
+    await press(screen, 'toast.action');
     const ticket = await ticketRow(h, ticketId);
     expect(ticket.outcome).toBe('received');
     expect(ticket.technicianId).toBeNull();
-    expect(screen.query('undo.toast')).toBeNull();
+    expect(screen.query('toast')).toBeNull();
   });
 
   test('the cashier assigns from the technicians who can work repairs', async () => {

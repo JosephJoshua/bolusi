@@ -24,7 +24,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { Linking, Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
-import { UndoHost } from './src/shell/UndoHost.js';
+import { ToastHost } from './src/shell/ToastHost.js';
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome, type RepairOpenTarget } from './src/screens/repair/RepairHome.js';
@@ -32,7 +32,7 @@ import { AttentionHome, type AttentionTarget } from './src/screens/repair/Attent
 import { KasHome } from './src/screens/money/KasHome.js';
 import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
 import { ItemsHome, type ItemsOpenTarget } from './src/screens/inventory/ItemsHome.js';
-import { UndoProvider, type PlaceOpen } from '@bolusi/modules/screen-kit';
+import { ToastProvider, type PlaceOpen } from '@bolusi/modules/screen-kit';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import { placeTabsShow, type SurfaceNav } from './src/navigation/surface.js';
@@ -1219,8 +1219,8 @@ export default function App(props: AppProps): React.JSX.Element {
         importantForAccessibility={modal === null ? 'auto' : 'no-hide-descendants'}
       >
         {/* Batalkan belongs to whoever made the slip: a new person signing in starts with none. */}
-        <UndoProvider key={currentUser?.id ?? 'nobody'}>
-          <UndoHost>
+        <ToastProvider key={currentUser?.id ?? 'nobody'}>
+          <ToastHost>
             {renderZone(zone, {
               enrollment: (revoked) => (
                 <EnrollmentScreen
@@ -1894,8 +1894,8 @@ export default function App(props: AppProps): React.JSX.Element {
                 );
               },
             })}
-          </UndoHost>
-        </UndoProvider>
+          </ToastHost>
+        </ToastProvider>
       </View>
       {accountMenu && currentUser !== null && zone.kind === 'shell' ? (
         <Sheet

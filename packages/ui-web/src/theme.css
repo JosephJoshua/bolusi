@@ -26,6 +26,11 @@
   --color-text-muted: var(--b-text-muted);
   --color-text-disabled: var(--b-text-disabled);
   --color-overlay: var(--b-overlay);
+  --color-inverse-surface: var(--b-inverse-surface);
+  --color-on-inverse: var(--b-on-inverse);
+  --color-inverse-action: var(--b-inverse-action);
+  --color-inverse-success: var(--b-inverse-success);
+  --color-inverse-danger: var(--b-inverse-danger);
   --color-chrome: var(--b-chrome-bar);
   --color-chrome-text: var(--b-chrome-text);
   --color-chrome-muted: var(--b-chrome-muted);

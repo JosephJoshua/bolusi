@@ -3,6 +3,7 @@
 export { applyTheme, chromeColor, desktopType, themeVariables } from './theme.js';
 export { Avatar } from './components/Avatar.js';
 export { Banner, type BannerTone } from './components/Banner.js';
+export { Toast, type ToastTone } from './components/Toast.js';
 export { BrandMark } from './components/BrandMark.js';
 export {
   Button,

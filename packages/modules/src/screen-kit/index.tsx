@@ -33,13 +33,16 @@ export { useLiveQuery, type LiveSource, type QueryState } from './live.js';
 export { FRESH_ACTION_MS, TYPING_PAUSE_MS, useJustReplaced, useSettledValue } from './settled.js';
 export { useTick } from './tick.js';
 export {
+  TOAST_MS,
   UNDO_WINDOW_MS,
-  UndoProvider,
-  useOfferUndo,
-  useShownUndo,
-  type ShownUndo,
-  type UndoOffer,
-} from './undo.js';
+  ToastProvider,
+  useDoneNote,
+  type DoneNote,
+  useShownToast,
+  useToast,
+  type ShownToast,
+  type ToastOffer,
+} from './toast.js';
 export { rejectedCount, statusesFor, type EntitySyncStatuses } from './sync-statuses.js';
 export {
   useThumbnailState,

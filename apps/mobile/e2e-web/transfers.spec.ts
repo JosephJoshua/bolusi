@@ -55,7 +55,7 @@ test('parts sent here are received into stock', async ({ page }) => {
   await expect(page.getByTestId('inventory.receiveTransfer')).toBeVisible();
   await shoot(page, 'phone-03-receive');
   await page.getByText('Masukkan ke stok', { exact: true }).last().click();
-  await expect(page.getByTestId('inventory.transfer.notice')).toContainText(
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
     'Barang masuk ke stok.',
   );
   await expect(page.getByTestId('inventory.transfer.stage')).toContainText('Selesai');
@@ -72,7 +72,9 @@ test('an owner sends parts to another store', async ({ page }) => {
   await expect(page.locator('[data-testid^="inventory.send.line."]').first()).toBeVisible();
   await shoot(page, 'phone-05-send');
   await page.getByText('Kirim', { exact: true }).last().click();
-  await expect(page.getByTestId('inventory.transfer.notice')).toContainText('Sparepart dikirim.');
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
+    'Sparepart dikirim.',
+  );
   await expect(page.getByTestId('inventory.transfer.stage')).toContainText('Dalam perjalanan');
   await expect(page.getByTestId('inventory.transfer.cancel')).toBeVisible();
   await shoot(page, 'phone-06-sent');
@@ -97,7 +99,7 @@ test('what never arrived is settled, and a write-off asks for its reason', async
     .first()
     .fill('Jatuh di jalan.');
   await page.getByText('Simpan', { exact: true }).last().click();
-  await expect(page.getByTestId('inventory.transfer.notice')).toContainText(
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
     'Kiriman diselesaikan.',
   );
   await expect(page.getByTestId('inventory.transfer.stage')).toContainText('Selesai');

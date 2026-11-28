@@ -15,7 +15,7 @@ import { Text } from '../text.js';
 import { Animated, Pressable, StyleSheet } from 'react-native';
 
 import { useEntrance } from '../motion.js';
-import { border, color, radius, size, space, touch, type } from '../tokens.js';
+import { color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon, type IconName } from './Icon.js';
 
 /** §3.7: a toast announces a background event finishing or failing — nothing else. */
@@ -38,27 +38,38 @@ export interface ToastProps {
   readonly testID?: string | undefined;
 }
 
-const TONE: Record<ToastTone, { fg: string; icon: IconName }> = {
-  neutral: { fg: color.text, icon: 'info' },
-  success: { fg: color.success, icon: 'success' },
-  danger: { fg: color.danger, icon: 'rejected' },
+/** A plain note carries no icon; a finished or failed event says so with one. */
+const TONE: Record<ToastTone, { fg: string; icon: IconName } | null> = {
+  neutral: null,
+  success: { fg: color.inverseSuccess, icon: 'success' },
+  danger: { fg: color.inverseDanger, icon: 'rejected' },
 };
 
+/** The action is drawn as compact as the text beside it and reaches the 48 dp target by slop. */
+const ACTION_SLOP = (touch.min - (type.bodySm.lineHeight + space.sm * 2)) / 2;
+
+// A dark bar, not a card: it stands apart from the light page without a shadow (§1.3), and its
+// text, icon and action share one centre line.
 const styles = StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: color.surface,
-    borderWidth: border.hairline,
-    borderColor: color.border,
-    borderRadius: radius.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    gap: space.sm,
+    backgroundColor: color.inverseSurface,
+    borderRadius: radius.sm,
+    paddingLeft: space.lg,
+    paddingRight: space.sm,
+    paddingVertical: space.xs,
     minHeight: touch.min,
   },
-  message: { ...type.bodySm, color: color.text, flex: 1, marginLeft: space.sm },
-  action: { minHeight: touch.min, justifyContent: 'center', marginLeft: space.sm },
-  actionLabel: { ...type.bodySm, color: color.primary },
+  message: { ...type.bodySm, color: color.onInverse, flex: 1, paddingVertical: space.sm },
+  action: {
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
+    borderRadius: radius.xs,
+  },
+  actionPressed: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  actionLabel: { ...type.bodySm, fontWeight: '600', color: color.inverseAction },
 });
 
 export function Toast({
@@ -70,7 +81,7 @@ export function Toast({
   autoHide = true,
   testID = 'ui.toast',
 }: ToastProps): React.JSX.Element {
-  const { fg, icon } = TONE[tone];
+  const mark = TONE[tone];
 
   useEffect(() => {
     if (!autoHide) return;
@@ -89,7 +100,7 @@ export function Toast({
       pointerEvents="box-none"
       style={[styles.base, entrance]}
     >
-      <Icon name={icon} size={size.iconInline} color={fg} />
+      {mark === null ? null : <Icon name={mark.icon} size={size.iconInline} color={mark.fg} />}
       <Text testID={`${testID}.message`} style={styles.message}>
         {message}
       </Text>
@@ -100,7 +111,8 @@ export function Toast({
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
           onPress={onAction}
-          style={styles.action}
+          hitSlop={ACTION_SLOP}
+          style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
         >
           <Text style={styles.actionLabel}>{actionLabel}</Text>
         </Pressable>

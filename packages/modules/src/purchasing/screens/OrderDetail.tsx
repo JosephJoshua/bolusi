@@ -24,7 +24,7 @@ import {
 import { useState } from 'react';
 import { Linking, Platform, Share, StyleSheet, View } from 'react-native';
 
-import { useActionRunner, useJustReplaced } from '../../screen-kit/index.js';
+import { useActionRunner, useDoneNote, useJustReplaced } from '../../screen-kit/index.js';
 import {
   ActionErrorBanner,
   QueryView,
@@ -81,7 +81,7 @@ export function OrderDetail({
   const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [done, setDone] = useState<PurchasingKey | null>(null);
+  const { note: done, say: setDone } = useDoneNote<PurchasingKey>((key) => tp(key));
   const query = usePurchasingQuery(
     async (rt) => (await rt.query('getOrder', { orderId })).rows[0],
     `order:${orderId}:${String(reloadNonce)}`,

@@ -1,6 +1,7 @@
 // Belanja on the counter PC: this store's orders to suppliers, the ones still running first, with
 // the selected order open beside them, and for whoever reads them the suppliers' bills. A new order
 // (or bill, on Tagihan) is F2; the suppliers are a dialog away.
+import { useDoneNote } from '../../screen-kit/index.js';
 import { formatDate, t } from '@bolusi/i18n';
 import {
   Button,
@@ -55,7 +56,7 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
   const runtime = usePurchasingRuntime();
   const readsBills = opensBills(runtime);
   const bills = readsBills && filter === 'bills';
-  const [notice, setNotice] = useState<PurchasingKey | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote<PurchasingKey>((key) => tp(key));
   const tableRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const testId = 'purchasing.desk';

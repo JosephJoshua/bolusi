@@ -21,12 +21,12 @@ test('a wrong Tunggu sparepart is taken back from the Batalkan toast', async ({ 
   await page.getByTestId('repair.note.waitForParts.text.field').fill('Baterai');
   await tap(page, 'repair.note.waitForParts.primary');
 
-  const toast = page.getByTestId('undo.toast');
+  const toast = page.getByTestId('toast').filter({ visible: true });
   await expect(toast).toContainText('Ditandai tunggu sparepart.');
   await expect(page.getByTestId('repair.ticket.action.resume').first()).toBeVisible();
   await shoot(page, 'offered');
 
-  await tap(page, 'undo.toast.action');
+  await tap(page, 'toast.action');
   await expect(toast).toHaveCount(0);
   await expect(page.getByTestId('repair.ticket.action.waitForParts').first()).toBeVisible();
   await shoot(page, 'taken-back');

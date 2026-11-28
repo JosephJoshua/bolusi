@@ -18,7 +18,7 @@ import {
 import { Ban, SearchX, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, useDoneNote } from '../../screen-kit/index.js';
 import { QueryPanel, TaskDialog } from '../../screen-kit/desktop/index.js';
 import { QtyField } from '../../inventory/desktop/fields.js';
 import { groupedRupiah, acceptsRupiahText } from '../../shared/rupiah.js';
@@ -136,7 +136,7 @@ export function BillPane({
 }: BillPaneProps): React.JSX.Element {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [task, setTask] = useState<'none' | 'edit' | 'void'>('none');
-  const [done, setDone] = useState<PurchasingKey | null>(null);
+  const { note: done, say: setDone } = useDoneNote<PurchasingKey>((key) => tp(key));
   const query = usePurchasingQuery(
     async (rt) => (await rt.query('getBill', { billId })).rows[0],
     `desk.bill:${billId}:${String(reloadNonce)}`,

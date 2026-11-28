@@ -417,7 +417,7 @@ describe('Settings on the PC', () => {
 
     online = true;
     fireEvent.click(byTestId('desktop.settings.limits.save'));
-    await screen.findByTestId('desktop.settings.limits.saved');
+    await screen.findByTestId('toast');
     expect(callsTo('staff.setLimits').at(-1)).toEqual([
       OWNER.id,
       'r-manager',
@@ -616,7 +616,7 @@ describe('the approval PIN on the PC', () => {
       expect(byTestId('desktop.approvalAsk.message').textContent).toBe('PIN persetujuan salah.'),
     );
     typePin('730265');
-    await screen.findByTestId('repair.desk.fees.saved');
+    await screen.findByTestId('toast');
     expect(opened).toEqual(['730264', '730265']);
     expect(tries).toBe(2);
     expect(screen.queryByTestId('desktop.approvalAsk')).toBeNull();
@@ -637,7 +637,7 @@ describe('the approval PIN on the PC', () => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByTestId('desktop.approvalAsk')).toBeNull());
     expect(callsTo('session.openDecision')).toEqual([]);
-    expect(screen.queryByTestId('repair.desk.fees.saved')).toBeNull();
+    expect(screen.queryByTestId('toast')).toBeNull();
   });
 
   it('with none set yet, makes one in the same place and goes on', async () => {
@@ -675,7 +675,7 @@ describe('the approval PIN on the PC', () => {
     typePin('418273');
     typePin('418273');
     fireEvent.click(await screen.findByTestId('desktop.approvalSetup.finish'));
-    await screen.findByTestId('repair.desk.fees.saved');
+    await screen.findByTestId('toast');
     expect(callsTo('approvalPin.set')).toEqual([
       [OWNER.id, '418273', { kind: 'password', password: 'rahasia' }],
     ]);
@@ -735,7 +735,7 @@ describe('repair settings on the PC', () => {
     expect((byTestId('repair.desk.fees.save') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(before, { target: { value: '35.000' } });
     fireEvent.click(byTestId('repair.desk.fees.save'));
-    await screen.findByTestId('repair.desk.fees.saved');
+    await screen.findByTestId('toast');
     const run = callsTo('repair.run').find((args) => args[1] === 'setCancelFees');
     expect(run?.[0]).toBe(OWNER.id);
     expect((run?.[2] as { beforeWork: number }).beforeWork).toBe(35_000);
@@ -754,7 +754,7 @@ describe('repair settings on the PC', () => {
 
     fireEvent.change(days, { target: { value: '30' } });
     fireEvent.click(byTestId('repair.desk.uncollected.save'));
-    await screen.findByTestId('repair.desk.uncollected.saved');
+    await screen.findByTestId('toast');
     const run = callsTo('repair.run').find((args) => args[1] === 'setUncollectedDays');
     expect(run?.[2]).toEqual({ days: 30 });
   });
@@ -778,7 +778,7 @@ describe('repair settings on the PC', () => {
 
     fireEvent.change(added, { target: { value: 'Tali gantungan' } });
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-    await screen.findByTestId('repair.desk.options.accessories.saved');
+    await screen.findByTestId('toast');
     const commands = callsTo('repair.run').map((args) => args[1]);
     expect(commands).toEqual(['changeIntakeOptions', 'hideIntakeOptions']);
     const change = callsTo('repair.run')[0]![2] as { items: { label: string | null }[] };
@@ -799,7 +799,7 @@ describe('repair settings on the PC', () => {
     const [video] = within(rows).getAllByTestId(/\.needsVideo$/);
     fireEvent.click(video!);
     fireEvent.click(byTestId('repair.desk.options.repairTypes.save'));
-    await screen.findByTestId('repair.desk.options.repairTypes.saved');
+    await screen.findByTestId('toast');
     const change = callsTo('repair.run').find((args) => args[1] === 'changeIntakeOptions')![2] as {
       items: { warrantyDays: number; needsVideo: boolean }[];
     };
@@ -831,7 +831,7 @@ describe('repair settings on the PC', () => {
     expect((byTestId('repair.desk.slip.phone') as HTMLInputElement).value).toBe('0811 4800 123');
 
     fireEvent.click(byTestId('repair.desk.slip.save'));
-    await screen.findByTestId('repair.desk.slip.saved');
+    await screen.findByTestId('toast');
     const saved = callsTo('repair.run').find((args) => args[1] === 'setPrintSettings');
     expect(saved?.[2]).toMatchObject({
       address: 'Jl. Ahmad Yani 12, Sorong',

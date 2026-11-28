@@ -6,6 +6,7 @@
  * Adding asks how many are on the shelf now, so a new item arrives with its stock in one go, and
  * "Tambah lagi" keeps the category, fields and phones for the next item of a run.
  */
+import { useDoneNote } from '../../screen-kit/index.js';
 import {
   ChipRow,
   ChoiceChips,
@@ -19,7 +20,6 @@ import {
   type,
   Text,
 } from '@bolusi/ui';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { DiscardGuard } from '../../screen-kit/index.js';
@@ -59,7 +59,7 @@ export function PartForm({
   const form = useItemForm({ part, categoryId });
   const { draft, set, runner, category, categories, fields, autoName, builtName, nameMissing } =
     form;
-  const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const { note: savedNotice, say: setSavedNotice } = useDoneNote();
 
   const discard = useDiscardConfirm({
     dirty: form.dirty,

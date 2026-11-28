@@ -4,6 +4,7 @@
 // commands and pure form logic as the phone screens; only the layout is the desktop's (inline rows
 // to type in, drag to reorder, one save bar). Each page tells Settings whether it holds unsaved
 // changes, so leaving it asks first.
+import { useDoneNote } from '../../screen-kit/index.js';
 import { t } from '@bolusi/i18n';
 import type { MediaRefMime } from '@bolusi/schemas';
 import {
@@ -210,7 +211,7 @@ function ListEditor({
 }): React.JSX.Element {
   const editor = useOptionsEditor(list, settings, can);
   const { runner, state, setState, showProblems, problems, dirty, manage, hide } = editor;
-  const [saved, setSaved] = useState<string | null>(null);
+  const { note: saved, say: setSaved } = useDoneNote();
   const [focusKey, setFocusKey] = useState<string | null>(null);
   useReportDirty(dirty, onDirtyChange);
 

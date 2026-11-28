@@ -1,7 +1,7 @@
 // The parts list's tasks on the counter PC: add or edit an item, and correct its stock. Each is a
 // dialog over the list, with the same rules as the phone's screens (`useItemForm`).
+import { useDoneNote } from '../../screen-kit/index.js';
 import { TextArea, TextField, ToggleChip } from '@bolusi/ui-web';
-import { useState } from 'react';
 
 import { TaskDialog, type DiscardCopy } from '../../screen-kit/desktop/index.js';
 import { MAX_FIELD_VALUE, type CategoryField } from '../categories.js';
@@ -44,7 +44,7 @@ export function PartDialog({
 }: PartDialogProps): React.JSX.Element {
   const form = useItemForm({ part, categoryId });
   const { draft, set, category, categories, fields, autoName, builtName, nameMissing } = form;
-  const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const { note: savedNotice, say: setSavedNotice } = useDoneNote();
   const testId = 'inventory.desk.form';
 
   const save = (another: boolean): void => {

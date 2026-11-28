@@ -123,7 +123,7 @@ describe('supplier bills on the PC', () => {
     await waitFor(() => expect(screen.queryByTestId('purchasing.desk.billForm')).toBeNull());
 
     const pane = await screen.findByTestId('purchasing.desk.bill');
-    expect(await within(pane).findByText('Tagihan dicatat.')).toBeTruthy();
+    expect((await screen.findByTestId('toast')).textContent).toContain('Tagihan dicatat.');
     expect(within(pane).getByText(/Nota AB.77/)).toBeTruthy();
     expect(byTestId('purchasing.desk.bill.total').textContent).toContain('95.000');
   });
@@ -141,7 +141,7 @@ describe('supplier bills on the PC', () => {
     fireEvent.click(byTestId('purchasing.desk.voidBill.submit'));
     await waitFor(() => expect(screen.queryByTestId('purchasing.desk.voidBill')).toBeNull());
     const pane = byTestId('purchasing.desk.bill');
-    expect(await within(pane).findByText('Tagihan dibatalkan.')).toBeTruthy();
+    expect((await screen.findByTestId('toast')).textContent).toContain('Tagihan dibatalkan.');
     expect(within(pane).getByTestId('purchasing.desk.bill.voided').textContent).toContain(
       'Salah supplier',
     );

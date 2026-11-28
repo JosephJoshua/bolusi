@@ -4,6 +4,7 @@
 //
 // THE OWNER NEVER TYPES THE NEW PIN. A new PIN first asks the owner to let the colleague at the
 // keyboard, and the colleague types it twice (api/02-auth §6.6).
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import { t, translateRoleKey } from '@bolusi/i18n';
 import {
   CLEAR_IDLE,
@@ -68,6 +69,8 @@ export function StaffPinsPanel({
     tone: 'success' | 'info' | 'danger';
     text: string;
   } | null>(null);
+  const { note: done, say } = useDoneNote();
+  const banner = notice ?? (done === null ? null : { tone: 'success' as const, text: done });
   const [unlock, dispatchUnlock] = useReducer(clearActionReducer, CLEAR_IDLE);
   const [resetFor, setResetFor] = useState<PinTargetUser | null>(null);
   const latest = useRef(access);
@@ -108,16 +111,17 @@ export function StaffPinsPanel({
   useEffect(() => {
     if (unlock.kind !== 'done' && unlock.kind !== 'failed') return;
     const name = unlock.target.name;
+    if (unlock.kind === 'done') say(t('auth.pin.staff.unlockDoneBody', { name }));
     setNotice(
       unlock.kind === 'done'
-        ? { tone: 'success', text: t('auth.pin.staff.unlockDoneBody', { name }) }
+        ? null
         : unlock.reason === 'notLocked'
           ? { tone: 'info', text: t('auth.pin.unlock.notLocked', { name }) }
           : { tone: 'danger', text: t('core.errors.UNEXPECTED') },
     );
     dispatchUnlock({ kind: 'dismiss' });
     void reload();
-  }, [unlock, reload]);
+  }, [unlock, reload, say]);
 
   const { canUnlock, canReset } = access;
   const users = loaded.kind === 'ready' ? loaded.users : [];
@@ -142,11 +146,14 @@ export function StaffPinsPanel({
       lead={t('core.settings.staffPinsSummary')}
       testId="desktop.settings.staffPins"
     >
-      {notice === null ? null : (
+      {banner === null ? null : (
         <Banner
-          tone={notice.tone}
-          message={notice.text}
-          onDismiss={() => setNotice(null)}
+          tone={banner.tone}
+          message={banner.text}
+          onDismiss={() => {
+            setNotice(null);
+            say(null);
+          }}
           dismissLabel={t('core.action.close')}
         />
       )}

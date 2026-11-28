@@ -24,7 +24,7 @@ import {
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner, useJustReplaced } from '../../../screen-kit/index.js';
+import { useActionRunner, useDoneNote, useJustReplaced } from '../../../screen-kit/index.js';
 import {
   ActionErrorBanner,
   QueryView,
@@ -76,7 +76,7 @@ export function TransferDetail({
   const stores = useStores();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [done, setDone] = useState<InventoryKey | null>(null);
+  const { note: done, say: setDone } = useDoneNote<InventoryKey>((key) => ti(key));
   const query = useInventoryQuery(
     async (rt) => (await rt.query('getTransfer', { transferId })).rows[0],
     `transfer:${transferId}:${String(reloadNonce)}`,

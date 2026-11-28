@@ -3,6 +3,7 @@
  * and tags), and every movement here (counts, takes and put-backs, with who and for which
  * servisan). Owners count it, edit it, or take it off the list; the history stays either way.
  */
+import { useDoneNote } from '../../screen-kit/index.js';
 import { formatDateTime, t } from '@bolusi/i18n';
 import {
   AppShell,
@@ -71,7 +72,7 @@ export function PartDetail({
   const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const [done, setDone] = useState<InventoryKey | null>(null);
+  const { note: done, say: setDone } = useDoneNote<InventoryKey>((key) => ti(key));
   const archive = useArchiveItem((archived) =>
     setDone(archived ? 'inventory.done.archived' : 'inventory.done.restored'),
   );

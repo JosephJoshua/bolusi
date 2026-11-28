@@ -5,6 +5,7 @@
  * their name, and its kind never changes once payments may have gone through it. The store's cash
  * drawers are listed first: an owner adds one and sets which roles use it (drawer-settings.tsx).
  */
+import { useDoneNote } from '../../screen-kit/index.js';
 import {
   ConfirmSheet,
   EmptyState,
@@ -77,7 +78,7 @@ export function PaymentMethodsSurface({
   onRegisterDiscardGuard,
 }: PaymentMethodsSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<MethodsView>({ kind: 'list' });
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback(
     (guard: DiscardGuard | null): void => {

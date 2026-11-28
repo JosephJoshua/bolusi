@@ -2,6 +2,7 @@
 // this store, per servisan (product-scope.md, "Managers, limits, approvals and roles"). The phone's
 // limits model decides which roles are offered; each save is a server call, so it needs the
 // internet and the page shows only what the server took.
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import { staffAdminFailure, type LimitAmounts } from '@bolusi/core';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import {
@@ -51,7 +52,7 @@ export function LimitsPanel({
   const [draft, setDraft] = useState<Draft>({});
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const [failure, setFailure] = useState<string | null>(null);
   const latest = useRef(controls);
   latest.current = controls;

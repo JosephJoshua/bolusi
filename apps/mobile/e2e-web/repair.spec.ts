@@ -440,7 +440,9 @@ test('an owner changes a cancelled servisan’s fee beside it', async ({ page })
   await fill(page, 'repair.cancelFee.reason', 'Pelanggan lama');
   await shoot(page, 'cancel-fee-step');
   await tap(page, 'repair.cancelFee.primary');
-  await expect(page.getByTestId('repair.ticket.done')).toContainText('Tagihan pembatalan diubah.');
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
+    'Tagihan pembatalan diubah.',
+  );
   // The DP less the new fee goes back at pickup.
   await expect(page.getByText('Rp 90.000').first()).toBeVisible();
   await shoot(page, 'cancel-fee-done');
@@ -1041,7 +1043,7 @@ test('the counter prints the handover slip, and the next print is a reprint', as
   await tap(page, 'repair.print.primary');
   await (await again).close();
   await tap(page, 'repair.print.ask.confirm');
-  await expect(page.getByTestId('repair.ticket.done')).toBeVisible();
+  await expect(page.getByTestId('toast').filter({ visible: true })).toBeVisible();
   await openPrint(page);
   await expect(page.getByTestId('repair.print.reprint')).toBeVisible();
   await shoot(page, 'print-step-reprint');
@@ -1084,7 +1086,9 @@ test('the owner sets what the slips print at the top', async ({ page }) => {
   await page.getByTestId('repair.printSettings.handoverTerms').scrollIntoViewIfNeeded();
   await shoot(page, 'print-settings-terms');
   await tap(page, 'repair.printSettings.primary');
-  await expect(page.getByText('Tampilan nota disimpan.').first()).toBeVisible();
+  await expect(
+    page.getByText('Tampilan nota disimpan.').filter({ visible: true }).first(),
+  ).toBeVisible();
 });
 
 /** Presses the message button and returns the WhatsApp link it opened; nothing reaches wa.me. */
@@ -1151,7 +1155,9 @@ test('the store owner sets when a phone counts as not collected', async ({ page 
   await fill(page, 'repair.uncollected.days', '90');
   await shoot(page, 'uncollected-settings');
   await tap(page, 'repair.uncollected.primary');
-  await expect(page.getByText('Batas hari disimpan.').first()).toBeVisible();
+  await expect(
+    page.getByText('Batas hari disimpan.').filter({ visible: true }).first(),
+  ).toBeVisible();
   await tap(page, 'repair.uncollected.back');
   await tap(page, 'settings-screen.back');
   // 72 days is no longer past the limit.

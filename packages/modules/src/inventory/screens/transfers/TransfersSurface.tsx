@@ -5,6 +5,7 @@
  * here, so a trip to pick a part comes back to it. While anything is open it publishes a
  * `PlaceStep`, so back closes the open step first.
  */
+import { useDoneNote } from '../../../screen-kit/index.js';
 import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -43,7 +44,7 @@ export function TransfersSurface({
 }: TransfersSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [filter, setFilter] = useState<TransferFilter>('open');
-  const [notice, setNotice] = useState<InventoryKey | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote<InventoryKey>((key) => ti(key));
   const [draft, setDraft] = useState<SendDraft>(EMPTY_SEND);
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback(
