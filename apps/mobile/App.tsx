@@ -7,7 +7,7 @@ import {
   ConfirmSheet,
   Icon,
   ListRow,
-  NAV_BAR_INSET,
+  useBottomInset,
   Sheet,
   ShellTabsProvider,
   SyncChip,
@@ -328,6 +328,7 @@ export interface AppProps {
 export default function App(props: AppProps): React.JSX.Element {
   // Live system insets from the entry's SafeAreaProvider; null where there is none (tests, web).
   const safeArea = useContext(SafeAreaInsetsContext);
+  const bottomInset = useBottomInset();
   const [route, setRoute] = useState<ShellRoute>('home');
   /** "PIN karyawan" opened from "Karyawan" for one person's first PIN; back returns to Karyawan. */
   const [staffPinFor, setStaffPinFor] = useState<string | null>(null);
@@ -1010,7 +1011,7 @@ export default function App(props: AppProps): React.JSX.Element {
   // returns below — so the capture zone and the main zone can never drift on the top inset. The top
   // inset is read here (not at module scope) because `RNStatusBar.currentHeight` is not reliably ready
   // at bundle-eval; see `androidStatusBarInset`.
-  const shellStyle = [styles.shell, { paddingTop: topInset(safeArea) }];
+  const shellStyle = [styles.shell, { paddingTop: topInset(safeArea), paddingBottom: bottomInset }];
 
   // The chrome for a capture or signature surface: the sync chip goes to Sync Status the way every
   // other screen's does; the avatar slot stays empty so the identity cannot switch mid-capture.
@@ -1970,12 +1971,12 @@ const styles = StyleSheet.create({
    * `topInset()` (see its docblock) — a static `paddingTop` here would freeze a possibly-
    * unpopulated status-bar height at module-eval.
    *
-   * `NAV_BAR_INSET` now lives in `@bolusi/ui` (`platform-insets.ts`), where its docblock explains the
-   * 48 dp figure. It moved because surfaces mounted OUTSIDE this shell — the ConfirmSheet overlay —
-   * need the same measurement and were silently missing it (task 205).
+   * The BOTTOM inset is this phone's measured navigation bar (`useBottomInset`, packages/ui
+   * `platform-insets.tsx`), also applied per render; surfaces mounted OUTSIDE this shell — the
+   * ConfirmSheet overlay — read the same value themselves (task 205).
    */
   // Painted, so the bands under the status and navigation bars match the screens.
-  shell: { flex: 1, paddingBottom: NAV_BAR_INSET, backgroundColor: color.surface },
+  shell: { flex: 1, backgroundColor: color.surface },
   zone: { flex: 1 },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
   // The menu's rows run edge to edge, like every list.

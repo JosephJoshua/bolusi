@@ -22,7 +22,7 @@ import { Text } from '../text.js';
 import { Animated, StyleSheet, View } from 'react-native';
 
 import { useSheetEntrance } from '../motion.js';
-import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useBottomInset } from '../platform-insets.js';
 import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, size, space, type } from '../tokens.js';
 import { Button } from './Button.js';
@@ -71,7 +71,6 @@ const styles = StyleSheet.create({
      * action squarely in the nav-bar band. The nav-bar window eats the touch, so Cancel rendered
      * but could not be pressed.
      */
-    paddingBottom: space.lg + NAV_BAR_INSET,
   },
   title: { ...type.heading, color: color.text },
   message: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
@@ -89,12 +88,16 @@ export function ConfirmSheet({
   tone = 'destructive',
   testID = 'ui.confirmSheet',
 }: ConfirmSheetProps): React.JSX.Element {
+  const bottomInset = useBottomInset();
   useDismissKeyboard();
   const entrance = useSheetEntrance();
   return (
     <View testID={testID} style={styles.root}>
       <Animated.View testID={`${testID}.scrim`} style={[styles.scrim, entrance.scrim]} />
-      <Animated.View testID={`${testID}.sheet`} style={[styles.sheet, entrance.sheet]}>
+      <Animated.View
+        testID={`${testID}.sheet`}
+        style={[styles.sheet, { paddingBottom: space.lg + bottomInset }, entrance.sheet]}
+      >
         <Text testID={`${testID}.title`} style={styles.title}>
           {title}
         </Text>

@@ -176,8 +176,9 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
   },
   actionBar: { padding: space.lg },
-  // The tabs under it give the action its bottom breathing room.
-  actionBarAboveTabs: { paddingBottom: space.sm },
+  // The tabs under it give the action its bottom breathing room, so the dock stays compact: the
+  // button and tabs keep their full touch size, only the padding between them is trimmed.
+  actionBarAboveTabs: { paddingTop: space.md, paddingBottom: space.xs },
   /**
    * Content and the bottom action are one centred column no wider than `size.contentMax`. On a phone
    * that is the whole width; on a tablet lines and buttons stop at a readable width instead of
