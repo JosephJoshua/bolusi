@@ -164,7 +164,14 @@
     "copyFailed": "The message couldn’t be copied.",
     "emptyHint": "Orders to suppliers show up here.",
     "suppliersHint": "Suppliers are shared by every store.",
-    "currency": "Rp"
+    "currency": "Rp",
+    "searchHint": "Search supplier or number",
+    "filter": {
+      "supplier": "Supplier",
+      "stage": "Status",
+      "ordered": "Order date",
+      "billed": "Bill date"
+    }
   },
   "price": {
     "title": "Buy price",

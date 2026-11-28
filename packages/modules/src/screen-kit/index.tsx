@@ -33,12 +33,10 @@ export { useLiveQuery, type LiveSource, type QueryState } from './live.js';
 export { FRESH_ACTION_MS, TYPING_PAUSE_MS, useJustReplaced, useSettledValue } from './settled.js';
 export {
   changeView,
-  compareValues,
   DEFAULT_PAGE_SIZE,
   pageCount,
   PAGE_SIZES,
   pageWindow,
-  sortBy,
   tableView,
   TableViewProvider,
   useTableView,
@@ -46,7 +44,6 @@ export {
   type ColumnSort,
   type TableView,
   type TableViewStore,
-  type ViewRows,
 } from './table-view.js';
 export { useTick } from './tick.js';
 export {

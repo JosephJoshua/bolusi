@@ -5,7 +5,14 @@
 import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
-import { normalizeText, type QueryContext, type QueryPage } from '@bolusi/core';
+import {
+  normalizeText,
+  tableInputShape,
+  tablePage,
+  type QueryContext,
+  type QueryPage,
+  type TablePage,
+} from '@bolusi/core';
 
 import type { InventoryDatabase } from '../inventory/schema.js';
 import { deviceCode } from '../shared/device-code.js';
@@ -243,12 +250,23 @@ export type OrderFilter = (typeof ORDER_FILTERS)[number];
 
 const OPEN_STAGES: ReadonlySet<OrderStage> = new Set(['draft', 'ordered', 'partial']);
 
+/** The columns an orders table sorts by. */
+export const ORDER_COLUMNS = ['supplier', 'order', 'parts'] as const;
+export type OrderColumn = (typeof ORDER_COLUMNS)[number];
+
 export const listOrdersInput = z
   .object({
     filter: z.enum(ORDER_FILTERS).default('open'),
     supplierId: z.string().min(1).nullable().default(null),
-    limit: z.number().int().min(1).max(200).default(50),
-    offset: z.number().int().min(0).default(0),
+    /** Any of these suppliers. */
+    supplierIds: z.array(z.string().min(1)).max(100).default([]),
+    /** Any of these stages. */
+    stages: z.array(z.string().min(1).max(20)).max(10).default([]),
+    /** Ordered (or, for a draft, started) on or after this time. */
+    orderedFrom: z.number().int().nullable().default(null),
+    /** Ordered (or started) before this time. */
+    orderedBefore: z.number().int().nullable().default(null),
+    ...tableInputShape(ORDER_COLUMNS),
   })
   .strict();
 export type ListOrdersInput = z.input<typeof listOrdersInput>;
@@ -260,9 +278,10 @@ export type ListOrdersInput = z.input<typeof listOrdersInput>;
 export async function listOrdersHandler(
   input: z.output<typeof listOrdersInput>,
   qctx: Qctx,
-): Promise<QueryPage<OrderRow>> {
+): Promise<TablePage<OrderRow>> {
   let query = storeOrders(qctx);
   if (input.supplierId !== null) query = query.where('o.supplierId', '=', input.supplierId);
+  if (input.supplierIds.length > 0) query = query.where('o.supplierId', 'in', input.supplierIds);
   // Drafts and cancelled orders are decided by status alone; placed ones need their receipts.
   query =
     input.filter === 'open'
@@ -275,11 +294,32 @@ export async function listOrdersHandler(
   );
   const orders = raw
     .map((row) => toOrder(row, lines.get(row.id) ?? []))
-    .filter((order) => OPEN_STAGES.has(order.stage) === (input.filter === 'open'));
-  const page = orders.slice(input.offset, input.offset + input.limit);
-  const next = input.offset + input.limit;
-  return { rows: page, nextCursor: next < orders.length ? String(next) : null };
+    .filter((order) => orderKept(order, input));
+  return tablePage(orders, input, ORDER_TABLE);
 }
+
+/** Whether an order is in the list's tab and its stage and date facets. */
+export function orderKept(order: OrderRow, input: z.output<typeof listOrdersInput>): boolean {
+  if (OPEN_STAGES.has(order.stage) !== (input.filter === 'open')) return false;
+  if (input.stages.length > 0 && !input.stages.includes(order.stage)) return false;
+  const at = order.orderedAt ?? order.createdAt;
+  return (
+    (input.orderedFrom === null || at >= input.orderedFrom) &&
+    (input.orderedBefore === null || at < input.orderedBefore)
+  );
+}
+
+/** How an orders table searches and sorts: by supplier and order number, newest first. */
+export const ORDER_TABLE = {
+  id: (order: OrderRow) => order.id,
+  document: (order: OrderRow) => ({ text: [order.supplierName], codes: [order.orderNumber] }),
+  value: (order: OrderRow, column: OrderColumn) =>
+    column === 'supplier'
+      ? order.supplierName
+      : column === 'order'
+        ? (order.orderedAt ?? order.createdAt)
+        : order.lineCount,
+};
 
 export const listOrdersQuery = {
   name: 'listOrders',

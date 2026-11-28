@@ -277,6 +277,38 @@ describe('an order from draft to received', () => {
   });
 });
 
+describe('the orders table', () => {
+  test('searches by supplier, filters by supplier and stage, sorts and pages with a total', async () => {
+    const h = await harness(7190);
+    const jaya = await addSupplier(h, 'Sumber Jaya', '0812 1111 2222');
+    const abadi = await addSupplier(h, 'Toko Abadi Part', '0812 3333 4444');
+    const lcd = await addItem(h, 'LCD');
+    const draft = async (supplierId: string, qtys: number[], place: boolean) =>
+      (
+        (await h.purchasing(
+          'draftOrder',
+          { supplierId, note: null, lines: qtys.map(() => ({ itemId: lcd, qty: 1 })), place },
+          h.storeOwnerId,
+        )) as { orderId: string }
+      ).orderId;
+    const first = await draft(jaya, [1], true);
+    const second = await draft(abadi, [1], false);
+    const list = async (input: Record<string, unknown>) => {
+      const page = (await h.purchasingQuery('listOrders', input, h.storeOwnerId)) as {
+        rows: readonly { id: string }[];
+        total: number;
+      };
+      return { ids: page.rows.map((row) => row.id), total: page.total };
+    };
+    expect(await list({ text: 'abadi' })).toEqual({ ids: [second], total: 1 });
+    expect(await list({ supplierIds: [jaya] })).toEqual({ ids: [first], total: 1 });
+    expect(await list({ stages: ['draft'] })).toEqual({ ids: [second], total: 1 });
+    expect(
+      await list({ sort: { column: 'supplier', descending: false }, limit: 1, offset: 1 }),
+    ).toEqual({ ids: [second], total: 2 });
+  });
+});
+
 describe('the stock a receipt brings in', () => {
   async function receivedOps(h: RepairHarness) {
     const { lcd, orderId } = await placed(h);

@@ -24,3 +24,14 @@ export {
 export { decodeCursor, encodeCursor, type CursorPosition } from './cursor.js';
 
 export { fetchKeysetPage, keysetPredicate, type KeysetPage } from './paginate.js';
+
+export {
+  compareValues,
+  searchRows,
+  sortBy,
+  tableInputShape,
+  tablePage,
+  type ColumnSort,
+  type TablePage,
+  type TablePageInput,
+} from './table-page.js';

@@ -164,7 +164,14 @@
     "copyFailed": "Pesan tidak dapat disalin.",
     "emptyHint": "Pesanan ke supplier akan muncul di sini.",
     "suppliersHint": "Supplier dipakai di semua toko.",
-    "currency": "Rp"
+    "currency": "Rp",
+    "searchHint": "Cari supplier atau nomor",
+    "filter": {
+      "supplier": "Supplier",
+      "stage": "Status",
+      "ordered": "Tanggal pesan",
+      "billed": "Tanggal tagihan"
+    }
   },
   "price": {
     "title": "Harga beli",

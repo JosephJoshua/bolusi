@@ -7,14 +7,11 @@
 // into a record or another place. How a person likes a table (its sort, page size and columns)
 // is remembered per person on this device through the provider's store; what they typed or
 // picked lasts for the session only.
-import { FuzzyIndex, type SearchDocument } from '@bolusi/core';
+import { tablePage, type ColumnSort, type SearchDocument, type TablePage } from '@bolusi/core';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export interface ColumnSort<C extends string = string> {
-  readonly column: C;
-  readonly descending: boolean;
-}
+export type { ColumnSort };
 
 export interface TableView<F, C extends string = string> {
   readonly text: string;
@@ -62,47 +59,9 @@ export function pageWindow(view: { readonly page: number; readonly pageSize: num
   return { offset: (view.page - 1) * view.pageSize, limit: view.pageSize };
 }
 
-export interface ViewRows<T> {
-  /** The rows on the view's page. */
-  readonly rows: readonly T[];
-  /** Every row the search and facets let through, on all pages. */
-  readonly total: number;
-}
-
-/** Compares two values the way a column sorts: text by Indonesian collation, the rest by number. */
-export function compareValues(a: string | number | null, b: string | number | null): number {
-  // Empty values go last in either direction.
-  if (a === null || a === '') return b === null || b === '' ? 0 : 1;
-  if (b === null || b === '') return -1;
-  return typeof a === 'string' && typeof b === 'string'
-    ? a.localeCompare(b, 'id', { sensitivity: 'base', numeric: true })
-    : Number(a) - Number(b);
-}
-
-/** Sorts rows by a column's value; without a sort the order is kept (list order or ranking). */
-export function sortBy<T, C extends string>(
-  rows: readonly T[],
-  sort: ColumnSort<C> | null,
-  value: (row: T, column: C) => string | number | null,
-): readonly T[] {
-  if (sort === null) return rows;
-  const sign = sort.descending ? -1 : 1;
-  return rows
-    .map((row, index) => ({ row, index, key: value(row, sort.column) }))
-    .sort((a, b) => {
-      const empty = (key: string | number | null) => key === null || key === '';
-      // Empty values stay last whichever way the column runs.
-      if (empty(a.key) !== empty(b.key)) return empty(a.key) ? 1 : -1;
-      return sign * compareValues(a.key, b.key) || a.index - b.index;
-    })
-    .map(({ row }) => row);
-}
-
 /**
  * A whole list, already in memory, through a view: fuzzy search (with the shop's synonyms) ranks
- * it, the facets narrow it, a column sorts it and the page cuts it. For lists the device holds in
- * full and that stay small enough to read at once (suppliers, categories, staff); long histories
- * page in their query instead.
+ * it, the facets narrow it, a column sorts it and the page cuts it, as `tablePage` does in a query.
  */
 export function viewRows<T, F, C extends string>(
   rows: readonly T[],
@@ -114,22 +73,10 @@ export function viewRows<T, F, C extends string>(
     readonly matches?: ((row: T, facets: F) => boolean) | undefined;
     readonly value: (row: T, column: C) => string | number | null;
   },
-): ViewRows<T> {
-  const text = view.text.trim();
-  let kept: readonly T[] = rows;
-  if (text !== '') {
-    const byId = new Map(rows.map((row) => [how.id(row), row]));
-    const index = new FuzzyIndex(
-      // Earlier rows rank first among equal matches, keeping the list's own order as a tiebreak.
-      rows.map((row, at) => ({ ...how.document(row), id: how.id(row), rank: -at })),
-    );
-    kept = index.search(text, rows.length).map((hit) => byId.get(hit.id)!);
-  }
+): TablePage<T> {
   const matches = how.matches;
-  if (matches !== undefined) kept = kept.filter((row) => matches(row, view.facets));
-  const sorted = sortBy(kept, view.sort, how.value);
-  const { offset, limit } = pageWindow(view);
-  return { rows: sorted.slice(offset, offset + limit), total: sorted.length };
+  const kept = matches === undefined ? rows : rows.filter((row) => matches(row, view.facets));
+  return tablePage(kept, { text: view.text, sort: view.sort, ...pageWindow(view) }, how);
 }
 
 /** Where the provider remembers a person's table setup on this device. Fails soft. */

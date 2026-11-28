@@ -213,6 +213,7 @@
       "thisMonth": "Bulan ini",
       "empty": "Tidak ada yang cocok dengan filter"
     },
-    "noMatches": "Tidak ada yang cocok dengan pencarian"
+    "noMatches": "Tidak ada yang cocok dengan pencarian",
+    "clearSearch": "Hapus pencarian"
   }
 }

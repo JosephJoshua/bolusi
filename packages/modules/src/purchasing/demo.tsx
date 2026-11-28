@@ -4,13 +4,22 @@
  * module's own pure pieces (stage, still to come, the order message) and mirrors the commands'
  * checks closely enough that a reviewer sees the same flow and refusals.
  */
-import { DomainError } from '@bolusi/core';
+import { DomainError, tablePage } from '@bolusi/core';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import type { DemoInventoryRuntime } from '../inventory/demo.js';
 import { PURCHASING_PERMISSION, type BillStatus, type OrderStatus } from './constants.js';
-import { billTotal, type BillDetailRow, type BillRow } from './bills/queries.js';
 import {
+  BILL_TABLE,
+  billTotal,
+  listBillsInput,
+  type BillDetailRow,
+  type BillRow,
+} from './bills/queries.js';
+import {
+  listOrdersInput,
+  ORDER_TABLE,
+  orderKept,
   orderStage,
   type OrderDetailRow,
   type OrderLineRow,
@@ -287,12 +296,14 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
         nextCursor: null,
       }),
     listOrders: (input) => {
-      const open = (input['filter'] ?? 'open') === 'open';
+      const parsed = listOrdersInput.parse(input);
       const rows = orders
         .map(row)
-        .filter((o) => ['draft', 'ordered', 'partial'].includes(o.stage) === open)
+        .filter((o) => parsed.supplierId === null || o.supplierId === parsed.supplierId)
+        .filter((o) => parsed.supplierIds.length === 0 || parsed.supplierIds.includes(o.supplierId))
+        .filter((o) => orderKept(o, parsed))
         .sort((a, b) => b.createdAt - a.createdAt);
-      return Promise.resolve({ rows, nextCursor: null });
+      return Promise.resolve(tablePage(rows, parsed, ORDER_TABLE));
     },
     listBills: (input) => {
       const rows = bills
@@ -303,9 +314,13 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
             input['orderId'] === null ||
             b.orderId === input['orderId'],
         )
+        .filter((b) => {
+          const ids = (input['supplierIds'] as string[] | undefined) ?? [];
+          return ids.length === 0 || ids.includes(b.supplierId);
+        })
         .sort((a, b) => b.billedOn - a.billedOn || b.createdAt - a.createdAt)
         .map(billRow);
-      return Promise.resolve({ rows, nextCursor: null });
+      return Promise.resolve(tablePage(rows, listBillsInput.parse(input), BILL_TABLE));
     },
     getBill: (input) => {
       const bill = bills.find((b) => b.id === input['billId']);

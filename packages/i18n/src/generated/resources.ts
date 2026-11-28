@@ -220,6 +220,7 @@ const source = {
           empty: 'Tidak ada yang cocok dengan filter',
         },
         noMatches: 'Tidak ada yang cocok dengan pencarian',
+        clearSearch: 'Hapus pencarian',
       },
     },
     auth: {
@@ -1164,6 +1165,7 @@ export const resources = {
             empty: 'Nothing matches these filters',
           },
           noMatches: 'Nothing matches this search',
+          clearSearch: 'Clear search',
         },
       },
       auth: {

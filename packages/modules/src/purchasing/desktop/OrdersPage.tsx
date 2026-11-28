@@ -1,13 +1,14 @@
 // Belanja on the counter PC: this store's orders to suppliers, the ones still running first, with
 // the selected order open beside them, and for whoever reads them the suppliers' bills. A new order
-// (or bill, on Tagihan) is F2; the suppliers are a dialog away.
+// (or bill, on Tagihan) is F2; the suppliers are a dialog away. Both tables search by supplier
+// and number, filter by supplier and date, sort from their headers and page in the shared frame.
 import { formatDate, t } from '@bolusi/i18n';
 import {
   Button,
   Chip,
-  DataTable,
   OverflowText,
   PageHeader,
+  SearchField,
   StatePanel,
   Tabs,
   type ColumnDef,
@@ -17,24 +18,60 @@ import { Plus, ShoppingCart, Store } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
+import { ChoiceFacet, DayFacet, TableFrame } from '../../screen-kit/desktop/table.js';
+import { dayRangeBounds, type DayRange } from '../../screen-kit/days.js';
+import {
+  changeView,
+  pageWindow,
+  tableView,
+  useTableView,
+  type ColumnSort,
+  type TableView,
+} from '../../screen-kit/table-view.js';
 import { opensBills } from '../constants.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
-import { ORDER_FILTERS, type OrderRow } from '../queries.js';
+import { ORDER_COLUMNS, ORDER_FILTERS, type OrderColumn, type OrderRow } from '../queries.js';
+import { ORDER_STAGES, type OrderStage } from '../constants.js';
 import { EMPTY_BILL, type BelanjaTab } from '../bills/bill-form.js';
-import type { BillRow } from '../bills/queries.js';
-import {
-  loadBillPages,
-  loadOrderPages,
-  usePurchasingQuery,
-  usePurchasingRuntime,
-} from '../runtime.js';
+import { BILL_COLUMNS, type BillColumn, type BillRow } from '../bills/queries.js';
+import { usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 import { BillDialog, BillPane, billColumns } from './bills.js';
 import { OrderDialog, SuppliersDialog } from './dialogs.js';
 import { OrderPane } from './OrderPane.js';
 import { STAGE_ICON } from './stage.js';
 
-const PAGE = 100;
+interface Facets {
+  readonly suppliers: readonly string[];
+  readonly stages: readonly OrderStage[];
+  readonly on: DayRange | null;
+}
+
+const NO_FACETS: Facets = { suppliers: [], stages: [], on: null };
+
+/** The stages each tab can hold, to offer as a filter. */
+const OPEN_STAGES: readonly OrderStage[] = ['draft', 'ordered', 'partial'];
+const DONE_STAGES = ORDER_STAGES.filter((stage) => !OPEN_STAGES.includes(stage));
+
+const facetCount = (facets: Facets): number =>
+  facets.suppliers.length + facets.stages.length + (facets.on === null ? 0 : 1);
+
+/** A table's search, sort and page as its query reads them, with the facets as the query names them. */
+function queryInput<C extends string>(view: TableView<Facets>) {
+  const { from, before } =
+    view.facets.on === null
+      ? { from: undefined, before: undefined }
+      : dayRangeBounds(view.facets.on);
+  return {
+    text: view.text.trim(),
+    // The headers only offer the query's own columns, and a remembered sort is checked against them.
+    sort: view.sort as ColumnSort<C> | null,
+    supplierIds: [...view.facets.suppliers],
+    ...pageWindow(view),
+    from: from ?? null,
+    before: before ?? null,
+  };
+}
 
 export interface OrdersPageProps {
   /**
@@ -48,7 +85,16 @@ export interface OrdersPageProps {
 }
 
 export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): React.JSX.Element {
-  const [pages, setPages] = useState(1);
+  const [ordersView, setOrdersView] = useTableView(
+    'purchasing.orders',
+    () => tableView(NO_FACETS),
+    {
+      sortable: ORDER_COLUMNS,
+    },
+  );
+  const [billsView, setBillsView] = useTableView('purchasing.bills', () => tableView(NO_FACETS), {
+    sortable: BILL_COLUMNS,
+  });
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [task, setTask] = useState<'none' | 'new' | 'newBill' | 'suppliers'>('none');
@@ -60,27 +106,50 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
   const paneRef = useRef<HTMLDivElement>(null);
   const testId = 'purchasing.desk';
 
+  const view = bills ? billsView : ordersView;
+  const setView = bills ? setBillsView : setOrdersView;
+  const tab = filter === 'bills' ? 'open' : filter;
+  const orderScope = JSON.stringify([tab, ordersView]);
   const query = usePurchasingQuery(
     async (rt) => {
-      return {
-        filter,
-        ...(await loadOrderPages(rt, filter === 'bills' ? 'open' : filter, pages, PAGE)),
-      };
+      const { from, before, ...input } = queryInput<OrderColumn>(ordersView);
+      const page = await rt.query('listOrders', {
+        ...input,
+        filter: tab,
+        stages: [...ordersView.facets.stages],
+        orderedFrom: from,
+        orderedBefore: before,
+      });
+      return { scope: orderScope, rows: page.rows, total: page.total };
     },
-    `desk.orders:${filter}:${String(pages)}:${String(reloadNonce)}`,
+    `desk.orders:${orderScope}:${String(reloadNonce)}`,
   );
+  const billScope = JSON.stringify([bills, billsView]);
   const billQuery = usePurchasingQuery(
     async (rt) => {
-      if (!bills) return { rows: [] as readonly BillRow[], hasMore: false };
-      return loadBillPages(rt, pages, PAGE);
+      if (!bills) return { scope: billScope, rows: [] as readonly BillRow[], total: 0 };
+      const { from, before, ...input } = queryInput<BillColumn>(billsView);
+      const page = await rt.query('listBills', {
+        ...input,
+        filter: 'all',
+        orderId: null,
+        billedFrom: from,
+        billedBefore: before,
+      });
+      return { scope: billScope, rows: page.rows, total: page.total };
     },
-    `desk.bills:${String(bills)}:${String(pages)}:${String(reloadNonce)}`,
+    `desk.bills:${billScope}:${String(reloadNonce)}`,
   );
   const loadedBills = billQuery.status === 'ready' ? billQuery.data : null;
   const loaded = query.status === 'ready' ? query.data : null;
   // Offline with the orders not on this PC: nothing to add to or pick from.
   const notHere = query.status === 'error' && query.code === 'NOT_ON_DEVICE';
-  const stale = loaded !== null && loaded.filter !== filter;
+  const shown = bills ? loadedBills : loaded;
+  const stale = shown !== null && shown.scope !== (bills ? billScope : orderScope);
+  const suppliers = usePurchasingQuery(
+    async (rt) => (await rt.query('listSuppliers', { text: '', includeArchived: true })).rows,
+    `desk.orders.suppliers:${String(reloadNonce)}`,
+  );
 
   const closePane = (): void => {
     setSelectedId(null);
@@ -108,30 +177,69 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
 
   const columns = useMemo(orderColumns, []);
   const columnsOfBills = useMemo(billColumns, []);
-  const empty =
-    query.status === 'unauthorized' || query.status === 'error' ? (
-      <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
+  const shownQuery = bills ? billQuery : query;
+  const problem =
+    shownQuery.status === 'unauthorized' || shownQuery.status === 'error' ? (
+      <QueryPanel query={shownQuery} onRetry={() => setReloadNonce((n) => n + 1)}>
         {() => null}
       </QueryPanel>
-    ) : bills ? (
-      <StatePanel icon={ShoppingCart} title={tp('purchasing.bill.listEmpty')} />
-    ) : filter === 'done' ? (
-      <StatePanel icon={ShoppingCart} title={tp('purchasing.list.emptyDone')} />
-    ) : (
-      <StatePanel
-        icon={ShoppingCart}
-        title={tp('purchasing.list.emptyOpen')}
-        hint={tp('purchasing.desk.emptyHint')}
-        action={
-          <Button
-            label={tp('purchasing.list.new')}
-            variant="primary"
-            icon={Plus}
-            onClick={() => setTask('new')}
-          />
-        }
+    ) : undefined;
+  const facets = view.facets;
+  const setFacets = (patch: Partial<Facets>): void =>
+    setView(changeView(view, { facets: { ...facets, ...patch } }));
+  const stageOptions = tab === 'open' ? OPEN_STAGES : DONE_STAGES;
+  const facetFilters = (
+    <>
+      <ChoiceFacet
+        label={tp('purchasing.desk.filter.supplier')}
+        options={(suppliers.status === 'ready' ? suppliers.data : []).map((supplier) => ({
+          value: supplier.id,
+          label: supplier.name,
+        }))}
+        selected={facets.suppliers}
+        onChange={(chosen) => setFacets({ suppliers: chosen })}
+        testId={`${testId}.filter.supplier`}
       />
-    );
+      {bills ? null : (
+        <ChoiceFacet
+          label={tp('purchasing.desk.filter.stage')}
+          options={stageOptions.map((stage) => ({
+            value: stage,
+            label: tp(`purchasing.stage.${stage}`),
+          }))}
+          selected={facets.stages.filter((stage) => stageOptions.includes(stage))}
+          onChange={(chosen) => setFacets({ stages: chosen as OrderStage[] })}
+          testId={`${testId}.filter.stage`}
+        />
+      )}
+      <DayFacet
+        label={tp(bills ? 'purchasing.desk.filter.billed' : 'purchasing.desk.filter.ordered')}
+        value={facets.on}
+        onChange={(on) => setFacets({ on })}
+        now={Date.now()}
+        testId={`${testId}.filter.on`}
+      />
+    </>
+  );
+  const empty = bills ? (
+    <StatePanel icon={ShoppingCart} title={tp('purchasing.bill.listEmpty')} />
+  ) : filter === 'done' ? (
+    <StatePanel icon={ShoppingCart} title={tp('purchasing.list.emptyDone')} />
+  ) : (
+    <StatePanel
+      icon={ShoppingCart}
+      title={tp('purchasing.list.emptyOpen')}
+      hint={tp('purchasing.desk.emptyHint')}
+      action={
+        <Button
+          label={tp('purchasing.list.new')}
+          variant="primary"
+          icon={Plus}
+          onClick={() => setTask('new')}
+        />
+      }
+    />
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={`${testId}.orders`}>
@@ -170,7 +278,18 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
             )}
           </>
         }
-      />
+      >
+        <SearchField
+          value={view.text}
+          onChange={(text) => setView(changeView(view, { text }))}
+          placeholder={tp('purchasing.desk.searchHint')}
+          label={t('core.action.search')}
+          clearLabel={t('core.table.clearSearch')}
+          shortcut="/"
+          className="w-full max-w-[520px]"
+          testId={`${testId}.search`}
+        />
+      </PageHeader>
 
       <div className="flex min-h-0 flex-1 flex-col @container">
         <div
@@ -194,8 +313,13 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
                 ]}
                 value={bills ? 'bills' : filter === 'bills' ? 'open' : filter}
                 onChange={(next) => {
-                  setPages(1);
                   setSelectedId(null);
+                  // A stage the other tab cannot hold is dropped, so no hidden filter empties it.
+                  if (next !== 'bills') {
+                    setOrdersView(
+                      changeView(ordersView, { facets: { ...ordersView.facets, stages: [] } }),
+                    );
+                  }
                   onFilterChange(next);
                 }}
                 label={tp('purchasing.list.title')}
@@ -203,49 +327,50 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
               />
             </div>
             {bills ? (
-              <DataTable
+              <TableFrame
+                key="bills"
+                view={billsView}
+                onViewChange={setBillsView}
                 rows={loadedBills?.rows ?? []}
+                total={loadedBills?.total ?? null}
+                stale={stale}
+                loading={billQuery.status === 'loading'}
                 columns={columnsOfBills}
+                lockedColumns={['supplier']}
                 getRowId={(row) => row.id}
+                filters={facetFilters}
+                filtered={facetCount(billsView.facets) > 0}
+                onResetFilters={() => setBillsView(changeView(billsView, { facets: NO_FACETS }))}
                 selectedId={selectedId}
                 onSelect={(row) => open(row.id)}
                 onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
                 bodyRef={tableRef}
-                sortable={false}
-                scrollKey="bills"
-                onEndReached={() => {
-                  if (loadedBills?.hasMore === true) setPages((n) => n + 1);
-                }}
-                loading={billQuery.status === 'loading'}
-                empty={
-                  billQuery.status === 'unauthorized' || billQuery.status === 'error' ? (
-                    <QueryPanel query={billQuery} onRetry={() => setReloadNonce((n) => n + 1)}>
-                      {() => null}
-                    </QueryPanel>
-                  ) : (
-                    empty
-                  )
-                }
+                empty={empty}
+                problem={problem}
                 label={tp('purchasing.bill.tab')}
                 testId={`${testId}.bills`}
               />
             ) : (
-              <DataTable
-                rows={stale ? [] : (loaded?.rows ?? [])}
+              <TableFrame
+                key="orders"
+                view={ordersView}
+                onViewChange={setOrdersView}
+                rows={loaded?.rows ?? []}
+                total={loaded?.total ?? null}
+                stale={stale}
+                loading={query.status === 'loading'}
                 columns={columns}
+                lockedColumns={['supplier']}
                 getRowId={(row) => row.id}
+                filters={facetFilters}
+                filtered={facetCount(ordersView.facets) > 0}
+                onResetFilters={() => setOrdersView(changeView(ordersView, { facets: NO_FACETS }))}
                 selectedId={selectedId}
                 onSelect={(row) => open(row.id)}
                 onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
                 bodyRef={tableRef}
-                // Pages load as the table scrolls, so the headers do not sort what is loaded so far.
-                sortable={false}
-                scrollKey={filter}
-                onEndReached={() => {
-                  if (loaded?.hasMore === true && !stale) setPages((n) => n + 1);
-                }}
-                loading={query.status === 'loading'}
                 empty={empty}
+                problem={problem}
                 label={tp('purchasing.list.title')}
                 testId={`${testId}.table`}
               />
@@ -271,7 +396,6 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
                   orderId={selectedId}
                   onClose={closePane}
                   onOpenBill={(billId) => {
-                    setPages(1);
                     setNotice(null);
                     onFilterChange('bills');
                     setSelectedId(billId);
@@ -365,6 +489,7 @@ function orderColumns(): Column[] {
       accessorFn: (row) => row.stage,
       header: tp('purchasing.desk.col.stage'),
       meta: { track: 'minmax(170px, auto)' },
+      enableSorting: false,
       cell: ({ row: { original: row } }) => {
         const chip = STAGE_CHIP[row.stage];
         return (

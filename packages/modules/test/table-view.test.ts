@@ -2,13 +2,9 @@
 // sorts with empty values last, the page cuts, and any change but a page turn starts on page 1.
 import { describe, expect, test } from 'vitest';
 
-import {
-  changeView,
-  pageWindow,
-  sortBy,
-  tableView,
-  viewRows,
-} from '../src/screen-kit/table-view.js';
+import { sortBy } from '@bolusi/core';
+
+import { changeView, pageWindow, tableView, viewRows } from '../src/screen-kit/table-view.js';
 
 interface Part {
   readonly id: string;

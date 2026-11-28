@@ -4,7 +4,13 @@
 import { sql } from 'kysely';
 import { z } from 'zod';
 
-import type { QueryContext, QueryPage } from '@bolusi/core';
+import {
+  tableInputShape,
+  tablePage,
+  type QueryContext,
+  type QueryPage,
+  type TablePage,
+} from '@bolusi/core';
 
 import { deviceCode } from '../../shared/device-code.js';
 import { userNames } from '../../shared/user-names.js';
@@ -141,26 +147,55 @@ function toRow(raw: RawBill, total: number): BillRow {
 export const BILL_FILTERS = ['open', 'all'] as const;
 export type BillFilter = (typeof BILL_FILTERS)[number];
 
+/** The columns a bills table sorts by. */
+export const BILL_COLUMNS = ['supplier', 'bill', 'due', 'total'] as const;
+export type BillColumn = (typeof BILL_COLUMNS)[number];
+
 export const listBillsInput = z
   .object({
     /** `open`: standing bills; `all` adds the void ones. */
     filter: z.enum(BILL_FILTERS).default('open'),
     /** Only one order's bills. */
     orderId: z.string().min(1).nullable().default(null),
+    /** Any of these suppliers. */
+    supplierIds: z.array(z.string().min(1)).max(100).default([]),
+    /** Billed on or after / before these times. */
+    billedFrom: z.number().int().nullable().default(null),
+    billedBefore: z.number().int().nullable().default(null),
+    ...tableInputShape(BILL_COLUMNS),
     limit: z.number().int().min(1).max(500).default(100),
-    offset: z.number().int().min(0).default(0),
   })
   .strict();
 export type ListBillsInput = z.input<typeof listBillsInput>;
+
+/** How a bills table searches and sorts: by supplier, its own and the supplier's numbers. */
+export const BILL_TABLE = {
+  id: (bill: BillRow) => bill.id,
+  document: (bill: BillRow) => ({
+    text: [bill.supplierName],
+    codes: [bill.billNumber, bill.supplierRef, bill.orderNumber],
+  }),
+  value: (bill: BillRow, column: BillColumn) =>
+    column === 'supplier'
+      ? bill.supplierName
+      : column === 'bill'
+        ? bill.billedOn
+        : column === 'due'
+          ? bill.dueOn
+          : bill.total,
+};
 
 /** Open bills by when they fall due (the soonest first, no date last); all of them newest first. */
 export async function listBillsHandler(
   input: z.output<typeof listBillsInput>,
   qctx: Qctx,
-): Promise<QueryPage<BillRow>> {
+): Promise<TablePage<BillRow>> {
   let query = storeBills(qctx);
   if (input.filter === 'open') query = query.where('b.status', '=', 'open');
   if (input.orderId !== null) query = query.where('b.orderId', '=', input.orderId);
+  if (input.supplierIds.length > 0) query = query.where('b.supplierId', 'in', input.supplierIds);
+  if (input.billedFrom !== null) query = query.where('b.billedOn', '>=', input.billedFrom);
+  if (input.billedBefore !== null) query = query.where('b.billedOn', '<', input.billedBefore);
   const raws = await (
     input.filter === 'open'
       ? query
@@ -168,13 +203,8 @@ export async function listBillsHandler(
           .orderBy('b.dueOn')
           .orderBy('b.billedOn')
       : query.orderBy('b.billedOn', 'desc').orderBy('b.createdAt', 'desc')
-  )
-    // One past the page says whether another follows.
-    .limit(input.limit + 1)
-    .offset(input.offset)
-    .execute();
-  const more = raws.length > input.limit;
-  if (more) raws.pop();
+  ).execute();
+  // Every bill the facets keep: search and a column's sort rank them all before the page is cut.
   const lines = await billLines(
     qctx,
     raws.map((raw) => raw.id),
@@ -188,7 +218,7 @@ export async function listBillsHandler(
       ),
     ),
   );
-  return { rows, nextCursor: more ? String(input.offset + input.limit) : null };
+  return tablePage(rows, input, BILL_TABLE);
 }
 
 export const listBillsQuery = {

@@ -213,6 +213,7 @@
       "thisMonth": "This month",
       "empty": "Nothing matches these filters"
     },
-    "noMatches": "Nothing matches this search"
+    "noMatches": "Nothing matches this search",
+    "clearSearch": "Clear search"
   }
 }
