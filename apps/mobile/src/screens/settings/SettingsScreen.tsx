@@ -16,9 +16,9 @@ import {
   FactGrid,
   Icon,
   ListRow,
+  Rows,
   SyncChip,
   TextButton,
-  border,
   color,
   radius,
   size,
@@ -382,8 +382,12 @@ function Section({
       <Text style={styles.sectionTitle} accessibilityRole="header" testID={testID}>
         {title}
       </Text>
-      {above === undefined || above === null ? null : <View style={styles.rows}>{above}</View>}
-      <View style={rows ? styles.rows : styles.plain}>{children}</View>
+      {above === undefined || above === null ? null : <Rows style={styles.rows}>{above}</Rows>}
+      {rows ? (
+        <Rows style={styles.rows}>{children}</Rows>
+      ) : (
+        <View style={styles.plain}>{children}</View>
+      )}
     </View>
   );
 }
@@ -411,11 +415,7 @@ const styles = StyleSheet.create({
   whoMeta: { ...type.bodySm, color: color.textMuted },
   section: { marginTop: space.xl },
   sectionTitle: { ...type.bodyBold, color: color.text, marginBottom: space.xs },
-  rows: {
-    marginHorizontal: -space.lg,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
-  },
+  rows: { marginHorizontal: -space.lg },
   plain: { marginTop: space.sm },
   rowIcon: {
     width: size.avatarRow,

@@ -7,7 +7,6 @@ import { formatDate, formatDateTime, t } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
-  border,
   Button,
   Card,
   Chip,
@@ -20,6 +19,7 @@ import {
   TextButton,
   Timeline,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { Linking, Platform, Share, StyleSheet, View } from 'react-native';
@@ -284,26 +284,28 @@ export function OrderDetail({
                 }
                 testID={`${testID}.lines`}
               >
-                {row.lines.map((line) => (
-                  <View
-                    key={line.itemId}
-                    style={styles.line}
-                    testID={`${testID}.line.${line.itemId}`}
-                  >
-                    <Text style={styles.lineName}>{line.name}</Text>
-                    <Text
-                      style={[styles.lineQty, line.received > line.qty ? styles.over : null]}
-                      testID={`${testID}.line.${line.itemId}.qty`}
+                <Rows>
+                  {row.lines.map((line) => (
+                    <View
+                      key={line.itemId}
+                      style={styles.line}
+                      testID={`${testID}.line.${line.itemId}`}
                     >
-                      {showsReceived(row.stage)
-                        ? tp('purchasing.order.receivedOf', {
-                            received: line.received,
-                            qty: line.qty,
-                          })
-                        : tp('purchasing.order.qty', { qty: line.qty })}
-                    </Text>
-                  </View>
-                ))}
+                      <Text style={styles.lineName}>{line.name}</Text>
+                      <Text
+                        style={[styles.lineQty, line.received > line.qty ? styles.over : null]}
+                        testID={`${testID}.line.${line.itemId}.qty`}
+                      >
+                        {showsReceived(row.stage)
+                          ? tp('purchasing.order.receivedOf', {
+                              received: line.received,
+                              qty: line.qty,
+                            })
+                          : tp('purchasing.order.qty', { qty: line.qty })}
+                      </Text>
+                    </View>
+                  ))}
+                </Rows>
               </Section>
             </>
           }
@@ -386,8 +388,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     paddingVertical: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineName: { ...type.body, color: color.text, flex: 1 },
   lineQty: { ...type.bodySm, color: color.textMuted, ...numeric },

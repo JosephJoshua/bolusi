@@ -377,6 +377,22 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  /** Dividers sit between rows only: none above the first or under the last. */
+  Rows: [
+    {
+      id: 'rows',
+      render: (l) => (
+        <componentInventory.Rows>
+          <componentInventory.ListRow primaryText={l.primaryText} />
+          <componentInventory.ListRow primaryText={l.primaryText} secondaryText={l.secondaryText} />
+          <componentInventory.ListRow primaryText={l.primaryText} />
+        </componentInventory.Rows>
+      ),
+    },
+  ],
+
+  RowDivider: [{ id: 'divider', render: () => <componentInventory.RowDivider /> }],
+
   ListRow: [
     { id: 'static', render: (l) => <componentInventory.ListRow primaryText={l.primaryText} /> },
     {

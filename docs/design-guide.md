@@ -94,6 +94,8 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   borders. Dividers are hairlines.
 - Rows in a list are edge to edge, with no chevrons when the whole row is
   tappable.
+- Dividers sit between rows only, never under the last row. Rows draw none
+  themselves; `Rows` and `List` draw them (lint: `bolusi/no-row-divider`).
 - Nothing touches. Every label sits `space.xs` above its field, fields in a
   group are `space.md` apart, groups and sections `space.xl` apart, and the
   primary action lives in the fixed bottom bar, never glued under the last

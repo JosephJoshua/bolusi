@@ -14,12 +14,12 @@ import {
   ConfirmSheet,
   TextButton,
   Timeline,
-  border,
   color,
   space,
   type,
   Text,
   numeric,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -221,13 +221,15 @@ export function TransferDetail({
                 }
                 testID={`${testID}.lines`}
               >
-                {row.lines.map((line) => (
-                  <TransferLine
-                    key={line.itemId}
-                    line={line}
-                    testID={`${testID}.line.${line.itemId}`}
-                  />
-                ))}
+                <Rows>
+                  {row.lines.map((line) => (
+                    <TransferLine
+                      key={line.itemId}
+                      line={line}
+                      testID={`${testID}.line.${line.itemId}`}
+                    />
+                  ))}
+                </Rows>
               </Section>
             </>
           }
@@ -302,8 +304,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: space.md,
     paddingVertical: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineName: { ...type.body, color: color.text, flex: 1 },
   lineQty: { alignItems: 'flex-end', gap: space.xs },

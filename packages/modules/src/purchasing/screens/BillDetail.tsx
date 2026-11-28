@@ -10,7 +10,6 @@ import {
   AmountRow,
   AppShell,
   Banner,
-  border,
   Card,
   Chip,
   color,
@@ -21,6 +20,7 @@ import {
   TextButton,
   TextInput,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -171,48 +171,52 @@ export function BillDetail({
           }
           testID={`${testID}.lines`}
         >
-          {row.lines.map((line, i) => (
-            <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-              <View style={styles.lineText}>
-                <Text style={styles.lineName}>{line.name}</Text>
-                <Text style={styles.linePrice}>
-                  {tp('purchasing.bill.linePrice', {
-                    qty: line.qty,
-                    price: formatMoney(line.unitPrice),
-                  })}
-                </Text>
-                {hints[i] === null ? null : (
-                  <Text style={styles.lineHint} testID={`${testID}.line.${line.itemId}.hint`}>
-                    {hints[i]}
+          <Rows>
+            {row.lines.map((line, i) => (
+              <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
+                <View style={styles.lineText}>
+                  <Text style={styles.lineName}>{line.name}</Text>
+                  <Text style={styles.linePrice}>
+                    {tp('purchasing.bill.linePrice', {
+                      qty: line.qty,
+                      price: formatMoney(line.unitPrice),
+                    })}
                   </Text>
-                )}
+                  {hints[i] === null ? null : (
+                    <Text style={styles.lineHint} testID={`${testID}.line.${line.itemId}.hint`}>
+                      {hints[i]}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.lineAmount}>{formatMoney(line.amount)}</Text>
               </View>
-              <Text style={styles.lineAmount}>{formatMoney(line.amount)}</Text>
-            </View>
-          ))}
-          <View style={styles.totals}>
-            {row.charges === 0 ? null : (
-              <>
-                <AmountRow
-                  label={tp('purchasing.bill.subtotal')}
-                  value={parts}
-                  testID={`${testID}.parts`}
-                />
-                <AmountRow
-                  label={tp('purchasing.bill.charges')}
-                  value={row.charges}
-                  testID={`${testID}.charges`}
-                />
-              </>
-            )}
-            <AmountRow
-              label={tp('purchasing.bill.total')}
-              value={row.total}
-              strong
-              tone={open ? 'text' : 'struck'}
-              testID={`${testID}.total`}
-            />
-          </View>
+            ))}
+            <Rows style={styles.totals}>
+              {row.charges === 0
+                ? null
+                : [
+                    <AmountRow
+                      label={tp('purchasing.bill.subtotal')}
+                      value={parts}
+                      testID={`${testID}.parts`}
+                      key="parts"
+                    />,
+                    <AmountRow
+                      key="charges"
+                      label={tp('purchasing.bill.charges')}
+                      value={row.charges}
+                      testID={`${testID}.charges`}
+                    />,
+                  ]}
+              <AmountRow
+                label={tp('purchasing.bill.total')}
+                value={row.total}
+                strong
+                tone={open ? 'text' : 'struck'}
+                testID={`${testID}.total`}
+              />
+            </Rows>
+          </Rows>
         </Section>
 
         <Text style={styles.recorded}>
@@ -316,8 +320,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: space.md,
     paddingVertical: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineText: { flex: 1, gap: space.xs },
   lineName: { ...type.body, color: color.text },

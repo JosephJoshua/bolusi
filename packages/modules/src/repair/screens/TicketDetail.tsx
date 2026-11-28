@@ -28,6 +28,7 @@ import {
   Timeline,
   touch,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -586,30 +587,32 @@ export function TicketDetail({
             onClose={() => setMoreOpen(false)}
             testID={`${testID}.more`}
           >
-            {moreActions(ticket).map((item) => (
-              <ListRow
-                key={item.key}
-                primaryText={item.label}
-                onPress={() => {
-                  setMoreOpen(false);
-                  item.onPress();
-                }}
-                testID={`${testID}.action.${item.key}`}
-              />
-            ))}
-            {/* Cancelling and taking a handover back are looked for here too; they also stay at
+            <Rows>
+              {moreActions(ticket).map((item) => (
+                <ListRow
+                  key={item.key}
+                  primaryText={item.label}
+                  onPress={() => {
+                    setMoreOpen(false);
+                    item.onPress();
+                  }}
+                  testID={`${testID}.action.${item.key}`}
+                />
+              ))}
+              {/* Cancelling and taking a handover back are looked for here too; they also stay at
                 the end of the page, apart from the next step. */}
-            {finals.map((action) => (
-              <ListRow
-                key={action}
-                primaryText={tn(actionKey(action, ticket.technicianId))}
-                onPress={() => {
-                  setMoreOpen(false);
-                  perform(action, ticket);
-                }}
-                testID={`${testID}.more.${action}`}
-              />
-            ))}
+              {finals.map((action) => (
+                <ListRow
+                  key={action}
+                  primaryText={tn(actionKey(action, ticket.technicianId))}
+                  onPress={() => {
+                    setMoreOpen(false);
+                    perform(action, ticket);
+                  }}
+                  testID={`${testID}.more.${action}`}
+                />
+              ))}
+            </Rows>
           </Sheet>
         ) : (
           photos.overlay
