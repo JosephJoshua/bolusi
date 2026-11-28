@@ -32,10 +32,18 @@ export function CountStep({
   onRegisterDiscardGuard,
   testID = 'inventory.countStep',
 }: CountStepProps): React.JSX.Element {
-  const { runner, counted, setCounted, note, setNote, caption, dirty, save } = useCountStock(
-    part,
-    onDone,
-  );
+  const {
+    runner,
+    counted,
+    setCounted,
+    note,
+    setNote,
+    caption,
+    dirty,
+    needsReason,
+    reasonMissing,
+    save,
+  } = useCountStock(part, onDone);
   const discard = useDiscardConfirm({
     dirty,
     copy: {
@@ -75,9 +83,10 @@ export function CountStep({
           testID={`${testID}.counted`}
         />
         <TextInput
-          label={ti('inventory.count.note')}
+          label={ti(needsReason ? 'inventory.count.reason' : 'inventory.count.note')}
           value={note}
           onChangeText={setNote}
+          errorMessage={reasonMissing ? ti('inventory.count.reasonMissing') : undefined}
           maxLength={MAX_NOTE}
           multiline
           testID={`${testID}.note`}

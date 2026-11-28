@@ -19,6 +19,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
+import { onBoard } from './desk.js';
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -43,14 +44,14 @@ async function renderApp(as?: string): Promise<void> {
       <App />
     </TooltipProvider>,
   );
-  await screen.findByTestId('repair.desk.board');
+  await onBoard();
   if (as !== undefined) await switchTo(as);
 }
 
 async function switchTo(name: string): Promise<void> {
   fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name }));
-  await screen.findByTestId('repair.desk.board');
+  await onBoard();
 }
 
 async function openParts(): Promise<void> {
@@ -125,6 +126,24 @@ describe('parts on the PC', () => {
     await waitFor(() => expect(byTestId('inventory.desk.part.stock').textContent).toBe('7'));
     expect(screen.getByText('Stok dikoreksi.')).toBeTruthy();
     expect(byTestId('inventory.desk.part.history').textContent).toContain('Dikoreksi menjadi 7');
+  });
+
+  it('asks why when a correction lowers the stock', async () => {
+    await renderApp(OWNER);
+    await openParts();
+    fireEvent.change(byTestId('inventory.desk.search'), { target: { value: '6941059648208' } });
+    fireEvent.submit(byTestId('inventory.desk.search').closest('form')!);
+    await screen.findByTestId('inventory.desk.part');
+    fireEvent.click(await screen.findByTestId('inventory.desk.part.count'));
+    await screen.findByTestId('inventory.desk.count');
+    fireEvent.change(byTestId('inventory.desk.count.counted'), { target: { value: '0' } });
+    fireEvent.click(byTestId('inventory.desk.count.submit'));
+    expect(await screen.findByText('Tulis alasan stok berkurang.')).toBeTruthy();
+    expect(screen.queryByTestId('inventory.desk.count')).not.toBeNull();
+    fireEvent.change(byTestId('inventory.desk.count.note'), { target: { value: 'Pecah semua' } });
+    fireEvent.click(byTestId('inventory.desk.count.submit'));
+    await waitFor(() => expect(screen.queryByTestId('inventory.desk.count')).toBeNull());
+    await waitFor(() => expect(byTestId('inventory.desk.part.stock').textContent).toBe('0'));
   });
 
   it('adds an item with its stock and opens it beside the list', async () => {

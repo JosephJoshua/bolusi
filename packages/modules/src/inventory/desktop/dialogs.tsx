@@ -278,10 +278,18 @@ export interface CountDialogProps {
  * matching count is one Enter, and the difference is said as it changes.
  */
 export function CountDialog({ part, onClose, onDone }: CountDialogProps): React.JSX.Element {
-  const { runner, counted, setCounted, note, setNote, caption, dirty, save } = useCountStock(
-    part,
-    onDone,
-  );
+  const {
+    runner,
+    counted,
+    setCounted,
+    note,
+    setNote,
+    caption,
+    dirty,
+    needsReason,
+    reasonMissing,
+    save,
+  } = useCountStock(part, onDone);
   return (
     <TaskDialog
       title={ti('inventory.count.title')}
@@ -304,9 +312,10 @@ export function CountDialog({ part, onClose, onDone }: CountDialogProps): React.
         testId="inventory.desk.count.counted"
       />
       <TextArea
-        label={ti('inventory.count.note')}
+        label={ti(needsReason ? 'inventory.count.reason' : 'inventory.count.note')}
         value={note}
         onChange={(event) => setNote(event.target.value)}
+        error={reasonMissing ? ti('inventory.count.reasonMissing') : undefined}
         maxLength={MAX_NOTE}
         rows={2}
         data-testid="inventory.desk.count.note"

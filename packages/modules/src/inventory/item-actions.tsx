@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useActionRunner, type ActionRunner } from '../screen-kit/index.js';
 
+import { countNeedsReason } from './constants.js';
 import { ti } from './i18n.js';
 import { itemDetails, type ItemDetailRow, type ItemRow } from './queries.js';
 import { useInventoryRuntime } from './runtime.js';
@@ -21,6 +22,10 @@ export interface CountStockForm {
   /** The record and the difference in words, said under the count as it changes. */
   readonly caption: string;
   readonly dirty: boolean;
+  /** The count lowers stock, so the note is a required reason. */
+  readonly needsReason: boolean;
+  /** A save was tried without the reason it needs. */
+  readonly reasonMissing: boolean;
   readonly save: () => void;
 }
 
@@ -32,8 +37,14 @@ export function useCountStock(part: ItemRow, onDone: () => void): CountStockForm
   const start = Math.max(0, recorded);
   const [counted, setCounted] = useState(start);
   const [note, setNote] = useState('');
+  const [noReason, setNoReason] = useState(false);
+  const needsReason = countNeedsReason(counted, recorded);
 
   const save = (): void => {
+    if (needsReason && note.trim() === '') {
+      setNoReason(true);
+      return;
+    }
     void runner
       .run(() =>
         runtime.run('countStock', {
@@ -53,7 +64,10 @@ export function useCountStock(part: ItemRow, onDone: () => void): CountStockForm
     counted,
     setCounted,
     note,
-    setNote,
+    setNote: (next) => {
+      setNote(next);
+      setNoReason(false);
+    },
     difference,
     caption: `${ti('inventory.count.recorded', { count: recorded })} · ${
       difference === 0
@@ -63,6 +77,8 @@ export function useCountStock(part: ItemRow, onDone: () => void): CountStockForm
           : ti('inventory.count.less', { count: -difference })
     }`,
     dirty: counted !== start || note !== '',
+    needsReason,
+    reasonMissing: needsReason && noReason,
     save,
   };
 }

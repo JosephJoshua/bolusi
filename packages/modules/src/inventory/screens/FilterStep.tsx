@@ -4,7 +4,17 @@
  * carry, most used first, so a filter never offers something that finds nothing. The phones a
  * part fits are left to search, which already matches them typo and all.
  */
-import { ChoiceChips, SegmentedControl, color, space, type, Text } from '@bolusi/ui';
+import {
+  ChoiceChips,
+  Icon,
+  ListRow,
+  SegmentedControl,
+  Text,
+  color,
+  size,
+  space,
+  type,
+} from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -24,6 +34,8 @@ export interface FilterStepProps {
   readonly filter: ListFilter;
   readonly onApply: (filter: ListFilter) => void;
   readonly onCancel: () => void;
+  /** Set up the categories the list is narrowed by; for whoever may. */
+  readonly onManageCategories?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -32,6 +44,7 @@ export function FilterStep({
   filter,
   onApply,
   onCancel,
+  onManageCategories,
   testID = 'inventory.filterStep',
 }: FilterStepProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
@@ -93,6 +106,14 @@ export function FilterStep({
             onChange={(next) => setDraft((current) => ({ ...current, tags: next }))}
             multiple
             testID={`${testID}.tags`}
+          />
+        )}
+        {onManageCategories === undefined ? null : (
+          <ListRow
+            leading={<Icon name="settings" size={size.iconInline} color={color.text} />}
+            primaryText={ti('inventory.list.manageCategories')}
+            onPress={onManageCategories}
+            testID={`${testID}.categories`}
           />
         )}
       </View>

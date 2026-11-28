@@ -25,6 +25,7 @@ import {
   MAX_PART_FITS,
   MAX_UNIT_COST,
   PART_USE_KINDS,
+  countNeedsReason,
   type StockSourceKind,
 } from './constants.js';
 
@@ -385,6 +386,12 @@ export async function countStockHandler(
     }
     seen.add(count.itemId);
     const part = await loadPart(ctx, count.itemId);
+    if (countNeedsReason(count.counted, part.onHand) && input.note === null) {
+      throw new DomainError('VALIDATION_FAILED', {
+        field: 'note',
+        issue: 'required to lower stock',
+      });
+    }
     const movementId = ctx.newId();
     movementIds.push(movementId);
     ops.push(

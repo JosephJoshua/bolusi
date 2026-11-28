@@ -6,6 +6,7 @@ import {
   Chip,
   Fact,
   FactGrid,
+  OverflowText,
   Section,
   type PhotoLabels,
   type PhotoState,
@@ -216,5 +217,25 @@ export function DeviceSpecs({
         ))}
       </FactGrid>
     </Section>
+  );
+}
+
+export function TwoLines({
+  first,
+  second,
+  strong = false,
+}: {
+  readonly first: string;
+  readonly second: string;
+  readonly strong?: boolean;
+}): React.JSX.Element {
+  return (
+    <span className="block min-w-0">
+      <OverflowText
+        text={first}
+        className={`text-body ${strong ? 'font-semibold' : ''} text-text`}
+      />
+      {second === '' ? null : <OverflowText text={second} className="text-small text-text-muted" />}
+    </span>
   );
 }

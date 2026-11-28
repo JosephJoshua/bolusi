@@ -112,6 +112,8 @@
     "counted": "On the shelf",
     "recorded": "Recorded {count}",
     "note": "Note (optional)",
+    "reason": "Why there are fewer",
+    "reasonMissing": "Say why there are fewer.",
     "save": "Save correction",
     "more": "{count} more",
     "less": "{count} fewer",

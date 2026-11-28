@@ -21,6 +21,7 @@ import {
   type RepairRuntime,
   type StepBack,
 } from '@bolusi/modules/repair/screens';
+import { usePlaceOpen, type PlaceOpen } from '@bolusi/modules/screen-kit';
 import { ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -40,8 +41,17 @@ type RepairView =
       readonly ticketId: string;
       readonly print?: true;
       readonly justOpened?: boolean;
+      /** Opened on this request's answer (from Perlu dicek). */
+      readonly answer?: string;
+      /** Backing out of it goes back to the place that opened it, not to the board. */
+      readonly returns?: true;
     }
   | { readonly kind: 'handover'; readonly ticketId: string };
+
+/** What another place may open here: a servisan on one of its requests, or a board queue. */
+export type RepairOpenTarget =
+  | { readonly kind: 'request'; readonly ticketId: string; readonly requestId: string }
+  | { readonly kind: 'board'; readonly view: BoardView };
 
 export interface RepairHomeProps {
   readonly runtime: RepairRuntime;
@@ -61,6 +71,10 @@ export interface RepairHomeProps {
    */
   readonly intakeStartedBy?: string | null | undefined;
   readonly onDraftChange?: ((draft: RepairDraft | null) => void) | undefined;
+  /** Another place asks to show something here; a new nonce is a new ask. */
+  readonly open?: PlaceOpen<RepairOpenTarget> | null | undefined;
+  /** Backing out of a servisan another place opened: the shell goes back to that place. */
+  readonly onReturn?: (() => void) | undefined;
 }
 
 export function RepairHome({
@@ -73,6 +87,8 @@ export function RepairHome({
   restoredDraft,
   intakeStartedBy = null,
   onDraftChange,
+  open = null,
+  onReturn,
 }: RepairHomeProps): React.JSX.Element {
   // Read once at mount: the lock unmounts this surface and the unlock remounts it.
   const [view, setView] = useState<RepairView>(() =>
@@ -112,6 +128,30 @@ export function RepairHome({
     else proceed();
   }, []);
 
+  // An ask from another place. A half-done step here asks before it is replaced.
+  usePlaceOpen(open, (target) =>
+    runLeave(() => {
+      if (target.kind === 'board') {
+        setBoardView(target.view);
+        setView({ kind: 'board' });
+      } else {
+        setView({
+          kind: 'ticket',
+          ticketId: target.ticketId,
+          answer: target.requestId,
+          returns: true,
+        });
+      }
+    }),
+  );
+  const returnRef = useRef(onReturn);
+  returnRef.current = onReturn;
+  /** Leaves the open servisan: to the place that opened it, or to the board. */
+  const closeTicket = useCallback((returns: boolean): void => {
+    setView({ kind: 'board' });
+    if (returns) returnRef.current?.();
+  }, []);
+
   useEffect(() => {
     if (view.kind === 'board') {
       onRegisterSurfaceNav?.(null);
@@ -120,7 +160,7 @@ export function RepairHome({
     const backTo: () => void =
       view.kind === 'handover'
         ? () => setView({ kind: 'ticket', ticketId: view.ticketId })
-        : () => setView({ kind: 'board' });
+        : () => closeTicket(view.kind === 'ticket' && view.returns === true);
     onRegisterSurfaceNav?.({
       handleBack: () => {
         if (stepBackRef.current?.() === true) return true;
@@ -132,7 +172,7 @@ export function RepairHome({
       listBeside: split,
     });
     return () => onRegisterSurfaceNav?.(null);
-  }, [view, split, onRegisterSurfaceNav, runLeave]);
+  }, [view, split, onRegisterSurfaceNav, runLeave, closeTicket]);
 
   const board = (
     <RepairBoard
@@ -166,14 +206,15 @@ export function RepairHome({
     view.kind === 'ticket' ? (
       <TicketDetail
         // A new ticket is a new screen: its open step and scroll position stay with the last one.
-        key={view.ticketId}
+        key={`${view.ticketId}:${view.answer ?? ''}`}
         ticketId={view.ticketId}
         printFirst={view.print === true}
+        answerRequestId={view.answer}
         chrome={chrome}
         now={now}
         hideBack={split}
         justOpened={view.justOpened === true}
-        onBack={() => setView({ kind: 'board' })}
+        onBack={() => closeTicket(view.returns === true)}
         onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
         onStartClaim={(draft) => setView({ kind: 'intake', draft })}
         onOpenTicket={(ticketId) => setView({ kind: 'ticket', ticketId })}
