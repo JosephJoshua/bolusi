@@ -11,6 +11,7 @@ import {
   askReducer,
   setupFailureKey,
   setupNewFeedbackKey,
+  setupDoneKey,
   setupNewPromptKey,
   setupReducer,
   setupStart,
@@ -131,7 +132,7 @@ function ApprovalPinAskDialog({
         proofKinds={proofKinds.filter((kind) => kind !== 'current')}
         owners={owners}
         openAfter
-        onClose={(saved) => onDone(saved)}
+        onClose={(approved) => onDone(approved)}
       />
     );
   }
@@ -245,7 +246,7 @@ export function ApprovalPinSetupDialog({
   readonly proofKinds: readonly ProofKind[];
   readonly owners: readonly ConfirmingOwner[];
   readonly openAfter?: boolean;
-  readonly onClose: (saved: boolean) => void;
+  readonly onClose: (approved: boolean) => void;
 }): React.JSX.Element {
   const [phase, dispatch] = useReducer(setupReducer, proofKinds, setupStart);
   const portRef = useRef(port);
@@ -261,8 +262,10 @@ export function ApprovalPinSetupDialog({
         if (!cancelled) dispatch({ kind: 'failed', failure: approvalPinFailure(error) });
         return;
       }
-      if (openAfter) await portRef.current.open(phase.pin).catch(() => 'failed' as const);
-      if (!cancelled) dispatch({ kind: 'saved' });
+      // From a decision, it goes ahead only if a session opened with the new PIN.
+      const approved =
+        !openAfter || (await portRef.current.open(phase.pin).catch(() => 'failed')) === 'opened';
+      if (!cancelled) dispatch({ kind: 'saved', approved });
     })();
     return () => {
       cancelled = true;
@@ -271,10 +274,11 @@ export function ApprovalPinSetupDialog({
 
   const saving = phase.kind === 'saving';
   const done = phase.kind === 'done';
+  const approved = phase.kind === 'done' && phase.approved;
   return (
     <Dialog
       open
-      onRequestClose={() => (saving ? undefined : onClose(done))}
+      onRequestClose={() => (saving ? undefined : onClose(approved))}
       title={t('auth.approval.setup.title')}
       closeLabel={t('core.action.close')}
       size="sm"
@@ -285,7 +289,7 @@ export function ApprovalPinSetupDialog({
             label={t('auth.pin.staff.finish')}
             variant="primary"
             autoFocus
-            onClick={() => onClose(true)}
+            onClick={() => onClose(approved)}
             data-testid="desktop.approvalSetup.finish"
           />
         ) : undefined
@@ -374,7 +378,7 @@ function SetupBody({
         >
           <CircleCheck size={40} strokeWidth={1.5} aria-hidden className="text-success" />
           <p className="text-heading font-semibold text-text">{t('auth.approval.setup.done')}</p>
-          <p className="text-body text-text-muted">{t('auth.approval.setup.doneBody')}</p>
+          <p className="text-body text-text-muted">{t(setupDoneKey(phase))}</p>
         </div>
       );
   }

@@ -522,7 +522,8 @@
       "rateLimited": "Too many wrong tries. Try again later.",
       "failed": "The approval PIN was not saved. Try again.",
       "done": "Approval PIN saved",
-      "doneBody": "Used when you approve cancellations, discounts and other decisions on shared devices."
+      "doneBody": "Used when you approve cancellations, discounts and other decisions on shared devices.",
+      "doneNotApproved": "The decision was not approved yet. Try it again with the new approval PIN."
     },
     "clear": {
       "action": "Remove approval PIN",

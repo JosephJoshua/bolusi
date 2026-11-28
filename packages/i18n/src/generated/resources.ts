@@ -721,6 +721,7 @@ const source = {
           done: 'PIN persetujuan tersimpan',
           doneBody:
             'Dipakai saat Anda menyetujui pembatalan, diskon, dan keputusan lain di perangkat bersama.',
+          doneNotApproved: 'Keputusan tadi belum disetujui. Ulangi dengan PIN persetujuan baru.',
         },
         clear: {
           action: 'Hapus PIN persetujuan',
@@ -1635,6 +1636,8 @@ export const resources = {
             done: 'Approval PIN saved',
             doneBody:
               'Used when you approve cancellations, discounts and other decisions on shared devices.',
+            doneNotApproved:
+              'The decision was not approved yet. Try it again with the new approval PIN.',
           },
           clear: {
             action: 'Remove approval PIN',

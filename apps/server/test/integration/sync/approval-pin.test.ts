@@ -27,10 +27,10 @@ const APPROVAL = '730264';
 const NIL_DEVICE = '00000000-0000-0000-0000-000000000000';
 const URL = 'http://srv.test';
 
-async function setSignInPin(tenantId: string, userId: string): Promise<void> {
+async function setSignInPin(tenantId: string, userId: string, pin = SIGN_IN_PIN): Promise<void> {
   const verifier = await buildPinVerifier(
     serverCryptoPort,
-    utf8ToBytes(SIGN_IN_PIN),
+    utf8ToBytes(pin),
     FLOOR_KDF_PARAMS,
     new Uint8Array(16).fill(7),
     { timestamp: 1, deviceId: NIL_DEVICE, seq: 0 },
@@ -38,6 +38,9 @@ async function setSignInPin(tenantId: string, userId: string): Promise<void> {
   await h.db
     .insertInto('userPinVerifiers')
     .values(buildPinVerifierRow(verifier, { userId, tenantId }))
+    .onConflict((oc) =>
+      oc.column('userId').doUpdateSet(buildPinVerifierRow(verifier, { userId, tenantId })),
+    )
     .execute();
 }
 
@@ -177,6 +180,23 @@ describe('an approval PIN opens a decision session; a sign-in PIN does not', () 
     // The budget is the person's, not a device's: a second device does not get five more.
     expect((await decide(other, w.owner, APPROVAL)).status).toBe(429);
   });
+  test('a sign-in PIN later changed to the same digits leaves it counting as none', async () => {
+    const w = await world();
+    const session = await ownerApproval(w);
+    // The sign-in PIN's verifier sits on shared devices, so this one is no secret any more.
+    await setSignInPin(w.tenantId, w.owner, APPROVAL);
+    expect(await errorCode(await decide(w.counter, w.owner, APPROVAL))).toBe(
+      'APPROVAL_PIN_NOT_SET',
+    );
+    const fresh = '918273';
+    const res = await setApproval(w.counter, w.owner, session, {
+      pin: fresh,
+      proof: { kind: 'password', password: 'rahasia-pemilik' },
+    });
+    expect(res.status).toBe(200);
+    expect((await decide(w.counter, w.owner, fresh)).status).toBe(200);
+  });
+
   test('someone who does not work at this store, in any tenant, answers like a wrong PIN', async () => {
     const w = await world();
     const elsewhere = await h.seedDevice(9305);

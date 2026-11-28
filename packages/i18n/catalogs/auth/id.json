@@ -522,7 +522,8 @@
       "rateLimited": "Terlalu sering salah. Coba lagi nanti.",
       "failed": "PIN persetujuan belum tersimpan. Coba lagi.",
       "done": "PIN persetujuan tersimpan",
-      "doneBody": "Dipakai saat Anda menyetujui pembatalan, diskon, dan keputusan lain di perangkat bersama."
+      "doneBody": "Dipakai saat Anda menyetujui pembatalan, diskon, dan keputusan lain di perangkat bersama.",
+      "doneNotApproved": "Keputusan tadi belum disetujui. Ulangi dengan PIN persetujuan baru."
     },
     "clear": {
       "action": "Hapus PIN persetujuan",

@@ -89,6 +89,35 @@ describe('asked by a decision', () => {
     fire(screen.get('approval-setup-finish'), 'onPress');
     expect(onDone).toHaveBeenCalledWith(true);
   });
+
+  test('saved but no session opened (offline) does not approve the decision', async () => {
+    const onDone = vi.fn();
+    const p = port(['notSet', 'offline']);
+    const screen = render(
+      <ApprovalPinScreen
+        mode="ask"
+        person={PERSON}
+        port={p}
+        proofKinds={['current', 'password']}
+        owners={[]}
+        onDone={onDone}
+      />,
+    );
+    enterPin(screen, 'approval-ask', '730264');
+    await flush();
+    fire(screen.get('approval-ask-create'), 'onPress');
+    fire(screen.get('approval-setup-password.field'), 'onChangeText', 'rahasia');
+    fire(screen.get('approval-setup-password-next'), 'onPress');
+    enterPin(screen, 'approval-setup', '418273');
+    enterPin(screen, 'approval-setup', '418273');
+    await flush();
+    expect(p.set).toHaveBeenCalled();
+    expect(textsIn(screen.get('approval-setup-done'))).toContain(
+      'Keputusan tadi belum disetujui. Ulangi dengan PIN persetujuan baru.',
+    );
+    fire(screen.get('approval-setup-finish'), 'onPress');
+    expect(onDone).toHaveBeenCalledWith(false);
+  });
 });
 
 describe('from Settings', () => {

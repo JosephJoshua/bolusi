@@ -17,6 +17,7 @@ import {
   askReducer,
   setupFailureKey,
   setupNewFeedbackKey,
+  setupDoneKey,
   setupNewPromptKey,
   setupReducer,
   setupStart,
@@ -183,8 +184,9 @@ function ApprovalPinSetup({
         if (!cancelled) dispatch({ kind: 'failed', failure: approvalPinFailure(error) });
         return;
       }
-      if (openAfter) await open(phase.pin).catch(() => 'failed' as const);
-      if (!cancelled) dispatch({ kind: 'saved' });
+      // From a decision, it goes ahead only if a session opened with the new PIN.
+      const approved = !openAfter || (await open(phase.pin).catch(() => 'failed')) === 'opened';
+      if (!cancelled) dispatch({ kind: 'saved', approved });
     })();
     return () => {
       cancelled = true;
@@ -196,7 +198,9 @@ function ApprovalPinSetup({
       scrollable
       title={t('auth.approval.setup.title')}
       titleVariant="detail"
-      onBack={() => (phase.kind === 'saving' ? undefined : onDone(phase.kind === 'done'))}
+      onBack={() =>
+        phase.kind === 'saving' ? undefined : onDone(phase.kind === 'done' && phase.approved)
+      }
       backLabel={t('core.action.back')}
       syncChip={null}
       avatar={<View testID="approval-setup-no-avatar" />}
@@ -204,7 +208,7 @@ function ApprovalPinSetup({
         phase.kind === 'done' ? (
           <Button
             label={t('auth.pin.staff.finish')}
-            onPress={() => onDone(true)}
+            onPress={() => onDone(phase.approved)}
             testID="approval-setup-finish"
           />
         ) : undefined
@@ -287,7 +291,7 @@ function SetupBody({
           tone="success"
           icon="success"
           title={t('auth.approval.setup.done')}
-          message={t('auth.approval.setup.doneBody')}
+          message={t(setupDoneKey(phase))}
           testID="approval-setup-done"
         />
       );

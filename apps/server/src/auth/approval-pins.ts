@@ -80,7 +80,7 @@ export async function checkApprovalPin(
 /**
  * `checkApprovalPin` under the person's guessing budget: a failure slot is reserved before the
  * check and handed back on a match, so concurrent wrong guesses cannot all pass. Throws
- * RATE_LIMITED once the budget is spent.
+ * RATE_LIMITED once the budget is spent, and APPROVAL_PIN_NOT_SET when it is now the sign-in PIN.
  */
 export async function approvalPinMatches(
   deps: { readonly identityRateStore: WindowLimitStore; readonly serverCrypto: CryptoPort },
@@ -93,8 +93,28 @@ export async function approvalPinMatches(
   const key = `approval-pin-fail:${userId}`;
   enforce(deps.identityRateStore.hit(key, limit, windowMs, now));
   const matched = await checkApprovalPin(db, deps.serverCrypto, userId, pin);
-  if (matched) deps.identityRateStore.refund(key, windowMs, now);
-  return matched;
+  if (!matched) return false;
+  deps.identityRateStore.refund(key, windowMs, now);
+  // A sign-in PIN changed later to the same digits gives this one away with its verifier on shared
+  // devices, so it counts as none: the person sets a new one.
+  if (await sameAsSignIn(db, deps.serverCrypto, userId, pin)) {
+    throw new ApiError('APPROVAL_PIN_NOT_SET', { sameAsSignIn: true });
+  }
+  return true;
+}
+
+async function sameAsSignIn(
+  db: TenantDb,
+  crypto: CryptoPort,
+  userId: string,
+  pin: string,
+): Promise<boolean> {
+  const signIn = await db
+    .selectFrom('userPinVerifiers')
+    .select(['salt', 'params', 'hash', 'asOfTimestamp', 'asOfDeviceId', 'asOfSeq'])
+    .where('userId', '=', userId)
+    .executeTakeFirst();
+  return signIn !== undefined && verifyPinAgainst(crypto, toVerifier(signIn), utf8ToBytes(pin));
 }
 
 /**
@@ -108,13 +128,7 @@ export async function requireUsableApprovalPin(
   pin: string,
 ): Promise<void> {
   if (weakPin(pin)) throw new ApiError('APPROVAL_PIN_WEAK');
-  const signIn = await db
-    .selectFrom('userPinVerifiers')
-    .select(['salt', 'params', 'hash', 'asOfTimestamp', 'asOfDeviceId', 'asOfSeq'])
-    .where('userId', '=', userId)
-    .executeTakeFirst();
-  if (signIn === undefined) return;
-  if (await verifyPinAgainst(crypto, toVerifier(signIn), utf8ToBytes(pin))) {
+  if (await sameAsSignIn(db, crypto, userId, pin)) {
     throw new ApiError('APPROVAL_PIN_WEAK', { sameAsSignIn: true });
   }
 }

@@ -118,8 +118,11 @@ export type SetupPhase =
       /** Saves the server refused so far, so each refusal shows a fresh pad. */
       readonly tries: number;
     }
-  /** Saved (and, from a decision, a session opened with it). Terminal. */
-  | { readonly kind: 'done'; readonly pin: string };
+  /**
+   * Saved. Terminal. `approved` is whether the decision that asked may go ahead: from Settings
+   * always, from a decision only once a session opened with the new PIN.
+   */
+  | { readonly kind: 'done'; readonly pin: string; readonly approved: boolean };
 
 export function setupStart(kinds: readonly ProofKind[]): SetupPhase {
   if (kinds.length === 0) return { kind: 'new', proof: null, entry: NEW_PIN_START, tries: 0 };
@@ -131,7 +134,7 @@ export type SetupEvent =
   | { readonly kind: 'choseProof'; readonly proofKind: ProofKind }
   | { readonly kind: 'proved'; readonly proof: ApprovalPinProof }
   | { readonly kind: 'enteredNew'; readonly pin: string }
-  | { readonly kind: 'saved' }
+  | { readonly kind: 'saved'; readonly approved: boolean }
   | { readonly kind: 'failed'; readonly failure: SetupFailure };
 
 export function setupReducer(phase: SetupPhase, event: SetupEvent): SetupPhase {
@@ -152,7 +155,7 @@ export function setupReducer(phase: SetupPhase, event: SetupEvent): SetupPhase {
         : { kind: 'new', proof: phase.proof, entry, tries: phase.tries };
     }
     case 'saving':
-      if (event.kind === 'saved') return { kind: 'done', pin: phase.pin };
+      if (event.kind === 'saved') return { kind: 'done', pin: phase.pin, approved: event.approved };
       if (event.kind !== 'failed') return phase;
       return afterRefusal(phase, event.failure);
     case 'done':
@@ -201,6 +204,13 @@ export function setupFailureKey(
   if (failure === 'denied') return 'auth.approval.setup.denied';
   if (failure === 'rateLimited') return 'auth.approval.setup.rateLimited';
   return 'auth.approval.setup.failed';
+}
+
+/** What the finished step says: saved, and whether the decision that asked went ahead. */
+export function setupDoneKey(
+  phase: Extract<SetupPhase, { kind: 'done' }>,
+): 'auth.approval.setup.doneBody' | 'auth.approval.setup.doneNotApproved' {
+  return phase.approved ? 'auth.approval.setup.doneBody' : 'auth.approval.setup.doneNotApproved';
 }
 
 /** The new PIN step's question and tip, in the approval PIN's own words. */
