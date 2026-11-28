@@ -1,6 +1,6 @@
 // Client migration 35 — supplier payments ("Bayar supplier", purchasing module).
 //
-// Mirrors server migration 0037. Read with "Tagihan supplier", as bills are: a device holds these
+// Mirrors server migration 0038. Read with "Tagihan supplier", as bills are: a device holds these
 // only when everyone it syncs for may read bills; an owner on a shared store device reads them in
 // their own in-memory store instead.
 import type { ClientMigration } from './types.js';
