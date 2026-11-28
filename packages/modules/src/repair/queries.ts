@@ -801,6 +801,11 @@ export async function getTicketHandler(
   const refunds = qctx.hasPermission(MONEY_PERMISSION.read)
     ? await ticketRefunds(qctx, toSummary(summary, names))
     : [];
+  const undone = new Set(
+    events
+      .filter((event) => event.kind === REPAIR_OP.changeReverted)
+      .flatMap((event) => parseJson<{ undoes?: string[] }>(event.detailJson, {}).undoes ?? []),
+  );
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -838,7 +843,9 @@ export async function getTicketHandler(
         returnedBy: detail.returnedBy,
         returnedByName: detail.returnedBy === null ? null : (names.get(detail.returnedBy) ?? null),
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
-        workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
+        workStarted: events.some(
+          (event) => event.kind === REPAIR_OP.workStarted && !undone.has(event.id),
+        ),
         slipPrints,
         refunds,
         quoteLines: lines.map((line) => ({

@@ -26,7 +26,8 @@
     "ticketRepairTypesChanged": "Jenis servisan diubah",
     "handoverReversed": "Penyerahan dibatalkan",
     "ticketDetailsCorrected": "Data servisan diubah",
-    "cancelFeeChanged": "Tagihan pembatalan diubah"
+    "cancelFeeChanged": "Tagihan pembatalan diubah",
+    "changeReverted": "Perubahan dibatalkan"
   },
   "action": {
     "applyPrice": "Gunakan harga baru",
@@ -346,7 +347,9 @@
     "refund": "Uang sudah dikembalikan.",
     "reduce": "Tagihan sudah dikurangi.",
     "repairedPriceWaiting": "Selesai dikerjakan. Harga baru masih perlu dikonfirmasi pelanggan.",
-    "cancelFeeChanged": "Tagihan pembatalan diubah."
+    "cancelFeeChanged": "Tagihan pembatalan diubah.",
+    "waitForParts": "Ditandai tunggu sparepart.",
+    "assigned": "Teknisi ditunjuk."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -745,7 +748,10 @@
     "repairTypeTerms": "Jenis servisan ini sudah diubah pemilik. Pilih kembali jenis servisan.",
     "intakePhotoMissing": "Foto HP dari semua sisi yang diminta toko terlebih dahulu.",
     "notCancelled": "Servisan ini tidak dibatalkan.",
-    "feeBelowCharged": "Tagihan sudah dicatat di perangkat lain. Ubah tagihan kembali."
+    "feeBelowCharged": "Tagihan sudah dicatat di perangkat lain. Ubah tagihan kembali.",
+    "undoChangedSince": "Servisan ini sudah berubah sejak itu, jadi tidak dapat dibatalkan.",
+    "undoNotYours": "Hanya yang membuat perubahan ini yang dapat membatalkannya.",
+    "undoExpired": "Perubahan ini sudah terlalu lama, jadi tidak dapat dibatalkan."
   },
   "paper": {
     "title": "Kertas nota",

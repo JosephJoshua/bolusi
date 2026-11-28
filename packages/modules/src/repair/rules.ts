@@ -18,6 +18,7 @@ import { approvedPermit } from '../approvals/permits.js';
 import {
   REPAIR_APPROVAL_KIND,
   HANDOVER_UNDO_WINDOW_MS,
+  REPAIR_UNDO_GRACE_MS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
@@ -54,6 +55,7 @@ import {
 } from './queries.js';
 import type {
   cancelFeeChangedPayload,
+  changeRevertedPayload,
   deviceReturnedPayload,
   ticketClaimedPayload,
   downPaymentCorrectedPayload,
@@ -146,11 +148,15 @@ export const REPAIR_REFUSALS = defineRefusals(
     'cancelFeeChanged',
     'repairTypeTerms',
     'intakePhotoMissing',
+    'undoChangedSince',
+    'undoNotYours',
+    'undoExpired',
   ] as const,
   // Flow guards on the device: a bill that would not change, and the down payment dialog, which
   // corrects only an open servisan's DP that was never handed back. The server judges the ledger
-  // entries such a correction writes by money's own rules.
-  ['nothingChanged', 'returned', 'downPaymentRefunded'] as const,
+  // entries such a correction writes by money's own rules. Batalkan takes back only the change its
+  // toast named, so a later one on the servisan refuses it before anything is sent.
+  ['nothingChanged', 'returned', 'downPaymentRefunded', 'undoChangedSince'] as const,
 );
 type RepairRefusal = Parameters<typeof REPAIR_REFUSALS.refuse>[0];
 const { refuse } = REPAIR_REFUSALS;
@@ -1362,6 +1368,65 @@ export const handoverReversedRule: Rule = async (op, ctx) => {
     .executeTakeFirst();
   if (claim !== undefined) {
     throw invalidTransition(ticket, op.type, 'handoverHasClaim', 'a warranty claim names it');
+  }
+};
+
+/**
+ * The status and technician changes Batalkan takes back, each with the permission it was made
+ * under: taking one back needs that permission still, so it never lets anyone do what they may not.
+ */
+export const UNDOABLE_CHANGES: Readonly<Record<string, string>> = {
+  [REPAIR_OP.ticketClaimed]: REPAIR_PERMISSION.work,
+  [REPAIR_OP.technicianAssigned]: REPAIR_PERMISSION.assign,
+  [REPAIR_OP.workPhotosAdded]: REPAIR_PERMISSION.work,
+  [REPAIR_OP.workStarted]: REPAIR_PERMISSION.work,
+  [REPAIR_OP.workPaused]: REPAIR_PERMISSION.work,
+  [REPAIR_OP.markedRepaired]: REPAIR_PERMISSION.work,
+};
+
+/**
+ * Batalkan takes back the person's own last change on a servisan (one command's ops): only theirs,
+ * only status and technician changes, only while nothing else has happened to the servisan since,
+ * and only right after it. Judged against the server's record, so a phone that missed a colleague's
+ * change in between is refused rather than undoing over it.
+ */
+export const changeRevertedRule: Rule = async (op, { db, holdsPermission }) => {
+  const { undoes } = payloadOf<Payload<typeof changeRevertedPayload>>(op);
+  const ticket = await loadTicket(db, op);
+  requireOpen(ticket, op.type);
+  const events = await db
+    .selectFrom('repairTicketEvents')
+    .select(['id', 'kind', 'actorId', 'at'])
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeOf(op))
+    .orderBy('at')
+    .orderBy('id')
+    .execute();
+  const taken = new Set(undoes);
+  const targets = events.filter((event) => taken.has(event.id));
+  if (targets.length !== taken.size) {
+    throw invalidTransition(ticket, op.type, 'undoChangedSince', 'a change to undo is not here');
+  }
+  // Nothing else since the first of them: the slip is still the servisan's latest change.
+  const first = events.findIndex((event) => taken.has(event.id));
+  if (events.slice(first).some((event) => !taken.has(event.id))) {
+    throw invalidTransition(ticket, op.type, 'undoChangedSince', 'the servisan changed since');
+  }
+  if (targets.some((event) => event.actorId !== op.userId)) {
+    throw invalidTransition(ticket, op.type, 'undoNotYours', 'someone else made the change');
+  }
+  const latestAt = Math.max(...targets.map((event) => Number(event.at)));
+  if (op.timestamp - latestAt > REPAIR_UNDO_GRACE_MS) {
+    throw invalidTransition(ticket, op.type, 'undoExpired', 'the change was too long ago');
+  }
+  for (const event of targets) {
+    const permission = UNDOABLE_CHANGES[event.kind];
+    if (permission === undefined || !(await holdsPermission(op.userId, permission))) {
+      throw invalidTransition(ticket, op.type, 'undoChangedSince', `${event.kind} is not undone`);
+    }
+  }
+  if (targets.every((event) => event.kind === REPAIR_OP.workPhotosAdded)) {
+    throw invalidTransition(ticket, op.type, 'undoChangedSince', 'only photos to undo');
   }
 };
 

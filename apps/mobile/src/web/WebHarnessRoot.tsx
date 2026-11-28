@@ -34,8 +34,11 @@ import {
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { UndoHost } from '../shell/UndoHost.js';
+
 import { ENTRIES, findEntry } from './gallery.js';
 import { DEMO_REPAIR_ROLES, type DemoRepairRole } from '@bolusi/modules/repair/demo';
+import { UndoProvider } from '@bolusi/modules/screen-kit';
 
 /** Parse `?screen=&state=` from the browser URL. Empty when neither is present. */
 export function readTarget(search: string): {
@@ -128,7 +131,10 @@ function PhoneColumn({
     <View style={styles.backdrop}>
       {/* The screens size themselves to this column, not to the browser window around it. */}
       <ViewportProvider deferUntilMeasured style={[styles.column, tablet ? styles.tablet : null]}>
-        {children}
+        {/* Batalkan offers, drawn in each screen's dock, as in the app. */}
+        <UndoProvider>
+          <UndoHost>{children}</UndoHost>
+        </UndoProvider>
       </ViewportProvider>
     </View>
   );

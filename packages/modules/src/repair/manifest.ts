@@ -43,6 +43,8 @@ import {
   markRepairedHandler,
   markRepairedInput,
   markWaitingForPartsHandler,
+  undoChangeHandler,
+  undoChangeInput,
   markWaitingForPartsInput,
   openTicketHandler,
   openTicketInput,
@@ -246,6 +248,11 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.work,
       input: markRepairedInput,
       handler: markRepairedHandler,
+    },
+    undoChange: {
+      permission: REPAIR_PERMISSION.read,
+      input: undoChangeInput,
+      handler: undoChangeHandler,
     },
     cancelTicket: {
       permission: REPAIR_PERMISSION.cancel,

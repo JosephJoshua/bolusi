@@ -73,6 +73,24 @@ test('Escape closes the dialog and keeps the servisan open; a second Escape clos
   await expect(page.getByTestId('repair.desk.ticket.customer')).toBeHidden();
 });
 
+test('a wrong Tunggu sparepart is taken back from the Batalkan toast, over the open servisan', async () => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.getByTestId('desktop.person').click();
+  await page.getByRole('menuitem', { name: 'Budi Santoso' }).click();
+  await page.getByText('Maria Kogoya').click();
+  await page.getByTestId('repair.desk.ticket.action.waitForParts').click();
+  await page.getByTestId('repair.desk.waitForParts.note').fill('Baterai');
+  await page.getByTestId('repair.desk.waitForParts.submit').click();
+  const toast = page.getByTestId('undo.toast');
+  await expect(toast).toContainText('Ditandai tunggu sparepart.');
+  // It sits over the page without covering the servisan's next step.
+  await expect(page.getByTestId('repair.desk.ticket.action.resume')).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: join(import.meta.dirname, 'artifacts', 'undo', 'offered.png') });
+  await page.getByTestId('undo.toast.action').click();
+  await expect(toast).toBeHidden();
+  await expect(page.getByTestId('repair.desk.ticket.action.waitForParts')).toBeVisible();
+});
+
 test('F2 does not start an intake while a dialog is open', async () => {
   await page.getByText('Maria Kogoya').click();
   await page.getByTestId('repair.desk.ticket.action.decidePrice').click();

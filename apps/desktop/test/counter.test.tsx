@@ -525,6 +525,27 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.history').textContent).toContain('Penyerahan dibatalkan');
   });
 
+  it('takes back a wrong Tunggu sparepart from the Batalkan toast', async () => {
+    renderApp();
+    await onBoard();
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Budi Santoso' }));
+    await openTicket('Maria Kogoya');
+    fireEvent.click(byTestId('repair.desk.ticket.action.waitForParts'));
+    fireEvent.change(await screen.findByTestId('repair.desk.waitForParts.note'), {
+      target: { value: 'Baterai' },
+    });
+    fireEvent.click(byTestId('repair.desk.waitForParts.submit'));
+    const toast = await screen.findByTestId('undo.toast');
+    expect(toast.textContent).toContain('Ditandai tunggu sparepart.');
+    await screen.findByTestId('repair.desk.ticket.action.resume');
+
+    fireEvent.click(byTestId('undo.toast.action'));
+    await waitFor(() => expect(screen.queryByTestId('undo.toast')).toBeNull());
+    await screen.findByTestId('repair.desk.ticket.action.waitForParts');
+    expect(byTestId('repair.desk.ticket.history').textContent).toContain('Perubahan dibatalkan');
+  });
+
   it('shows a manager their discount limit, and asks an owner for more', async () => {
     renderApp();
     fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });

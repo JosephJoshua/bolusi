@@ -24,6 +24,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { Linking, Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
+import { UndoHost } from './src/shell/UndoHost.js';
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome, type RepairOpenTarget } from './src/screens/repair/RepairHome.js';
@@ -31,7 +32,7 @@ import { AttentionHome, type AttentionTarget } from './src/screens/repair/Attent
 import { KasHome } from './src/screens/money/KasHome.js';
 import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
 import { ItemsHome, type ItemsOpenTarget } from './src/screens/inventory/ItemsHome.js';
-import type { PlaceOpen } from '@bolusi/modules/screen-kit';
+import { UndoProvider, type PlaceOpen } from '@bolusi/modules/screen-kit';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import { placeTabsShow, type SurfaceNav } from './src/navigation/surface.js';
@@ -1217,667 +1218,684 @@ export default function App(props: AppProps): React.JSX.Element {
         accessibilityElementsHidden={modal !== null}
         importantForAccessibility={modal === null ? 'auto' : 'no-hide-descendants'}
       >
-        {renderZone(zone, {
-          enrollment: (revoked) => (
-            <EnrollmentScreen
-              state={{ ...enrollment, revoked }}
-              onChange={(patch) => setEnrollment((previous) => ({ ...previous, ...patch }))}
-              onLogin={runLogin}
-              onEnroll={runEnroll}
-              // §8.5 step 3: the owner taps Continue on the success step. `finish` fires the deferred
-              // `onEnrolled` (zone flip + loop/push start); resetting the wizard state is just hygiene for
-              // a future re-enroll, since the zone has already handed off to the switcher (task 201).
-              onFinish={() => {
-                props.enrollment.finish();
-                setEnrollment(initialEnrollmentState());
-                // Same re-derivation hazard as the back path: the zone hands off to the switcher, and a
-                // still-set `reenrolling` would immediately pull it back into the wizard (task 168).
-                setReenrolling(false);
-              }}
-              onBack={goBack}
-              discardPrompt={discardPrompt}
-              onConfirmDiscard={() => {
-                setDiscardPrompt(false);
-                setEnrollment((previous) => ({
-                  ...initialEnrollmentState(revoked),
-                  phone: previous.phone,
-                }));
-              }}
-              onCancelDiscard={() => setDiscardPrompt(false)}
-            />
-          ),
-          switcher: (switcherZone) => (
-            <SwitcherScreen
-              state={switcherState(props.users, props.usersError)}
-              mode={switcherZone.mode}
-              // §8.2: the LOCK has no back. `backTarget` is the single source of that rule.
-              onBack={backTarget(switcherZone) === null ? null : goBack}
-              onSelect={(user) => setPinFor(tapTarget(user).userId)}
-              // §8.2's empty-roster recovery, LIVE since task 168 / D27 (which amends D23 §3). D23 §3
-              // removed this control because nothing could service it: reaching Device Enrolment from
-              // an `active` device needed a new input on `resolveZone`, and completing it left the old
-              // registration `active` server-side. Both are now built — `reenrolling` feeds the gate
-              // (device status, lock and pending PIN all still beat it), and the enrol request carries
-              // `replacesDeviceId` so the server revokes the outgoing device in the same transaction.
-              //
-              // Still not a stub: the handler is REAL, and `EmptyState` renders the CTA only because
-              // one exists. §5's "a control that cannot work must not render" is satisfied by the
-              // control now working, not by hiding it.
-              onReenroll={() => setReenrolling(true)}
-              //
-              // §5's Error retry — the real producer (`AppSessionController.refresh`), reached through
-              // Root. This is the read that FAILED; running it again is the only thing that can clear
-              // the state, and until now it was `noop`, so the retry button on a directory failure
-              // left the user with a permanently broken switcher and no way back.
-              onRetry={props.onRetryUsers}
-              // A DIFFERENT function from `onRetry`, which is the point (see SwitcherScreen's prop
-              // doc). Back from the unauthorized state is the shell's ONE back — the same `goBack`
-              // hardware back and the header run, so §8.2's "the lock has no back" holds here too:
-              // `backTarget` returns null for the lock and `goBack` consumes the press rather than
-              // walking into the previous user's session.
-              onUnauthorizedBack={goBack}
-              syncChip={chip}
-              pendingCount={props.sync.pendingOperationCount}
-              onOpenSync={openSyncStatus}
-              currentUserId={switcherZone.mode === 'lock' ? null : sessionUserId}
-              lockedUserIds={lockedUserIds(props.users, props.pinRow, props.now)}
-            />
-          ),
-          pin: (pinZone) => {
-            const signIn = (pin: string): void => {
-              // Clear the pending PIN target only on a CONFIRMED unlock. On a wrong PIN the pad
-              // stays exactly where it is (its own `state` renders the failure), which is why this
-              // waits for the result rather than clearing optimistically — an optimistic clear
-              // would drop a failed attempt straight into the shell.
-              const submitted = props.onSubmitPin(pinZone.userId, pin);
-              if (submitted !== undefined) {
-                void submitted.then((opened) => {
-                  if (!opened) {
-                    setWrongPins((prior) => ({
-                      userId: pinZone.userId,
-                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+        {/* Batalkan belongs to whoever made the slip: a new person signing in starts with none. */}
+        <UndoProvider key={currentUser?.id ?? 'nobody'}>
+          <UndoHost>
+            {renderZone(zone, {
+              enrollment: (revoked) => (
+                <EnrollmentScreen
+                  state={{ ...enrollment, revoked }}
+                  onChange={(patch) => setEnrollment((previous) => ({ ...previous, ...patch }))}
+                  onLogin={runLogin}
+                  onEnroll={runEnroll}
+                  // §8.5 step 3: the owner taps Continue on the success step. `finish` fires the deferred
+                  // `onEnrolled` (zone flip + loop/push start); resetting the wizard state is just hygiene for
+                  // a future re-enroll, since the zone has already handed off to the switcher (task 201).
+                  onFinish={() => {
+                    props.enrollment.finish();
+                    setEnrollment(initialEnrollmentState());
+                    // Same re-derivation hazard as the back path: the zone hands off to the switcher, and a
+                    // still-set `reenrolling` would immediately pull it back into the wizard (task 168).
+                    setReenrolling(false);
+                  }}
+                  onBack={goBack}
+                  discardPrompt={discardPrompt}
+                  onConfirmDiscard={() => {
+                    setDiscardPrompt(false);
+                    setEnrollment((previous) => ({
+                      ...initialEnrollmentState(revoked),
+                      phone: previous.phone,
                     }));
-                  }
-                  if (!opened) {
-                    setWrongPins((prior) => ({
-                      userId: pinZone.userId,
-                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
-                    }));
-                  }
-                  if (opened) {
-                    // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
-                    // the pending target AND the switch intent, so the gate lands on the incoming
-                    // user's shell rather than re-rendering the roster over their session (task 143).
-                    setPinFor(null);
-                    setSwitching(false);
-                  }
-                });
-              }
-            };
-            const user = userOf(props.users, pinZone.userId);
-            const tap = user === undefined ? null : tapTarget(user);
-            // §6.6: the enrolling owner with no PIN yet makes one, then is signed in with it. Anyone
-            // else with no PIN is told to ask an owner (PinScreen's `needsFirstPin` state).
-            if (
-              tap?.kind === 'firstPinSetup' &&
-              user !== undefined &&
-              props.onSetFirstPin !== undefined
-            ) {
-              return (
-                <PinSetupScreen
-                  userId={pinZone.userId}
-                  userName={user.name}
-                  roleKeys={user.roleKeys}
-                  onSetFirstPin={props.onSetFirstPin}
-                  onSignIn={signIn}
-                  onBack={() => setPinFor(null)}
+                  }}
+                  onCancelDiscard={() => setDiscardPrompt(false)}
+                />
+              ),
+              switcher: (switcherZone) => (
+                <SwitcherScreen
+                  state={switcherState(props.users, props.usersError)}
+                  mode={switcherZone.mode}
+                  // §8.2: the LOCK has no back. `backTarget` is the single source of that rule.
+                  onBack={backTarget(switcherZone) === null ? null : goBack}
+                  onSelect={(user) => setPinFor(tapTarget(user).userId)}
+                  // §8.2's empty-roster recovery, LIVE since task 168 / D27 (which amends D23 §3). D23 §3
+                  // removed this control because nothing could service it: reaching Device Enrolment from
+                  // an `active` device needed a new input on `resolveZone`, and completing it left the old
+                  // registration `active` server-side. Both are now built — `reenrolling` feeds the gate
+                  // (device status, lock and pending PIN all still beat it), and the enrol request carries
+                  // `replacesDeviceId` so the server revokes the outgoing device in the same transaction.
+                  //
+                  // Still not a stub: the handler is REAL, and `EmptyState` renders the CTA only because
+                  // one exists. §5's "a control that cannot work must not render" is satisfied by the
+                  // control now working, not by hiding it.
+                  onReenroll={() => setReenrolling(true)}
+                  //
+                  // §5's Error retry — the real producer (`AppSessionController.refresh`), reached through
+                  // Root. This is the read that FAILED; running it again is the only thing that can clear
+                  // the state, and until now it was `noop`, so the retry button on a directory failure
+                  // left the user with a permanently broken switcher and no way back.
+                  onRetry={props.onRetryUsers}
+                  // A DIFFERENT function from `onRetry`, which is the point (see SwitcherScreen's prop
+                  // doc). Back from the unauthorized state is the shell's ONE back — the same `goBack`
+                  // hardware back and the header run, so §8.2's "the lock has no back" holds here too:
+                  // `backTarget` returns null for the lock and `goBack` consumes the press rather than
+                  // walking into the previous user's session.
+                  onUnauthorizedBack={goBack}
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}
                   onOpenSync={openSyncStatus}
+                  currentUserId={switcherZone.mode === 'lock' ? null : sessionUserId}
+                  lockedUserIds={lockedUserIds(props.users, props.pinRow, props.now)}
                 />
-              );
-            }
-            const wrong = wrongPins.userId === pinZone.userId ? wrongPins.count : 0;
-            return (
-              <PinScreen
-                key={`${pinZone.userId}:${wrong}`}
-                userId={pinZone.userId}
-                userName={nameOf(props.users, pinZone.userId)}
-                roleKeys={user?.roleKeys}
-                needsFirstPin={tap?.kind === 'askOwnerForPin'}
-                row={props.pinRow(pinZone.userId)}
-                now={props.now}
-                lastAttempt={wrong > 0 ? 'wrong' : 'none'}
-                onSubmit={signIn}
-                onSwitchUser={() => setPinFor(null)}
-                syncChip={chip}
-                pendingCount={props.sync.pendingOperationCount}
-                onOpenSync={openSyncStatus}
-              />
-            );
-          },
-          shell: (shellZone) => {
-            // Switching user, or re-enrolling (which ends the session), unmounts the home surface
-            // kept under Sync Status, so go back to it first and let its discard question run where
-            // the person can see it.
-            const leaveSyncStatusThen = (proceed: () => void): void => {
-              if (syncReturn !== 'home') {
-                proceed();
-                return;
-              }
-              setRoute('home');
-              leaveHome(proceed);
-            };
-            const syncStatus =
-              shellZone.route === 'syncStatus' ? (
-                <SyncStatusScreen
-                  input={props.sync}
-                  currentUser={currentUser}
-                  onBack={() => setRoute(syncReturn)}
-                  onSyncNow={props.onSyncNow}
-                  // 05 §2.3 / 06 §8: "rejections must be surfaced, never silent". The row already
-                  // carries the code's explanation; the tap discloses the server's own words under
-                  // `sync.rejected.technicalDetails` (a catalog key that shipped with no consumer).
-                  // Tapping the open row closes it — see `rejectedDetailFor`.
-                  onOpenRejected={(row) =>
-                    setRejectedDetailFor((current) => (current === row.opId ? null : row.opId))
+              ),
+              pin: (pinZone) => {
+                const signIn = (pin: string): void => {
+                  // Clear the pending PIN target only on a CONFIRMED unlock. On a wrong PIN the pad
+                  // stays exactly where it is (its own `state` renders the failure), which is why this
+                  // waits for the result rather than clearing optimistically — an optimistic clear
+                  // would drop a failed attempt straight into the shell.
+                  const submitted = props.onSubmitPin(pinZone.userId, pin);
+                  if (submitted !== undefined) {
+                    void submitted.then((opened) => {
+                      if (!opened) {
+                        setWrongPins((prior) => ({
+                          userId: pinZone.userId,
+                          count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                        }));
+                      }
+                      if (!opened) {
+                        setWrongPins((prior) => ({
+                          userId: pinZone.userId,
+                          count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                        }));
+                      }
+                      if (opened) {
+                        // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
+                        // the pending target AND the switch intent, so the gate lands on the incoming
+                        // user's shell rather than re-rendering the roster over their session (task 143).
+                        setPinFor(null);
+                        setSwitching(false);
+                      }
+                    });
                   }
-                  expandedRejectedOpId={rejectedDetailFor}
-                  // 06 §5.2 (e). The row-level chip is per item and the producer is loop-level
-                  // (`requestManual` coalesces into one immediate drain pass), which is the honest
-                  // shape: the drain is single-flight and processes oldest-evidence-first (§5.1), so
-                  // there is no per-item retry to call and pretending otherwise would be a control
-                  // that looks more precise than the engine underneath it.
-                  onRetryMedia={props.onRetryMedia}
-                  onMarkRejectedHandled={props.onMarkRejectedHandled}
-                  onCheckForUpdate={props.onCheckForUpdate}
-                  onOpenSwitcher={() => leaveSyncStatusThen(() => setSwitching(true))}
-                  onReenroll={() => leaveSyncStatusThen(() => setReenrolling(true))}
-                />
-              ) : null;
-            if (syncStatus !== null && syncReturn !== 'home') return syncStatus;
-            // The chip on a settings page or the parts list: tapping it leaves through the page's guard.
-            const routeSyncChip = (
-              <SyncChip
-                state={chip}
-                pendingCount={props.sync.pendingOperationCount}
-                accessibilityLabels={syncChipAccessibilityLabels({
-                  pendingCount: props.sync.pendingOperationCount,
-                })}
-                onPress={() => leaveHome(() => setRoute('syncStatus'))}
-              />
-            );
-            if (shellZone.route === 'settings' && currentUser !== null) {
-              return (
-                <SettingsScreen
-                  locale={props.locale}
-                  onSelectLocale={props.onSelectLocale}
-                  onOpenNotificationSettings={(category: MutablePushCategory) =>
-                    openNotificationSettings(channelId(category))
-                  }
-                  // Data that needs an owner's decision is for whoever can decide it.
-                  notificationCategories={MUTABLE_PUSH_CATEGORIES.filter(
-                    (category) => category !== 'conflict' || props.canDecideConflicts === true,
-                  )}
-                  device={props.deviceInfo}
-                  currentUser={currentUser}
-                  onBack={() => setRoute('home')}
-                  onOpenSwitcher={() => setSwitching(true)}
-                  onOpenChangePin={() => setRoute('changePin')}
-                  onOpenApprovalPin={props.onOpenApprovalPin}
-                  onRenameDevice={
-                    props.onRenameDevice === undefined ? undefined : () => setRoute('renameDevice')
-                  }
-                  onOpenSetup={() => {
-                    setSetupReturn('settings');
-                    setRoute('deviceSetup');
-                  }}
-                  // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
-                  // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
-                  onOpenStaffPins={
-                    props.canUnlock || props.canReset ? () => setRoute('staffPins') : undefined
-                  }
-                  onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
-                  onOpenLimits={
-                    props.staff?.canSetLimits === true ? () => setRoute('limits') : undefined
-                  }
-                  // The role editor is the main owner's alone.
-                  onOpenRoles={
-                    props.staff?.tenantAdmin === true ? () => setRoute('roles') : undefined
-                  }
-                  onOpenDevices={
-                    props.devices === undefined ? undefined : () => setRoute('devices')
-                  }
-                  lockedStaffCount={
-                    [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
-                      (id) => id !== currentUser.id,
-                    ).length
-                  }
-                  // Each row for whoever may change it here: the store's settings for owners, the
-                  // phone's paper for anyone who prints.
-                  modules={[
-                    {
-                      section: tn('repair.board.title'),
-                      testID: 'settings-section-repair',
-                      rows: [
-                        ...(repairSettings.intakeOptions
-                          ? [
-                              {
-                                icon: 'list' as const,
-                                title: tn('repair.options.title'),
-                                summary: tn('repair.options.summary'),
-                                onOpen: () => setRoute('intakeOptions'),
-                                testID: 'settings-intake-options',
-                              },
-                            ]
-                          : []),
-                        ...(repairSettings.cancelFees
-                          ? [
-                              {
-                                icon: 'money' as const,
-                                title: tn('repair.fees.title'),
-                                summary: tn('repair.fees.summary'),
-                                onOpen: () => setRoute('cancelFees'),
-                                testID: 'settings-cancel-fees',
-                              },
-                            ]
-                          : []),
-                        ...(repairSettings.uncollected
-                          ? [
-                              {
-                                icon: 'clock' as const,
-                                title: tn('repair.uncollected.title'),
-                                summary: tn('repair.uncollected.summary'),
-                                onOpen: () => setRoute('uncollectedDays'),
-                                testID: 'settings-uncollected-days',
-                              },
-                            ]
-                          : []),
-                        ...(repairSettings.printSettings
-                          ? [
-                              {
-                                icon: 'print' as const,
-                                title: tn('repair.printSettings.title'),
-                                summary: tn('repair.printSettings.summary'),
-                                onOpen: () => setRoute('printSettings'),
-                                testID: 'settings-print-settings',
-                              },
-                            ]
-                          : []),
-                        // The phone's own paper: anyone who prints here may set it.
-                        ...(props.repair?.printing !== undefined
-                          ? [
-                              {
-                                icon: 'paper' as const,
-                                title: tn('repair.paper.title'),
-                                summary: tn('repair.paper.phoneSummary'),
-                                onOpen: () => setRoute('printPaper'),
-                                testID: 'settings-print-paper',
-                              },
-                            ]
-                          : []),
-                      ],
-                    },
-                    {
-                      section: tm('money.kas.title'),
-                      testID: 'settings-section-money',
-                      rows: canManageAccounts
-                        ? [
-                            {
-                              icon: 'paymentMethods' as const,
-                              title: tm('money.methods.title'),
-                              summary: tm('money.methods.summary'),
-                              onOpen: () => setRoute('paymentMethods'),
-                              testID: 'settings-payment-methods',
-                            },
-                          ]
-                        : [],
-                    },
-                  ]}
-                  syncChip={chip}
-                  pendingCount={props.sync.pendingOperationCount}
-                  onOpenSync={openSyncStatus}
-                />
-              );
-            }
-            if (
-              (shellZone.route === 'intakeOptions' ||
-                shellZone.route === 'cancelFees' ||
-                shellZone.route === 'uncollectedDays' ||
-                shellZone.route === 'printSettings' ||
-                shellZone.route === 'printPaper') &&
-              props.repair !== undefined
-            ) {
-              return (
-                <RepairSettingsRoute
-                  page={shellZone.route}
-                  runtime={props.repair}
-                  syncChip={routeSyncChip}
-                  onClose={backToSettings}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (shellZone.route === 'paymentMethods' && moneyRuntime !== null) {
-              return (
-                <PaymentMethodsRoute
-                  runtime={moneyRuntime}
-                  syncChip={routeSyncChip}
-                  onClose={backToSettings}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (shellZone.route === 'deviceSetup') {
-              return (
-                <DeviceSetupRoute
-                  repair={props.repair}
-                  syncChip={routeSyncChip}
-                  camera={props.cameraPermission}
-                  notifications={props.notificationPermission}
-                  onOpenSystemSettings={() => void Linking.openSettings()}
-                  onOpenSetting={setRoute}
-                  onDone={() => {
-                    setRoute(setupReturn);
-                    setSetupReturn('home');
-                  }}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (shellZone.route === 'devices' && props.devices !== undefined) {
-              // The owner's "Perangkat": the store's devices, and blocking a lost one, online.
-              return (
-                <DevicesScreen
-                  load={props.devices.load}
-                  onBlock={props.devices.block}
-                  onClose={() => setRoute('settings')}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (shellZone.route === 'renameDevice' && props.onRenameDevice !== undefined) {
-              return (
-                <RenameDeviceScreen
-                  current={props.deviceInfo.deviceName}
-                  onRename={props.onRenameDevice}
-                  onClose={() => setRoute('settings')}
-                />
-              );
-            }
-            if (shellZone.route === 'changePin') {
-              // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
-              // through the session controller and REJECTS with its DomainError; the screen maps it.
-              // Back / done returns to Settings — the surface it was opened from (see `backTarget`).
-              return (
-                <ChangePinScreen
-                  person={currentUser ?? undefined}
-                  onChangePin={props.onChangePin}
-                  onClose={() => setRoute('settings')}
-                />
-              );
-            }
-            if (shellZone.route === 'staffPins') {
-              // The owner's "PIN karyawan": unlock a locked PIN or have a colleague make a new one, each
-              // offered only with its permission (core enforces both, plus the §6.6 privileged-target
-              // rule). The list is loaded on entry (the effect above); back returns to Settings.
-              return (
-                <StaffPinScreen
-                  canUnlock={props.canUnlock}
-                  canReset={props.canReset}
-                  loading={pinTargets.loading}
-                  error={pinTargets.error}
-                  users={pinTargets.users}
-                  actorUserId={sessionUserId ?? ''}
-                  onClearLockout={clearLockout}
-                  onResetPin={resetPin}
-                  onReload={loadPinTargets}
-                  startWith={staffPinFor}
-                  onClose={() => {
-                    setRoute(staffPinFor === null ? 'settings' : 'staff');
-                    setStaffPinFor(null);
-                  }}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (shellZone.route === 'staff' && props.staff !== undefined && currentUser !== null) {
-              // The owner's "Karyawan": add, change and deactivate staff, online. A new person's first
-              // PIN is made in "PIN karyawan", opened at their hand-over and returning here.
-              const staff = props.staff;
-              return (
-                <StaffScreen
-                  actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
-                  load={staff.load}
-                  onCreate={staff.onCreate}
-                  onUpdate={staff.onUpdate}
-                  onSetActive={staff.onSetActive}
-                  onMakePin={
-                    props.canReset
-                      ? (userId) => {
-                          setStaffPinFor(userId);
-                          setRoute('staffPins');
-                        }
-                      : undefined
-                  }
-                  onClose={() => setRoute('settings')}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (shellZone.route === 'limits' && props.staff !== undefined && currentUser !== null) {
-              // The store owner's "Batas wewenang": a limited role's amounts here, online.
-              const staff = props.staff;
-              return (
-                <LimitsScreen
-                  actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
-                  load={staff.load}
-                  onSave={staff.onSetLimits}
-                  onClose={() => setRoute('settings')}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            if (shellZone.route === 'roles' && props.staff?.tenantAdmin === true) {
-              // The main owner's "Tugas karyawan": the store roles and their switches, online.
-              const staff = props.staff;
-              return (
-                <RolesScreen
-                  load={staff.load}
-                  onCreate={staff.onCreateRole}
-                  onUpdate={staff.onUpdateRole}
-                  onDelete={staff.onDeleteRole}
-                  onClose={() => setRoute('settings')}
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                />
-              );
-            }
-            const homeSurface = (): React.JSX.Element => {
-              // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
-              // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
-              // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
-              // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
-              // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
-              // the copy the label catalog exists to prevent (07-i18n).
-              if (props.notes === undefined && props.repair === undefined) {
-                return <View testID="shell-home" style={FILL} />;
-              }
-              // The header chrome every home surface shares (§8.1).
-              const homeSyncChip = (
-                <SyncChip
-                  state={chip}
-                  pendingCount={props.sync.pendingOperationCount}
-                  progressPercent={setupPercent}
-                  accessibilityLabels={syncChipAccessibilityLabels({
-                    relative:
-                      props.sync.state.lastSuccessfulSyncAt === null
-                        ? t('core.status.empty')
-                        : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
-                    pendingCount: props.sync.pendingOperationCount,
-                    firstSyncPercent: setupPercent,
-                  })}
-                  // No leave guard: Sync Status keeps the surface mounted, so nothing is lost.
-                  onPress={openSyncStatus}
-                />
-              );
-              const homeAvatar =
-                currentUser === null ? (
-                  <View testID="notes-no-avatar" />
-                ) : (
-                  // THE HEADER CHROME (§8.1): the avatar, which opens the account menu: switch user
-                  // (the User Switcher) and Settings. It is the ONLY producer of `route: 'settings'`.
-                  //
-                  // Settings holds the language toggle, the owner's intake lists, the PIN and
-                  // notification rows and the device readout. On an Indonesian-first product the
-                  // language rows are the ONLY way out of a wrong locale (07-i18n §1.2), so both menu
-                  // rows carry an icon that reads by shape: a cog and a person swap.
-                  //
-                  // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES (task 143) now goes through the menu.
-                  // `setSwitching(true)` produces the switcher zone from a live session, and
-                  // `backTarget` returns to `home` (this surface's route) when the switch is abandoned.
-                  // Both rows go through `leaveHome` (task 145), so an open editor's discard gate runs
-                  // before either leaves the surface.
-                  <AvatarButton
-                    userId={currentUser.id}
-                    initials={currentUser.initials}
-                    accessibilityLabel={t('core.account.menu')}
-                    onPress={() => setAccountMenu(true)}
-                  />
-                );
-              // Repair is the slice-1 home; notes stays the home on a build without it.
-              if (props.repair !== undefined) {
-                const repairHome = (
-                  <RepairHome
-                    runtime={props.repair}
-                    // The clock itself, not this render's reading: an intake can sit open for hours.
-                    now={props.clock ?? systemClock.now}
-                    onRegisterSurfaceNav={registerRepairNav}
-                    restoredDraft={restoredRepairDraft}
-                    intakeStartedBy={intakeStartedBy}
-                    onDraftChange={publishRepairDraft}
-                    onOpenSyncStatus={openSyncStatus}
-                    syncChip={homeSyncChip}
-                    avatar={homeAvatar}
-                    open={repairOpen}
-                    onReturn={returnFromRepair}
-                  />
-                );
-                if (homeTabs.length === 1) return repairHome;
-                // Servisan stays mounted behind the other places, so a half-done intake survives a
-                // look at the drawer. Barang stays mounted once opened, so its filter and a
-                // half-written order survive too. Kas holds nothing worth keeping.
-                const tabsShow =
-                  tab === 'attention'
-                    ? true
-                    : tab === 'repair'
-                      ? repairTabs
-                      : tab === 'kas'
-                        ? kasTabs
-                        : itemsTabs;
-                const tabs = tabsShow ? (
-                  <TabBar
-                    tabs={homeTabs.map(homeTabItem)}
-                    selected={tab}
-                    onSelect={selectTab}
-                    variant={tabsAsRail ? 'rail' : 'bar'}
-                    testID="shell-tabs"
-                  />
-                ) : null;
-                // Along the bottom, the tabs go into the showing screen's own shell (one dock with
-                // its action, under its sheets); only the place in front gets them.
-                const bottomTabs = (place: HomeTab): React.ReactNode =>
-                  !tabsAsRail && tab === place ? tabs : null;
+                };
+                const user = userOf(props.users, pinZone.userId);
+                const tap = user === undefined ? null : tapTarget(user);
+                // §6.6: the enrolling owner with no PIN yet makes one, then is signed in with it. Anyone
+                // else with no PIN is told to ask an owner (PinScreen's `needsFirstPin` state).
+                if (
+                  tap?.kind === 'firstPinSetup' &&
+                  user !== undefined &&
+                  props.onSetFirstPin !== undefined
+                ) {
+                  return (
+                    <PinSetupScreen
+                      userId={pinZone.userId}
+                      userName={user.name}
+                      roleKeys={user.roleKeys}
+                      onSetFirstPin={props.onSetFirstPin}
+                      onSignIn={signIn}
+                      onBack={() => setPinFor(null)}
+                      syncChip={chip}
+                      pendingCount={props.sync.pendingOperationCount}
+                      onOpenSync={openSyncStatus}
+                    />
+                  );
+                }
+                const wrong = wrongPins.userId === pinZone.userId ? wrongPins.count : 0;
                 return (
-                  <View style={tabsAsRail ? ROW : FILL}>
-                    {tabsAsRail ? tabs : null}
-                    {tab === 'attention' ? (
-                      <View style={FILL}>
-                        <ShellTabsProvider tabs={bottomTabs('attention')}>
-                          <AttentionHome
-                            runtime={props.repair}
-                            now={props.clock ?? systemClock.now}
-                            refused={props.sync.rejected.length}
-                            syncChip={homeSyncChip}
-                            avatar={homeAvatar}
-                            onOpen={openFromAttention}
-                            onOpenSyncStatus={openSyncStatus}
-                          />
-                        </ShellTabsProvider>
-                      </View>
-                    ) : null}
-                    <View style={tab === 'repair' ? FILL : HIDDEN}>
-                      <ShellTabsProvider tabs={bottomTabs('repair')}>
-                        {repairHome}
-                      </ShellTabsProvider>
-                    </View>
-                    {tab === 'kas' && moneyRuntime !== null ? (
-                      <View style={FILL}>
-                        <ShellTabsProvider tabs={bottomTabs('kas')}>
-                          <KasHome
-                            runtime={moneyRuntime}
-                            now={props.clock ?? systemClock.now}
-                            syncChip={homeSyncChip}
-                            avatar={homeAvatar}
-                            onRegisterSurfaceNav={registerKasNav}
-                          />
-                        </ShellTabsProvider>
-                      </View>
-                    ) : null}
-                    {showsItems && itemsRuntime !== undefined && itemsOpened ? (
-                      <View style={tab === 'items' ? FILL : HIDDEN}>
-                        <ShellTabsProvider tabs={bottomTabs('items')}>
-                          <ItemsHome
-                            inventory={itemsRuntime}
-                            purchasing={props.repair.purchasing}
-                            syncChip={homeSyncChip}
-                            avatar={homeAvatar}
-                            onOpenSyncStatus={openSyncStatus}
-                            onRegisterSurfaceNav={registerItemsNav}
-                            open={itemsOpen}
-                          />
-                        </ShellTabsProvider>
-                      </View>
-                    ) : null}
-                  </View>
+                  <PinScreen
+                    key={`${pinZone.userId}:${wrong}`}
+                    userId={pinZone.userId}
+                    userName={nameOf(props.users, pinZone.userId)}
+                    roleKeys={user?.roleKeys}
+                    needsFirstPin={tap?.kind === 'askOwnerForPin'}
+                    row={props.pinRow(pinZone.userId)}
+                    now={props.now}
+                    lastAttempt={wrong > 0 ? 'wrong' : 'none'}
+                    onSubmit={signIn}
+                    onSwitchUser={() => setPinFor(null)}
+                    syncChip={chip}
+                    pendingCount={props.sync.pendingOperationCount}
+                    onOpenSync={openSyncStatus}
+                  />
                 );
-              }
-              if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
-              return (
-                <NotesHome
-                  runtime={props.notes}
-                  now={props.now}
-                  // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
-                  onRegisterSurfaceNav={registerSurfaceNav}
-                  // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
-                  // locked (owner-checked above, so it is theirs), and the write-back that keeps it
-                  // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
-                  restoredDraft={restoredNotesDraft}
-                  onDraftChange={publishNotesDraft}
-                  onOpenSyncStatus={openSyncStatus}
-                  syncChip={homeSyncChip}
-                  avatar={homeAvatar}
-                />
-              );
-            };
-            // Sync Status opened from home sits OVER the home surface instead of replacing it: the
-            // surface keeps its own state (the open servisan, its step, anything typed), so Back lands
-            // exactly where the person was. Same element shape on both routes, so React keeps it mounted.
-            return (
-              <>
-                <View
-                  key="home"
-                  testID="shell-home-surface"
-                  style={syncStatus === null ? FILL : HIDDEN}
-                  accessibilityElementsHidden={syncStatus !== null}
-                  importantForAccessibility={syncStatus === null ? 'auto' : 'no-hide-descendants'}
-                >
-                  {homeSurface()}
-                </View>
-                {syncStatus}
-              </>
-            );
-          },
-        })}
+              },
+              shell: (shellZone) => {
+                // Switching user, or re-enrolling (which ends the session), unmounts the home surface
+                // kept under Sync Status, so go back to it first and let its discard question run where
+                // the person can see it.
+                const leaveSyncStatusThen = (proceed: () => void): void => {
+                  if (syncReturn !== 'home') {
+                    proceed();
+                    return;
+                  }
+                  setRoute('home');
+                  leaveHome(proceed);
+                };
+                const syncStatus =
+                  shellZone.route === 'syncStatus' ? (
+                    <SyncStatusScreen
+                      input={props.sync}
+                      currentUser={currentUser}
+                      onBack={() => setRoute(syncReturn)}
+                      onSyncNow={props.onSyncNow}
+                      // 05 §2.3 / 06 §8: "rejections must be surfaced, never silent". The row already
+                      // carries the code's explanation; the tap discloses the server's own words under
+                      // `sync.rejected.technicalDetails` (a catalog key that shipped with no consumer).
+                      // Tapping the open row closes it — see `rejectedDetailFor`.
+                      onOpenRejected={(row) =>
+                        setRejectedDetailFor((current) => (current === row.opId ? null : row.opId))
+                      }
+                      expandedRejectedOpId={rejectedDetailFor}
+                      // 06 §5.2 (e). The row-level chip is per item and the producer is loop-level
+                      // (`requestManual` coalesces into one immediate drain pass), which is the honest
+                      // shape: the drain is single-flight and processes oldest-evidence-first (§5.1), so
+                      // there is no per-item retry to call and pretending otherwise would be a control
+                      // that looks more precise than the engine underneath it.
+                      onRetryMedia={props.onRetryMedia}
+                      onMarkRejectedHandled={props.onMarkRejectedHandled}
+                      onCheckForUpdate={props.onCheckForUpdate}
+                      onOpenSwitcher={() => leaveSyncStatusThen(() => setSwitching(true))}
+                      onReenroll={() => leaveSyncStatusThen(() => setReenrolling(true))}
+                    />
+                  ) : null;
+                if (syncStatus !== null && syncReturn !== 'home') return syncStatus;
+                // The chip on a settings page or the parts list: tapping it leaves through the page's guard.
+                const routeSyncChip = (
+                  <SyncChip
+                    state={chip}
+                    pendingCount={props.sync.pendingOperationCount}
+                    accessibilityLabels={syncChipAccessibilityLabels({
+                      pendingCount: props.sync.pendingOperationCount,
+                    })}
+                    onPress={() => leaveHome(() => setRoute('syncStatus'))}
+                  />
+                );
+                if (shellZone.route === 'settings' && currentUser !== null) {
+                  return (
+                    <SettingsScreen
+                      locale={props.locale}
+                      onSelectLocale={props.onSelectLocale}
+                      onOpenNotificationSettings={(category: MutablePushCategory) =>
+                        openNotificationSettings(channelId(category))
+                      }
+                      // Data that needs an owner's decision is for whoever can decide it.
+                      notificationCategories={MUTABLE_PUSH_CATEGORIES.filter(
+                        (category) => category !== 'conflict' || props.canDecideConflicts === true,
+                      )}
+                      device={props.deviceInfo}
+                      currentUser={currentUser}
+                      onBack={() => setRoute('home')}
+                      onOpenSwitcher={() => setSwitching(true)}
+                      onOpenChangePin={() => setRoute('changePin')}
+                      onOpenApprovalPin={props.onOpenApprovalPin}
+                      onRenameDevice={
+                        props.onRenameDevice === undefined
+                          ? undefined
+                          : () => setRoute('renameDevice')
+                      }
+                      onOpenSetup={() => {
+                        setSetupReturn('settings');
+                        setRoute('deviceSetup');
+                      }}
+                      // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
+                      // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
+                      onOpenStaffPins={
+                        props.canUnlock || props.canReset ? () => setRoute('staffPins') : undefined
+                      }
+                      onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
+                      onOpenLimits={
+                        props.staff?.canSetLimits === true ? () => setRoute('limits') : undefined
+                      }
+                      // The role editor is the main owner's alone.
+                      onOpenRoles={
+                        props.staff?.tenantAdmin === true ? () => setRoute('roles') : undefined
+                      }
+                      onOpenDevices={
+                        props.devices === undefined ? undefined : () => setRoute('devices')
+                      }
+                      lockedStaffCount={
+                        [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
+                          (id) => id !== currentUser.id,
+                        ).length
+                      }
+                      // Each row for whoever may change it here: the store's settings for owners, the
+                      // phone's paper for anyone who prints.
+                      modules={[
+                        {
+                          section: tn('repair.board.title'),
+                          testID: 'settings-section-repair',
+                          rows: [
+                            ...(repairSettings.intakeOptions
+                              ? [
+                                  {
+                                    icon: 'list' as const,
+                                    title: tn('repair.options.title'),
+                                    summary: tn('repair.options.summary'),
+                                    onOpen: () => setRoute('intakeOptions'),
+                                    testID: 'settings-intake-options',
+                                  },
+                                ]
+                              : []),
+                            ...(repairSettings.cancelFees
+                              ? [
+                                  {
+                                    icon: 'money' as const,
+                                    title: tn('repair.fees.title'),
+                                    summary: tn('repair.fees.summary'),
+                                    onOpen: () => setRoute('cancelFees'),
+                                    testID: 'settings-cancel-fees',
+                                  },
+                                ]
+                              : []),
+                            ...(repairSettings.uncollected
+                              ? [
+                                  {
+                                    icon: 'clock' as const,
+                                    title: tn('repair.uncollected.title'),
+                                    summary: tn('repair.uncollected.summary'),
+                                    onOpen: () => setRoute('uncollectedDays'),
+                                    testID: 'settings-uncollected-days',
+                                  },
+                                ]
+                              : []),
+                            ...(repairSettings.printSettings
+                              ? [
+                                  {
+                                    icon: 'print' as const,
+                                    title: tn('repair.printSettings.title'),
+                                    summary: tn('repair.printSettings.summary'),
+                                    onOpen: () => setRoute('printSettings'),
+                                    testID: 'settings-print-settings',
+                                  },
+                                ]
+                              : []),
+                            // The phone's own paper: anyone who prints here may set it.
+                            ...(props.repair?.printing !== undefined
+                              ? [
+                                  {
+                                    icon: 'paper' as const,
+                                    title: tn('repair.paper.title'),
+                                    summary: tn('repair.paper.phoneSummary'),
+                                    onOpen: () => setRoute('printPaper'),
+                                    testID: 'settings-print-paper',
+                                  },
+                                ]
+                              : []),
+                          ],
+                        },
+                        {
+                          section: tm('money.kas.title'),
+                          testID: 'settings-section-money',
+                          rows: canManageAccounts
+                            ? [
+                                {
+                                  icon: 'paymentMethods' as const,
+                                  title: tm('money.methods.title'),
+                                  summary: tm('money.methods.summary'),
+                                  onOpen: () => setRoute('paymentMethods'),
+                                  testID: 'settings-payment-methods',
+                                },
+                              ]
+                            : [],
+                        },
+                      ]}
+                      syncChip={chip}
+                      pendingCount={props.sync.pendingOperationCount}
+                      onOpenSync={openSyncStatus}
+                    />
+                  );
+                }
+                if (
+                  (shellZone.route === 'intakeOptions' ||
+                    shellZone.route === 'cancelFees' ||
+                    shellZone.route === 'uncollectedDays' ||
+                    shellZone.route === 'printSettings' ||
+                    shellZone.route === 'printPaper') &&
+                  props.repair !== undefined
+                ) {
+                  return (
+                    <RepairSettingsRoute
+                      page={shellZone.route}
+                      runtime={props.repair}
+                      syncChip={routeSyncChip}
+                      onClose={backToSettings}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                if (shellZone.route === 'paymentMethods' && moneyRuntime !== null) {
+                  return (
+                    <PaymentMethodsRoute
+                      runtime={moneyRuntime}
+                      syncChip={routeSyncChip}
+                      onClose={backToSettings}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                if (shellZone.route === 'deviceSetup') {
+                  return (
+                    <DeviceSetupRoute
+                      repair={props.repair}
+                      syncChip={routeSyncChip}
+                      camera={props.cameraPermission}
+                      notifications={props.notificationPermission}
+                      onOpenSystemSettings={() => void Linking.openSettings()}
+                      onOpenSetting={setRoute}
+                      onDone={() => {
+                        setRoute(setupReturn);
+                        setSetupReturn('home');
+                      }}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                if (shellZone.route === 'devices' && props.devices !== undefined) {
+                  // The owner's "Perangkat": the store's devices, and blocking a lost one, online.
+                  return (
+                    <DevicesScreen
+                      load={props.devices.load}
+                      onBlock={props.devices.block}
+                      onClose={() => setRoute('settings')}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                if (shellZone.route === 'renameDevice' && props.onRenameDevice !== undefined) {
+                  return (
+                    <RenameDeviceScreen
+                      current={props.deviceInfo.deviceName}
+                      onRename={props.onRenameDevice}
+                      onClose={() => setRoute('settings')}
+                    />
+                  );
+                }
+                if (shellZone.route === 'changePin') {
+                  // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
+                  // through the session controller and REJECTS with its DomainError; the screen maps it.
+                  // Back / done returns to Settings — the surface it was opened from (see `backTarget`).
+                  return (
+                    <ChangePinScreen
+                      person={currentUser ?? undefined}
+                      onChangePin={props.onChangePin}
+                      onClose={() => setRoute('settings')}
+                    />
+                  );
+                }
+                if (shellZone.route === 'staffPins') {
+                  // The owner's "PIN karyawan": unlock a locked PIN or have a colleague make a new one, each
+                  // offered only with its permission (core enforces both, plus the §6.6 privileged-target
+                  // rule). The list is loaded on entry (the effect above); back returns to Settings.
+                  return (
+                    <StaffPinScreen
+                      canUnlock={props.canUnlock}
+                      canReset={props.canReset}
+                      loading={pinTargets.loading}
+                      error={pinTargets.error}
+                      users={pinTargets.users}
+                      actorUserId={sessionUserId ?? ''}
+                      onClearLockout={clearLockout}
+                      onResetPin={resetPin}
+                      onReload={loadPinTargets}
+                      startWith={staffPinFor}
+                      onClose={() => {
+                        setRoute(staffPinFor === null ? 'settings' : 'staff');
+                        setStaffPinFor(null);
+                      }}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                if (
+                  shellZone.route === 'staff' &&
+                  props.staff !== undefined &&
+                  currentUser !== null
+                ) {
+                  // The owner's "Karyawan": add, change and deactivate staff, online. A new person's first
+                  // PIN is made in "PIN karyawan", opened at their hand-over and returning here.
+                  const staff = props.staff;
+                  return (
+                    <StaffScreen
+                      actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
+                      load={staff.load}
+                      onCreate={staff.onCreate}
+                      onUpdate={staff.onUpdate}
+                      onSetActive={staff.onSetActive}
+                      onMakePin={
+                        props.canReset
+                          ? (userId) => {
+                              setStaffPinFor(userId);
+                              setRoute('staffPins');
+                            }
+                          : undefined
+                      }
+                      onClose={() => setRoute('settings')}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                if (
+                  shellZone.route === 'limits' &&
+                  props.staff !== undefined &&
+                  currentUser !== null
+                ) {
+                  // The store owner's "Batas wewenang": a limited role's amounts here, online.
+                  const staff = props.staff;
+                  return (
+                    <LimitsScreen
+                      actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
+                      load={staff.load}
+                      onSave={staff.onSetLimits}
+                      onClose={() => setRoute('settings')}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                if (shellZone.route === 'roles' && props.staff?.tenantAdmin === true) {
+                  // The main owner's "Tugas karyawan": the store roles and their switches, online.
+                  const staff = props.staff;
+                  return (
+                    <RolesScreen
+                      load={staff.load}
+                      onCreate={staff.onCreateRole}
+                      onUpdate={staff.onUpdateRole}
+                      onDelete={staff.onDeleteRole}
+                      onClose={() => setRoute('settings')}
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                    />
+                  );
+                }
+                const homeSurface = (): React.JSX.Element => {
+                  // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
+                  // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
+                  // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
+                  // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
+                  // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
+                  // the copy the label catalog exists to prevent (07-i18n).
+                  if (props.notes === undefined && props.repair === undefined) {
+                    return <View testID="shell-home" style={FILL} />;
+                  }
+                  // The header chrome every home surface shares (§8.1).
+                  const homeSyncChip = (
+                    <SyncChip
+                      state={chip}
+                      pendingCount={props.sync.pendingOperationCount}
+                      progressPercent={setupPercent}
+                      accessibilityLabels={syncChipAccessibilityLabels({
+                        relative:
+                          props.sync.state.lastSuccessfulSyncAt === null
+                            ? t('core.status.empty')
+                            : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
+                        pendingCount: props.sync.pendingOperationCount,
+                        firstSyncPercent: setupPercent,
+                      })}
+                      // No leave guard: Sync Status keeps the surface mounted, so nothing is lost.
+                      onPress={openSyncStatus}
+                    />
+                  );
+                  const homeAvatar =
+                    currentUser === null ? (
+                      <View testID="notes-no-avatar" />
+                    ) : (
+                      // THE HEADER CHROME (§8.1): the avatar, which opens the account menu: switch user
+                      // (the User Switcher) and Settings. It is the ONLY producer of `route: 'settings'`.
+                      //
+                      // Settings holds the language toggle, the owner's intake lists, the PIN and
+                      // notification rows and the device readout. On an Indonesian-first product the
+                      // language rows are the ONLY way out of a wrong locale (07-i18n §1.2), so both menu
+                      // rows carry an icon that reads by shape: a cog and a person swap.
+                      //
+                      // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES (task 143) now goes through the menu.
+                      // `setSwitching(true)` produces the switcher zone from a live session, and
+                      // `backTarget` returns to `home` (this surface's route) when the switch is abandoned.
+                      // Both rows go through `leaveHome` (task 145), so an open editor's discard gate runs
+                      // before either leaves the surface.
+                      <AvatarButton
+                        userId={currentUser.id}
+                        initials={currentUser.initials}
+                        accessibilityLabel={t('core.account.menu')}
+                        onPress={() => setAccountMenu(true)}
+                      />
+                    );
+                  // Repair is the slice-1 home; notes stays the home on a build without it.
+                  if (props.repair !== undefined) {
+                    const repairHome = (
+                      <RepairHome
+                        runtime={props.repair}
+                        // The clock itself, not this render's reading: an intake can sit open for hours.
+                        now={props.clock ?? systemClock.now}
+                        onRegisterSurfaceNav={registerRepairNav}
+                        restoredDraft={restoredRepairDraft}
+                        intakeStartedBy={intakeStartedBy}
+                        onDraftChange={publishRepairDraft}
+                        onOpenSyncStatus={openSyncStatus}
+                        syncChip={homeSyncChip}
+                        avatar={homeAvatar}
+                        open={repairOpen}
+                        onReturn={returnFromRepair}
+                      />
+                    );
+                    if (homeTabs.length === 1) return repairHome;
+                    // Servisan stays mounted behind the other places, so a half-done intake survives a
+                    // look at the drawer. Barang stays mounted once opened, so its filter and a
+                    // half-written order survive too. Kas holds nothing worth keeping.
+                    const tabsShow =
+                      tab === 'attention'
+                        ? true
+                        : tab === 'repair'
+                          ? repairTabs
+                          : tab === 'kas'
+                            ? kasTabs
+                            : itemsTabs;
+                    const tabs = tabsShow ? (
+                      <TabBar
+                        tabs={homeTabs.map(homeTabItem)}
+                        selected={tab}
+                        onSelect={selectTab}
+                        variant={tabsAsRail ? 'rail' : 'bar'}
+                        testID="shell-tabs"
+                      />
+                    ) : null;
+                    // Along the bottom, the tabs go into the showing screen's own shell (one dock with
+                    // its action, under its sheets); only the place in front gets them.
+                    const bottomTabs = (place: HomeTab): React.ReactNode =>
+                      !tabsAsRail && tab === place ? tabs : null;
+                    return (
+                      <View style={tabsAsRail ? ROW : FILL}>
+                        {tabsAsRail ? tabs : null}
+                        {tab === 'attention' ? (
+                          <View style={FILL}>
+                            <ShellTabsProvider tabs={bottomTabs('attention')}>
+                              <AttentionHome
+                                runtime={props.repair}
+                                now={props.clock ?? systemClock.now}
+                                refused={props.sync.rejected.length}
+                                syncChip={homeSyncChip}
+                                avatar={homeAvatar}
+                                onOpen={openFromAttention}
+                                onOpenSyncStatus={openSyncStatus}
+                              />
+                            </ShellTabsProvider>
+                          </View>
+                        ) : null}
+                        <View style={tab === 'repair' ? FILL : HIDDEN}>
+                          <ShellTabsProvider tabs={bottomTabs('repair')}>
+                            {repairHome}
+                          </ShellTabsProvider>
+                        </View>
+                        {tab === 'kas' && moneyRuntime !== null ? (
+                          <View style={FILL}>
+                            <ShellTabsProvider tabs={bottomTabs('kas')}>
+                              <KasHome
+                                runtime={moneyRuntime}
+                                now={props.clock ?? systemClock.now}
+                                syncChip={homeSyncChip}
+                                avatar={homeAvatar}
+                                onRegisterSurfaceNav={registerKasNav}
+                              />
+                            </ShellTabsProvider>
+                          </View>
+                        ) : null}
+                        {showsItems && itemsRuntime !== undefined && itemsOpened ? (
+                          <View style={tab === 'items' ? FILL : HIDDEN}>
+                            <ShellTabsProvider tabs={bottomTabs('items')}>
+                              <ItemsHome
+                                inventory={itemsRuntime}
+                                purchasing={props.repair.purchasing}
+                                syncChip={homeSyncChip}
+                                avatar={homeAvatar}
+                                onOpenSyncStatus={openSyncStatus}
+                                onRegisterSurfaceNav={registerItemsNav}
+                                open={itemsOpen}
+                              />
+                            </ShellTabsProvider>
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  }
+                  if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
+                  return (
+                    <NotesHome
+                      runtime={props.notes}
+                      now={props.now}
+                      // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
+                      onRegisterSurfaceNav={registerSurfaceNav}
+                      // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
+                      // locked (owner-checked above, so it is theirs), and the write-back that keeps it
+                      // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
+                      restoredDraft={restoredNotesDraft}
+                      onDraftChange={publishNotesDraft}
+                      onOpenSyncStatus={openSyncStatus}
+                      syncChip={homeSyncChip}
+                      avatar={homeAvatar}
+                    />
+                  );
+                };
+                // Sync Status opened from home sits OVER the home surface instead of replacing it: the
+                // surface keeps its own state (the open servisan, its step, anything typed), so Back lands
+                // exactly where the person was. Same element shape on both routes, so React keeps it mounted.
+                return (
+                  <>
+                    <View
+                      key="home"
+                      testID="shell-home-surface"
+                      style={syncStatus === null ? FILL : HIDDEN}
+                      accessibilityElementsHidden={syncStatus !== null}
+                      importantForAccessibility={
+                        syncStatus === null ? 'auto' : 'no-hide-descendants'
+                      }
+                    >
+                      {homeSurface()}
+                    </View>
+                    {syncStatus}
+                  </>
+                );
+              },
+            })}
+          </UndoHost>
+        </UndoProvider>
       </View>
       {accountMenu && currentUser !== null && zone.kind === 'shell' ? (
         <Sheet
