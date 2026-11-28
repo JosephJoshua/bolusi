@@ -221,14 +221,31 @@ export function wordSimilarity(query: string, target: string, typed = query.leng
   return best;
 }
 
-/** Best similarity of query word `i`, as typed or folded, against any target term. */
-function bestWord(query: Words, i: number, target: Words): number {
-  const plain = query.plain[i]!;
-  const folded = query.folded[i]!;
+/** A synonym's match counts a little less, so a record saying exactly what was typed comes first. */
+export const SYNONYM_WEIGHT = 0.9;
+
+/**
+ * How well query word `i` (as typed, folded, or one of its synonyms) matches one target term. The
+ * index compares vocabulary terms with this too, so both give the same scores.
+ */
+export function queryWordSimilarity(query: CompiledQuery, i: number, term: string): number {
+  const plain = query.words.plain[i]!;
+  const folded = query.words.folded[i]!;
+  let best = wordSimilarity(plain, term);
+  if (best === 1) return 1;
+  if (folded !== plain) best = Math.max(best, wordSimilarity(folded, term, plain.length));
+  for (const other of query.synonyms[i]!) {
+    if (best >= SYNONYM_WEIGHT) break;
+    best = Math.max(best, SYNONYM_WEIGHT * wordSimilarity(other, term));
+  }
+  return best;
+}
+
+/** Best similarity of query word `i` against any target term. */
+function bestWord(query: CompiledQuery, i: number, target: Words): number {
   let best = 0;
   for (const term of target.terms) {
-    best = Math.max(best, wordSimilarity(plain, term));
-    if (folded !== plain) best = Math.max(best, wordSimilarity(folded, term, plain.length));
+    best = Math.max(best, queryWordSimilarity(query, i, term));
     if (best === 1) break;
   }
   return best;
@@ -240,17 +257,18 @@ export function allowedMisses(wordCount: number): number {
 }
 
 /** How well all query words match the target words, in [0, 1]. */
-function wordsScore(query: Words, target: Words): number {
-  if (query.plain.length === 0 || target.plain.length === 0) return 0;
+function wordsScore(query: CompiledQuery, target: Words): number {
+  const count = query.words.plain.length;
+  if (count === 0 || target.plain.length === 0) return 0;
   let total = 0;
   let missed = 0;
-  for (let i = 0; i < query.plain.length; i += 1) {
+  for (let i = 0; i < count; i += 1) {
     const best = bestWord(query, i, target);
     if (best === 0) missed += 1;
     total += best;
   }
-  if (missed > allowedMisses(query.plain.length)) return 0;
-  return total / query.plain.length;
+  if (missed > allowedMisses(count)) return 0;
+  return total / count;
 }
 
 /**
@@ -310,8 +328,16 @@ export interface SearchDocument {
 }
 
 /** A query prepared once and scored against many documents. */
+/** Where a query finds the other words of a word's synonym groups (synonyms.ts). */
+export interface SynonymLookup {
+  /** The folded words that mean the same as this folded word, not including it. */
+  alternatives(folded: string): readonly string[];
+}
+
 export interface CompiledQuery {
   readonly words: Words;
+  /** Per query word, the folded synonyms it also looks for (see `SYNONYM_WEIGHT`). */
+  readonly synonyms: readonly (readonly string[])[];
   /** The folded words joined, for `compactSimilarity`. */
   readonly compact: string;
   /** `compact`'s length for its edit budget: what was typed, if the folds made it longer. */
@@ -331,7 +357,8 @@ export interface CompiledQuery {
   readonly code: string;
 }
 
-export function compileQuery(query: string): CompiledQuery | null {
+/** The query prepared for scoring. Without `synonyms` a word matches only itself and its typos. */
+export function compileQuery(query: string, synonyms?: SynonymLookup): CompiledQuery | null {
   const normalized = normalizeText(query);
   if (normalized === '') return null;
   const digitCount = query.replace(/\D/g, '').length;
@@ -342,6 +369,7 @@ export function compileQuery(query: string): CompiledQuery | null {
   const compactLength = Math.min(compact.length, parsed.plain.join('').length);
   return {
     words: parsed,
+    synonyms: parsed.folded.map((word) => synonyms?.alternatives(word) ?? []),
     compact,
     compactLength,
     compactTolerance:
@@ -444,10 +472,7 @@ export function scoreNumbers(query: CompiledQuery, fields: NumberFields, parts: 
 
 /** The prepared document's score for the query, in [0, 1]; 0 when it does not match. */
 export function scorePrepared(query: CompiledQuery, prepared: PreparedDocument): number {
-  const text = Math.max(
-    wordsScore(query.words, prepared.words),
-    compactScore(query, prepared.words),
-  );
+  const text = Math.max(wordsScore(query, prepared.words), compactScore(query, prepared.words));
   return Math.max(text >= MIN_SCORE ? text : 0, scoreNumbers(query, prepared, SCORE_PART.all));
 }
 
