@@ -227,13 +227,13 @@ export function CategoryDialog({
     if (outcome.status !== 'blocked') return;
     // The first thing to fix gets the keyboard, scrolled into sight in a long dialog.
     const target =
-      problems.name !== null
+      outcome.at === 'name'
         ? `${testId}.name`
-        : outcome.field !== undefined
+        : outcome.at === 'field'
           ? `${testId}.field.${outcome.field}.label`
-          : problems.format !== null
+          : outcome.at === 'format'
             ? `${testId}.format`
-            : null;
+            : `${testId}.addField`;
     if (target !== null) document.querySelector<HTMLElement>(`[data-testid="${target}"]`)?.focus();
   };
 
