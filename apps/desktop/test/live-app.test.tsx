@@ -383,7 +383,7 @@ describe('the PC over the offline core', () => {
   it('shows the servisan a kept intake already opened instead of opening it twice', async () => {
     core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
     renderApp();
-    await screen.findByTestId('repair.desk.board.newIntake');
+    await onBoard();
     fireEvent.keyDown(window, { key: 'F2' });
     fireEvent.change(await screen.findByTestId('repair.desk.intake.name'), {
       target: { value: 'Yakobus Mandowen' },
