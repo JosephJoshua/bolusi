@@ -6,12 +6,17 @@
 // Beyond it the same change is asked for, with the fee as typed (one kind before a charge, one
 // after, for the two limits), so the owner reads that fee and their yes records exactly what the
 // manager would have.
+import { formatMoney } from '@bolusi/i18n';
+
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import { ta } from '../approvals/i18n.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
 import { REPAIR_APPROVAL_KIND, REPAIR_PERMISSION } from './constants.js';
-import { discountsStanding } from './flows.js';
+import { askedBecauseKey, discountsStanding } from './flows.js';
+import { tn } from './i18n.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import { cancelDrop, standardCancelFee, type TicketDetailRow } from './queries.js';
+import { useActionRunner } from '../screen-kit/index.js';
 import { useCancelFees, useRepairQuery, useRepairRuntime } from './runtime.js';
 
 export type CancelFeeTicket = Pick<
@@ -107,5 +112,61 @@ export function useCancelFeeAsk(
       if (request === null) throw new Error('nothing to ask');
       return { ...request, input: { ...request.input, reason }, reason };
     },
+  };
+}
+
+/**
+ * The "Ubah biaya" form on a cancelled servisan. `fee` is the bill as typed (null while it is not
+ * an amount yet), `current` the bill now and `paid` what was paid in so far.
+ */
+export function useChangeCancelFee(
+  facts: { readonly ticket: CancelFeeTicket; readonly current: number; readonly paid: number },
+  form: { readonly fee: number | null; readonly reason: string },
+  done: { readonly onDone: () => void; readonly onAsked: () => void },
+) {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const { ticket, current, paid } = facts;
+  const { fee, reason } = form;
+  const changed = fee !== null && fee !== current;
+  const complete = changed && reason.trim() !== '';
+  const ask = useCancelFeeAsk(ticket, current, changed ? fee : null);
+  const submit = (): void => {
+    if (fee === null || !complete) return;
+    const asking = ask.asking;
+    void runner
+      .run<unknown>(() =>
+        asking
+          ? runtime.approvals.run('requestApproval', ask.request(reason.trim()))
+          : runtime.run('changeCancelFee', { ticketId: ticket.id, fee, reason }),
+      )
+      .then((result) => {
+        if (result !== undefined) (asking ? done.onAsked : done.onDone)();
+      });
+  };
+  return {
+    runner,
+    changed,
+    complete,
+    /** Something was typed that leaving would lose. */
+    dirty: changed || reason.trim() !== '',
+    asking: ask.asking,
+    submitLabel: ask.asking ? ta('approvals.action.ask') : tn('repair.cancelFee.save'),
+    /** What the bill is now and what was paid against it. */
+    explain:
+      paid > 0
+        ? tn('repair.cancelFee.paid', { bill: formatMoney(current), amount: formatMoney(paid) })
+        : tn('repair.cancelFee.unpaid', { bill: formatMoney(current) }),
+    /** Why it goes to an owner, while it does. */
+    askedBecause: ask.asking ? tn(askedBecauseKey(true)) : null,
+    /** What is still missing before it can be saved. */
+    hint: tn(
+      fee === null
+        ? 'repair.hint.cancelFee'
+        : changed
+          ? 'repair.hint.reason'
+          : 'repair.cancelFee.same',
+    ),
+    submit,
   };
 }
