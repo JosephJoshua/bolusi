@@ -2,6 +2,7 @@
 // when each last synced, and blocking a lost one. A blocked device erases its data the next time it
 // reaches the server, so the confirmation names its last sync. Online only; the phone's list model
 // decides the rows and their words, and this PC cannot block itself from here.
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import { staffAdminFailure, type StaffAdminFailure } from '@bolusi/core';
 import type { DeviceControls } from '@bolusi/device/bootstrap/devices';
 import {
@@ -32,6 +33,8 @@ export function DevicesPanel({
     readonly tone: 'success' | 'warning' | 'danger';
     readonly text: string;
   } | null>(null);
+  const { note: done, say } = useDoneNote();
+  const shown = notice ?? (done === null ? null : { tone: 'success' as const, text: done });
   const latest = useRef(controls);
   latest.current = controls;
 
@@ -54,7 +57,7 @@ export function DevicesPanel({
       async () => {
         await reload();
         setBusy(false);
-        setNotice({ tone: 'success', text: t('auth.devices.blocked', { name: row.name }) });
+        say(t('auth.devices.blocked', { name: row.name }));
       },
       (error: unknown) => {
         const reason = staffAdminFailure(error);
@@ -73,11 +76,14 @@ export function DevicesPanel({
       lead={t('auth.devices.settingsSummary')}
       testId="desktop.settings.devices"
     >
-      {notice === null ? null : (
+      {shown === null ? null : (
         <Banner
-          tone={notice.tone}
-          message={notice.text}
-          onDismiss={() => setNotice(null)}
+          tone={shown.tone}
+          message={shown.text}
+          onDismiss={() => {
+            setNotice(null);
+            say(null);
+          }}
           dismissLabel={t('core.action.close')}
         />
       )}

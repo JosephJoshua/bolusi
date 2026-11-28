@@ -31,6 +31,15 @@ export const color = Object.freeze({
   overlay: '#18181B',
   /** Text/initials on any `identityPalette` hue (§1.5). */
   onIdentity: '#FFFFFF',
+  /**
+   * The toast: a dark bar that stands apart from the light page without a shadow. Its action and
+   * status icons are the light steps of primary, success and danger, which read on dark.
+   */
+  inverseSurface: '#18181B',
+  onInverse: '#FAFAFA',
+  inverseAction: '#93C5FD',
+  inverseSuccess: '#4ADE80',
+  inverseDanger: '#FCA5A5',
 } as const);
 
 /**

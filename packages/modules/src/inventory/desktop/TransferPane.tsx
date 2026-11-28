@@ -15,7 +15,7 @@ import {
 import { SearchX, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, useDoneNote } from '../../screen-kit/index.js';
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import { ti, type InventoryKey } from '../i18n.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
@@ -54,7 +54,7 @@ export function TransferPane({
   const stores = useStores();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [task, setTask] = useState<Task>('none');
-  const [done, setDone] = useState<InventoryKey | null>(null);
+  const { note: done, say: setDone } = useDoneNote<InventoryKey>((key) => ti(key));
   const say = (key: InventoryKey | null): void => {
     onClearNotice();
     setDone(key);

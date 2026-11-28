@@ -4,6 +4,7 @@
  * one every store uses. A method is switched off rather than deleted, so its past payments keep
  * their name, and its kind never changes once payments may have gone through it.
  */
+import { useDoneNote } from '../../screen-kit/index.js';
 import {
   ConfirmSheet,
   EmptyState,
@@ -60,7 +61,7 @@ export function PaymentMethodsSurface({
   onRegisterDiscardGuard,
 }: PaymentMethodsSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<MethodsView>({ kind: 'list' });
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback(
     (guard: DiscardGuard | null): void => {

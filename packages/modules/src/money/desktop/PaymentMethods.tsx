@@ -3,6 +3,7 @@
  * as a settings page and a dialog, over the same form state and save (`usePaymentMethodForm`).
  * Cash is always there; a method is switched off rather than deleted, and its kind never changes.
  */
+import { useDoneNote } from '../../screen-kit/index.js';
 import { t } from '@bolusi/i18n';
 import {
   Banner,
@@ -48,7 +49,7 @@ export function PaymentMethodsSettings(): React.JSX.Element {
   const stores = useMoneyStores();
   const [nonce, setNonce] = useState(0);
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const query = useMoneyQuery<readonly PaymentAccountRow[]>(
     async (rt) =>
       (await rt.query('paymentAccounts', { includeInactive: true, everyStore: access.central }))

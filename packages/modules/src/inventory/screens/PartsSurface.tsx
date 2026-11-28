@@ -9,10 +9,11 @@ import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  usePlaceOpen,
   type DiscardGuard,
   type PlaceOpen,
   type PlaceStep,
+  useDoneNote,
+  usePlaceOpen,
 } from '../../screen-kit/index.js';
 import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
@@ -61,9 +62,9 @@ export function PartsSurface({
 }: PartsSurfaceProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
   const [view, setView] = useState<View>({ kind: 'list' });
-  const [notice, setNotice] = useState<InventoryKey | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote<InventoryKey>((key) => ti(key));
   const [filter, setFilter] = useState<ListFilter>(NO_FILTER);
-  const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
+  const { note: categoryNotice, say: setCategoryNotice } = useDoneNote();
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback(
     (guard: DiscardGuard | null): void => {

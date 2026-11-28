@@ -10,10 +10,11 @@ import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  usePlaceOpen,
   type DiscardGuard,
   type PlaceOpen,
   type PlaceStep,
+  useDoneNote,
+  usePlaceOpen,
 } from '../../screen-kit/index.js';
 import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp, type PurchasingKey } from '../i18n.js';
@@ -86,8 +87,8 @@ export function PurchasingSurface({
 }: PurchasingSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [filter, setFilter] = useState<BelanjaTab>('open');
-  const [notice, setNotice] = useState<PurchasingKey | null>(null);
-  const [supplierNotice, setSupplierNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote<PurchasingKey>((key) => tp(key));
+  const { note: supplierNotice, say: setSupplierNotice } = useDoneNote();
   const [writing, setWriting] = useState<Writing | null>(null);
   const [draft, setDraft] = useState<OrderDraft>(EMPTY_ORDER);
   const [billWriting, setBillWriting] = useState<BillWriting | null>(null);

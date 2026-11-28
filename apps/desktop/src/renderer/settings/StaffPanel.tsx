@@ -5,6 +5,7 @@
 //
 // A new person has no PIN. Right after adding, the owner is offered "Buat PIN", the same new-PIN
 // dialog as "PIN karyawan": one PIN flow, not two.
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import {
   staffAdminFailure,
   type StaffActor,
@@ -78,7 +79,7 @@ export function StaffPanel({
 }): React.JSX.Element {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [step, setStep] = useState<StaffStep>({ kind: 'list' });
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const [pinFor, setPinFor] = useState<PinTargetUser | null>(null);
   const actor: StaffActor = useMemo(
     () => ({ userId: actorUserId, tenantAdmin: controls.tenantAdmin }),

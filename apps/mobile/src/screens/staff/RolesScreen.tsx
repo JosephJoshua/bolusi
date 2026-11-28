@@ -6,6 +6,7 @@
  * ONLINE ONLY, like "Karyawan": each change is a server call, and the screen re-reads this phone's
  * directory afterwards, so it never shows a role the server refused.
  */
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import {
   staffAdminFailure,
   type StaffAdminFailure,
@@ -106,7 +107,7 @@ export function RolesScreen({
 }: RolesScreenProps): React.JSX.Element {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [step, setStep] = useState<Step>({ kind: 'list' });
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
 
   const latestLoad = useLatestCallback(load);
   const reload = useCallback(async (): Promise<void> => {

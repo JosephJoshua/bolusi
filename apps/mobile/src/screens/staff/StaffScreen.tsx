@@ -9,6 +9,7 @@
  * A new person has no PIN. Right after adding, the owner is offered "Buat PIN", which opens
  * the existing "PIN karyawan" hand-over for that person (`onMakePin`): one PIN flow, not two.
  */
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import {
   type StaffActor,
   type StaffDirectory,
@@ -80,7 +81,7 @@ export function StaffScreen({
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [step, setStep] = useState<StaffStep>({ kind: 'list' });
   /** What the last change did, said on the list it returns to. */
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
 
   const latestLoad = useLatestCallback(load);
   const reload = useCallback(async (): Promise<StaffDirectory | null> => {

@@ -7,6 +7,7 @@
  * directory afterwards, so it never shows an amount the server refused. With one limited role (the
  * usual store) the form opens straight away; otherwise a list of roles comes first.
  */
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import {
   staffAdminFailure,
   type LimitAmounts,
@@ -74,7 +75,7 @@ export function LimitsScreen({
 }: LimitsScreenProps): React.JSX.Element {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [openId, setOpenId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
 
   const latestLoad = useLatestCallback(load);
   const reload = useCallback(async (): Promise<void> => {

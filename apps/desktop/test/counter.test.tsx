@@ -536,12 +536,12 @@ describe('counter app over demo data', () => {
       target: { value: 'Baterai' },
     });
     fireEvent.click(byTestId('repair.desk.waitForParts.submit'));
-    const toast = await screen.findByTestId('undo.toast');
+    const toast = await screen.findByTestId('toast');
     expect(toast.textContent).toContain('Ditandai tunggu sparepart.');
     await screen.findByTestId('repair.desk.ticket.action.resume');
 
-    fireEvent.click(byTestId('undo.toast.action'));
-    await waitFor(() => expect(screen.queryByTestId('undo.toast')).toBeNull());
+    fireEvent.click(byTestId('toast.action'));
+    await waitFor(() => expect(screen.queryByTestId('toast')).toBeNull());
     await screen.findByTestId('repair.desk.ticket.action.waitForParts');
     expect(byTestId('repair.desk.ticket.history').textContent).toContain('Perubahan dibatalkan');
   });

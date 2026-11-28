@@ -1,5 +1,6 @@
 // Kiriman on the counter PC: parts sent between this store and the business's others, the open ones
 // first, with the selected transfer open beside them. Sending is F2, for whoever may send.
+import { useDoneNote } from '../../screen-kit/index.js';
 import { formatDate, t } from '@bolusi/i18n';
 import {
   Button,
@@ -49,7 +50,7 @@ export function TransfersPage({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [notice, setNotice] = useState<InventoryKey | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote<InventoryKey>((key) => ti(key));
   const tableRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const sends = runtime.hasPermission(INVENTORY_PERMISSION.transfer);

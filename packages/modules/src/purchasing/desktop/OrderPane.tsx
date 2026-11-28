@@ -15,7 +15,7 @@ import {
 import { SearchX, Send, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, useDoneNote } from '../../screen-kit/index.js';
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { orderMessage, orderMessageUrl } from '../order-message.js';
@@ -59,7 +59,7 @@ export function OrderPane({
   const setTask = (kind: 'none' | 'edit' | 'receive' | 'cancel' | 'bill'): void =>
     setTaskState({ kind });
   const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
-  const [done, setDone] = useState<PurchasingKey | null>(null);
+  const { note: done, say: setDone } = useDoneNote<PurchasingKey>((key) => tp(key));
   const say = (key: PurchasingKey | null): void => {
     onClearNotice();
     setDone(key);

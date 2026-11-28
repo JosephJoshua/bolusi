@@ -57,6 +57,17 @@ describe('contrast floor (§6.1)', () => {
     expect(exempt).toHaveLength(0);
   });
 
+  test('the toast’s text, action and status icons read on its dark bar', () => {
+    for (const fg of [
+      color.onInverse,
+      color.inverseAction,
+      color.inverseSuccess,
+      color.inverseDanger,
+    ]) {
+      expect(contrastRatio(fg, color.inverseSurface)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   test('every identity hue carries white initials (§1.5)', () => {
     for (const hue of identityPalette) {
       expect(contrastRatio(color.onIdentity, hue)).toBeGreaterThanOrEqual(4.5);

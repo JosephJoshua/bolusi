@@ -2,6 +2,7 @@
 // approvals and roles"). A list of the store roles, each opening a page of plain-language switches;
 // a new role starts as a copy of another. The owners' own roles are listed as fixed. Each change is
 // a server call, so it needs the internet and the page shows only what the server took.
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import {
   staffAdminFailure,
   type StaffAdminFailure,
@@ -83,7 +84,7 @@ export function RolesPanel({
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const latest = useRef(controls);
   latest.current = controls;
 

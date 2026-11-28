@@ -154,7 +154,7 @@ sees only the places they work in. Settings stay in the account menu.
 - A record open beside its list is not a new level; a full-page task is.
 - **Batalkan** takes back a small slip right after it: a status change or a
   technician change says what it did in a toast with "Batalkan" for 8 seconds
-  (`useOfferUndo`), over the dock on the phone and at the bottom of the window on
+  (`useDoneNote` with an undo), over the dock on the phone and at the bottom of the window on
   the PC. Pressing it records the reverse change, which the server checks (only
   the person who made it, within 2 minutes, nothing changed since). Money, stock
   leaving, a cancel and anything the customer signed keep a confirm and a formal
@@ -204,8 +204,22 @@ setting).
 
 Every screen ships loading (skeleton for lists, not spinners), empty, error and
 offline or stale states. A new device still on its first sync shows loading rows,
-never "Belum ada …" (`List` and `DataTable` read `setDataArriving`). Every
-action shows its success feedback ("Servisan mulai dikerjakan."). A refused action shows a banner in the fixed slot, never
+never "Belum ada …" (`List` and `DataTable` read `setDataArriving`).
+
+Feedback has four forms, the same on the phone and the PC:
+
+- **Toast** says a step is done ("Servisan mulai dikerjakan."): one short line at
+  the bottom of the window that goes by itself after 5 seconds, with "Batalkan"
+  (8 seconds) when the step can be taken back. Every done message goes through
+  `useDoneNote`; a screen never draws its own success box.
+- **Inline** says what went wrong: an error or a refusal sits beside the field or
+  button it is about, or in the fixed banner slot of the page, never only in a
+  toast that goes away.
+- **Dialog** asks first, only before a destructive or money-heavy step.
+- **Banner** holds a lasting state that is still true while you look at it
+  ("Menunggu persetujuan pemilik", offline, a refused change).
+
+A refused action shows a banner in the fixed slot, never
 only at the top of a scrolled page. Refused changes on the record you are looking
 at show the same strip at the top of the page (`AppShell` `pageBanner`), so it
 scrolls away instead of covering rows at a large font. Sync state is a quiet chip, not an alarm.

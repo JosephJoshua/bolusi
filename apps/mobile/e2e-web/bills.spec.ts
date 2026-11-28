@@ -55,7 +55,9 @@ test('an owner records a bill on its own, with terms and ongkir', async ({ page 
   await shoot(page, '03-form');
   await page.getByText('Simpan tagihan', { exact: true }).last().click();
 
-  await expect(page.getByTestId('purchasing.bill.notice')).toContainText('Tagihan dicatat.');
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
+    'Tagihan dicatat.',
+  );
   await expect(page.getByTestId('purchasing.bill.total')).toContainText('95.000');
   await shoot(page, '04-recorded');
 });
@@ -87,7 +89,9 @@ test('voiding a bill asks why, and keeps it in the history', async ({ page }) =>
   await shoot(page, '07-void');
   await page.getByText('Batalkan tagihan', { exact: true }).last().click();
 
-  await expect(page.getByTestId('purchasing.bill.notice')).toContainText('Tagihan dibatalkan.');
+  await expect(page.getByTestId('toast').filter({ visible: true })).toContainText(
+    'Tagihan dibatalkan.',
+  );
   await expect(page.getByTestId('purchasing.bill.voided')).toContainText('Salah supplier');
   await expect(page.getByTestId('purchasing.bill.edit')).toHaveCount(0);
   await shoot(page, '08-voided');

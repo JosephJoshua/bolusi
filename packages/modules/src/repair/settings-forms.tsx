@@ -4,7 +4,7 @@
 // itself. The screens only draw the fields.
 import { useEffect, useRef, useState } from 'react';
 
-import { useActionRunner, type ActionRunner } from '../screen-kit/index.js';
+import { type ActionRunner, useActionRunner, useDoneNote } from '../screen-kit/index.js';
 import { parseUncollectedDays } from './constants.js';
 import { rebaseForm } from './form-rebase.js';
 import { tn } from './i18n.js';
@@ -63,7 +63,7 @@ export function useCancelFeesForm(saved: CancelFees): CancelFeesFormState {
   const [baseline, setBaseline] = useState<CancelFees>(saved);
   const [fees, setFees] = useState<CancelFeesFields>(saved);
   const [attempted, setAttempted] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const dirty = fees.beforeWork !== baseline.beforeWork || fees.afterWork !== baseline.afterWork;
   useFollowSaved(saved, (next) => {
     setFees((current) => rebaseForm<CancelFeesFields>(current, baseline, next));
@@ -128,7 +128,7 @@ export function useUncollectedDaysForm(saved: number): UncollectedDaysFormState 
   const [baseline, setBaseline] = useState(saved);
   const [text, setText] = useState(String(saved));
   const [attempted, setAttempted] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const days = parseUncollectedDays(text);
   const dirty = days !== baseline;
   useFollowSaved(saved, (next) => {
@@ -190,7 +190,7 @@ export function usePrintSettingsForm(saved: PrintSettings): PrintSettingsFormSta
   const runner = useActionRunner();
   const [baseline, setBaseline] = useState<PrintSettingsForm>(() => printSettingsForm(saved));
   const [form, setForm] = useState<PrintSettingsForm>(baseline);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { note: notice, say: setNotice } = useDoneNote();
   const dirty = !samePrintSettingsForm(form, baseline);
   useFollowSaved(saved, (next) => {
     const nextForm = printSettingsForm(next);

@@ -4,7 +4,8 @@
 import { useMemo, useState } from 'react';
 
 import type { ApprovalRow } from '../approvals/queries.js';
-import { useActionRunner, useOfferUndo, type EntitySyncStatuses } from '../screen-kit/index.js';
+import { ta } from '../approvals/i18n.js';
+import { useActionRunner, useDoneNote, type EntitySyncStatuses } from '../screen-kit/index.js';
 
 import { useClearAskedNotice } from './asked-notice.js';
 import { repairAbilities, type TicketAction } from './flows.js';
@@ -27,8 +28,16 @@ export function useTicketPage(ticketId: string, cacheKey: string) {
   // Money back to the customer and a lowered bill are the ledger's steps, over repair's port.
   const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
-  // What the last action did, already in words: repair's own steps and the parts steps say it.
-  const [done, setDone] = useState<string | null>(null);
+  // What the last action did, already in words: repair's own steps and the parts steps say it in a
+  // toast. Asking an owner is a lasting state instead: its note stays on the page while it waits.
+  const { note, say } = useDoneNote();
+  const [asked, setAsked] = useState(false);
+  const done = asked ? ta('approvals.done.asked') : note;
+  const setDone = (message: string | null): void => {
+    const asking = message === ta('approvals.done.asked');
+    setAsked(asking);
+    say(asking ? null : message);
+  };
   const [reloadNonce, setReloadNonce] = useState(0);
   const query = useRepairQuery<LoadedTicket>(
     async (rt) => {
@@ -43,27 +52,19 @@ export function useTicketPage(ticketId: string, cacheKey: string) {
   );
   useClearAskedNotice(
     done,
-    () => setDone(null),
+    () => setAsked(false),
     query.status === 'ready' ? query.data.approvals : undefined,
   );
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
 
-  const offerUndo = useOfferUndo();
   /**
    * Says what a status or technician change did, with Batalkan to take it back for a few seconds
    * (the server allows it only while nothing else changed on the servisan since).
    */
   const changed = (message: string, change: UndoChangeInput['change']): void => {
-    if (offerUndo === null) {
-      setDone(message);
-      return;
-    }
-    setDone(null);
-    offerUndo({
-      message,
-      undo: async () => {
-        await runtime.run('undoChange', { ticketId, change });
-      },
+    setAsked(false);
+    say(message, async () => {
+      await runtime.run('undoChange', { ticketId, change });
     });
   };
 

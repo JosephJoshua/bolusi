@@ -6,6 +6,7 @@
  * ONLINE ONLY, like "Karyawan": the list is the server's, and a block is the server's revoke. This
  * phone is shown first and cannot block itself from here.
  */
+import { useDoneNote } from '@bolusi/modules/screen-kit';
 import { staffAdminFailure, type StaffAdminFailure } from '@bolusi/core';
 import type { DeviceControls } from '@bolusi/device/bootstrap/devices';
 import {
@@ -76,6 +77,8 @@ export function DevicesScreen({
     readonly tone: 'info' | 'warning' | 'danger';
     readonly message: string;
   } | null>(null);
+  const { note: done, say } = useDoneNote();
+  const shown = notice ?? (done === null ? null : { tone: 'info' as const, message: done });
 
   const latestLoad = useLatestCallback(load);
   const reload = useCallback(async (): Promise<void> => {
@@ -115,7 +118,7 @@ export function DevicesScreen({
       async () => {
         await reload();
         setBusy(false);
-        setNotice({ tone: 'info', message: t('auth.devices.blocked', { name: row.name }) });
+        say(t('auth.devices.blocked', { name: row.name }));
       },
       (error: unknown) => {
         const reason = staffAdminFailure(error);
@@ -154,11 +157,14 @@ export function DevicesScreen({
       syncChip={null}
       avatar={<View testID="devices-no-avatar" />}
       banner={
-        notice === null ? undefined : (
+        shown === null ? undefined : (
           <Banner
-            variant={notice.tone}
-            message={notice.message}
-            onDismiss={() => setNotice(null)}
+            variant={shown.tone}
+            message={shown.message}
+            onDismiss={() => {
+              setNotice(null);
+              say(null);
+            }}
             testID="devices-notice"
           />
         )
