@@ -420,6 +420,7 @@ export interface PersonSessions {
   deviceId: string;
   expiresAt: Int8;
   id: string;
+  provesDecisions: Generated<boolean>;
   revokedAt: Int8 | null;
   tenantId: string;
   tokenHash: string;
@@ -822,6 +823,16 @@ export interface Tenants {
   name: string;
 }
 
+export interface UserApprovalPins {
+  hash: string;
+  params: Json;
+  salt: string;
+  setAt: Int8;
+  setBy: string;
+  tenantId: string;
+  userId: string;
+}
+
 export interface UserPinVerifiers {
   algo: Generated<string>;
   asOfDeviceId: string;
@@ -932,6 +943,7 @@ export interface DB {
   systemDeviceChainState: SystemDeviceChainState;
   tenantOpCounters: TenantOpCounters;
   tenants: Tenants;
+  userApprovalPins: UserApprovalPins;
   userPinVerifiers: UserPinVerifiers;
   userPrefs: UserPrefs;
   userRoles: UserRoles;

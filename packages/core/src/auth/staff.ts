@@ -321,6 +321,27 @@ export function staffAdminFailure(error: unknown): StaffAdminFailure {
   return error instanceof StaffAdminError ? error.reason : 'unexpected';
 }
 
+/** Why setting or clearing an approval PIN failed: a staff call's reasons, and the PIN's own. */
+export type ApprovalPinFailure =
+  | StaffAdminFailure
+  /** The PIN or password given as proof was not the right one. */
+  | 'wrongProof'
+  /** The new approval PIN is easy to guess, or the same as the sign-in PIN. */
+  | 'weakPin';
+
+export class ApprovalPinError extends Error {
+  constructor(readonly reason: ApprovalPinFailure) {
+    super(`approval PIN change failed: ${reason}`);
+    this.name = 'ApprovalPinError';
+  }
+}
+
+/** The failure reason of anything an approval PIN call threw. */
+export function approvalPinFailure(error: unknown): ApprovalPinFailure {
+  if (error instanceof ApprovalPinError) return error.reason;
+  return staffAdminFailure(error);
+}
+
 /** A phone or PC registered to the business, as the server lists it for an owner. */
 export interface RegisteredDevice {
   readonly id: string;
@@ -386,4 +407,26 @@ export interface StaffAdminPort {
   }): Promise<void>;
   /** Delete a made role nobody holds. */
   deleteRole(input: { readonly actingUserId: string; readonly roleId: string }): Promise<void>;
+  /**
+   * Set the person's own approval PIN, which only the server checks (server auth/approval-pins.ts).
+   * Off their own phone it needs `proof`: their current approval PIN, their account password, or an
+   * owner confirming with the owner's own approval PIN. REJECTS with an {@link ApprovalPinError}.
+   */
+  setApprovalPin(input: {
+    readonly actingUserId: string;
+    readonly pin: string;
+    readonly proof?: ApprovalPinProof | undefined;
+  }): Promise<void>;
+  /** Clear someone's forgotten approval PIN, confirmed with the acting owner's own (same errors). */
+  clearApprovalPin(input: {
+    readonly actingUserId: string;
+    readonly targetUserId: string;
+    readonly pin: string;
+  }): Promise<void>;
 }
+
+/** What proves a person may set their approval PIN off their own phone (`setApprovalPin`). */
+export type ApprovalPinProof =
+  | { readonly kind: 'current'; readonly pin: string }
+  | { readonly kind: 'password'; readonly password: string }
+  | { readonly kind: 'owner'; readonly userId: string; readonly pin: string };

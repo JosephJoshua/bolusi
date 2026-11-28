@@ -37,6 +37,9 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
   let serverPin: string | null = null;
   let unpushedWork = false;
   let onSendPins: (() => Promise<unknown>) | null = null;
+  let approvalPin: string | null = '135790';
+  let decisionFails: string | null = null;
+  const decisionOpens: { userId: string; approvalPin: string }[] = [];
   const offline = (): SyncTransportError =>
     new SyncTransportError('offline', { code: null, status: null });
   const transport: PersonTransportPort = {
@@ -59,6 +62,27 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     },
     pull(): Promise<PullResponse> {
       return Promise.reject(new Error('the fake store pulls through its own port'));
+    },
+    openDecision(request) {
+      decisionOpens.push({ ...request });
+      if (!online) return Promise.reject(offline());
+      if (decisionFails !== null) {
+        return Promise.reject(new SyncTransportError('no', { code: decisionFails, status: 429 }));
+      }
+      if (approvalPin === null) {
+        return Promise.reject(
+          new SyncTransportError('no', { code: 'APPROVAL_PIN_NOT_SET', status: 409 }),
+        );
+      }
+      if (request.approvalPin !== approvalPin) {
+        return Promise.reject(
+          new SyncTransportError('no', { code: 'AUTH_INVALID_CREDENTIALS', status: 401 }),
+        );
+      }
+      return Promise.resolve({
+        token: `bpd_${decisionOpens.length}`,
+        expiresAt: now + 30 * 60 * 1000,
+      });
     },
     end(token) {
       ended.push(token);
@@ -129,6 +153,9 @@ function harness(readSet: readonly string[] | null = [REPAIR]) {
     serverKnowsPin: (pin: string) => (serverPin = pin),
     workUnpushed: (value: boolean) => (unpushedWork = value),
     onSendPins: (fn: () => Promise<unknown>) => (onSendPins = fn),
+    decisionOpens,
+    approvalPinIs: (pin: string | null) => (approvalPin = pin),
+    failDecision: (code: string | null) => (decisionFails = code),
   };
 }
 
@@ -276,6 +303,7 @@ describe('what a person may read is only "here" once it is all here', () => {
       pull: () => Promise.reject(new Error('unused')),
       end: () => Promise.resolve(),
       sendPendingPins: () => Promise.resolve(),
+      openDecision: () => Promise.reject(new Error('unused')),
     });
     await h.access.begin(owner);
     await h.access.sync();
@@ -540,41 +568,88 @@ describe('a lock right after a PIN change here', () => {
 });
 
 describe('an owner’s or manager’s decisions on a shared device', () => {
-  const manager = { userId: 'mgr-1', pin: '112233', mayRead: holding(REPAIR), mayDecide: true };
+  const manager = { userId: 'mgr-1', pin: '112233', mayRead: holding(REPAIR) };
+  const APPROVAL = '135790';
+  const TEN_MINUTES = 10 * 60 * 1000;
 
-  test('someone who decides is proven at sign-in, even with nothing extra to read', async () => {
+  test('signing in proves no decision: only the approval PIN does, checked by the server', async () => {
     const h = harness();
     h.serverGrants([]);
     await h.access.begin(manager);
     await h.access.sync();
-
-    expect(h.opens).toEqual([{ userId: 'mgr-1', pin: '112233' }]);
-    expect(h.access.canProve('mgr-1')).toBe(true);
-    expect(h.access.canProve('owner-1')).toBe(false);
-    expect(h.access.proofs(['mgr-1', 'cashier-1'])).toEqual(['bps_1']);
-    // A push carries only its own authors' sessions.
-    expect(h.access.proofs(['cashier-1'])).toEqual([]);
-    expect(h.opened).toEqual([]);
-  });
-
-  test('someone who does not decide sends no PIN', async () => {
-    const h = harness();
-    h.serverGrants([]);
-    await h.access.begin({ ...manager, mayDecide: false });
-    await h.access.sync();
     expect(h.opens).toEqual([]);
     expect(h.access.canProve('mgr-1')).toBe(false);
+
+    expect(await h.access.openDecision('mgr-1', APPROVAL)).toBe('opened');
+    expect(h.decisionOpens).toEqual([{ userId: 'mgr-1', approvalPin: APPROVAL }]);
+    expect(h.access.canProve('mgr-1')).toBe(true);
+    expect(h.access.canProve('owner-1')).toBe(false);
+    expect(h.access.proofs(['mgr-1', 'cashier-1'])).toEqual(['bpd_1']);
+    // A push carries only its own authors' sessions.
+    expect(h.access.proofs(['cashier-1'])).toEqual([]);
+  });
+
+  test('a sign-in session for reads never stands in for a decision', async () => {
+    const h = harness();
+    h.serverGrants([COSTS]);
+    await h.access.begin({ ...manager, mayRead: holding(COSTS, REPAIR) });
+    await h.access.sync();
+    expect(h.access.status()).toBe('open');
+    expect(h.access.canProve('mgr-1')).toBe(false);
+    expect(h.access.proofs(['mgr-1'])).toEqual([]);
+  });
+
+  test('only the signed-in person opens one for themselves', async () => {
+    const h = harness();
+    expect(await h.access.openDecision('mgr-1', APPROVAL)).toBe('failed');
+    await h.access.begin(manager);
+    expect(await h.access.openDecision('owner-1', APPROVAL)).toBe('failed');
+    expect(h.decisionOpens).toEqual([]);
+  });
+
+  test('what the server says comes back as what the prompt shows', async () => {
+    const h = harness();
+    await h.access.begin(manager);
+    expect(await h.access.openDecision('mgr-1', '000000')).toBe('wrong');
+    h.approvalPinIs(null);
+    expect(await h.access.openDecision('mgr-1', APPROVAL)).toBe('notSet');
+    h.approvalPinIs(APPROVAL);
+    h.failDecision('RATE_LIMITED');
+    expect(await h.access.openDecision('mgr-1', APPROVAL)).toBe('locked');
+    h.failDecision(null);
+    h.goOffline();
+    expect(await h.access.openDecision('mgr-1', APPROVAL)).toBe('offline');
+    expect(h.access.canProve('mgr-1')).toBe(false);
+  });
+
+  test('one approval PIN proves a run of decisions for ten minutes, then asks again', async () => {
+    const h = harness();
+    await h.access.begin(manager);
+    await h.access.openDecision('mgr-1', APPROVAL);
+    h.advance(TEN_MINUTES - 1);
+    expect(h.access.canProve('mgr-1')).toBe(true);
+    h.advance(1);
+    expect(h.access.canProve('mgr-1')).toBe(false);
+    expect(h.access.proofs(['mgr-1'])).toEqual([]);
+  });
+
+  test('a new approval PIN replaces the earlier session and ends it', async () => {
+    const h = harness();
+    await h.access.begin(manager);
+    await h.access.openDecision('mgr-1', APPROVAL);
+    await h.access.openDecision('mgr-1', APPROVAL);
+    expect(h.access.proofs(['mgr-1'])).toEqual(['bpd_2']);
+    expect(h.ended).toEqual(['bpd_1']);
   });
 
   test('a lock with a decision not yet pushed keeps the session for that push, then ends it', async () => {
     const h = harness();
-    h.serverGrants([]);
     await h.access.begin(manager);
-    await h.access.sync();
+    await h.access.openDecision('mgr-1', APPROVAL);
     h.workUnpushed(true);
     await h.access.end();
 
-    expect(h.access.proofs(['mgr-1'])).toEqual(['bps_1']);
+    expect(h.access.proofs(['mgr-1'])).toEqual(['bpd_1']);
     expect(h.access.canProve('mgr-1')).toBe(true);
     expect(h.ended).toEqual([]);
 
@@ -582,46 +657,35 @@ describe('an owner’s or manager’s decisions on a shared device', () => {
     expect(h.ended).toEqual([]);
     h.workUnpushed(false);
     await h.access.pushed();
-    expect(h.ended).toEqual(['bps_1']);
+    expect(h.ended).toEqual(['bpd_1']);
     expect(h.access.proofs(['mgr-1'])).toEqual([]);
     expect(h.access.canProve('mgr-1')).toBe(false);
   });
 
-  test('an expired session proves nobody, even with a store open', async () => {
+  test('the next person signed in here cannot decide on the one who left', async () => {
     const h = harness();
-    h.serverGrants([COSTS]);
-    await h.access.begin({ ...manager, mayRead: holding(COSTS, REPAIR) });
-    await h.access.sync();
-    expect(h.access.canProve('mgr-1')).toBe(true);
-    h.advance(SESSION_TTL - 60_000);
-    expect(h.access.canProve('mgr-1')).toBe(false);
-    expect(h.access.proofs(['mgr-1'])).toEqual([]);
-    // The PIN left memory when the store opened, so the device refuses the decision itself
-    // rather than send a token the server would refuse.
+    await h.access.begin(manager);
+    await h.access.openDecision('mgr-1', APPROVAL);
+    h.workUnpushed(true);
+    await h.access.begin({ userId: 'cashier-1', pin: '999999', mayRead: holding(REPAIR) });
+    expect(h.access.canProve('cashier-1')).toBe(false);
+    expect(h.access.proofs(['cashier-1'])).toEqual([]);
+    // The left session still carries the manager's own unsent decision.
+    expect(h.access.proofs(['mgr-1', 'cashier-1'])).toEqual(['bpd_1']);
+    // It never proves a read for them.
     expect(await h.access.sessionFor('mgr-1')).toBeNull();
   });
 
-  test('a left session that expired is not sent', async () => {
+  test('a left decision session stops proving when its ten minutes end', async () => {
     const h = harness();
-    h.serverGrants([]);
     await h.access.begin(manager);
-    await h.access.sync();
+    await h.access.openDecision('mgr-1', APPROVAL);
     h.workUnpushed(true);
     await h.access.end();
-    h.advance(SESSION_TTL - 60_000);
+    h.advance(TEN_MINUTES);
     expect(h.access.canProve('mgr-1')).toBe(false);
     expect(h.access.proofs(['mgr-1'])).toEqual([]);
-  });
-
-  test('a left session is never kept past ten minutes, sent or not', async () => {
-    const h = harness();
-    h.serverGrants([]);
-    await h.access.begin(manager);
-    await h.access.sync();
-    h.workUnpushed(true);
-    await h.access.end();
-    h.advance(10 * 60 * 1000 + 1);
     await h.access.pushed();
-    expect(h.ended).toEqual(['bps_1']);
+    expect(h.ended).toEqual(['bpd_1']);
   });
 });

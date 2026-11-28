@@ -3,7 +3,7 @@
 // from the core's state, so a change in someone's grants builds a new runtime and the screens
 // re-derive what they show. Photos, signatures and the ownership video are taken in the window and
 // handed to the core.
-import { createUuidV7Generator } from '@bolusi/core';
+import { createUuidV7Generator, retryAfterDecision } from '@bolusi/core';
 import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { InventoryRuntime } from '@bolusi/modules/inventory/desktop';
 import type { PurchasingRuntime } from '@bolusi/modules/purchasing/desktop';
@@ -53,8 +53,19 @@ export function createCoreRepairRuntime(deps: {
   readonly storeName: string;
   readonly capture: PcCapture;
   readonly statusSite: string;
+  /**
+   * Asks for the approval PIN when a decision was refused for want of one, and resolves whether a
+   * decision session opened; the command then runs once more (core port.ts `retryAfterDecision`).
+   */
+  readonly askDecision?: () => Promise<boolean>;
 }): RepairRuntime {
   const { client, userId, capture } = deps;
+  const ask = (): Promise<boolean> => deps.askDecision?.() ?? Promise.resolve(false);
+  /** A module's `run`, through the core, asking for the approval PIN when a decision needs it. */
+  const runVia =
+    (method: string) =>
+    (name: string, input: unknown): Promise<never> =>
+      retryAfterDecision(() => call<never>(method, name, input), ask);
   const granted = new Set(deps.session.permissions);
   const limitOf = (permission: string): number | null =>
     granted.has(permission) ? (deps.session.limits[permission] ?? null) : 0;
@@ -81,8 +92,7 @@ export function createCoreRepairRuntime(deps: {
     userId,
     query: ((name: string, input: unknown) =>
       call('inventory.query', name, input)) as InventoryRuntime['query'],
-    run: ((name: string, input: unknown) =>
-      call('inventory.run', name, input)) as InventoryRuntime['run'],
+    run: runVia('inventory.run') as InventoryRuntime['run'],
     hasPermission: (permission) => granted.has(permission),
     colleagueHasPermission: (colleague, permission) =>
       deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
@@ -98,8 +108,7 @@ export function createCoreRepairRuntime(deps: {
     userId,
     query: ((name: string, input: unknown) =>
       call('purchasing.query', name, input)) as PurchasingRuntime['query'],
-    run: ((name: string, input: unknown) =>
-      call('purchasing.run', name, input)) as PurchasingRuntime['run'],
+    run: runVia('purchasing.run') as PurchasingRuntime['run'],
     hasPermission: (permission) => granted.has(permission),
     colleagueHasPermission: (colleague, permission) =>
       deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
@@ -112,8 +121,7 @@ export function createCoreRepairRuntime(deps: {
   const runtime: RepairRuntime = {
     userId,
     query,
-    run: ((name: string, input: unknown) =>
-      call('repair.run', name, input)) as RepairRuntime['run'],
+    run: runVia('repair.run') as RepairRuntime['run'],
     hasPermission: (permission) => granted.has(permission),
     colleagueHasPermission: (colleague, permission) =>
       deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
@@ -124,8 +132,7 @@ export function createCoreRepairRuntime(deps: {
       userId,
       query: ((name: string, input: unknown) =>
         call('money.query', name, input)) as RepairRuntime['money']['query'],
-      run: ((name: string, input: unknown) =>
-        call('money.run', name, input)) as RepairRuntime['money']['run'],
+      run: runVia('money.run') as RepairRuntime['money']['run'],
       hasPermission: (permission) => granted.has(permission),
       colleagueHasPermission: (colleague, permission) =>
         deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
@@ -148,8 +155,7 @@ export function createCoreRepairRuntime(deps: {
       userId,
       query: ((name: string, input: unknown) =>
         call('approvals.query', name, input)) as RepairRuntime['approvals']['query'],
-      run: ((name: string, input: unknown) =>
-        call('approvals.run', name, input)) as RepairRuntime['approvals']['run'],
+      run: runVia('approvals.run') as RepairRuntime['approvals']['run'],
       hasPermission: (permission) => granted.has(permission),
       colleagueHasPermission: (colleague, permission) =>
         deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,

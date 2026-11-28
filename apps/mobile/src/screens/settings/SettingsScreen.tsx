@@ -78,6 +78,8 @@ export interface SettingsScreenProps {
   readonly onOpenSwitcher: () => void;
   /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
   readonly onOpenChangePin: () => void;
+  /** Their approval PIN, for someone who makes owner's or manager's decisions here. */
+  readonly onOpenApprovalPin?: (() => void) | undefined;
   /** Rename this phone, for someone who may register devices here; absent for everyone else. */
   readonly onRenameDevice?: (() => void) | undefined;
   /** Open this phone's setup guide again (permissions, paper); absent where there is none. */
@@ -123,6 +125,7 @@ export function SettingsScreen({
   onBack,
   onOpenSwitcher,
   onOpenChangePin,
+  onOpenApprovalPin,
   onRenameDevice,
   onOpenSetup,
   onOpenStaffPins,
@@ -179,6 +182,15 @@ export function SettingsScreen({
           onPress={onOpenChangePin}
           testID="settings-change-pin"
         />
+        {onOpenApprovalPin === undefined ? null : (
+          <ListRow
+            leading={<RowIcon name="lock" />}
+            primaryText={t('auth.approval.title')}
+            secondaryText={t('auth.approval.summary')}
+            onPress={onOpenApprovalPin}
+            testID="settings-approval-pin"
+          />
+        )}
       </Section>
 
       {onOpenStaff === undefined &&

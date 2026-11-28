@@ -603,9 +603,15 @@ describe('a decision on a shared device needs its author’s PIN, checked by the
   async function sessionFor(
     world: ChainWorld,
     userId: string,
-    options: { deviceId?: string; expiresAt?: bigint; revokedAt?: bigint } = {},
+    options: {
+      deviceId?: string;
+      expiresAt?: bigint;
+      revokedAt?: bigint;
+      /** A sign-in session, opened on the sign-in PIN: proves no decision. */
+      signIn?: boolean;
+    } = {},
   ): Promise<string> {
-    const token = `bps_decision_${userId}_${options.deviceId ?? world.deviceId}_${String(options.expiresAt ?? 0n)}_${String(options.revokedAt ?? 0n)}`;
+    const token = `bps_decision_${userId}_${options.deviceId ?? world.deviceId}_${String(options.expiresAt ?? 0n)}_${String(options.revokedAt ?? 0n)}_${String(options.signIn ?? false)}`;
     await db
       .insertInto('personSessions')
       .values({
@@ -617,6 +623,7 @@ describe('a decision on a shared device needs its author’s PIN, checked by the
         createdAt: 1_726_000_000_000n,
         expiresAt: options.expiresAt ?? 1_726_200_000_000n,
         revokedAt: options.revokedAt ?? null,
+        provesDecisions: options.signIn !== true,
       })
       .execute();
     return token;
@@ -644,7 +651,7 @@ describe('a decision on a shared device needs its author’s PIN, checked by the
     expect(result.results[0]).toMatchObject({ status: 'accepted' });
   });
 
-  test('no other session proves the owner: a cashier’s, another device’s, an expired or an ended one', async () => {
+  test('no other session proves the owner: a cashier’s, another device’s, an expired or an ended one, or their own sign-in', async () => {
     const { world, builder } = await setupWorld(3603);
     await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3603);
     const cashier = testId(3613);
@@ -662,6 +669,8 @@ describe('a decision on a shared device needs its author’s PIN, checked by the
       await sessionFor(world, world.userId, { deviceId: otherDevice }),
       await sessionFor(world, world.userId, { expiresAt: 1_726_000_000_001n }),
       await sessionFor(world, world.userId, { revokedAt: 1_726_000_000_001n }),
+      // Opened on the sign-in PIN, whose verifier shared devices hold: no proof of a decision.
+      await sessionFor(world, world.userId, { signIn: true }),
     ];
 
     const result = await pushWith(world, [cancel(builder)], proofs);

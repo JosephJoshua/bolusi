@@ -8,6 +8,6 @@
     "conflictNotFound": "Data bentrok ini tidak ditemukan.",
     "notYourPreference": "Bahasa hanya dapat diubah oleh pemilik akun.",
     "idTaken": "Data ini belum dapat disimpan. Silakan buat ulang.",
-    "decisionNeedsPin": "Perlu pemeriksaan PIN secara online. Coba lagi saat ada internet, atau minta persetujuan melalui HP pemilik."
+    "decisionNeedsPin": "Perlu PIN persetujuan Anda, yang diperiksa secara online, atau persetujuan melalui HP Anda sendiri."
   }
 }

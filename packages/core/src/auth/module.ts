@@ -320,16 +320,18 @@ export const authModuleManifest = {
       true,
       "Can deactivate an employee's account, removing their access everywhere. Their history is kept.",
     ),
+    // Not a decision: a reset sign-in PIN signs in as that person but approves nothing, since
+    // their decisions need their approval PIN, which only the server checks (approval-pins.ts).
+    // An owner setting up a counter PC makes everyone's PIN without one.
     [AUTH_PERMISSION.userResetPin]: store(
       true,
       "Can reset another employee's PIN. Whoever holds this can take over that person's identity until they change it.",
-      { decision: true },
+      { decision: false },
     ),
     [AUTH_PERMISSION.pinChange]: store(false, 'Can change their own PIN.'),
     [AUTH_PERMISSION.pinUnlock]: store(
       false,
       "Can clear an employee's PIN lockout so they can try again.",
-      { decision: true },
     ),
     [AUTH_PERMISSION.roleManage]: tenant(
       true,

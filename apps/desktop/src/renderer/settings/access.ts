@@ -5,7 +5,10 @@ import type { DeviceControls } from '@bolusi/device/bootstrap/devices';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
 import type { PinTargetUser } from '@bolusi/device/models/pin/pin-target';
 import type { DeviceInfo } from '@bolusi/device/models/settings/model';
+import type { ProofKind } from '@bolusi/device/models/approval-pin/model';
 import type { Locale } from '@bolusi/i18n';
+
+import type { ApprovalPinPort, ConfirmingOwner } from '../approval-pin.js';
 
 export interface StaffPinAccess {
   readonly canUnlock: boolean;
@@ -31,4 +34,12 @@ export interface SettingsAccess {
   readonly renameDevice?: ((name: string) => Promise<void>) | undefined;
   /** Switch this PC's language, for anyone signed in; the window follows once it is saved. */
   readonly chooseLocale?: ((locale: Locale) => Promise<void>) | undefined;
+  /** Their approval PIN, for someone who makes owner's or manager's decisions here. */
+  readonly approvalPin?:
+    | {
+        readonly port: ApprovalPinPort;
+        readonly proofKinds: readonly ProofKind[];
+        readonly owners: readonly ConfirmingOwner[];
+      }
+    | undefined;
 }

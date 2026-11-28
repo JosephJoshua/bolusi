@@ -178,6 +178,8 @@ export async function openRepairHarness(
     readonly readHere?: (permissionId: string) => boolean;
     /** Whether the device can prove a person's decision (a shared device with no PIN checked). */
     readonly decisionProven?: (userId: string) => boolean;
+    /** The app's approval PIN prompt (core port.ts `retryAfterDecision`). */
+    readonly askDecision?: (userId: string) => Promise<boolean>;
   } = {},
 ): Promise<RepairHarness> {
   const driver = openMemoryDriver();
@@ -342,6 +344,7 @@ export async function openRepairHarness(
     // The device's live search cache, fed by this engine's applies (local and pulled).
     search: new SearchIndexCache(engine.invalidation),
     ...(options.decisionProven === undefined ? {} : { decisionProven: options.decisionProven }),
+    ...(options.askDecision === undefined ? {} : { askDecision: () => options.askDecision! }),
     ...(options.readHere === undefined
       ? {}
       : {
