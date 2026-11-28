@@ -10,6 +10,7 @@ import {
   PageHeader,
   StatePanel,
   Tabs,
+  ToggleChip,
   type ColumnDef,
   type Crumb,
 } from '@bolusi/ui-web';
@@ -22,7 +23,9 @@ import { tp, type PurchasingKey } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
 import { ORDER_FILTERS, type OrderRow } from '../queries.js';
 import { EMPTY_BILL, type BelanjaTab } from '../bills/bill-form.js';
-import type { BillRow } from '../bills/queries.js';
+import type { BillListFilter, BillRow } from '../bills/queries.js';
+import { dayStart } from '../../money/kas.js';
+import { BILL_FILTER_EMPTY, BILL_FILTER_LABEL, BILL_LIST_FILTERS } from '../payments/pay-form.js';
 import {
   loadBillPages,
   loadOrderPages,
@@ -52,6 +55,9 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [task, setTask] = useState<'none' | 'new' | 'newBill' | 'suppliers'>('none');
+  const [billFilter, setBillFilter] = useState<BillListFilter>('unpaid');
+  // The day the list was read on: overdue counts from its start.
+  const today = dayStart(Date.now());
   const runtime = usePurchasingRuntime();
   const readsBills = opensBills(runtime);
   const bills = readsBills && filter === 'bills';
@@ -72,9 +78,9 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
   const billQuery = usePurchasingQuery(
     async (rt) => {
       if (!bills) return { rows: [] as readonly BillRow[], hasMore: false };
-      return loadBillPages(rt, pages, PAGE);
+      return loadBillPages(rt, billFilter, today, pages, PAGE);
     },
-    `desk.bills:${String(bills)}:${String(pages)}:${String(reloadNonce)}`,
+    `desk.bills:${String(bills)}:${billFilter}:${String(today)}:${String(pages)}:${String(reloadNonce)}`,
   );
   const loadedBills = billQuery.status === 'ready' ? billQuery.data : null;
   const loaded = query.status === 'ready' ? query.data : null;
@@ -107,14 +113,14 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
   }, [selectedId, notHere, bills]);
 
   const columns = useMemo(orderColumns, []);
-  const columnsOfBills = useMemo(billColumns, []);
+  const columnsOfBills = useMemo(() => billColumns(today), [today]);
   const empty =
     query.status === 'unauthorized' || query.status === 'error' ? (
       <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
         {() => null}
       </QueryPanel>
     ) : bills ? (
-      <StatePanel icon={ShoppingCart} title={tp('purchasing.bill.listEmpty')} />
+      <StatePanel icon={ShoppingCart} title={tp(BILL_FILTER_EMPTY[billFilter])} />
     ) : filter === 'done' ? (
       <StatePanel icon={ShoppingCart} title={tp('purchasing.list.emptyDone')} />
     ) : (
@@ -203,6 +209,26 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
               />
             </div>
             {bills ? (
+              <div
+                role="group"
+                aria-label={tp('purchasing.bill.tab')}
+                className="flex flex-wrap gap-2 px-6 pb-2 pt-3"
+              >
+                {BILL_LIST_FILTERS.map((value) => (
+                  <ToggleChip
+                    key={value}
+                    label={tp(BILL_FILTER_LABEL[value])}
+                    selected={billFilter === value}
+                    onToggle={() => {
+                      setPages(1);
+                      setBillFilter(value);
+                    }}
+                    testId={`${testId}.billFilter.${value}`}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {bills ? (
               <DataTable
                 rows={loadedBills?.rows ?? []}
                 columns={columnsOfBills}
@@ -212,7 +238,7 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
                 onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
                 bodyRef={tableRef}
                 sortable={false}
-                scrollKey="bills"
+                scrollKey={`bills:${billFilter}`}
                 onEndReached={() => {
                   if (loadedBills?.hasMore === true) setPages((n) => n + 1);
                 }}

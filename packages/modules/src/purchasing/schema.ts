@@ -115,6 +115,31 @@ export interface PurchasingBillLinesTable {
   unitPrice: number;
 }
 
+/**
+ * A payment to a supplier, in one store. It names the bill it pays, or none when paid ahead; what
+ * each bill still owes is read from these (bills/balances.ts), so nothing on a bill is rewritten.
+ */
+export interface PurchasingPaymentsTable {
+  id: string;
+  tenantId: string;
+  storeId: string;
+  supplierId: string;
+  /** The bill it pays, or null for money paid ahead (the supplier's credit). */
+  billId: string | null;
+  /** Whole rupiah. */
+  amount: number;
+  /** `cash`, `account:<id>` or `owner` (constants.ts `OWNER_FUNDS`). */
+  source: string;
+  /** A bank transfer's reference, as typed. */
+  reference: string | null;
+  note: string | null;
+  createdBy: string;
+  createdAt: number;
+  voidedBy: string | null;
+  voidedAt: number | null;
+  voidReason: string | null;
+}
+
 export interface PurchasingDatabase {
   purchasingSuppliers: PurchasingSuppliersTable;
   purchasingOrders: PurchasingOrdersTable;
@@ -123,4 +148,5 @@ export interface PurchasingDatabase {
   purchasingReceiptLines: PurchasingReceiptLinesTable;
   purchasingBills: PurchasingBillsTable;
   purchasingBillLines: PurchasingBillLinesTable;
+  purchasingPayments: PurchasingPaymentsTable;
 }

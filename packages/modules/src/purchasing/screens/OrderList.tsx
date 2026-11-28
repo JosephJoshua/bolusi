@@ -11,6 +11,7 @@ import {
   Chip,
   ChipRow,
   List,
+  SegmentedControl,
   ToggleChip,
   color,
   space,
@@ -29,7 +30,14 @@ import { tp } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
 import type { OrderRow } from '../queries.js';
 import { dueText, notaText, type BelanjaTab } from '../bills/bill-form.js';
-import type { BillRow } from '../bills/queries.js';
+import type { BillListFilter, BillRow } from '../bills/queries.js';
+import { dayStart } from '../../money/kas.js';
+import {
+  BILL_FILTER_EMPTY,
+  BILL_FILTER_LABEL,
+  BILL_LIST_FILTERS,
+  billStanding,
+} from '../payments/pay-form.js';
 import {
   loadBillPages,
   loadOrderPages,
@@ -43,6 +51,9 @@ export interface OrderListProps {
   readonly chrome: ScreenChrome;
   readonly filter: BelanjaTab;
   readonly onFilter: (filter: BelanjaTab) => void;
+  /** Which bills Tagihan lists, owned by the surface so it survives opening one. */
+  readonly billFilter: BillListFilter;
+  readonly onBillFilter: (filter: BillListFilter) => void;
   /** The Barang place's title and the switch to its other sections. */
   readonly place: PlaceHeader;
   readonly onOpenOrder: (orderId: string) => void;
@@ -62,6 +73,8 @@ export function OrderList({
   chrome,
   filter,
   onFilter,
+  billFilter,
+  onBillFilter,
   place,
   onOpenOrder,
   onNewOrder,
@@ -75,10 +88,12 @@ export function OrderList({
   const bills = opensBills(runtime) && filter === 'bills';
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
+  // The day the list was read on: overdue counts from its start.
+  const today = dayStart(Date.now());
   const query = usePurchasingQuery(
     async (rt): Promise<{ readonly rows: readonly ListedRow[]; readonly hasMore: boolean }> => {
       if (bills) {
-        const page = await loadBillPages(rt, pages, PAGE);
+        const page = await loadBillPages(rt, billFilter, today, pages, PAGE);
         return {
           rows: page.rows.map((row) => ({ kind: 'bill' as const, row })),
           hasMore: page.hasMore,
@@ -90,7 +105,7 @@ export function OrderList({
         hasMore: page.hasMore,
       };
     },
-    `orders:${filter}:${String(bills)}:${String(pages)}:${String(reloadNonce)}`,
+    `orders:${filter}:${String(bills)}:${billFilter}:${String(today)}:${String(pages)}:${String(reloadNonce)}`,
   );
 
   const listState = useMemo((): ListState<ListedRow> => {
@@ -125,7 +140,7 @@ export function OrderList({
               empty: {
                 title: tp(
                   bills
-                    ? 'purchasing.bill.listEmpty'
+                    ? BILL_FILTER_EMPTY[billFilter]
                     : filter === 'done'
                       ? 'purchasing.list.emptyDone'
                       : 'purchasing.list.emptyOpen',
@@ -134,7 +149,7 @@ export function OrderList({
             }
           : { kind: 'ready', items: query.data.rows };
     }
-  }, [query, filter, bills, place.onOpenSyncStatus]);
+  }, [query, filter, bills, billFilter, place.onOpenSyncStatus]);
 
   const openRef = useRef(onOpenOrder);
   openRef.current = onOpenOrder;
@@ -155,11 +170,12 @@ export function OrderList({
         <BillListRow
           row={listed.row}
           selected={listed.row.id === selectedId}
+          today={today}
           onOpen={openBill}
           testID={`${testID}.bill.${listed.row.id}`}
         />
       ),
-    [open, openBill, selectedId, testID],
+    [open, openBill, selectedId, testID, today],
   );
   const pick = (next: BelanjaTab): void => {
     setPages(1);
@@ -215,8 +231,25 @@ export function OrderList({
           />
         </ChipRow>
       </View>
+      {bills ? (
+        <View style={styles.chips}>
+          <SegmentedControl
+            size="compact"
+            options={BILL_LIST_FILTERS.map((value) => ({
+              value,
+              label: tp(BILL_FILTER_LABEL[value]),
+            }))}
+            value={billFilter}
+            onChange={(next) => {
+              setPages(1);
+              onBillFilter(next);
+            }}
+            testID={`${testID}.billFilter`}
+          />
+        </View>
+      ) : null}
       <List
-        key={filter}
+        key={bills ? `bills:${billFilter}` : filter}
         state={listState}
         keyExtractor={(listed) => listed.row.id}
         onEndReached={
@@ -290,19 +323,26 @@ const OrderListRow = memo(function OrderListRow({
 interface BillListRowProps {
   readonly row: BillRow;
   readonly selected: boolean;
+  /** The start of today, which a due date has passed when it is before. */
+  readonly today: number;
   readonly onOpen: (billId: string) => void;
   readonly testID: string;
 }
 
-/** A bill in the list: whose, its total, its nota and when it is due. */
+/** A bill in the list: whose, its total, what is left to pay and by when, and its nota. */
 const BillListRow = memo(function BillListRow({
   row,
   selected,
+  today,
   onOpen,
   testID,
 }: BillListRowProps): React.JSX.Element {
   const voided = row.status === 'void';
   const meta = `${row.billNumber} · ${notaText(row)}`;
+  const standing = billStanding(row, today);
+  const owedLine = [standing.owed, standing.late ?? dueText(row)]
+    .filter((part) => part !== null)
+    .join(' · ');
   return (
     <Pressable
       testID={testID}
@@ -310,7 +350,11 @@ const BillListRow = memo(function BillListRow({
       accessibilityLabel={[
         row.supplierName,
         formatMoney(row.total),
-        voided ? tp('purchasing.bill.statusVoid') : dueText(row),
+        voided
+          ? tp('purchasing.bill.statusVoid')
+          : standing.settled
+            ? tp('purchasing.bill.settled')
+            : owedLine,
         meta,
       ].join(', ')}
       accessibilityState={{ selected }}
@@ -331,8 +375,14 @@ const BillListRow = memo(function BillListRow({
         <View style={styles.chipLine}>
           <Chip label={tp('purchasing.bill.statusVoid')} icon="remove" tone="neutral" />
         </View>
+      ) : standing.settled ? (
+        <View style={styles.chipLine}>
+          <Chip label={tp('purchasing.bill.settled')} icon="check" tone="success" />
+        </View>
       ) : (
-        <Text style={styles.details}>{dueText(row)}</Text>
+        <Text style={[styles.details, standing.late === null ? null : styles.late]}>
+          {owedLine}
+        </Text>
       )}
       <Text style={styles.meta}>{meta}</Text>
     </Pressable>
@@ -352,5 +402,6 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
   name: { ...type.bodyBold, color: color.text, flex: 1 },
   details: { ...type.bodySm, color: color.text },
+  late: { color: color.warning },
   meta: { ...type.caption, color: color.textMuted },
 });

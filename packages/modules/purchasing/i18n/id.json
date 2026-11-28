@@ -9,7 +9,9 @@
     "orderReceived": "Barang pesanan diterima",
     "billRecorded": "Tagihan supplier dicatat",
     "billEdited": "Tagihan supplier diubah",
-    "billVoided": "Tagihan supplier dibatalkan"
+    "billVoided": "Tagihan supplier dibatalkan",
+    "supplierPaid": "Supplier dibayar",
+    "supplierPaymentVoided": "Pembayaran supplier dibatalkan"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
@@ -31,7 +33,12 @@
     "orderNotPlaced": "Pesanan ini masih draf, jadi belum bisa ditagih.",
     "billNumberNotThisDevice": "Nomor tagihan ini bukan dari perangkat ini.",
     "billNumberUsed": "Nomor tagihan ini sudah dipakai.",
-    "notaUsed": "Nota supplier ini sudah dicatat di tagihan lain."
+    "notaUsed": "Nota supplier ini sudah dicatat di tagihan lain.",
+    "billOtherSupplier": "Tagihan ini milik supplier lain.",
+    "sourceNotUsable": "Rekening ini tidak dapat dipakai untuk membayar supplier.",
+    "paymentNotFound": "Pembayaran ini tidak ada di toko ini.",
+    "paymentVoided": "Pembayaran ini sudah dibatalkan.",
+    "drawerSettled": "Selisih hitungan kas setelah pembayaran ini sudah diselesaikan, jadi pembayaran ini tidak dapat dibatalkan."
   },
   "stage": {
     "draft": "Draf",
@@ -150,7 +157,9 @@
     "priced": "Harga beli disimpan.",
     "billRecorded": "Tagihan dicatat.",
     "billSaved": "Tagihan disimpan.",
-    "billVoided": "Tagihan dibatalkan."
+    "billVoided": "Tagihan dibatalkan.",
+    "paid": "Pembayaran dicatat.",
+    "paymentVoided": "Pembayaran dibatalkan."
   },
   "desk": {
     "col": {
@@ -234,8 +243,43 @@
       "bill": "Tagihan",
       "supplier": "Supplier",
       "due": "Jatuh tempo",
-      "total": "Total"
+      "total": "Total",
+      "balance": "Sisa"
     },
-    "linePrice": "{qty} × {price}"
+    "linePrice": "{qty} × {price}",
+    "filter": {
+      "unpaid": "Belum lunas",
+      "overdue": "Jatuh tempo",
+      "all": "Semua"
+    },
+    "paid": "Dibayar",
+    "balance": "Sisa",
+    "settled": "Lunas",
+    "balanceDue": "Sisa {amount}",
+    "overdue": "Lewat jatuh tempo {date}",
+    "fromCredit": "Dari kredit supplier",
+    "credit": "Kredit supplier {amount} dipakai untuk tagihan berikutnya.",
+    "listEmptyUnpaid": "Semua tagihan sudah lunas.",
+    "listEmptyOverdue": "Tidak ada tagihan yang lewat jatuh tempo."
+  },
+  "pay": {
+    "title": "Bayar supplier",
+    "action": "Bayar",
+    "save": "Bayar {amount}",
+    "amount": "Jumlah dibayar",
+    "source": "Dibayar dari",
+    "cash": "Laci kas",
+    "owner": "Uang pribadi pemilik",
+    "reference": "No. referensi transfer",
+    "amountFirst": "Isi jumlah yang dibayar terlebih dahulu.",
+    "aboveBalance": "Lebih dari sisa tagihan. Kelebihannya menjadi kredit supplier.",
+    "payments": "Pembayaran",
+    "line": "{date} · {source}",
+    "voided": "Dibatalkan: {reason}",
+    "void": "Batalkan",
+    "voidLabel": "Batalkan pembayaran {amount}, {date}",
+    "voidTitle": "Batalkan pembayaran",
+    "voidHint": "Tagihan kembali belum lunas sebesar jumlah ini. Uang dari laci kas dihitung kembali di laci.",
+    "voidConfirm": "Batalkan pembayaran"
   }
 }

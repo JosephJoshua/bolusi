@@ -4,6 +4,7 @@ export * from './constants.js';
 export { managesPaymentMethods, opensKas } from './kas.js';
 export type * from './schema.js';
 export * from './documents.js';
+export type * from './payouts.js';
 export { postingsFor, reversalOf, type Posting } from './postings.js';
 export {
   MONEY_REFUSALS,

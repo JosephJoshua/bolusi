@@ -71,6 +71,11 @@ async function openBills(): Promise<void> {
   await screen.findByTestId('purchasing.desk.bills');
 }
 
+/** One of the list's views: Belum lunas (the default), Jatuh tempo, Semua. */
+function showBills(view: 'unpaid' | 'overdue' | 'all'): void {
+  fireEvent.click(byTestId(`purchasing.desk.billFilter.${view}`));
+}
+
 /** The bills table row that names `text` (a supplier, a nota). */
 async function billWith(text: string | RegExp): Promise<HTMLElement> {
   const table = byTestId('purchasing.desk.bills');
@@ -82,6 +87,12 @@ describe('supplier bills on the PC', () => {
   it('lists the bills for an owner, voided ones marked, and opens one with its checks', async () => {
     await renderApp(OWNER);
     await openBills();
+    // Belum lunas leaves out what is paid off or void.
+    await billWith('Sumber Jaya Sparepart');
+    expect(
+      within(byTestId('purchasing.desk.bills')).queryByText(/Nota INV\/MP\/2611.B/),
+    ).toBeNull();
+    showBills('all');
     const voided = await billWith(/Nota INV\/MP\/2611.B/);
     expect(within(voided).getByText('Dibatalkan')).toBeTruthy();
 
@@ -131,6 +142,7 @@ describe('supplier bills on the PC', () => {
   it('voids a bill with a reason, and it stays in the list', async () => {
     await renderApp(OWNER);
     await openBills();
+    showBills('all');
     fireEvent.click(await billWith('Toko Abadi'));
     fireEvent.click(await screen.findByTestId('purchasing.desk.bill.void'));
     await screen.findByTestId('purchasing.desk.voidBill');
@@ -146,6 +158,52 @@ describe('supplier bills on the PC', () => {
       'Salah supplier',
     );
     expect(screen.queryByTestId('purchasing.desk.bill.edit')).toBeNull();
+  });
+
+  it('pays what is left on an overdue bill from the drawer, then cancels the payment', async () => {
+    await renderApp(OWNER);
+    await openBills();
+    showBills('overdue');
+    fireEvent.click(await billWith(/Nota INV\/MP\/2611(?!-)/));
+    const pane = await screen.findByTestId('purchasing.desk.bill');
+    expect(within(pane).getByTestId('purchasing.desk.bill.balance').textContent).toContain(
+      '540.000',
+    );
+    fireEvent.click(byTestId('purchasing.desk.bill.pay'));
+    await screen.findByTestId('purchasing.desk.pay');
+    const amount = byTestId('purchasing.desk.pay.amount') as HTMLInputElement;
+    expect(amount.value).toBe('540.000');
+    fireEvent.change(amount, { target: { value: '600000' } });
+    expect(byTestId('purchasing.desk.pay.above').textContent).toContain('kredit supplier');
+    fireEvent.change(amount, { target: { value: '540000' } });
+    expect(screen.queryByTestId('purchasing.desk.pay.above')).toBeNull();
+    // A transfer takes its reference; the drawer does not.
+    fireEvent.click(await within(byTestId('purchasing.desk.pay')).findByText('BCA Toko'));
+    expect(byTestId('purchasing.desk.pay.reference')).toBeTruthy();
+    fireEvent.click(byTestId('purchasing.desk.pay.source.cash'));
+    expect(screen.queryByTestId('purchasing.desk.pay.reference')).toBeNull();
+    fireEvent.click(byTestId('purchasing.desk.pay.submit'));
+    await waitFor(() => expect(screen.queryByTestId('purchasing.desk.pay')).toBeNull());
+
+    expect(await within(pane).findByText('Pembayaran dicatat.')).toBeTruthy();
+    await waitFor(() =>
+      expect(within(pane).getByTestId('purchasing.desk.bill.balance').textContent).toMatch(/Rp\s0/),
+    );
+    expect(screen.queryByTestId('purchasing.desk.bill.pay')).toBeNull();
+
+    const cancel = await within(pane).findByRole('button', {
+      name: /Batalkan pembayaran Rp\s540\.000/,
+    });
+    fireEvent.click(cancel);
+    await screen.findByTestId('purchasing.desk.voidPayment');
+    expect(byTestId('purchasing.desk.voidPayment.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('purchasing.desk.voidPayment.reason'), {
+      target: { value: 'Salah tagihan' },
+    });
+    fireEvent.click(byTestId('purchasing.desk.voidPayment.submit'));
+    await waitFor(() => expect(screen.queryByTestId('purchasing.desk.voidPayment')).toBeNull());
+    expect(await within(pane).findByText('Dibatalkan: Salah tagihan')).toBeTruthy();
+    expect(await within(pane).findByTestId('purchasing.desk.bill.pay')).toBeTruthy();
   });
 
   it('bills an order from its pane, its parts already listed', async () => {

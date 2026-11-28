@@ -9,7 +9,9 @@
     "orderReceived": "Order parts received",
     "billRecorded": "Supplier bill recorded",
     "billEdited": "Supplier bill changed",
-    "billVoided": "Supplier bill voided"
+    "billVoided": "Supplier bill voided",
+    "supplierPaid": "Supplier paid",
+    "supplierPaymentVoided": "Supplier payment cancelled"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -31,7 +33,12 @@
     "orderNotPlaced": "This order is still a draft, so it cannot be billed yet.",
     "billNumberNotThisDevice": "This bill number is not from this device.",
     "billNumberUsed": "This bill number is already used.",
-    "notaUsed": "This supplier’s nota is already recorded on another bill."
+    "notaUsed": "This supplier’s nota is already recorded on another bill.",
+    "billOtherSupplier": "This bill belongs to another supplier.",
+    "sourceNotUsable": "This account can’t be used to pay suppliers.",
+    "paymentNotFound": "This payment isn’t in this store.",
+    "paymentVoided": "This payment was already cancelled.",
+    "drawerSettled": "A drawer count after this payment was already settled, so it can’t be cancelled any more."
   },
   "stage": {
     "draft": "Draft",
@@ -150,7 +157,9 @@
     "priced": "Buy price saved.",
     "billRecorded": "Bill recorded.",
     "billSaved": "Bill saved.",
-    "billVoided": "Bill voided."
+    "billVoided": "Bill voided.",
+    "paid": "Payment recorded.",
+    "paymentVoided": "Payment cancelled."
   },
   "desk": {
     "col": {
@@ -234,8 +243,43 @@
       "bill": "Bill",
       "supplier": "Supplier",
       "due": "Due",
-      "total": "Total"
+      "total": "Total",
+      "balance": "Left to pay"
     },
-    "linePrice": "{qty} × {price}"
+    "linePrice": "{qty} × {price}",
+    "filter": {
+      "unpaid": "Unpaid",
+      "overdue": "Overdue",
+      "all": "All"
+    },
+    "paid": "Paid",
+    "balance": "Left to pay",
+    "settled": "Paid",
+    "balanceDue": "{amount} left",
+    "overdue": "Overdue since {date}",
+    "fromCredit": "From supplier credit",
+    "credit": "Supplier credit of {amount} goes to the next bill.",
+    "listEmptyUnpaid": "Every bill is paid.",
+    "listEmptyOverdue": "No bill is overdue."
+  },
+  "pay": {
+    "title": "Pay supplier",
+    "action": "Pay",
+    "save": "Pay {amount}",
+    "amount": "Amount paid",
+    "source": "Paid from",
+    "cash": "Cash drawer",
+    "owner": "Owner’s own money",
+    "reference": "Transfer reference",
+    "amountFirst": "Enter the amount paid first.",
+    "aboveBalance": "More than is left to pay. The rest becomes supplier credit.",
+    "payments": "Payments",
+    "line": "{date} · {source}",
+    "voided": "Cancelled: {reason}",
+    "void": "Cancel",
+    "voidLabel": "Cancel payment of {amount}, {date}",
+    "voidTitle": "Cancel payment",
+    "voidHint": "The bill owes this amount again. Cash from the drawer counts in the drawer again.",
+    "voidConfirm": "Cancel payment"
   }
 }

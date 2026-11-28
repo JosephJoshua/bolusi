@@ -27,6 +27,7 @@ import {
   type PaymentAccountKind,
 } from './constants.js';
 import type { MoneyDocument, MoneyDocumentSources } from './documents.js';
+import type { MoneyPayoutSources } from './payouts.js';
 import type { MoneyDatabase } from './schema.js';
 
 type Rule = OpRule<MoneyDatabase>;
@@ -61,6 +62,7 @@ export const MONEY_REFUSALS = defineRefusals(
     'overLimit',
     'cashMoveNotFound',
     'laterCountSettled',
+    'payoutNotFound',
   ] as const,
   // The server records cash as it really moved, so only a device that sees the drawer stops a
   // move above it.
@@ -512,7 +514,34 @@ export async function voidCounted(
   );
 }
 
-export function createMoneyRules(sources: MoneyDocumentSources) {
+/**
+ * Whether an owner settled a count of this store's drawer made after `at`. A drawer record from
+ * before it is then part of a book that owner put right: cancelling it would open the difference
+ * again. Exported for the modules whose records take drawer cash (a supplier payment).
+ */
+export async function settledCountAfter(db: Db, storeId: string, at: number): Promise<boolean> {
+  const settled = await db
+    .selectFrom('moneyEntries as a')
+    .innerJoin('moneyEntries as c', 'c.id', 'a.relatedEntryId')
+    .select('a.id')
+    .where('a.storeId', '=', storeId)
+    .where('a.kind', '=', 'cash_adjusted')
+    .where('c.kind', '=', 'cash_counted')
+    .where('c.createdAt', '>', at)
+    .executeTakeFirst();
+  return settled !== undefined;
+}
+
+async function requireNoLaterSettledCount(db: Db, op: SignedOperation, at: number): Promise<void> {
+  if (await settledCountAfter(db, storeOf(op), at)) {
+    throw refuse('laterCountSettled', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+    });
+  }
+}
+
+export function createMoneyRules(sources: MoneyDocumentSources, payouts: MoneyPayoutSources) {
   async function requireDocument(db: Db, op: SignedOperation, document: MoneyDocument) {
     const source = sources[document.kind];
     const lookup = { tenantId: op.tenantId, storeId: storeOf(op), documentId: document.id };
@@ -677,21 +706,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (entry.voidedBy !== null) {
       throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
     }
-    const settled = await db
-      .selectFrom('moneyEntries as a')
-      .innerJoin('moneyEntries as c', 'c.id', 'a.relatedEntryId')
-      .select('a.id')
-      .where('a.storeId', '=', storeOf(op))
-      .where('a.kind', '=', 'cash_adjusted')
-      .where('c.kind', '=', 'cash_counted')
-      .where('c.createdAt', '>', entry.createdAt)
-      .executeTakeFirst();
-    if (settled !== undefined) {
-      throw refuse('laterCountSettled', {
-        code: 'INVALID_TRANSITION',
-        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
-      });
-    }
+    await requireNoLaterSettledCount(db, op, Number(entry.createdAt));
   };
 
   /**
@@ -847,6 +862,76 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     }
   };
 
+  /** The payout record behind a drawer payout, in this store, as `find` reads it. */
+  async function payoutOf(db: Db, op: SignedOperation) {
+    const record = await payouts.supplier_paid.find(db as unknown as Kysely<never>, {
+      tenantId: op.tenantId,
+      storeId: storeOf(op),
+      id: op.entityId,
+    });
+    if (record === null) {
+      throw refuse('payoutNotFound', {
+        code: 'ENTITY_NOT_FOUND',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
+    return record;
+  }
+
+  /**
+   * Money out for a supplier payment: only exactly as the owner's payment says (the account, the
+   * amount), by the same person, once. The drawer may go below zero here: the server records cash
+   * as it really moved, and the paying command stops it on a device that sees the drawer.
+   */
+  const supplierPaidRule: Rule = async (op, { db }) => {
+    const { amount, account } = payloadOf<{ amount: number; account: string }>(op);
+    await requireFreshEntry(db, op);
+    const record = await payoutOf(db, op);
+    if (
+      record.voided ||
+      record.account !== account ||
+      record.amount !== amount ||
+      record.userId !== op.userId
+    ) {
+      throw refuse('payoutNotFound', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'amount', issue: 'not as the supplier payment says' },
+      });
+    }
+  };
+
+  /**
+   * The drawer's side of a cancelled supplier payment, once the payment itself is cancelled. As a
+   * cash move's void, not once a count after it was settled.
+   */
+  const supplierPaymentVoidedRule: Rule = async (op, { db }) => {
+    const entry = await db
+      .selectFrom('moneyEntries')
+      .select(['kind', 'account', 'voidedBy', 'createdAt'])
+      .where('id', '=', op.entityId)
+      .where('storeId', '=', storeOf(op))
+      .executeTakeFirst();
+    if (entry === undefined || entry.kind !== 'supplier_paid') {
+      throw refuse('payoutNotFound', {
+        code: 'ENTITY_NOT_FOUND',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
+    if (entry.voidedBy !== null) {
+      throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
+    }
+    if (!(await payoutOf(db, op)).voided) {
+      throw refuse('payoutNotFound', {
+        code: 'INVALID_TRANSITION',
+        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+      });
+    }
+    // Only the drawer is counted: a payment from a bank or the owner is cancelled any time.
+    if (entry.account === CASH_ACCOUNT) {
+      await requireNoLaterSettledCount(db, op, Number(entry.createdAt));
+    }
+  };
+
   return {
     chargeRecordedRule,
     chargeReducedRule,
@@ -857,6 +942,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     cashMovedRule,
     cashCountedRule,
     cashAdjustedRule,
+    supplierPaidRule,
+    supplierPaymentVoidedRule,
   };
 }
 

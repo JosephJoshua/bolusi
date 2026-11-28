@@ -42,6 +42,7 @@ import { createMoneyApprovalKinds } from './money/approval-kinds.js';
 import { createMoneyModule } from './money/manifest.js';
 import { notesModule } from './notes/manifest.js';
 import { purchasingModule } from './purchasing/manifest.js';
+import { supplierPaymentPayout } from './purchasing/payments/payout.js';
 import { purchaseReceiptSource } from './purchasing/stock-source.js';
 import { repairApprovalKinds } from './repair/approval-kinds.js';
 import { repairModule } from './repair/manifest.js';
@@ -61,11 +62,14 @@ export const inventoryModule: InventoryModule = defineInventoryModule(
 export { purchasingModule };
 
 /**
- * The money ledger, checking each charge against the module that issued the document. A module that
- * charges customers adds its document source here.
+ * The money ledger, checking each charge against the module that issued the document, and each
+ * drawer payout against the record it pays out. A module that charges customers adds its document
+ * source here.
  */
 const moneyDocumentSources = { [REPAIR_DOCUMENT_KIND]: repairMoneyDocument };
-export const moneyModule = createMoneyModule(moneyDocumentSources);
+export const moneyModule = createMoneyModule(moneyDocumentSources, {
+  supplier_paid: supplierPaymentPayout,
+});
 
 /**
  * Approval requests, for the decisions each module lets an owner hand out. A module with such

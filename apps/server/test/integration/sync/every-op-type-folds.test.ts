@@ -205,6 +205,29 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId,
       payload,
     });
+    const payOp = (type: string, entityId: string, payload: Record<string, unknown>): OpSpec => ({
+      type,
+      entityType: 'purchasing_payment',
+      entityId,
+      payload,
+    });
+    const payoutOp = (
+      type: string,
+      entityId: string,
+      payload: Record<string, unknown>,
+    ): OpSpec => ({
+      type,
+      entityType: 'money_entry',
+      entityId,
+      payload,
+    });
+    const payment = {
+      supplierId: supplier,
+      billId: id(0x610),
+      amount: 100_000,
+      reference: null,
+      note: 'DP nota',
+    };
     const bill = {
       supplierId: supplier,
       orderId: order,
@@ -289,6 +312,16 @@ function journey(world: ChainWorld): OpSpec[] {
         orderId: null,
       }),
       billOp('purchasing.bill_voided', id(0x611), { reason: 'Nota dobel' }),
+      // Paid from the drawer and cancelled (each with the ledger's side), then from the owner.
+      payOp('purchasing.supplier_paid', id(0x620), { ...payment, source: 'cash' }),
+      payoutOp('money.supplier_paid', id(0x620), { amount: payment.amount, account: 'cash' }),
+      payOp('purchasing.supplier_payment_voided', id(0x620), { reason: 'Salah ketik' }),
+      payoutOp('money.supplier_payment_voided', id(0x620), { reason: 'Salah ketik' }),
+      payOp('purchasing.supplier_paid', id(0x621), { ...payment, source: 'owner', billId: null }),
+      payoutOp('money.supplier_paid', id(0x621), {
+        amount: payment.amount,
+        account: 'owner_capital',
+      }),
     ];
   };
   /** A transfer sent and cancelled, one sent and settled back, and one from the other store that

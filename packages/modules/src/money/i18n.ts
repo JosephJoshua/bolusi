@@ -44,6 +44,7 @@ export const MONEY_KEYS = [
   'money.reduce.rejected',
   'money.reduce.rejectedNote',
   'money.method.cash',
+  'money.method.ownerFunds',
   'money.pay.addMethod',
   'money.pay.amount',
   'money.pay.approvalCode',
@@ -278,6 +279,10 @@ export const MONEY_KEYS = [
   'money.void.cashSave',
   'money.void.cashExplain',
   'money.history.voidCashLabel',
+  'money.kas.supplierPaid',
+  'money.opType.supplierPaid',
+  'money.opType.supplierPaymentVoided',
+  'money.refusal.payoutNotFound',
 ] as const;
 
 export type MoneyKey = (typeof MONEY_KEYS)[number];

@@ -204,6 +204,8 @@ export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
   INVENTORY_PERMISSION.settleTransfer,
   // What parts cost to buy and what the store owes its suppliers (owner decision 2026-11-25).
   PURCHASING_PERMISSION.bills,
+  // Money leaving the business to suppliers (owner decision 2026-11-25).
+  PURCHASING_PERMISSION.paySuppliers,
 ];
 
 const BY_ID = new Map(ROLE_ABILITIES.map((ability) => [ability.id, ability]));

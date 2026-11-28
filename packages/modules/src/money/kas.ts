@@ -7,9 +7,12 @@ import {
   HANDOVER_REFUND_REASON,
   MONEY_PERMISSION,
   movesOut,
+  PAYOUT_KINDS,
+  SYSTEM_ACCOUNT,
   type CashMoveKind,
 } from './constants.js';
 import type { MoneyDocument } from './documents.js';
+import type { PayoutKind } from './payouts.js';
 import { tm, type MoneyKey } from './i18n.js';
 import { paymentEntry, rupiah, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
@@ -24,6 +27,7 @@ export function dayStart(now: number): number {
 /** A method's name, also for one switched off since: past money keeps the name it came in by. */
 export function accountLabel(account: string, accounts: readonly PaymentAccountRow[]): string {
   if (account === CASH_ACCOUNT) return tm('money.method.cash');
+  if (account === SYSTEM_ACCOUNT.ownerCapital) return tm('money.method.ownerFunds');
   return accounts.find((row) => `account:${row.id}` === account)?.name ?? account;
 }
 
@@ -97,6 +101,14 @@ export const CASH_MOVE_LABEL: Readonly<Record<CashMoveKind, MoneyKey>> = {
   float: 'money.moveKind.float',
 };
 
+/** How each kind of payout reads in Kas: a new kind only needs its copy here. */
+export const PAYOUT_LABEL: Readonly<Record<PayoutKind, MoneyKey>> = {
+  supplier_paid: 'money.kas.supplierPaid',
+};
+
+const isPayout = (kind: string): kind is PayoutKind =>
+  (PAYOUT_KINDS as readonly string[]).includes(kind);
+
 /** A change to the drawer the counter did not take at the counter: a move, or a settled difference. */
 export interface DrawerMove {
   readonly entry: MoneyEntryRow;
@@ -121,6 +133,9 @@ export function drawerMoves(entries: readonly MoneyEntryRow[]): DrawerMove[] {
       });
     } else if (entry.kind === 'cash_adjusted') {
       moves.push({ entry, label: 'money.kas.adjusted', delta: entry.amount });
+    } else if (isPayout(entry.kind) && entry.account === CASH_ACCOUNT) {
+      // Who was paid and for what is the paying module's; the drawer shows only that it left.
+      moves.push({ entry, label: PAYOUT_LABEL[entry.kind], delta: -entry.amount });
     }
   }
   return moves;
@@ -242,16 +257,21 @@ export function historyLine(
   const voidedPayment = voided && entry.kind === 'payment_received';
   const label = voidedPayment
     ? 'money.opType.paymentVoided'
-    : (move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived');
+    : isPayout(entry.kind)
+      ? PAYOUT_LABEL[entry.kind]
+      : (move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived');
+  // A payout says which account it left, the drawer, a bank or the owner's own money.
   const method =
     entry.account === null ||
-    !['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind)
+    !(
+      ['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind) || isPayout(entry.kind)
+    )
       ? null
       : accountLabel(entry.account, accounts);
   const signed =
     move !== undefined
       ? move.delta
-      : entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
+      : isPayout(entry.kind) || entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
         ? -entry.amount
         : entry.amount;
   return {

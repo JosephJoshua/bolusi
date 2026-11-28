@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import type { ModulePort } from '@bolusi/core';
 
 import type { PurchasingModule } from './manifest.js';
-import type { BillRow } from './bills/queries.js';
+import type { BillListFilter, BillRow } from './bills/queries.js';
 import type { OrderFilter, OrderRow } from './queries.js';
 import {
   createRuntimeContext,
@@ -78,14 +78,19 @@ export const loadOrderPages = (
 ): Promise<{ readonly rows: readonly OrderRow[]; readonly hasMore: boolean }> =>
   loadPages((offset) => rt.query('listOrders', { filter, limit: pageSize, offset }), pages);
 
-/** The first `pages` pages of the store's bills, open and void, the soonest due first. */
+/**
+ * The first `pages` pages of the store's bills in one of the list's views: still owed or overdue
+ * (the soonest due first), or every bill with the void ones (the newest first).
+ */
 export const loadBillPages = (
   rt: PurchasingRuntime,
+  filter: BillListFilter,
+  today: number,
   pages: number,
   pageSize: number,
 ): Promise<{ readonly rows: readonly BillRow[]; readonly hasMore: boolean }> =>
   loadPages(
-    (offset) => rt.query('listBills', { filter: 'all', orderId: null, limit: pageSize, offset }),
+    (offset) => rt.query('listBills', { filter, today, orderId: null, limit: pageSize, offset }),
     pages,
   );
 

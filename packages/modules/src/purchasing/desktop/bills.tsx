@@ -15,7 +15,7 @@ import {
   ToggleChip,
   type ColumnDef,
 } from '@bolusi/ui-web';
-import { Ban, SearchX, X } from 'lucide-react';
+import { Ban, Check, SearchX, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
@@ -28,6 +28,7 @@ import {
   MAX_PURCHASING_NOTE,
   MAX_SUPPLIER_REF,
   MAX_UNIT_PRICE,
+  PURCHASING_PERMISSION,
 } from '../constants.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import {
@@ -54,10 +55,15 @@ import type { OrderDetailRow } from '../queries.js';
 import { usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 import { PartSearch } from '../../inventory/desktop/PartSearch.js';
 import { discardCopy } from './dialogs.js';
+import { dayStart } from '../../money/kas.js';
+import { billStanding } from '../payments/pay-form.js';
+import type { PaymentRow } from '../payments/queries.js';
+import { PayDialog, PaymentsSection, VoidPaymentDialog } from './payments.js';
 
 // ── the Tagihan list ───────────────────────────────────────────────────────────────────────────
 
-export function billColumns(): ColumnDef<BillRow, unknown>[] {
+/** The Tagihan table's columns; `today` is the start of the day a due date has passed before. */
+export function billColumns(today: number): ColumnDef<BillRow, unknown>[] {
   return [
     {
       id: 'supplier',
@@ -90,14 +96,21 @@ export function billColumns(): ColumnDef<BillRow, unknown>[] {
       accessorFn: (row) => row.dueOn,
       header: tp('purchasing.bill.col.due'),
       meta: { track: 'minmax(170px, 1fr)', fold: 2 },
-      cell: ({ row: { original: row } }) =>
-        row.status === 'void' ? (
-          <Chip label={tp('purchasing.bill.statusVoid')} icon={Ban} tone="neutral" />
-        ) : (
-          <span className="tabular text-body text-text">
+      cell: ({ row: { original: row } }) => {
+        if (row.status === 'void') {
+          return <Chip label={tp('purchasing.bill.statusVoid')} icon={Ban} tone="neutral" />;
+        }
+        const late = billStanding(row, today).late !== null;
+        return (
+          <span
+            className={
+              late ? 'tabular text-body font-semibold text-warning' : 'tabular text-body text-text'
+            }
+          >
             {row.dueOn === null ? tp('purchasing.bill.noDue') : formatDate(row.dueOn)}
           </span>
-        ),
+        );
+      },
     },
     {
       id: 'total',
@@ -115,6 +128,20 @@ export function billColumns(): ColumnDef<BillRow, unknown>[] {
           {formatMoney(row.total)}
         </span>
       ),
+    },
+    {
+      id: 'balance',
+      accessorFn: (row) => row.balance,
+      header: tp('purchasing.bill.col.balance'),
+      meta: { track: 'minmax(140px, auto)', align: 'end', fold: 3 },
+      cell: ({ row: { original: row } }) =>
+        row.status === 'void' ? null : row.balance === 0 ? (
+          <Chip label={tp('purchasing.bill.settled')} icon={Check} tone="success" />
+        ) : (
+          <span className="tabular whitespace-nowrap text-body font-semibold text-text">
+            {formatMoney(row.balance)}
+          </span>
+        ),
     },
   ];
 }
@@ -135,7 +162,12 @@ export function BillPane({
   onClearNotice,
 }: BillPaneProps): React.JSX.Element {
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [task, setTask] = useState<'none' | 'edit' | 'void'>('none');
+  const [task, setTask] = useState<
+    | { readonly kind: 'none' | 'edit' | 'void' | 'pay' }
+    | { readonly kind: 'voidPayment'; readonly payment: PaymentRow }
+  >({ kind: 'none' });
+  const runtime = usePurchasingRuntime();
+  const pays = runtime.hasPermission(PURCHASING_PERMISSION.paySuppliers);
   const [done, setDone] = useState<PurchasingKey | null>(null);
   const query = usePurchasingQuery(
     async (rt) => (await rt.query('getBill', { billId })).rows[0],
@@ -185,18 +217,33 @@ export function BillPane({
                   <div className="flex flex-wrap items-center gap-2">
                     {row.status === 'void' ? (
                       <Chip label={tp('purchasing.bill.statusVoid')} icon={Ban} tone="neutral" />
+                    ) : row.balance === 0 ? (
+                      <Chip label={tp('purchasing.bill.settled')} icon={Check} tone="success" />
                     ) : null}
-                    <span className="text-small text-text-muted">{dueText(row)}</span>
+                    <DueLine bill={row} testId={`${testId}.due`} />
                   </div>
                   {row.status === 'open' ? (
-                    <Button
-                      label={tp('purchasing.action.edit')}
-                      onClick={() => {
-                        say(null);
-                        setTask('edit');
-                      }}
-                      data-testid={`${testId}.edit`}
-                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        label={tp('purchasing.action.edit')}
+                        onClick={() => {
+                          say(null);
+                          setTask({ kind: 'edit' });
+                        }}
+                        data-testid={`${testId}.edit`}
+                      />
+                      {pays && row.balance > 0 ? (
+                        <Button
+                          label={tp('purchasing.pay.action')}
+                          variant="primary"
+                          onClick={() => {
+                            say(null);
+                            setTask({ kind: 'pay' });
+                          }}
+                          data-testid={`${testId}.pay`}
+                        />
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </header>
@@ -211,13 +258,27 @@ export function BillPane({
                     />
                   )}
                   <BillBody bill={row} testId={testId} />
+                  <PaymentsSection
+                    bill={row}
+                    mayCancel={pays && row.status === 'open'}
+                    onCancel={(payment) => {
+                      say(null);
+                      setTask({ kind: 'voidPayment', payment });
+                    }}
+                    testId={testId}
+                  />
+                  {row.status === 'open' && row.supplierCredit > 0 ? (
+                    <p className="text-body text-text-muted" data-testid={`${testId}.credit`}>
+                      {tp('purchasing.bill.credit', { amount: formatMoney(row.supplierCredit) })}
+                    </p>
+                  ) : null}
                   {row.status === 'open' ? (
                     <div>
                       <Button
                         label={tp('purchasing.bill.voidTitle')}
                         variant="dangerText"
                         className="-ml-3"
-                        onClick={() => setTask('void')}
+                        onClick={() => setTask({ kind: 'void' })}
                         data-testid={`${testId}.void`}
                       />
                     </div>
@@ -228,23 +289,42 @@ export function BillPane({
           )
         }
       </QueryPanel>
-      {bill === undefined ? null : task === 'edit' ? (
+      {bill === undefined ? null : task.kind === 'edit' ? (
         <BillDialog
           bill={bill}
           start={null}
-          onClose={() => setTask('none')}
+          onClose={() => setTask({ kind: 'none' })}
           onDone={() => {
-            setTask('none');
+            setTask({ kind: 'none' });
             setDone('purchasing.done.billSaved');
           }}
         />
-      ) : task === 'void' ? (
+      ) : task.kind === 'void' ? (
         <VoidBillDialog
           bill={bill}
-          onClose={() => setTask('none')}
+          onClose={() => setTask({ kind: 'none' })}
           onDone={() => {
-            setTask('none');
+            setTask({ kind: 'none' });
             setDone('purchasing.done.billVoided');
+          }}
+        />
+      ) : task.kind === 'pay' ? (
+        <PayDialog
+          bill={bill}
+          onClose={() => setTask({ kind: 'none' })}
+          onDone={() => {
+            setTask({ kind: 'none' });
+            setDone('purchasing.done.paid');
+          }}
+        />
+      ) : task.kind === 'voidPayment' ? (
+        <VoidPaymentDialog
+          bill={bill}
+          payment={task.payment}
+          onClose={() => setTask({ kind: 'none' })}
+          onDone={() => {
+            setTask({ kind: 'none' });
+            setDone('purchasing.done.paymentVoided');
           }}
         />
       ) : null}
@@ -332,10 +412,25 @@ function BillBody({
           <TotalLine
             label={tp('purchasing.bill.total')}
             value={bill.total}
-            strong
+            strong={!open || bill.paid === 0}
             struck={!open}
             testId={`${testId}.total`}
           />
+          {open && bill.paid > 0 ? (
+            <>
+              <TotalLine
+                label={tp('purchasing.bill.paid')}
+                value={bill.paid}
+                testId={`${testId}.paid`}
+              />
+              <TotalLine
+                label={tp('purchasing.bill.balance')}
+                value={bill.balance}
+                strong
+                testId={`${testId}.balance`}
+              />
+            </>
+          ) : null}
         </dl>
       </Section>
       <p className="text-small text-text-muted">
@@ -347,6 +442,27 @@ function BillBody({
             })}
       </p>
     </>
+  );
+}
+
+/** When the bill falls due, as a warning once that day has passed and it is still owed. */
+function DueLine({
+  bill,
+  testId,
+}: {
+  readonly bill: BillDetailRow;
+  readonly testId: string;
+}): React.JSX.Element {
+  const late = billStanding(bill, dayStart(Date.now())).late;
+  return (
+    <span
+      className={
+        late === null ? 'text-small text-text-muted' : 'text-small font-semibold text-warning'
+      }
+      data-testid={testId}
+    >
+      {late ?? dueText(bill)}
+    </span>
   );
 }
 
@@ -453,7 +569,7 @@ export function OrderBillsSection({
 // ── the dialogs ────────────────────────────────────────────────────────────────────────────────
 
 /** Rupiah typed as digits and shown grouped; a keystroke past `max` is not taken. */
-function PriceField({
+export function PriceField({
   label,
   value,
   onChange,

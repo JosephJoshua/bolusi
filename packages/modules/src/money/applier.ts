@@ -200,7 +200,7 @@ export const entryRecordedApplier: ProjectionApplier<MoneyDatabase> = async (db,
  * it was never recorded, so a count made after the mistake reads right again.
  */
 function voidedApplier(
-  kind: 'payment_received' | 'cash_moved',
+  kind: 'payment_received' | 'cash_moved' | 'supplier_paid',
   datedWith: 'void' | 'entry',
 ): ProjectionApplier<MoneyDatabase> {
   return async (db, op) => {
@@ -240,6 +240,8 @@ function voidedApplier(
 
 export const paymentVoidedApplier = voidedApplier('payment_received', 'void');
 export const cashMoveVoidedApplier = voidedApplier('cash_moved', 'entry');
+/** As a cash move's: a supplier payment cancelled was a mistake, so the cash never left. */
+export const supplierPaymentVoidedApplier = voidedApplier('supplier_paid', 'entry');
 
 /** A store's own account, or a central one: the latest save is the account. */
 export const accountSavedApplier: ProjectionApplier<MoneyDatabase> = async (db, op) => {
