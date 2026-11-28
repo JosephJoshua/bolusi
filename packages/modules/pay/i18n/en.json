@@ -14,7 +14,7 @@
     "notStaff": "This person does not work at this store.",
     "self": "Nobody can give themselves a kasbon or pay themselves.",
     "alreadyRecorded": "This was already recorded.",
-    "accountNotUsable": "Use the drawer or one of this store's bank accounts.",
+    "accountNotUsable": "Use the drawer or one of this store’s bank accounts.",
     "installmentAboveAmount": "The monthly installment cannot be more than the kasbon.",
     "aboveBalance": "This is more than the kasbon still owed.",
     "advanceNotFound": "This kasbon is not in this store.",
